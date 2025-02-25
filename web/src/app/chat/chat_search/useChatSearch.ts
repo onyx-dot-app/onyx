@@ -16,8 +16,6 @@ interface UseChatSearchResult {
   hasMore: boolean;
   fetchMoreChats: () => Promise<void>;
   refreshChats: () => Promise<void>;
-  createChat: () => Promise<string>;
-  deleteChat: (chatId: string) => Promise<void>;
 }
 
 export function useChatSearch(
@@ -91,36 +89,11 @@ export function useChatSearch(
 
       setIsSearching(true);
 
-      searchTimeoutRef.current = setTimeout(() => {
+      // searchTimeoutRef.current =
+      setTimeout(() => {
         fetchInitialChats();
         setIsSearching(false);
-      }, 500);
-    },
-    [fetchInitialChats]
-  );
-
-  // Create new chat
-  const handleCreateChat = useCallback(async (): Promise<string> => {
-    try {
-      const response = await createNewChat();
-      await fetchInitialChats();
-      return response.chat_session_id;
-    } catch (error) {
-      console.error("Error creating new chat:", error);
-      throw error;
-    }
-  }, [fetchInitialChats]);
-
-  // Delete chat
-  const handleDeleteChat = useCallback(
-    async (chatId: string): Promise<void> => {
-      try {
-        await deleteChat(chatId);
-        await fetchInitialChats();
-      } catch (error) {
-        console.error("Error deleting chat:", error);
-        throw error;
-      }
+      }, 1000);
     },
     [fetchInitialChats]
   );
@@ -145,7 +118,5 @@ export function useChatSearch(
     hasMore,
     fetchMoreChats,
     refreshChats: fetchInitialChats,
-    createChat: handleCreateChat,
-    deleteChat: handleDeleteChat,
   };
 }

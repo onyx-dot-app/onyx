@@ -714,13 +714,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-2.1": "Claude 2.1",
   "claude-2.0": "Claude 2.0",
   "claude-instant-1.2": "Claude Instant 1.2",
-  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
-  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
-
-  "claude-3-7-sonnet-latest": "Claude 3.7 Sonnet",
-
-  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
-  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
+  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
+  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
   "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
   "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
   "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
@@ -760,9 +757,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
   "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
   "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet",
-  "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet",
+  "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet (New)",
   "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
-  "anthropic.claude-3-7-sonnet-latest": "Claude 3.7 Sonnet",
   "mistral.mistral-large-2402-v1:0": "Mistral Large",
   "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct",
   "mistral.mistral-7b-instruct-v0:2": "Mistral 7B Instruct",
@@ -774,12 +770,6 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 };
 
 export function getDisplayNameForModel(modelName: string): string {
-  if (modelName.startsWith("bedrock")) {
-    const parts = modelName.split("/");
-    const lastPart = parts[parts.length - 1];
-    return MODEL_DISPLAY_NAMES[lastPart] || lastPart;
-  }
-
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 
@@ -792,8 +782,5 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "mistral.mistral-large-2402-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
   ],
-  anthropic: [
-    "anthropic.claude-3-7-sonnet-latest",
-    "anthropic.claude-3-5-sonnet-20241022-v2:0",
-  ],
+  anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
 };

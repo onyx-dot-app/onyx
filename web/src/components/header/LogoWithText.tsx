@@ -113,7 +113,7 @@ export default function LogoWithText({
           </Tooltip>
         </TooltipProvider>
       )}
-      <div className="flex ml-auto gap-x-2">
+      <div className="flex ml-auto gap-x-4">
         {toggleChatSessionSearchModal && (
           <TooltipProvider delayDuration={1000}>
             <Tooltip>
@@ -125,8 +125,8 @@ export default function LogoWithText({
                   }}
                 >
                   <Search
-                    className="ml-2 flex-none text-text-mobile-sidebar"
-                    size={20}
+                    className="flex-none text-text-mobile-sidebar"
+                    size={16}
                   />
                 </button>
               </TooltipTrigger>

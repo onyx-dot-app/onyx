@@ -2,7 +2,7 @@ import React, { useRef, useEffect } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
+import { Search, XIcon } from "lucide-react";
 import { ChatSearchGroup } from "./ChatSearchGroup";
 import { NewChatButton } from "./NewChatButton";
 import { useChatSearch } from "./useChatSearch";
@@ -41,8 +41,8 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
   const handleNewChat = async () => {
     try {
       const chatId = await createChat();
-      router.push(`/chat/${chatId}`);
       onClose();
+      router.push(`/chat/${chatId}`);
     } catch (error) {
       console.error("Error creating new chat:", error);
     }
@@ -89,7 +89,6 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
           <div className="sticky top-0 z-20 px-6 py-3 w-full flex items-center justify-between bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
             <div className="relative w-full">
               <div className="flex items-center">
-                <Search className="h-4 w-4 mr-2 text-neutral-400 dark:text-neutral-500" />
                 <Input
                   removeFocusRing
                   className="w-full !focus-visible:ring-offset-0 !focus-visible:ring-none !focus-visible:ring-0 hover:focus-none border-none bg-transparent placeholder:text-neutral-400 focus:border-transparent focus:outline-none focus:ring-0 dark:placeholder:text-neutral-500 dark:text-neutral-200"
@@ -97,17 +96,24 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                {isSearching && (
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
-                    <LoadingSpinner size="small" />
-                  </div>
-                )}
+                {searchQuery &&
+                  (isSearching ? (
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                      <LoadingSpinner size="small" />
+                    </div>
+                  ) : (
+                    <XIcon
+                      size={16}
+                      className="absolute right-2 top-1/2 -translate-y-1/2"
+                      onClick={() => setSearchQuery("")}
+                    />
+                  ))}
               </div>
-              {searchQuery && !isSearching && (
-                <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 ml-6">
-                  Matching text will be highlighted
-                </div>
-              )}
+              <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 ml-3">
+                {searchQuery && !isSearching
+                  ? "Matching text will be highlighted"
+                  : "Enter text to search through your chat history"}
+              </div>
             </div>
           </div>
 
