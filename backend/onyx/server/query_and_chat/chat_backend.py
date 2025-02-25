@@ -1,15 +1,20 @@
 import asyncio
+import datetime
 import io
 import json
 import os
 import uuid
 from collections.abc import Callable
 from collections.abc import Generator
+from datetime import timedelta
+from typing import List
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import Request
 from fastapi import Response
 from fastapi import UploadFile
@@ -44,6 +49,7 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
+from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine import get_session
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
@@ -62,6 +68,9 @@ from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.chat_session_naming import (
     get_renamed_conversation_name,
 )
+from onyx.server.query_and_chat.chat_search_models import ChatSearchResponse
+from onyx.server.query_and_chat.chat_search_models import ChatSessionGroup
+from onyx.server.query_and_chat.chat_search_models import ChatSessionSummary
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -794,3 +803,87 @@ def fetch_chat_file(
     file_io = file_store.read_file(file_id, mode="b")
 
     return StreamingResponse(file_io, media_type=media_type)
+
+
+# ############################################################
+
+
+@router.get("/search", response_model=ChatSearchResponse)
+async def search_chats(
+    query: Optional[str] = Query(None),
+    page: int = Query(1),
+    page_size: int = Query(10),
+    user: User | None = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> ChatSearchResponse:
+    """
+    Search for chat sessions based on the provided query.
+    If no query is provided, returns recent chat sessions.
+    """
+
+    # Use the enhanced database function for chat search
+    chat_sessions, has_more = search_chat_sessions(
+        user_id=user.id if user else None,
+        db_session=db_session,
+        query=query,
+        page=page,
+        page_size=page_size,
+        include_deleted=False,
+        include_onyxbot_flows=False,
+    )
+
+    # Group chat sessions by time period
+    today = datetime.datetime.now().date()
+    yesterday = today - timedelta(days=1)
+    this_week = today - timedelta(days=7)
+    this_month = today - timedelta(days=30)
+
+    today_chats: List[ChatSessionSummary] = []
+    yesterday_chats: List[ChatSessionSummary] = []
+    this_week_chats: List[ChatSessionSummary] = []
+    this_month_chats: List[ChatSessionSummary] = []
+    older_chats: List[ChatSessionSummary] = []
+
+    for session in chat_sessions:
+        session_date = session.time_created.date()
+
+        chat_summary = ChatSessionSummary(
+            id=session.id,
+            name=session.description,
+            persona_id=session.persona_id,
+            time_created=session.time_created,
+            shared_status=session.shared_status,
+            folder_id=session.folder_id,
+            current_alternate_model=session.current_alternate_model,
+            current_temperature_override=session.temperature_override,
+        )
+
+        if session_date == today:
+            today_chats.append(chat_summary)
+        elif session_date == yesterday:
+            yesterday_chats.append(chat_summary)
+        elif session_date > this_week:
+            this_week_chats.append(chat_summary)
+        elif session_date > this_month:
+            this_month_chats.append(chat_summary)
+        else:
+            older_chats.append(chat_summary)
+
+    # Create groups
+    groups = []
+    if today_chats:
+        groups.append(ChatSessionGroup(title="Today", chats=today_chats))
+    if yesterday_chats:
+        groups.append(ChatSessionGroup(title="Yesterday", chats=yesterday_chats))
+    if this_week_chats:
+        groups.append(ChatSessionGroup(title="This Week", chats=this_week_chats))
+    if this_month_chats:
+        groups.append(ChatSessionGroup(title="This Month", chats=this_month_chats))
+    if older_chats:
+        groups.append(ChatSessionGroup(title="Older", chats=older_chats))
+
+    return ChatSearchResponse(
+        groups=groups,
+        has_more=has_more,
+        next_page=page + 1 if has_more else None,
+    )

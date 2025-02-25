@@ -3,7 +3,6 @@ import { fetchChatSessions, createNewChat, deleteChat } from "./api/client";
 import { ChatSessionGroup, ChatSessionSummary } from "./api/models";
 
 interface UseChatSearchOptions {
-  includeHighlights?: boolean;
   pageSize?: number;
 }
 
@@ -21,7 +20,7 @@ interface UseChatSearchResult {
 export function useChatSearch(
   options: UseChatSearchOptions = {}
 ): UseChatSearchResult {
-  const { includeHighlights = true, pageSize = 10 } = options;
+  const { pageSize = 10 } = options;
   const [searchQuery, setSearchQuery] = useState("");
   const [chatGroups, setChatGroups] = useState<ChatSessionGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -41,7 +40,6 @@ export function useChatSearch(
         query: searchQuery,
         page: 1,
         page_size: PAGE_SIZE,
-        include_highlights: includeHighlights,
       });
 
       setChatGroups(response.groups);
@@ -51,7 +49,7 @@ export function useChatSearch(
     } finally {
       setIsLoading(false);
     }
-  }, [searchQuery, PAGE_SIZE, includeHighlights]);
+  }, [searchQuery, PAGE_SIZE]);
 
   // Load more chats (pagination)
   const fetchMoreChats = useCallback(async () => {
@@ -65,7 +63,6 @@ export function useChatSearch(
         query: searchQuery,
         page: nextPage,
         page_size: PAGE_SIZE,
-        include_highlights: includeHighlights,
       });
 
       setChatGroups((prev) => [...prev, ...response.groups]);
@@ -76,7 +73,7 @@ export function useChatSearch(
     } finally {
       setIsLoading(false);
     }
-  }, [isLoading, hasMore, page, searchQuery, PAGE_SIZE, includeHighlights]);
+  }, [isLoading, hasMore, page, searchQuery, PAGE_SIZE]);
 
   // Handle search with debounce
   const handleSearch = useCallback(

@@ -17,7 +17,6 @@ class ChatSessionSummary(BaseModel):
     folder_id: Optional[int] = None
     current_alternate_model: Optional[str] = None
     current_temperature_override: Optional[float] = None
-    highlights: Optional[List[str]] = None
 
 
 class ChatSessionGroup(BaseModel):
