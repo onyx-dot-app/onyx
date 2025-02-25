@@ -1,7 +1,5 @@
 from datetime import datetime
 from typing import Any
-from typing import List
-from typing import Optional
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -289,28 +287,28 @@ class AdminSearchResponse(BaseModel):
 
 class ChatSessionSummary(BaseModel):
     id: UUID
-    name: Optional[str] = None
-    persona_id: Optional[int] = None
+    name: str | None = None
+    persona_id: int | None = None
     time_created: datetime
     shared_status: ChatSessionSharedStatus
-    folder_id: Optional[int] = None
-    current_alternate_model: Optional[str] = None
-    current_temperature_override: Optional[float] = None
+    folder_id: int | None = None
+    current_alternate_model: str | None = None
+    current_temperature_override: float | None = None
 
 
 class ChatSessionGroup(BaseModel):
     title: str
-    chats: List[ChatSessionSummary]
+    chats: list[ChatSessionSummary]
 
 
 class ChatSearchResponse(BaseModel):
-    groups: List[ChatSessionGroup]
+    groups: list[ChatSessionGroup]
     has_more: bool
-    next_page: Optional[int] = None
+    next_page: int | None = None
 
 
 class ChatSearchRequest(BaseModel):
-    query: Optional[str] = None
+    query: str | None = None
     page: int = 1
     page_size: int = 10
 

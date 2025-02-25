@@ -71,7 +71,6 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   // standard claude names
   "claude-3-5-sonnet-20240620",
   "claude-3-5-sonnet-20241022",
-  "claude-3-7-sonnet-latest",
   "claude-3-opus-20240229",
   "claude-3-sonnet-20240229",
   "claude-3-haiku-20240307",

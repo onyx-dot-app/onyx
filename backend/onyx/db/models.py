@@ -1216,7 +1216,6 @@ class ChatMessage(Base):
     parent_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latest_child_message: Mapped[int | None] = mapped_column(Integer, nullable=True)
     message: Mapped[str] = mapped_column(Text)
-    # Precomputed tsvector for full-text search
     rephrased_query: Mapped[str] = mapped_column(Text, nullable=True)
     # If None, then there is no answer generation, it's the special case of only
     # showing the user the retrieved docs

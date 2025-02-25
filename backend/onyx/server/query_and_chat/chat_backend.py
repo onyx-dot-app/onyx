@@ -7,8 +7,6 @@ import uuid
 from collections.abc import Callable
 from collections.abc import Generator
 from datetime import timedelta
-from typing import List
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter
@@ -805,9 +803,9 @@ def fetch_chat_file(
     return StreamingResponse(file_io, media_type=media_type)
 
 
-@router.get("/search", response_model=ChatSearchResponse)
+@router.get("/search")
 async def search_chats(
-    query: Optional[str] = Query(None),
+    query: str | None = Query(None),
     page: int = Query(1),
     page_size: int = Query(10),
     user: User | None = Depends(current_user),
@@ -835,11 +833,11 @@ async def search_chats(
     this_week = today - timedelta(days=7)
     this_month = today - timedelta(days=30)
 
-    today_chats: List[ChatSessionSummary] = []
-    yesterday_chats: List[ChatSessionSummary] = []
-    this_week_chats: List[ChatSessionSummary] = []
-    this_month_chats: List[ChatSessionSummary] = []
-    older_chats: List[ChatSessionSummary] = []
+    today_chats: list[ChatSessionSummary] = []
+    yesterday_chats: list[ChatSessionSummary] = []
+    this_week_chats: list[ChatSessionSummary] = []
+    this_month_chats: list[ChatSessionSummary] = []
+    older_chats: list[ChatSessionSummary] = []
 
     for session in chat_sessions:
         session_date = session.time_created.date()
