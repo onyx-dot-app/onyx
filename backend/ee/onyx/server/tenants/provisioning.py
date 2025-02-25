@@ -224,7 +224,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             name="Anthropic",
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
-            default_model_name="claude-3-5-sonnet-20241022",
+            default_model_name="claude-3-7-sonnet-20250219",
             fast_default_model_name="claude-3-5-sonnet-20241022",
             model_names=ANTHROPIC_MODEL_NAMES,
         )

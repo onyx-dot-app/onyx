@@ -12,5 +12,5 @@ torch==2.2.0
 transformers==4.39.2
 uvicorn==0.21.1
 voyageai==0.2.3
-litellm==1.60.2
+litellm==1.61.16
 sentry-sdk[fastapi,celery,starlette]==2.14.0
