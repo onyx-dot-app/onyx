@@ -37,39 +37,53 @@ def get_search_highlights(
     if not search_query or not search_query.strip():
         return []
 
-    # Prepare the search query for ts_query
-    search_terms = " & ".join(search_query.strip().split())
+    try:
+        # Prepare the search query for ts_query
+        # For single words, don't add operators
+        search_terms = search_query.strip()
+        if len(search_terms.split()) > 1:
+            search_terms = " & ".join(search_terms.split())
 
-    # Use PostgreSQL's ts_headline to highlight matching terms
-    # This will return snippets of text with the matching terms highlighted
-    query = text(
-        """
-        SELECT ts_headline(
-            'english',
-            message,
-            to_tsquery('english', :search_terms),
-            'StartSel=<mark>, StopSel=</mark>, MaxWords=50, MinWords=20, ShortWord=3, MaxFragments=1'
-        ) as highlight
-        FROM chat_message
-        WHERE chat_session_id = :chat_session_id
-        AND message_type = :message_type
-        AND to_tsvector('english', message) @@ to_tsquery('english', :search_terms)
-        ORDER BY ts_rank(to_tsvector('english', message), to_tsquery('english', :search_terms)) DESC
-        LIMIT :max_highlights
-    """
-    )
+        # Use PostgreSQL's ts_headline to highlight matching terms
+        # This will return snippets of text with the matching terms highlighted
+        query = text(
+            """
+            SELECT ts_headline(
+                'english',
+                message,
+                plainto_tsquery('english', :search_terms),
+                'StartSel=<mark>, StopSel=</mark>, MaxWords=50, MinWords=20, ShortWord=3, MaxFragments=1'
+            ) as highlight
+            FROM chat_message
+            WHERE chat_session_id = :chat_session_id
+            AND message_type = :message_type
+            AND to_tsvector('english', message) @@ plainto_tsquery('english', :search_terms)
+            ORDER BY ts_rank(to_tsvector('english', message), plainto_tsquery('english', :search_terms)) DESC
+            LIMIT :max_highlights
+            """
+        )
 
-    result = db_session.execute(
-        query,
-        {
-            "search_terms": search_terms,
-            "chat_session_id": chat_session_id,
-            "message_type": MessageType.USER.value,
-            "max_highlights": max_highlights,
-        },
-    )
+        print(
+            f"Executing highlight query for session {chat_session_id} with terms: '{search_terms}'"
+        )
 
-    return [row.highlight for row in result]
+        result = db_session.execute(
+            query,
+            {
+                "search_terms": search_terms,
+                "chat_session_id": chat_session_id,
+                "message_type": MessageType.USER.value,
+                "max_highlights": max_highlights,
+            },
+        )
+
+        highlights = [row.highlight for row in result]
+        print(f"Found {len(highlights)} highlights for session {chat_session_id}")
+        return highlights
+
+    except Exception as e:
+        print(f"Error getting search highlights: {str(e)}")
+        return []
 
 
 def search_chat_sessions(
@@ -109,7 +123,9 @@ def search_chat_sessions(
         # For message content search, use PostgreSQL's full-text search
         # First, prepare the search query by converting it to a tsquery format
         # Replace spaces with & for AND operations in the search
-        search_terms = " & ".join(query.strip().split())
+        search_terms = query.strip()
+        if len(search_terms.split()) > 1:
+            search_terms = " & ".join(search_terms.split())
 
         # Create a direct SQL query for ranking messages
         # This approach avoids the issue with column access in subqueries
@@ -117,10 +133,10 @@ def search_chat_sessions(
             """
             SELECT
                 chat_session_id,
-                ts_rank(to_tsvector('english', message), to_tsquery('english', :search_terms)) AS search_rank
+                ts_rank(to_tsvector('english', message), plainto_tsquery('english', :search_terms)) AS search_rank
             FROM chat_message
             WHERE message_type = :message_type
-            AND to_tsvector('english', message) @@ to_tsquery('english', :search_terms)
+            AND to_tsvector('english', message) @@ plainto_tsquery('english', :search_terms)
         """
         ).bindparams(search_terms=search_terms, message_type=MessageType.USER.value)
 
@@ -186,6 +202,7 @@ def search_chat_sessions(
             if include_highlights and query and query.strip() and paginated_sessions:
                 highlights_by_session_id = {}
                 for session in paginated_sessions:
+                    print("getting search highlights for session", session.id)
                     highlights = get_search_highlights(
                         chat_session_id=session.id,
                         search_query=query,

@@ -14,9 +14,9 @@ export function ChatSearchGroup({
   onSelectChat,
 }: ChatSearchGroupProps) {
   return (
-    <div className="relative mb-4">
+    <div className="mb-4">
       {/* Sticky date header */}
-      <div className="sticky top-0 z-10 bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm py-2 px-4 border-b border-gray-100 dark:border-gray-700 shadow-sm">
+      <div className="sticky -top-1 mt-1 z-10 bg-[#fff]/90 dark:bg-gray-800/90  py-2 px-4  px-4">
         <div className="text-xs font-medium leading-4 text-gray-600 dark:text-gray-400">
           {title}
         </div>

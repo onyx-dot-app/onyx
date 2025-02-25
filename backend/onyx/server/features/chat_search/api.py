@@ -52,6 +52,7 @@ async def search_chats(
     - Next page number if there are more results
     - Highlighted snippets of matching text for each chat session
     """
+    print("fetching with highlights", include_highlights)
     # Use the enhanced database function for chat search
     chat_sessions, has_more, highlights_by_session_id = search_chat_sessions(
         user_id=user.id if user else None,

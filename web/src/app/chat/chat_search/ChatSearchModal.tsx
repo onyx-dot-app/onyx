@@ -82,15 +82,17 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
       <DialogContent
         hideCloseIcon
         className="!rounded-xl overflow-hidden p-0 w-full max-w-2xl"
+        backgroundColor="bg-neutral-950/20 shadow-xl"
       >
-        <div className="w-full flex flex-col bg-white dark:bg-gray-800 h-[80vh] max-h-[600px]">
+        <div className="w-full flex flex-col bg-white dark:bg-neutral-800 h-[80vh] max-h-[600px]">
           {/* Search header */}
-          <div className="sticky top-0 z-20 px-6 py-3 w-full flex items-center justify-between bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="sticky top-0 z-20 px-6 py-3 w-full flex items-center justify-between bg-white dark:bg-neutral-800 border-b border-neutral-200 dark:border-neutral-700">
             <div className="relative w-full">
               <div className="flex items-center">
-                <Search className="h-4 w-4 mr-2 text-gray-400 dark:text-gray-500" />
+                <Search className="h-4 w-4 mr-2 text-neutral-400 dark:text-neutral-500" />
                 <Input
-                  className="w-full border-none bg-transparent placeholder:text-gray-400 focus:border-transparent focus:outline-none focus:ring-0 dark:placeholder:text-gray-500 dark:text-gray-200"
+                  removeFocusRing
+                  className="w-full !focus-visible:ring-offset-0 !focus-visible:ring-none !focus-visible:ring-0 hover:focus-none border-none bg-transparent placeholder:text-neutral-400 focus:border-transparent focus:outline-none focus:ring-0 dark:placeholder:text-neutral-500 dark:text-neutral-200"
                   placeholder="Search chats..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -102,7 +104,7 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
                 )}
               </div>
               {searchQuery && !isSearching && (
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 ml-6">
+                <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 ml-6">
                   Matching text will be highlighted
                 </div>
               )}
@@ -111,12 +113,13 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
 
           {/* Chat list */}
           <ScrollArea
-            className="flex-grow bg-white dark:bg-gray-800"
+            className="flex-grow bg-white relative dark:bg-neutral-800"
             ref={scrollAreaRef}
             type="auto"
           >
-            <div className="px-4 py-2">
+            <div className="px-4  py-2">
               {/* New chat button */}
+
               <NewChatButton onClick={handleNewChat} />
 
               {/* Initial loading state */}
@@ -144,7 +147,7 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
                       <LoadingSpinner className="mx-auto" />
                     )}
                     {!hasMore && chatGroups.length > 0 && (
-                      <div className="text-center text-xs text-gray-500 dark:text-gray-400 py-2">
+                      <div className="text-center text-xs text-neutral-500 dark:text-neutral-400 py-2">
                         No more chats to load
                       </div>
                     )}
@@ -152,7 +155,7 @@ export function ChatSearchModal({ open, onClose }: ChatSearchModalProps) {
                 </>
               ) : (
                 !isLoading && (
-                  <div className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                  <div className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">
                     No chats found
                   </div>
                 )
