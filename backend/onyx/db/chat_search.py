@@ -4,11 +4,14 @@ from typing import Tuple
 from uuid import UUID
 
 from sqlalchemy import desc
+from sqlalchemy import func
+from sqlalchemy import literal
 from sqlalchemy import select
-from sqlalchemy import text
+from sqlalchemy import union_all
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 
 
@@ -29,7 +32,7 @@ def search_chat_sessions(
     """
     offset = (page - 1) * page_size
 
-    # If no search query, use standard SQLAlchemy pagination
+    # If no search query, we use standard SQLAlchemy pagination
     if not query or not query.strip():
         stmt = select(ChatSession)
         if user_id:
@@ -52,69 +55,62 @@ def search_chat_sessions(
 
         return list(chat_sessions), has_more
 
-    # For search queries, use a two-step approach:
-    # 1. Find matching IDs with ranking
-    # 2. Query full objects with those IDs
     words = query.lower().strip().split()
-    params = {}
 
-    for i, word in enumerate(words):
-        params[f"word_{i}"] = f"%{word}%"
+    # Message mach subquery
+    message_matches = []
+    for word in words:
+        word_like = f"%{word}%"
+        message_match = select(
+            ChatMessage.chat_session_id, literal(1.0).label("search_rank")
+        ).where(func.lower(ChatMessage.message).like(word_like))
 
-    # SQL to get matching IDs with ranking
-    message_conditions = " OR ".join(
-        [f"LOWER(message) LIKE :word_{i}" for i in range(len(words))]
-    )
+        if user_id:
+            message_match = message_match.where(ChatMessage.user_id == user_id)
 
-    sql = f"""
-    WITH message_matches AS (
-        SELECT
-            chat_session_id,
-            1.0 AS search_rank
-        FROM chat_message
-        WHERE ({message_conditions})
-        {"AND chat_message.user_id = :user_id" if user_id else ""}
-    ),
-    description_matches AS (
-        SELECT
-            id AS chat_session_id,
-            0.5 AS search_rank
-        FROM chat_session
-        WHERE LOWER(description) LIKE :query_text
-        {"AND user_id = :user_id" if user_id else ""}
-        {"AND onyxbot_flow = FALSE" if not include_onyxbot_flows else ""}
-        {"AND deleted = FALSE" if not include_deleted else ""}
-    ),
-    combined_matches AS (
-        SELECT chat_session_id, MAX(search_rank) AS rank
-        FROM (
-            SELECT * FROM message_matches
-            UNION ALL
-            SELECT * FROM description_matches
-        ) AS matches
-        GROUP BY chat_session_id
-    ),
-    ranked_ids AS (
-        SELECT
-            chat_session_id,
-            rank,
-            ROW_NUMBER() OVER (ORDER BY rank DESC, chat_session_id) AS row_num
-        FROM combined_matches
-    )
-    SELECT chat_session_id, rank
-    FROM ranked_ids
-    WHERE row_num > :offset AND row_num <= :limit
-    """
+        message_matches.append(message_match)
 
-    # Add query text to params
-    params["query_text"] = f"%{query.lower()}%"
+    if message_matches:
+        message_matches_query = union_all(*message_matches).alias("message_matches")
+    else:
+        return [], False
+
+    # Description matches
+    description_match = select(
+        ChatSession.id.label("chat_session_id"), literal(0.5).label("search_rank")
+    ).where(func.lower(ChatSession.description).like(f"%{query.lower()}%"))
+
     if user_id:
-        params["user_id"] = user_id
-    params["offset"] = offset
-    params["limit"] = offset + page_size + 1  # +1 to check if there are more
+        description_match = description_match.where(ChatSession.user_id == user_id)
+    if not include_onyxbot_flows:
+        description_match = description_match.where(ChatSession.onyxbot_flow.is_(False))
+    if not include_deleted:
+        description_match = description_match.where(ChatSession.deleted.is_(False))
 
-    # Execute the query to get IDs and ranks
-    result = db_session.execute(text(sql).bindparams(**params))
+    # Combine all match sources
+    combined_matches = union_all(
+        message_matches_query.select(), description_match
+    ).alias("combined_matches")
+
+    # Use CTE to group and get max rank
+    session_ranks = (
+        select(
+            combined_matches.c.chat_session_id,
+            func.max(combined_matches.c.search_rank).label("rank"),
+        )
+        .group_by(combined_matches.c.chat_session_id)
+        .alias("session_ranks")
+    )
+
+    # Get ranked sessions with pagination
+    ranked_query = (
+        db_session.query(session_ranks.c.chat_session_id, session_ranks.c.rank)
+        .order_by(desc(session_ranks.c.rank), session_ranks.c.chat_session_id)
+        .offset(offset)
+        .limit(page_size + 1)
+    )
+
+    result = ranked_query.all()
 
     # Extract session IDs and ranks
     session_ids_with_ranks = {row.chat_session_id: row.rank for row in result}
@@ -123,7 +119,7 @@ def search_chat_sessions(
     if not session_ids:
         return [], False
 
-    # Now query the actual ChatSession objects using the IDs
+    # Now, let's query the actual ChatSession objects using the IDs
     stmt = select(ChatSession).where(ChatSession.id.in_(session_ids))
 
     if user_id:
@@ -133,11 +129,11 @@ def search_chat_sessions(
     if not include_deleted:
         stmt = stmt.where(ChatSession.deleted.is_(False))
 
-    # Get the full objects with eager loading
+    # Full objects with eager loading
     result = db_session.execute(stmt.options(joinedload(ChatSession.persona)))
     chat_sessions = result.scalars().all()
 
-    # Sort according to our ranking
+    # Sort based on above ranking
     chat_sessions = sorted(
         chat_sessions,
         key=lambda session: (
@@ -146,7 +142,6 @@ def search_chat_sessions(
         ),
     )
 
-    # Check if there are more results
     has_more = len(chat_sessions) > page_size
     if has_more:
         chat_sessions = chat_sessions[:page_size]

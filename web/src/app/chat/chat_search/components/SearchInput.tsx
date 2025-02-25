@@ -39,7 +39,7 @@ export function SearchInput({
       </div>
       <div className="text-xs text-neutral-500 dark:text-neutral-400 mt-1 ml-3">
         {searchQuery && !isSearching
-          ? "Matching text will be highlighted"
+          ? "Showing chats matching your search"
           : "Enter text to search through your chat history"}
       </div>
     </div>
