@@ -94,8 +94,7 @@ def _initializer(
 
         sys.exit(255)  # use 255 to indicate a generic exception
     finally:
-        if token:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _run_in_process(
