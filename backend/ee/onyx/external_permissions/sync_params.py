@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
+from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
@@ -70,7 +71,7 @@ DOC_PERMISSION_SYNC_PERIODS: dict[DocumentSource, int] = {
 EXTERNAL_GROUP_SYNC_PERIODS: dict[DocumentSource, int] = {
     # Polling is not supported so we fetch all group permissions every 30 minutes
     DocumentSource.GOOGLE_DRIVE: 5 * 60,
-    # DocumentSource.CONFLUENCE: CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
+    DocumentSource.CONFLUENCE: CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY,
 }
 
 
