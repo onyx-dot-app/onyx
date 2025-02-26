@@ -19,7 +19,11 @@ import { ChatSession } from "../interfaces";
 import { Folder } from "../folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
-import { DocumentIcon2, NewChatIcon } from "@/components/icons/icons";
+import {
+  DocumentIcon2,
+  KnowledgeGroupIcon,
+  NewChatIcon,
+} from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
@@ -47,7 +51,7 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CircleX, PinIcon } from "lucide-react";
+import { CircleX, FolderIcon, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
 
@@ -257,7 +261,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             flex
             flex-none
             gap-y-4
-            bg-background-sidebar
+            bg-white
             w-full
             border-r 
             dark:border-none
@@ -302,6 +306,18 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 <NewChatIcon size={20} className="flex-none" />
                 <p className="my-auto flex font-normal  items-center ">
                   New Chat
+                </p>
+              </Link>
+              <Link
+                className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+                href="/chat/my-documents"
+              >
+                <KnowledgeGroupIcon
+                  size={20}
+                  className="flex-none text-text-history-sidebar-button"
+                />
+                <p className="my-auto flex font-normal items-center text-base">
+                  Knowledge Groups
                 </p>
               </Link>
               {user?.preferences?.shortcut_enabled && (

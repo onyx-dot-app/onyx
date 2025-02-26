@@ -444,12 +444,15 @@ def get_document_acls(
         response = vespa_client.get(document_url)
         if response.status_code == 200:
             fields = response.json().get("fields", {})
+
             document_id = fields.get("document_id") or fields.get(
                 "documentid", "Unknown"
             )
             acls = fields.get("access_control_list", {})
             title = fields.get("title", "")
             source_type = fields.get("source_type", "")
+            doc_sets = fields.get("document_sets", [])
+            user_file = fields.get("user_file", None)
             source_links_raw = fields.get("source_links", "{}")
             try:
                 source_links = json.loads(source_links_raw)
@@ -462,6 +465,8 @@ def get_document_acls(
             print(f"Source Links: {source_links}")
             print(f"Title: {title}")
             print(f"Source Type: {source_type}")
+            print(f"Document Sets: {doc_sets}")
+            print(f"User File: {user_file}")
             if MULTI_TENANT:
                 print(f"Tenant ID: {fields.get('tenant_id', 'N/A')}")
             print("-" * 80)

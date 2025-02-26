@@ -91,6 +91,7 @@ def _create_indexable_chunks(
             tenant_id=tenant_id if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA,
             access=default_public_access,
             document_sets=set(),
+            user_file=None,
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
         )

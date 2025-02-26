@@ -64,10 +64,10 @@ import { debounce } from "lodash";
 import { FullLLMProvider } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
 
-import { Switch, SwitchField } from "@/components/ui/switch";
+import { SwitchField } from "@/components/ui/switch";
 import { generateIdenticon } from "@/components/assistants/AssistantIcon";
 import { BackButton } from "@/components/BackButton";
-import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -76,12 +76,26 @@ import {
   Option as DropdownOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
-import { TagIcon, UserIcon, XIcon, InfoIcon } from "lucide-react";
+import {
+  TagIcon,
+  UserIcon,
+  FileIcon,
+  FolderIcon,
+  InfoIcon,
+} from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import Title from "@/components/ui/title";
+
+import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
+import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
+import {
+  FileResponse,
+  FolderResponse,
+} from "@/app/chat/my-documents/DocumentsContext";
+import { RadioGroup } from "@/components/ui/radio-group";
+import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
 function findSearchTool(tools: ToolSnapshot[]) {
@@ -147,6 +161,7 @@ export function AssistantEditor({
     "#6FFFFF",
   ];
 
+  const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // state to persist across formik reformatting
@@ -221,6 +236,16 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
+  const {
+    selectedFiles,
+    selectedFolders,
+    addSelectedFile,
+    removeSelectedFile,
+    addSelectedFolder,
+    removeSelectedFolder,
+    clearSelectedItems,
+  } = useDocumentsContext();
+
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
   const initialValues = {
@@ -259,6 +284,9 @@ export function AssistantEditor({
         (u) => u.id !== existingPersona.owner?.id
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
+    user_file_ids: existingPersona?.user_file_ids ?? [],
+    user_folder_ids: existingPersona?.user_folder_ids ?? [],
+    knowledge_source: "user_files",
     is_default_persona: existingPersona?.is_default_persona ?? false,
   };
 
@@ -368,6 +396,24 @@ export function AssistantEditor({
           <BackButton />
         </div>
       )}
+      {filePickerModalOpen && (
+        <FilePickerModal
+          selectedFiles={selectedFiles}
+          selectedFolders={selectedFolders}
+          addSelectedFile={addSelectedFile}
+          removeSelectedFile={removeSelectedFile}
+          addSelectedFolder={addSelectedFolder}
+          isOpen={filePickerModalOpen}
+          onClose={() => {
+            setFilePickerModalOpen(false);
+          }}
+          onSave={() => {
+            setFilePickerModalOpen(false);
+          }}
+          title="Add Documents to your Assistant"
+          buttonContent="Add to Assistant"
+        />
+      )}
 
       {labelToDelete && (
         <ConfirmEntityModal
@@ -434,6 +480,7 @@ export function AssistantEditor({
             label_ids: Yup.array().of(Yup.number()),
             selectedUsers: Yup.array().of(Yup.object()),
             selectedGroups: Yup.array().of(Yup.number()),
+            knowledge_source: Yup.string().required(),
             is_default_persona: Yup.boolean().required(),
           })
           .test(
@@ -522,9 +569,12 @@ export function AssistantEditor({
               ? new Date(values.search_start_date)
               : null,
             num_chunks: numChunks,
+            user_file_ids: selectedFiles.map((file) => file.id),
+            user_folder_ids: selectedFolders.map((folder) => folder.id),
           };
 
           let personaResponse;
+
           if (isUpdate) {
             personaResponse = await updatePersona(
               existingPersona.id,
@@ -846,77 +896,168 @@ export function AssistantEditor({
                     values.enabled_tools_map[searchTool.id] &&
                     !(user?.role != "admin" && documentSets.length === 0) && (
                       <CollapsibleSection>
-                        <div className="mt-2">
-                          {ccPairs.length > 0 && (
-                            <>
-                              <Label small>Document Sets</Label>
-                              <div>
-                                <SubLabel>
-                                  <>
-                                    Select which{" "}
-                                    {!user || user.role === "admin" ? (
-                                      <Link
-                                        href="/admin/documents/sets"
-                                        className="font-semibold underline hover:underline text-text"
-                                        target="_blank"
-                                      >
-                                        Document Sets
-                                      </Link>
-                                    ) : (
-                                      "Document Sets"
-                                    )}{" "}
-                                    this Assistant should use to inform its
-                                    responses. If none are specified, the
-                                    Assistant will reference all available
-                                    documents.
-                                  </>
-                                </SubLabel>
-                              </div>
+                        <div>
+                          <Label>Knowledge Source</Label>
+                          <RadioGroup
+                            className="flex flex-col gap-y-4 mt-2"
+                            value={values.knowledge_source}
+                            onValueChange={(value: string) => {
+                              setFieldValue("knowledge_source", value);
+                            }}
+                          >
+                            <RadioGroupItemField
+                              value="user_files"
+                              id="user_files"
+                              label="User Files"
+                              sublabel="Select specific user files and folders for this Assistant to use"
+                            />
+                            <RadioGroupItemField
+                              value="team_knowledge"
+                              id="team_knowledge"
+                              label="Team Knowledge"
+                              sublabel="Use team-wide document sets for this Assistant"
+                            />
+                          </RadioGroup>
 
-                              {documentSets.length > 0 ? (
-                                <FieldArray
-                                  name="document_set_ids"
-                                  render={(arrayHelpers: ArrayHelpers) => (
-                                    <div>
-                                      <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                                        {documentSets.map((documentSet) => (
-                                          <DocumentSetSelectable
-                                            key={documentSet.id}
-                                            documentSet={documentSet}
-                                            isSelected={values.document_set_ids.includes(
-                                              documentSet.id
-                                            )}
-                                            onSelect={() => {
-                                              const index =
-                                                values.document_set_ids.indexOf(
-                                                  documentSet.id
-                                                );
-                                              if (index !== -1) {
-                                                arrayHelpers.remove(index);
-                                              } else {
-                                                arrayHelpers.push(
-                                                  documentSet.id
-                                                );
-                                              }
-                                            }}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                />
-                              ) : (
-                                <p className="text-sm">
-                                  <Link
-                                    href="/admin/documents/sets/new"
-                                    className="text-primary hover:underline"
+                          {values.knowledge_source === "user_files" &&
+                            !existingPersona?.is_default_persona &&
+                            !admin && (
+                              <div className="mt-4">
+                                <div className="flex justify-start gap-x-2 items-center">
+                                  <Label>User Files</Label>
+                                  <span
+                                    className="cursor-pointer text-xs text-primary hover:underline"
+                                    onClick={() => setFilePickerModalOpen(true)}
                                   >
-                                    + Create Document Set
-                                  </Link>
-                                </p>
-                              )}
-                            </>
-                          )}
+                                    Attach Files and Folders
+                                  </span>
+                                </div>
+
+                                <SubLabel>
+                                  Select which of your user files and folders
+                                  this Assistant should use to inform its
+                                  responses. If none are specified, the
+                                  Assistant will not have access to any
+                                  user-specific documents.
+                                </SubLabel>
+
+                                <div className="mt-2 mb-4">
+                                  <h4 className="text-xs font-normal mb-2">
+                                    Selected Files and Folders
+                                  </h4>
+                                  <div className="flex flex-wrap gap-2">
+                                    {selectedFiles.map((file: FileResponse) => (
+                                      <SourceChip
+                                        key={file.id}
+                                        onRemove={() => {
+                                          removeSelectedFile(file);
+                                          setFieldValue(
+                                            "selectedFiles",
+                                            values.selectedFiles.filter(
+                                              (f: FileResponse) =>
+                                                f.id !== file.id
+                                            )
+                                          );
+                                        }}
+                                        title={file.name}
+                                        icon={<FileIcon size={12} />}
+                                      />
+                                    ))}
+                                    {selectedFolders.map(
+                                      (folder: FolderResponse) => (
+                                        <SourceChip
+                                          key={folder.id}
+                                          onRemove={() => {
+                                            removeSelectedFolder(folder);
+                                            setFieldValue(
+                                              "selectedFolders",
+                                              values.selectedFolders.filter(
+                                                (f: FolderResponse) =>
+                                                  f.id !== folder.id
+                                              )
+                                            );
+                                          }}
+                                          title={folder.name}
+                                          icon={<FolderIcon size={12} />}
+                                        />
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                          {values.knowledge_source === "team_knowledge" &&
+                            ccPairs.length > 0 && (
+                              <div className="mt-4">
+                                <Label>Team Knowledge</Label>
+                                <div>
+                                  <SubLabel>
+                                    <>
+                                      Select which{" "}
+                                      {!user || user.role === "admin" ? (
+                                        <Link
+                                          href="/admin/documents/sets"
+                                          className="font-semibold underline hover:underline text-text"
+                                          target="_blank"
+                                        >
+                                          Team Document Sets
+                                        </Link>
+                                      ) : (
+                                        "Team Document Sets"
+                                      )}{" "}
+                                      this Assistant should use to inform its
+                                      responses. If none are specified, the
+                                      Assistant will reference all available
+                                      documents.
+                                    </>
+                                  </SubLabel>
+                                </div>
+
+                                {documentSets.length > 0 ? (
+                                  <FieldArray
+                                    name="document_set_ids"
+                                    render={(arrayHelpers: ArrayHelpers) => (
+                                      <div>
+                                        <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                          {documentSets.map((documentSet) => (
+                                            <DocumentSetSelectable
+                                              key={documentSet.id}
+                                              documentSet={documentSet}
+                                              isSelected={values.document_set_ids.includes(
+                                                documentSet.id
+                                              )}
+                                              onSelect={() => {
+                                                const index =
+                                                  values.document_set_ids.indexOf(
+                                                    documentSet.id
+                                                  );
+                                                if (index !== -1) {
+                                                  arrayHelpers.remove(index);
+                                                } else {
+                                                  arrayHelpers.push(
+                                                    documentSet.id
+                                                  );
+                                                }
+                                              }}
+                                            />
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  />
+                                ) : (
+                                  <p className="text-sm">
+                                    <Link
+                                      href="/admin/documents/sets/new"
+                                      className="text-primary hover:underline"
+                                    >
+                                      + Create Document Set
+                                    </Link>
+                                  </p>
+                                )}
+                              </div>
+                            )}
                         </div>
                       </CollapsibleSection>
                     )}

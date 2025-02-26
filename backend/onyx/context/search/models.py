@@ -98,6 +98,7 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
+    user_file_ids: list[int] | None = None
 
 
 class IndexFilters(BaseFilters):

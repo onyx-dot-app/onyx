@@ -162,6 +162,8 @@ export async function* sendMessage({
   regenerate,
   message,
   fileDescriptors,
+  userFileIds,
+  userFolderIds,
   parentMessageId,
   chatSessionId,
   promptId,
@@ -176,6 +178,7 @@ export async function* sendMessage({
   useExistingUserMessage,
   alternateAssistantId,
   signal,
+  forceUserFileSearch,
   useLanggraph,
 }: {
   regenerate: boolean;
@@ -195,6 +198,9 @@ export async function* sendMessage({
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
+  userFileIds?: number[];
+  userFolderIds?: number[];
+  forceUserFileSearch?: boolean;
   useLanggraph?: boolean;
 }): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
@@ -206,7 +212,10 @@ export async function* sendMessage({
     message: message,
     prompt_id: promptId,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
+    force_user_file_search: forceUserFileSearch,
     file_descriptors: fileDescriptors,
+    user_file_ids: userFileIds,
+    user_folder_ids: userFolderIds,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {

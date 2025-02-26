@@ -90,7 +90,10 @@ export async function fetchChatData(searchParams: {
   const chatSessionsResponse = results[4] as Response | null;
 
   const tagsResponse = results[5] as Response | null;
+  console.log("-----tagsResponse-----");
+  console.log(results[6]);
   const llmProviders = (results[6] || []) as LLMProviderDescriptor[];
+  console.log(llmProviders);
   const foldersResponse = results[7] as Response | null;
 
   let inputPrompts: InputPrompt[] = [];
