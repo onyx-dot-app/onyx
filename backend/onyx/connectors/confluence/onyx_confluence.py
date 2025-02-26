@@ -256,7 +256,8 @@ class OnyxConfluence(Confluence):
                 if new_start - previous_start > len(results):
                     logger.warning(
                         f"Start was updated by more than the amount of results "
-                        f"retrieved. This is a bug. Start: {new_start}, Previous Start: {previous_start}, Results: {results}"
+                        f"retrieved. This is a bug. Start: {new_start}, "
+                        f"Previous Start: {previous_start}, Len Results: {len(results)}."
                     )
 
                     # Update the url_suffix to use the adjusted start
