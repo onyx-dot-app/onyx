@@ -110,11 +110,9 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                 />
               </TooltipTrigger>
               <TooltipContent>
-                {!isIndexed ? (
-                  <p>Not yet indexed. This will be completed momentarily.</p>
-                ) : (
-                  <p>Indexed</p>
-                )}
+                {!isIndexed
+                  ? "Not yet indexed. This will be completed momentarily."
+                  : "Indexed"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
