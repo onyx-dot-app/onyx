@@ -23,7 +23,7 @@ from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChannelConfig
 from onyx.onyxbot.slack.constants import CONTINUE_IN_WEB_UI_ACTION_ID
 from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
@@ -410,12 +410,11 @@ def _build_qa_response_blocks(
 
 
 def _build_continue_in_web_ui_block(
-    tenant_id: str | None,
     message_id: int | None,
 ) -> Block:
     if message_id is None:
         raise ValueError("No message id provided to build continue in web ui block")
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         chat_session = get_chat_session_by_message_id(
             db_session=db_session,
             message_id=message_id,
@@ -482,7 +481,6 @@ def build_follow_up_resolved_blocks(
 
 def build_slack_response_blocks(
     answer: ChatOnyxBotResponse,
-    tenant_id: str | None,
     message_info: SlackMessageInfo,
     channel_conf: ChannelConfig | None,
     use_citations: bool,
@@ -517,7 +515,6 @@ def build_slack_response_blocks(
     if channel_conf and channel_conf.get("show_continue_in_web_ui"):
         web_follow_up_block.append(
             _build_continue_in_web_ui_block(
-                tenant_id=tenant_id,
                 message_id=answer.chat_message_id,
             )
         )
