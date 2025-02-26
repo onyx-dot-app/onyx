@@ -120,6 +120,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Confluence",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/confluence",
+    oauthSupported: true,
   },
   jira: {
     icon: JiraIcon,

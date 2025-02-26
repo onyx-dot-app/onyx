@@ -455,7 +455,7 @@ def connector_permission_sync_generator_task(
 
             callback = PermissionSyncCallback(redis_connector, lock, r)
             document_external_accesses: list[DocExternalAccess] = doc_sync_func(
-                cc_pair, callback
+                tenant_id, cc_pair, callback
             )
 
             task_logger.info(
