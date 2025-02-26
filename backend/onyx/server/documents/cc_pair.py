@@ -646,7 +646,6 @@ def associate_credential_to_connector(
         )
 
         return response
-
     except ValidationError as e:
         # If validation fails, delete the connector and commit the changes
         # Ensures we don't leave invalid connectors in the database
@@ -660,10 +659,16 @@ def associate_credential_to_connector(
         )
     except IntegrityError as e:
         logger.error(f"IntegrityError: {e}")
+        delete_connector(db_session, connector_id)
+        db_session.commit()
+
         raise HTTPException(status_code=400, detail="Name must be unique")
 
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
+        delete_connector(db_session, connector_id)
+        db_session.commit()
+
         raise HTTPException(status_code=500, detail="Unexpected error")
 
 
