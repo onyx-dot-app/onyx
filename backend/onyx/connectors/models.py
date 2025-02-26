@@ -145,6 +145,9 @@ class DocumentBase(BaseModel):
             else:
                 attributes.append(k + INDEX_SEPARATOR + v)
         return attributes
+    
+    def get_content(self) -> str:
+        return " ".join([section.text for section in self.sections])
 
 
 class Document(DocumentBase):
