@@ -77,7 +77,7 @@ JSON_PROMPT = f"""
 
 SAMPLE RESPONSE:
 ```
-{{{json.dumps(EMPTY_SAMPLE_JSON)}}}
+{{{json.dumps(EMPTY_SAMPLE_JSON, ensure_ascii=False)}}}
 ```
 
 {FINAL_QUERY_PAT.upper()}
@@ -134,7 +134,7 @@ You MUST respond in the following format:
 ```
 {THOUGHT_PAT} Use this section as a scratchpad to reason through the answer.
 
-{{{json.dumps(EMPTY_SAMPLE_JSON)}}}
+{{{json.dumps(EMPTY_SAMPLE_JSON, ensure_ascii=False)}}}
 ```
 
 {QUESTION_PAT.upper()} {{user_query}}

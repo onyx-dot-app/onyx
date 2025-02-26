@@ -18,7 +18,7 @@ def _populate_results_file(output_folder_path: str, all_qa_output: list[dict]) -
     output_file_path = os.path.join(output_folder_path, RESULTS_FILENAME)
     with open(output_file_path, "a", encoding="utf-8") as file:
         for qa_output in all_qa_output:
-            file.write(json.dumps(qa_output) + "\n")
+            file.write(json.dumps(qa_output, ensure_ascii=False) + "\n")
             file.flush()
 
 
