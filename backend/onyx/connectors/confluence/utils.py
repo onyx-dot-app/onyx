@@ -2,7 +2,10 @@ import io
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import TYPE_CHECKING
+from urllib.parse import parse_qs
 from urllib.parse import quote
+from urllib.parse import urlparse
 
 import bs4
 
@@ -10,12 +13,12 @@ from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
-from onyx.connectors.confluence.onyx_confluence import (
-    OnyxConfluence,
-)
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.utils.logger import setup_logger
+
+if TYPE_CHECKING:
+    from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 
 logger = setup_logger()
 
@@ -24,7 +27,7 @@ _USER_EMAIL_CACHE: dict[str, str | None] = {}
 
 
 def get_user_email_from_username__server(
-    confluence_client: OnyxConfluence, user_name: str
+    confluence_client: "OnyxConfluence", user_name: str
 ) -> str | None:
     global _USER_EMAIL_CACHE
     if _USER_EMAIL_CACHE.get(user_name) is None:
@@ -47,7 +50,7 @@ _USER_NOT_FOUND = "Unknown Confluence User"
 _USER_ID_TO_DISPLAY_NAME_CACHE: dict[str, str | None] = {}
 
 
-def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
+def _get_user(confluence_client: "OnyxConfluence", user_id: str) -> str:
     """Get Confluence Display Name based on the account-id or userkey value
 
     Args:
@@ -78,7 +81,7 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
 
 
 def extract_text_from_confluence_html(
-    confluence_client: OnyxConfluence,
+    confluence_client: "OnyxConfluence",
     confluence_object: dict[str, Any],
     fetched_titles: set[str],
 ) -> str:
@@ -191,7 +194,7 @@ def validate_attachment_filetype(attachment: dict[str, Any]) -> bool:
 
 
 def attachment_to_content(
-    confluence_client: OnyxConfluence,
+    confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
 ) -> str | None:
     """If it returns None, assume that we should skip this attachment."""
@@ -279,3 +282,32 @@ def datetime_from_string(datetime_string: str) -> datetime:
         datetime_object = datetime_object.astimezone(timezone.utc)
 
     return datetime_object
+
+
+def get_single_param_from_url(url: str, param: str) -> str | None:
+    """Get a parameter from a url"""
+    parsed_url = urlparse(url)
+    return parse_qs(parsed_url.query).get(param, [None])[0]
+
+
+def get_start_param_from_url(url: str) -> int:
+    """Get the start parameter from a url"""
+    start_str = get_single_param_from_url(url, "start")
+    if start_str is None:
+        return 0
+    return int(start_str)
+
+
+def update_param_in_path(path: str, param: str, value: str) -> str:
+    """Update a parameter in a path. Path should look something like:
+
+    /api/rest/users?start=0&limit=10
+    """
+    parsed_url = urlparse(path)
+    query_params = parse_qs(parsed_url.query)
+    query_params[param] = [value]
+    return (
+        path.split("?")[0]
+        + "?"
+        + "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
+    )
