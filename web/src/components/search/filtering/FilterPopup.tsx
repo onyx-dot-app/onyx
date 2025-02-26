@@ -383,6 +383,9 @@ export function FilterPopup({
             )}
           </div>
         </div>
+        {/* {availableDocumentSets.map((docSet) => (
+          <div key={docSet.id}>{docSet.name}</div>
+        ))} */}
         <Separator className="mt-0 mb-2" />
         <div className="flex justify-between items-center px-4 py-2">
           <Button
