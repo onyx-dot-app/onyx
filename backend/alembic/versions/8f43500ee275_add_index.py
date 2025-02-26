@@ -17,10 +17,11 @@ depends_on = None
 
 def upgrade() -> None:
     # Create a basic index on the lowercase message column for direct text matching
+    # Limit to 2000 characters to stay well under the 8191 byte limit
     op.execute(
         """
         CREATE INDEX idx_chat_message_message_lower
-        ON chat_message (LOWER(message))
+        ON chat_message (LOWER(substring(message, 1, 2000)))
         """
     )
 
