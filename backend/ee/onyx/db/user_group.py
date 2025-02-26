@@ -8,6 +8,8 @@ from sqlalchemy import func
 from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.orm import contains_eager
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.user_group.models import SetCuratorRequest
@@ -16,12 +18,15 @@ from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential__UserGroup
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.db.models import DocumentSet
 from onyx.db.models import DocumentSet__UserGroup
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import Persona
 from onyx.db.models import Persona__UserGroup
 from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import User
@@ -175,6 +180,42 @@ def validate_object_creation_for_user(
         )
 
 
+def eager_usergroup_options(stmt: Select[tuple[UserGroup]]) -> Select[tuple[UserGroup]]:
+    return stmt.options(
+        selectinload(UserGroup.users),
+        selectinload(UserGroup.user_group_relationships),
+        selectinload(UserGroup.cc_pair_relationships)
+        .selectinload(UserGroup__ConnectorCredentialPair.cc_pair)
+        .joinedload(ConnectorCredentialPair.credential),
+        selectinload(UserGroup.cc_pair_relationships)
+        .selectinload(UserGroup__ConnectorCredentialPair.cc_pair)
+        .joinedload(ConnectorCredentialPair.connector)
+        .contains_eager(Connector.credentials),
+        selectinload(UserGroup.document_sets)
+        .selectinload(DocumentSet.connector_credential_pairs)
+        .selectinload(ConnectorCredentialPair.credential),
+        selectinload(UserGroup.document_sets)
+        .selectinload(DocumentSet.connector_credential_pairs)
+        .joinedload(ConnectorCredentialPair.connector)
+        .contains_eager(Connector.credentials),
+        selectinload(UserGroup.personas).selectinload(Persona.user),
+        selectinload(UserGroup.personas).selectinload(Persona.prompts),
+        selectinload(UserGroup.personas).selectinload(Persona.tools),
+        selectinload(UserGroup.personas)
+        .selectinload(Persona.document_sets)
+        .selectinload(DocumentSet.connector_credential_pairs)
+        .selectinload(ConnectorCredentialPair.credential),
+        selectinload(UserGroup.personas)
+        .selectinload(Persona.document_sets)
+        .selectinload(DocumentSet.connector_credential_pairs)
+        .joinedload(ConnectorCredentialPair.connector)
+        .contains_eager(Connector.credentials),
+        selectinload(UserGroup.personas).selectinload(Persona.users),
+        selectinload(UserGroup.personas).selectinload(Persona.groups),
+        selectinload(UserGroup.personas).selectinload(Persona.labels),
+    )
+
+
 def fetch_user_group(db_session: Session, user_group_id: int) -> UserGroup | None:
     stmt = select(UserGroup).where(UserGroup.id == user_group_id)
     return db_session.scalar(stmt)
@@ -201,6 +242,8 @@ def fetch_user_groups(
     stmt = select(UserGroup)
     if only_up_to_date:
         stmt = stmt.where(UserGroup.is_up_to_date == True)  # noqa: E712
+
+    stmt = eager_usergroup_options(stmt)
     return db_session.scalars(stmt).all()
 
 
@@ -215,6 +258,9 @@ def fetch_user_groups_for_user(
     )
     if only_curator_groups:
         stmt = stmt.where(User__UserGroup.is_curator == True)  # noqa: E712
+
+    stmt = eager_usergroup_options(stmt)
+    stmt = stmt.options(contains_eager(UserGroup.users))
     return db_session.scalars(stmt).all()
 
 
