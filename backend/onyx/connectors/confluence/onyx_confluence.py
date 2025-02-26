@@ -5,9 +5,7 @@ from collections.abc import Iterator
 from typing import Any
 from typing import cast
 from typing import TypeVar
-from urllib.parse import parse_qs
 from urllib.parse import quote
-from urllib.parse import urlparse
 
 from atlassian import Confluence  # type:ignore
 from pydantic import BaseModel
@@ -253,7 +251,6 @@ class OnyxConfluence(Confluence):
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
             if url_suffix and "start" in url_suffix:
-                parse_qs(urlparse(url_suffix).query)
                 new_start = get_start_param_from_url(url_suffix)
                 previous_start = get_start_param_from_url(old_url_suffix)
                 if new_start - previous_start > len(results):
