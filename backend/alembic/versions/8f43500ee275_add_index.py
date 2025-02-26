@@ -18,12 +18,13 @@ depends_on = None
 def upgrade() -> None:
     # Create a basic index on the lowercase message column for direct text matching
     # Limit to 1500 characters to stay well under the 2856 byte limit of btree version 4
-    op.execute(
-        """
-        CREATE INDEX idx_chat_message_message_lower
-        ON chat_message (LOWER(substring(message, 1, 1500)))
-        """
-    )
+    # op.execute(
+    #     """
+    #     CREATE INDEX idx_chat_message_message_lower
+    #     ON chat_message (LOWER(substring(message, 1, 1500)))
+    #     """
+    # )
+    pass
 
 
 def downgrade() -> None:
