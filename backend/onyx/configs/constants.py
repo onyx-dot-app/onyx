@@ -213,6 +213,12 @@ class AuthType(str, Enum):
     CLOUD = "cloud"
 
 
+class QueryHistoryType(str, Enum):
+    DISABLED = "disabled"
+    ANONYMIZED = "anonymized"
+    NORMAL = "normal"
+
+
 # Special characters for password validation
 PASSWORD_SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
 
