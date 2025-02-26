@@ -64,7 +64,6 @@ from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
@@ -194,7 +193,7 @@ def get_vespa_info() -> Dict[str, Any]:
         return response.json()
 
 
-def get_index_name(tenant_id: str) -> str:
+def get_index_name(tenant_id: str | None) -> str:
     # Return the index name for a given tenant.
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         search_settings = get_current_search_settings(db_session)
@@ -207,7 +206,7 @@ def query_vespa(
     yql: str, tenant_id: Optional[str] = None, limit: int = 10
 ) -> List[Dict[str, Any]]:
     # Perform a Vespa query using YQL syntax.
-    filters = IndexFilters(tenant_id=tenant_id, access_control_list=[])
+    filters = IndexFilters(tenant_id=None, access_control_list=[])
     filter_string = build_vespa_filters(filters, remove_trailing_and=True)
     full_yql = yql.strip()
     if filter_string:
@@ -242,7 +241,7 @@ def print_documents(documents: List[Dict[str, Any]]) -> None:
 
 
 def get_documents_for_tenant_connector(
-    tenant_id: str, connector_id: int, n: int = 10
+    tenant_id: str | None, connector_id: int, n: int = 10
 ) -> None:
     # Get and print documents for a specific tenant and connector.
     index_name = get_index_name(tenant_id)
@@ -288,7 +287,7 @@ def search_for_document(
 
 
 def search_documents(
-    tenant_id: str, connector_id: int, query: str, n: int = 10
+    tenant_id: str | None, connector_id: int, query: str, n: int = 10
 ) -> None:
     # Search documents for a specific tenant and connector.
     index_name = get_index_name(tenant_id)
@@ -302,7 +301,7 @@ def search_documents(
 
 
 def update_document(
-    tenant_id: str, connector_id: int, doc_id: str, fields: Dict[str, Any]
+    tenant_id: str | None, connector_id: int, doc_id: str, fields: Dict[str, Any]
 ) -> None:
     # Update a specific document.
     index_name = get_index_name(tenant_id)
@@ -318,7 +317,7 @@ def update_document(
         print(f"Document {doc_id} updated successfully")
 
 
-def delete_document(tenant_id: str, connector_id: int, doc_id: str) -> None:
+def delete_document(tenant_id: str | None, connector_id: int, doc_id: str) -> None:
     # Delete a specific document.
     index_name = get_index_name(tenant_id)
     logger.info(
@@ -348,7 +347,7 @@ def list_documents(n: int = 10, tenant_id: Optional[str] = None) -> None:
 
 
 def get_document_and_chunk_counts(
-    tenant_id: str, cc_pair_id: int, filter_doc: DocumentFilter | None = None
+    tenant_id: str | None, cc_pair_id: int, filter_doc: DocumentFilter | None = None
 ) -> Dict[str, int]:
     # Return a dict mapping each document ID to its chunk count for a given connector.
     with get_session_with_tenant(tenant_id=tenant_id) as session:
@@ -388,7 +387,7 @@ def get_document_and_chunk_counts(
 
 
 def get_chunk_ids_for_connector(
-    tenant_id: str,
+    tenant_id: str | None,
     cc_pair_id: int,
     index_name: str,
     filter_doc: DocumentFilter | None = None,
@@ -418,7 +417,7 @@ def get_chunk_ids_for_connector(
 
 
 def get_document_acls(
-    tenant_id: str,
+    tenant_id: str | None,
     cc_pair_id: int,
     n: int | None = 10,
     filter_doc: DocumentFilter | None = None,
@@ -472,9 +471,7 @@ def get_document_acls(
             print("-" * 80)
 
 
-def get_current_chunk_count(
-    document_id: str, index_name: str, tenant_id: str
-) -> int | None:
+def get_current_chunk_count(document_id: str) -> int | None:
     with get_session_with_current_tenant() as session:
         return (
             session.query(Document.chunk_count)
@@ -484,9 +481,9 @@ def get_current_chunk_count(
 
 
 def get_number_of_chunks_we_think_exist(
-    document_id: str, index_name: str, tenant_id: str
+    document_id: str, index_name: str, tenant_id: str | None
 ) -> int:
-    current_chunk_count = get_current_chunk_count(document_id, index_name, tenant_id)
+    current_chunk_count = get_current_chunk_count(document_id)
     print(f"Current chunk count: {current_chunk_count}")
 
     doc_info = VespaIndex.enrich_basic_chunk_info(
@@ -508,8 +505,7 @@ def get_number_of_chunks_we_think_exist(
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
     def __init__(self, tenant_id: str | None = None):
-        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-        self.tenant_id = POSTGRES_DEFAULT_SCHEMA if not tenant_id else tenant_id
+        self.tenant_id = tenant_id
         self.index_name = get_index_name(self.tenant_id)
 
     def sample_document_counts(self) -> None:
@@ -635,6 +631,7 @@ def delete_where(
     """
     Removes visited documents in `cluster` where the given selection
     is true, using Vespa's 'delete where' endpoint.
+
 
     :param index_name: Typically <namespace>/<document-type> from your schema
     :param selection:  The selection string, e.g., "true" or "foo contains 'bar'"
@@ -799,7 +796,7 @@ def main() -> None:
     args = parser.parse_args()
     vespa_debug = VespaDebugging(args.tenant_id)
 
-    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id or "public")
     if args.action == "delete-all-documents":
         if not args.tenant_id:
             parser.error("--tenant-id is required for delete-all-documents action")

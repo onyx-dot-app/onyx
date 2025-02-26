@@ -32,6 +32,7 @@ from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import EMBEDDINGS
+from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import METADATA
 from onyx.document_index.vespa_constants import METADATA_LIST
@@ -198,13 +199,13 @@ def _index_vespa_chunk(
         # which only calls VespaIndex.update
         ACCESS_CONTROL_LIST: {acl_entry: 1 for acl_entry in chunk.access.to_acl()},
         DOCUMENT_SETS: {document_set: 1 for document_set in chunk.document_sets},
+        IMAGE_FILE_NAME: chunk.image_file_name,
         BOOST: chunk.boost,
     }
 
     if multitenant:
         if chunk.tenant_id:
             vespa_document_fields[TENANT_ID] = chunk.tenant_id
-
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
     logger.debug(f'Indexing to URL "{vespa_url}"')
     res = http_client.post(

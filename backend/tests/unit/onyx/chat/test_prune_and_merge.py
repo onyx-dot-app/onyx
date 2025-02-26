@@ -37,6 +37,7 @@ def create_inference_chunk(
         metadata={},
         match_highlights=[],
         updated_at=None,
+        image_file_name=None,
     )
 
 

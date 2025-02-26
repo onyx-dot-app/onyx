@@ -347,6 +347,7 @@ class SearchPipeline:
         if self.retrieved_sections_callback is not None:
             self.retrieved_sections_callback(retrieved_sections)
 
+        print("POST PROCESING GEERATOR")
         self._postprocessing_generator = search_postprocessing(
             search_query=self.search_query,
             retrieved_sections=retrieved_sections,

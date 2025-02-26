@@ -6,12 +6,14 @@ from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine import get_session_context_manager
 from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_provider
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.utils import model_supports_image_input
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -84,6 +86,48 @@ def get_llms_for_persona(
         )
 
     return _create_llm(model), _create_llm(fast_model)
+
+
+def get_default_llm_with_vision(
+    timeout: int | None = None,
+    temperature: float | None = None,
+    additional_headers: dict[str, str] | None = None,
+    long_term_logger: LongTermLogger | None = None,
+) -> LLM | None:
+    if DISABLE_GENERATIVE_AI:
+        raise GenAIDisabledException()
+
+    with get_session_context_manager() as db_session:
+        llm_providers = fetch_existing_llm_providers(db_session)
+
+    if not llm_providers:
+        return None
+
+    for provider in llm_providers:
+        model_name = provider.default_model_name
+        fast_model_name = (
+            provider.fast_default_model_name or provider.default_model_name
+        )
+
+        if not model_name or not fast_model_name:
+            continue
+
+        if model_supports_image_input(model_name, provider.provider):
+            return get_llm(
+                provider=provider.provider,
+                model=model_name,
+                deployment_name=provider.deployment_name,
+                api_key=provider.api_key,
+                api_base=provider.api_base,
+                api_version=provider.api_version,
+                custom_config=provider.custom_config,
+                timeout=timeout,
+                temperature=temperature,
+                additional_headers=additional_headers,
+                long_term_logger=long_term_logger,
+            )
+
+    raise ValueError("No LLM provider found that supports image input")
 
 
 def get_default_llms(
