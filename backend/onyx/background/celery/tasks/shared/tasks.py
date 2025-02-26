@@ -298,6 +298,7 @@ def cloud_beat_task_generator(
 
     last_lock_time = time.monotonic()
     tenant_ids: list[str] = []
+    num_processed_tenants = 0
 
     try:
         tenant_ids = get_all_tenant_ids()
@@ -325,6 +326,8 @@ def cloud_beat_task_generator(
                 expires=expires,
                 ignore_result=True,
             )
+
+            num_processed_tenants += 1
     except SoftTimeLimitExceeded:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
@@ -344,6 +347,7 @@ def cloud_beat_task_generator(
     task_logger.info(
         f"cloud_beat_task_generator finished: "
         f"task={task_name} "
+        f"num_processed_tenants={num_processed_tenants} "
         f"num_tenants={len(tenant_ids)} "
         f"elapsed={time_elapsed:.2f}"
     )
