@@ -32,12 +32,15 @@ def list_user_groups(
     db_session: Session = Depends(get_session),
 ) -> list[UserGroup]:
     if user is None or user.role == UserRole.ADMIN:
-        user_groups = fetch_user_groups(db_session, only_up_to_date=False)
+        user_groups = fetch_user_groups(
+            db_session, only_up_to_date=False, eager_load_all=True
+        )
     else:
         user_groups = fetch_user_groups_for_user(
             db_session=db_session,
             user_id=user.id,
             only_curator_groups=user.role == UserRole.CURATOR,
+            eager_load_all=True,
         )
     return [UserGroup.from_model(user_group) for user_group in user_groups]
 
