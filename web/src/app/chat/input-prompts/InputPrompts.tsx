@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { Button } from "@/components/ui/button";
-import { TrashIcon, PlusIcon } from "@/components/icons/icons";
-import { MoreVertical, CheckIcon, XIcon } from "lucide-react";
+import { PlusIcon } from "@/components/icons/icons";
+import { MoreVertical, XIcon } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
@@ -153,114 +153,6 @@ export default function InputPrompts() {
     }
   };
 
-  const PromptCard = ({ prompt }: { prompt: InputPrompt }) => {
-    const isEditing = editingPromptId === prompt.id;
-    const [localPrompt, setLocalPrompt] = useState(prompt.prompt);
-    const [localContent, setLocalContent] = useState(prompt.content);
-
-    // Sync local edits with any prompt changes from outside
-    useEffect(() => {
-      setLocalPrompt(prompt.prompt);
-      setLocalContent(prompt.content);
-    }, [prompt, isEditing]);
-
-    const handleLocalEdit = (field: "prompt" | "content", value: string) => {
-      if (field === "prompt") {
-        setLocalPrompt(value);
-      } else {
-        setLocalContent(value);
-      }
-    };
-
-    const handleSaveLocal = () => {
-      handleSave(prompt.id, localPrompt, localContent);
-    };
-
-    return (
-      <div className="border dark:border-none dark:bg-[#333333] rounded-lg p-4 mb-4 relative">
-        {isEditing ? (
-          <>
-            <div className="absolute top-2 right-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setEditingPromptId(null);
-                  fetchInputPrompts(); // Revert changes from server
-                }}
-              >
-                <XIcon size={14} />
-              </Button>
-            </div>
-            <div className="flex">
-              <div className="flex-grow mr-4">
-                <Textarea
-                  value={localPrompt}
-                  onChange={(e) => handleLocalEdit("prompt", e.target.value)}
-                  className="mb-2 resize-none"
-                  placeholder="Prompt"
-                />
-                <Textarea
-                  value={localContent}
-                  onChange={(e) => handleLocalEdit("content", e.target.value)}
-                  className="resize-vertical min-h-[100px]"
-                  placeholder="Content"
-                />
-              </div>
-              <div className="flex items-end">
-                <Button onClick={handleSaveLocal}>
-                  {prompt.id ? "Save" : "Create"}
-                </Button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="mb-2  flex gap-x-2 ">
-                    <p className="font-semibold">{prompt.prompt}</p>
-                    {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
-                  </div>
-                </TooltipTrigger>
-                {isPromptPublic(prompt) && (
-                  <TooltipContent>
-                    <p>This is a built-in prompt and cannot be edited</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-            <div className="whitespace-pre-wrap">{prompt.content}</div>
-            <div className="absolute top-2 right-2">
-              <DropdownMenu>
-                <DropdownMenuTrigger className="hover:bg-transparent" asChild>
-                  <Button
-                    className="!hover:bg-transparent"
-                    variant="ghost"
-                    size="sm"
-                  >
-                    <MoreVertical size={14} />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  {!isPromptPublic(prompt) && (
-                    <DropdownMenuItem onClick={() => handleEdit(prompt.id)}>
-                      Edit
-                    </DropdownMenuItem>
-                  )}
-                  <DropdownMenuItem onClick={() => handleDelete(prompt.id)}>
-                    Delete
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div className="mx-auto max-w-4xl">
       <div className="absolute top-4 left-4">
@@ -272,13 +164,21 @@ export default function InputPrompts() {
           <Title>Prompt Shortcuts</Title>
           <Text>
             Manage and customize prompt shortcuts for your assistants. Use your
-            prompt shortcuts by starting a new message “/” in chat.
+            prompt shortcuts by starting a new message with &quot;/&quot; in
+            chat.
           </Text>
         </div>
       </div>
 
       {inputPrompts.map((prompt) => (
-        <PromptCard key={prompt.id} prompt={prompt} />
+        <PromptCard
+          key={prompt.id}
+          prompt={prompt}
+          onEdit={handleEdit}
+          onSave={handleSave}
+          onDelete={handleDelete}
+          isEditing={editingPromptId === prompt.id}
+        />
       ))}
 
       {isCreatingNew ? (
@@ -315,3 +215,129 @@ export default function InputPrompts() {
     </div>
   );
 }
+
+interface PromptCardProps {
+  prompt: InputPrompt;
+  onEdit: (id: number) => void;
+  onSave: (id: number, prompt: string, content: string) => void;
+  onDelete: (id: number) => void;
+  isEditing: boolean;
+}
+
+const PromptCard: React.FC<PromptCardProps> = ({
+  prompt,
+  onEdit,
+  onSave,
+  onDelete,
+  isEditing,
+}) => {
+  const [localPrompt, setLocalPrompt] = useState(prompt.prompt);
+  const [localContent, setLocalContent] = useState(prompt.content);
+
+  useEffect(() => {
+    setLocalPrompt(prompt.prompt);
+    setLocalContent(prompt.content);
+  }, [prompt, isEditing]);
+
+  const handleLocalEdit = useCallback(
+    (field: "prompt" | "content", value: string) => {
+      if (field === "prompt") {
+        setLocalPrompt(value);
+      } else {
+        setLocalContent(value);
+      }
+    },
+    []
+  );
+
+  const handleSaveLocal = useCallback(() => {
+    onSave(prompt.id, localPrompt, localContent);
+  }, [prompt.id, localPrompt, localContent, onSave]);
+
+  const isPromptPublic = useCallback((p: InputPrompt): boolean => {
+    return p.is_public;
+  }, []);
+
+  return (
+    <div className="border dark:border-none dark:bg-[#333333] rounded-lg p-4 mb-4 relative">
+      {isEditing ? (
+        <>
+          <div className="absolute top-2 right-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                onEdit(0);
+              }}
+            >
+              <XIcon size={14} />
+            </Button>
+          </div>
+          <div className="flex">
+            <div className="flex-grow mr-4">
+              <Textarea
+                value={localPrompt}
+                onChange={(e) => handleLocalEdit("prompt", e.target.value)}
+                className="mb-2 resize-none"
+                placeholder="Prompt"
+              />
+              <Textarea
+                value={localContent}
+                onChange={(e) => handleLocalEdit("content", e.target.value)}
+                className="resize-vertical min-h-[100px]"
+                placeholder="Content"
+              />
+            </div>
+            <div className="flex items-end">
+              <Button onClick={handleSaveLocal}>
+                {prompt.id ? "Save" : "Create"}
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="mb-2  flex gap-x-2 ">
+                  <p className="font-semibold">{prompt.prompt}</p>
+                  {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
+                </div>
+              </TooltipTrigger>
+              {isPromptPublic(prompt) && (
+                <TooltipContent>
+                  <p>This is a built-in prompt and cannot be edited</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <div className="whitespace-pre-wrap">{prompt.content}</div>
+          <div className="absolute top-2 right-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger className="hover:bg-transparent" asChild>
+                <Button
+                  className="!hover:bg-transparent"
+                  variant="ghost"
+                  size="sm"
+                >
+                  <MoreVertical size={14} />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                {!isPromptPublic(prompt) && (
+                  <DropdownMenuItem onClick={() => onEdit(prompt.id)}>
+                    Edit
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem onClick={() => onDelete(prompt.id)}>
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
