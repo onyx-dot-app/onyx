@@ -1,3 +1,4 @@
+from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import KV_SETTINGS_KEY
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.key_value_store.factory import get_kv_store
@@ -45,6 +46,7 @@ def load_settings() -> Settings:
         anonymous_user_enabled = False
 
     settings.anonymous_user_enabled = anonymous_user_enabled
+    settings.query_history_type = ONYX_QUERY_HISTORY_TYPE
     return settings
 
 

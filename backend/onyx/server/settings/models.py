@@ -4,6 +4,7 @@ from enum import Enum
 from pydantic import BaseModel
 
 from onyx.configs.constants import NotificationType
+from onyx.configs.constants import QueryHistoryType
 from onyx.db.models import Notification as NotificationDBModel
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -50,6 +51,7 @@ class Settings(BaseModel):
 
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False
+    query_history_type: QueryHistoryType | None = None
 
 
 class UserSettings(Settings):

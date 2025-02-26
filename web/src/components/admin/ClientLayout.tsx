@@ -359,18 +359,25 @@ export function ClientLayout({
                                 ),
                                 link: "/admin/performance/usage",
                               },
-                              {
-                                name: (
-                                  <div className="flex">
-                                    <DatabaseIconSkeleton
-                                      className="text-text-700"
-                                      size={18}
-                                    />
-                                    <div className="ml-1">Query History</div>
-                                  </div>
-                                ),
-                                link: "/admin/performance/query-history",
-                              },
+                              ...(settings?.settings.query_history_type !==
+                              "disabled"
+                                ? [
+                                    {
+                                      name: (
+                                        <div className="flex">
+                                          <DatabaseIconSkeleton
+                                            className="text-text-700"
+                                            size={18}
+                                          />
+                                          <div className="ml-1">
+                                            Query History
+                                          </div>
+                                        </div>
+                                      ),
+                                      link: "/admin/performance/query-history",
+                                    },
+                                  ]
+                                : []),
                               {
                                 name: (
                                   <div className="flex">
