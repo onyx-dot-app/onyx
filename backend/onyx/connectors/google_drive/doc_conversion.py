@@ -1,10 +1,9 @@
 import io
-import os
 from datetime import datetime
 from datetime import timezone
 from tempfile import NamedTemporaryFile
 
-import openpyxl
+import openpyxl  # type: ignore
 from googleapiclient.discovery import build  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
@@ -47,13 +46,6 @@ def _extract_sections_basic(
     mime_type = file["mimeType"]
     link = file["webViewLink"]
     supported_file_types = set(item.value for item in GDriveMimeType)
-    excel_file_types = set(
-        [
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "application/vnd.ms-excel",
-        ]
-    )
-    supported_file_types.update(excel_file_types)
 
     if mime_type not in supported_file_types:
         # Unsupported file types can still have a title, finding this way is still useful
@@ -124,34 +116,38 @@ def _extract_sections_basic(
                 )
         # ---------------------------
         # Microsoft Excel (.xlsx or .xls) extraction branch
-        elif mime_type in excel_file_types:
+        elif mime_type in [
+            GDriveMimeType.SPREADSHEET_OPEN_FORMAT.value,
+            GDriveMimeType.SPREADSHEET_MS_EXCEL.value,
+        ]:
             try:
                 response = service.files().get_media(fileId=file["id"]).execute()
-                with NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+
+                with NamedTemporaryFile(suffix=".xlsx", delete=True) as tmp:
                     tmp.write(response)
                     tmp_path = tmp.name
 
-                TEXT_SECTION_SEPARATOR = "\n\n"
+                    section_separator = "\n\n"
+                    workbook = openpyxl.load_workbook(tmp_path, read_only=True)
 
-                workbook = openpyxl.load_workbook(tmp_path, read_only=True)
-
-                sections = []
-
-                for sheet in workbook.worksheets:
-                    sheet_string = TEXT_SECTION_SEPARATOR.join(
-                        ",".join(map(str, row))
-                        for row in sheet.iter_rows(min_row=1, values_only=True)
-                    )
-
-                    if sheet_string.strip():
-                        sections.append(
-                            Section(
-                                link=link,
-                                text=f"Sheet: {sheet.title}\n\n{sheet_string}",
-                            )
+                    # Work similarly to the xlsx_to_text function used for file connector
+                    # but returns Sections instead of a string
+                    sections = [
+                        Section(
+                            link=link,
+                            text=(
+                                f"Sheet: {sheet.title}\n\n"
+                                + section_separator.join(
+                                    ",".join(map(str, row))
+                                    for row in sheet.iter_rows(
+                                        min_row=1, values_only=True
+                                    )
+                                    if row
+                                )
+                            ),
                         )
-
-                os.remove(tmp_path)
+                        for sheet in workbook.worksheets
+                    ]
 
                 return sections
 
@@ -229,7 +225,11 @@ def _extract_sections_basic(
                     Section(link=link, text=pptx_to_text(file=io.BytesIO(response)))
                 ]
 
-        return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
+        # Catch-all case, should not happen since there should be specific handling
+        # for each of the supported file types
+        error_message = f"Unsupported file type: {mime_type}"
+        logger.error(error_message)
+        raise ValueError(error_message)
 
     except Exception:
         return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
