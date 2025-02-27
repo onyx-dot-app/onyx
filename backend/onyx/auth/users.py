@@ -214,7 +214,7 @@ def verify_email_is_invited(email: str) -> None:
     raise PermissionError("User not on allowed user whitelist")
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str | None = None) -> None:
+def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if not get_user_by_email(email, db_session):
             verify_email_is_invited(email)
@@ -420,7 +420,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except exceptions.UserNotExists:
                 try:
                     # Attempt to get user by email
-                    user = await self.get_by_email(account_email)
+                    user = cast(User, await self.user_db.get_by_email(account_email))
                     if not associate_by_email:
                         raise exceptions.UserAlreadyExists()
 
@@ -553,7 +553,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             async_return_default_schema,
         )(email=user.email)
 
-        send_forgot_password_email(user.email, token, tenant_id=tenant_id)
+        send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None

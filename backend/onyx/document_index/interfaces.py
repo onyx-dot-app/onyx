@@ -43,7 +43,7 @@ class IndexBatchParams:
 
     doc_id_to_previous_chunk_cnt: dict[str, int | None]
     doc_id_to_new_chunk_cnt: dict[str, int]
-    tenant_id: str | None
+    tenant_id: str
     large_chunks_enabled: bool
 
 
@@ -222,7 +222,7 @@ class Deletable(abc.ABC):
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
     ) -> int:
         """
@@ -249,7 +249,7 @@ class Updatable(abc.ABC):
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
         fields: VespaDocumentFields,
     ) -> int:
@@ -270,9 +270,7 @@ class Updatable(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update(
-        self, update_requests: list[UpdateRequest], *, tenant_id: str | None
-    ) -> None:
+    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
         """
         Updates some set of chunks. The document and fields to update are specified in the update
         requests. Each update request in the list applies its changes to a list of document ids.

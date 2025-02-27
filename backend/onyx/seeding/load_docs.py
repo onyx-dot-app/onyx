@@ -37,13 +37,15 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.documents.models import ConnectorBase
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
 
 def _create_indexable_chunks(
     preprocessed_docs: list[dict],
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> tuple[list[Document], list[DocMetadataAwareIndexChunk]]:
     ids_to_documents = {}
     chunks = []
@@ -86,7 +88,7 @@ def _create_indexable_chunks(
                 mini_chunk_embeddings=[],
             ),
             title_embedding=preprocessed_doc["title_embedding"],
-            tenant_id=tenant_id,
+            tenant_id=tenant_id if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA,
             access=default_public_access,
             document_sets=set(),
             boost=DEFAULT_BOOST,
@@ -111,7 +113,7 @@ def load_processed_docs(cohere_enabled: bool) -> list[dict]:
 
 
 def seed_initial_documents(
-    db_session: Session, tenant_id: str | None, cohere_enabled: bool = False
+    db_session: Session, tenant_id: str, cohere_enabled: bool = False
 ) -> None:
     """
     Seed initial documents so users don't have an empty index to start

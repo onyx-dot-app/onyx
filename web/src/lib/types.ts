@@ -10,7 +10,7 @@ interface UserPreferences {
   pinned_assistants?: number[];
   default_model: string | null;
   recent_assistants: number[];
-  auto_scroll: boolean | null;
+  auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
 }

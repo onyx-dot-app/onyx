@@ -11,7 +11,7 @@ from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import make_slack_api_rate_limited
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.onyxbot.slack.blocks import build_follow_up_resolved_blocks
@@ -114,7 +114,7 @@ def handle_generate_answer_button(
         thread_ts=thread_ts,
     )
 
-    with get_session_with_tenant(tenant_id=client.tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         slack_channel_config = get_slack_channel_config_for_bot_and_channel(
             db_session=db_session,
             slack_bot_id=client.slack_bot_id,
@@ -136,7 +136,6 @@ def handle_generate_answer_button(
             slack_channel_config=slack_channel_config,
             receiver_ids=None,
             client=client.web_client,
-            tenant_id=client.tenant_id,
             channel=channel_id,
             logger=logger,
             feedback_reminder_id=None,
@@ -151,11 +150,10 @@ def handle_slack_feedback(
     user_id_to_post_confirmation: str,
     channel_id_to_post_confirmation: str,
     thread_ts_to_post_confirmation: str,
-    tenant_id: str | None,
 ) -> None:
     message_id, doc_id, doc_rank = decompose_action_id(feedback_id)
 
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         if feedback_type in [LIKE_BLOCK_ACTION_ID, DISLIKE_BLOCK_ACTION_ID]:
             create_chat_message_feedback(
                 is_positive=feedback_type == LIKE_BLOCK_ACTION_ID,
@@ -246,7 +244,7 @@ def handle_followup_button(
 
     tag_ids: list[str] = []
     group_ids: list[str] = []
-    with get_session_with_tenant(tenant_id=client.tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         channel_name, is_dm = get_channel_name_from_id(
             client=client.web_client, channel_id=channel_id
         )

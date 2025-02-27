@@ -84,7 +84,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
            negative -> ranked lower.
     """
 
-    tenant_id: str | None = None
+    tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
     boost: int
@@ -96,7 +96,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         access: "DocumentAccess",
         document_sets: set[str],
         boost: int,
-        tenant_id: str | None,
+        tenant_id: str,
     ) -> "DocMetadataAwareIndexChunk":
         index_chunk_data = index_chunk.model_dump()
         return cls(

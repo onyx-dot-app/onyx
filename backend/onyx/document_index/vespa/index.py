@@ -468,9 +468,7 @@ class VespaIndex(DocumentIndex):
                         failure_msg = f"Failed to update document: {future_to_document_id[future]}"
                         raise requests.HTTPError(failure_msg) from e
 
-    def update(
-        self, update_requests: list[UpdateRequest], *, tenant_id: str | None
-    ) -> None:
+    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
         logger.debug(f"Updating {len(update_requests)} documents in Vespa")
 
         # Handle Vespa character limitations
@@ -618,7 +616,7 @@ class VespaIndex(DocumentIndex):
         doc_id: str,
         *,
         chunk_count: int | None,
-        tenant_id: str | None,
+        tenant_id: str,
         fields: VespaDocumentFields,
     ) -> int:
         """Note: if the document id does not exist, the update will be a no-op and the
@@ -661,7 +659,7 @@ class VespaIndex(DocumentIndex):
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
     ) -> int:
         total_chunks_deleted = 0

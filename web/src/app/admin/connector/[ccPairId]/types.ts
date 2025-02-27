@@ -15,6 +15,18 @@ export enum ConnectorCredentialPairStatus {
   INVALID = "INVALID",
 }
 
+/**
+ * Returns true if the status is not currently active (i.e. paused or invalid), but not deleting
+ */
+export function statusIsNotCurrentlyActive(
+  status: ConnectorCredentialPairStatus
+): boolean {
+  return (
+    status === ConnectorCredentialPairStatus.PAUSED ||
+    status === ConnectorCredentialPairStatus.INVALID
+  );
+}
+
 export interface CCPairFullInfo {
   id: number;
   name: string;

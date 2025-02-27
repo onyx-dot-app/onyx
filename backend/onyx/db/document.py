@@ -24,6 +24,7 @@ from sqlalchemy.sql.expression import null
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
@@ -229,12 +230,12 @@ def get_document_connector_counts(
 
 
 def get_document_counts_for_cc_pairs(
-    db_session: Session, cc_pair_identifiers: list[ConnectorCredentialPairIdentifier]
+    db_session: Session, cc_pairs: list[ConnectorCredentialPairIdentifier]
 ) -> Sequence[tuple[int, int, int]]:
     """Returns a sequence of tuples of (connector_id, credential_id, document count)"""
 
     # Prepare a list of (connector_id, credential_id) tuples
-    cc_ids = [(x.connector_id, x.credential_id) for x in cc_pair_identifiers]
+    cc_ids = [(x.connector_id, x.credential_id) for x in cc_pairs]
 
     stmt = (
         select(
@@ -258,6 +259,16 @@ def get_document_counts_for_cc_pairs(
     )
 
     return db_session.execute(stmt).all()  # type: ignore
+
+
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
+def get_document_counts_for_cc_pairs_parallel(
+    cc_pairs: list[ConnectorCredentialPairIdentifier],
+) -> Sequence[tuple[int, int, int]]:
+    with get_session_context_manager() as db_session:
+        return get_document_counts_for_cc_pairs(db_session, cc_pairs)
 
 
 def get_access_info_for_document(

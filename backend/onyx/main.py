@@ -219,7 +219,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         # If we are multi-tenant, we need to only set up initial public tables
         with Session(engine) as db_session:
-            setup_onyx(db_session, None)
+            setup_onyx(db_session, POSTGRES_DEFAULT_SCHEMA)
     else:
         setup_multitenant_onyx()
 

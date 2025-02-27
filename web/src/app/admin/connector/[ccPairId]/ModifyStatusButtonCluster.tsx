@@ -1,13 +1,18 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
+import {
+  CCPairFullInfo,
+  ConnectorCredentialPairStatus,
+  statusIsNotCurrentlyActive,
+} from "./types";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { mutate } from "swr";
 import { buildCCPairInfoUrl } from "./lib";
 import { setCCPairStatus } from "@/lib/ccPair";
 import { useState } from "react";
 import { LoadingAnimation } from "@/components/Loading";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 export function ModifyStatusButtonCluster({
   ccPair,
@@ -16,11 +21,24 @@ export function ModifyStatusButtonCluster({
 }) {
   const { popup, setPopup } = usePopup();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
 
   const handleStatusChange = async (
     newStatus: ConnectorCredentialPairStatus
   ) => {
     if (isUpdating) return; // Prevent double-clicks or multiple requests
+
+    if (
+      ccPair.status === ConnectorCredentialPairStatus.INVALID &&
+      newStatus === ConnectorCredentialPairStatus.ACTIVE
+    ) {
+      setShowConfirmModal(true);
+    } else {
+      await updateStatus(newStatus);
+    }
+  };
+
+  const updateStatus = async (newStatus: ConnectorCredentialPairStatus) => {
     setIsUpdating(true);
 
     try {
@@ -38,30 +56,23 @@ export function ModifyStatusButtonCluster({
   };
 
   // Compute the button text based on current state and backend status
-  const buttonText =
-    ccPair.status === ConnectorCredentialPairStatus.PAUSED
-      ? "Re-Enable"
-      : "Pause";
+  const isNotActive = statusIsNotCurrentlyActive(ccPair.status);
+  const buttonText = isNotActive ? "Re-Enable" : "Pause";
 
-  const tooltip =
-    ccPair.status === ConnectorCredentialPairStatus.PAUSED
-      ? "Click to start indexing again!"
-      : "When paused, the connector's documents will still be visible. However, no new documents will be indexed.";
+  const tooltip = isNotActive
+    ? "Click to start indexing again!"
+    : "When paused, the connector's documents will still be visible. However, no new documents will be indexed.";
 
   return (
     <>
       {popup}
       <Button
         className="flex items-center justify-center w-auto min-w-[100px] px-4 py-2"
-        variant={
-          ccPair.status === ConnectorCredentialPairStatus.PAUSED
-            ? "success-reverse"
-            : "default"
-        }
+        variant={isNotActive ? "success-reverse" : "default"}
         disabled={isUpdating}
         onClick={() =>
           handleStatusChange(
-            ccPair.status === ConnectorCredentialPairStatus.PAUSED
+            isNotActive
               ? ConnectorCredentialPairStatus.ACTIVE
               : ConnectorCredentialPairStatus.PAUSED
           )
@@ -70,17 +81,27 @@ export function ModifyStatusButtonCluster({
       >
         {isUpdating ? (
           <LoadingAnimation
-            text={
-              ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                ? "Resuming"
-                : "Pausing"
-            }
+            text={isNotActive ? "Resuming" : "Pausing"}
             size="text-md"
           />
         ) : (
           buttonText
         )}
       </Button>
+      {showConfirmModal && (
+        <ConfirmEntityModal
+          entityType="Invalid Connector"
+          entityName={ccPair.name}
+          onClose={() => setShowConfirmModal(false)}
+          onSubmit={() => {
+            setShowConfirmModal(false);
+            updateStatus(ConnectorCredentialPairStatus.ACTIVE);
+          }}
+          additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
+          actionButtonText="Re-Enable"
+          variant="action"
+        />
+      )}
     </>
   );
 }

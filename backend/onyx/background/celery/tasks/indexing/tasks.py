@@ -48,7 +48,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
-from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -182,7 +182,7 @@ class SimpleJobResult:
 
 
 class ConnectorIndexingContext(BaseModel):
-    tenant_id: str | None
+    tenant_id: str
     cc_pair_id: int
     search_settings_id: int
     index_attempt_id: int
@@ -210,7 +210,7 @@ class ConnectorIndexingLogBuilder:
 
 
 def monitor_ccpair_indexing_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     # if the fence doesn't exist, there's nothing to do
     fence_key = key_bytes.decode("utf-8")
@@ -358,7 +358,7 @@ def monitor_ccpair_indexing_taskset(
     soft_time_limit=300,
     bind=True,
 )
-def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
+def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     """a lightweight task used to kick off indexing tasks.
     Occcasionally does some validation of existing state to clear up error conditions"""
 
@@ -598,7 +598,7 @@ def connector_indexing_task(
     cc_pair_id: int,
     search_settings_id: int,
     is_ee: bool,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     """Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -890,7 +890,7 @@ def connector_indexing_proxy_task(
     index_attempt_id: int,
     cc_pair_id: int,
     search_settings_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """celery out of process task execution strategy is pool=prefork, but it uses fork,
     and forking is inherently unstable.
@@ -899,6 +899,9 @@ def connector_indexing_proxy_task(
 
     TODO(rkuo): refactor this so that there is a single return path where we canonically
     log the result of running this function.
+
+    NOTE: we try/except all db access in this function because as a watchdog, this function
+    needs to be extremely stable.
     """
     start = time.monotonic()
 
@@ -924,6 +927,7 @@ def connector_indexing_proxy_task(
         task_logger.error("self.request.id is None!")
 
     client = SimpleJobClient()
+    task_logger.info(f"submitting connector_indexing_task with tenant_id={tenant_id}")
 
     job = client.submit(
         connector_indexing_task,
@@ -1016,7 +1020,7 @@ def connector_indexing_proxy_task(
                     job.release()
                     break
 
-            # if a termination signal is detected, clean up and break
+            # if a termination signal is detected, break (exit point will clean up)
             if self.request.id and redis_connector_index.terminating(self.request.id):
                 task_logger.warning(
                     log_builder.build("Indexing watchdog - termination signal detected")
@@ -1025,6 +1029,7 @@ def connector_indexing_proxy_task(
                 result.status = IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL
                 break
 
+            # if activity timeout is detected, break (exit point will clean up)
             if not redis_connector_index.connector_active():
                 task_logger.warning(
                     log_builder.build(
@@ -1033,25 +1038,6 @@ def connector_indexing_proxy_task(
                     )
                 )
 
-                try:
-                    with get_session_with_current_tenant() as db_session:
-                        mark_attempt_failed(
-                            index_attempt_id,
-                            db_session,
-                            "Indexing watchdog - activity timeout exceeded: "
-                            f"attempt={index_attempt_id} "
-                            f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
-                        )
-                except Exception:
-                    # if the DB exceptions, we'll just get an unfriendly failure message
-                    # in the UI instead of the cancellation message
-                    logger.exception(
-                        log_builder.build(
-                            "Indexing watchdog - transient exception marking index attempt as failed"
-                        )
-                    )
-
-                job.cancel()
                 result.status = (
                     IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT
                 )
@@ -1070,15 +1056,15 @@ def connector_indexing_proxy_task(
 
                     if not index_attempt.is_finished():
                         continue
+
             except Exception:
-                # if the DB exceptioned, just restart the check.
-                # polling the index attempt status doesn't need to be strongly consistent
                 task_logger.exception(
                     log_builder.build(
                         "Indexing watchdog - transient exception looking up index attempt"
                     )
                 )
                 continue
+
     except Exception as e:
         result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
         if isinstance(e, ConnectorValidationError):
@@ -1139,8 +1125,6 @@ def connector_indexing_proxy_task(
                     "Connector termination signal detected",
                 )
         except Exception:
-            # if the DB exceptions, we'll just get an unfriendly failure message
-            # in the UI instead of the cancellation message
             task_logger.exception(
                 log_builder.build(
                     "Indexing watchdog - transient exception marking index attempt as canceled"
@@ -1148,6 +1132,25 @@ def connector_indexing_proxy_task(
             )
 
         job.cancel()
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                mark_attempt_failed(
+                    index_attempt_id,
+                    db_session,
+                    "Indexing watchdog - activity timeout exceeded: "
+                    f"attempt={index_attempt_id} "
+                    f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                )
+        except Exception:
+            logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt as failed"
+                )
+            )
+        job.cancel()
+    else:
+        pass
 
     task_logger.info(
         log_builder.build(
@@ -1167,7 +1170,7 @@ def connector_indexing_proxy_task(
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
 )
-def check_for_checkpoint_cleanup(*, tenant_id: str | None) -> None:
+def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
     """Clean up old checkpoints that are older than 7 days."""
     locked = False
     redis_client = get_redis_client(tenant_id=tenant_id)

@@ -103,7 +103,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_version_required=False,
             custom_config_keys=[],
             llm_names=fetch_models_for_provider(ANTHROPIC_PROVIDER_NAME),
-            default_model="claude-3-5-sonnet-20241022",
+            default_model="claude-3-7-sonnet-20250219",
             default_fast_model="claude-3-5-sonnet-20241022",
         ),
         WellKnownLLMProviderDescriptor(

@@ -40,8 +40,13 @@ export function UserSettingsModal({
   onClose: () => void;
   defaultModel: string | null;
 }) {
-  const { refreshUser, user, updateUserAutoScroll, updateUserShortcuts } =
-    useUser();
+  const {
+    refreshUser,
+    user,
+    updateUserAutoScroll,
+    updateUserShortcuts,
+    updateUserTemperatureOverrideEnabled,
+  } = useUser();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
@@ -155,11 +160,6 @@ export function UserSettingsModal({
 
   const settings = useContext(SettingsContext);
   const autoScroll = settings?.settings?.auto_scroll;
-
-  const checked =
-    user?.preferences?.auto_scroll === null
-      ? autoScroll
-      : user?.preferences?.auto_scroll;
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -288,9 +288,23 @@ export function UserSettingsModal({
                     <SubLabel>Automatically scroll to new content</SubLabel>
                   </div>
                   <Switch
-                    checked={checked}
+                    checked={user?.preferences.auto_scroll}
                     onCheckedChange={(checked) => {
                       updateUserAutoScroll(checked);
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-medium">
+                      Temperature override
+                    </h3>
+                    <SubLabel>Set the temperature for the LLM</SubLabel>
+                  </div>
+                  <Switch
+                    checked={user?.preferences.temperature_override_enabled}
+                    onCheckedChange={(checked) => {
+                      updateUserTemperatureOverrideEnabled(checked);
                     }}
                   />
                 </div>

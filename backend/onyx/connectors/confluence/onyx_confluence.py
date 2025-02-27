@@ -11,6 +11,9 @@ from atlassian import Confluence  # type:ignore
 from pydantic import BaseModel
 from requests import HTTPError
 
+from onyx.connectors.confluence.utils import get_start_param_from_url
+from onyx.connectors.confluence.utils import update_param_in_path
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -160,7 +163,7 @@ class OnyxConfluence(Confluence):
                 )
 
     def _paginate_url(
-        self, url_suffix: str, limit: int | None = None
+        self, url_suffix: str, limit: int | None = None, auto_paginate: bool = False
     ) -> Iterator[dict[str, Any]]:
         """
         This will paginate through the top level query.
@@ -235,9 +238,41 @@ class OnyxConfluence(Confluence):
                 raise e
 
             # yield the results individually
-            yield from next_response.get("results", [])
+            results = cast(list[dict[str, Any]], next_response.get("results", []))
+            yield from results
 
-            url_suffix = next_response.get("_links", {}).get("next")
+            old_url_suffix = url_suffix
+            url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
+
+            # make sure we don't update the start by more than the amount
+            # of results we were able to retrieve. The Confluence API has a
+            # weird behavior where if you pass in a limit that is too large for
+            # the configured server, it will artificially limit the amount of
+            # results returned BUT will not apply this to the start parameter.
+            # This will cause us to miss results.
+            if url_suffix and "start" in url_suffix:
+                new_start = get_start_param_from_url(url_suffix)
+                previous_start = get_start_param_from_url(old_url_suffix)
+                if new_start - previous_start > len(results):
+                    logger.warning(
+                        f"Start was updated by more than the amount of results "
+                        f"retrieved. This is a bug with Confluence. Start: {new_start}, "
+                        f"Previous Start: {previous_start}, Len Results: {len(results)}."
+                    )
+
+                    # Update the url_suffix to use the adjusted start
+                    adjusted_start = previous_start + len(results)
+                    url_suffix = update_param_in_path(
+                        url_suffix, "start", str(adjusted_start)
+                    )
+
+            # some APIs don't properly paginate, so we need to manually update the `start` param
+            if auto_paginate and len(results) > 0:
+                previous_start = get_start_param_from_url(old_url_suffix)
+                updated_start = previous_start + len(results)
+                url_suffix = update_param_in_path(
+                    old_url_suffix, "start", str(updated_start)
+                )
 
     def paginated_cql_retrieval(
         self,
@@ -297,7 +332,9 @@ class OnyxConfluence(Confluence):
             url = "rest/api/search/user"
             expand_string = f"&expand={expand}" if expand else ""
             url += f"?cql={cql}{expand_string}"
-            for user_result in self._paginate_url(url, limit):
+            # endpoint doesn't properly paginate, so we need to manually update the `start` param
+            # thus the auto_paginate flag
+            for user_result in self._paginate_url(url, limit, auto_paginate=True):
                 # Example response:
                 # {
                 #     'user': {
@@ -508,11 +545,15 @@ def build_confluence_client(
     is_cloud: bool,
     wiki_base: str,
 ) -> OnyxConfluence:
-    _validate_connector_configuration(
-        credentials=credentials,
-        is_cloud=is_cloud,
-        wiki_base=wiki_base,
-    )
+    try:
+        _validate_connector_configuration(
+            credentials=credentials,
+            is_cloud=is_cloud,
+            wiki_base=wiki_base,
+        )
+    except Exception as e:
+        raise ConnectorValidationError(str(e))
+
     return OnyxConfluence(
         api_version="cloud" if is_cloud else "latest",
         # Remove trailing slash from wiki_base if present

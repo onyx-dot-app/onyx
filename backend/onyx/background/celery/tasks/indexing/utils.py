@@ -187,7 +187,7 @@ class IndexingCallback(IndexingCallbackBase):
 
 
 def validate_indexing_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     reserved_tasks: set[str],
     r_celery: Redis,
@@ -311,7 +311,7 @@ def validate_indexing_fence(
 
 
 def validate_indexing_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,
@@ -442,7 +442,7 @@ def try_creating_indexing_task(
     reindex: bool,
     db_session: Session,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     """Checks for any conditions that should block the indexing task from being
     created, then creates the task.

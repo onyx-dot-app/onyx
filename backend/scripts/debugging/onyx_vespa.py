@@ -260,7 +260,7 @@ def get_documents_for_tenant_connector(
 def search_for_document(
     index_name: str,
     document_id: str | None = None,
-    tenant_id: str | None = None,
+    tenant_id: str = POSTGRES_DEFAULT_SCHEMA,
     max_hits: int | None = 10,
 ) -> List[Dict[str, Any]]:
     yql_query = f"select * from sources {index_name}"
@@ -507,8 +507,9 @@ def get_number_of_chunks_we_think_exist(
 
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
-    def __init__(self, tenant_id: str | None = None):
-        self.tenant_id = POSTGRES_DEFAULT_SCHEMA if not tenant_id else tenant_id
+    def __init__(self, tenant_id: str = POSTGRES_DEFAULT_SCHEMA):
+        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        self.tenant_id = tenant_id
         self.index_name = get_index_name(self.tenant_id)
 
     def sample_document_counts(self) -> None:
@@ -602,7 +603,7 @@ class VespaDebugging:
         delete_documents_for_tenant(self.index_name, self.tenant_id, count=count)
 
     def search_for_document(
-        self, document_id: str | None = None, tenant_id: str | None = None
+        self, document_id: str | None = None, tenant_id: str = POSTGRES_DEFAULT_SCHEMA
     ) -> List[Dict[str, Any]]:
         return search_for_document(self.index_name, document_id, tenant_id)
 

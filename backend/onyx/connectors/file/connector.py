@@ -16,7 +16,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import detect_encoding
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -27,8 +27,6 @@ from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
 
@@ -165,12 +163,10 @@ class LocalFileConnector(LoadConnector):
     def __init__(
         self,
         file_locations: list[Path | str],
-        tenant_id: str = POSTGRES_DEFAULT_SCHEMA,
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [Path(file_location) for file_location in file_locations]
         self.batch_size = batch_size
-        self.tenant_id = tenant_id
         self.pdf_pass: str | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -179,9 +175,8 @@ class LocalFileConnector(LoadConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         documents: list[Document] = []
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
 
-        with get_session_with_tenant(tenant_id=self.tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             for file_path in self.file_locations:
                 current_datetime = datetime.now(timezone.utc)
                 files = _read_files_and_metadata(
@@ -202,8 +197,6 @@ class LocalFileConnector(LoadConnector):
 
             if documents:
                 yield documents
-
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 if __name__ == "__main__":

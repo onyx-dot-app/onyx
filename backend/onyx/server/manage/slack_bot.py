@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -345,6 +343,9 @@ def list_bot_configs(
     ]
 
 
+MAX_CHANNELS = 200
+
+
 @router.get(
     "/admin/slack-app/bots/{bot_id}/channels",
 )
@@ -353,38 +354,40 @@ def get_all_channels_from_slack_api(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
 ) -> list[SlackChannel]:
+    """
+    Fetches all channels from the Slack API.
+    If the workspace has 200 or more channels, we raise an error.
+    """
     tokens = fetch_slack_bot_tokens(db_session, bot_id)
     if not tokens or "bot_token" not in tokens:
         raise HTTPException(
             status_code=404, detail="Bot token not found for the given bot ID"
         )
 
-    bot_token = tokens["bot_token"]
-    client = WebClient(token=bot_token)
+    client = WebClient(token=tokens["bot_token"])
 
     try:
-        channels = []
-        cursor = None
-        while True:
-            response = client.conversations_list(
-                types="public_channel,private_channel",
-                exclude_archived=True,
-                limit=1000,
-                cursor=cursor,
-            )
-            for channel in response["channels"]:
-                channels.append(SlackChannel(id=channel["id"], name=channel["name"]))
+        response = client.conversations_list(
+            types="public_channel,private_channel",
+            exclude_archived=True,
+            limit=MAX_CHANNELS,
+        )
 
-            response_metadata: dict[str, Any] = response.get("response_metadata", {})
-            if isinstance(response_metadata, dict):
-                cursor = response_metadata.get("next_cursor")
-                if not cursor:
-                    break
-            else:
-                break
+        channels = [
+            SlackChannel(id=channel["id"], name=channel["name"])
+            for channel in response["channels"]
+        ]
+
+        if len(channels) == MAX_CHANNELS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Workspace has {MAX_CHANNELS} or more channels.",
+            )
 
         return channels
+
     except SlackApiError as e:
         raise HTTPException(
-            status_code=500, detail=f"Error fetching channels from Slack API: {str(e)}"
+            status_code=500,
+            detail=f"Error fetching channels from Slack API: {str(e)}",
         )

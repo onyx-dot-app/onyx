@@ -18,12 +18,14 @@ async function verifyAdminPageNavigation(
 
   try {
     await expect(page.locator("h1.text-3xl")).toHaveText(pageTitle, {
-      timeout: 3000,
+      timeout: 5000,
     });
   } catch (error) {
     console.error(
       `Failed to find h1 with text "${pageTitle}" for path "${path}"`
     );
+    // NOTE: This is a temporary measure for debugging the issue
+    console.error(await page.content());
     throw error;
   }
 

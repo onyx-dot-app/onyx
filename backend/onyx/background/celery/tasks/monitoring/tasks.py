@@ -91,7 +91,7 @@ class Metric(BaseModel):
         }
         task_logger.info(json.dumps(data))
 
-    def emit(self, tenant_id: str | None) -> None:
+    def emit(self, tenant_id: str) -> None:
         # Convert value to appropriate type based on the input value
         bool_value = None
         float_value = None
@@ -656,7 +656,7 @@ def build_job_id(
     queue=OnyxCeleryQueues.MONITORING,
     bind=True,
 )
-def monitor_background_processes(self: Task, *, tenant_id: str | None) -> None:
+def monitor_background_processes(self: Task, *, tenant_id: str) -> None:
     """Collect and emit metrics about background processes.
     This task runs periodically to gather metrics about:
     - Queue lengths for different Celery queues
@@ -864,7 +864,7 @@ def cloud_monitor_celery_queues(
 
 
 @shared_task(name=OnyxCeleryTask.MONITOR_CELERY_QUEUES, ignore_result=True, bind=True)
-def monitor_celery_queues(self: Task, *, tenant_id: str | None) -> None:
+def monitor_celery_queues(self: Task, *, tenant_id: str) -> None:
     return monitor_celery_queues_helper(self)
 
 

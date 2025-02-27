@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.document_index.document_index_utils import get_multipass_config
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 # makes it so `PYTHONPATH=.` is not required when running this script
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -96,7 +97,9 @@ def main() -> None:
                     try:
                         print(f"Deleting document {doc_id} in Vespa")
                         chunks_deleted = vespa_index.delete_single(
-                            doc_id, tenant_id=None, chunk_count=document.chunk_count
+                            doc_id,
+                            tenant_id=POSTGRES_DEFAULT_SCHEMA,
+                            chunk_count=document.chunk_count,
                         )
                         if chunks_deleted > 0:
                             print(

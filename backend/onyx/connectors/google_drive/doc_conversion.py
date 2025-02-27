@@ -1,7 +1,9 @@
 import io
 from datetime import datetime
 from datetime import timezone
+from tempfile import NamedTemporaryFile
 
+import openpyxl  # type: ignore
 from googleapiclient.discovery import build  # type: ignore
 from googleapiclient.errors import HttpError  # type: ignore
 
@@ -43,12 +45,15 @@ def _extract_sections_basic(
 ) -> list[Section]:
     mime_type = file["mimeType"]
     link = file["webViewLink"]
+    supported_file_types = set(item.value for item in GDriveMimeType)
 
-    if mime_type not in set(item.value for item in GDriveMimeType):
+    if mime_type not in supported_file_types:
         # Unsupported file types can still have a title, finding this way is still useful
         return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
 
     try:
+        # ---------------------------
+        # Google Sheets extraction
         if mime_type == GDriveMimeType.SPREADSHEET.value:
             try:
                 sheets_service = build(
@@ -109,7 +114,53 @@ def _extract_sections_basic(
                     f"Ran into exception '{e}' when pulling data from Google Sheet '{file['name']}'."
                     " Falling back to basic extraction."
                 )
+        # ---------------------------
+        # Microsoft Excel (.xlsx or .xls) extraction branch
+        elif mime_type in [
+            GDriveMimeType.SPREADSHEET_OPEN_FORMAT.value,
+            GDriveMimeType.SPREADSHEET_MS_EXCEL.value,
+        ]:
+            try:
+                response = service.files().get_media(fileId=file["id"]).execute()
 
+                with NamedTemporaryFile(suffix=".xlsx", delete=True) as tmp:
+                    tmp.write(response)
+                    tmp_path = tmp.name
+
+                    section_separator = "\n\n"
+                    workbook = openpyxl.load_workbook(tmp_path, read_only=True)
+
+                    # Work similarly to the xlsx_to_text function used for file connector
+                    # but returns Sections instead of a string
+                    sections = [
+                        Section(
+                            link=link,
+                            text=(
+                                f"Sheet: {sheet.title}\n\n"
+                                + section_separator.join(
+                                    ",".join(map(str, row))
+                                    for row in sheet.iter_rows(
+                                        min_row=1, values_only=True
+                                    )
+                                    if row
+                                )
+                            ),
+                        )
+                        for sheet in workbook.worksheets
+                    ]
+
+                return sections
+
+            except Exception as e:
+                logger.warning(
+                    f"Error extracting data from Excel file '{file['name']}': {e}"
+                )
+                return [
+                    Section(link=link, text="Error extracting data from Excel file")
+                ]
+
+        # ---------------------------
+        # Export for Google Docs, PPT, and fallback for spreadsheets
         if mime_type in [
             GDriveMimeType.DOC.value,
             GDriveMimeType.PPT.value,
@@ -128,6 +179,8 @@ def _extract_sections_basic(
             )
             return [Section(link=link, text=text)]
 
+        # ---------------------------
+        # Plain text and Markdown files
         elif mime_type in [
             GDriveMimeType.PLAIN_TEXT.value,
             GDriveMimeType.MARKDOWN.value,
@@ -141,6 +194,8 @@ def _extract_sections_basic(
                     .decode("utf-8"),
                 )
             ]
+        # ---------------------------
+        # Word, PowerPoint, PDF files
         if mime_type in [
             GDriveMimeType.WORD_DOC.value,
             GDriveMimeType.POWERPOINT.value,
@@ -170,7 +225,11 @@ def _extract_sections_basic(
                     Section(link=link, text=pptx_to_text(file=io.BytesIO(response)))
                 ]
 
-        return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
+        # Catch-all case, should not happen since there should be specific handling
+        # for each of the supported file types
+        error_message = f"Unsupported file type: {mime_type}"
+        logger.error(error_message)
+        raise ValueError(error_message)
 
     except Exception:
         return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]

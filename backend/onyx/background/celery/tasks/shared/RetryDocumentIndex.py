@@ -32,7 +32,7 @@ class RetryDocumentIndex:
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
     ) -> int:
         return self.index.delete_single(
@@ -50,7 +50,7 @@ class RetryDocumentIndex:
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
         fields: VespaDocumentFields,
     ) -> int:
