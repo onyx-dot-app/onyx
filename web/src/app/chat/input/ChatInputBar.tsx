@@ -154,7 +154,6 @@ export const SourceChip = ({
         gap-x-1
         h-6
         ${onClick ? "cursor-pointer" : ""}
-        animate-fade-in-scale
       `}
   >
     {icon}

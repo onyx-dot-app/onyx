@@ -4,6 +4,12 @@ export enum ApplicationStatus {
   ACTIVE = "active",
 }
 
+export enum QueryHistoryType {
+  DISABLED = "disabled",
+  ANONYMIZED = "anonymized",
+  NORMAL = "normal",
+}
+
 export interface Settings {
   anonymous_user_enabled: boolean;
   maximum_chat_retention_days: number | null;
@@ -14,6 +20,7 @@ export interface Settings {
   application_status: ApplicationStatus;
   auto_scroll: boolean;
   temperature_override_enabled: boolean;
+  query_history_type: QueryHistoryType;
 }
 
 export enum NotificationType {

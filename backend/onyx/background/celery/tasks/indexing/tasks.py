@@ -182,7 +182,7 @@ class SimpleJobResult:
 
 
 class ConnectorIndexingContext(BaseModel):
-    tenant_id: str | None
+    tenant_id: str
     cc_pair_id: int
     search_settings_id: int
     index_attempt_id: int
@@ -210,7 +210,7 @@ class ConnectorIndexingLogBuilder:
 
 
 def monitor_ccpair_indexing_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     # if the fence doesn't exist, there's nothing to do
     fence_key = key_bytes.decode("utf-8")
@@ -358,7 +358,7 @@ def monitor_ccpair_indexing_taskset(
     soft_time_limit=300,
     bind=True,
 )
-def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
+def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     """a lightweight task used to kick off indexing tasks.
     Occcasionally does some validation of existing state to clear up error conditions"""
 
@@ -598,7 +598,7 @@ def connector_indexing_task(
     cc_pair_id: int,
     search_settings_id: int,
     is_ee: bool,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     """Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -890,7 +890,7 @@ def connector_indexing_proxy_task(
     index_attempt_id: int,
     cc_pair_id: int,
     search_settings_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """celery out of process task execution strategy is pool=prefork, but it uses fork,
     and forking is inherently unstable.
@@ -1170,7 +1170,7 @@ def connector_indexing_proxy_task(
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
 )
-def check_for_checkpoint_cleanup(*, tenant_id: str | None) -> None:
+def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
     """Clean up old checkpoints that are older than 7 days."""
     locked = False
     redis_client = get_redis_client(tenant_id=tenant_id)

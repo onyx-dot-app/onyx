@@ -16,15 +16,16 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { unified } from "unified";
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
-import {
-  markdownToHtml,
-  getMarkdownForSelection,
-} from "@/app/chat/message/codeUtils";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
+import remarkParse from "remark-parse";
+import remarkRehype from "remark-rehype";
+import rehypeSanitize from "rehype-sanitize";
+import rehypeStringify from "rehype-stringify";
 import { CopyButton } from "@/components/CopyButton";
 import { ChatFileType, FileDescriptor, ToolCallMetadata } from "../interfaces";
 import {
@@ -69,6 +70,7 @@ import { SourceCard } from "./SourcesDisplay";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import { copyAll, handleCopy } from "./copyingUtils";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -364,34 +366,24 @@ export const AIMessage = ({
     }),
     [anchorCallback, paragraphCallback, finalContent]
   );
+  const markdownRef = useRef<HTMLDivElement>(null);
+
+  // Process selection copying with HTML formatting
 
   const renderedMarkdown = useMemo(() => {
     if (typeof finalContent !== "string") {
       return finalContent;
     }
 
-    // Create a hidden div with the HTML content for copying
-    const htmlContent = markdownToHtml(finalContent);
-
     return (
-      <>
-        <div
-          style={{
-            position: "absolute",
-            left: "-9999px",
-            display: "none",
-          }}
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
-        />
-        <ReactMarkdown
-          className="prose dark:prose-invert max-w-full text-base"
-          components={markdownComponents}
-          remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
-        >
-          {finalContent}
-        </ReactMarkdown>
-      </>
+      <ReactMarkdown
+        className="prose dark:prose-invert max-w-full text-base"
+        components={markdownComponents}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+      >
+        {finalContent}
+      </ReactMarkdown>
     );
   }, [finalContent, markdownComponents]);
 
@@ -535,64 +527,9 @@ export const AIMessage = ({
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">
                             <div
-                              contentEditable="true"
-                              suppressContentEditableWarning
+                              ref={markdownRef}
                               className="focus:outline-none cursor-text select-text"
-                              style={{
-                                MozUserModify: "read-only",
-                                WebkitUserModify: "read-only",
-                              }}
-                              onCopy={(e) => {
-                                e.preventDefault();
-                                const selection = window.getSelection();
-                                const selectedPlainText =
-                                  selection?.toString() || "";
-                                if (!selectedPlainText) {
-                                  // If no text is selected, copy the full content
-                                  const contentStr =
-                                    typeof content === "string"
-                                      ? content
-                                      : (
-                                          content as JSX.Element
-                                        ).props?.children?.toString() || "";
-                                  const clipboardItem = new ClipboardItem({
-                                    "text/html": new Blob(
-                                      [
-                                        typeof content === "string"
-                                          ? markdownToHtml(content)
-                                          : contentStr,
-                                      ],
-                                      { type: "text/html" }
-                                    ),
-                                    "text/plain": new Blob([contentStr], {
-                                      type: "text/plain",
-                                    }),
-                                  });
-                                  navigator.clipboard.write([clipboardItem]);
-                                  return;
-                                }
-
-                                const contentStr =
-                                  typeof content === "string"
-                                    ? content
-                                    : (
-                                        content as JSX.Element
-                                      ).props?.children?.toString() || "";
-                                const markdownText = getMarkdownForSelection(
-                                  contentStr,
-                                  selectedPlainText
-                                );
-                                const clipboardItem = new ClipboardItem({
-                                  "text/html": new Blob(
-                                    [markdownToHtml(markdownText)],
-                                    { type: "text/html" }
-                                  ),
-                                  "text/plain": new Blob([selectedPlainText], {
-                                    type: "text/plain",
-                                  }),
-                                });
-                                navigator.clipboard.write([clipboardItem]);
-                              }}
+                              onCopy={(e) => handleCopy(e, markdownRef)}
                             >
                               {renderedMarkdown}
                             </div>
@@ -643,13 +580,8 @@ export const AIMessage = ({
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
-                              content={
-                                typeof content === "string"
-                                  ? {
-                                      html: markdownToHtml(content),
-                                      plainText: content,
-                                    }
-                                  : content.toString()
+                              copyAllFn={() =>
+                                copyAll(finalContent as string, markdownRef)
                               }
                             />
                           </CustomTooltip>
@@ -734,13 +666,8 @@ export const AIMessage = ({
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
-                              content={
-                                typeof content === "string"
-                                  ? {
-                                      html: markdownToHtml(content),
-                                      plainText: content,
-                                    }
-                                  : content.toString()
+                              copyAllFn={() =>
+                                copyAll(finalContent as string, markdownRef)
                               }
                             />
                           </CustomTooltip>

@@ -114,7 +114,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
+def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
     r = get_redis_client()
     r_replica = get_redis_replica_client()
     r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
@@ -211,7 +211,7 @@ def try_creating_prune_generator_task(
     cc_pair: ConnectorCredentialPair,
     db_session: Session,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> str | None:
     """Checks for any conditions that should block the pruning generator task from being
     created, then creates the task.
@@ -333,7 +333,7 @@ def connector_pruning_generator_task(
     cc_pair_id: int,
     connector_id: int,
     credential_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """connector pruning task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -521,7 +521,7 @@ def connector_pruning_generator_task(
 
 
 def monitor_ccpair_pruning_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
@@ -567,7 +567,7 @@ def monitor_ccpair_pruning_taskset(
 
 
 def validate_pruning_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     r: Redis,
     r_replica: Redis,
     r_celery: Redis,
@@ -615,7 +615,7 @@ def validate_pruning_fences(
 
 
 def validate_pruning_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     reserved_tasks: set[str],
     queued_tasks: set[str],

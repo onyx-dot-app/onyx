@@ -55,6 +55,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.variable_functionality import global_version
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -67,7 +68,6 @@ def _get_connector_runner(
     batch_size: int,
     start_time: datetime,
     end_time: datetime,
-    tenant_id: str | None,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
 ) -> ConnectorRunner:
     """
@@ -86,7 +86,6 @@ def _get_connector_runner(
             input_type=task,
             connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
             credential=attempt.connector_credential_pair.credential,
-            tenant_id=tenant_id,
         )
 
         # validate the connector settings
@@ -242,7 +241,7 @@ def _check_failure_threshold(
 def _run_indexing(
     db_session: Session,
     index_attempt_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> None:
     """
@@ -389,7 +388,6 @@ def _run_indexing(
                 batch_size=INDEX_BATCH_SIZE,
                 start_time=window_start,
                 end_time=window_end,
-                tenant_id=tenant_id,
             )
 
             # don't use a checkpoint if we're explicitly indexing from
@@ -682,7 +680,7 @@ def _run_indexing(
 
 def run_indexing_entrypoint(
     index_attempt_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
     connector_credential_pair_id: int,
     is_ee: bool = False,
     callback: IndexingHeartbeatInterface | None = None,
@@ -702,7 +700,7 @@ def run_indexing_entrypoint(
         attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
 
         tenant_str = ""
-        if tenant_id is not None:
+        if MULTI_TENANT:
             tenant_str = f" for tenant {tenant_id}"
 
         connector_name = attempt.connector_credential_pair.connector.name

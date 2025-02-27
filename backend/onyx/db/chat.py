@@ -168,7 +168,7 @@ def get_chat_sessions_by_user(
     if not include_onyxbot_flows:
         stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
 
-    stmt = stmt.order_by(desc(ChatSession.time_created))
+    stmt = stmt.order_by(desc(ChatSession.time_updated))
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
@@ -962,6 +962,7 @@ def translate_db_message_to_chat_message_detail(
             chat_message.sub_questions
         ),
         refined_answer_improvement=chat_message.refined_answer_improvement,
+        is_agentic=chat_message.is_agentic,
         error=chat_message.error,
     )
 

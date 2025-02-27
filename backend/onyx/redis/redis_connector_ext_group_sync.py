@@ -44,8 +44,8 @@ class RedisConnectorExternalGroupSync:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = 3600
 
-    def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
-        self.tenant_id: str | None = tenant_id
+    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+        self.tenant_id: str = tenant_id
         self.id = id
         self.redis = redis
 

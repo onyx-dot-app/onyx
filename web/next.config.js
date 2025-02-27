@@ -68,6 +68,28 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/docs/:path*", // catch /api/docs and /api/docs/...
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/docs/:path*`,
+      },
+      {
+        source: "/api/docs", // if you also need the exact /api/docs
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/docs`,
+      },
+      {
+        source: "/openapi.json",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/openapi.json`,
+      },
+    ];
+  },
 };
 
 // Sentry configuration for error monitoring:

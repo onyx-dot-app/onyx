@@ -25,6 +25,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text

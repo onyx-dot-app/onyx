@@ -73,6 +73,8 @@
     "recharts": "^2.13.1",
     "rehype-katex": "^7.0.1",
     "rehype-prism-plus": "^2.0.0",
+    "rehype-sanitize": "^6.0.0",
+    "rehype-stringify": "^10.0.1",
     "remark-gfm": "^4.0.0",
     "remark-math": "^6.0.0",
     "semver": "^7.5.4",

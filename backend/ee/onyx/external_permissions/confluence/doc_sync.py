@@ -345,7 +345,7 @@ def _fetch_all_page_restrictions(
 
 
 def confluence_doc_sync(
-    tenant_id: str | None,
+    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
     callback: IndexingHeartbeatInterface | None,
 ) -> list[DocExternalAccess]:

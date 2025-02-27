@@ -92,7 +92,8 @@ def celery_find_task(task_id: str, queue: str, r: Redis) -> int:
 
 
 def celery_get_queued_task_ids(queue: str, r: Redis) -> set[str]:
-    """This is a redis specific way to build a list of tasks in a queue.
+    """This is a redis specific way to build a list of tasks in a queue and return them
+    as a set.
 
     This helps us read the queue once and then efficiently look for missing tasks
     in the queue.

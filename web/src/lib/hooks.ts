@@ -714,10 +714,11 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-2.1": "Claude 2.1",
   "claude-2.0": "Claude 2.0",
   "claude-instant-1.2": "Claude Instant 1.2",
-  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
-  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (New)",
-  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
-  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
+  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
+  "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
+  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
+  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
   "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
   "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
   "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
@@ -770,6 +771,12 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 };
 
 export function getDisplayNameForModel(modelName: string): string {
+  if (modelName.startsWith("bedrock/")) {
+    const parts = modelName.split("/");
+    const lastPart = parts[parts.length - 1];
+    return MODEL_DISPLAY_NAMES[lastPart] || lastPart;
+  }
+
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 

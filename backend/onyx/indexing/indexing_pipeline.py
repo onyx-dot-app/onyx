@@ -158,8 +158,8 @@ def index_doc_batch_with_handler(
     document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
+    tenant_id: str,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
 ) -> IndexingPipelineResult:
     try:
         index_pipeline_result = index_doc_batch(
@@ -317,8 +317,8 @@ def index_doc_batch(
     document_index: DocumentIndex,
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
+    tenant_id: str,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
     filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
 ) -> IndexingPipelineResult:
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -525,9 +525,9 @@ def build_indexing_pipeline(
     embedder: IndexingEmbedder,
     document_index: DocumentIndex,
     db_session: Session,
+    tenant_id: str,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""

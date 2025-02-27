@@ -38,7 +38,9 @@ export const ConnectorTitle = ({
     const typedConnector = connector as Connector<GithubConfig>;
     additionalMetadata.set(
       "Repo",
-      `${typedConnector.connector_specific_config.repo_owner}/${typedConnector.connector_specific_config.repo_name}`
+      typedConnector.connector_specific_config.repo_name
+        ? `${typedConnector.connector_specific_config.repo_owner}/${typedConnector.connector_specific_config.repo_name}`
+        : `${typedConnector.connector_specific_config.repo_owner}/*`
     );
   } else if (connector.source === "gitlab") {
     const typedConnector = connector as Connector<GitlabConfig>;

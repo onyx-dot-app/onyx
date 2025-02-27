@@ -221,7 +221,7 @@ def try_creating_permissions_sync_task(
     app: Celery,
     cc_pair_id: int,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> str | None:
     """Returns a randomized payload id on success.
     Returns None if no syncing is required."""
@@ -320,7 +320,7 @@ def try_creating_permissions_sync_task(
 def connector_permission_sync_generator_task(
     self: Task,
     cc_pair_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """
     Permission sync task that handles document permission syncing for a given connector credential pair
@@ -410,7 +410,6 @@ def connector_permission_sync_generator_task(
                     cc_pair.connector.id,
                     cc_pair.credential.id,
                     db_session,
-                    tenant_id,
                     enforce_creation=False,
                 )
                 if not created:
@@ -510,7 +509,7 @@ def connector_permission_sync_generator_task(
 )
 def update_external_document_permissions_task(
     self: Task,
-    tenant_id: str | None,
+    tenant_id: str,
     serialized_doc_external_access: dict,
     source_string: str,
     connector_id: int,
@@ -585,7 +584,7 @@ def update_external_document_permissions_task(
 
 
 def validate_permission_sync_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     r: Redis,
     r_replica: Redis,
     r_celery: Redis,
@@ -632,7 +631,7 @@ def validate_permission_sync_fences(
 
 
 def validate_permission_sync_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     queued_tasks: set[str],
     reserved_tasks: set[str],
@@ -842,7 +841,7 @@ class PermissionSyncCallback(IndexingHeartbeatInterface):
 
 
 def monitor_ccpair_permissions_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)

@@ -6,7 +6,11 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 from typing import TypeVar
+from urllib.parse import parse_qs
+from urllib.parse import quote
+from urllib.parse import urlparse
 
 import bs4
 import requests
@@ -14,6 +18,8 @@ from pydantic import BaseModel
 
 from onyx.utils.logger import setup_logger
 
+if TYPE_CHECKING:
+    pass
 
 logger = setup_logger()
 
@@ -21,7 +27,6 @@ CONFLUENCE_OAUTH_TOKEN_URL = "https://auth.atlassian.com/oauth/token"
 RATE_LIMIT_MESSAGE_LOWERCASE = "Rate limit exceeded".lower()
 
 
-# the response when refreshing from the token url with grant_type "refresh_token"
 class TokenResponse(BaseModel):
     access_token: str
     expires_in: int
@@ -218,3 +223,32 @@ def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
 
     delay_until = math.ceil(time.monotonic() + delay)
     return delay_until
+
+
+def get_single_param_from_url(url: str, param: str) -> str | None:
+    """Get a parameter from a url"""
+    parsed_url = urlparse(url)
+    return parse_qs(parsed_url.query).get(param, [None])[0]
+
+
+def get_start_param_from_url(url: str) -> int:
+    """Get the start parameter from a url"""
+    start_str = get_single_param_from_url(url, "start")
+    if start_str is None:
+        return 0
+    return int(start_str)
+
+
+def update_param_in_path(path: str, param: str, value: str) -> str:
+    """Update a parameter in a path. Path should look something like:
+
+    /api/rest/users?start=0&limit=10
+    """
+    parsed_url = urlparse(path)
+    query_params = parse_qs(parsed_url.query)
+    query_params[param] = [value]
+    return (
+        path.split("?")[0]
+        + "?"
+        + "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
+    )

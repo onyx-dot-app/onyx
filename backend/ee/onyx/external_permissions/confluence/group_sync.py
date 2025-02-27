@@ -63,7 +63,7 @@ def _build_group_member_email_map(
 
 
 def confluence_group_sync(
-    tenant_id: str | None,
+    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
     provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)

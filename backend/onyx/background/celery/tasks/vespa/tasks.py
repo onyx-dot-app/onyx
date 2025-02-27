@@ -76,7 +76,7 @@ logger = setup_logger()
     trail=False,
     bind=True,
 )
-def check_for_vespa_sync_task(self: Task, *, tenant_id: str | None) -> bool | None:
+def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
     """Runs periodically to check if any document needs syncing.
     Generates sets of tasks for Celery if syncing is needed."""
 
@@ -208,7 +208,7 @@ def try_generate_stale_document_sync_tasks(
     db_session: Session,
     r: Redis,
     lock_beat: RedisLock,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     # the fence is up, do nothing
 
@@ -284,7 +284,7 @@ def try_generate_document_set_sync_tasks(
     db_session: Session,
     r: Redis,
     lock_beat: RedisLock,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     lock_beat.reacquire()
 
@@ -361,7 +361,7 @@ def try_generate_user_group_sync_tasks(
     db_session: Session,
     r: Redis,
     lock_beat: RedisLock,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     lock_beat.reacquire()
 
@@ -448,7 +448,7 @@ def monitor_connector_taskset(r: Redis) -> None:
 
 
 def monitor_document_set_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     document_set_id_str = RedisDocumentSet.get_id_from_fence_key(fence_key)
@@ -523,9 +523,7 @@ def monitor_document_set_taskset(
     time_limit=LIGHT_TIME_LIMIT,
     max_retries=3,
 )
-def vespa_metadata_sync_task(
-    self: Task, document_id: str, *, tenant_id: str | None
-) -> bool:
+def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) -> bool:
     start = time.monotonic()
 
     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED

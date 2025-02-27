@@ -13,8 +13,8 @@ class RedisConnectorStop:
     TIMEOUT_PREFIX = f"{PREFIX}_timeout"
     TIMEOUT_TTL = 300
 
-    def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
-        self.tenant_id: str | None = tenant_id
+    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+        self.tenant_id: str = tenant_id
         self.id: int = id
         self.redis = redis
 

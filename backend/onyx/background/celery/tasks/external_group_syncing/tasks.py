@@ -123,7 +123,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool | None:
+def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
     r = get_redis_client()
@@ -220,7 +220,7 @@ def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
     Returns None if no syncing is required."""
@@ -306,7 +306,7 @@ def try_creating_external_group_sync_task(
 def connector_external_group_sync_generator_task(
     self: Task,
     cc_pair_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """
     External group sync task for a given connector credential pair
@@ -392,7 +392,6 @@ def connector_external_group_sync_generator_task(
                     cc_pair.connector.id,
                     cc_pair.credential.id,
                     db_session,
-                    tenant_id,
                     enforce_creation=False,
                 )
                 if not created:
@@ -494,7 +493,7 @@ def connector_external_group_sync_generator_task(
 
 
 def validate_external_group_sync_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     celery_app: Celery,
     r: Redis,
     r_replica: Redis,
@@ -526,7 +525,7 @@ def validate_external_group_sync_fences(
 
 
 def validate_external_group_sync_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     reserved_tasks: set[str],
     r_celery: Redis,

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import DocumentSourceRequiringTenantContext
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
@@ -60,6 +59,7 @@ from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.models import Credential
+from shared_configs.contextvars import get_current_tenant_id
 
 
 class ConnectorMissingException(Exception):
@@ -166,17 +166,15 @@ def instantiate_connector(
     input_type: InputType,
     connector_specific_config: dict[str, Any],
     credential: Credential,
-    tenant_id: str | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
-
-    if source in DocumentSourceRequiringTenantContext:
-        connector_specific_config["tenant_id"] = tenant_id
 
     connector = connector_class(**connector_specific_config)
 
     if isinstance(connector, CredentialsConnector):
-        provider = OnyxDBCredentialsProvider(tenant_id, str(source), credential.id)
+        provider = OnyxDBCredentialsProvider(
+            get_current_tenant_id(), str(source), credential.id
+        )
         connector.set_credentials_provider(provider)
     else:
         new_credentials = connector.load_credentials(credential.credential_json)
@@ -191,7 +189,6 @@ def validate_ccpair_for_user(
     connector_id: int,
     credential_id: int,
     db_session: Session,
-    tenant_id: str | None,
     enforce_creation: bool = True,
 ) -> bool:
     if INTEGRATION_TESTS_MODE:
@@ -223,7 +220,6 @@ def validate_ccpair_for_user(
             input_type=connector.input_type,
             connector_specific_config=connector.connector_specific_config,
             credential=credential,
-            tenant_id=tenant_id,
         )
     except ConnectorValidationError as e:
         raise e

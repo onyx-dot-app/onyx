@@ -148,7 +148,7 @@ export async function fetchChatData(searchParams: {
 
   chatSessions.sort(
     (a, b) =>
-      new Date(b.time_created).getTime() - new Date(a.time_created).getTime()
+      new Date(b.time_updated).getTime() - new Date(a.time_updated).getTime()
   );
 
   let documentSets: DocumentSet[] = [];

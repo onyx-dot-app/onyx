@@ -1,4 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useLayoutEffect,
+} from "react";
 import {
   Popover,
   PopoverContent,
@@ -28,6 +33,7 @@ import { FiAlertTriangle } from "react-icons/fi";
 
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
+import { TruncatedText } from "@/components/ui/truncatedText";
 
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
@@ -158,9 +164,7 @@ export default function LLMPopover({
                     size: 16,
                     className: "flex-none my-auto text-black",
                   })}
-                  <span className="line-clamp-1 ">
-                    {getDisplayNameForModel(name)}
-                  </span>
+                  <TruncatedText text={getDisplayNameForModel(name)} />
                   {(() => {
                     if (currentAssistant?.llm_model_version_override === name) {
                       return (

@@ -20,7 +20,7 @@ class OnyxDBCredentialsProvider(
 
     LOCK_TTL = 900  # TTL of the lock
 
-    def __init__(self, tenant_id: str | None, connector_name: str, credential_id: int):
+    def __init__(self, tenant_id: str, connector_name: str, credential_id: int):
         self._tenant_id = tenant_id
         self._connector_name = connector_name
         self._credential_id = credential_id
