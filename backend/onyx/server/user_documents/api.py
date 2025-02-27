@@ -10,6 +10,7 @@ from fastapi import Depends
 from fastapi import File
 from fastapi import Form
 from fastapi import HTTPException
+from fastapi import Query
 from fastapi import UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -25,7 +26,10 @@ from onyx.db.enums import AccessType
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
+from onyx.db.user_documents import calculate_user_files_token_count
+from onyx.db.user_documents import create_user_file_with_indexing
 from onyx.db.user_documents import create_user_files
+from onyx.db.user_documents import get_user_file_indexing_status
 from onyx.db.user_documents import share_file_with_assistant
 from onyx.db.user_documents import share_folder_with_assistant
 from onyx.db.user_documents import unshare_file_with_assistant
@@ -37,6 +41,9 @@ from onyx.server.documents.models import FileUploadResponse
 from onyx.server.user_documents.models import MessageResponse
 from onyx.server.user_documents.models import UserFileSnapshot
 from onyx.server.user_documents.models import UserFolderSnapshot
+from onyx.setup import setup_logger
+
+logger = setup_logger()
 
 router = APIRouter()
 
@@ -113,57 +120,16 @@ def upload_user_files(
     if folder_id == 0:
         folder_id = None
 
-    user_files = create_user_files(files, folder_id, user, db_session)
-    for user_file in user_files:
-        connector_base = ConnectorBase(
-            name=f"UserFile-{user_file.file_id}-{int(time.time())}",
-            source=DocumentSource.FILE,
-            input_type=InputType.LOAD_STATE,
-            connector_specific_config={
-                "file_locations": [user_file.file_id],
-            },
-            refresh_freq=None,
-            prune_freq=None,
-            indexing_start=None,
-        )
+    try:
+        # Use our consolidated function that handles indexing properly
+        user_files = create_user_file_with_indexing(files, folder_id, user, db_session)
 
-        connector = create_connector(
-            db_session=db_session,
-            connector_data=connector_base,
+        return FileUploadResponse(
+            file_paths=[user_file.file_id for user_file in user_files],
         )
-
-        credential_info = CredentialBase(
-            credential_json={},
-            admin_public=True,
-            source=DocumentSource.FILE,
-            curator_public=True,
-            groups=[],
-            name=f"UserFileCredential-{user_file.file_id}-{int(time.time())}",
-            is_user_file=True,
-        )
-        credential = create_credential(credential_info, user, db_session)
-
-        cc_pair = add_credential_to_connector(
-            db_session=db_session,
-            user=user,
-            connector_id=connector.id,
-            credential_id=credential.id,
-            cc_pair_name=f"UserFileCCPair-{user_file.file_id}-{int(time.time())}",
-            access_type=AccessType.PRIVATE,
-            auto_sync_options=None,
-            groups=[],
-            is_user_file=True,
-        )
-        user_file.cc_pair_id = cc_pair.data
-        print("A")
-        db_session.commit()
-
-    db_session.commit()
-    # TODO: functional document indexing
-    # trigger_document_indexing(db_session, user.id)
-    return FileUploadResponse(
-        file_paths=[user_file.file_id for user_file in user_files],
-    )
+    except Exception as e:
+        logger.error(f"Error uploading files: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
 
 
 @router.put("/user/folder/{folder_id}")
@@ -441,3 +407,25 @@ def create_file_from_link(
         )
     except requests.RequestException as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {str(e)}")
+
+
+@router.get("/user/file/indexing-status")
+def get_files_indexing_status(
+    file_ids: list[int] = Query(...),
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> dict[int, bool]:
+    """Get indexing status for multiple files"""
+    return get_user_file_indexing_status(file_ids, db_session)
+
+
+@router.get("/user/file/token-estimate")
+def get_files_token_estimate(
+    file_ids: list[int] = Query([]),
+    folder_ids: list[int] = Query([]),
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> dict:
+    """Get token estimate for files and folders"""
+    total_tokens = calculate_user_files_token_count(file_ids, folder_ids, db_session)
+    return {"total_tokens": total_tokens}

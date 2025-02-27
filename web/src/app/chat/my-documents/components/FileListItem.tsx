@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   CheckCircle,
@@ -6,6 +6,8 @@ import {
   MoreVertical,
   X,
   ArrowLeft,
+  Loader,
+  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +15,11 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { FileResponse, FolderResponse } from "../DocumentsContext";
+import {
+  FileResponse,
+  FolderResponse,
+  useDocumentsContext,
+} from "../DocumentsContext";
 import {
   Tooltip,
   TooltipContent,
@@ -28,11 +34,17 @@ import {
   FiSearch,
   FiTrash,
 } from "react-icons/fi";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface FileListItemProps {
   file: FileResponse;
   isSelected?: boolean;
-  onSelect?: () => void;
+  onSelect?: (file: FileResponse) => void;
   view: "grid" | "list";
   onRename: (
     itemId: number,
@@ -59,6 +71,26 @@ export const FileListItem: React.FC<FileListItemProps> = ({
   isIndexed,
 }) => {
   const [showMoveOptions, setShowMoveOptions] = useState(false);
+  const [indexingStatus, setIndexingStatus] = useState<boolean | null>(null);
+  const { getFilesIndexingStatus } = useDocumentsContext();
+
+  // Check indexing status when component mounts
+  useEffect(() => {
+    const checkStatus = async () => {
+      const status = await getFilesIndexingStatus([file.id]);
+      setIndexingStatus(status[file.id]);
+    };
+
+    checkStatus();
+    // Set up polling for files not yet indexed
+    const interval = setInterval(() => {
+      if (indexingStatus === false) {
+        checkStatus();
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [file.id, indexingStatus, getFilesIndexingStatus]);
 
   const handleDelete = () => {
     onDelete(file.id, false, file.name);
@@ -81,7 +113,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
         className={`flex items-center ${
           view === "grid" ? "flex-col" : "w-full"
         }`}
-        onClick={onSelect}
+        onClick={() => onSelect && onSelect(file)}
       >
         {isSelected !== undefined && (
           <Checkbox
@@ -103,16 +135,24 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>
-                <div
-                  className={`h-2 w-2 rounded-full ${
-                    isIndexed ? "bg-transparent" : "bg-red-600 animate-pulse"
-                  }`}
-                />
+                {indexingStatus === false ? (
+                  <div className="flex-shrink-0">
+                    <Loader className="h-4 w-4 animate-spin text-amber-500" />
+                  </div>
+                ) : (
+                  <div
+                    className={`h-2 w-2 rounded-full ${
+                      isIndexed ? "bg-transparent" : "bg-red-600 animate-pulse"
+                    }`}
+                  />
+                )}
               </TooltipTrigger>
               <TooltipContent>
-                {!isIndexed
-                  ? "Not yet indexed. This will be completed momentarily."
-                  : "Indexed"}
+                {indexingStatus === false
+                  ? "File is being indexed. Search might not include all content yet."
+                  : isIndexed
+                    ? "Indexed"
+                    : "Not yet indexed. This will be completed momentarily."}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -124,7 +164,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             variant="ghost"
             className="group-hover:visible invisible h-8 w-8 p-0"
           >
-            <MoreVertical className="h-4 w-4" />
+            <MoreHorizontal className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className={`!p-0 ${showMoveOptions ? "w-52" : "w-40"}`}>

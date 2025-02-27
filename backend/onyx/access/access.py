@@ -64,7 +64,7 @@ def _get_access_for_documents(
             external_user_emails=set(),
             external_user_group_ids=set(),
         )
-        for document_id, user_emails, is_public in document_access_info
+        for document_id, user_emails, is_public, external_user_group_ids, external_user_emails in document_access_info
     }
 
     # Sometimes the document has not be indexed by the indexing job yet, in those cases

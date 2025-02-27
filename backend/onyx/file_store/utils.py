@@ -56,9 +56,6 @@ def load_all_chat_files(
     return files
 
 
-
-
-
 def load_user_folder(folder_id: int, db_session: Session) -> list[InMemoryChatFile]:
     user_files = (
         db_session.query(UserFile).filter(UserFile.folder_id == folder_id).all()
@@ -71,9 +68,7 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
     if not user_file:
         raise ValueError(f"User file with id {file_id} not found")
 
-    file_io = get_default_file_store(db_session).read_file(
-        user_file.document_id, mode="b"
-    )
+    file_io = get_default_file_store(db_session).read_file(user_file.file_id, mode="b")
     return InMemoryChatFile(
         file_id=str(user_file.id),
         content=file_io.read(),
@@ -98,9 +93,6 @@ def load_all_user_files(
             for file in load_user_folder(folder_id, db_session)
         ],
     )
-
-
-
 
 
 def save_file_from_url(url: str) -> str:

@@ -83,16 +83,18 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
-from onyx.file_store.utils import load_all_user_files
 from onyx.file_store.utils import save_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
+from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import ChatMessageDetail
@@ -543,14 +545,62 @@ def stream_chat_message_objects(
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
 
-        if not new_msg_req.force_user_file_search:
+        if new_msg_req.user_file_ids or new_msg_req.user_folder_ids:
+            # Load user files
+            from onyx.file_store.utils import load_all_user_files
+
             user_files = load_all_user_files(
-                new_msg_req.user_file_ids,
-                new_msg_req.user_folder_ids,
+                new_msg_req.user_file_ids or [],
+                new_msg_req.user_folder_ids or [],
                 db_session,
             )
 
-            latest_query_files += user_files
+            # Calculate token count for the files
+            from onyx.db.user_documents import calculate_user_files_token_count
+
+            total_tokens = calculate_user_files_token_count(
+                new_msg_req.user_file_ids or [],
+                new_msg_req.user_folder_ids or [],
+                db_session,
+            )
+
+            # Get LLM max tokens
+            llm_max_tokens = get_max_input_tokens(
+                llm.config.model_name, llm.config.model_provider
+            )
+
+            # If files are too large for context, use search instead
+            if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
+                # We'll set force_use_tool.force_use = True after tools are defined
+                logger.info(
+                    f"User files exceed token limit ({total_tokens} > {llm_max_tokens * 0.75}), using search instead"
+                )
+                use_search_for_user_files = True
+            else:
+                use_search_for_user_files = False
+                # Convert UserFile objects to InMemoryChatFile objects
+                user_file_objects = []
+                for file in user_files:
+                    try:
+                        file_io = get_default_file_store(db_session).read_file(
+                            file.file_id, mode="b"
+                        )
+                        user_file_objects.append(
+                            InMemoryChatFile(
+                                file_id=str(file.file_id),
+                                content=file_io.read(),
+                                file_type=ChatFileType.DOC,
+                                filename=file.name,
+                            )
+                        )
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to load user file {file.file_id}: {str(e)}"
+                        )
+
+                # Add converted files to latest_query_files
+                latest_query_files.extend(user_file_objects)
+                logger.info(f"Using {len(user_files)} user files directly in context")
 
         if user_message:
             attach_files_to_chat_message(
@@ -725,6 +775,12 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
+        force_use_tool = _get_force_search_settings(new_msg_req, tools)
+
+        # Set force_use if user files exceed token limit
+        if "use_search_for_user_files" in locals() and use_search_for_user_files:
+            force_use_tool.force_use = True
+
         # TODO: unify message history with single message history
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
@@ -754,7 +810,6 @@ def stream_chat_message_objects(
             ),
         )
 
-        force_use_tool = _get_force_search_settings(new_msg_req, tools)
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
                 user_query=final_msg.message,
