@@ -501,6 +501,7 @@ export function processRawChatHistory(
       sub_questions: subQuestions,
       isImprovement:
         (messageInfo.refined_answer_improvement as unknown as boolean) || false,
+      is_agentic: messageInfo.is_agentic,
     };
 
     messages.set(messageInfo.message_id, message);

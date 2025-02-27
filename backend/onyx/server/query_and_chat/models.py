@@ -241,6 +241,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
     refined_answer_improvement: bool | None = None
+    is_agentic: bool | None = None
     error: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
