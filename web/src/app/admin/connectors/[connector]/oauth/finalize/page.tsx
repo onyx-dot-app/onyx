@@ -46,9 +46,6 @@ function UpdateCloudURLOnCloudIdChange({
           cloud_name: selectedResource.name,
           cloud_url: selectedResource.url,
         }));
-
-        // setFieldValue("cloud_url", selectedResource.url);
-        // setFieldValue("cloud_name", selectedResource.name);
       }
     }
   }, [values.cloud_id, accessibleResources, setFieldValue]);

@@ -1,6 +1,5 @@
 import io
 import json
-import math
 import time
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -24,6 +23,7 @@ from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
+from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.interfaces import CredentialsProviderInterface
@@ -37,8 +37,6 @@ logger = setup_logger()
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-
-RATE_LIMIT_MESSAGE_LOWERCASE = "Rate limit exceeded".lower()
 
 # https://jira.atlassian.com/browse/CONFCLOUD-76433
 _PROBLEMATIC_EXPANSIONS = "body.storage.value"
@@ -61,54 +59,6 @@ class ConfluenceUser(BaseModel):
     # have to fetch it with a different endpoint
     email: str | None
     type: str
-
-
-def _handle_http_error(e: HTTPError, attempt: int) -> int:
-    MIN_DELAY = 2
-    MAX_DELAY = 60
-    STARTING_DELAY = 5
-    BACKOFF = 2
-
-    # Check if the response or headers are None to avoid potential AttributeError
-    if e.response is None or e.response.headers is None:
-        logger.warning("HTTPError with `None` as response or as headers")
-        raise e
-
-    if (
-        e.response.status_code != 429
-        and RATE_LIMIT_MESSAGE_LOWERCASE not in e.response.text.lower()
-    ):
-        raise e
-
-    retry_after = None
-
-    retry_after_header = e.response.headers.get("Retry-After")
-    if retry_after_header is not None:
-        try:
-            retry_after = int(retry_after_header)
-            if retry_after > MAX_DELAY:
-                logger.warning(
-                    f"Clamping retry_after from {retry_after} to {MAX_DELAY} seconds..."
-                )
-                retry_after = MAX_DELAY
-            if retry_after < MIN_DELAY:
-                retry_after = MIN_DELAY
-        except ValueError:
-            pass
-
-    if retry_after is not None:
-        logger.warning(
-            f"Rate limiting with retry header. Retrying after {retry_after} seconds..."
-        )
-        delay = retry_after
-    else:
-        logger.warning(
-            "Rate limiting without retry header. Retrying with exponential backoff..."
-        )
-        delay = min(STARTING_DELAY * (BACKOFF**attempt), MAX_DELAY)
-
-    delay_until = math.ceil(time.monotonic() + delay)
-    return delay_until
 
 
 _DEFAULT_PAGINATION_LIMIT = 1000

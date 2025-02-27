@@ -1,7 +1,12 @@
+import math
+import time
+from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
+from typing import cast
+from typing import TypeVar
 
 import bs4
 import requests
@@ -13,6 +18,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 CONFLUENCE_OAUTH_TOKEN_URL = "https://auth.atlassian.com/oauth/token"
+RATE_LIMIT_MESSAGE_LOWERCASE = "Rate limit exceeded".lower()
 
 
 # the response when refreshing from the token url with grant_type "refresh_token"
@@ -118,3 +124,97 @@ def confluence_refresh_tokens(
     new_credentials["scope"] = token_response.scope
     new_credentials["cloud_id"] = cloud_id
     return new_credentials
+
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+# https://developer.atlassian.com/cloud/confluence/rate-limiting/
+# this uses the native rate limiting option provided by the
+# confluence client and otherwise applies a simpler set of error handling
+def handle_confluence_rate_limit(confluence_call: F) -> F:
+    def wrapped_call(*args: list[Any], **kwargs: Any) -> Any:
+        MAX_RETRIES = 5
+
+        TIMEOUT = 600
+        timeout_at = time.monotonic() + TIMEOUT
+
+        for attempt in range(MAX_RETRIES):
+            if time.monotonic() > timeout_at:
+                raise TimeoutError(
+                    f"Confluence call attempts took longer than {TIMEOUT} seconds."
+                )
+
+            try:
+                # we're relying more on the client to rate limit itself
+                # and applying our own retries in a more specific set of circumstances
+                return confluence_call(*args, **kwargs)
+            except requests.HTTPError as e:
+                delay_until = _handle_http_error(e, attempt)
+                logger.warning(
+                    f"HTTPError in confluence call. "
+                    f"Retrying in {delay_until} seconds..."
+                )
+                while time.monotonic() < delay_until:
+                    # in the future, check a signal here to exit
+                    time.sleep(1)
+            except AttributeError as e:
+                # Some error within the Confluence library, unclear why it fails.
+                # Users reported it to be intermittent, so just retry
+                if attempt == MAX_RETRIES - 1:
+                    raise e
+
+                logger.exception(
+                    "Confluence Client raised an AttributeError. Retrying..."
+                )
+                time.sleep(5)
+
+    return cast(F, wrapped_call)
+
+
+def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
+    MIN_DELAY = 2
+    MAX_DELAY = 60
+    STARTING_DELAY = 5
+    BACKOFF = 2
+
+    # Check if the response or headers are None to avoid potential AttributeError
+    if e.response is None or e.response.headers is None:
+        logger.warning("HTTPError with `None` as response or as headers")
+        raise e
+
+    if (
+        e.response.status_code != 429
+        and RATE_LIMIT_MESSAGE_LOWERCASE not in e.response.text.lower()
+    ):
+        raise e
+
+    retry_after = None
+
+    retry_after_header = e.response.headers.get("Retry-After")
+    if retry_after_header is not None:
+        try:
+            retry_after = int(retry_after_header)
+            if retry_after > MAX_DELAY:
+                logger.warning(
+                    f"Clamping retry_after from {retry_after} to {MAX_DELAY} seconds..."
+                )
+                retry_after = MAX_DELAY
+            if retry_after < MIN_DELAY:
+                retry_after = MIN_DELAY
+        except ValueError:
+            pass
+
+    if retry_after is not None:
+        logger.warning(
+            f"Rate limiting with retry header. Retrying after {retry_after} seconds..."
+        )
+        delay = retry_after
+    else:
+        logger.warning(
+            "Rate limiting without retry header. Retrying with exponential backoff..."
+        )
+        delay = min(STARTING_DELAY * (BACKOFF**attempt), MAX_DELAY)
+
+    delay_until = math.ceil(time.monotonic() + delay)
+    return delay_until
