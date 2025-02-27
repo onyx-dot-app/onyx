@@ -117,7 +117,7 @@ export default function OAuthCallbackPage() {
       <AdminPageTitle title={pageTitle} icon={<KeyIcon size={32} />} />
 
       <div className="flex flex-col items-center justify-center min-h-screen">
-        <CardSection className="max-w-md">
+        <CardSection className="max-w-md w-[500px] h-[250px]">
           <h1 className="text-2xl font-bold mb-4">{statusMessage}</h1>
           <p className="text-text-500">{statusDetails}</p>
           {redirectUrl && !isError && (
