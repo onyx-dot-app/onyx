@@ -77,15 +77,15 @@ def pass_aws_key(api_key: str) -> tuple[str, str, str]:
         try:
             # Example of splitting AWS keys (assuming format like "aws_ACCESSKEY_SECRETKEY_REGION")
             parts = api_key.split("_")
-            if len(parts) >= 3:
+            if len(parts) == 4:
                 aws_access_key_id = parts[1]
                 aws_secret_access_key = parts[2]
-                aws_region = parts[3] if len(parts) == 4 else "en-central-1"
+                aws_region = parts[3]
                 return aws_access_key_id, aws_secret_access_key, aws_region
             else:
-                raise "Invalid AWS key format"
+                raise f"Invalid AWS key format for key must be 'aws_ACCESSKEY_SECRETKEY_REGION' but got {parts}"
         except Exception as e:
             raise f"Error parsing AWS key: {e}"
 
     # Return the API key as-is if it's not an AWS key
-    raise "API key is not an AWS key needed aws_ prefix"
+    raise "API key does not match expected format format for key must be 'aws_ACCESSKEY_SECRETKEY_REGION'"
