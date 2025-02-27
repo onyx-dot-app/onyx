@@ -104,8 +104,6 @@ export default function MyDocuments() {
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const folderIdFromParams = parseInt(searchParams.get("folder") || "0", 10);
-
   const handleFolderClick = (id: number) => {
     startTransition(() => {
       router.push(`/chat/my-documents/${id}`);
@@ -117,12 +115,6 @@ export default function MyDocuments() {
   const handleCreateFolder = async (name: string, description: string) => {
     try {
       const folderResponse = await createFolder(name, description);
-      // setPopup({
-      //   message: "Folder created successfully",
-      //   type: "success",
-      // });
-      // await refreshFolders();
-      // setIsCreateFolderOpen(false);
       startTransition(() => {
         router.push(
           `/chat/my-documents/${folderResponse.id}?message=folder-created`

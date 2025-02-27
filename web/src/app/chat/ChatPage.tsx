@@ -130,7 +130,6 @@ import {
 
 import { getSourceMetadata } from "@/lib/sources";
 import { UserSettingsModal } from "./modal/UserSettingsModal";
-import { AlignStartVertical } from "lucide-react";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
@@ -141,6 +140,7 @@ import { ValidSources } from "@/lib/types";
 import {
   FileUploadResponse,
   FileResponse,
+  FolderResponse,
   useDocumentsContext,
 } from "./my-documents/DocumentsContext";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
@@ -186,6 +186,7 @@ export function ChatPage({
     clearSelectedItems,
     folders: userFolders,
     uploadFile,
+    removeSelectedFile,
   } = useDocumentsContext();
 
   const defaultAssistantIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -194,6 +195,7 @@ export function ChatPage({
     : undefined;
   const [forceUserFileSearch, setForceUserFileSearch] = useState(true);
 
+  // Function declarations need to be outside of blocks in strict mode
   function useScreenSize() {
     const [screenSize, setScreenSize] = useState({
       width: typeof window !== "undefined" ? window.innerWidth : 0,
@@ -315,10 +317,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-      ? availableAssistants.find(
-          (assistant) => assistant.id === defaultAssistantId
-        )
-      : undefined
+        ? availableAssistants.find(
+            (assistant) => assistant.id === defaultAssistantId
+          )
+        : undefined
   );
   // Gather default temperature settings
   const search_param_temperature = searchParams.get(
@@ -328,12 +330,12 @@ export function ChatPage({
   const defaultTemperature = search_param_temperature
     ? parseFloat(search_param_temperature)
     : selectedAssistant?.tools.some(
-        (tool) =>
-          tool.in_code_tool_id === SEARCH_TOOL_ID ||
-          tool.in_code_tool_id === INTERNET_SEARCH_TOOL_ID
-      )
-    ? 0
-    : 0.7;
+          (tool) =>
+            tool.in_code_tool_id === SEARCH_TOOL_ID ||
+            tool.in_code_tool_id === INTERNET_SEARCH_TOOL_ID
+        )
+      ? 0
+      : 0.7;
 
   const setSelectedAssistantFromId = (assistantId: number) => {
     // NOTE: also intentionally look through available assistants here, so that
@@ -2136,6 +2138,69 @@ export function ChatPage({
   useEffect(() => {
     abortControllersRef.current = abortControllers;
   }, [abortControllers]);
+  useEffect(() => {
+    const calculateTokensAndUpdateSearchMode = async () => {
+      if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+        try {
+          // Prepare the query parameters for the API call
+          const fileIds = selectedFiles.map((file: FileResponse) => file.id);
+          const folderIds = selectedFolders.map(
+            (folder: FolderResponse) => folder.id
+          );
+
+          // Build the query string
+          const queryParams = new URLSearchParams();
+          fileIds.forEach((id) =>
+            queryParams.append("file_ids", id.toString())
+          );
+          folderIds.forEach((id) =>
+            queryParams.append("folder_ids", id.toString())
+          );
+
+          // Make the API call to get token estimate
+          const response = await fetch(
+            `/api/user/file/token-estimate?${queryParams.toString()}`
+          );
+
+          if (!response.ok) {
+            console.error("Failed to fetch token estimate");
+            return;
+          }
+
+          const data = await response.json();
+          const totalTokens = data.total_tokens;
+
+          // Get the current model's context window size
+          const currentModel = llmManager.currentLlm;
+          // Default to Claude Sonnet's context window (200k tokens) if not specified
+          // Use model.modelName to determine context size - Claude models typically have 200k tokens
+          const modelContextSize = currentModel?.modelName
+            ?.toLowerCase()
+            .includes("claude")
+            ? 200000
+            : currentModel?.modelName?.toLowerCase().includes("gpt-4")
+              ? 128000
+              : currentModel?.modelName?.toLowerCase().includes("gpt-3.5")
+                ? 16000
+                : 200000; // Default to 200k
+
+          // If tokens exceed 75% of the model's context window, force search mode
+          const shouldForceSearch = totalTokens > modelContextSize * 0.75;
+
+          // Update the forceUserFileSearch state
+          setForceUserFileSearch(shouldForceSearch);
+
+          console.log(
+            `Total tokens: ${totalTokens}, Context size: ${modelContextSize}, Force search: ${shouldForceSearch}`
+          );
+        } catch (error) {
+          console.error("Error calculating tokens:", error);
+        }
+      }
+    };
+
+    calculateTokensAndUpdateSearchMode();
+  }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
 
   useSidebarShortcut(router, toggleSidebar);
 
@@ -2205,6 +2270,8 @@ export function ChatPage({
     // const uploadedFile = await uploadFile(files[0]);
     // addSelectedFile(uploadedFile);
   };
+
+  // Calculate token count and update forceUserFileSearch when selected files/folders change
 
   return (
     <>
@@ -2291,24 +2358,8 @@ export function ChatPage({
           selectedFolders={selectedFolders}
           addSelectedFile={addSelectedFile}
           addSelectedFolder={addSelectedFolder}
-          removeSelectedFile={() => {}}
-        />
-      )}
-
-      {toggleDocSelection && (
-        <FilePickerModal
-          buttonContent="Set as Context"
-          title="User Documents"
-          isOpen={true}
-          onClose={() => setToggleDocSelection(false)}
-          onSave={() => {
-            setToggleDocSelection(false);
-          }}
-          selectedFiles={selectedFiles}
-          selectedFolders={selectedFolders}
-          addSelectedFile={addSelectedFile}
-          addSelectedFolder={addSelectedFolder}
-          removeSelectedFile={() => {}}
+          removeSelectedFile={(file) => removeSelectedFile(file)}
+          removeSelectedFolder={removeSelectedFolder}
         />
       )}
 

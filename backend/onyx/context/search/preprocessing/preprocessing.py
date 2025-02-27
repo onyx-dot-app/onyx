@@ -160,12 +160,12 @@ def retrieval_preprocessing(
     user_acl_filters = (
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
-    user_file_ids = preset_filters.user_file_ids
+    user_file_ids = preset_filters.user_file_ids or []
     if persona and persona.user_files:
         user_file_ids = user_file_ids + [
             file.id
             for file in persona.user_files
-            if file.id not in preset_filters.user_file_ids
+            if file.id not in (preset_filters.user_file_ids or [])
         ]
 
     final_filters = IndexFilters(

@@ -44,35 +44,8 @@ export interface DocumentsContextType {
   presentingDocument: MinimalOnyxDocument | null;
   searchQuery: string;
   page: number;
-  refreshFolders: () => Promise<void>;
-  createFolder: (name: string, description: string) => Promise<FolderResponse>;
-  deleteItem: (itemId: number, isFolder: boolean) => Promise<void>;
-  moveItem: (
-    itemId: number,
-    currentFolderId: number | null,
-    isFolder: boolean
-  ) => Promise<void>;
-  downloadItem: (documentId: string) => Promise<void>;
-  renameItem: (
-    itemId: number,
-    currentName: string,
-    isFolder: boolean
-  ) => Promise<void>;
-  setCurrentFolder: (folderId: number | null) => void;
-  setPresentingDocument: (document: MinimalOnyxDocument | null) => void;
-  setSearchQuery: (query: string) => void;
-  setPage: (page: number) => void;
-  getFolderDetails: (folderId: number) => Promise<FolderResponse>;
-  updateFolderDetails: (
-    folderId: number,
-    name: string,
-    description: string
-  ) => Promise<void>;
   isLoading: boolean;
-  uploadFile: (
-    formData: FormData,
-    folderId: number | null
-  ) => Promise<FileUploadResponse>;
+  error: string | null;
   selectedFiles: FileResponse[];
   selectedFolders: FolderResponse[];
   addSelectedFile: (file: FileResponse) => void;
@@ -80,26 +53,44 @@ export interface DocumentsContextType {
   addSelectedFolder: (folder: FolderResponse) => void;
   removeSelectedFolder: (folder: FolderResponse) => void;
   clearSelectedItems: () => void;
+  setSelectedFiles: (files: FileResponse[]) => void;
+  setSelectedFolders: (folders: FolderResponse[]) => void;
+  refreshFolders: () => Promise<void>;
+  createFolder: (name: string, description: string) => Promise<FolderResponse>;
+  deleteItem: (itemId: number, isFolder: boolean) => Promise<void>;
+  moveItem: (
+    itemId: number,
+    isFolder: boolean,
+    newFolderId: number | null
+  ) => Promise<void>;
+  renameFile: (fileId: number, newName: string) => Promise<void>;
+  renameFolder: (folderId: number, newName: string) => Promise<void>;
+  uploadFile: (
+    formData: FormData,
+    folderId: number | null
+  ) => Promise<FileUploadResponse>;
+  setCurrentFolder: (folderId: number | null) => void;
+  setPresentingDocument: (document: MinimalOnyxDocument | null) => void;
+  setSearchQuery: (query: string) => void;
+  setPage: (page: number) => void;
+  getFilesIndexingStatus: (
+    fileIds: number[]
+  ) => Promise<Record<number, boolean>>;
+  getFolderDetails: (folderId: number) => Promise<FolderResponse>;
+  downloadItem: (documentId: string) => Promise<Blob>;
+  renameItem: (
+    itemId: number,
+    newName: string,
+    isFolder: boolean
+  ) => Promise<void>;
   createFileFromLink: (
     url: string,
     folderId: number | null
   ) => Promise<FileUploadResponse>;
-  setSelectedFiles: Dispatch<SetStateAction<FileResponse[]>>;
-  setSelectedFolders: Dispatch<SetStateAction<FolderResponse[]>>;
   handleUpload: (files: File[]) => Promise<void>;
-  handleCreateFileFromLink: () => Promise<void>;
   refreshFolderDetails: () => Promise<void>;
-  folderDetails: FolderResponse | undefined | null;
-  setFolderDetails: Dispatch<SetStateAction<FolderResponse | undefined | null>>;
-  showUploadWarning: boolean;
-  setShowUploadWarning: Dispatch<SetStateAction<boolean>>;
-  linkUrl: string;
-  setLinkUrl: Dispatch<SetStateAction<string>>;
-  isCreatingFileFromLink: boolean;
-  setIsCreatingFileFromLink: Dispatch<SetStateAction<boolean>>;
-  error: string | null;
-  setError: Dispatch<SetStateAction<string | null>>;
   getFolders: () => Promise<FolderResponse[]>;
+  folderDetails: FolderResponse | null | undefined;
 }
 
 const DocumentsContext = createContext<DocumentsContextType | undefined>(
@@ -158,13 +149,32 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
       if (folderId) {
         formData.append("folder_id", folderId.toString());
       }
+
+      setIsLoading(true);
+      setError(null);
+
       try {
-        const data = await documentsService.uploadFileRequest(formData);
+        const response = await fetch("/api/user/file/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || "Failed to upload file");
+        }
+
+        const data = await response.json();
         await refreshFolders();
         return data;
       } catch (error) {
         console.error("Failed to upload file:", error);
+        setError(
+          error instanceof Error ? error.message : "Failed to upload file"
+        );
         throw error;
+      } finally {
+        setIsLoading(false);
       }
     },
     [refreshFolders]
@@ -204,39 +214,58 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
     [refreshFolders]
   );
 
-  const moveItem = useCallback(
-    async (
-      itemId: number,
-      currentFolderId: number | null,
-      isFolder: boolean
-    ) => {
+  const moveItem = async (
+    itemId: number,
+    isFolder: boolean,
+    newFolderId: number | null
+  ): Promise<void> => {
+    try {
+      if (isFolder) {
+        // Move folder logic
+        // This is a placeholder - implement actual folder moving logic
+        console.log(`Moving folder ${itemId} to ${newFolderId}`);
+      } else {
+        // Move file
+        const response = await fetch(`/api/user/file/${itemId}/move`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ new_folder_id: newFolderId }),
+        });
+
+        if (!response.ok) {
+          throw new Error("Failed to move file");
+        }
+      }
+      await refreshFolders();
+    } catch (error) {
+      console.error("Failed to move item:", error);
+      setError(error instanceof Error ? error.message : "Failed to move item");
+      throw error;
+    }
+  };
+
+  const downloadItem = useCallback(
+    async (documentId: string): Promise<Blob> => {
       try {
-        await documentsService.moveItem(itemId, currentFolderId, isFolder);
-        await refreshFolders();
+        const blob = await documentsService.downloadItem(documentId);
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "document";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        return blob;
       } catch (error) {
-        console.error("Failed to move item:", error);
+        console.error("Failed to download item:", error);
         throw error;
       }
     },
-    [refreshFolders]
+    []
   );
-
-  const downloadItem = useCallback(async (documentId: string) => {
-    try {
-      const blob = await documentsService.downloadItem(documentId);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "document";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error("Failed to download item:", error);
-      throw error;
-    }
-  }, []);
 
   const renameItem = useCallback(
     async (itemId: number, newName: string, isFolder: boolean) => {
@@ -392,28 +421,60 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
     }
   };
 
+  const getFilesIndexingStatus = async (
+    fileIds: number[]
+  ): Promise<Record<number, boolean>> => {
+    try {
+      const queryParams = fileIds.map((id) => `file_ids=${id}`).join("&");
+      const response = await fetch(
+        `/api/user/file/indexing-status?${queryParams}`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch indexing status");
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching indexing status:", error);
+      return {};
+    }
+  };
+
+  const renameFile = useCallback(
+    async (fileId: number, newName: string) => {
+      try {
+        await documentsService.renameItem(fileId, newName, false);
+        await refreshFolders();
+      } catch (error) {
+        console.error("Failed to rename file:", error);
+        throw error;
+      }
+    },
+    [refreshFolders]
+  );
+
+  const renameFolder = useCallback(
+    async (folderId: number, newName: string) => {
+      try {
+        await documentsService.renameItem(folderId, newName, true);
+        await refreshFolders();
+      } catch (error) {
+        console.error("Failed to rename folder:", error);
+        throw error;
+      }
+    },
+    [refreshFolders]
+  );
+
   const value: DocumentsContextType = {
-    folderDetails,
-    setFolderDetails,
     folders,
     currentFolder,
     presentingDocument,
     searchQuery,
     page,
-    refreshFolders,
-    createFolder,
-    deleteItem,
-    moveItem,
-    downloadItem,
-    renameItem,
-    setCurrentFolder,
-    setPresentingDocument,
-    setSearchQuery,
-    setPage,
-    getFolderDetails,
-    updateFolderDetails,
     isLoading,
-    uploadFile,
+    error,
     selectedFiles,
     selectedFolders,
     addSelectedFile,
@@ -421,21 +482,28 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
     addSelectedFolder,
     removeSelectedFolder,
     clearSelectedItems,
-    createFileFromLink,
     setSelectedFiles,
     setSelectedFolders,
+    refreshFolders,
+    createFolder,
+    deleteItem,
+    moveItem,
+    renameFile,
+    renameFolder,
+    uploadFile,
+    setCurrentFolder,
+    setPresentingDocument,
+    setSearchQuery,
+    setPage,
+    getFilesIndexingStatus,
+    getFolderDetails,
+    downloadItem,
+    renameItem,
+    createFileFromLink,
     handleUpload,
-    handleCreateFileFromLink,
     refreshFolderDetails,
-    showUploadWarning,
-    setShowUploadWarning,
-    linkUrl,
-    setLinkUrl,
-    isCreatingFileFromLink,
-    setIsCreatingFileFromLink,
-    error,
-    setError,
     getFolders,
+    folderDetails,
   };
 
   return (
