@@ -545,6 +545,9 @@ def stream_chat_message_objects(
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
 
+        # Initialize flag for user file search
+        use_search_for_user_files = False
+
         if new_msg_req.user_file_ids or new_msg_req.user_folder_ids:
             # Load user files
             from onyx.file_store.utils import load_all_user_files
@@ -577,7 +580,6 @@ def stream_chat_message_objects(
                 )
                 use_search_for_user_files = True
             else:
-                use_search_for_user_files = False
                 # Convert UserFile objects to InMemoryChatFile objects
                 user_file_objects = []
                 for file in user_files:
@@ -590,7 +592,7 @@ def stream_chat_message_objects(
                                 file_id=str(file.file_id),
                                 content=file_io.read(),
                                 file_type=ChatFileType.DOC,
-                                filename=file.name,
+                                filename="user file",
                             )
                         )
                     except Exception as e:
@@ -778,7 +780,7 @@ def stream_chat_message_objects(
         force_use_tool = _get_force_search_settings(new_msg_req, tools)
 
         # Set force_use if user files exceed token limit
-        if "use_search_for_user_files" in locals() and use_search_for_user_files:
+        if use_search_for_user_files:
             force_use_tool.force_use = True
 
         # TODO: unify message history with single message history

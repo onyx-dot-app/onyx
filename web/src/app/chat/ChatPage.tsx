@@ -2145,6 +2145,69 @@ export function ChatPage({
   useEffect(() => {
     abortControllersRef.current = abortControllers;
   }, [abortControllers]);
+  useEffect(() => {
+    const calculateTokensAndUpdateSearchMode = async () => {
+      if (selectedFiles.length > 0 || selectedFolders.length > 0) {
+        try {
+          // Prepare the query parameters for the API call
+          const fileIds = selectedFiles.map((file: FileResponse) => file.id);
+          const folderIds = selectedFolders.map(
+            (folder: FolderResponse) => folder.id
+          );
+
+          // Build the query string
+          const queryParams = new URLSearchParams();
+          fileIds.forEach((id) =>
+            queryParams.append("file_ids", id.toString())
+          );
+          folderIds.forEach((id) =>
+            queryParams.append("folder_ids", id.toString())
+          );
+
+          // Make the API call to get token estimate
+          const response = await fetch(
+            `/api/user/file/token-estimate?${queryParams.toString()}`
+          );
+
+          if (!response.ok) {
+            console.error("Failed to fetch token estimate");
+            return;
+          }
+
+          const data = await response.json();
+          const totalTokens = data.total_tokens;
+
+          // Get the current model's context window size
+          const currentModel = llmManager.currentLlm;
+          // Default to Claude Sonnet's context window (200k tokens) if not specified
+          // Use model.modelName to determine context size - Claude models typically have 200k tokens
+          const modelContextSize = currentModel?.modelName
+            ?.toLowerCase()
+            .includes("claude")
+            ? 200000
+            : currentModel?.modelName?.toLowerCase().includes("gpt-4")
+              ? 128000
+              : currentModel?.modelName?.toLowerCase().includes("gpt-3.5")
+                ? 16000
+                : 200000; // Default to 200k
+
+          // If tokens exceed 75% of the model's context window, force search mode
+          const shouldForceSearch = totalTokens > modelContextSize * 0.75;
+
+          // Update the forceUserFileSearch state
+          setForceUserFileSearch(shouldForceSearch);
+
+          console.log(
+            `Total tokens: ${totalTokens}, Context size: ${modelContextSize}, Force search: ${shouldForceSearch}`
+          );
+        } catch (error) {
+          console.error("Error calculating tokens:", error);
+        }
+      }
+    };
+
+    calculateTokensAndUpdateSearchMode();
+  }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
 
   useSidebarShortcut(router, toggleSidebar);
 
@@ -2236,69 +2299,6 @@ export function ChatPage({
   };
 
   // Calculate token count and update forceUserFileSearch when selected files/folders change
-  useEffect(() => {
-    const calculateTokensAndUpdateSearchMode = async () => {
-      if (selectedFiles.length > 0 || selectedFolders.length > 0) {
-        try {
-          // Prepare the query parameters for the API call
-          const fileIds = selectedFiles.map((file: FileResponse) => file.id);
-          const folderIds = selectedFolders.map(
-            (folder: FolderResponse) => folder.id
-          );
-
-          // Build the query string
-          const queryParams = new URLSearchParams();
-          fileIds.forEach((id) =>
-            queryParams.append("file_ids", id.toString())
-          );
-          folderIds.forEach((id) =>
-            queryParams.append("folder_ids", id.toString())
-          );
-
-          // Make the API call to get token estimate
-          const response = await fetch(
-            `/api/user/file/token-estimate?${queryParams.toString()}`
-          );
-
-          if (!response.ok) {
-            console.error("Failed to fetch token estimate");
-            return;
-          }
-
-          const data = await response.json();
-          const totalTokens = data.total_tokens;
-
-          // Get the current model's context window size
-          const currentModel = llmManager.currentLlm;
-          // Default to Claude Sonnet's context window (200k tokens) if not specified
-          // Use model.modelName to determine context size - Claude models typically have 200k tokens
-          const modelContextSize = currentModel?.modelName
-            ?.toLowerCase()
-            .includes("claude")
-            ? 200000
-            : currentModel?.modelName?.toLowerCase().includes("gpt-4")
-              ? 128000
-              : currentModel?.modelName?.toLowerCase().includes("gpt-3.5")
-                ? 16000
-                : 200000; // Default to 200k
-
-          // If tokens exceed 75% of the model's context window, force search mode
-          const shouldForceSearch = totalTokens > modelContextSize * 0.75;
-
-          // Update the forceUserFileSearch state
-          setForceUserFileSearch(shouldForceSearch);
-
-          console.log(
-            `Total tokens: ${totalTokens}, Context size: ${modelContextSize}, Force search: ${shouldForceSearch}`
-          );
-        } catch (error) {
-          console.error("Error calculating tokens:", error);
-        }
-      }
-    };
-
-    calculateTokensAndUpdateSearchMode();
-  }, [selectedFiles, selectedFolders, llmManager.currentLlm]);
 
   return (
     <>
