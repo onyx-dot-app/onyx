@@ -91,6 +91,8 @@ def _form_channel_config(
         "respond_to_bots"
     ] = slack_channel_config_creation_request.respond_to_bots
 
+    channel_config["is_ephemeral"] = slack_channel_config_creation_request.is_ephemeral
+
     channel_config["disabled"] = slack_channel_config_creation_request.disabled
 
     return channel_config

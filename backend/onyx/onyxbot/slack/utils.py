@@ -181,7 +181,7 @@ def _build_error_block(error_message: str) -> Block:
     backoff=2,
     logger=cast(logging.Logger, logger),
 )
-def respond_in_thread(
+def respond_in_thread_or_channel(
     client: WebClient,
     channel: str,
     thread_ts: str | None,
@@ -190,6 +190,7 @@ def respond_in_thread(
     receiver_ids: list[str] | None = None,
     metadata: Metadata | None = None,
     unfurl: bool = True,
+    send_as_ephemeral: bool | None = True,
 ) -> list[str]:
     if not text and not blocks:
         raise ValueError("One of `text` or `blocks` must be provided")
@@ -233,6 +234,7 @@ def respond_in_thread(
         message_ids.append(response["message_ts"])
     else:
         slack_call = make_slack_api_rate_limited(client.chat_postEphemeral)
+
         for receiver in receiver_ids:
             try:
                 response = slack_call(
@@ -294,6 +296,14 @@ def build_feedback_id(
         feedback_id = str(message_id)
 
     return unique_prefix + ID_SEPARATOR + feedback_id
+
+
+def build_publish_ephemeral_message_id(
+    original_question_ts: str | None = None,
+) -> str:
+    if original_question_ts is None:
+        raise ValueError("Original question timestamp is required")
+    return "publish_ephemeral_message__" + original_question_ts
 
 
 def build_continue_in_web_ui_id(
@@ -611,7 +621,7 @@ class SlackRateLimiter:
     def notify(
         self, client: WebClient, channel: str, position: int, thread_ts: str | None
     ) -> None:
-        respond_in_thread(
+        respond_in_thread_or_channel(
             client=client,
             channel=channel,
             receiver_ids=None,

@@ -31,12 +31,18 @@ from onyx.onyxbot.slack.constants import FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID
 from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_ACTION_ID
 from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_RESOLVED_ACTION_ID
 from onyx.onyxbot.slack.constants import IMMEDIATE_RESOLVED_BUTTON_ACTION_ID
+from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
 from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
+from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
 from onyx.onyxbot.slack.formatting import format_slack_message
 from onyx.onyxbot.slack.icons import source_to_github_img_link
+from onyx.onyxbot.slack.models import ActionValuesEphemeralMessage
+from onyx.onyxbot.slack.models import ActionValuesEphemeralMessageChannelConfig
+from onyx.onyxbot.slack.models import ActionValuesEphemeralMessageMessageInfo
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import build_continue_in_web_ui_id
 from onyx.onyxbot.slack.utils import build_feedback_id
+from onyx.onyxbot.slack.utils import build_publish_ephemeral_message_id
 from onyx.onyxbot.slack.utils import remove_slack_text_interactions
 from onyx.onyxbot.slack.utils import translate_vespa_highlight_to_slack
 from onyx.utils.text_processing import decode_escapes
@@ -100,6 +106,88 @@ def _build_qa_feedback_block(
                 action_id=DISLIKE_BLOCK_ACTION_ID,
                 text="👎 Not helpful",
                 value=feedback_reminder_id,
+            ),
+        ],
+    )
+
+
+def _build_ephemeral_publication_block(
+    channel_id: str,
+    original_question_ts: str | None = None,
+    chat_message_id: int | None = None,
+    message_info: SlackMessageInfo | None = None,
+    channel_conf: ChannelConfig | None = None,
+    feedback_reminder_id: str | None = None,
+) -> Block:
+    if not chat_message_id:
+        raise ValueError("Chat message id is required to change the ephemeral message")
+
+    if message_info is None:
+        raise ValueError("Message info is required to change the ephemeral message")
+
+    if channel_conf is None:
+        raise ValueError("Channel config is required to change the ephemeral message")
+
+    # check whether the message is in a thread
+    if (
+        message_info is not None
+        and message_info.msg_to_respond is not None
+        and message_info.thread_to_respond is not None
+        and (message_info.msg_to_respond == message_info.thread_to_respond)
+    ):
+        respond_ts = None
+        channel_thread_str = "Channel"
+    else:
+        respond_ts = original_question_ts
+        channel_thread_str = "Thread"
+
+    action_values_ephemeral_message_channel_config = (
+        ActionValuesEphemeralMessageChannelConfig(
+            channel_name=channel_conf.get("channel_name"),
+            respond_tag_only=channel_conf.get("respond_tag_only"),
+            respond_to_bots=channel_conf.get("respond_to_bots"),
+            is_ephemeral=channel_conf.get("is_ephemeral", False),
+            respond_member_group_list=channel_conf.get("respond_member_group_list"),
+            answer_filters=channel_conf.get("answer_filters"),
+            follow_up_tags=channel_conf.get("follow_up_tags"),
+            show_continue_in_web_ui=channel_conf.get("show_continue_in_web_ui", False),
+        )
+    )
+
+    action_values_ephemeral_message_message_info = (
+        ActionValuesEphemeralMessageMessageInfo(
+            bypass_filters=message_info.bypass_filters,
+            channel_to_respond=message_info.channel_to_respond,
+            msg_to_respond=message_info.msg_to_respond,
+            email=message_info.email,
+            sender_id=message_info.sender_id,
+            thread_messages=[],
+            is_bot_msg=message_info.is_bot_msg,
+            is_bot_dm=message_info.is_bot_dm,
+            thread_to_respond=respond_ts,
+        )
+    )
+
+    action_values_ephemeral_message = ActionValuesEphemeralMessage(
+        original_question_ts=original_question_ts,
+        feedback_reminder_id=feedback_reminder_id,
+        chat_message_id=chat_message_id,
+        message_info=action_values_ephemeral_message_message_info,
+        channel_conf=action_values_ephemeral_message_channel_config,
+    )
+
+    return ActionsBlock(
+        block_id=build_publish_ephemeral_message_id(original_question_ts),
+        elements=[
+            ButtonElement(
+                action_id=SHOW_EVERYONE_ACTION_ID,
+                text=f"📢 Share with Everyone in {channel_thread_str} (Caution!)",
+                value=action_values_ephemeral_message.model_dump_json(),
+            ),
+            ButtonElement(
+                action_id=KEEP_TO_YOURSELF_ACTION_ID,
+                text="🤫  Keep to Yourself",
+                value=action_values_ephemeral_message.model_dump_json(),
             ),
         ],
     )
@@ -488,16 +576,21 @@ def build_slack_response_blocks(
     use_citations: bool,
     feedback_reminder_id: str | None,
     skip_ai_feedback: bool = False,
+    offer_ephemeral_publication: bool = False,
     expecting_search_result: bool = False,
+    skip_restated_question: bool = False,
 ) -> list[Block]:
     """
     This function is a top level function that builds all the blocks for the Slack response.
     It also handles combining all the blocks together.
     """
     # If called with the OnyxBot slash command, the question is lost so we have to reshow it
-    restate_question_block = get_restate_blocks(
-        message_info.thread_messages[-1].message, message_info.is_bot_msg
-    )
+    if not skip_restated_question:
+        restate_question_block = get_restate_blocks(
+            message_info.thread_messages[-1].message, message_info.is_bot_msg
+        )
+    else:
+        restate_question_block = []
 
     if expecting_search_result:
         answer_blocks = _build_qa_response_blocks(
@@ -528,7 +621,22 @@ def build_slack_response_blocks(
             _build_follow_up_block(message_id=answer.chat_message_id)
         )
 
-    ai_feedback_block = []
+    publish_ephemeral_message_block = []
+
+    if offer_ephemeral_publication:
+        publish_ephemeral_message_block.append(
+            _build_ephemeral_publication_block(
+                channel_id=message_info.channel_to_respond,
+                original_question_ts=message_info.msg_to_respond,
+                chat_message_id=answer.chat_message_id,
+                message_info=message_info,
+                channel_conf=channel_conf,
+                feedback_reminder_id=feedback_reminder_id,
+            )
+        )
+
+    ai_feedback_block: list[Block] = []
+
     if answer.chat_message_id is not None and not skip_ai_feedback:
         ai_feedback_block.append(
             _build_qa_feedback_block(
@@ -550,6 +658,7 @@ def build_slack_response_blocks(
     all_blocks = (
         restate_question_block
         + answer_blocks
+        + publish_ephemeral_message_block
         + ai_feedback_block
         + citations_divider
         + citations_blocks

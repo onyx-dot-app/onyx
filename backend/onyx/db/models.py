@@ -1756,6 +1756,7 @@ class ChannelConfig(TypedDict):
     channel_name: str | None  # None for default channel config
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
+    is_ephemeral: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
     answer_filters: NotRequired[list[AllowedAnswerFilters]]
     # If None then no follow up
