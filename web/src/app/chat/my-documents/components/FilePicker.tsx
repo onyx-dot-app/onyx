@@ -195,8 +195,9 @@ export interface FilePickerModalProps {
   selectedFiles: FileResponse[];
   selectedFolders: FolderResponse[];
   addSelectedFile: (file: FileResponse) => void;
-  removeSelectedFile: (file: FileResponse) => void;
   addSelectedFolder: (folder: FolderResponse) => void;
+  removeSelectedFile: (file: FileResponse) => void;
+  removeSelectedFolder: (folder: FolderResponse) => void;
 }
 
 export const FilePickerModal: React.FC<FilePickerModalProps> = ({
@@ -209,6 +210,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   selectedFolders,
   addSelectedFile,
   addSelectedFolder,
+  removeSelectedFile,
+  removeSelectedFolder,
 }) => {
   const {
     folders,
@@ -220,7 +223,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     deleteItem,
     moveItem,
     downloadItem,
-    removeSelectedFile,
     createFileFromLink,
     setSelectedFiles,
     setSelectedFolders,
@@ -259,6 +261,21 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   );
 
   const { setPopup } = usePopup();
+
+  // Initialize selectedFileIds and selectedFolderIds based on props
+  useEffect(() => {
+    if (isOpen) {
+      // Initialize selected file IDs
+      const fileIds = new Set<number>();
+      selectedFiles.forEach((file) => fileIds.add(file.id));
+      setSelectedFileIds(fileIds);
+
+      // Initialize selected folder IDs
+      const folderIds = new Set<number>();
+      selectedFolders.forEach((folder) => folderIds.add(folder.id));
+      setSelectedFolderIds(folderIds);
+    }
+  }, [isOpen, selectedFiles, selectedFolders]);
 
   useEffect(() => {
     if (isOpen) {
@@ -304,12 +321,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       const newSet = new Set(prev);
       if (newSet.has(file.id)) {
         newSet.delete(file.id);
+        removeSelectedFile(file);
       } else {
         newSet.add(file.id);
+        addSelectedFile(file);
       }
       return newSet;
     });
-    removeSelectedFile(file);
 
     // Check if the file's folder should be unselected
     if (file.folder_id) {
@@ -323,6 +341,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             );
             if (!allFilesSelected) {
               newSet.delete(file.folder_id!);
+              if (folder) {
+                removeSelectedFolder(folder);
+              }
             }
           }
         }
@@ -331,13 +352,32 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   };
 
+  const RECENT_DOCS_FOLDER_ID = -1;
+
+  const isRecentFolder = (folderId: number) =>
+    folderId === RECENT_DOCS_FOLDER_ID;
+
   const handleFolderSelect = (folder: FolderResponse) => {
+    // Special handling for the recent folder
+    const isRecent = isRecentFolder(folder.id);
+
     setSelectedFolderIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(folder.id)) {
         newSet.delete(folder.id);
+        removeSelectedFolder(folder);
+
+        // For the recent folder, also remove all its files from selection
+        if (isRecent) {
+          folder.files.forEach((file) => {
+            if (selectedFileIds.has(file.id)) {
+              removeSelectedFile(file);
+            }
+          });
+        }
       } else {
         newSet.add(folder.id);
+        addSelectedFolder(folder);
       }
       return newSet;
     });
@@ -345,6 +385,15 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     // Update selectedFileIds based on folder selection
     setSelectedFileIds((prev) => {
       const newSet = new Set(prev);
+
+      // For the recent folder, we need special handling
+      if (isRecent) {
+        // If we're selecting the recent folder, don't automatically select all its files
+        if (!selectedFolderIds.has(folder.id)) {
+          return newSet;
+        }
+      }
+
       folder.files.forEach((file) => {
         if (selectedFolderIds.has(folder.id)) {
           newSet.delete(file.id);
@@ -361,30 +410,50 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       folders: [],
       files: [],
     };
+
+    // First handle selected files that are not in any folder
     selectedFiles.forEach((file) => {
       if (!folders.some((f) => f.id === file.folder_id)) {
         items.files.push(file);
       }
     });
 
+    // Then handle folders and their files
     folders.forEach((folder) => {
+      // For the recent folder, only include it if explicitly selected
+      if (isRecentFolder(folder.id)) {
+        if (selectedFolderIds.has(folder.id)) {
+          items.folders.push(folder);
+        } else {
+          // For the recent folder, include individually selected files
+          const selectedFilesInFolder = folder.files.filter((file) =>
+            selectedFileIds.has(file.id)
+          );
+          items.files.push(...selectedFilesInFolder);
+        }
+        return;
+      }
+
+      // For regular folders
       if (selectedFolderIds.has(folder.id)) {
         items.folders.push(folder);
       } else {
         const selectedFilesInFolder = folder.files.filter((file) =>
           selectedFileIds.has(file.id)
         );
-        if (selectedFilesInFolder.length === folder.files.length) {
+        if (
+          selectedFilesInFolder.length === folder.files.length &&
+          folder.files.length > 0
+        ) {
           items.folders.push(folder);
         } else {
           items.files.push(...selectedFilesInFolder);
         }
       }
     });
-    setSelectedFiles(items.files);
-    setSelectedFolders(items.folders);
+
     return items;
-  }, [folders, selectedFileIds, selectedFolderIds]);
+  }, [folders, selectedFileIds, selectedFolderIds, selectedFiles]);
 
   const addUploadedFileToContext = async (files: FileList) => {
     for (let i = 0; i < files.length; i++) {
@@ -603,8 +672,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       try {
         await moveItem(
           itemId,
-          newFolderId === 0 ? null : newFolderId,
-          isFolder
+          isFolder,
+          newFolderId === 0 ? null : newFolderId
         );
         setPopup({
           message: `${isFolder ? "Folder" : "File"} moved successfully`,
@@ -619,6 +688,42 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
         });
       }
     }
+  };
+
+  // Add these new functions for removing files and folders
+  const handleRemoveFile = (file: FileResponse) => {
+    setSelectedFileIds((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(file.id);
+      return newSet;
+    });
+    removeSelectedFile(file);
+  };
+
+  const handleRemoveFolder = (folder: FolderResponse) => {
+    // Special handling for the recent folder
+    if (isRecentFolder(folder.id)) {
+      console.log("Removing recent folder");
+
+      // Also remove all files in the recent folder from selection
+      folder.files.forEach((file) => {
+        if (selectedFileIds.has(file.id)) {
+          setSelectedFileIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(file.id);
+            return newSet;
+          });
+          removeSelectedFile(file);
+        }
+      });
+    }
+
+    setSelectedFolderIds((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(folder.id);
+      return newSet;
+    });
+    removeSelectedFolder(folder);
   };
 
   return (
@@ -764,8 +869,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             <SelectedItemsList
               folders={selectedItems.folders}
               files={selectedItems.files}
-              onRemoveFile={(file) => handleFileSelect(file)}
-              onRemoveFolder={(folder) => handleFolderSelect(folder)}
+              onRemoveFile={handleRemoveFile}
+              onRemoveFolder={handleRemoveFolder}
             />
           </div>
 

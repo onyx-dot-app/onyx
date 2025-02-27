@@ -261,7 +261,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             flex
             flex-none
             gap-y-4
-            bg-white
+            bg-background-sidebar
             w-full
             border-r 
             dark:border-none

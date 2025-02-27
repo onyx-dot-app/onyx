@@ -1,11 +1,21 @@
 import datetime
+import time
 from typing import List
 
 from fastapi import UploadFile
 from sqlalchemy import and_
+from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
+from onyx.auth.users import get_current_tenant_id
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.file.connector import _read_files_and_metadata
+from onyx.connectors.models import InputType
+from onyx.db.connector import create_connector
+from onyx.db.connector_credential_pair import add_credential_to_connector
+from onyx.db.credentials import create_credential
+from onyx.db.enums import AccessType
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
@@ -14,7 +24,11 @@ from onyx.db.models import UserFolder
 from onyx.file_processing.extract_file_text import read_text_file
 from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.connector import upload_files
+from onyx.server.documents.models import ConnectorBase
+from onyx.server.documents.models import CredentialBase
+from onyx.server.models import StatusResponse
 
 USER_FILE_CONSTANT = "USER_FILE_CONNECTOR"
 
@@ -54,6 +68,153 @@ def create_user_files(
         user_files.append(new_file)
     db_session.commit()
     return user_files
+
+
+def create_user_file_with_indexing(
+    files: List[UploadFile],
+    folder_id: int | None,
+    user: User,
+    db_session: Session,
+    trigger_index: bool = True,
+) -> list[UserFile]:
+    """Create user files and trigger immediate indexing"""
+    # Create the user files first
+    user_files = create_user_files(files, folder_id, user, db_session)
+
+    # Create connector and credential for each file
+    for user_file in user_files:
+        cc_pair = create_file_connector_credential(user_file, user, db_session)
+        user_file.cc_pair_id = cc_pair.data
+
+    db_session.commit()
+
+    # Trigger immediate high-priority indexing for all created files
+    if trigger_index:
+        tenant_id = get_current_tenant_id()
+        for user_file in user_files:
+            # Use the existing trigger_indexing_for_cc_pair function but with high priority
+            if user_file.cc_pair_id:
+                trigger_indexing_for_cc_pair(
+                    [], user_file.cc_pair.connector_id, False, tenant_id, db_session
+                )
+
+    return user_files
+
+
+def create_file_connector_credential(
+    user_file: UserFile, user: User, db_session: Session
+) -> StatusResponse:
+    """Create connector and credential for a user file"""
+    connector_base = ConnectorBase(
+        name=f"UserFile-{user_file.file_id}-{int(time.time())}",
+        source=DocumentSource.FILE,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={
+            "file_locations": [user_file.file_id],
+        },
+        refresh_freq=None,
+        prune_freq=None,
+        indexing_start=None,
+    )
+
+    connector = create_connector(db_session=db_session, connector_data=connector_base)
+
+    credential_info = CredentialBase(
+        credential_json={},
+        admin_public=True,
+        source=DocumentSource.FILE,
+        curator_public=True,
+        groups=[],
+        name=f"UserFileCredential-{user_file.file_id}-{int(time.time())}",
+        is_user_file=True,
+    )
+
+    credential = create_credential(credential_info, user, db_session)
+
+    return add_credential_to_connector(
+        db_session=db_session,
+        user=user,
+        connector_id=connector.id,
+        credential_id=credential.id,
+        cc_pair_name=f"UserFileCCPair-{user_file.file_id}-{int(time.time())}",
+        access_type=AccessType.PRIVATE,
+        auto_sync_options=None,
+        groups=[],
+        is_user_file=True,
+    )
+
+
+def get_user_file_indexing_status(
+    file_ids: list[int], db_session: Session
+) -> dict[int, bool]:
+    """Get indexing status for multiple user files"""
+    status_dict = {}
+
+    # Query UserFile with cc_pair join
+    files_with_pairs = (
+        db_session.query(UserFile)
+        .filter(UserFile.id.in_(file_ids))
+        .options(joinedload(UserFile.cc_pair))
+        .all()
+    )
+
+    for file in files_with_pairs:
+        if file.cc_pair and file.cc_pair.last_successful_index_time:
+            status_dict[file.id] = True
+        else:
+            status_dict[file.id] = False
+
+    return status_dict
+
+
+def calculate_user_files_token_count(
+    file_ids: list[int], folder_ids: list[int], db_session: Session
+) -> int:
+    """Calculate total token count for specified files and folders"""
+    total_tokens = 0
+
+    # Get tokens from individual files
+    if file_ids:
+        file_tokens = (
+            db_session.query(func.sum(UserFile.token_count))
+            .filter(UserFile.id.in_(file_ids))
+            .scalar()
+            or 0
+        )
+        total_tokens += file_tokens
+
+    # Get tokens from folders
+    if folder_ids:
+        folder_files_tokens = (
+            db_session.query(func.sum(UserFile.token_count))
+            .filter(UserFile.folder_id.in_(folder_ids))
+            .scalar()
+            or 0
+        )
+        total_tokens += folder_files_tokens
+
+    return total_tokens
+
+
+def load_all_user_files(
+    file_ids: list[int], folder_ids: list[int], db_session: Session
+) -> list[UserFile]:
+    """Load all user files from specified file IDs and folder IDs"""
+    result = []
+
+    # Get individual files
+    if file_ids:
+        files = db_session.query(UserFile).filter(UserFile.id.in_(file_ids)).all()
+        result.extend(files)
+
+    # Get files from folders
+    if folder_ids:
+        folder_files = (
+            db_session.query(UserFile).filter(UserFile.folder_id.in_(folder_ids)).all()
+        )
+        result.extend(folder_files)
+
+    return result
 
 
 def get_user_files_from_folder(folder_id: int, db_session: Session) -> list[UserFile]:
@@ -107,14 +268,14 @@ def unshare_folder_with_assistant(
 def fetch_user_files_for_documents(
     document_ids: list[str],
     db_session: Session,
-) -> dict[str, None | int]:
+) -> dict[str, int | None]:
     # Query UserFile objects for the given document_ids
     user_files = (
         db_session.query(UserFile).filter(UserFile.document_id.in_(document_ids)).all()
     )
 
     # Create a dictionary mapping document_ids to UserFile objects
-    result = {doc_id: None for doc_id in document_ids}
+    result: dict[str, int | None] = {doc_id: None for doc_id in document_ids}
     for user_file in user_files:
         result[user_file.document_id] = user_file.id
 
