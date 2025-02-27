@@ -73,19 +73,29 @@ def get_gpu_type() -> str:
 
 
 def pass_aws_key(api_key: str) -> tuple[str, str, str]:
-    if api_key.startswith("aws"):
-        try:
-            # Example of splitting AWS keys (assuming format like "aws_ACCESSKEY_SECRETKEY_REGION")
-            parts = api_key.split("_")
-            if len(parts) == 4:
-                aws_access_key_id = parts[1]
-                aws_secret_access_key = parts[2]
-                aws_region = parts[3]
-                return aws_access_key_id, aws_secret_access_key, aws_region
-            else:
-                raise f"Invalid AWS key format for key must be 'aws_ACCESSKEY_SECRETKEY_REGION' but got {parts}"
-        except Exception as e:
-            raise f"Error parsing AWS key: {e}"
+    """Parse AWS API key string into components.
 
-    # Return the API key as-is if it's not an AWS key
-    raise "API key does not match expected format format for key must be 'aws_ACCESSKEY_SECRETKEY_REGION'"
+    Args:
+        api_key: String in format 'aws_ACCESSKEY_SECRETKEY_REGION'
+
+    Returns:
+        Tuple of (access_key, secret_key, region)
+
+    Raises:
+        ValueError: If key format is invalid
+    """
+    if not api_key.startswith("aws"):
+        raise ValueError("API key must start with 'aws' prefix")
+
+    parts = api_key.split("_")
+    if len(parts) != 4:
+        raise ValueError(
+            f"API key must be in format 'aws_ACCESSKEY_SECRETKEY_REGION', got {len(parts) - 1} parts"
+            "this is an onyx specific format for formatting the aws secrets for bedrock"
+        )
+
+    try:
+        _, aws_access_key_id, aws_secret_access_key, aws_region = parts
+        return aws_access_key_id, aws_secret_access_key, aws_region
+    except Exception as e:
+        raise ValueError(f"Failed to parse AWS key components: {str(e)}")

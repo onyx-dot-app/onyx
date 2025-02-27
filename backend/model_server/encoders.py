@@ -35,6 +35,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
+from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
@@ -183,7 +184,7 @@ class CloudEmbedding:
         inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
 
         # Split into batches of 25 texts
-        max_texts_per_batch = 25  # 25 texts per batch
+        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
         batches = [
             inputs[i : i + max_texts_per_batch]
             for i in range(0, len(inputs), max_texts_per_batch)

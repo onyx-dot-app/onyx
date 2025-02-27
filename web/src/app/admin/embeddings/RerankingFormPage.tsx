@@ -389,7 +389,10 @@ const RerankingDetailsForm = forwardRef<
                         placeholder={
                           values.rerank_api_key
                             ? "*".repeat(values.rerank_api_key.length)
-                            : "aws_ACCESSKEY_SECRETKEY_REGION"
+                            : values.rerank_provider_type ===
+                                RerankerProvider.BEDROCK
+                              ? "aws_ACCESSKEY_SECRETKEY_REGION"
+                              : "Enter your API key"
                         }
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           const value = e.target.value;

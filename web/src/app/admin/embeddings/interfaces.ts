@@ -98,7 +98,8 @@ export const rerankingModels: RerankingModel[] = [
     rerank_provider_type: RerankerProvider.BEDROCK,
     modelName: "cohere.rerank-v3-5:0",
     displayName: "Cohere Rerank 3.5",
-    description: "Powerful multilingual reranking model.",
+    description:
+      "Powerful multilingual reranking model invoked through AWS Bedrock.",
     link: "https://aws.amazon.com/blogs/machine-learning/cohere-rerank-3-5-is-now-available-in-amazon-bedrock-through-rerank-api",
   },
 ];
