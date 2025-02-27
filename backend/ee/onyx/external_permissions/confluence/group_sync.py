@@ -66,10 +66,6 @@ def confluence_group_sync(
     tenant_id: str | None,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
-    # confluence_connector = ConfluenceConnector(
-    #     **cc_pair.connector.connector_specific_config
-    # )
-
     provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
     wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
@@ -88,12 +84,6 @@ def confluence_group_sync(
     confluence_client = OnyxConfluence(is_cloud, url, provider)
     confluence_client._probe_connection(**probe_kwargs)
     confluence_client._initialize_connection(**final_kwargs)
-
-    # confluence_client = build_confluence_client(
-    #     credentials=cc_pair.credential.credential_json,
-    #     is_cloud=cc_pair.connector.connector_specific_config.get("is_cloud", False),
-    #     wiki_base=cc_pair.connector.connector_specific_config["wiki_base"],
-    # )
 
     group_member_email_map = _build_group_member_email_map(
         confluence_client=confluence_client,
