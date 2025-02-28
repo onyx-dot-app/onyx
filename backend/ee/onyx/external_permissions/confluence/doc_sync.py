@@ -18,6 +18,7 @@ from onyx.connectors.models import SlimDocument
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -345,7 +346,6 @@ def _fetch_all_page_restrictions(
 
 
 def confluence_doc_sync(
-    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
     callback: IndexingHeartbeatInterface | None,
 ) -> list[DocExternalAccess]:
@@ -361,7 +361,9 @@ def confluence_doc_sync(
     )
 
     # confluence_connector.load_credentials(cc_pair.credential.credential_json)
-    provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
+    provider = OnyxDBCredentialsProvider(
+        get_current_tenant_id(), "confluence", cc_pair.credential_id
+    )
     confluence_connector.set_credentials_provider(provider)
 
     is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)

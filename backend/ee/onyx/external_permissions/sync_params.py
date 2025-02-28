@@ -20,7 +20,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 # Defining the input/output types for the sync functions
 DocSyncFuncType = Callable[
     [
-        str,
         ConnectorCredentialPair,
         IndexingHeartbeatInterface | None,
     ],

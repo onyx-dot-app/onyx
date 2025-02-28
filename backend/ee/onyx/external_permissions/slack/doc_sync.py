@@ -123,7 +123,6 @@ def _fetch_channel_permissions(
 
 
 def slack_doc_sync(
-    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
     callback: IndexingHeartbeatInterface | None,
 ) -> list[DocExternalAccess]:

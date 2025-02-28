@@ -59,8 +59,6 @@ def prepare_authorization_request(
         session = ConfluenceCloudOAuth.session_dump_json(
             email=user.email, redirect_on_success=redirect_on_success
         )
-    # elif connector == DocumentSource.JIRA:
-    #     oauth_url = JiraCloudOAuth.generate_dev_oauth_url(oauth_state)
     elif connector == DocumentSource.GOOGLE_DRIVE:
         if not DEV_MODE:
             oauth_url = GoogleDriveOAuth.generate_oauth_url(oauth_state)

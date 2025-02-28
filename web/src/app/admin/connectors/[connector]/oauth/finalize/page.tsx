@@ -143,11 +143,11 @@ export default function OAuthFinalizePage() {
   useEffect(() => {}, [redirectUrl]);
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="mx-auto h-screen flex flex-col">
       <AdminPageTitle title={pageTitle} icon={<KeyIcon size={32} />} />
 
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <CardSection className="max-w-md w-[500px] h-[250px]">
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <CardSection className="max-w-md w-[500px] h-[250px] p-8">
           <h1 className="text-2xl font-bold mb-4">{statusMessage}</h1>
           <p className="text-text-500">{statusDetails}</p>
 
