@@ -755,6 +755,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "anthropic.claude-v2:1": "Claude v2.1",
   "anthropic.claude-v2": "Claude v2",
   "anthropic.claude-v1": "Claude v1",
+  "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
   "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
   "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
   "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet",
@@ -788,6 +789,7 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "anthropic.claude-3-opus-20240229-v1:0",
     "mistral.mistral-large-2402-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "anthropic.claude-3-7-sonnet-20250219-v1:0",
   ],
   anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
 };
