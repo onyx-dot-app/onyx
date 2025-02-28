@@ -11,9 +11,9 @@ from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import make_slack_api_rate_limited
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
+from onyx.db.session import get_session_with_current_tenant
 from onyx.onyxbot.slack.blocks import build_follow_up_resolved_blocks
 from onyx.onyxbot.slack.blocks import get_document_feedback_blocks
 from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel

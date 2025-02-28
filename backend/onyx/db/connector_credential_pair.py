@@ -16,7 +16,6 @@ from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
-from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
@@ -29,6 +28,7 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
+from onyx.db.session import get_session_context_manager
 from onyx.server.models import StatusResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop

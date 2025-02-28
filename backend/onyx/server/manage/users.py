@@ -42,9 +42,9 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_total_users_count
-from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users

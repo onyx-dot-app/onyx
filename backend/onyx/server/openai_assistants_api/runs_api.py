@@ -18,9 +18,9 @@ from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_messages_by_session
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_or_create_root_message
-from onyx.db.engine import get_session
 from onyx.db.models import ChatMessage
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.tools.tool_implementations.search.search_tool import SearchTool

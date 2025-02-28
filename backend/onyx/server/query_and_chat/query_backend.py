@@ -22,9 +22,9 @@ from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
-from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session
 from onyx.db.tag import find_tags
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa.index import VespaIndex

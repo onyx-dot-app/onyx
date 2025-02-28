@@ -23,7 +23,6 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.engine import get_db_current_time
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
@@ -35,6 +34,7 @@ from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import SearchSettings
+from onyx.db.session import get_session_with_current_tenant
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_index import RedisConnectorIndex

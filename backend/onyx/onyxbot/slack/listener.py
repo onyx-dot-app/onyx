@@ -36,12 +36,12 @@ from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.context.search.retrieval.search_runner import (
     download_nltk_data,
 )
-from onyx.db.engine import get_all_tenant_ids
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_with_current_tenant
+from onyx.db.session import get_session_with_tenant
 from onyx.db.slack_bot import fetch_slack_bots
+from onyx.db.tenant import get_all_tenant_ids
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder

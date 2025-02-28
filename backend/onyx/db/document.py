@@ -24,7 +24,6 @@ from sqlalchemy.sql.expression import null
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
@@ -34,6 +33,7 @@ from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import User
+from onyx.db.session import get_session_context_manager
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata

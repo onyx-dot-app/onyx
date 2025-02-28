@@ -35,12 +35,12 @@ from onyx.db.document_set import fetch_document_sets
 from onyx.db.document_set import fetch_document_sets_for_document
 from onyx.db.document_set import get_document_set_by_id
 from onyx.db.document_set import mark_document_set_as_synced
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import DocumentSet
 from onyx.db.models import UserGroup
 from onyx.db.search_settings import get_active_search_settings
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status

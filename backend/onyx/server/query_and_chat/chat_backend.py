@@ -48,12 +48,12 @@ from onyx.db.chat import set_as_latest_chat_message
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import update_chat_session
 from onyx.db.chat_search import search_chat_sessions
-from onyx.db.engine import get_session
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.session import get_session
+from onyx.db.session import get_session_with_tenant
 from onyx.file_processing.extract_file_text import docx_to_txt_filename
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_store.file_store import get_default_file_store

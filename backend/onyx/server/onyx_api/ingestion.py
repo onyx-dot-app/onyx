@@ -11,11 +11,11 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.document import get_documents_by_cc_pair
 from onyx.db.document import get_ingestion_documents
-from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
+from onyx.db.session import get_session
 from onyx.document_index.factory import get_default_document_index
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline

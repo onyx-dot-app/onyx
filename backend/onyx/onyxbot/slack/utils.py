@@ -32,7 +32,7 @@ from onyx.configs.onyxbot_configs import (
 )
 from onyx.connectors.slack.utils import make_slack_api_rate_limited
 from onyx.connectors.slack.utils import SlackTextCleaner
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_default_llms

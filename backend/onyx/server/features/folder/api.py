@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user
 from onyx.db.chat import get_chat_session_by_id
-from onyx.db.engine import get_session
 from onyx.db.folder import add_chat_to_folder
 from onyx.db.folder import create_folder
 from onyx.db.folder import delete_folder
@@ -15,6 +14,7 @@ from onyx.db.folder import remove_chat_from_folder
 from onyx.db.folder import rename_folder
 from onyx.db.folder import update_folder_display_priority
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.server.features.folder.models import DeleteFolderOptions
 from onyx.server.features.folder.models import FolderChatSessionRequest
 from onyx.server.features.folder.models import FolderCreationRequest

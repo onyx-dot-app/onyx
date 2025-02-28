@@ -14,16 +14,18 @@ from onyx.db.document_set import fetch_all_document_sets_for_user
 from onyx.db.document_set import insert_document_set
 from onyx.db.document_set import mark_document_set_as_to_be_deleted
 from onyx.db.document_set import update_document_set
-from onyx.db.engine import get_current_tenant_id
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.server.features.document_set.models import CheckDocSetPublicRequest
 from onyx.server.features.document_set.models import CheckDocSetPublicResponse
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.document_set.models import DocumentSetCreationRequest
 from onyx.server.features.document_set.models import DocumentSetUpdateRequest
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from shared_configs.contextvars import get_current_tenant_id
 
+logger = setup_logger()
 
 router = APIRouter(prefix="/manage")
 
@@ -83,6 +85,7 @@ def patch_document_set(
             user=user,
         )
     except Exception as e:
+        logger.exception("patch_document_set exceptioned")
         raise HTTPException(status_code=400, detail=str(e))
 
     primary_app.send_task(

@@ -38,7 +38,6 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.document import get_document_counts_for_cc_pairs
 from onyx.db.document import get_documents_for_cc_pair
-from onyx.db.engine import get_session
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import count_index_attempt_errors_for_cc_pair
@@ -50,6 +49,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CCPairFullInfo
@@ -651,6 +651,8 @@ def associate_credential_to_connector(
         # Ensures we don't leave invalid connectors in the database
         # NOTE: consensus is that it makes sense to unify connector and ccpair creation flows
         # which would rid us of needing to handle cases like these
+        logger.exception("ValidationError")
+
         delete_connector(db_session, connector_id)
         db_session.commit()
 

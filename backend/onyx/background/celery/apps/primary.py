@@ -24,10 +24,10 @@ from onyx.configs.constants import CELERY_PRIMARY_WORKER_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.engine import SqlEngine
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import mark_attempt_canceled
+from onyx.db.session import get_session_with_current_tenant
 from onyx.redis.redis_connector_credential_pair import (
     RedisGlobalConnectorCredentialPair,
 )

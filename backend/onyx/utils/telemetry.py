@@ -12,9 +12,9 @@ from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
 from onyx.configs.constants import KV_CUSTOMER_UUID_KEY
 from onyx.configs.constants import KV_INSTANCE_DOMAIN_KEY
 from onyx.configs.constants import MilestoneRecordType
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.models import User
+from onyx.db.session import get_session_with_current_tenant
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.variable_functionality import (

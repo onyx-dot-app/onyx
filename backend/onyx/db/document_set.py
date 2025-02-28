@@ -323,15 +323,27 @@ def update_document_set(
         _mark_document_set_cc_pairs_as_outdated__no_commit(
             db_session=db_session, document_set_id=document_set_row.id
         )
+
+        # commit this before performing more updates on the row id or else
+        # we'll have conflicting updates in the same commit
+        db_session.commit()
+
         # add in rows for the new CC pairs
-        ds_cc_pairs = [
-            DocumentSet__ConnectorCredentialPair(
+        existing_cc_pair_ids: set[int] = set()  # use to avoid duplicates
+
+        ds_cc_pairs: list[DocumentSet__ConnectorCredentialPair] = []
+        for cc_pair_id in document_set_update_request.cc_pair_ids:
+            if cc_pair_id in existing_cc_pair_ids:
+                continue
+
+            item = DocumentSet__ConnectorCredentialPair(
                 document_set_id=document_set_update_request.id,
                 connector_credential_pair_id=cc_pair_id,
                 is_current=True,
             )
-            for cc_pair_id in document_set_update_request.cc_pair_ids
-        ]
+            ds_cc_pairs.append(item)
+            existing_cc_pair_ids.add(cc_pair_id)
+
         db_session.add_all(ds_cc_pairs)
         db_session.commit()
     except:

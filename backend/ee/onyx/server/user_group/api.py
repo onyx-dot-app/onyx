@@ -16,9 +16,9 @@ from ee.onyx.server.user_group.models import UserGroupCreate
 from ee.onyx.server.user_group.models import UserGroupUpdate
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
-from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.models import UserRole
+from onyx.db.session import get_session
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

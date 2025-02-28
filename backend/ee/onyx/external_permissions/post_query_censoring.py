@@ -6,8 +6,8 @@ from ee.onyx.external_permissions.salesforce.postprocessing import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.pipeline import InferenceChunk
-from onyx.db.engine import get_session_context_manager
 from onyx.db.models import User
+from onyx.db.session import get_session_context_manager
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

@@ -17,8 +17,8 @@ from ee.onyx.server.manage.models import StandardAnswerCategory
 from ee.onyx.server.manage.models import StandardAnswerCategoryCreationRequest
 from ee.onyx.server.manage.models import StandardAnswerCreationRequest
 from onyx.auth.users import current_admin_user
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_session
 
 router = APIRouter(prefix="/manage")
 

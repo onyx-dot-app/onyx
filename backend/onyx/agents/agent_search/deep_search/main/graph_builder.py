@@ -238,7 +238,7 @@ def main_graph_builder(test_mode: bool = False) -> StateGraph:
 if __name__ == "__main__":
     pass
 
-    from onyx.db.engine import get_session_context_manager
+    from onyx.db.session import get_session_context_manager
     from onyx.llm.factory import get_default_llms
     from onyx.context.search.models import SearchRequest
 

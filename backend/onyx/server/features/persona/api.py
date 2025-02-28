@@ -18,7 +18,6 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
-from onyx.db.engine import get_session
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
 from onyx.db.notification import create_notification
@@ -38,6 +37,7 @@ from onyx.db.persona import update_persona_shared_users
 from onyx.db.persona import update_persona_visibility
 from onyx.db.prompts import build_prompt_name_from_persona_name
 from onyx.db.prompts import upsert_prompt
+from onyx.db.session import get_session
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.secondary_llm_flows.starter_message_creation import (

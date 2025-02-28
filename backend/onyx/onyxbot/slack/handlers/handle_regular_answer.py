@@ -23,11 +23,11 @@ from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import RetrievalDetails
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import SlackChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import persona_has_search_tool
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.handlers.utils import send_team_member_message

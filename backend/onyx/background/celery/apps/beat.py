@@ -13,8 +13,8 @@ from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEF
 from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import POSTGRES_CELERY_BEAT_APP_NAME
-from onyx.db.engine import get_all_tenant_ids
 from onyx.db.engine import SqlEngine
+from onyx.db.tenant import get_all_tenant_ids
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import IGNORED_SYNCING_TENANT_LIST

@@ -16,11 +16,11 @@ from sqlalchemy.orm import Session
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.db.api_key import get_api_key_email_pattern
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
+from onyx.db.session import get_async_session
+from onyx.db.session import get_async_session_with_tenant
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )

@@ -52,7 +52,6 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import get_index_attempt
@@ -61,6 +60,7 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.swap_index import check_index_swap
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder

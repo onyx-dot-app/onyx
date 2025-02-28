@@ -86,12 +86,12 @@ from onyx.db.auth import get_default_admin_user_emails
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_with_tenant
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
+from onyx.db.session import get_async_session
+from onyx.db.session import get_async_session_with_tenant
+from onyx.db.session import get_session_with_tenant
 from onyx.db.users import get_user_by_email
 from onyx.redis.redis_pool import get_async_redis_connection
 from onyx.redis.redis_pool import get_redis_client

@@ -23,8 +23,8 @@ from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_DOCS_TO_DISPLAY
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChannelConfig
+from onyx.db.session import get_session_with_current_tenant
 from onyx.onyxbot.slack.constants import CONTINUE_IN_WEB_UI_ACTION_ID
 from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
 from onyx.onyxbot.slack.constants import FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID

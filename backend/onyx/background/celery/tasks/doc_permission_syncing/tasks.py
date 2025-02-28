@@ -48,12 +48,12 @@ from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists

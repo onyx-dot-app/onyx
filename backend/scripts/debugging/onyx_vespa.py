@@ -41,12 +41,12 @@ from sqlalchemy import and_
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_with_current_tenant
+from onyx.db.session import get_session_with_tenant
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
 from onyx.document_index.vespa.index import VespaIndex

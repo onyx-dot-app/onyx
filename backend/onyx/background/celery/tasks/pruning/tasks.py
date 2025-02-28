@@ -41,12 +41,12 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_documents_for_connector_credential_pair
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.redis.redis_connector import RedisConnector

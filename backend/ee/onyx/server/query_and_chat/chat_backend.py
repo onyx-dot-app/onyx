@@ -31,8 +31,8 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_or_create_root_message
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer

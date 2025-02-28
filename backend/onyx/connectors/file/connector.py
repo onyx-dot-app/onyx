@@ -16,7 +16,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.session import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import detect_encoding
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext

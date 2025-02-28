@@ -20,13 +20,13 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_for_
 from onyx.db.connector_credential_pair import (
     update_connector_credential_pair_from_id,
 )
-from onyx.db.engine import get_session
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import fetch_docs_ranked_by_boost_for_user
 from onyx.db.feedback import update_document_boost_for_user
 from onyx.db.feedback import update_document_hidden_for_user
 from onyx.db.index_attempt import cancel_indexing_attempts_for_ccpair
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.file_store.file_store import get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError

@@ -9,8 +9,8 @@ from onyx.db.api_key import insert_api_key
 from onyx.db.api_key import regenerate_api_key
 from onyx.db.api_key import remove_api_key
 from onyx.db.api_key import update_api_key
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.server.api_key.models import APIKeyArgs
 
 

@@ -41,9 +41,9 @@ from onyx.auth.users import User
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.auth import get_user_count
-from onyx.db.engine import get_session
-from onyx.db.engine import get_session_with_shared_schema
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.session import get_session
+from onyx.db.session import get_session_with_shared_schema
+from onyx.db.session import get_session_with_tenant
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_user_by_email
 from onyx.server.manage.models import UserByEmail

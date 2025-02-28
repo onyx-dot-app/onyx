@@ -18,9 +18,9 @@ from onyx.db.credentials import fetch_credentials_by_source_for_user
 from onyx.db.credentials import fetch_credentials_for_user
 from onyx.db.credentials import swap_credentials_connector
 from onyx.db.credentials import update_credential
-from onyx.db.engine import get_session
 from onyx.db.models import DocumentSource
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.server.documents.models import CredentialBase
 from onyx.server.documents.models import CredentialDataUpdateRequest
 from onyx.server.documents.models import CredentialSnapshot

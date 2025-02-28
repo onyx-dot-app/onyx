@@ -11,8 +11,8 @@ from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import InputType
-from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import IndexingStatus
+from onyx.db.session import get_session_context_manager
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_HOST
 from tests.integration.common_utils.constants import MOCK_CONNECTOR_SERVER_PORT
 from tests.integration.common_utils.managers.cc_pair import CCPairManager

@@ -30,7 +30,6 @@ from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_time
 from onyx.db.connector_credential_pair import update_connector_credential_pair
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
@@ -46,6 +45,7 @@ from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
 from onyx.db.models import IndexingStatus
 from onyx.db.models import IndexModelStatus
+from onyx.db.session import get_session_with_current_tenant
 from onyx.document_index.factory import get_default_document_index
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder

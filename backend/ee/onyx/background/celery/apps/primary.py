@@ -5,7 +5,7 @@ from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import build_celery_task_wrapper
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.chat import delete_chat_sessions_older_than
-from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.session import get_session_with_current_tenant
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 

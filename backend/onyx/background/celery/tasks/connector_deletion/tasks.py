@@ -32,12 +32,12 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.index_attempt import delete_index_attempts
 from onyx.db.search_settings import get_all_search_settings
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.sync_record import cleanup_sync_records
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status

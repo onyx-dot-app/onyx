@@ -29,7 +29,7 @@ from onyx.chat.models import ToolResponse
 from onyx.configs.agent_configs import ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.context.search.models import SearchRequest
-from onyx.db.engine import get_session_context_manager
+from onyx.db.session import get_session_context_manager
 from onyx.llm.factory import get_default_llms
 from onyx.tools.tool_runner import ToolCallKickoff
 from onyx.utils.logger import setup_logger

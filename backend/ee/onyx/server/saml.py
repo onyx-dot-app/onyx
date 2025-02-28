@@ -27,9 +27,9 @@ from onyx.auth.users import get_user_manager
 from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
-from onyx.db.engine import get_async_session
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_async_session
+from onyx.db.session import get_session
 from onyx.utils.logger import setup_logger
 
 

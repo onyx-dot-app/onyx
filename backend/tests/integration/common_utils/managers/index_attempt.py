@@ -5,11 +5,11 @@ from urllib.parse import urlencode
 import requests
 
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
-from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import IndexModelStatus
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_context_manager
 from onyx.server.documents.models import IndexAttemptSnapshot
 from onyx.server.documents.models import PaginatedReturn
 from tests.integration.common_utils.constants import API_SERVER_URL

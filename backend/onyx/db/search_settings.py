@@ -13,12 +13,12 @@ from onyx.configs.model_configs import OLD_DEFAULT_DOCUMENT_ENCODER_MODEL
 from onyx.configs.model_configs import OLD_DEFAULT_MODEL_DOC_EMBEDDING_DIM
 from onyx.configs.model_configs import OLD_DEFAULT_MODEL_NORMALIZE_EMBEDDINGS
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import CloudEmbeddingProvider
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
+from onyx.db.session import get_session_with_current_tenant
 from onyx.indexing.models import IndexingSetting
 from onyx.natural_language_processing.search_nlp_models import clean_model_name
 from onyx.natural_language_processing.search_nlp_models import warm_up_cross_encoder

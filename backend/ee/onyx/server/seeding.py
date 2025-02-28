@@ -19,11 +19,11 @@ from ee.onyx.server.enterprise_settings.store import (
 )
 from ee.onyx.server.enterprise_settings.store import upload_logo
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.db.engine import get_session_context_manager
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import Tool
 from onyx.db.persona import upsert_persona
+from onyx.db.session import get_session_context_manager
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.settings.models import Settings

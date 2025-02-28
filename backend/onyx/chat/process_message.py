@@ -73,7 +73,6 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
-from onyx.db.engine import get_session_context_manager
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
@@ -82,6 +81,7 @@ from onyx.db.models import ToolCall
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_context_manager
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor

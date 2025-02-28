@@ -6,7 +6,7 @@ from onyx.configs.app_configs import POSTGRES_PORT
 from onyx.configs.app_configs import POSTGRES_USER
 from onyx.configs.app_configs import AWS_REGION_NAME
 from onyx.db.engine import build_connection_string
-from onyx.db.engine import get_all_tenant_ids
+from onyx.db.tenant import get_all_tenant_ids
 from sqlalchemy import event
 from sqlalchemy import pool
 from sqlalchemy import text

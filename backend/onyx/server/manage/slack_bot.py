@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.configs.constants import MilestoneRecordType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
-from onyx.db.engine import get_session
 from onyx.db.models import ChannelConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.session import get_session
 from onyx.db.slack_bot import fetch_slack_bot
 from onyx.db.slack_bot import fetch_slack_bot_tokens
 from onyx.db.slack_bot import fetch_slack_bots

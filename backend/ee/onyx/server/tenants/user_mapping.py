@@ -4,9 +4,9 @@ from fastapi_users import exceptions
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.models import UserTenantMapping
+from onyx.db.session import get_session_with_tenant
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 

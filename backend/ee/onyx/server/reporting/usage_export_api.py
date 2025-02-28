@@ -14,8 +14,8 @@ from ee.onyx.db.usage_export import get_usage_report_data
 from ee.onyx.db.usage_export import UsageReportMetadata
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.auth.users import current_admin_user
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 
 router = APIRouter()

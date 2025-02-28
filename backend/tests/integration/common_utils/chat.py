@@ -1,7 +1,7 @@
 import requests
 
-from onyx.db.engine import get_session_context_manager
 from onyx.db.models import User
+from onyx.db.session import get_session_context_manager
 
 
 def test_create_chat_session_and_send_messages() -> None:

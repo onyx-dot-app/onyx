@@ -3,8 +3,8 @@ import os
 import pytest
 
 from onyx.auth.schemas import UserRole
-from onyx.db.engine import get_session_context_manager
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session_context_manager
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.managers.user import build_email

@@ -4,13 +4,13 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
-from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_embedding_providers
 from onyx.db.llm import remove_embedding_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.models import User
 from onyx.db.search_settings import get_all_search_settings
 from onyx.db.search_settings import get_current_db_embedding_provider
+from onyx.db.session import get_session
 from onyx.indexing.models import EmbeddingModelDetail
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider

@@ -13,7 +13,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.api_key import is_api_key_email_address
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
@@ -21,6 +20,7 @@ from onyx.db.models import TokenRateLimit__UserGroup
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
+from onyx.db.session import get_session_with_current_tenant
 from onyx.db.token_limit import fetch_all_user_token_rate_limits
 from onyx.server.query_and_chat.token_limit import _get_cutoff_time
 from onyx.server.query_and_chat.token_limit import _is_rate_limited

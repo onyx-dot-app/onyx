@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_chat_accesssible_user
-from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_llm_providers_for_user
 from onyx.db.llm import fetch_provider
@@ -16,6 +15,7 @@ from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms

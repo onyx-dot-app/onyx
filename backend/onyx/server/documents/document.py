@@ -9,9 +9,9 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.session import get_session
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.natural_language_processing.utils import get_tokenizer

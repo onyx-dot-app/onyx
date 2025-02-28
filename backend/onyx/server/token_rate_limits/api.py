@@ -3,8 +3,8 @@ from fastapi import Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
-from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.db.session import get_session
 from onyx.db.token_limit import delete_token_rate_limit
 from onyx.db.token_limit import fetch_all_global_token_rate_limits
 from onyx.db.token_limit import insert_global_token_rate_limit

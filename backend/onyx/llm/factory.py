@@ -4,10 +4,10 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
-from onyx.db.engine import get_session_context_manager
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_provider
 from onyx.db.models import Persona
+from onyx.db.session import get_session_context_manager
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM

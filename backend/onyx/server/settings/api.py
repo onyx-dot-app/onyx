@@ -10,12 +10,12 @@ from onyx.auth.users import current_user
 from onyx.auth.users import is_user_admin
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.configs.constants import NotificationType
-from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 from onyx.db.notification import dismiss_all_notifications
 from onyx.db.notification import get_notifications
 from onyx.db.notification import update_notification_last_shown
+from onyx.db.session import get_session
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.settings.models import Notification

@@ -31,10 +31,10 @@ from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import get_prompt_by_id
-from onyx.db.engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.db.session import get_session
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
