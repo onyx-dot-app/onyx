@@ -110,5 +110,5 @@ def reset_multitenant() -> None:
     reset_all_multitenant()
 
 
-def pytest_runtest_logstart(nodeid, location):
+def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
     print(f"\nRunning test: {nodeid}")
