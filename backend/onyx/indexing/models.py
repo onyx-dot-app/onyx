@@ -143,6 +143,7 @@ class IndexingSetting(EmbeddingModelDetail):
     model_dim: int
     index_name: str | None
     multipass_indexing: bool
+    requires_reindex: bool = True
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
@@ -158,6 +159,7 @@ class IndexingSetting(EmbeddingModelDetail):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
+            requires_reindex=search_settings.requires_reindex,
         )
 
 

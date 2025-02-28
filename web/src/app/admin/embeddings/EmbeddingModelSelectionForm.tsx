@@ -109,12 +109,19 @@ export function EmbeddingModelSelection({
     { refreshInterval: 5000 } // 5 seconds
   );
 
-  const onConfirmSelection = async (model: EmbeddingModelDescriptor) => {
+  const onConfirmSelection = async (
+    model: EmbeddingModelDescriptor,
+    requiresReindex: boolean = true
+  ) => {
     const response = await fetch(
       "/api/search-settings/set-new-search-settings",
       {
         method: "POST",
-        body: JSON.stringify({ ...model, index_name: null }),
+        body: JSON.stringify({
+          ...model,
+          index_name: null,
+          requires_reindex: requiresReindex,
+        }),
         headers: {
           "Content-Type": "application/json",
         },
@@ -203,10 +210,11 @@ export function EmbeddingModelSelection({
       {showTentativeModel && (
         <SelectModelModal
           model={showTentativeModel}
-          onConfirm={() => {
+          onConfirm={(requiresReindex) => {
             setShowModelInQueue(null);
             updateSelectedProvider(showTentativeModel);
             setShowTentativeModel(null);
+            onConfirmSelection(showTentativeModel, requiresReindex);
           }}
           onCancel={() => {
             setShowModelInQueue(null);
