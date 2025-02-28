@@ -47,11 +47,14 @@ export function EmailPasswordForm({
           password: Yup.string().required(),
         })}
         onSubmit={async (values) => {
+          // Ensure email is lowercase
+          const email = values.email.toLowerCase();
+
           if (isSignup) {
             // login is fast, no need to show a spinner
             setIsWorking(true);
             const response = await basicSignup(
-              values.email,
+              email,
               values.password,
               referralSource
             );
@@ -78,10 +81,10 @@ export function EmailPasswordForm({
             }
           }
 
-          const loginResponse = await basicLogin(values.email, values.password);
+          const loginResponse = await basicLogin(email, values.password);
           if (loginResponse.ok) {
             if (isSignup && shouldVerify) {
-              await requestEmailVerification(values.email);
+              await requestEmailVerification(email);
               // Use window.location.href to force a full page reload,
               // ensuring app re-initializes with the new state (including
               // server-side provider values)
