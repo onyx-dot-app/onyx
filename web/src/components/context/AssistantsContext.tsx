@@ -25,6 +25,7 @@ interface AssistantsContextProps {
   ownedButHiddenAssistants: Persona[];
   refreshAssistants: () => Promise<void>;
   isImageGenerationAvailable: boolean;
+  debug: () => Promise<void>;
   // Admin only
   editablePersonas: Persona[];
   allAssistants: Persona[];
@@ -126,6 +127,49 @@ export const AssistantsProvider: React.FC<{
     fetchPersonas();
   }, [isAdmin, isCurator]);
 
+  const debug = async () => {
+    console.log(
+      JSON.stringify(
+        {
+          pinnedAssistants,
+          assistants,
+          user,
+          isAdmin,
+          isCurator,
+          editablePersonas,
+          allAssistants,
+          hasAnyConnectors,
+          isImageGenerationAvailable,
+          visibleAssistants,
+          hiddenAssistants,
+          finalAssistants,
+          ownedButHiddenAssistants,
+        },
+        null,
+        2
+      )
+    );
+    console.log("refreshing assistants");
+    await refreshAssistants();
+    const response = await fetch("/api/persona", {
+      method: "GET",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    let assistantsLocal: Persona[] = await response.json();
+    console.log("all Assistants", assistantsLocal);
+    const filteredAssistantsLocal = filterAssistants(
+      assistantsLocal,
+      hasAnyConnectors,
+      hasImageCompatibleModel
+    );
+    console.log("filtered Assistants", filteredAssistantsLocal);
+
+    await refreshAssistants();
+  };
+
   const refreshAssistants = async () => {
     try {
       const response = await fetch("/api/persona", {
@@ -194,6 +238,7 @@ export const AssistantsProvider: React.FC<{
         isImageGenerationAvailable,
         setPinnedAssistants,
         pinnedAssistants,
+        debug,
       }}
     >
       {children}

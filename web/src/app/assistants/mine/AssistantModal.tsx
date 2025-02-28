@@ -7,6 +7,7 @@ import { useAssistants } from "@/components/context/AssistantsContext";
 import { useUser } from "@/components/user/UserProvider";
 import { FilterIcon, XIcon } from "lucide-react";
 import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
+import { Button } from "@/components/ui/button";
 
 export const AssistantBadgeSelector = ({
   text,
@@ -68,7 +69,7 @@ export function AssistantModal({
   hideModal,
   modalHeight,
 }: AssistantModalProps) {
-  const { assistants, pinnedAssistants } = useAssistants();
+  const { assistants, pinnedAssistants, debug } = useAssistants();
   const { assistantFilters, toggleAssistantFilter } = useAssistantFilter();
   const router = useRouter();
   const { user } = useUser();
@@ -139,6 +140,7 @@ export function AssistantModal({
             <XIcon className="w-5 h-5" />
           </button>
         </div>
+
         <div className="flex overflow-hidden flex-col h-full">
           <div className="flex overflow-hidden flex-col h-full">
             <div className="flex flex-col sticky top-0 z-10">
@@ -267,6 +269,7 @@ export function AssistantModal({
               )}
             </div>
           </div>
+          <Button onClick={() => debug()}>Debugger</Button>
         </div>
       </div>
     </div>
