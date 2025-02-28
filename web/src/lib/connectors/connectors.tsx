@@ -43,6 +43,7 @@ export interface Option {
     currentCredential: Credential<any> | null
   ) => boolean;
   wrapInCollapsible?: boolean;
+  disabled?: boolean | ((currentCredential: Credential<any> | null) => boolean);
 }
 
 export interface SelectOption extends Option {
@@ -60,6 +61,7 @@ export interface ListOption extends Option {
 export interface TextOption extends Option {
   type: "text";
   default?: string;
+  initial?: string | ((currentCredential: Credential<any> | null) => string);
   isTextArea?: boolean;
 }
 
@@ -105,6 +107,7 @@ export interface TabOption extends Option {
 export interface ConnectionConfiguration {
   description: string;
   subtext?: string;
+  initialConnectorName?: string; // a key in the credential to prepopulate the connector name field
   values: (
     | BooleanOption
     | ListOption
@@ -389,6 +392,7 @@ export const connectorConfigs: Record<
   },
   confluence: {
     description: "Configure Confluence connector",
+    initialConnectorName: "cloud_name",
     values: [
       {
         type: "checkbox",
@@ -399,6 +403,12 @@ export const connectorConfigs: Record<
         default: true,
         description:
           "Check if this is a Confluence Cloud instance, uncheck for Confluence Server/Data Center",
+        disabled: (currentCredential) => {
+          if (currentCredential?.credential_json?.confluence_refresh_token) {
+            return true;
+          }
+          return false;
+        },
       },
       {
         type: "text",
@@ -406,6 +416,15 @@ export const connectorConfigs: Record<
         label: "Wiki Base URL",
         name: "wiki_base",
         optional: false,
+        initial: (currentCredential) => {
+          return currentCredential?.credential_json?.wiki_base ?? "";
+        },
+        disabled: (currentCredential) => {
+          if (currentCredential?.credential_json?.confluence_refresh_token) {
+            return true;
+          }
+          return false;
+        },
         description:
           "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
       },

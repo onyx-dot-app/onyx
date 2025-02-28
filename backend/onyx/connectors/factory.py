@@ -12,6 +12,7 @@ from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
 from onyx.connectors.clickup.connector import ClickupConnector
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.discord.connector import DiscordConnector
 from onyx.connectors.discourse.connector import DiscourseConnector
 from onyx.connectors.document360.connector import Document360Connector
@@ -32,6 +33,7 @@ from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -57,6 +59,7 @@ from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import backend_update_credential_json
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.models import Credential
+from shared_configs.contextvars import get_current_tenant_id
 
 
 class ConnectorMissingException(Exception):
@@ -167,10 +170,17 @@ def instantiate_connector(
     connector_class = identify_connector_class(source, input_type)
 
     connector = connector_class(**connector_specific_config)
-    new_credentials = connector.load_credentials(credential.credential_json)
 
-    if new_credentials is not None:
-        backend_update_credential_json(credential, new_credentials, db_session)
+    if isinstance(connector, CredentialsConnector):
+        provider = OnyxDBCredentialsProvider(
+            get_current_tenant_id(), str(source), credential.id
+        )
+        connector.set_credentials_provider(provider)
+    else:
+        new_credentials = connector.load_credentials(credential.credential_json)
+
+        if new_credentials is not None:
+            backend_update_credential_json(credential, new_credentials, db_session)
 
     return connector
 

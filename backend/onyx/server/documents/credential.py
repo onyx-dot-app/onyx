@@ -13,6 +13,7 @@ from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import create_credential
 from onyx.db.credentials import CREDENTIAL_PERMISSIONS_TO_IGNORE
 from onyx.db.credentials import delete_credential
+from onyx.db.credentials import delete_credential_for_user
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.credentials import fetch_credentials_by_source_for_user
 from onyx.db.credentials import fetch_credentials_for_user
@@ -88,7 +89,7 @@ def delete_credential_by_id_admin(
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
     """Same as the user endpoint, but can delete any credential (not just the user's own)"""
-    delete_credential(db_session=db_session, credential_id=credential_id, user=None)
+    delete_credential(db_session=db_session, credential_id=credential_id)
     return StatusResponse(
         success=True, message="Credential deleted successfully", data=credential_id
     )
@@ -242,7 +243,7 @@ def delete_credential_by_id(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
-    delete_credential(
+    delete_credential_for_user(
         credential_id,
         user,
         db_session,
@@ -259,7 +260,7 @@ def force_delete_credential_by_id(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
-    delete_credential(credential_id, user, db_session, True)
+    delete_credential_for_user(credential_id, user, db_session, True)
 
     return StatusResponse(
         success=True, message="Credential deleted successfully", data=credential_id

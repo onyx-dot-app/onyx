@@ -302,29 +302,29 @@ class WebConnector(LoadConnector):
         playwright, context = start_playwright()
         restart_playwright = False
         while to_visit:
-            current_url = to_visit.pop()
-            if current_url in visited_links:
+            initial_url = to_visit.pop()
+            if initial_url in visited_links:
                 continue
-            visited_links.add(current_url)
+            visited_links.add(initial_url)
 
             try:
-                protected_url_check(current_url)
+                protected_url_check(initial_url)
             except Exception as e:
-                last_error = f"Invalid URL {current_url} due to {e}"
+                last_error = f"Invalid URL {initial_url} due to {e}"
                 logger.warning(last_error)
                 continue
 
-            logger.info(f"Visiting {current_url}")
+            logger.info(f"{len(visited_links)}: Visiting {initial_url}")
 
             try:
-                check_internet_connection(current_url)
+                check_internet_connection(initial_url)
                 if restart_playwright:
                     playwright, context = start_playwright()
                     restart_playwright = False
 
-                if current_url.split(".")[-1] == "pdf":
+                if initial_url.split(".")[-1] == "pdf":
                     # PDF files are not checked for links
-                    response = requests.get(current_url)
+                    response = requests.get(initial_url)
                     page_text, metadata = read_pdf_file(
                         file=io.BytesIO(response.content)
                     )
@@ -332,10 +332,10 @@ class WebConnector(LoadConnector):
 
                     doc_batch.append(
                         Document(
-                            id=current_url,
-                            sections=[Section(link=current_url, text=page_text)],
+                            id=initial_url,
+                            sections=[Section(link=initial_url, text=page_text)],
                             source=DocumentSource.WEB,
-                            semantic_identifier=current_url.split("/")[-1],
+                            semantic_identifier=initial_url.split("/")[-1],
                             metadata=metadata,
                             doc_updated_at=_get_datetime_from_last_modified_header(
                                 last_modified
@@ -347,21 +347,25 @@ class WebConnector(LoadConnector):
                     continue
 
                 page = context.new_page()
-                page_response = page.goto(current_url)
+                page_response = page.goto(initial_url)
                 last_modified = (
                     page_response.header_value("Last-Modified")
                     if page_response
                     else None
                 )
-                final_page = page.url
-                if final_page != current_url:
-                    logger.info(f"Redirected to {final_page}")
-                    protected_url_check(final_page)
-                    current_url = final_page
-                    if current_url in visited_links:
-                        logger.info("Redirected page already indexed")
+                final_url = page.url
+                if final_url != initial_url:
+                    protected_url_check(final_url)
+                    initial_url = final_url
+                    if initial_url in visited_links:
+                        logger.info(
+                            f"{len(visited_links)}: {initial_url} redirected to {final_url} - already indexed"
+                        )
                         continue
-                    visited_links.add(current_url)
+                    logger.info(
+                        f"{len(visited_links)}: {initial_url} redirected to {final_url}"
+                    )
+                    visited_links.add(initial_url)
 
                 if self.scroll_before_scraping:
                     scroll_attempts = 0
@@ -379,13 +383,13 @@ class WebConnector(LoadConnector):
                 soup = BeautifulSoup(content, "html.parser")
 
                 if self.recursive:
-                    internal_links = get_internal_links(base_url, current_url, soup)
+                    internal_links = get_internal_links(base_url, initial_url, soup)
                     for link in internal_links:
                         if link not in visited_links:
                             to_visit.append(link)
 
                 if page_response and str(page_response.status)[0] in ("4", "5"):
-                    last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
+                    last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
                     logger.info(last_error)
                     continue
 
@@ -393,12 +397,12 @@ class WebConnector(LoadConnector):
 
                 doc_batch.append(
                     Document(
-                        id=current_url,
+                        id=initial_url,
                         sections=[
-                            Section(link=current_url, text=parsed_html.cleaned_text)
+                            Section(link=initial_url, text=parsed_html.cleaned_text)
                         ],
                         source=DocumentSource.WEB,
-                        semantic_identifier=parsed_html.title or current_url,
+                        semantic_identifier=parsed_html.title or initial_url,
                         metadata={},
                         doc_updated_at=_get_datetime_from_last_modified_header(
                             last_modified
@@ -410,7 +414,7 @@ class WebConnector(LoadConnector):
 
                 page.close()
             except Exception as e:
-                last_error = f"Failed to fetch '{current_url}': {e}"
+                last_error = f"Failed to fetch '{initial_url}': {e}"
                 logger.exception(last_error)
                 playwright.stop()
                 restart_playwright = True

@@ -93,10 +93,11 @@ def _get_connector_runner(
             runnable_connector.validate_connector_settings()
 
     except Exception as e:
-        logger.exception(f"Unable to instantiate connector due to {e}")
-
+        logger.exception("Unable to instantiate connector.")
         # since we failed to even instantiate the connector, we pause the CCPair since
-        # it will never succeed. Sometimes there are cases where the connector will
+        # it will never succeed
+
+        # Sometimes there are cases where the connector will
         # intermittently fail to initialize in which case we should pass in
         # leave_connector_active=True to allow it to continue.
         # For example, if there is nightly maintenance on a Confluence Server instance,

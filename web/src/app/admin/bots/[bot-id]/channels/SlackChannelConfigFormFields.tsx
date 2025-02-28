@@ -199,17 +199,17 @@ export function SlackChannelConfigFormFields({
             <Badge variant="agent" className="bg-blue-100 text-blue-800">
               Default Configuration
             </Badge>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-neutral-600">
               This default configuration will apply across all Slack channels
               the bot is added to in the Slack workspace, as well as direct
               messages (DMs), unless disabled.
             </p>
-            <div className="mt-4 p-4 bg-gray-100 rounded-md border border-gray-300">
+            <div className="mt-4 p-4 bg-neutral-100 rounded-md border border-neutral-300">
               <CheckFormField
                 name="disabled"
                 label="Disable Default Configuration"
               />
-              <p className="mt-2 text-sm text-gray-600 italic">
+              <p className="mt-2 text-sm text-neutral-600 italic">
                 Warning: Disabling the default configuration means the bot
                 won&apos;t respond in Slack channels or DMs unless explicitly
                 configured for them.
@@ -238,20 +238,28 @@ export function SlackChannelConfigFormFields({
                 />
               </div>
             ) : (
-              <Field name="channel_name">
-                {({ field, form }: { field: any; form: any }) => (
-                  <SearchMultiSelectDropdown
-                    options={channelOptions || []}
-                    onSelect={(selected) => {
-                      form.setFieldValue("channel_name", selected.name);
-                    }}
-                    initialSearchTerm={field.value}
-                    onSearchTermChange={(term) => {
-                      form.setFieldValue("channel_name", term);
-                    }}
-                  />
-                )}
-              </Field>
+              <>
+                <Field name="channel_name">
+                  {({ field, form }: { field: any; form: any }) => (
+                    <SearchMultiSelectDropdown
+                      options={channelOptions || []}
+                      onSelect={(selected) => {
+                        form.setFieldValue("channel_name", selected.name);
+                      }}
+                      initialSearchTerm={field.value}
+                      onSearchTermChange={(term) => {
+                        form.setFieldValue("channel_name", term);
+                      }}
+                    />
+                  )}
+                </Field>
+                <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
+                  Note: This list shows public and private channels where the
+                  bot is a member (up to 500 channels). If you don&apos;t see a
+                  channel, make sure the bot is added to that channel in Slack
+                  first, or type the channel name manually.
+                </p>
+              </>
             )}
           </>
         )}

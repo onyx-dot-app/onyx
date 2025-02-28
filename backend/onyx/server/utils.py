@@ -46,13 +46,21 @@ def mask_string(sensitive_str: str) -> str:
     return "****...**" + sensitive_str[-4:]
 
 
+MASK_CREDENTIALS_WHITELIST = {
+    DB_CREDENTIALS_AUTHENTICATION_METHOD,
+    "wiki_base",
+    "cloud_name",
+    "cloud_id",
+}
+
+
 def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
     masked_creds = {}
     for key, val in credential_dict.items():
         if isinstance(val, str):
             # we want to pass the authentication_method field through so the frontend
             # can disambiguate credentials created by different methods
-            if key == DB_CREDENTIALS_AUTHENTICATION_METHOD:
+            if key in MASK_CREDENTIALS_WHITELIST:
                 masked_creds[key] = val
             else:
                 masked_creds[key] = mask_string(val)
@@ -63,8 +71,8 @@ def mask_credential_dict(credential_dict: dict[str, Any]) -> dict[str, str]:
             continue
 
         raise ValueError(
-            f"Unable to mask credentials of type other than string, cannot process request."
-            f"Recieved type: {type(val)}"
+            f"Unable to mask credentials of type other than string or int, cannot process request."
+            f"Received type: {type(val)}"
         )
 
     return masked_creds

@@ -132,7 +132,6 @@ export function TextFormField({
   label,
   subtext,
   placeholder,
-  value,
   type = "text",
   optional,
   includeRevert,
@@ -157,7 +156,6 @@ export function TextFormField({
   vertical,
   className,
 }: {
-  value?: string; // Escape hatch for setting the value of the field - conflicts with Formik
   name: string;
   removeLabel?: boolean;
   label: string;
@@ -253,7 +251,6 @@ export function TextFormField({
           min={min}
           as={isTextArea ? "textarea" : "input"}
           type={type}
-          defaultValue={value}
           data-testid={name}
           name={name}
           id={name}

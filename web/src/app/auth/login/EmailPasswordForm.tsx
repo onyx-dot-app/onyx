@@ -36,11 +36,14 @@ export function EmailPasswordForm({
       {popup}
       <Formik
         initialValues={{
-          email: defaultEmail || "",
+          email: defaultEmail ? defaultEmail.toLowerCase() : "",
           password: "",
         }}
         validationSchema={Yup.object().shape({
-          email: Yup.string().email().required(),
+          email: Yup.string()
+            .email()
+            .required()
+            .transform((value) => value.toLowerCase()),
           password: Yup.string().required(),
         })}
         onSubmit={async (values) => {

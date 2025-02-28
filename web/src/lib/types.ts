@@ -167,18 +167,36 @@ export interface OAuthPrepareAuthorizationResponse {
   url: string;
 }
 
-export interface OAuthSlackCallbackResponse {
+export interface OAuthBaseCallbackResponse {
   success: boolean;
   message: string;
-  team_id: string;
-  authed_user_id: string;
+  finalize_url: string | null;
   redirect_on_success: string;
 }
 
-export interface OAuthGoogleDriveCallbackResponse {
+export interface OAuthSlackCallbackResponse extends OAuthBaseCallbackResponse {
+  team_id: string;
+  authed_user_id: string;
+}
+
+export interface ConfluenceAccessibleResource {
+  id: string;
+  name: string;
+  url: string;
+  scopes: string[];
+  avatarUrl: string;
+}
+
+export interface OAuthConfluencePrepareFinalizationResponse {
   success: boolean;
   message: string;
-  redirect_on_success: string;
+  accessible_resources: ConfluenceAccessibleResource[];
+}
+
+export interface OAuthConfluenceFinalizeResponse {
+  success: boolean;
+  message: string;
+  redirect_url: string;
 }
 
 export interface CCPairBasicInfo {
@@ -382,6 +400,7 @@ export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Slack,
   // NOTE: temporarily disabled until our GDrive App is approved
   // ValidSources.GoogleDrive,
+  ValidSources.Confluence,
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];

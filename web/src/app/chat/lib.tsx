@@ -48,10 +48,10 @@ export function getChatRetentionInfo(
 ): ChatRetentionInfo {
   // If `maximum_chat_retention_days` isn't set- never display retention warning.
   const chatRetentionDays = settings.maximum_chat_retention_days || 10000;
-  const createdDate = new Date(chatSession.time_created);
+  const updatedDate = new Date(chatSession.time_updated);
   const today = new Date();
   const daysFromCreation = Math.ceil(
-    (today.getTime() - createdDate.getTime()) / (1000 * 3600 * 24)
+    (today.getTime() - updatedDate.getTime()) / (1000 * 3600 * 24)
   );
   const daysUntilExpiration = chatRetentionDays - daysFromCreation;
   const showRetentionWarning =
@@ -419,7 +419,7 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
   };
 
   chatSessions.forEach((chatSession) => {
-    const chatSessionDate = new Date(chatSession.time_created);
+    const chatSessionDate = new Date(chatSession.time_updated);
 
     const diffTime = today.getTime() - chatSessionDate.getTime();
     const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
@@ -501,6 +501,7 @@ export function processRawChatHistory(
       sub_questions: subQuestions,
       isImprovement:
         (messageInfo.refined_answer_improvement as unknown as boolean) || false,
+      is_agentic: messageInfo.is_agentic,
     };
 
     messages.set(messageInfo.message_id, message);
