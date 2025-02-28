@@ -403,6 +403,7 @@ export function AssistantEditor({
           addSelectedFile={addSelectedFile}
           removeSelectedFile={removeSelectedFile}
           addSelectedFolder={addSelectedFolder}
+          removeSelectedFolder={removeSelectedFolder}
           isOpen={filePickerModalOpen}
           onClose={() => {
             setFilePickerModalOpen(false);

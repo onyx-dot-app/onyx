@@ -672,8 +672,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       try {
         await moveItem(
           itemId,
-          isFolder,
-          newFolderId === 0 ? null : newFolderId
+          newFolderId === 0 ? null : newFolderId,
+          isFolder
         );
         setPopup({
           message: `${isFolder ? "Folder" : "File"} moved successfully`,

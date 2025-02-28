@@ -290,7 +290,11 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             files={folderDetails.files}
             onRename={handleRenameItem}
             onDelete={handleDeleteItem}
-            onDownload={downloadItem}
+            onDownload={async (documentId: string) => {
+              const blob = await downloadItem(documentId);
+              const url = URL.createObjectURL(blob);
+              window.open(url, "_blank");
+            }}
             onUpload={handleUpload}
             onMove={handleMoveFile}
             folders={folders}

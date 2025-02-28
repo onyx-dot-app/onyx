@@ -60,8 +60,8 @@ export interface DocumentsContextType {
   deleteItem: (itemId: number, isFolder: boolean) => Promise<void>;
   moveItem: (
     itemId: number,
-    isFolder: boolean,
-    newFolderId: number | null
+    newFolderId: number | null,
+    isFolder: boolean
   ) => Promise<void>;
   renameFile: (fileId: number, newName: string) => Promise<void>;
   renameFolder: (folderId: number, newName: string) => Promise<void>;
@@ -216,8 +216,8 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
 
   const moveItem = async (
     itemId: number,
-    isFolder: boolean,
-    newFolderId: number | null
+    newFolderId: number | null,
+    isFolder: boolean
   ): Promise<void> => {
     try {
       if (isFolder) {
