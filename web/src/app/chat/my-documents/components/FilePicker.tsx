@@ -48,24 +48,6 @@ import {
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
-const ListIcon = () => <List className="h-4 w-4" />;
-const GridIcon = () => <Grid className="h-4 w-4" />;
-
-const IconButton: React.FC<{
-  icon: React.ComponentType;
-  onClick: () => void;
-  active: boolean;
-}> = ({ icon: Icon, onClick, active }) => (
-  <button
-    className={`p-2 flex-none h-10 w-10 flex items-center justify-center rounded ${
-      active ? "bg-gray-200" : "hover:bg-gray-100"
-    }`}
-    onClick={onClick}
-  >
-    <Icon />
-  </button>
-);
-
 const DraggableItem: React.FC<{
   id: string;
   type: "folder" | "file";
@@ -559,9 +541,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   };
 
-  const filteredFolders = folders.filter((folder) =>
-    folder.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredFolders = folders.filter(function (folder) {
+    return (
+      folder.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
+      folder.files &&
+      folder.files.length > 0
+    );
+  });
 
   const renderNavigation = () => {
     if (currentFolder !== null) {
