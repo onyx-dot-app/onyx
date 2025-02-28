@@ -17,27 +17,21 @@ def test_inviting_users_flow(reset: None) -> None:
     # 1) Create an admin user (the first user created is automatically admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
     assert admin_user is not None
-    assert UserManager.is_role(
-        admin_user, UserRole.ADMIN
-    ), "Admin user should have ADMIN role"
+    assert UserManager.is_role(admin_user, UserRole.ADMIN)
 
     # 2) Admin invites a new user
     invited_email = "invited_user@test.com"
     invite_response = UserManager.invite_users(admin_user, [invited_email])
 
-    assert (
-        invite_response == 1
-    ), "Invite operation should return count=1 for a single invited user"
+    assert invite_response == 1
 
     # 3) The invited user successfully registers/logs in
     invited_user: DATestUser = UserManager.create(
         name="invited_user", email=invited_email
     )
-    assert invited_user is not None, "Invited user should be able to register"
-    assert invited_user.email == invited_email, "Invited user email mismatch"
-    assert UserManager.is_role(
-        invited_user, UserRole.BASIC
-    ), "Newly created user should have BASIC role by default"
+    assert invited_user is not None
+    assert invited_user.email == invited_email
+    assert UserManager.is_role(invited_user, UserRole.BASIC)
 
     # 4) A non-invited user attempts to sign in/register (should fail)
     with pytest.raises(HTTPError):
