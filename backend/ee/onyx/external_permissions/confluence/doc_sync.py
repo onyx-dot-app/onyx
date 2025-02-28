@@ -360,7 +360,6 @@ def confluence_doc_sync(
         **cc_pair.connector.connector_specific_config
     )
 
-    # confluence_connector.load_credentials(cc_pair.credential.credential_json)
     provider = OnyxDBCredentialsProvider(
         get_current_tenant_id(), "confluence", cc_pair.credential_id
     )
