@@ -111,4 +111,10 @@ def reset_multitenant() -> None:
 
 
 def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
-    print(f"\nRunning test: {nodeid}")
+    print(f"\nTest start: {nodeid}")
+
+
+def pytest_runtest_logfinish(
+    nodeid: str, location: tuple[str, int | None, str]
+) -> None:
+    print(f"\nTest end: {nodeid}")
