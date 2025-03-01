@@ -11,6 +11,7 @@ import React, {
 } from "react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import * as documentsService from "@/services/documentsService";
+import { FileDescriptor } from "../interfaces";
 
 export interface FolderResponse {
   id: number;
@@ -96,6 +97,8 @@ export interface DocumentsContextType {
     name: string,
     description: string
   ) => Promise<void>;
+  currentMessageFiles: FileDescriptor[];
+  setCurrentMessageFiles: Dispatch<SetStateAction<FileDescriptor[]>>;
 }
 
 const DocumentsContext = createContext<DocumentsContextType | undefined>(
@@ -119,6 +122,12 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
   const [selectedFiles, setSelectedFiles] = useState<FileResponse[]>([]);
+
+  // uploaded files
+  const [currentMessageFiles, setCurrentMessageFiles] = useState<
+    FileDescriptor[]
+  >([]);
+
   const [selectedFolders, setSelectedFolders] = useState<FolderResponse[]>([]);
   const [folderDetails, setFolderDetails] = useState<
     FolderResponse | undefined | null
@@ -310,7 +319,12 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
   );
 
   const addSelectedFile = useCallback((file: FileResponse) => {
-    setSelectedFiles((prev) => [...prev, file]);
+    setSelectedFiles((prev) => {
+      if (prev.find((f) => f.id === file.id)) {
+        return prev;
+      }
+      return [...prev, file];
+    });
   }, []);
 
   const removeSelectedFile = useCallback((file: FileResponse) => {
@@ -510,6 +524,8 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
     getFolders,
     folderDetails,
     updateFolderDetails,
+    currentMessageFiles,
+    setCurrentMessageFiles,
   };
 
   return (

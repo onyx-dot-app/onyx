@@ -70,7 +70,7 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
 
     file_io = get_default_file_store(db_session).read_file(user_file.file_id, mode="b")
     return InMemoryChatFile(
-        file_id=str(user_file.id),
+        file_id=str(user_file.file_id),
         content=file_io.read(),
         file_type=ChatFileType.PLAIN_TEXT,
         filename=user_file.name,

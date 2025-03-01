@@ -36,7 +36,15 @@ export function useDocumentSelection(): [
   };
 
   const addSelectedFile = (file: FileResponse) => {
-    setSelectedFiles([...selectedFiles, file]);
+    console.log("ADDING FILESSSSSS\n\n\n\n\n\n");
+    // Check if file already exists in the array to avoid duplicates
+    setSelectedFiles((files) => {
+      // Check if file already exists in the array to avoid duplicates
+      if (files.some((f) => f.id === file.id)) {
+        return files;
+      }
+      return [...files, file];
+    });
   };
   const [totalTokens, setTotalTokens] = useState(0);
   const selectedDocumentIds = selectedDocuments.map(

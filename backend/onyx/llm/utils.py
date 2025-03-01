@@ -155,7 +155,11 @@ def build_content_with_imgs(
 
     img_urls = img_urls or []
     b64_imgs = b64_imgs or []
-
+    print(
+        "building main content iwth this message and this number of files",
+        message,
+        len(files),
+    )
     message_main_content = _build_content(message, files)
 
     if exclude_images or (not img_files and not img_urls):

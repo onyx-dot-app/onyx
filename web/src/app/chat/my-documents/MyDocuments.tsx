@@ -61,15 +61,15 @@ const SortSelector: React.FC<SortSelectorProps> = ({ onSortChange }) => {
     </div>
   );
 };
-
-const SkeletonLoader = ({ count = 5 }) => (
-  <div className={`mt-4 grid gap-3 md:mt-8 md:grid-cols-2 md:gap-6`}>
-    {[...Array(count)].map((_, index) => (
-      <div
-        key={index}
-        className="animate-pulse bg-background-200 rounded-xl h-24"
-      ></div>
-    ))}
+const SkeletonLoader = () => (
+  <div className="flex justify-center items-center w-full h-64">
+    <div className="animate-pulse flex flex-col items-center gap-4 w-full">
+      <div className="h-24 w-24 rounded-full bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary dark:border-neutral-300"></div>
+      </div>
+      <div className="h-4 w-48 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
+      <div className="h-3 w-32 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
+    </div>
   </div>
 );
 

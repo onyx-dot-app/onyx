@@ -237,6 +237,7 @@ export function ChatInputBar({
     selectedFolders,
     removeSelectedFile,
     removeSelectedFolder,
+    currentMessageFiles,
   } = useDocumentsContext();
 
   const settings = useContext(SettingsContext);
@@ -640,6 +641,7 @@ export function ChatInputBar({
               selectedFiles.length > 0 ||
               selectedFolders.length > 0 ||
               files.length > 0 ||
+              currentMessageFiles.length > 0 ||
               filterManager.timeRange ||
               filterManager.selectedDocumentSets.length > 0 ||
               filterManager.selectedTags.length > 0 ||
@@ -661,6 +663,13 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
+                  {currentMessageFiles.map((file) => (
+                    <SourceChip
+                      key={file.id}
+                      icon={<FileIcon size={16} />}
+                      title={file.name || "File"}
+                    />
+                  ))}
 
                   {selectedFiles.map((file) => (
                     <SourceChip

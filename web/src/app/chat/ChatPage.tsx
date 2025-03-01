@@ -187,6 +187,8 @@ export function ChatPage({
     folders: userFolders,
     uploadFile,
     removeSelectedFile,
+    currentMessageFiles,
+    setCurrentMessageFiles,
   } = useDocumentsContext();
 
   const defaultAssistantIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -840,11 +842,6 @@ export function ChatPage({
   const currentSessionChatState = currentChatState();
   const currentSessionRegenerationState = currentRegenerationState();
 
-  // uploaded files
-  const [currentMessageFiles, setCurrentMessageFiles] = useState<
-    FileDescriptor[]
-  >([]);
-
   // for document display
   // NOTE: -1 is a special designation that means the latest AI message
   const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
@@ -1393,7 +1390,10 @@ export function ChatPage({
         queryOverride,
         forceSearch,
         userFolderIds: selectedFolders.map((folder) => folder.id),
-        userFileIds: selectedFiles.map((file) => file.id),
+        userFileIds: selectedFiles
+          .filter((file) => file.id !== undefined && file.id !== null)
+          .map((file) => file.id),
+
         regenerate: regenerationRequest !== undefined,
         modelProvider:
           modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1893,82 +1893,18 @@ export function ChatPage({
       return;
     }
 
-    const tempFileDescriptors = acceptedFiles.map((file) => ({
-      id: uuidv4(),
-      type: file.type.startsWith("image/")
-        ? ChatFileType.IMAGE
-        : ChatFileType.DOCUMENT,
-      isUploading: true,
-    }));
-
-    // only show loading spinner for reasonably large files
-    const totalSize = acceptedFiles.reduce((sum, file) => sum + file.size, 0);
-    if (totalSize > 50 * 1024) {
-      setCurrentMessageFiles((prev) => [...prev, ...tempFileDescriptors]);
-    }
-
-    const removeTempFiles = (prev: FileDescriptor[]) => {
-      return prev.filter(
-        (file) => !tempFileDescriptors.some((newFile) => newFile.id === file.id)
-      );
-    };
     updateChatState("uploading", currentSessionId());
 
-    // const files = await uploadFilesForChat(acceptedFiles).then(
-    //   ([files, error]) => {
-    //     if (error) {
-    //       setCurrentMessageFiles((prev) => removeTempFiles(prev));
-    //       setPopup({
-    //         type: "error",
-    //         message: error,
-    //       });
-    //     } else {
-    //       setCurrentMessageFiles((prev) => [
-    //         ...removeTempFiles(prev),
-    //         ...files,
-    //       ]);
-    //     }
-    //     return files;
-    //   }
-    // );
-
-    for (let i = 0; i < acceptedFiles.length; i++) {
-      const file = acceptedFiles[i];
-      const formData = new FormData();
-      formData.append("files", file);
-      const response: FileUploadResponse = await uploadFile(formData, null);
-
-      if (response.file_paths && response.file_paths.length > 0) {
-        const uploadedFile: FileResponse = {
-          id: Date.now(),
-          name: file.name,
-          document_id: response.file_paths[0],
-          folder_id: null,
-          size: file.size,
-          type: file.type,
-          lastModified: new Date().toISOString(),
-          token_count: 0,
-        };
-        addSelectedFile(uploadedFile);
-      }
+    const [uploadedFiles, error] = await uploadFilesForChat(acceptedFiles);
+    if (error) {
+      setPopup({
+        type: "error",
+        message: error,
+      });
     }
 
-    // const fileToAdd: FileResponse[] = files.map((file: FileDescriptor) => {
-    //   return {
-    //     document_id: file.id,
-    //     type: file.type.startsWith("image/")
-    //       ? ChatFileType.IMAGE
-    //       : ChatFileType.DOCUMENT,
-    //     name: file.name || "Name not available",
-    //     size: 10,
-    //     folder_id: -1,
-    //     id: 10,
-    //   };
-    // });
-    // setSelectedFiles((prevFiles: FileResponse[]) => [
-    //   ...prevFiles,
-    //   ...fileToAdd,
-    // ]);
+    setCurrentMessageFiles((prev) => [...prev, ...uploadedFiles]);
+
     updateChatState("input", currentSessionId());
   };
 
@@ -2381,12 +2317,6 @@ export function ChatPage({
           onSave={() => {
             setToggleDocSelection(false);
           }}
-          selectedFiles={selectedFiles}
-          selectedFolders={selectedFolders}
-          addSelectedFile={addSelectedFile}
-          addSelectedFolder={addSelectedFolder}
-          removeSelectedFile={(file) => removeSelectedFile(file)}
-          removeSelectedFolder={removeSelectedFolder}
         />
       )}
 

@@ -552,6 +552,8 @@ def stream_chat_message_objects(
             # Load user files
             from onyx.file_store.utils import load_all_user_files
 
+            print("user file ids is", new_msg_req.user_file_ids)
+
             user_files = load_all_user_files(
                 new_msg_req.user_file_ids or [],
                 new_msg_req.user_folder_ids or [],
@@ -585,7 +587,7 @@ def stream_chat_message_objects(
                 use_search_for_user_files = True
             else:
                 # Convert UserFile objects to InMemoryChatFile objects
-                user_file_objects = []
+                user_file_objects: list[InMemoryChatFile] = []
                 for file in user_files:
                     print(f"Processing user file: {file.file_id}")
                     try:
@@ -596,7 +598,7 @@ def stream_chat_message_objects(
                             InMemoryChatFile(
                                 file_id=str(file.file_id),
                                 content=file_io.read(),
-                                file_type=ChatFileType.DOC,
+                                file_type=ChatFileType.PLAIN_TEXT,
                                 filename="user file",
                             )
                         )
@@ -606,6 +608,8 @@ def stream_chat_message_objects(
                         logger.warning(
                             f"Failed to load user file {file.file_id}: {str(e)}"
                         )
+                for file in user_file_objects:
+                    print(file.file_id, file.file_type, file.filename)
 
                 # Add converted files to latest_query_files
                 latest_query_files.extend(user_file_objects)
@@ -625,6 +629,7 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 commit=False,
             )
+            print("attached")
 
         selected_db_search_docs = None
         selected_sections: list[InferenceSection] | None = None
