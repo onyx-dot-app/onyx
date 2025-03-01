@@ -730,7 +730,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gemini-1.5-flash-001": "Gemini 1.5 Flash",
   "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
   "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
-  "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+  "gemini-2.0-flash-001": "Gemini 2.0 Flash",
+  "gemini-2.0-flash": "Gemini 2.0 Flash",
+  "gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro",
+  "gemini-2.0-flash-thinking-exp-01-21": "Gemini 2.0 Flash Thinking",
 
   // Mistral Models
   "mistral-large-2411": "Mistral Large 24.11",
@@ -755,6 +758,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "anthropic.claude-v2:1": "Claude v2.1",
   "anthropic.claude-v2": "Claude v2",
   "anthropic.claude-v1": "Claude v1",
+  "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
+  "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
   "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
   "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
   "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet",
@@ -788,6 +793,7 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "anthropic.claude-3-opus-20240229-v1:0",
     "mistral.mistral-large-2402-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "anthropic.claude-3-7-sonnet-20250219-v1:0",
   ],
   anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
 };
