@@ -55,6 +55,7 @@ export interface EmbeddingModelDescriptor {
   api_version?: string | null;
   deployment_name?: string | null;
   index_name: string | null;
+  requires_reindex?: boolean;
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
