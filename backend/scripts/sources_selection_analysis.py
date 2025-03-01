@@ -464,7 +464,7 @@ class SelectionAnalysis:
 
         try:
             with open(analysis_file, "w") as f:
-                json.dump(content, f, indent=4)
+                json.dump(content, f, indent=4, ensure_ascii=False)
         except Exception as e:
             color_output(f"Unable to create the analysis file: {e}", model="critical")
             return None

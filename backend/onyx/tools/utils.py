@@ -24,7 +24,7 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
 
 
 def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:
-    return len(llm_tokenizer.encode(json.dumps(tool.tool_definition())))
+    return len(llm_tokenizer.encode(json.dumps(tool.tool_definition(), ensure_ascii=False)))
 
 
 def compute_all_tool_tokens(tools: list[Tool], llm_tokenizer: BaseTokenizer) -> int:

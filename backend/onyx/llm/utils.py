@@ -315,7 +315,7 @@ def check_message_tokens(
     if isinstance(message, AIMessage) and message.tool_calls:
         for tool_call in message.tool_calls:
             total_tokens += check_number_of_tokens(
-                json.dumps(tool_call["args"]), encode_fn
+                json.dumps(tool_call["args"], ensure_ascii=False), encode_fn
             )
             total_tokens += check_number_of_tokens(tool_call["name"], encode_fn)
 

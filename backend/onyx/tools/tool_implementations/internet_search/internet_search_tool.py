@@ -211,7 +211,7 @@ class InternetSearchTool(Tool[None]):
         self, *args: ToolResponse
     ) -> str | list[str | dict[str, Any]]:
         search_response = cast(InternetSearchResponse, args[0].response)
-        return json.dumps(search_response.model_dump())
+        return json.dumps(search_response.model_dump(), ensure_ascii=False)
 
     def _perform_search(self, query: str) -> InternetSearchResponse:
         response = self.client.get(

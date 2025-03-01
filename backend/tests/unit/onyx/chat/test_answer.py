@@ -167,7 +167,7 @@ def test_answer_with_search_call(
             ToolCallChunk(
                 id="search",
                 name="search",
-                args=json.dumps(expected_tool_args),
+                args=json.dumps(expected_tool_args, ensure_ascii=False),
                 index=0,
             )
         ]
