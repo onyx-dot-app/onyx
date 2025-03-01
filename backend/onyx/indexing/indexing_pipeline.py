@@ -221,7 +221,7 @@ def index_doc_batch_prepare(
         else documents
     )
     if len(updatable_docs) != len(documents):
-        updatable_doc_ids = [doc.id for doc in updatable_docs]
+        updatable_doc_ids = {doc.id for doc in updatable_docs}
         skipped_doc_ids = [
             doc.id for doc in documents if doc.id not in updatable_doc_ids
         ]

@@ -23,6 +23,8 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.constants import NotificationType
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
+from onyx.db.models import Connector
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import DocumentSet
 from onyx.db.models import Persona
 from onyx.db.models import Persona__User
@@ -332,10 +334,16 @@ def get_personas_for_user(
         stmt = stmt.options(
             selectinload(Persona.prompts),
             selectinload(Persona.tools),
-            selectinload(Persona.document_sets),
             selectinload(Persona.groups),
             selectinload(Persona.users),
             selectinload(Persona.labels),
+            selectinload(Persona.document_sets)
+            .selectinload(DocumentSet.connector_credential_pairs)
+            .selectinload(ConnectorCredentialPair.credential),
+            selectinload(Persona.document_sets)
+            .selectinload(DocumentSet.connector_credential_pairs)
+            .joinedload(ConnectorCredentialPair.connector)
+            .contains_eager(Connector.credentials),
         )
 
     results = db_session.execute(stmt).scalars().all()
