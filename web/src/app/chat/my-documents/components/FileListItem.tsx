@@ -40,6 +40,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { truncateString } from "@/lib/utils";
 
 interface FileListItemProps {
   file: FileResponse;
@@ -131,7 +132,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             view === "grid" ? "text-center" : ""
           }`}
         >
-          <p>{file.name}</p>
+          <p>{truncateString(file.name, 80)}</p>
           <TooltipProvider>
             <Tooltip delayDuration={300}>
               <TooltipTrigger asChild>

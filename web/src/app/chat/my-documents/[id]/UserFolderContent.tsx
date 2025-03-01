@@ -292,9 +292,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         currentFolderId={folderId}
       />
       <div className="flex justify-between w-full items-start mb-6">
-        <div className="flex-1 w-full mr-4">
+        <div className="flex flex-col w-full mr-4">
           <div
-            className="flex text-sm mb-4 items-center cursor-pointer text-neutral-700 dark:text-neutral-300"
+            className="flex w-fit text-sm mb-4 items-center cursor-pointer text-neutral-700 dark:text-neutral-300"
             onClick={handleBack}
           >
             <ArrowLeft className="h-4 w-4 mr-2" /> Back to My Knowledge Groups
