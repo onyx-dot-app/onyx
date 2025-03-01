@@ -91,6 +91,11 @@ export interface DocumentsContextType {
   refreshFolderDetails: () => Promise<void>;
   getFolders: () => Promise<FolderResponse[]>;
   folderDetails: FolderResponse | null | undefined;
+  updateFolderDetails: (
+    folderId: number,
+    name: string,
+    description: string
+  ) => Promise<void>;
 }
 
 const DocumentsContext = createContext<DocumentsContextType | undefined>(
@@ -504,6 +509,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
     refreshFolderDetails,
     getFolders,
     folderDetails,
+    updateFolderDetails,
   };
 
   return (

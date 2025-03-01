@@ -57,7 +57,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="w-full space-y-4">
       {presentingDocument && (
         <TextView
           presentingDocument={presentingDocument}

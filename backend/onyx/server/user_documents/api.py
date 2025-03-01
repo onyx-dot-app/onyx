@@ -132,10 +132,15 @@ def upload_user_files(
         raise HTTPException(status_code=500, detail=f"Failed to upload files: {str(e)}")
 
 
+class FolderUpdateRequest(BaseModel):
+    name: str
+    description: str
+
+
 @router.put("/user/folder/{folder_id}")
 def update_folder(
     folder_id: int,
-    name: str,
+    request: FolderUpdateRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserFolderSnapshot:
@@ -147,8 +152,8 @@ def update_folder(
     )
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    folder.name = name
-
+    folder.name = request.name
+    folder.description = request.description
     db_session.commit()
 
     return UserFolderSnapshot.from_model(folder)

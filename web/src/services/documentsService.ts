@@ -90,6 +90,7 @@ export async function updateFolderDetails(
   name: string,
   description: string
 ): Promise<void> {
+  alert(JSON.stringify({ folderId, name, description }));
   const response = await fetch(`/api/user/folder/${folderId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

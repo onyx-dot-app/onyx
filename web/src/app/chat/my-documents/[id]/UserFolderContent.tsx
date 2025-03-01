@@ -170,6 +170,13 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const handleSaveDescription = async () => {
     if (folderDetails && newDescription !== folderDetails.description) {
       try {
+        alert(
+          JSON.stringify({
+            id: folderDetails.id,
+            name: folderDetails.name,
+            newDescription,
+          })
+        );
         await updateFolderDetails(
           folderDetails.id,
           folderDetails.name,
@@ -284,8 +291,8 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         folders={folders}
         currentFolderId={folderId}
       />
-      <div className="flex justify-between items-start mb-6">
-        <div className="flex-1 mr-4">
+      <div className="flex justify-between w-full items-start mb-6">
+        <div className="flex-1 w-full mr-4">
           <div
             className="flex text-sm mb-4 items-center cursor-pointer text-neutral-700 dark:text-neutral-300"
             onClick={handleBack}
@@ -370,7 +377,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           />
         </div>
 
-        <div className="w-[313.33px] bg-[#fff] dark:bg-neutral-800 mt-20 relative rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+        <div className="w-[300px] bg-[#fff] dark:bg-neutral-800 mt-20 relative rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           <ContextLimitPanel
             isOpen={isCapacityOpen}
             onToggle={() => setIsCapacityOpen(!isCapacityOpen)}
