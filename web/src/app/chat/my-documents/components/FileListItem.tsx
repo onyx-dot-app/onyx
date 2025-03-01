@@ -211,16 +211,18 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               </div>
               <div className="max-h-60 overflow-y-auto pr-2">
                 <div className="space-y-1">
-                  {[...folders, ...folders].map((folder) => (
-                    <Button
-                      key={folder.id}
-                      variant="ghost"
-                      onClick={() => handleMove(folder.id)}
-                      className="w-full justify-start text-sm py-2 px-3"
-                    >
-                      {folder.name}
-                    </Button>
-                  ))}
+                  {folders
+                    .filter((folder) => folder.id !== -1)
+                    .map((folder) => (
+                      <Button
+                        key={folder.id}
+                        variant="ghost"
+                        onClick={() => handleMove(folder.id)}
+                        className="w-full bg-neutral-900 justify-start text-sm py-2 px-3"
+                      >
+                        {folder.name}
+                      </Button>
+                    ))}
                 </div>
               </div>
             </div>

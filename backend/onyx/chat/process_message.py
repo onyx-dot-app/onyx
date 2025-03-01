@@ -557,6 +557,9 @@ def stream_chat_message_objects(
                 new_msg_req.user_folder_ids or [],
                 db_session,
             )
+            # print('------------------------------------\n\n\n\n\n')
+            # for file in user_files:
+            #     print(file.__dict__)
 
             # Calculate token count for the files
             from onyx.db.user_documents import calculate_user_files_token_count
@@ -574,6 +577,7 @@ def stream_chat_message_objects(
 
             # If files are too large for context, use search instead
             if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
+                print("exceeded")
                 # We'll set force_use_tool.force_use = True after tools are defined
                 logger.info(
                     f"User files exceed token limit ({total_tokens} > {llm_max_tokens * 0.75}), using search instead"
@@ -583,6 +587,7 @@ def stream_chat_message_objects(
                 # Convert UserFile objects to InMemoryChatFile objects
                 user_file_objects = []
                 for file in user_files:
+                    print(f"Processing user file: {file.file_id}")
                     try:
                         file_io = get_default_file_store(db_session).read_file(
                             file.file_id, mode="b"
@@ -595,16 +600,23 @@ def stream_chat_message_objects(
                                 filename="user file",
                             )
                         )
+                        print(f"Successfully loaded user file: {file.file_id}")
                     except Exception as e:
+                        print(f"Error loading file {file.file_id}: {e}")
                         logger.warning(
                             f"Failed to load user file {file.file_id}: {str(e)}"
                         )
 
                 # Add converted files to latest_query_files
                 latest_query_files.extend(user_file_objects)
+                print(
+                    f"Added {len(user_file_objects)} user files to latest_query_files"
+                )
                 logger.info(f"Using {len(user_files)} user files directly in context")
 
         if user_message:
+            print("at this point")
+            print("attaching")
             attach_files_to_chat_message(
                 chat_message=user_message,
                 files=[

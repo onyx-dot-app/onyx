@@ -19,7 +19,7 @@ export const DeleteEntityModal: React.FC<DeleteEntityModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed z-[10000] inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+    <div className="fixed z-[10000] inset-0 bg-[#fff] bg-opacity-50 flex items-center justify-center">
       <div className="max-w-md w-full bg-white p-6 rounded-lg shadow-lg">
         <h2 className="text-xl font-bold mb-4">Delete {entityType}</h2>
         <p className="mb-6">

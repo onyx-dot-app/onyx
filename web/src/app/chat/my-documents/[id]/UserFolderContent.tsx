@@ -15,6 +15,7 @@ import { FolderResponse } from "../DocumentsContext";
 import { SharingPanel } from "./components/panels/SharingPanel";
 import { ContextLimitPanel } from "./components/panels/ContextLimitPanel";
 import { AddWebsitePanel } from "./components/panels/AddWebsitePanel";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function UserFolderContent({ folderId }: { folderId: number }) {
   const router = useRouter();
@@ -32,12 +33,15 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     refreshFolderDetails,
     getFolders,
     moveItem,
+    updateFolderDetails,
   } = useDocumentsContext();
 
   const [isCapacityOpen, setIsCapacityOpen] = useState(false);
   const [isSharedOpen, setIsSharedOpen] = useState(false);
   const [editingItemId, setEditingItemId] = useState<number | null>(null);
   const [newItemName, setNewItemName] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [newDescription, setNewDescription] = useState("");
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
   const [deleteItemType, setDeleteItemType] = useState<"file" | "folder">(
@@ -154,6 +158,42 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const handleCancelRename = () => {
     setEditingItemId(null);
     setNewItemName("");
+  };
+
+  const handleEditDescription = () => {
+    if (folderDetails) {
+      setEditingDescription(true);
+      setNewDescription(folderDetails.description);
+    }
+  };
+
+  const handleSaveDescription = async () => {
+    if (folderDetails && newDescription !== folderDetails.description) {
+      try {
+        await updateFolderDetails(
+          folderDetails.id,
+          folderDetails.name,
+          newDescription
+        );
+        setPopup({
+          message: "Folder description updated successfully",
+          type: "success",
+        });
+        await refreshFolderDetails();
+      } catch (error) {
+        console.error("Error updating folder description:", error);
+        setPopup({
+          message: "Failed to update folder description",
+          type: "error",
+        });
+      }
+    }
+    setEditingDescription(false);
+  };
+
+  const handleCancelDescription = () => {
+    setEditingDescription(false);
+    setNewDescription("");
   };
 
   const handleDeleteItem = (
@@ -281,9 +321,32 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               </h1>
             </div>
           )}
-          <p className="text-neutral-600 dark:text-neutral-200 mb-4">
-            {folderDetails.description}
-          </p>
+
+          {editingDescription ? (
+            <div className="flex flex-col mb-4">
+              <Textarea
+                value={newDescription}
+                onChange={(e) => setNewDescription(e.target.value)}
+                className="mb-2"
+                rows={3}
+              />
+              <div className="flex">
+                <Button onClick={handleSaveDescription} className="mr-2">
+                  Save
+                </Button>
+                <Button onClick={handleCancelDescription} variant="outline">
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <p
+              className="text-neutral-600 dark:text-neutral-200 mb-4 cursor-pointer"
+              onClick={handleEditDescription}
+            >
+              {folderDetails.description}
+            </p>
+          )}
 
           <DocumentList
             isLoading={false}
