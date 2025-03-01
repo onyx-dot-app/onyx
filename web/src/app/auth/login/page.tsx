@@ -17,7 +17,7 @@ const Page = async (props: {
   const autoRedirectDisabled = searchParams?.disableAutoRedirect === "true";
   const nextUrl = Array.isArray(searchParams?.next)
     ? searchParams?.next[0]
-    : searchParams?.next || null;
+    : searchParams?.next || "/chat";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -35,15 +35,15 @@ const Page = async (props: {
 
   // simply take the user to the home page if Auth is disabled
   if (authTypeMetadata?.authType === "disabled") {
-    return redirect("/chat");
+    return redirect(nextUrl);
   }
 
   // if user is already logged in, take them to the main app page
   if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     if (authTypeMetadata?.requiresVerification && !currentUser.is_verified) {
-      return redirect("/auth/waiting-on-verification");
+      return redirect(`/auth/waiting-on-verification?next=${nextUrl}`);
     }
-    return redirect("/chat");
+    return redirect(nextUrl);
   }
 
   // get where to send the user to authenticate
