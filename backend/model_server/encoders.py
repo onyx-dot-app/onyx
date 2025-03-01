@@ -107,7 +107,6 @@ class CloudEmbedding:
                 )
             return final_embeddings
         except openai.AuthenticationError:
-            # Clean authentication error without exposing API key details
             raise AuthenticationError(provider="OpenAI")
         except Exception as e:
             error_string = (
@@ -143,7 +142,6 @@ class CloudEmbedding:
                 final_embeddings.extend(cast(list[Embedding], response.embeddings))
             return final_embeddings
         except Exception as e:
-            # Check for authentication errors in Cohere
             if (
                 "401" in str(e)
                 or "unauthorized" in str(e).lower()
@@ -181,7 +179,6 @@ class CloudEmbedding:
             )
             return response.embeddings
         except Exception as e:
-            # Check for authentication errors in Voyage
             if (
                 "401" in str(e)
                 or "unauthorized" in str(e).lower()
@@ -215,7 +212,6 @@ class CloudEmbedding:
             embeddings = [embedding["embedding"] for embedding in response.data]
             return embeddings
         except Exception as e:
-            # Check for authentication errors in Azure
             if (
                 "401" in str(e)
                 or "unauthorized" in str(e).lower()
@@ -260,7 +256,6 @@ class CloudEmbedding:
             )
             return [embedding.values for embedding in embeddings]
         except Exception as e:
-            # Check for authentication errors in Vertex
             if (
                 "401" in str(e)
                 or "unauthorized" in str(e).lower()
