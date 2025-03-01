@@ -402,6 +402,7 @@ class DefaultMultiLLM(LLM):
         stream: bool,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -424,6 +425,7 @@ class DefaultMultiLLM(LLM):
                 messages=processed_prompt,
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
+                max_tokens=max_tokens,
                 # streaming choice
                 stream=stream,
                 # model params
@@ -484,6 +486,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -497,6 +500,7 @@ class DefaultMultiLLM(LLM):
                 stream=False,
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
+                max_tokens=max_tokens,
             ),
         )
         choice = response.choices[0]
@@ -515,6 +519,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -526,6 +531,7 @@ class DefaultMultiLLM(LLM):
                 tool_choice,
                 structured_response_format,
                 timeout_override,
+                max_tokens,
             )
             return
 
@@ -539,6 +545,7 @@ class DefaultMultiLLM(LLM):
                 stream=True,
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
+                max_tokens=max_tokens,
             ),
         )
         try:
