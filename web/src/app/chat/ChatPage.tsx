@@ -2132,10 +2132,6 @@ export function ChatPage({
 
           // Update the forceUserFileSearch state
           setForceUserFileSearch(shouldForceSearch);
-
-          console.log(
-            `Total tokens: ${totalTokens}, Context size: ${modelContextSize}, Force search: ${shouldForceSearch}`
-          );
         } catch (error) {
           console.error("Error calculating tokens:", error);
         }

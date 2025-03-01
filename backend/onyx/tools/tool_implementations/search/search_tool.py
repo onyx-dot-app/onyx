@@ -24,6 +24,7 @@ from onyx.configs.chat_configs import CONTEXT_CHUNKS_BELOW
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import QueryFlow
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
@@ -285,15 +286,35 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         alternate_db_session = None
         retrieved_sections_callback = None
         skip_query_analysis = False
+        user_file_ids = None
         if override_kwargs:
             force_no_rerank = override_kwargs.force_no_rerank
             alternate_db_session = override_kwargs.alternate_db_session
             retrieved_sections_callback = override_kwargs.retrieved_sections_callback
             skip_query_analysis = override_kwargs.skip_query_analysis
+            user_file_ids = override_kwargs.user_file_ids
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
             return
+
+        # Create a copy of the retrieval options with user_file_ids if provided
+        retrieval_options = self.retrieval_options
+        if user_file_ids and retrieval_options:
+            # Create a copy to avoid modifying the original
+            filters = (
+                retrieval_options.filters.model_copy()
+                if retrieval_options.filters
+                else BaseFilters()
+            )
+            filters.user_file_ids = user_file_ids
+            retrieval_options = retrieval_options.model_copy(
+                update={"filters": filters}
+            )
+        elif user_file_ids:
+            # Create new retrieval options with user_file_ids
+            filters = BaseFilters(user_file_ids=user_file_ids)
+            retrieval_options = RetrievalDetails(filters=filters)
 
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(
@@ -302,13 +323,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 if force_no_rerank
                 else self.evaluation_type,
                 human_selected_filters=(
-                    self.retrieval_options.filters if self.retrieval_options else None
+                    retrieval_options.filters if retrieval_options else None
                 ),
                 persona=self.persona,
-                offset=(
-                    self.retrieval_options.offset if self.retrieval_options else None
-                ),
-                limit=self.retrieval_options.limit if self.retrieval_options else None,
+                offset=(retrieval_options.offset if retrieval_options else None),
+                limit=retrieval_options.limit if retrieval_options else None,
                 rerank_settings=RerankingDetails(
                     rerank_model_name=None,
                     rerank_api_url=None,
@@ -323,8 +342,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                 chunks_below=self.chunks_below,
                 full_doc=self.full_doc,
                 enable_auto_detect_filters=(
-                    self.retrieval_options.enable_auto_detect_filters
-                    if self.retrieval_options
+                    retrieval_options.enable_auto_detect_filters
+                    if retrieval_options
                     else None
                 ),
             ),

@@ -237,7 +237,6 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
       if (isFolder) {
         // Move folder logic
         // This is a placeholder - implement actual folder moving logic
-        console.log(`Moving folder ${itemId} to ${newFolderId}`);
       } else {
         // Move file
         const response = await fetch(`/api/user/file/${itemId}/move`, {

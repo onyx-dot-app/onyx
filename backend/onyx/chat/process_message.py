@@ -52,6 +52,7 @@ from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
@@ -101,6 +102,7 @@ from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
@@ -279,6 +281,17 @@ def _get_force_search_settings(
         else None
     )
 
+    # Create override_kwargs for the search tool if user_file_ids are provided
+    override_kwargs = None
+    if new_msg_req.user_file_ids and tool_name == SearchTool._NAME:
+        override_kwargs = SearchToolOverrideKwargs(
+            force_no_rerank=False,
+            alternate_db_session=None,
+            retrieved_sections_callback=None,
+            skip_query_analysis=False,
+            user_file_ids=new_msg_req.user_file_ids,
+        )
+
     if new_msg_req.file_descriptors:
         # If user has uploaded files they're using, don't run any of the search tools
         return ForceUseTool(force_use=False, tool_name=tool_name)
@@ -298,9 +311,16 @@ def _get_force_search_settings(
     if should_force_search:
         # If we are using selected docs, just put something here so the Tool doesn't need to build its own args via an LLM call
         args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
-        return ForceUseTool(force_use=True, tool_name=tool_name, args=args)
+        return ForceUseTool(
+            force_use=True,
+            tool_name=tool_name,
+            args=args,
+            override_kwargs=override_kwargs,
+        )
 
-    return ForceUseTool(force_use=False, tool_name=tool_name, args=args)
+    return ForceUseTool(
+        force_use=False, tool_name=tool_name, args=args, override_kwargs=override_kwargs
+    )
 
 
 ChatPacket = (
@@ -578,7 +598,8 @@ def stream_chat_message_objects(
             )
 
             # If files are too large for context, use search instead
-            if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
+            # if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
+            if True:
                 print("exceeded")
                 # We'll set force_use_tool.force_use = True after tools are defined
                 logger.info(
@@ -798,7 +819,58 @@ def stream_chat_message_objects(
 
         # Set force_use if user files exceed token limit
         if use_search_for_user_files:
+            # Check if search tool is available in the tools list
+            search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
+
+            # If no search tool is available, add one
+            if not search_tool_available:
+                # Create a basic search tool config
+                search_tool_config = SearchToolConfig(
+                    answer_style_config=answer_style_config,
+                    document_pruning_config=document_pruning_config,
+                    retrieval_options=retrieval_options or RetrievalDetails(),
+                )
+
+                # Create and add the search tool
+                search_tool = SearchTool(
+                    db_session=db_session,
+                    user=user,
+                    persona=persona,
+                    retrieval_options=search_tool_config.retrieval_options,
+                    prompt_config=prompt_config,
+                    llm=llm,
+                    fast_llm=fast_llm,
+                    pruning_config=search_tool_config.document_pruning_config,
+                    answer_style_config=search_tool_config.answer_style_config,
+                    evaluation_type=(
+                        LLMEvaluationType.BASIC
+                        if persona.llm_relevance_filter
+                        else LLMEvaluationType.SKIP
+                    ),
+                    bypass_acl=bypass_acl,
+                )
+
+                # Add the search tool to the tools list
+                tools.append(search_tool)
+
+                logger.info("Added search tool for user files that exceed token limit")
+
+            # Now set force_use_tool.force_use to True
             force_use_tool.force_use = True
+            force_use_tool.tool_name = SearchTool._NAME
+
+            # Set query argument if not already set
+            if not force_use_tool.args:
+                force_use_tool.args = {"query": final_msg.message}
+
+            # Pass the user file IDs to the search tool
+            if new_msg_req.user_file_ids:
+                # Create a BaseFilters object with user_file_ids
+                if not retrieval_options:
+                    retrieval_options = RetrievalDetails()
+                if not retrieval_options.filters:
+                    retrieval_options.filters = BaseFilters()
+                retrieval_options.filters.user_file_ids = new_msg_req.user_file_ids
 
         # TODO: unify message history with single message history
         message_history = [
@@ -1110,10 +1182,16 @@ def stream_chat_message_objects(
             error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
-                    tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
-                    tool_name=info.tool_result.tool_name,
-                    tool_arguments=info.tool_result.tool_args,
-                    tool_result=info.tool_result.tool_result,
+                    tool_id=tool_name_to_tool_id.get(info.tool_result.tool_name, 0)
+                    if info.tool_result
+                    else None,
+                    tool_name=info.tool_result.tool_name if info.tool_result else None,
+                    tool_arguments=info.tool_result.tool_args
+                    if info.tool_result
+                    else None,
+                    tool_result=info.tool_result.tool_result
+                    if info.tool_result
+                    else None,
                 )
                 if info.tool_result
                 else None

@@ -16,6 +16,9 @@ from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
 from onyx.db.enums import AccessType
+from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Document
+from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import Persona
 from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
@@ -87,11 +90,13 @@ def create_user_file_with_indexing(
         user_file.cc_pair_id = cc_pair.data
 
     db_session.commit()
+    print("SHOULD I TRIGGER INDEXING?", trigger_index)
 
     # Trigger immediate high-priority indexing for all created files
     if trigger_index:
         tenant_id = get_current_tenant_id()
         for user_file in user_files:
+            print("TRIGGERING INDEXING FOR USER FILE", user_file.file_id)
             # Use the existing trigger_indexing_for_cc_pair function but with high priority
             if user_file.cc_pair_id:
                 trigger_indexing_for_cc_pair(
@@ -269,17 +274,77 @@ def fetch_user_files_for_documents(
     document_ids: list[str],
     db_session: Session,
 ) -> dict[str, int | None]:
-    # Query UserFile objects for the given document_ids
-    user_files = (
-        db_session.query(UserFile).filter(UserFile.document_id.in_(document_ids)).all()
+    """
+    Fetches user file IDs for the given document IDs.
+
+    Args:
+        document_ids: List of document IDs to fetch user files for
+        db_session: Database session
+
+    Returns:
+        Dictionary mapping document IDs to user file IDs (or None if no user file exists)
+    """
+    # First, get the document to cc_pair mapping
+    doc_cc_pairs = (
+        db_session.query(Document.id, ConnectorCredentialPair.id)
+        .join(
+            DocumentByConnectorCredentialPair,
+            Document.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .filter(Document.id.in_(document_ids))
+        .all()
     )
 
-    # Create a dictionary mapping document_ids to UserFile objects
+    # Get cc_pair to user_file mapping
+    cc_pair_to_user_file = (
+        db_session.query(ConnectorCredentialPair.id, UserFile.id)
+        .join(UserFile, UserFile.cc_pair_id == ConnectorCredentialPair.id)
+        .filter(
+            ConnectorCredentialPair.id.in_(
+                [cc_pair_id for _, cc_pair_id in doc_cc_pairs]
+            )
+        )
+        .all()
+    )
+
+    # Create mapping from cc_pair_id to user_file_id
+    cc_pair_to_user_file_dict = {
+        cc_pair_id: user_file_id for cc_pair_id, user_file_id in cc_pair_to_user_file
+    }
+
+    # Create the final result mapping document_id to user_file_id
     result: dict[str, int | None] = {doc_id: None for doc_id in document_ids}
-    for user_file in user_files:
-        result[user_file.document_id] = user_file.id
+    for doc_id, cc_pair_id in doc_cc_pairs:
+        if cc_pair_id in cc_pair_to_user_file_dict:
+            result[doc_id] = cc_pair_to_user_file_dict[cc_pair_id]
 
     return result
+
+
+# def fetch_user_files_for_documents(
+# #     document_ids: list[str],
+# #     db_session: Session,
+# # ) -> dict[str, int | None]:
+# #     # Query UserFile objects for the given document_ids
+# #     user_files = (
+# #         db_session.query(UserFile).filter(UserFile.document_id.in_(document_ids)).all()
+# #     )
+
+# #     # Create a dictionary mapping document_ids to UserFile objects
+# #     result: dict[str, int | None] = {doc_id: None for doc_id in document_ids}
+# #     for user_file in user_files:
+# #         result[user_file.document_id] = user_file.id
+
+# #     return result
 
 
 def upsert_user_folder(

@@ -777,6 +777,16 @@ def get_connector_indexing_status(
             (connector.id, credential.id)
         )
 
+        # Safely get the owner email, handling detached instances
+        owner_email = ""
+        try:
+            if credential.user:
+                owner_email = credential.user.email
+        except Exception:
+            # If there's any error accessing the user (like DetachedInstanceError),
+            # we'll just use an empty string for the owner email
+            pass
+
         indexing_statuses.append(
             ConnectorIndexingStatus(
                 cc_pair_id=cc_pair.id,
@@ -788,7 +798,7 @@ def get_connector_indexing_status(
                 ),
                 credential=CredentialSnapshot.from_credential_db_model(credential),
                 access_type=cc_pair.access_type,
-                owner=credential.user.email if credential.user else "",
+                owner=owner_email,
                 groups=group_cc_pair_relationships_dict.get(cc_pair.id, []),
                 last_finished_status=(
                     latest_finished_attempt.status if latest_finished_attempt else None
