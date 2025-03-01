@@ -2304,11 +2304,6 @@ class UserFolder(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-
-    # Mapped[datetime.datetime] = mapped_column(
-    #     DateTime(timezone=True), server_default=func.now()
-    # )
-
     user: Mapped["User"] = relationship(back_populates="folders")
     files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
     assistants: Mapped[list["Persona"]] = relationship(
