@@ -2298,7 +2298,7 @@ class UserFolder(Base):
     __tablename__ = "user_folder"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     name: Mapped[str] = mapped_column(nullable=False)
     description: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -2323,7 +2323,7 @@ class UserFile(Base):
     __tablename__ = "user_file"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(ForeignKey("user.id"), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
     assistants: Mapped[list["Persona"]] = relationship(
         "Persona",
         secondary=Persona__UserFile.__table__,

@@ -1,6 +1,7 @@
 import datetime
 import time
 from typing import List
+from uuid import UUID
 
 from fastapi import UploadFile
 from sqlalchemy import and_
@@ -412,7 +413,7 @@ def fetch_user_folders_for_documents(
 def upsert_user_folder(
     db_session: Session,
     id: int | None = None,
-    user_id: int | None = None,
+    user_id: UUID | None = None,
     name: str | None = None,
     description: str | None = None,
     created_at: datetime.datetime | None = None,

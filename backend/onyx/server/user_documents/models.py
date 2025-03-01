@@ -27,7 +27,7 @@ class UserFileSnapshot(BaseModel):
             name=model.name,
             folder_id=model.folder_id,
             document_id=model.document_id,
-            user_id=UUID(str(model.user_id)) if model.user_id is not None else None,
+            user_id=model.user_id,
             file_id=model.file_id,
             created_at=model.created_at,
             assistant_ids=[assistant.id for assistant in model.assistants],
@@ -56,7 +56,7 @@ class UserFolderSnapshot(BaseModel):
             description=model.description,
             files=[UserFileSnapshot.from_model(file) for file in model.files],
             created_at=model.created_at,
-            user_id=UUID(str(model.user_id)) if model.user_id is not None else None,
+            user_id=model.user_id,
             assistant_ids=[assistant.id for assistant in model.assistants],
             token_count=sum(file.token_count or 0 for file in model.files) or None,
         )
