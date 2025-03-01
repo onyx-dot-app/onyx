@@ -603,6 +603,8 @@ def stream_chat_message_objects(
             llm_max_tokens = get_max_input_tokens(
                 llm.config.model_name, llm.config.model_provider
             )
+            print("llm max tokens is", llm_max_tokens)
+            print("total tokens is", total_tokens)
 
             # If files are too large for context, use search instead
             if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
@@ -614,28 +616,26 @@ def stream_chat_message_objects(
             else:
                 # Convert UserFile objects to InMemoryChatFile objects
                 user_file_objects: list[InMemoryChatFile] = []
-                for file in user_files:
-                    print(f"Processing user file: {file.file_id}")
+                for user_file in user_files:
+                    print(f"Processing user file: {user_file.file_id}")
                     try:
                         file_io = get_default_file_store(db_session).read_file(
-                            file.file_id, mode="b"
+                            user_file.file_id, mode="b"
                         )
                         user_file_objects.append(
                             InMemoryChatFile(
-                                file_id=str(file.file_id),
+                                file_id=str(user_file.file_id),
                                 content=file_io.read(),
                                 file_type=ChatFileType.PLAIN_TEXT,
                                 filename="user file",
                             )
                         )
-                        print(f"Successfully loaded user file: {file.file_id}")
+                        print(f"Successfully loaded user file: {user_file.file_id}")
                     except Exception as e:
-                        print(f"Error loading file {file.file_id}: {e}")
+                        print(f"Error loading file {user_file.file_id}: {e}")
                         logger.warning(
-                            f"Failed to load user file {file.file_id}: {str(e)}"
+                            f"Failed to load user file {user_file.file_id}: {str(e)}"
                         )
-                for file in user_file_objects:
-                    print(file.file_id, file.file_type, file.filename)
 
                 # Add converted files to latest_query_files
                 latest_query_files.extend(user_file_objects)

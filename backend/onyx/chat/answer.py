@@ -102,7 +102,7 @@ class Answer:
         ):
             search_request.query = force_use_tool.args[QUERY_FIELD]
 
-        print("latest query files", len(latest_query_files))
+        print("latest query files", len(latest_query_files or []))
         # for file in latest_query_files:
         #     print(file.filename)
         self.graph_inputs = GraphInputs(

@@ -27,6 +27,7 @@ from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserFile
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
 from onyx.server.models import StatusResponse
@@ -642,3 +643,23 @@ def resync_cc_pair(
     )
 
     db_session.commit()
+
+
+def get_connector_credential_pairs_with_user_files(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """
+    Get all connector credential pairs that have associated user files.
+
+    Args:
+        db_session: Database session
+
+    Returns:
+        List of ConnectorCredentialPair objects that have user files
+    """
+    return (
+        db_session.query(ConnectorCredentialPair)
+        .join(UserFile, UserFile.cc_pair_id == ConnectorCredentialPair.id)
+        .distinct()
+        .all()
+    )

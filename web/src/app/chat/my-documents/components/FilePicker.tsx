@@ -753,8 +753,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                   />
                 </svg>
               </div>
-              {/* {selectedFileIds.length} */}
-              {selectedFiles.length}
             </div>
             {renderNavigation()}
           </div>
