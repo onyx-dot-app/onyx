@@ -864,13 +864,14 @@ def stream_chat_message_objects(
                 force_use_tool.args = {"query": final_msg.message}
 
             # Pass the user file IDs to the search tool
-            if new_msg_req.user_file_ids:
+            if new_msg_req.user_file_ids or new_msg_req.user_folder_ids:
                 # Create a BaseFilters object with user_file_ids
                 if not retrieval_options:
                     retrieval_options = RetrievalDetails()
                 if not retrieval_options.filters:
                     retrieval_options.filters = BaseFilters()
                 retrieval_options.filters.user_file_ids = new_msg_req.user_file_ids
+                retrieval_options.filters.user_folder_ids = new_msg_req.user_folder_ids
 
         # TODO: unify message history with single message history
         message_history = [

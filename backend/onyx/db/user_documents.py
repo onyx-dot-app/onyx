@@ -330,6 +330,68 @@ def fetch_user_files_for_documents(
     return result
 
 
+def fetch_user_folders_for_documents(
+    document_ids: list[str],
+    db_session: Session,
+) -> dict[str, int | None]:
+    """
+    Fetches user folder IDs for the given document IDs.
+
+    For each document, returns the folder ID that the document's associated user file belongs to.
+
+    Args:
+        document_ids: List of document IDs to fetch user folders for
+        db_session: Database session
+
+    Returns:
+        Dictionary mapping document IDs to user folder IDs (or None if no user folder exists)
+    """
+    # First, get the document to cc_pair mapping
+    doc_cc_pairs = (
+        db_session.query(Document.id, ConnectorCredentialPair.id)
+        .join(
+            DocumentByConnectorCredentialPair,
+            Document.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .filter(Document.id.in_(document_ids))
+        .all()
+    )
+
+    # Get cc_pair to user_file and folder mapping
+    cc_pair_to_folder = (
+        db_session.query(ConnectorCredentialPair.id, UserFile.folder_id)
+        .join(UserFile, UserFile.cc_pair_id == ConnectorCredentialPair.id)
+        .filter(
+            ConnectorCredentialPair.id.in_(
+                [cc_pair_id for _, cc_pair_id in doc_cc_pairs]
+            )
+        )
+        .all()
+    )
+
+    # Create mapping from cc_pair_id to folder_id
+    cc_pair_to_folder_dict = {
+        cc_pair_id: folder_id for cc_pair_id, folder_id in cc_pair_to_folder
+    }
+
+    # Create the final result mapping document_id to folder_id
+    result: dict[str, int | None] = {doc_id: None for doc_id in document_ids}
+    for doc_id, cc_pair_id in doc_cc_pairs:
+        if cc_pair_id in cc_pair_to_folder_dict:
+            result[doc_id] = cc_pair_to_folder_dict[cc_pair_id]
+
+    return result
+
+
 # def fetch_user_files_for_documents(
 # #     document_ids: list[str],
 # #     db_session: Session,

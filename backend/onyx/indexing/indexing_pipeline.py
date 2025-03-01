@@ -32,6 +32,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
 from onyx.db.user_documents import fetch_user_files_for_documents
+from onyx.db.user_documents import fetch_user_folders_for_documents
 from onyx.document_index.document_index_utils import (
     get_multipass_config,
 )
@@ -406,6 +407,11 @@ def index_doc_batch(
         doc_id_to_user_file_id: dict[str, int | None] = fetch_user_files_for_documents(
             document_ids=updatable_ids, db_session=db_session
         )
+        doc_id_to_user_folder_id: dict[
+            str, int | None
+        ] = fetch_user_folders_for_documents(
+            document_ids=updatable_ids, db_session=db_session
+        )
         logger.error("fetching user files for documents")
         logger.error(doc_id_to_user_file_id)
 
@@ -441,6 +447,9 @@ def index_doc_batch(
                     doc_id_to_document_set.get(chunk.source_document.id, [])
                 ),
                 user_file=doc_id_to_user_file_id.get(chunk.source_document.id, None),
+                user_folder=doc_id_to_user_folder_id.get(
+                    chunk.source_document.id, None
+                ),
                 boost=(
                     ctx.id_to_db_doc_map[chunk.source_document.id].boost
                     if chunk.source_document.id in ctx.id_to_db_doc_map

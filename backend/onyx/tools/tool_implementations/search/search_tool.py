@@ -287,20 +287,21 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         retrieved_sections_callback = None
         skip_query_analysis = False
         user_file_ids = None
+        user_folder_ids = None
         if override_kwargs:
             force_no_rerank = override_kwargs.force_no_rerank
             alternate_db_session = override_kwargs.alternate_db_session
             retrieved_sections_callback = override_kwargs.retrieved_sections_callback
             skip_query_analysis = override_kwargs.skip_query_analysis
             user_file_ids = override_kwargs.user_file_ids
-
+            user_folder_ids = override_kwargs.user_folder_ids
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
             return
 
         # Create a copy of the retrieval options with user_file_ids if provided
         retrieval_options = self.retrieval_options
-        if user_file_ids and retrieval_options:
+        if (user_file_ids or user_folder_ids) and retrieval_options:
             # Create a copy to avoid modifying the original
             filters = (
                 retrieval_options.filters.model_copy()
@@ -311,9 +312,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             retrieval_options = retrieval_options.model_copy(
                 update={"filters": filters}
             )
-        elif user_file_ids:
+        elif user_file_ids or user_folder_ids:
             # Create new retrieval options with user_file_ids
-            filters = BaseFilters(user_file_ids=user_file_ids)
+            filters = BaseFilters(
+                user_file_ids=user_file_ids, user_folder_ids=user_folder_ids
+            )
             retrieval_options = RetrievalDetails(filters=filters)
 
         search_pipeline = SearchPipeline(

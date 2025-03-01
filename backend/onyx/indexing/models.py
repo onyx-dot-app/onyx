@@ -88,7 +88,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     access: "DocumentAccess"
     document_sets: set[str]
     user_file: int | None
-    # user_folders: list[int]
+    user_folder: int | None
     boost: int
 
     @classmethod
@@ -98,7 +98,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         access: "DocumentAccess",
         document_sets: set[str],
         user_file: int | None,
-        # user_folder: list[int],
+        user_folder: int | None,
         boost: int,
         tenant_id: str,
     ) -> "DocMetadataAwareIndexChunk":
@@ -108,7 +108,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             access=access,
             document_sets=document_sets,
             user_file=user_file,
-            # user_folders=user_folders,
+            user_folder=user_folder,
             boost=boost,
             tenant_id=tenant_id,
         )

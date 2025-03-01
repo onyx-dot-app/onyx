@@ -99,6 +99,7 @@ class BaseFilters(BaseModel):
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
     user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
 
 class IndexFilters(BaseFilters):

@@ -117,7 +117,7 @@ schema DANSWER_CHUNK_NAME {
             rank: filter
             attribute: fast-search
         }
-        field user_folders type weightedset<int> {
+        field user_folder type int {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search
