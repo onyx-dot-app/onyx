@@ -14,11 +14,13 @@ from onyx.db.models import KVStore
 from onyx.key_value_store.interface import KeyValueStore
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.redis.redis_pool import get_redis_client
+from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
+
 
 logger = setup_logger()
 
@@ -43,9 +45,7 @@ class PgRedisKVStore(KeyValueStore):
         with Session(engine, expire_on_commit=False) as session:
             if MULTI_TENANT:
                 if self.tenant_id == POSTGRES_DEFAULT_SCHEMA:
-                    raise HTTPException(
-                        status_code=401, detail="User must authenticate"
-                    )
+                    raise BasicAuthenticationError(detail="User must authenticate")
                 if not is_valid_schema_name(self.tenant_id):
                     raise HTTPException(status_code=400, detail="Invalid tenant ID")
                 # Set the search_path to the tenant's schema
