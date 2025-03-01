@@ -141,19 +141,13 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                     <Loader className="h-4 w-4 animate-spin text-amber-500" />
                   </div>
                 ) : (
-                  <div
-                    className={`h-2 w-2 rounded-full ${
-                      isIndexed ? "bg-transparent" : "bg-red-600 animate-pulse"
-                    }`}
-                  />
+                  <div className="h-2 w-2 rounded-full bg-transparent" />
                 )}
               </TooltipTrigger>
               <TooltipContent>
                 {indexingStatus === false
                   ? "File is being indexed. Search might not include all content yet."
-                  : isIndexed
-                    ? "Indexed"
-                    : "Not yet indexed. This will be completed momentarily."}
+                  : "Indexed"}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -219,7 +213,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                         key={folder.id}
                         variant="ghost"
                         onClick={() => handleMove(folder.id)}
-                        className="w-full bg-neutral-900 justify-start text-sm py-2 px-3"
+                        className="w-full justify-start text-sm py-2 px-3"
                       >
                         {folder.name}
                       </Button>

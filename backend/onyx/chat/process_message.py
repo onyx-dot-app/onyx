@@ -89,6 +89,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
+from onyx.file_store.utils import load_all_user_files
 from onyx.file_store.utils import save_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -259,7 +260,10 @@ def _handle_internet_search_tool_response_summary(
 
 
 def _get_force_search_settings(
-    new_msg_req: CreateChatMessageRequest, tools: list[Tool]
+    new_msg_req: CreateChatMessageRequest,
+    tools: list[Tool],
+    user_file_ids: list[int],
+    user_folder_ids: list[int],
 ) -> ForceUseTool:
     internet_search_available = any(
         isinstance(tool, InternetSearchTool) for tool in tools
@@ -283,13 +287,14 @@ def _get_force_search_settings(
 
     # Create override_kwargs for the search tool if user_file_ids are provided
     override_kwargs = None
-    if new_msg_req.user_file_ids and tool_name == SearchTool._NAME:
+    if (user_file_ids or user_folder_ids) and tool_name == SearchTool._NAME:
         override_kwargs = SearchToolOverrideKwargs(
             force_no_rerank=False,
             alternate_db_session=None,
             retrieved_sections_callback=None,
             skip_query_analysis=False,
-            user_file_ids=new_msg_req.user_file_ids,
+            user_file_ids=user_file_ids,
+            user_folder_ids=user_folder_ids,
         )
 
     if new_msg_req.file_descriptors:
@@ -564,31 +569,33 @@ def stream_chat_message_objects(
         )
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
+        user_file_ids = new_msg_req.user_file_ids or []
+        user_folder_ids = new_msg_req.user_folder_ids or []
+
+        if persona.user_files:
+            for file in persona.user_files:
+                user_file_ids.append(file.id)
+        if persona.user_folders:
+            for folder in persona.user_folders:
+                user_folder_ids.append(folder.id)
 
         # Initialize flag for user file search
         use_search_for_user_files = False
 
-        if new_msg_req.user_file_ids or new_msg_req.user_folder_ids:
+        if user_file_ids or user_folder_ids:
             # Load user files
-            from onyx.file_store.utils import load_all_user_files
-
-            print("user file ids is", new_msg_req.user_file_ids)
-
             user_files = load_all_user_files(
-                new_msg_req.user_file_ids or [],
-                new_msg_req.user_folder_ids or [],
+                user_file_ids or [],
+                user_folder_ids or [],
                 db_session,
             )
-            # print('------------------------------------\n\n\n\n\n')
-            # for file in user_files:
-            #     print(file.__dict__)
 
             # Calculate token count for the files
             from onyx.db.user_documents import calculate_user_files_token_count
 
             total_tokens = calculate_user_files_token_count(
-                new_msg_req.user_file_ids or [],
-                new_msg_req.user_folder_ids or [],
+                user_file_ids or [],
+                user_folder_ids or [],
                 db_session,
             )
 
@@ -598,9 +605,7 @@ def stream_chat_message_objects(
             )
 
             # If files are too large for context, use search instead
-            # if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
-            if True:
-                print("exceeded")
+            if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
                 # We'll set force_use_tool.force_use = True after tools are defined
                 logger.info(
                     f"User files exceed token limit ({total_tokens} > {llm_max_tokens * 0.75}), using search instead"
@@ -815,7 +820,9 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
-        force_use_tool = _get_force_search_settings(new_msg_req, tools)
+        force_use_tool = _get_force_search_settings(
+            new_msg_req, tools, user_file_ids, user_folder_ids
+        )
 
         # Set force_use if user files exceed token limit
         if use_search_for_user_files:
@@ -864,14 +871,14 @@ def stream_chat_message_objects(
                 force_use_tool.args = {"query": final_msg.message}
 
             # Pass the user file IDs to the search tool
-            if new_msg_req.user_file_ids or new_msg_req.user_folder_ids:
+            if user_file_ids or user_folder_ids:
                 # Create a BaseFilters object with user_file_ids
                 if not retrieval_options:
                     retrieval_options = RetrievalDetails()
                 if not retrieval_options.filters:
                     retrieval_options.filters = BaseFilters()
-                retrieval_options.filters.user_file_ids = new_msg_req.user_file_ids
-                retrieval_options.filters.user_folder_ids = new_msg_req.user_folder_ids
+                retrieval_options.filters.user_file_ids = user_file_ids
+                retrieval_options.filters.user_folder_ids = user_folder_ids
 
         # TODO: unify message history with single message history
         message_history = [

@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List
+from uuid import UUID
 
 from pydantic import BaseModel
 
@@ -12,7 +13,7 @@ class UserFileSnapshot(BaseModel):
     name: str
     document_id: str
     folder_id: int | None = None
-    user_id: int | None
+    user_id: UUID | None
     file_id: str
     created_at: datetime
     assistant_ids: List[int] = []  # List of assistant IDs
@@ -43,7 +44,7 @@ class UserFolderSnapshot(BaseModel):
     description: str
     files: List[UserFileSnapshot]
     created_at: datetime
-    user_id: int | None
+    user_id: UUID | None
     assistant_ids: List[int] = []  # List of assistant IDs
     token_count: int | None
 

@@ -377,16 +377,11 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           />
         </div>
 
-        <div className="w-[300px] bg-[#fff] dark:bg-neutral-800 mt-20 relative rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
+        <div className="w-[500px] bg-[#fff] dark:bg-neutral-800 mt-20 relative rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
           <ContextLimitPanel
             isOpen={isCapacityOpen}
             onToggle={() => setIsCapacityOpen(!isCapacityOpen)}
-            tokenPercentage={tokenPercentage}
             totalTokens={totalTokens}
-            maxTokens={maxTokens}
-            selectedModel={selectedModel}
-            modelDescriptors={modelDescriptors}
-            onSelectModel={setSelectedModel}
           />
 
           <SharingPanel

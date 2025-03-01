@@ -103,6 +103,16 @@ class VespaDocumentFields:
 
 
 @dataclass
+class VespaDocumentUserFields:
+    """
+    Fields that are specific to the user who is indexing the document.
+    """
+
+    user_file_id: str | None = None
+    user_folder_id: str | None = None
+
+
+@dataclass
 class UpdateRequest:
     """
     For all document_ids, update the allowed_users and the boost to the new values
@@ -251,7 +261,8 @@ class Updatable(abc.ABC):
         *,
         tenant_id: str,
         chunk_count: int | None,
-        fields: VespaDocumentFields,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
     ) -> int:
         """
         Updates all chunks for a document with the specified fields.

@@ -380,6 +380,10 @@ export function AssistantEditor({
       }
     }
   };
+  const canShowKnowledgeSource =
+    ccPairs.length > 0 &&
+    searchTool &&
+    !(user?.role != "admin" && documentSets.length === 0);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -398,12 +402,6 @@ export function AssistantEditor({
       )}
       {filePickerModalOpen && (
         <FilePickerModal
-          selectedFiles={selectedFiles}
-          selectedFolders={selectedFolders}
-          addSelectedFile={addSelectedFile}
-          removeSelectedFile={removeSelectedFile}
-          addSelectedFolder={addSelectedFolder}
-          removeSelectedFolder={removeSelectedFolder}
           isOpen={filePickerModalOpen}
           onClose={() => {
             setFilePickerModalOpen(false);
@@ -892,176 +890,181 @@ export function AssistantEditor({
                       </div>
                     </>
                   )}
-                  {ccPairs.length > 0 &&
-                    searchTool &&
-                    values.enabled_tools_map[searchTool.id] &&
-                    !(user?.role != "admin" && documentSets.length === 0) && (
-                      <CollapsibleSection>
-                        <div>
-                          <Label>Knowledge Source</Label>
-                          <RadioGroup
-                            className="flex flex-col gap-y-4 mt-2"
-                            value={values.knowledge_source}
-                            onValueChange={(value: string) => {
-                              setFieldValue("knowledge_source", value);
-                            }}
-                          >
-                            <RadioGroupItemField
-                              value="user_files"
-                              id="user_files"
-                              label="User Files"
-                              sublabel="Select specific user files and folders for this Assistant to use"
-                            />
-                            <RadioGroupItemField
-                              value="team_knowledge"
-                              id="team_knowledge"
-                              label="Team Knowledge"
-                              sublabel="Use team-wide document sets for this Assistant"
-                            />
-                          </RadioGroup>
+                  {searchTool && values.enabled_tools_map[searchTool.id] && (
+                    <CollapsibleSection>
+                      <div>
+                        {canShowKnowledgeSource && (
+                          <>
+                            <Label>Knowledge Source</Label>
+                            <RadioGroup
+                              className="flex flex-col gap-y-4 mt-2"
+                              value={values.knowledge_source}
+                              onValueChange={(value: string) => {
+                                setFieldValue("knowledge_source", value);
+                              }}
+                            >
+                              <RadioGroupItemField
+                                value="user_files"
+                                id="user_files"
+                                label="User Files"
+                                sublabel="Select specific user files and folders for this Assistant to use"
+                              />
+                              <RadioGroupItemField
+                                value="team_knowledge"
+                                id="team_knowledge"
+                                label="Team Knowledge"
+                                sublabel="Use team-wide document sets for this Assistant"
+                              />
+                            </RadioGroup>
+                          </>
+                        )}
 
-                          {values.knowledge_source === "user_files" &&
-                            !existingPersona?.is_default_persona &&
-                            !admin && (
-                              <div className="mt-4">
-                                <div className="flex justify-start gap-x-2 items-center">
-                                  <Label>User Files</Label>
-                                  <span
-                                    className="cursor-pointer text-xs text-primary hover:underline"
-                                    onClick={() => setFilePickerModalOpen(true)}
-                                  >
-                                    Attach Files and Folders
-                                  </span>
-                                </div>
+                        {values.knowledge_source === "user_files" &&
+                          !existingPersona?.is_default_persona &&
+                          !admin && (
+                            <div className="mt-4">
+                              <div className="flex justify-start gap-x-2 items-center">
+                                <Label>User Files</Label>
+                                <span
+                                  className="cursor-pointer text-xs text-primary hover:underline"
+                                  onClick={() => setFilePickerModalOpen(true)}
+                                >
+                                  Attach Files and Folders
+                                </span>
+                              </div>
 
-                                <SubLabel>
-                                  Select which of your user files and folders
-                                  this Assistant should use to inform its
-                                  responses. If none are specified, the
-                                  Assistant will not have access to any
-                                  user-specific documents.
-                                </SubLabel>
+                              <SubLabel>
+                                Select which of your user files and folders this
+                                Assistant should use to inform its responses. If
+                                none are specified, the Assistant will not have
+                                access to any user-specific documents.
+                              </SubLabel>
 
-                                <div className="mt-2 mb-4">
-                                  <h4 className="text-xs font-normal mb-2">
-                                    Selected Files and Folders
-                                  </h4>
-                                  <div className="flex flex-wrap gap-2">
-                                    {selectedFiles.map((file: FileResponse) => (
-                                      <SourceChip
-                                        key={file.id}
-                                        onRemove={() => {
-                                          removeSelectedFile(file);
-                                          setFieldValue(
-                                            "selectedFiles",
-                                            values.selectedFiles.filter(
-                                              (f: FileResponse) =>
-                                                f.id !== file.id
-                                            )
-                                          );
-                                        }}
-                                        title={file.name}
-                                        icon={<FileIcon size={12} />}
-                                      />
-                                    ))}
-                                    {selectedFolders.map(
-                                      (folder: FolderResponse) => (
-                                        <SourceChip
-                                          key={folder.id}
-                                          onRemove={() => {
-                                            removeSelectedFolder(folder);
-                                            setFieldValue(
-                                              "selectedFolders",
-                                              values.selectedFolders.filter(
-                                                (f: FolderResponse) =>
-                                                  f.id !== folder.id
-                                              )
-                                            );
-                                          }}
-                                          title={folder.name}
-                                          icon={<FolderIcon size={12} />}
-                                        />
-                                      )
-                                    )}
+                              {selectedFiles.length > 0 ||
+                                (selectedFolders.length > 0 && (
+                                  <div className="mt-2 mb-4">
+                                    <h4 className="text-xs font-normal mb-2">
+                                      Selected Files and Folders
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedFiles.map(
+                                        (file: FileResponse) => (
+                                          <SourceChip
+                                            key={file.id}
+                                            onRemove={() => {
+                                              removeSelectedFile(file);
+                                              setFieldValue(
+                                                "selectedFiles",
+                                                values.selectedFiles.filter(
+                                                  (f: FileResponse) =>
+                                                    f.id !== file.id
+                                                )
+                                              );
+                                            }}
+                                            title={file.name}
+                                            icon={<FileIcon size={12} />}
+                                          />
+                                        )
+                                      )}
+                                      {selectedFolders.map(
+                                        (folder: FolderResponse) => (
+                                          <SourceChip
+                                            key={folder.id}
+                                            onRemove={() => {
+                                              removeSelectedFolder(folder);
+                                              setFieldValue(
+                                                "selectedFolders",
+                                                values.selectedFolders.filter(
+                                                  (f: FolderResponse) =>
+                                                    f.id !== folder.id
+                                                )
+                                              );
+                                            }}
+                                            title={folder.name}
+                                            icon={<FolderIcon size={12} />}
+                                          />
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
+                                ))}
+                            </div>
+                          )}
+
+                        {values.knowledge_source === "team_knowledge" &&
+                          ccPairs.length > 0 && (
+                            <div className="mt-4">
+                              <Label>Team Knowledge</Label>
+                              <div>
+                                <SubLabel>
+                                  <>
+                                    Select which{" "}
+                                    {!user || user.role === "admin" ? (
+                                      <Link
+                                        href="/admin/documents/sets"
+                                        className="font-semibold underline hover:underline text-text"
+                                        target="_blank"
+                                      >
+                                        Team Document Sets
+                                      </Link>
+                                    ) : (
+                                      "Team Document Sets"
+                                    )}{" "}
+                                    this Assistant should use to inform its
+                                    responses. If none are specified, the
+                                    Assistant will reference all available
+                                    documents.
+                                  </>
+                                </SubLabel>
                               </div>
-                            )}
 
-                          {values.knowledge_source === "team_knowledge" &&
-                            ccPairs.length > 0 && (
-                              <div className="mt-4">
-                                <Label>Team Knowledge</Label>
-                                <div>
-                                  <SubLabel>
-                                    <>
-                                      Select which{" "}
-                                      {!user || user.role === "admin" ? (
-                                        <Link
-                                          href="/admin/documents/sets"
-                                          className="font-semibold underline hover:underline text-text"
-                                          target="_blank"
-                                        >
-                                          Team Document Sets
-                                        </Link>
-                                      ) : (
-                                        "Team Document Sets"
-                                      )}{" "}
-                                      this Assistant should use to inform its
-                                      responses. If none are specified, the
-                                      Assistant will reference all available
-                                      documents.
-                                    </>
-                                  </SubLabel>
-                                </div>
-
-                                {documentSets.length > 0 ? (
-                                  <FieldArray
-                                    name="document_set_ids"
-                                    render={(arrayHelpers: ArrayHelpers) => (
-                                      <div>
-                                        <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                                          {documentSets.map((documentSet) => (
-                                            <DocumentSetSelectable
-                                              key={documentSet.id}
-                                              documentSet={documentSet}
-                                              isSelected={values.document_set_ids.includes(
-                                                documentSet.id
-                                              )}
-                                              onSelect={() => {
-                                                const index =
-                                                  values.document_set_ids.indexOf(
-                                                    documentSet.id
-                                                  );
-                                                if (index !== -1) {
-                                                  arrayHelpers.remove(index);
-                                                } else {
-                                                  arrayHelpers.push(
-                                                    documentSet.id
-                                                  );
-                                                }
-                                              }}
-                                            />
-                                          ))}
-                                        </div>
+                              {documentSets.length > 0 ? (
+                                <FieldArray
+                                  name="document_set_ids"
+                                  render={(arrayHelpers: ArrayHelpers) => (
+                                    <div>
+                                      <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                        {documentSets.map((documentSet) => (
+                                          <DocumentSetSelectable
+                                            key={documentSet.id}
+                                            documentSet={documentSet}
+                                            isSelected={values.document_set_ids.includes(
+                                              documentSet.id
+                                            )}
+                                            onSelect={() => {
+                                              const index =
+                                                values.document_set_ids.indexOf(
+                                                  documentSet.id
+                                                );
+                                              if (index !== -1) {
+                                                arrayHelpers.remove(index);
+                                              } else {
+                                                arrayHelpers.push(
+                                                  documentSet.id
+                                                );
+                                              }
+                                            }}
+                                          />
+                                        ))}
                                       </div>
-                                    )}
-                                  />
-                                ) : (
-                                  <p className="text-sm">
-                                    <Link
-                                      href="/admin/documents/sets/new"
-                                      className="text-primary hover:underline"
-                                    >
-                                      + Create Document Set
-                                    </Link>
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                        </div>
-                      </CollapsibleSection>
-                    )}
+                                    </div>
+                                  )}
+                                />
+                              ) : (
+                                <p className="text-sm">
+                                  <Link
+                                    href="/admin/documents/sets/new"
+                                    className="text-primary hover:underline"
+                                  >
+                                    + Create Document Set
+                                  </Link>
+                                </p>
+                              )}
+                            </div>
+                          )}
+                      </div>
+                    </CollapsibleSection>
+                  )}
 
                   <Separator />
                   <div className="py-2">

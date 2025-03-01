@@ -29,9 +29,9 @@ export function AddWebsitePanel({
   };
 
   return (
-    <div className="p-4 border-b border-neutral-200 dark:border-neutral-700">
+    <div className="p-4 border-b border-neutral-300 dark:border-neutral-600">
       <div
-        className="flex items-center justify-between w-full cursor-pointer text-[#13343a] dark:text-neutral-300"
+        className="flex items-center justify-between w-full cursor-pointer text-neutral-900 dark:text-neutral-300"
         onClick={() => setIsOpen(!isOpen)}
       >
         <div className="flex items-center">

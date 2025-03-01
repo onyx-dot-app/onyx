@@ -24,9 +24,9 @@ export function SharingPanel({
 }: SharingPanelProps) {
   const count = assistantIds.length;
   return (
-    <div className="p-4 border-b border-[#d9d9d0]">
+    <div className="p-4 border-b border-neutral-300 dark:border-neutral-600">
       <div
-        className="text-[#13343a] dark:text-neutral-300 flex items-center justify-between"
+        className="text-neutral-900 dark:text-neutral-300 flex items-center justify-between"
         onClick={onToggle}
       >
         <div className="flex items-center">

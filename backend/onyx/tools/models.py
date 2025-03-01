@@ -66,6 +66,7 @@ class SearchToolOverrideKwargs(BaseModel):
     retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None
     skip_query_analysis: bool
     user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
     class Config:
         arbitrary_types_allowed = True
