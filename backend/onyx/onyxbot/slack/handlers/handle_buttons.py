@@ -103,7 +103,7 @@ def handle_doc_feedback_button(
     external_id = build_feedback_id(query_event_id, doc_id, doc_rank)
 
     channel_id = req.payload["container"]["channel_id"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
 
     data = View(
         type="modal",
@@ -129,7 +129,7 @@ def handle_generate_answer_button(
     channel_id = req.payload["channel"]["id"]
     channel_name = req.payload["channel"]["name"]
     message_ts = req.payload["message"]["ts"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
     user_id = req.payload["user"]["id"]
     expert_info = expert_info_from_slack_id(user_id, client.web_client, user_cache={})
     email = expert_info.email if expert_info else None
@@ -374,13 +374,20 @@ def handle_slack_feedback(
 ) -> None:
     message_id, doc_id, doc_rank = decompose_action_id(feedback_id)
 
+    # Get Onyx user from Slack ID
+    expert_info = expert_info_from_slack_id(
+        user_id_to_post_confirmation, client, user_cache={}
+    )
+    email = expert_info.email if expert_info else None
+
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        onyx_user = get_user_by_email(email, db_session) if email else None
         if feedback_type in [LIKE_BLOCK_ACTION_ID, DISLIKE_BLOCK_ACTION_ID]:
             create_chat_message_feedback(
                 is_positive=feedback_type == LIKE_BLOCK_ACTION_ID,
                 feedback_text="",
                 chat_message_id=message_id,
-                user_id=None,  # no "user" for Slack bot for now
+                user_id=onyx_user.id if onyx_user else None,
                 db_session=db_session,
             )
             remove_scheduled_feedback_reminder(
@@ -453,7 +460,7 @@ def handle_followup_button(
         action_id = cast(str, action.get("block_id"))
 
     channel_id = req.payload["container"]["channel_id"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
 
     update_emote_react(
         emoji=DANSWER_FOLLOWUP_EMOJI,
@@ -536,7 +543,7 @@ def handle_followup_resolved_button(
 ) -> None:
     channel_id = req.payload["container"]["channel_id"]
     message_ts = req.payload["container"]["message_ts"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
 
     clicker_name = get_clicker_name(req, client)
 

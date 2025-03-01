@@ -113,21 +113,12 @@ def _build_qa_feedback_block(
 
 def _build_ephemeral_publication_block(
     channel_id: str,
-    original_question_ts: str | None = None,
-    chat_message_id: int | None = None,
-    message_info: SlackMessageInfo | None = None,
-    channel_conf: ChannelConfig | None = None,
+    chat_message_id: int,
+    message_info: SlackMessageInfo,
+    original_question_ts: str,
+    channel_conf: ChannelConfig,
     feedback_reminder_id: str | None = None,
 ) -> Block:
-    if not chat_message_id:
-        raise ValueError("Chat message id is required to change the ephemeral message")
-
-    if message_info is None:
-        raise ValueError("Message info is required to change the ephemeral message")
-
-    if channel_conf is None:
-        raise ValueError("Channel config is required to change the ephemeral message")
-
     # check whether the message is in a thread
     if (
         message_info is not None
@@ -616,19 +607,28 @@ def build_slack_response_blocks(
         )
 
     follow_up_block = []
-    if channel_conf and channel_conf.get("follow_up_tags") is not None:
+    if (
+        channel_conf
+        and channel_conf.get("follow_up_tags") is not None
+        and not channel_conf.get("is_ephemeral", False)
+    ):
         follow_up_block.append(
             _build_follow_up_block(message_id=answer.chat_message_id)
         )
 
     publish_ephemeral_message_block = []
 
-    if offer_ephemeral_publication:
+    if (
+        offer_ephemeral_publication
+        and answer.chat_message_id is not None
+        and message_info.msg_to_respond is not None
+        and channel_conf is not None
+    ):
         publish_ephemeral_message_block.append(
             _build_ephemeral_publication_block(
                 channel_id=message_info.channel_to_respond,
-                original_question_ts=message_info.msg_to_respond,
                 chat_message_id=answer.chat_message_id,
+                original_question_ts=message_info.msg_to_respond,
                 message_info=message_info,
                 channel_conf=channel_conf,
                 feedback_reminder_id=feedback_reminder_id,

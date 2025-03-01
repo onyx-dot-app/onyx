@@ -299,10 +299,8 @@ def build_feedback_id(
 
 
 def build_publish_ephemeral_message_id(
-    original_question_ts: str | None = None,
+    original_question_ts: str,
 ) -> str:
-    if original_question_ts is None:
-        raise ValueError("Original question timestamp is required")
     return "publish_ephemeral_message__" + original_question_ts
 
 

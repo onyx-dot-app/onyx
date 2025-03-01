@@ -73,10 +73,6 @@ def make_slack_api_rate_limited(
     def rate_limited_call(**kwargs: Any) -> SlackResponse:
         last_exception = None
 
-        if "thread_ts" in kwargs:
-            if kwargs["thread_ts"] is None:
-                kwargs.pop("thread_ts", None)
-
         for _ in range(max_retries):
             try:
                 # Make the API call

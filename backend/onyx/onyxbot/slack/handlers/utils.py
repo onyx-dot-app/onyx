@@ -43,6 +43,6 @@ def send_team_member_message(
             + "information to the team. They'll get back to you shortly!"
         ),
         thread_ts=thread_ts,
-        receiver_ids=receiver_ids,
+        receiver_ids=None,
         send_as_ephemeral=send_as_ephemeral,
     )

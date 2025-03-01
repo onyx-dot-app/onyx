@@ -579,8 +579,10 @@ export function SlackChannelConfigFormFields({
               />
               <CheckFormField
                 name="is_ephemeral"
-                label="Respond to user as ephemeral message"
-                tooltip="If set, OnyxBot will respond only to the user as an ephemeral message"
+                label="Respond to user in a private (ephemeral) message"
+                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also 
+                chose 'Search' Assistant above, selecting this option will make documents that are private to the user 
+                available for their queries."
               />
 
               <TextArrayField
