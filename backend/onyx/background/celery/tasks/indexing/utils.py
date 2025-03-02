@@ -370,9 +370,9 @@ def _should_index(
     """
     connector = cc_pair.connector
 
-    # When switching over models, always index at least once if requires_reindex is True
+    # When switching over models, always index at least once if background_reindex_enabled is True
     if search_settings_instance.status == IndexModelStatus.FUTURE:
-        if not search_settings_instance.requires_reindex:
+        if not search_settings_instance.background_reindex_enabled:
             return False
 
         if last_index:

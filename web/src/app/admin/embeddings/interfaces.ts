@@ -33,7 +33,7 @@ export interface SavedSearchSettings
   extends RerankingDetails,
     AdvancedSearchConfiguration {
   provider_type: EmbeddingProvider | null;
-  requires_reindex: boolean;
+  background_reindex_enabled: boolean;
 }
 
 export interface RerankingModel {

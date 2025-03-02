@@ -716,8 +716,9 @@ class SearchSettings(Base):
         ForeignKey("embedding_provider.provider_type"), nullable=True
     )
 
-    # Whether switching to this model requires re-indexing
-    requires_reindex: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Whether switching to this model should re-index all connectors in the background
+    # if no re-index is needed, will be ignored
+    background_reindex_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # Mini and Large Chunks (large chunk also checks for model max context)
     multipass_indexing: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -6,7 +6,12 @@ import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, WarningCircle } from "@phosphor-icons/react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  WarningCircle,
+  CaretDown,
+} from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
   EmbeddingProvider,
@@ -29,6 +34,23 @@ import { Modal } from "@/components/Modal";
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { combineSearchSettings } from "./utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+enum ReindexType {
+  REINDEX = "reindex",
+  INSTANT = "instant",
+}
 
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
@@ -51,6 +73,17 @@ export default function EmbeddingForm() {
     rerank_model_name: "",
     rerank_api_url: null,
   });
+
+  const [reindexType, setReindexType] = useState<ReindexType>(
+    ReindexType.REINDEX
+  );
+
+  const handleReindex = async () => {
+    const update = await updateSearch();
+    if (update) {
+      navigateToEmbeddingPage("search settings");
+    }
+  };
 
   const updateAdvancedEmbeddingDetails = (
     key: keyof AdvancedSearchConfiguration,
@@ -146,13 +179,6 @@ export default function EmbeddingForm() {
     }
   }, [currentEmbeddingModel]);
 
-  const handleReindex = async () => {
-    const update = await updateSearch();
-    if (update) {
-      await onConfirm();
-    }
-  };
-
   const needsReIndex =
     currentEmbeddingModel != selectedProvider ||
     searchSettings?.multipass_indexing !=
@@ -166,14 +192,18 @@ export default function EmbeddingForm() {
       selectedProvider,
       advancedEmbeddingDetails,
       rerankingDetails,
-      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null
+      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
+      reindexType === ReindexType.REINDEX
     );
 
     const response = await updateSearchSettings(searchSettings);
     if (response.ok) {
       return true;
     } else {
-      setPopup({ message: "Failed to update search settings", type: "error" });
+      setPopup({
+        message: "Failed to update search settings",
+        type: "error",
+      });
       return false;
     }
   }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
@@ -186,12 +216,103 @@ export default function EmbeddingForm() {
     }) => {
       return needsReIndex ? (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
-          <button
-            className="enabled:cursor-pointer disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-            onClick={handleReindex}
-          >
-            Re-index
-          </button>
+          <div className="flex items-center">
+            <button
+              onClick={handleReindex}
+              className="
+                enabled:cursor-pointer 
+                disabled:bg-accent/50 
+                disabled:cursor-not-allowed 
+                bg-agent 
+                flex 
+                items-center 
+                justify-center
+                text-white 
+                text-sm 
+                font-regular 
+                rounded-l-sm
+                py-2.5 
+                px-3.5
+                transition-colors
+                hover:bg-white/10
+                text-center
+                w-32"
+            >
+              {reindexType == ReindexType.REINDEX
+                ? "Re-index"
+                : "Instant Switch"}
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  className="
+                    enabled:cursor-pointer 
+                    disabled:bg-accent/50 
+                    disabled:cursor-not-allowed 
+                    bg-agent 
+                    flex 
+                    items-center 
+                    justify-center
+                    text-white 
+                    text-sm 
+                    font-regular 
+                    rounded-r-sm
+                    border-l
+                    border-white/20
+                    py-2.5 
+                    px-2
+                    h-[40px]
+                    w-[34px]
+                    transition-colors
+                    hover:bg-white/10"
+                >
+                  <CaretDown className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setReindexType(ReindexType.REINDEX);
+                  }}
+                >
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="w-full text-left">
+                        (Recommended) Re-index
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Re-runs all connectors in the background before
+                          switching over. Takes longer but ensures no
+                          degredation of search during the switch.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setReindexType(ReindexType.INSTANT);
+                  }}
+                >
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="w-full text-left">
+                        Instant Switch
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Immediately switches to new settings without
+                          re-indexing. Searches will be degraded until the
+                          re-indexing is complete.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
           <div className="relative group">
             <WarningCircle
               className="text-text-800 cursor-help"
@@ -226,7 +347,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, updateSearch]);
+  }, [needsReIndex, handleReindex, reindexType, updateSearch]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -260,7 +381,8 @@ export default function EmbeddingForm() {
         rerankingDetails,
         selectedProvider.provider_type
           ?.toLowerCase()
-          .split(" ")[0] as EmbeddingProvider | null
+          .split(" ")[0] as EmbeddingProvider | null,
+        true
       );
     } else {
       // This is a locally hosted model
@@ -268,7 +390,8 @@ export default function EmbeddingForm() {
         selectedProvider,
         advancedEmbeddingDetails,
         rerankingDetails,
-        null
+        null,
+        true
       );
     }
 
