@@ -23,16 +23,15 @@ import AssistantModal from "./mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
 
 interface SidebarWrapperProps<T extends object> {
-  initiallyToggled: boolean;
   size?: "sm" | "lg";
   children: ReactNode;
 }
 
 export default function SidebarWrapper<T extends object>({
-  initiallyToggled,
   size = "sm",
   children,
 }: SidebarWrapperProps<T>) {
+  const { sidebarInitiallyVisible: initiallyToggled } = useChatContext();
   const [sidebarVisible, setSidebarVisible] = useState(initiallyToggled);
   const [showDocSidebar, setShowDocSidebar] = useState(false); // State to track if sidebar is open
   // Used to maintain a "time out" for history sidebar so our existing refs can have time to process change
@@ -135,13 +134,7 @@ export default function SidebarWrapper<T extends object>({
                       ${sidebarVisible ? "w-[250px]" : "w-[0px]"}`}
           />
 
-          <div
-            className={`mt-4 w-full ${
-              size == "lg" ? "max-w-4xl" : "max-w-3xl"
-            } mx-auto`}
-          >
-            {children}
-          </div>
+          <div className={`mt-4 w-full mx-auto`}>{children}</div>
         </div>
       </div>
       <FixedLogo backgroundToggled={sidebarVisible || showDocSidebar} />

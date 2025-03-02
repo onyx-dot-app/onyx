@@ -138,6 +138,7 @@ def construct_tools(
     user: User | None,
     llm: LLM,
     fast_llm: LLM,
+    use_file_search: bool,
     search_tool_config: SearchToolConfig | None = None,
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
@@ -250,6 +251,33 @@ def construct_tools(
     tools: list[Tool] = []
     for tool_list in tool_dict.values():
         tools.extend(tool_list)
+
+    if use_file_search:
+        search_tool_config = SearchToolConfig()
+
+        search_tool = SearchTool(
+            db_session=db_session,
+            user=user,
+            persona=persona,
+            retrieval_options=search_tool_config.retrieval_options,
+            prompt_config=prompt_config,
+            llm=llm,
+            fast_llm=fast_llm,
+            pruning_config=search_tool_config.document_pruning_config,
+            answer_style_config=search_tool_config.answer_style_config,
+            selected_sections=search_tool_config.selected_sections,
+            chunks_above=search_tool_config.chunks_above,
+            chunks_below=search_tool_config.chunks_below,
+            full_doc=search_tool_config.full_doc,
+            evaluation_type=(
+                LLMEvaluationType.BASIC
+                if persona.llm_relevance_filter
+                else LLMEvaluationType.SKIP
+            ),
+            rerank_settings=search_tool_config.rerank_settings,
+            bypass_acl=search_tool_config.bypass_acl,
+        )
+        tool_dict[1] = [search_tool]
 
     # factor in tool definition size when pruning
     if search_tool_config:

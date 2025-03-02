@@ -102,10 +102,14 @@ class Answer:
         ):
             search_request.query = force_use_tool.args[QUERY_FIELD]
 
+        print("latest query files", len(latest_query_files or []))
+        # for file in latest_query_files:
+        #     print(file.filename)
         self.graph_inputs = GraphInputs(
             search_request=search_request,
             prompt_builder=prompt_builder,
             files=latest_query_files,
+            # user_files=latest_user_files,
             structured_response_format=answer_style_config.structured_response_format,
         )
         self.graph_tooling = GraphTooling(

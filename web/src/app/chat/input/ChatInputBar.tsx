@@ -27,7 +27,7 @@ import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
 import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
-import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
+import { CalendarIcon, TagIcon, XIcon, FolderIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
 import { DocumentSet, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
@@ -35,6 +35,7 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
+import { useDocumentsContext } from "../my-documents/DocumentsContext";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
@@ -172,6 +173,7 @@ export const SourceChip = ({
 );
 
 interface ChatInputBarProps {
+  toggleDocSelection: () => void;
   removeDocs: () => void;
   showConfigureAPIKey: () => void;
   selectedDocuments: OnyxDocument[];
@@ -186,7 +188,6 @@ interface ChatInputBarProps {
   selectedAssistant: Persona;
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
   toggleDocumentSidebar: () => void;
-  files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
@@ -200,6 +201,7 @@ interface ChatInputBarProps {
 }
 
 export function ChatInputBar({
+  toggleDocSelection,
   retrievalEnabled,
   removeDocs,
   toggleDocumentSidebar,
@@ -216,7 +218,6 @@ export function ChatInputBar({
   selectedAssistant,
   setAlternativeAssistant,
 
-  files,
   setFiles,
   handleFileUpload,
   textAreaRef,
@@ -229,6 +230,15 @@ export function ChatInputBar({
   setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
+  const {
+    selectedFiles,
+    selectedFolders,
+    removeSelectedFile,
+    removeSelectedFolder,
+    currentMessageFiles,
+    setCurrentMessageFiles,
+  } = useDocumentsContext();
+
   const settings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -627,7 +637,9 @@ export function ChatInputBar({
             />
 
             {(selectedDocuments.length > 0 ||
-              files.length > 0 ||
+              selectedFiles.length > 0 ||
+              selectedFolders.length > 0 ||
+              currentMessageFiles.length > 0 ||
               filterManager.timeRange ||
               filterManager.selectedDocumentSets.length > 0 ||
               filterManager.selectedTags.length > 0 ||
@@ -650,6 +662,22 @@ export function ChatInputBar({
                       />
                     ))}
 
+                  {selectedFiles.map((file) => (
+                    <SourceChip
+                      key={file.id}
+                      icon={<FileIcon size={16} />}
+                      title={file.name}
+                      onRemove={() => removeSelectedFile(file)}
+                    />
+                  ))}
+                  {selectedFolders.map((folder) => (
+                    <SourceChip
+                      key={folder.id}
+                      icon={<FolderIcon size={16} />}
+                      title={folder.name}
+                      onRemove={() => removeSelectedFolder(folder)}
+                    />
+                  ))}
                   {filterManager.timeRange && (
                     <SourceChip
                       truncateTitle={false}
@@ -679,7 +707,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-
                   {filterManager.selectedSources.length > 0 &&
                     filterManager.selectedSources.map((source, index) => (
                       <SourceChip
@@ -700,7 +727,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-
                   {selectedDocuments.length > 0 && (
                     <SourceChip
                       key="selected-documents"
@@ -712,8 +738,7 @@ export function ChatInputBar({
                       onRemove={removeDocs}
                     />
                   )}
-
-                  {files.map((file, index) =>
+                  {currentMessageFiles.map((file, index) =>
                     file.type === ChatFileType.IMAGE ? (
                       <SourceChip
                         key={`file-${index}`}
@@ -729,8 +754,8 @@ export function ChatInputBar({
                         }
                         title={file.name || "File" + file.id}
                         onRemove={() => {
-                          setFiles(
-                            files.filter(
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
                               (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );
@@ -742,8 +767,8 @@ export function ChatInputBar({
                         icon={<FileIcon className="text-red-500" size={16} />}
                         title={file.name || "File"}
                         onRemove={() => {
-                          setFiles(
-                            files.filter(
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
                               (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );
@@ -757,26 +782,38 @@ export function ChatInputBar({
 
             <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
               <div className="space-x-1 flex  px-4 ">
-                <ChatInputOption
-                  flexPriority="stiff"
-                  name="File"
-                  Icon={FiPlusCircle}
-                  onClick={() => {
-                    const input = document.createElement("input");
-                    input.type = "file";
-                    input.multiple = true;
-                    input.onchange = (event: any) => {
-                      const files = Array.from(
-                        event?.target?.files || []
-                      ) as File[];
-                      if (files.length > 0) {
-                        handleFileUpload(files);
-                      }
-                    };
-                    input.click();
-                  }}
-                  tooltipContent={"Upload files"}
-                />
+                {retrievalEnabled ? (
+                  <ChatInputOption
+                    flexPriority="stiff"
+                    name="File"
+                    Icon={FiPlusCircle}
+                    onClick={() => {
+                      const input = document.createElement("input");
+                      input.type = "file";
+                      input.multiple = true;
+                      input.onchange = (event: any) => {
+                        const files = Array.from(
+                          event?.target?.files || []
+                        ) as File[];
+                        if (files.length > 0) {
+                          handleFileUpload(files);
+                        }
+                      };
+                      input.click();
+                    }}
+                    tooltipContent={"Upload files"}
+                  />
+                ) : (
+                  <ChatInputOption
+                    flexPriority="stiff"
+                    name="File"
+                    Icon={FiPlusCircle}
+                    onClick={() => {
+                      toggleDocSelection();
+                    }}
+                    tooltipContent={"Upload files and attach user files"}
+                  />
+                )}
 
                 <LLMPopover
                   llmProviders={llmProviders}

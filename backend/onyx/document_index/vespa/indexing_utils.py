@@ -47,6 +47,8 @@ from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
+from onyx.document_index.vespa_constants import USER_FILE
+from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 
@@ -198,6 +200,8 @@ def _index_vespa_chunk(
         # which only calls VespaIndex.update
         ACCESS_CONTROL_LIST: {acl_entry: 1 for acl_entry in chunk.access.to_acl()},
         DOCUMENT_SETS: {document_set: 1 for document_set in chunk.document_sets},
+        USER_FILE: chunk.user_file if chunk.user_file is not None else None,
+        USER_FOLDER: chunk.user_folder if chunk.user_folder is not None else None,
         BOOST: chunk.boost,
     }
 
