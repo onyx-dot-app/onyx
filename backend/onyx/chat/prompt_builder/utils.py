@@ -20,7 +20,6 @@ def translate_onyx_msg_to_langchain(
     if not isinstance(msg, ChatMessage):
         files = msg.files
 
-    print("files", len(files))
     content = build_content_with_imgs(
         msg.message, files, message_type=msg.message_type, exclude_images=exclude_images
     )
