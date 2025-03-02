@@ -91,13 +91,11 @@ def create_user_file_with_indexing(
         user_file.cc_pair_id = cc_pair.data
 
     db_session.commit()
-    print("SHOULD I TRIGGER INDEXING?", trigger_index)
 
     # Trigger immediate high-priority indexing for all created files
     if trigger_index:
         tenant_id = get_current_tenant_id()
         for user_file in user_files:
-            print("TRIGGERING INDEXING FOR USER FILE", user_file.file_id)
             # Use the existing trigger_indexing_for_cc_pair function but with high priority
             if user_file.cc_pair_id:
                 trigger_indexing_for_cc_pair(
