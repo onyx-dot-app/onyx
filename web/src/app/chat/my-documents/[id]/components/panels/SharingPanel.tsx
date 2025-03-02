@@ -26,20 +26,20 @@ export function SharingPanel({
   return (
     <div className="p-4 border-b border-neutral-300 dark:border-neutral-600">
       <div
-        className="text-neutral-900 dark:text-neutral-300 flex items-center justify-between"
+        className="flex items-center justify-between text-neutral-900 dark:text-neutral-300 cursor-pointer hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md p-1"
         onClick={onToggle}
       >
         <div className="flex items-center">
           {count > 0 ? (
             <>
-              <Users className="w-5 h-4 mr-3 " />
+              <Users className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
               <span className="text-sm font-medium leading-tight">
                 Shared with {count} Assistant{count > 1 ? "s" : ""}
               </span>
             </>
           ) : (
             <>
-              <User className="w-5 h-4 mr-3 " />
+              <User className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
               <span className="text-sm font-medium leading-tight">
                 Not shared
               </span>
@@ -48,14 +48,14 @@ export function SharingPanel({
         </div>
         <Button variant="ghost" size="sm" className="w-6 h-6 p-0 rounded-full">
           {isOpen ? (
-            <ChevronDown className="w-[15px] h-3 " />
+            <ChevronDown className="w-[15px] h-3" />
           ) : (
-            <ChevronRight className="w-[15px] h-3 " />
+            <ChevronRight className="w-[15px] h-3" />
           )}
         </Button>
       </div>
       {isOpen && (
-        <div className="mt-2 text-[#64645e] dark:tex-neutral-300 text-sm font-normal leading-tight">
+        <div className="mt-3 mb-3 text-neutral-600 dark:text-neutral-400 text-sm">
           {count > 0 ? (
             <div className="flex flex-wrap gap-2 mt-1">
               {assistantIds.map((id) => {

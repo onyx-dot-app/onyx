@@ -90,7 +90,6 @@ export async function updateFolderDetails(
   name: string,
   description: string
 ): Promise<void> {
-  alert(JSON.stringify({ folderId, name, description }));
   const response = await fetch(`/api/user/folder/${folderId}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -124,12 +123,23 @@ export async function renameItem(
   newName: string,
   isFolder: boolean
 ): Promise<void> {
-  const endpoint = isFolder
-    ? `/api/user/folder/${itemId}?name=${encodeURIComponent(newName)}`
-    : `/api/user/file/${itemId}/rename?name=${encodeURIComponent(newName)}`;
-  const response = await fetch(endpoint, { method: "PUT" });
-  if (!response.ok) {
-    throw new Error(`Failed to rename ${isFolder ? "folder" : "file"}`);
+  if (isFolder) {
+    const response = await fetch(`/api/user/folder/${itemId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newName }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to rename folder");
+    }
+  } else {
+    const endpoint = `/api/user/file/${itemId}/rename?name=${encodeURIComponent(
+      newName
+    )}`;
+    const response = await fetch(endpoint, { method: "PUT" });
+    if (!response.ok) {
+      throw new Error("Failed to rename file");
+    }
   }
 }
 

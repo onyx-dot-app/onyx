@@ -207,7 +207,10 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               <div className="max-h-60 default-scrollbar overflow-y-auto pr-2">
                 <div className="space-y-1">
                   {folders
-                    .filter((folder) => folder.id !== -1)
+                    .filter(
+                      (folder) =>
+                        folder.id !== -1 && folder.id !== file.folder_id
+                    )
                     .map((folder) => (
                       <Button
                         key={folder.id}
@@ -218,6 +221,13 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                         {folder.name}
                       </Button>
                     ))}
+                  {folders.filter(
+                    (folder) => folder.id !== -1 && folder.id !== file.folder_id
+                  ).length === 0 && (
+                    <div className="text-sm text-gray-500 px-2 text-center">
+                      No folders available to move this file to.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

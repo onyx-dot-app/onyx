@@ -52,8 +52,9 @@ export function ContextLimitPanel({
       {isOpen && (
         <div className="mt-3 mb-3 text-neutral-600 dark:text-neutral-400 text-sm">
           <p className="mb-2">
-            This panel shows how much of each model&apos;s context window is
-            used by the documents in this group.
+            Shows how much of each model&apos;s context window is used by these
+            documents. When exceeded, the model will search over content rather
+            than including all content in each prompt.
           </p>
           <p className="font-medium">
             Total tokens in this group:{" "}
