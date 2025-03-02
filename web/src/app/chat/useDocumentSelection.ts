@@ -36,7 +36,6 @@ export function useDocumentSelection(): [
   };
 
   const addSelectedFile = (file: FileResponse) => {
-    console.log("ADDING FILESSSSSS\n\n\n\n\n\n");
     // Check if file already exists in the array to avoid duplicates
     setSelectedFiles((files) => {
       // Check if file already exists in the array to avoid duplicates

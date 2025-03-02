@@ -1900,7 +1900,7 @@ export function ChatPage({
         message: error,
       });
     }
-    console.log([...uploadedFiles]);
+
     setCurrentMessageFiles((prev) => [...prev, ...uploadedFiles]);
 
     updateChatState("input", currentSessionId());

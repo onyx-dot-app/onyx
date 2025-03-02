@@ -271,35 +271,23 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   }, [searchQuery]);
 
-  const handleSave = () => {
-    // onSave(selectedItems);
-    onClose();
-  };
-
   const handleFolderClick = (folderId: number) => {
-    console.log(`Folder clicked: ${folderId}`);
     setCurrentFolder(folderId);
     const clickedFolder = folders.find((f) => f.id === folderId);
     if (clickedFolder) {
-      console.log(`Found folder: ${clickedFolder.name}`);
       setCurrentFolderFiles(clickedFolder.files || []);
     } else {
-      console.log(`Folder not found for id: ${folderId}`);
       setCurrentFolderFiles([]);
     }
   };
 
   const handleFileSelect = (file: FileResponse) => {
-    console.log(`File select triggered for file: ${file.id} - ${file.name}`);
-
     setSelectedFileIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(file.id)) {
-        console.log(`Removing file ${file.id} from selection`);
         newSet.delete(file.id);
         removeSelectedFile(file);
       } else {
-        console.log(`Adding file ${file.id} to selection`);
         newSet.add(file.id);
         addSelectedFile(file);
       }
@@ -308,28 +296,16 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
     // Check if the file's folder should be unselected
     if (file.folder_id) {
-      console.log(
-        `Checking folder ${file.folder_id} status for file ${file.id}`
-      );
-
       setSelectedFolderIds((prev) => {
         const newSet = new Set(prev);
         if (newSet.has(file.folder_id!)) {
-          console.log(`Folder ${file.folder_id} is currently selected`);
-
           const folder = folders.find((f) => f.id === file.folder_id);
           if (folder) {
             const allFilesSelected = folder.files.every(
               (f) => selectedFileIds.has(f.id) || f.id === file.id
             );
-            console.log(
-              `All files in folder ${folder.id} selected: ${allFilesSelected}`
-            );
 
             if (!allFilesSelected) {
-              console.log(
-                `Unselecting folder ${folder.id} as not all files are selected`
-              );
               newSet.delete(file.folder_id!);
               if (folder) {
                 removeSelectedFolder(folder);
@@ -469,7 +445,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("File upload started");
     const files = e.target.files;
     if (files) {
       setIsUploadingFile(true);
@@ -485,29 +460,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    console.log("Drag started:", event);
     setActiveId(event.active.id.toString());
   };
 
-  const handleDragMove = (event: DragMoveEvent) => {
-    console.log("Drag move:", event);
-  };
+  const handleDragMove = (event: DragMoveEvent) => {};
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    console.log("Drag ended:", { active, over, isHoveringRight });
-
-    if (active.id !== over?.id && isHoveringRight) {
-      const activeType = active.id.toString().startsWith("folder")
-        ? "folders"
-        : "files";
-      const activeId = parseInt(active.id.toString().split("-")[1], 10);
-
-      console.log(`Added ${activeType} with id ${activeId} to selected items`);
-    } else {
-      console.log("Item not added to selection");
-    }
-
     setActiveId(null);
     setIsHoveringRight(false);
   };
@@ -697,8 +656,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const handleRemoveFolder = (folder: FolderResponse) => {
     // Special handling for the recent folder
     if (isRecentFolder(folder.id)) {
-      console.log("Removing recent folder");
-
       // Also remove all files in the recent folder from selection
       folder.files.forEach((file) => {
         if (selectedFileIds.has(file.id)) {
