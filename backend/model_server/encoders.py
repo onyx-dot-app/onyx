@@ -94,16 +94,10 @@ def format_embedding_error(
     """
     Format a standardized error string for embedding errors.
     """
-    if status_code:
-        return (
-            f"HTTP error embedding text with {service_name} - Status {status_code}: "
-            f"Model: {model} "
-            f"Provider: {provider} "
-            f"Exception: {error}"
-        )
+    detail = f"Status {status_code}" if status_code else f"{type(error)}"
 
     return (
-        f"Exception embedding text with {service_name} - {type(error)}: "
+        f"{'HTTP error' if status_code else 'Exception'} embedding text with {service_name} - {detail}: "
         f"Model: {model} "
         f"Provider: {provider} "
         f"Exception: {error}"
