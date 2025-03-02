@@ -195,7 +195,6 @@ export function ChatPage({
   const defaultAssistantId = defaultAssistantIdRaw
     ? parseInt(defaultAssistantIdRaw)
     : undefined;
-  const [forceUserFileSearch, setForceUserFileSearch] = useState(true);
 
   // Function declarations need to be outside of blocks in strict mode
   function useScreenSize() {
@@ -1410,7 +1409,6 @@ export function ChatPage({
           settings?.settings.pro_search_enabled &&
           proSearchEnabled &&
           retrievalEnabled,
-        forceUserFileSearch: forceUserFileSearch,
       });
 
       const delay = (ms: number) => {
@@ -2109,29 +2107,6 @@ export function ChatPage({
             console.error("Failed to fetch token estimate");
             return;
           }
-
-          const data = await response.json();
-          const totalTokens = data.total_tokens;
-
-          // Get the current model's context window size
-          const currentModel = llmManager.currentLlm;
-          // Default to Claude Sonnet's context window (200k tokens) if not specified
-          // Use model.modelName to determine context size - Claude models typically have 200k tokens
-          const modelContextSize = currentModel?.modelName
-            ?.toLowerCase()
-            .includes("claude")
-            ? 200000
-            : currentModel?.modelName?.toLowerCase().includes("gpt-4")
-              ? 128000
-              : currentModel?.modelName?.toLowerCase().includes("gpt-3.5")
-                ? 16000
-                : 200000; // Default to 200k
-
-          // If tokens exceed 75% of the model's context window, force search mode
-          const shouldForceSearch = totalTokens > modelContextSize * 0.75;
-
-          // Update the forceUserFileSearch state
-          setForceUserFileSearch(shouldForceSearch);
         } catch (error) {
           console.error("Error calculating tokens:", error);
         }
@@ -2221,16 +2196,6 @@ export function ChatPage({
         : [...prev, document]
     );
   };
-
-  const handleFileUpload = async (files: File[]) => {
-    // Implement file upload logic here
-    // After successful upload, you might want to add the file to selected files
-    // For example:
-    // const uploadedFile = await uploadFile(files[0]);
-    // addSelectedFile(uploadedFile);
-  };
-
-  // Calculate token count and update forceUserFileSearch when selected files/folders change
 
   return (
     <>
@@ -3268,9 +3233,8 @@ export function ChatPage({
                                 selectedAssistant || finalAssistants[0]
                               }
                               setAlternativeAssistant={setAlternativeAssistant}
-                              files={currentMessageFiles}
                               setFiles={setCurrentMessageFiles}
-                              handleFileUpload={handleFileUpload}
+                              handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
                             />
                             {enterpriseSettings &&
@@ -3340,25 +3304,6 @@ export function ChatPage({
           </div>
           <FixedLogo backgroundToggled={sidebarVisible || showHistorySidebar} />
         </div>
-        {/* Right Sidebar - DocumentSidebar */}
-      </div>
-
-      {/* Add the fixed toggle button */}
-      <div className="fixed right-4 top-1/2 transform -translate-y-1/2 z-50">
-        <button
-          onClick={() => {
-            setPopup({
-              message: "This feature is not available yet.",
-              type: "error",
-            });
-            setForceUserFileSearch(!forceUserFileSearch);
-          }}
-          className={`p-2 rounded-full ${
-            forceUserFileSearch ? "bg-blue-500" : "bg-gray-300"
-          } transition-colors duration-200`}
-        >
-          {forceUserFileSearch ? "On" : "Off"}
-        </button>
       </div>
     </>
   );

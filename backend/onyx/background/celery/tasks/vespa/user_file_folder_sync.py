@@ -49,7 +49,6 @@ def check_for_user_file_folder_sync(self: Task, *, tenant_id: str) -> bool | Non
     This task fetches all connector credential pairs with user files, gets the documents
     associated with them, and updates the user file and folder metadata in Vespa.
     """
-    task_logger.info("check_for_user_file_folder_sync started")
 
     time_start = time.monotonic()
 

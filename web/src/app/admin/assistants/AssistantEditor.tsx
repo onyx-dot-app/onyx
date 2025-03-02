@@ -940,54 +940,52 @@ export function AssistantEditor({
                                 access to any user-specific documents.
                               </SubLabel>
 
-                              {selectedFiles.length > 0 ||
-                                (selectedFolders.length > 0 && (
-                                  <div className="mt-2 mb-4">
-                                    <h4 className="text-xs font-normal mb-2">
-                                      Selected Files and Folders
-                                    </h4>
-                                    <div className="flex flex-wrap gap-2">
-                                      {selectedFiles.map(
-                                        (file: FileResponse) => (
-                                          <SourceChip
-                                            key={file.id}
-                                            onRemove={() => {
-                                              removeSelectedFile(file);
-                                              setFieldValue(
-                                                "selectedFiles",
-                                                values.selectedFiles.filter(
-                                                  (f: FileResponse) =>
-                                                    f.id !== file.id
-                                                )
-                                              );
-                                            }}
-                                            title={file.name}
-                                            icon={<FileIcon size={12} />}
-                                          />
-                                        )
-                                      )}
-                                      {selectedFolders.map(
-                                        (folder: FolderResponse) => (
-                                          <SourceChip
-                                            key={folder.id}
-                                            onRemove={() => {
-                                              removeSelectedFolder(folder);
-                                              setFieldValue(
-                                                "selectedFolders",
-                                                values.selectedFolders.filter(
-                                                  (f: FolderResponse) =>
-                                                    f.id !== folder.id
-                                                )
-                                              );
-                                            }}
-                                            title={folder.name}
-                                            icon={<FolderIcon size={12} />}
-                                          />
-                                        )
-                                      )}
-                                    </div>
+                              {(selectedFiles.length > 0 ||
+                                selectedFolders.length > 0) && (
+                                <div className="mt-2 mb-4">
+                                  <h4 className="text-xs font-normal mb-2">
+                                    Selected Files and Folders
+                                  </h4>
+                                  <div className="flex flex-wrap gap-2">
+                                    {selectedFiles.map((file: FileResponse) => (
+                                      <SourceChip
+                                        key={file.id}
+                                        onRemove={() => {
+                                          removeSelectedFile(file);
+                                          setFieldValue(
+                                            "selectedFiles",
+                                            values.selectedFiles.filter(
+                                              (f: FileResponse) =>
+                                                f.id !== file.id
+                                            )
+                                          );
+                                        }}
+                                        title={file.name}
+                                        icon={<FileIcon size={12} />}
+                                      />
+                                    ))}
+                                    {selectedFolders.map(
+                                      (folder: FolderResponse) => (
+                                        <SourceChip
+                                          key={folder.id}
+                                          onRemove={() => {
+                                            removeSelectedFolder(folder);
+                                            setFieldValue(
+                                              "selectedFolders",
+                                              values.selectedFolders.filter(
+                                                (f: FolderResponse) =>
+                                                  f.id !== folder.id
+                                              )
+                                            );
+                                          }}
+                                          title={folder.name}
+                                          icon={<FolderIcon size={12} />}
+                                        />
+                                      )
+                                    )}
                                   </div>
-                                ))}
+                                </div>
+                              )}
                             </div>
                           )}
 

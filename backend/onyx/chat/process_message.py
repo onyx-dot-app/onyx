@@ -84,10 +84,8 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
-from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import load_all_user_files
 from onyx.file_store.utils import save_files
@@ -615,32 +613,32 @@ def stream_chat_message_objects(
                 use_search_for_user_files = True
             else:
                 # Convert UserFile objects to InMemoryChatFile objects
-                user_file_objects: list[InMemoryChatFile] = []
-                for user_file in user_files:
-                    print(f"Processing user file: {user_file.file_id}")
-                    try:
-                        file_io = get_default_file_store(db_session).read_file(
-                            user_file.file_id, mode="b"
-                        )
-                        user_file_objects.append(
-                            InMemoryChatFile(
-                                file_id=str(user_file.file_id),
-                                content=file_io.read(),
-                                file_type=ChatFileType.PLAIN_TEXT,
-                                filename="user file",
-                            )
-                        )
-                        print(f"Successfully loaded user file: {user_file.file_id}")
-                    except Exception as e:
-                        print(f"Error loading file {user_file.file_id}: {e}")
-                        logger.warning(
-                            f"Failed to load user file {user_file.file_id}: {str(e)}"
-                        )
+                # user_file_objects: list[InMemoryChatFile] = []
+                # for user_file in user_files:
+                #     print(f"Processing user file: {user_file.file_id}")
+                #     try:
+                #         file_io = get_default_file_store(db_session).read_file(
+                #             user_file.file_id, mode="b"
+                #         )
+                #         user_file_objects.append(
+                #             InMemoryChatFile(
+                #                 file_id=str(user_file.file_id),
+                #                 content=file_io.read(),
+                #                 file_type=ChatFileType.PLAIN_TEXT,
+                #                 filename=user_file.file_name,
+                #             )
+                #         )
+                #         print(f"Successfully loaded user file: {user_file.file_id}")
+                #     except Exception as e:
+                #         print(f"Error loading file {user_file.file_id}: {e}")
+                #         logger.warning(
+                #             f"Failed to load user file {user_file.file_id}: {str(e)}"
+                #         )
 
-                # Add converted files to latest_query_files
-                latest_query_files.extend(user_file_objects)
+                # # Add converted files to latest_query_files
+                latest_query_files.extend(user_files)
                 print(
-                    f"Added {len(user_file_objects)} user files to latest_query_files"
+                    # f"Added {len(user_file_objects)} user files to latest_query_files"
                 )
                 logger.info(f"Using {len(user_files)} user files directly in context")
 

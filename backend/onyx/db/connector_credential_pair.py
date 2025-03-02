@@ -105,14 +105,15 @@ def get_connector_credential_pairs_for_user(
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
-    include_user_files: bool = False,
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
+    include_user_files: bool = False,
 ) -> list[ConnectorCredentialPair]:
     if eager_load_user:
         assert (
             eager_load_credential
         ), "eager_load_credential must be True if eager_load_user is True"
+
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
@@ -214,12 +215,15 @@ def get_connector_credential_pair_for_user(
     connector_id: int,
     credential_id: int,
     user: User | None,
+    include_user_files: bool = False,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
     stmt = _add_user_filters(stmt, user, get_editable)
     stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
     stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
+    if include_user_files:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.user_files))
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -596,8 +600,12 @@ def remove_credential_from_connector(
 
 def fetch_connector_credential_pairs(
     db_session: Session,
+    include_user_files: bool = False,
 ) -> list[ConnectorCredentialPair]:
-    return db_session.query(ConnectorCredentialPair).all()
+    stmt = select(ConnectorCredentialPair)
+    if include_user_files:
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.user_files))
+    return db_session.scalars(stmt).all()
 
 
 def resync_cc_pair(

@@ -56,7 +56,7 @@ def _get_access_for_documents(
         document_ids=document_ids,
     )
     doc_access = {}
-    for document_id, user_emails, is_public, _, _ in document_access_info:
+    for document_id, user_emails, is_public in document_access_info:
         doc_access[document_id] = DocumentAccess(
             user_emails=set([email for email in user_emails if email]),
             # MIT version will wipe all groups and external groups on update

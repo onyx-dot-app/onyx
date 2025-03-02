@@ -188,7 +188,6 @@ interface ChatInputBarProps {
   selectedAssistant: Persona;
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
   toggleDocumentSidebar: () => void;
-  files: FileDescriptor[];
   setFiles: (files: FileDescriptor[]) => void;
   handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
@@ -219,7 +218,6 @@ export function ChatInputBar({
   selectedAssistant,
   setAlternativeAssistant,
 
-  files,
   setFiles,
   handleFileUpload,
   textAreaRef,
@@ -238,6 +236,7 @@ export function ChatInputBar({
     removeSelectedFile,
     removeSelectedFolder,
     currentMessageFiles,
+    setCurrentMessageFiles,
   } = useDocumentsContext();
 
   const settings = useContext(SettingsContext);
@@ -640,7 +639,6 @@ export function ChatInputBar({
             {(selectedDocuments.length > 0 ||
               selectedFiles.length > 0 ||
               selectedFolders.length > 0 ||
-              files.length > 0 ||
               currentMessageFiles.length > 0 ||
               filterManager.timeRange ||
               filterManager.selectedDocumentSets.length > 0 ||
@@ -663,13 +661,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-                  {currentMessageFiles.map((file) => (
-                    <SourceChip
-                      key={file.id}
-                      icon={<FileIcon size={16} />}
-                      title={file.name || "File"}
-                    />
-                  ))}
 
                   {selectedFiles.map((file) => (
                     <SourceChip
@@ -679,7 +670,6 @@ export function ChatInputBar({
                       onRemove={() => removeSelectedFile(file)}
                     />
                   ))}
-
                   {selectedFolders.map((folder) => (
                     <SourceChip
                       key={folder.id}
@@ -688,7 +678,6 @@ export function ChatInputBar({
                       onRemove={() => removeSelectedFolder(folder)}
                     />
                   ))}
-
                   {filterManager.timeRange && (
                     <SourceChip
                       truncateTitle={false}
@@ -718,7 +707,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-
                   {filterManager.selectedSources.length > 0 &&
                     filterManager.selectedSources.map((source, index) => (
                       <SourceChip
@@ -739,7 +727,6 @@ export function ChatInputBar({
                         }}
                       />
                     ))}
-
                   {selectedDocuments.length > 0 && (
                     <SourceChip
                       key="selected-documents"
@@ -751,8 +738,7 @@ export function ChatInputBar({
                       onRemove={removeDocs}
                     />
                   )}
-
-                  {files.map((file, index) =>
+                  {currentMessageFiles.map((file, index) =>
                     file.type === ChatFileType.IMAGE ? (
                       <SourceChip
                         key={`file-${index}`}
@@ -768,8 +754,8 @@ export function ChatInputBar({
                         }
                         title={file.name || "File" + file.id}
                         onRemove={() => {
-                          setFiles(
-                            files.filter(
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
                               (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );
@@ -781,8 +767,8 @@ export function ChatInputBar({
                         icon={<FileIcon className="text-red-500" size={16} />}
                         title={file.name || "File"}
                         onRemove={() => {
-                          setFiles(
-                            files.filter(
+                          setCurrentMessageFiles(
+                            currentMessageFiles.filter(
                               (fileInFilter) => fileInFilter.id !== file.id
                             )
                           );

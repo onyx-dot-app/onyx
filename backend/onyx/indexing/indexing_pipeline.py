@@ -412,8 +412,6 @@ def index_doc_batch(
         ] = fetch_user_folders_for_documents(
             document_ids=updatable_ids, db_session=db_session
         )
-        logger.error("fetching user files for documents")
-        logger.error(doc_id_to_user_file_id)
 
         doc_id_to_previous_chunk_cnt: dict[str, int | None] = {
             document_id: chunk_count

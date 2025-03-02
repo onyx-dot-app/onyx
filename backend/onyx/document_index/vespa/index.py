@@ -660,8 +660,6 @@ class VespaIndex(DocumentIndex):
                     tenant_id=tenant_id,
                     large_chunks_enabled=large_chunks_enabled,
                 )
-                logger.error("CHECKing chunks")
-                logger.error(doc_chunk_ids)
 
                 doc_chunk_count += len(doc_chunk_ids)
 
