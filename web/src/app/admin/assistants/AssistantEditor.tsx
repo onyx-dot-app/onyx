@@ -409,7 +409,7 @@ export function AssistantEditor({
           onSave={() => {
             setFilePickerModalOpen(false);
           }}
-          title="Add Documents to your Assistant"
+          title="Add Knowledge to your Assistant"
           buttonContent="Add to Assistant"
         />
       )}
@@ -906,8 +906,8 @@ export function AssistantEditor({
                               <RadioGroupItemField
                                 value="user_files"
                                 id="user_files"
-                                label="User Files"
-                                sublabel="Select specific user files and folders for this Assistant to use"
+                                label="User Knowledge"
+                                sublabel="Select specific user files and groups for this Assistant to use"
                               />
                               <RadioGroupItemField
                                 value="team_knowledge"
@@ -924,17 +924,17 @@ export function AssistantEditor({
                           !admin && (
                             <div className="mt-4">
                               <div className="flex justify-start gap-x-2 items-center">
-                                <Label>User Files</Label>
+                                <Label>User Knowledge</Label>
                                 <span
                                   className="cursor-pointer text-xs text-primary hover:underline"
                                   onClick={() => setFilePickerModalOpen(true)}
                                 >
-                                  Attach Files and Folders
+                                  Attach Files and Groups
                                 </span>
                               </div>
 
                               <SubLabel>
-                                Select which of your user files and folders this
+                                Select which of your user files and groups this
                                 Assistant should use to inform its responses. If
                                 none are specified, the Assistant will not have
                                 access to any user-specific documents.

@@ -684,7 +684,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   };
 
-  // Add these new functions for removing files and folders
+  // Add these new functions for removing files and groups
   const handleRemoveFile = (file: FileResponse) => {
     setSelectedFileIds((prev) => {
       const newSet = new Set(prev);
@@ -733,7 +733,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             <div className="w-full relative">
               <input
                 type="text"
-                placeholder="Search folders..."
+                placeholder="Search groups..."
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -834,13 +834,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           ) : folders.length > 0 ? (
             <div className="flex-grow overflow-y-auto px-4">
               <p className="text-text-subtle dark:text-neutral-400">
-                No files or folders found
+                No groups found
               </p>
             </div>
           ) : (
             <div className="flex-grow flex-col overflow-y-auto px-4 flex items-start justify-start gap-y-2">
               <p className="text-sm text-muted-foreground dark:text-neutral-400">
-                No files or folders found
+                No groups found
               </p>
               <a
                 href="/chat/my-documents"

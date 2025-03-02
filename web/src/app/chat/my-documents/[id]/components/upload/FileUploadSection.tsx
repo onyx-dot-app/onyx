@@ -44,7 +44,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             >
               <div className="flex flex-col gap-y-2 items-center justify-between">
                 <p className="flex flex-col text-center text-sm text-neutral-500 dark:text-neutral-400">
-                  Add files to this project
+                  Add files to this Knowledge Group
                 </p>
                 <Upload className="w-5 h-5 text-neutral-400 dark:text-neutral-500" />
               </div>
