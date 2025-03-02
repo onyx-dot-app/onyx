@@ -414,7 +414,7 @@ def should_index(
     ):
         return False
 
-    if search_settings_instance.status == IndexModelStatus.PRESENT:
+    if search_settings_instance.status.is_primary():
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for primary search settings
             return True

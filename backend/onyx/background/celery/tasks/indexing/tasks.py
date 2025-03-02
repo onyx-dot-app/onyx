@@ -55,7 +55,6 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
-from onyx.db.enums import IndexModelStatus
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_last_attempt_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_canceled
@@ -467,7 +466,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         continue
 
                     reindex = False
-                    if search_settings_instance.status == IndexModelStatus.PRESENT:
+                    if search_settings_instance.status.is_primary():
                         # the indexing trigger is only checked and cleared with the primary search settings
                         if cc_pair.indexing_trigger is not None:
                             if cc_pair.indexing_trigger == IndexingMode.REINDEX:
