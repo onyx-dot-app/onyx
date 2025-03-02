@@ -94,7 +94,6 @@ from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
-from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.models import ChatMessageDetail
@@ -590,6 +589,9 @@ def stream_chat_message_objects(
 
             # Calculate token count for the files
             from onyx.db.user_documents import calculate_user_files_token_count
+            from onyx.chat.prompt_builder.citations_prompt import (
+                compute_max_document_tokens_for_persona,
+            )
 
             total_tokens = calculate_user_files_token_count(
                 user_file_ids or [],
@@ -597,54 +599,31 @@ def stream_chat_message_objects(
                 db_session,
             )
 
-            # Get LLM max tokens
-            llm_max_tokens = get_max_input_tokens(
-                llm.config.model_name, llm.config.model_provider
+            # Calculate available tokens for documents based on prompt, user input, etc.
+            available_tokens = compute_max_document_tokens_for_persona(
+                db_session=db_session,
+                persona=persona,
+                actual_user_input=message_text,  # Use the actual user message
             )
-            print("llm max tokens is", llm_max_tokens)
-            print("total tokens is", total_tokens)
+
+            logger.debug(
+                f"Total file tokens: {total_tokens}, Available tokens: {available_tokens}"
+            )
 
             # If files are too large for context, use search instead
-            if total_tokens > (llm_max_tokens * 0.75):  # 75% of context limit
+            if total_tokens > available_tokens:
                 # We'll set force_use_tool.force_use = True after tools are defined
                 logger.info(
-                    f"User files exceed token limit ({total_tokens} > {llm_max_tokens * 0.75}), using search instead"
+                    f"User files exceed available token limit ({total_tokens} > {available_tokens}), using search instead"
                 )
                 use_search_for_user_files = True
             else:
-                # Convert UserFile objects to InMemoryChatFile objects
-                # user_file_objects: list[InMemoryChatFile] = []
-                # for user_file in user_files:
-                #     print(f"Processing user file: {user_file.file_id}")
-                #     try:
-                #         file_io = get_default_file_store(db_session).read_file(
-                #             user_file.file_id, mode="b"
-                #         )
-                #         user_file_objects.append(
-                #             InMemoryChatFile(
-                #                 file_id=str(user_file.file_id),
-                #                 content=file_io.read(),
-                #                 file_type=ChatFileType.PLAIN_TEXT,
-                #                 filename=user_file.file_name,
-                #             )
-                #         )
-                #         print(f"Successfully loaded user file: {user_file.file_id}")
-                #     except Exception as e:
-                #         print(f"Error loading file {user_file.file_id}: {e}")
-                #         logger.warning(
-                #             f"Failed to load user file {user_file.file_id}: {str(e)}"
-                #         )
-
-                # # Add converted files to latest_query_files
                 latest_query_files.extend(user_files)
-                print(
-                    # f"Added {len(user_file_objects)} user files to latest_query_files"
+                logger.info(
+                    f"Using {len(user_files)} user files directly in context ({total_tokens}/{available_tokens} tokens)"
                 )
-                logger.info(f"Using {len(user_files)} user files directly in context")
 
         if user_message:
-            print("at this point")
-            print("attaching")
             attach_files_to_chat_message(
                 chat_message=user_message,
                 files=[
@@ -653,7 +632,6 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 commit=False,
             )
-            print("attached")
 
         selected_db_search_docs = None
         selected_sections: list[InferenceSection] | None = None
@@ -824,59 +802,95 @@ def stream_chat_message_objects(
 
         # Set force_use if user files exceed token limit
         if use_search_for_user_files:
-            # Check if search tool is available in the tools list
-            search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
-
-            # If no search tool is available, add one
-            if not search_tool_available:
-                # Create a basic search tool config
-                search_tool_config = SearchToolConfig(
-                    answer_style_config=answer_style_config,
-                    document_pruning_config=document_pruning_config,
-                    retrieval_options=retrieval_options or RetrievalDetails(),
+            try:
+                # Check if search tool is available in the tools list
+                search_tool_available = any(
+                    isinstance(tool, SearchTool) for tool in tools
                 )
 
-                # Create and add the search tool
-                search_tool = SearchTool(
-                    db_session=db_session,
-                    user=user,
-                    persona=persona,
-                    retrieval_options=search_tool_config.retrieval_options,
-                    prompt_config=prompt_config,
-                    llm=llm,
-                    fast_llm=fast_llm,
-                    pruning_config=search_tool_config.document_pruning_config,
-                    answer_style_config=search_tool_config.answer_style_config,
-                    evaluation_type=(
-                        LLMEvaluationType.BASIC
-                        if persona.llm_relevance_filter
-                        else LLMEvaluationType.SKIP
-                    ),
-                    bypass_acl=bypass_acl,
+                # If no search tool is available, add one
+                if not search_tool_available:
+                    logger.info("No search tool available, creating one for user files")
+                    # Create a basic search tool config
+                    search_tool_config = SearchToolConfig(
+                        answer_style_config=answer_style_config,
+                        document_pruning_config=document_pruning_config,
+                        retrieval_options=retrieval_options or RetrievalDetails(),
+                    )
+
+                    # Create and add the search tool
+                    search_tool = SearchTool(
+                        db_session=db_session,
+                        user=user,
+                        persona=persona,
+                        retrieval_options=search_tool_config.retrieval_options,
+                        prompt_config=prompt_config,
+                        llm=llm,
+                        fast_llm=fast_llm,
+                        pruning_config=search_tool_config.document_pruning_config,
+                        answer_style_config=search_tool_config.answer_style_config,
+                        evaluation_type=(
+                            LLMEvaluationType.BASIC
+                            if persona.llm_relevance_filter
+                            else LLMEvaluationType.SKIP
+                        ),
+                        bypass_acl=bypass_acl,
+                    )
+
+                    # Add the search tool to the tools list
+                    tools.append(search_tool)
+
+                    logger.info(
+                        "Added search tool for user files that exceed token limit"
+                    )
+
+                # Now set force_use_tool.force_use to True
+                force_use_tool.force_use = True
+                force_use_tool.tool_name = SearchTool._NAME
+
+                # Set query argument if not already set
+                if not force_use_tool.args:
+                    force_use_tool.args = {"query": final_msg.message}
+
+                # Pass the user file IDs to the search tool
+                if user_file_ids or user_folder_ids:
+                    # Create a BaseFilters object with user_file_ids
+                    if not retrieval_options:
+                        retrieval_options = RetrievalDetails()
+                    if not retrieval_options.filters:
+                        retrieval_options.filters = BaseFilters()
+
+                    # Set user file and folder IDs in the filters
+                    retrieval_options.filters.user_file_ids = user_file_ids
+                    retrieval_options.filters.user_folder_ids = user_folder_ids
+
+                    # Create override kwargs for the search tool
+                    override_kwargs = SearchToolOverrideKwargs(
+                        force_no_rerank=False,
+                        alternate_db_session=None,
+                        retrieved_sections_callback=None,
+                        skip_query_analysis=False,
+                        user_file_ids=user_file_ids,
+                        user_folder_ids=user_folder_ids,
+                    )
+
+                    # Set the override kwargs in the force_use_tool
+                    force_use_tool.override_kwargs = override_kwargs
+
+                    logger.info(
+                        f"Configured search tool to use {len(user_file_ids)} files and {len(user_folder_ids)} folders"
+                    )
+            except Exception as e:
+                logger.exception(
+                    f"Error configuring search tool for user files: {str(e)}"
                 )
-
-                # Add the search tool to the tools list
-                tools.append(search_tool)
-
-                logger.info("Added search tool for user files that exceed token limit")
-
-            # Now set force_use_tool.force_use to True
-            force_use_tool.force_use = True
-            force_use_tool.tool_name = SearchTool._NAME
-
-            # Set query argument if not already set
-            if not force_use_tool.args:
-                force_use_tool.args = {"query": final_msg.message}
-
-            # Pass the user file IDs to the search tool
-            if user_file_ids or user_folder_ids:
-                # Create a BaseFilters object with user_file_ids
-                if not retrieval_options:
-                    retrieval_options = RetrievalDetails()
-                if not retrieval_options.filters:
-                    retrieval_options.filters = BaseFilters()
-                retrieval_options.filters.user_file_ids = user_file_ids
-                retrieval_options.filters.user_folder_ids = user_folder_ids
+                # If we fail to configure the search tool, fall back to using files directly
+                # but with a warning that it might exceed token limits
+                logger.warning(
+                    "Falling back to using files directly despite token limit concerns"
+                )
+                latest_query_files.extend(user_files)
+                use_search_for_user_files = False
 
         # TODO: unify message history with single message history
         message_history = [
