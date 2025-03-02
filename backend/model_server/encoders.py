@@ -59,6 +59,56 @@ _OPENAI_MAX_INPUT_LEN = 2048
 # Cohere allows up to 96 embeddings in a single embedding calling
 _COHERE_MAX_INPUT_LEN = 96
 
+# Authentication error string constants
+_AUTH_ERROR_401 = "401"
+_AUTH_ERROR_UNAUTHORIZED = "unauthorized"
+_AUTH_ERROR_INVALID_API_KEY = "invalid api key"
+_AUTH_ERROR_PERMISSION = "permission"
+
+
+def is_authentication_error(error: Exception) -> bool:
+    """Check if an exception is related to authentication issues.
+
+    Args:
+        error: The exception to check
+
+    Returns:
+        bool: True if the error appears to be authentication-related
+    """
+    error_str = str(error).lower()
+    return (
+        _AUTH_ERROR_401 in error_str
+        or _AUTH_ERROR_UNAUTHORIZED in error_str
+        or _AUTH_ERROR_INVALID_API_KEY in error_str
+        or _AUTH_ERROR_PERMISSION in error_str
+    )
+
+
+def format_embedding_error(
+    error: Exception,
+    service_name: str,
+    model: str | None,
+    provider: EmbeddingProvider,
+    status_code: int | None = None,
+) -> str:
+    """
+    Format a standardized error string for embedding errors.
+    """
+    if status_code:
+        return (
+            f"HTTP error embedding text with {service_name} - Status {status_code}: "
+            f"Model: {model} "
+            f"Provider: {provider} "
+            f"Exception: {error}"
+        )
+
+    return (
+        f"Exception embedding text with {service_name} - {type(error)}: "
+        f"Model: {model} "
+        f"Provider: {provider} "
+        f"Exception: {error}"
+    )
+
 
 # Custom exception for authentication errors
 class AuthenticationError(Exception):
@@ -99,26 +149,12 @@ class CloudEmbedding:
         )
 
         final_embeddings: list[Embedding] = []
-        try:
-            for text_batch in batch_list(texts, _OPENAI_MAX_INPUT_LEN):
-                response = await client.embeddings.create(input=text_batch, model=model)
-                final_embeddings.extend(
-                    [embedding.embedding for embedding in response.data]
-                )
-            return final_embeddings
-        except openai.AuthenticationError:
-            raise AuthenticationError(provider="OpenAI")
-        except Exception as e:
-            error_string = (
-                f"Exception embedding text with OpenAI - {type(e)}: "
-                f"Model: {model} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
+        for text_batch in batch_list(texts, _OPENAI_MAX_INPUT_LEN):
+            response = await client.embeddings.create(input=text_batch, model=model)
+            final_embeddings.extend(
+                [embedding.embedding for embedding in response.data]
             )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
+        return final_embeddings
 
     async def _embed_cohere(
         self, texts: list[str], model: str | None, embedding_type: str
@@ -129,36 +165,17 @@ class CloudEmbedding:
         client = CohereAsyncClient(api_key=self.api_key)
 
         final_embeddings: list[Embedding] = []
-        try:
-            for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
-                # Does not use the same tokenizer as the Onyx API server but it's approximately the same
-                # empirically it's only off by a very few tokens so it's not a big deal
-                response = await client.embed(
-                    texts=text_batch,
-                    model=model,
-                    input_type=embedding_type,
-                    truncate="END",
-                )
-                final_embeddings.extend(cast(list[Embedding], response.embeddings))
-            return final_embeddings
-        except Exception as e:
-            if (
-                "401" in str(e)
-                or "unauthorized" in str(e).lower()
-                or "invalid api key" in str(e).lower()
-            ):
-                raise AuthenticationError(provider="Cohere")
-
-            error_string = (
-                f"Exception embedding text with Cohere - {type(e)}: "
-                f"Model: {model} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
+        for text_batch in batch_list(texts, _COHERE_MAX_INPUT_LEN):
+            # Does not use the same tokenizer as the Onyx API server but it's approximately the same
+            # empirically it's only off by a very few tokens so it's not a big deal
+            response = await client.embed(
+                texts=text_batch,
+                model=model,
+                input_type=embedding_type,
+                truncate="END",
             )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
+            final_embeddings.extend(cast(list[Embedding], response.embeddings))
+        return final_embeddings
 
     async def _embed_voyage(
         self, texts: list[str], model: str | None, embedding_type: str
@@ -170,65 +187,27 @@ class CloudEmbedding:
             api_key=self.api_key, timeout=API_BASED_EMBEDDING_TIMEOUT
         )
 
-        try:
-            response = await client.embed(
-                texts=texts,
-                model=model,
-                input_type=embedding_type,
-                truncation=True,
-            )
-            return response.embeddings
-        except Exception as e:
-            if (
-                "401" in str(e)
-                or "unauthorized" in str(e).lower()
-                or "invalid api key" in str(e).lower()
-            ):
-                raise AuthenticationError(provider="Voyage")
-
-            error_string = (
-                f"Exception embedding text with Voyage - {type(e)}: "
-                f"Model: {model} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
+        response = await client.embed(
+            texts=texts,
+            model=model,
+            input_type=embedding_type,
+            truncation=True,
+        )
+        return response.embeddings
 
     async def _embed_azure(
         self, texts: list[str], model: str | None
     ) -> list[Embedding]:
-        try:
-            response = await aembedding(
-                model=model,
-                input=texts,
-                timeout=API_BASED_EMBEDDING_TIMEOUT,
-                api_key=self.api_key,
-                api_base=self.api_url,
-                api_version=self.api_version,
-            )
-            embeddings = [embedding["embedding"] for embedding in response.data]
-            return embeddings
-        except Exception as e:
-            if (
-                "401" in str(e)
-                or "unauthorized" in str(e).lower()
-                or "invalid api key" in str(e).lower()
-            ):
-                raise AuthenticationError(provider="Azure")
-
-            error_string = (
-                f"Exception embedding text with Azure - {type(e)}: "
-                f"Model: {model} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
+        response = await aembedding(
+            model=model,
+            input=texts,
+            timeout=API_BASED_EMBEDDING_TIMEOUT,
+            api_key=self.api_key,
+            api_base=self.api_url,
+            api_version=self.api_version,
+        )
+        embeddings = [embedding["embedding"] for embedding in response.data]
+        return embeddings
 
     async def _embed_vertex(
         self, texts: list[str], model: str | None, embedding_type: str
@@ -236,43 +215,24 @@ class CloudEmbedding:
         if not model:
             model = DEFAULT_VERTEX_MODEL
 
-        try:
-            credentials = service_account.Credentials.from_service_account_info(
-                json.loads(self.api_key)
-            )
-            project_id = json.loads(self.api_key)["project_id"]
-            vertexai.init(project=project_id, credentials=credentials)
-            client = TextEmbeddingModel.from_pretrained(model)
+        credentials = service_account.Credentials.from_service_account_info(
+            json.loads(self.api_key)
+        )
+        project_id = json.loads(self.api_key)["project_id"]
+        vertexai.init(project=project_id, credentials=credentials)
+        client = TextEmbeddingModel.from_pretrained(model)
 
-            embeddings = await client.get_embeddings_async(
-                [
-                    TextEmbeddingInput(
-                        text,
-                        embedding_type,
-                    )
-                    for text in texts
-                ],
-                auto_truncate=True,  # This is the default
-            )
-            return [embedding.values for embedding in embeddings]
-        except Exception as e:
-            if (
-                "401" in str(e)
-                or "unauthorized" in str(e).lower()
-                or "permission" in str(e).lower()
-            ):
-                raise AuthenticationError(provider="Google Vertex")
-
-            error_string = (
-                f"Exception embedding text with Vertex - {type(e)}: "
-                f"Model: {model} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
+        embeddings = await client.get_embeddings_async(
+            [
+                TextEmbeddingInput(
+                    text,
+                    embedding_type,
+                )
+                for text in texts
+            ],
+            auto_truncate=True,  # This is the default
+        )
+        return [embedding.values for embedding in embeddings]
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -287,43 +247,17 @@ class CloudEmbedding:
             {} if not self.api_key else {"Authorization": f"Bearer {self.api_key}"}
         )
 
-        try:
-            response = await self.http_client.post(
-                self.api_url,
-                json={
-                    "model": model_name,
-                    "input": texts,
-                },
-                headers=headers,
-            )
-            response.raise_for_status()
-            result = response.json()
-            return [embedding["embedding"] for embedding in result["data"]]
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                raise AuthenticationError(provider="LiteLLM Proxy")
-
-            error_string = (
-                f"HTTP error embedding text with LiteLLM Proxy - Status {e.response.status_code}: "
-                f"Model: {model_name} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
-        except Exception as e:
-            error_string = (
-                f"Exception embedding text with LiteLLM Proxy - {type(e)}: "
-                f"Model: {model_name} "
-                f"Provider: {self.provider} "
-                f"Exception: {e}"
-            )
-            logger.error(error_string)
-            logger.debug(f"Exception texts: {texts}")
-
-            raise RuntimeError(error_string)
+        response = await self.http_client.post(
+            self.api_url,
+            json={
+                "model": model_name,
+                "input": texts,
+            },
+            headers=headers,
+        )
+        response.raise_for_status()
+        result = response.json()
+        return [embedding["embedding"] for embedding in result["data"]]
 
     @retry(tries=_RETRY_TRIES, delay=_RETRY_DELAY)
     async def embed(
@@ -334,22 +268,51 @@ class CloudEmbedding:
         model_name: str | None = None,
         deployment_name: str | None = None,
     ) -> list[Embedding]:
-        if self.provider == EmbeddingProvider.OPENAI:
-            return await self._embed_openai(texts, model_name)
-        elif self.provider == EmbeddingProvider.AZURE:
-            return await self._embed_azure(texts, f"azure/{deployment_name}")
-        elif self.provider == EmbeddingProvider.LITELLM:
-            return await self._embed_litellm_proxy(texts, model_name)
+        try:
+            if self.provider == EmbeddingProvider.OPENAI:
+                return await self._embed_openai(texts, model_name)
+            elif self.provider == EmbeddingProvider.AZURE:
+                return await self._embed_azure(texts, f"azure/{deployment_name}")
+            elif self.provider == EmbeddingProvider.LITELLM:
+                return await self._embed_litellm_proxy(texts, model_name)
 
-        embedding_type = EmbeddingModelTextType.get_type(self.provider, text_type)
-        if self.provider == EmbeddingProvider.COHERE:
-            return await self._embed_cohere(texts, model_name, embedding_type)
-        elif self.provider == EmbeddingProvider.VOYAGE:
-            return await self._embed_voyage(texts, model_name, embedding_type)
-        elif self.provider == EmbeddingProvider.GOOGLE:
-            return await self._embed_vertex(texts, model_name, embedding_type)
-        else:
-            raise ValueError(f"Unsupported provider: {self.provider}")
+            embedding_type = EmbeddingModelTextType.get_type(self.provider, text_type)
+            if self.provider == EmbeddingProvider.COHERE:
+                return await self._embed_cohere(texts, model_name, embedding_type)
+            elif self.provider == EmbeddingProvider.VOYAGE:
+                return await self._embed_voyage(texts, model_name, embedding_type)
+            elif self.provider == EmbeddingProvider.GOOGLE:
+                return await self._embed_vertex(texts, model_name, embedding_type)
+            else:
+                raise ValueError(f"Unsupported provider: {self.provider}")
+        except openai.AuthenticationError:
+            raise AuthenticationError(provider="OpenAI")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError(provider=str(self.provider))
+
+            error_string = format_embedding_error(
+                e,
+                str(self.provider),
+                model_name or deployment_name,
+                self.provider,
+                status_code=e.response.status_code,
+            )
+            logger.error(error_string)
+            logger.debug(f"Exception texts: {texts}")
+
+            raise RuntimeError(error_string)
+        except Exception as e:
+            if is_authentication_error(e):
+                raise AuthenticationError(provider=str(self.provider))
+
+            error_string = format_embedding_error(
+                e, str(self.provider), model_name or deployment_name, self.provider
+            )
+            logger.error(error_string)
+            logger.debug(f"Exception texts: {texts}")
+
+            raise RuntimeError(error_string)
 
     @staticmethod
     def create(
