@@ -346,35 +346,44 @@ def validate_indexing_fences(
     return
 
 
-def _should_index(
+def should_index(
     cc_pair: ConnectorCredentialPair,
     last_index: IndexAttempt | None,
     search_settings_instance: SearchSettings,
-    search_settings_primary: bool,
     secondary_index_building: bool,
     db_session: Session,
 ) -> bool:
     """Checks various global settings and past indexing attempts to determine if
-    indexing should occur for a given connector credential pair.
+    we should try to start indexing the cc pair / search setting combination.
 
-    Args:
-        cc_pair: The connector credential pair to check
-        last_index: The last index attempt for this cc pair
-        search_settings_instance: The search settings to check against
-        search_settings_primary: Whether this is for the primary search settings
-        secondary_index_building: Whether this is for a secondary index
-        db_session: The database session
+    Note that tactical checks such as preventing overlap with a currently running task
+    are not handled here.
 
-    Returns:
-        bool: Whether indexing should occur
+    Return True if we should try to index, False if not.
     """
     connector = cc_pair.connector
 
-    # When switching over models, always index at least once if background_reindex_enabled is True
-    if search_settings_instance.status == IndexModelStatus.FUTURE:
-        if not search_settings_instance.background_reindex_enabled:
+    # uncomment for debugging
+    # task_logger.info(f"_should_index: "
+    #                  f"cc_pair={cc_pair.id} "
+    #                  f"connector={cc_pair.connector_id} "
+    #                  f"refresh_freq={connector.refresh_freq}")
+
+    # don't kick off indexing for `NOT_APPLICABLE` sources
+    if connector.source == DocumentSource.NOT_APPLICABLE:
+        return False
+
+    # User can still manually create single indexing attempts via the UI for the
+    # currently in use index
+    if DISABLE_INDEX_UPDATE_ON_SWAP:
+        if (
+            search_settings_instance.status == IndexModelStatus.PRESENT
+            and secondary_index_building
+        ):
             return False
 
+    # When switching over models, always index at least once
+    if search_settings_instance.status == IndexModelStatus.FUTURE:
         if last_index:
             # No new index if the last index attempt succeeded
             # Once is enough. The model will never be able to swap otherwise.
@@ -395,19 +404,6 @@ def _should_index(
                 return False
         return True
 
-    # don't kick off indexing for `NOT_APPLICABLE` sources
-    if connector.source == DocumentSource.NOT_APPLICABLE:
-        return False
-
-    # User can still manually create single indexing attempts via the UI for the
-    # currently in use index
-    if DISABLE_INDEX_UPDATE_ON_SWAP:
-        if (
-            search_settings_instance.status == IndexModelStatus.PRESENT
-            and secondary_index_building
-        ):
-            return False
-
     # If the connector is paused or is the ingestion API, don't index
     # NOTE: during an embedding model switch over, the following logic
     # is bypassed by the above check for a future model
@@ -418,7 +414,7 @@ def _should_index(
     ):
         return False
 
-    if search_settings_primary:
+    if search_settings_instance.status == IndexModelStatus.PRESENT:
         if cc_pair.indexing_trigger is not None:
             # if a manual indexing trigger is on the cc pair, honor it for primary search settings
             return True

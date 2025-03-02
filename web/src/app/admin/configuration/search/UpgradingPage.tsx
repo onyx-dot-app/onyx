@@ -108,15 +108,13 @@ export default function UpgradingPage({
         >
           <div>
             <div>
-              Are you sure you want to cancel?
-              <br />
-              <br />
-              Cancelling will revert to the previous model and all progress will
-              be lost.
+              Are you sure you want to cancel? Cancelling will revert to the
+              previous model and all progress will be lost.
             </div>
-            <div className="flex">
-              <Button onClick={onCancel} variant="submit">
-                Confirm
+            <div className="mt-12 gap-x-2 w-full justify-end flex">
+              <Button onClick={onCancel}>Confirm</Button>
+              <Button onClick={() => setIsCancelling(false)} variant="outline">
+                Cancel
               </Button>
             </div>
           </div>
@@ -162,7 +160,7 @@ export default function UpgradingPage({
                     reindexingProgress={sortedReindexingProgress}
                   />
                 ) : (
-                  <ErrorCallout errorTitle="Failed to fetch reindexing progress" />
+                  <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
                 )}
               </>
             ) : (

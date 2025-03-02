@@ -78,13 +78,6 @@ export default function EmbeddingForm() {
     ReindexType.REINDEX
   );
 
-  const handleReindex = async () => {
-    const update = await updateSearch();
-    if (update) {
-      navigateToEmbeddingPage("search settings");
-    }
-  };
-
   const updateAdvancedEmbeddingDetails = (
     key: keyof AdvancedSearchConfiguration,
     value: any
@@ -218,7 +211,10 @@ export default function EmbeddingForm() {
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
           <div className="flex items-center">
             <button
-              onClick={handleReindex}
+              onClick={() => {
+                handleReIndex();
+                navigateToEmbeddingPage("search settings");
+              }}
               className="
                 enabled:cursor-pointer 
                 disabled:bg-accent/50 
@@ -347,7 +343,7 @@ export default function EmbeddingForm() {
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, handleReindex, reindexType, updateSearch]);
+  }, [needsReIndex, reindexType, updateSearch]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -367,7 +363,7 @@ export default function EmbeddingForm() {
     router.push("/admin/configuration/search?message=search-settings");
   };
 
-  const onConfirm = async () => {
+  const handleReIndex = async () => {
     if (!selectedProvider) {
       return;
     }

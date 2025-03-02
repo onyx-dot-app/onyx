@@ -23,9 +23,9 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.background.celery.tasks.indexing.utils import _should_index
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
+from onyx.background.celery.tasks.indexing.utils import should_index
 from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
@@ -55,6 +55,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexModelStatus
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_last_attempt_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_canceled
@@ -456,22 +457,17 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         cc_pair.id, search_settings_instance.id, db_session
                     )
 
-                    search_settings_primary = False
-                    if search_settings_instance.id == search_settings_list[0].id:
-                        search_settings_primary = True
-
-                    if not _should_index(
+                    if not should_index(
                         cc_pair=cc_pair,
                         last_index=last_attempt,
                         search_settings_instance=search_settings_instance,
-                        search_settings_primary=search_settings_primary,
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
                     ):
                         continue
 
                     reindex = False
-                    if search_settings_instance.id == search_settings_list[0].id:
+                    if search_settings_instance.status == IndexModelStatus.PRESENT:
                         # the indexing trigger is only checked and cleared with the primary search settings
                         if cc_pair.indexing_trigger is not None:
                             if cc_pair.indexing_trigger == IndexingMode.REINDEX:
