@@ -390,38 +390,24 @@ def check_drive_tokens(
 
 
 def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResponse:
-    print(f"Starting upload of {len(files)} files")
     for file in files:
         if not file.filename:
-            print("Error: Empty filename detected")
             raise HTTPException(status_code=400, detail="File name cannot be empty")
-        print(f"Processing file: {file.filename}")
 
     # Skip directories and known macOS metadata entries
     def should_process_file(file_path: str) -> bool:
         normalized_path = os.path.normpath(file_path)
-        print(f"Checking if file should be processed: {file_path}")
-        result = not any(part.startswith(".") for part in normalized_path.split(os.sep))
-        print(f"File {file_path} should be processed: {result}")
-        return result
+        return not any(part.startswith(".") for part in normalized_path.split(os.sep))
 
     try:
-        print("Getting default file store")
         file_store = get_default_file_store(db_session)
         deduped_file_paths = []
 
         for file in files:
-            print(
-                f"Processing file: {file.filename}, content type: {file.content_type}"
-            )
             if file.content_type and file.content_type.startswith("application/zip"):
-                print(f"Detected zip file: {file.filename}")
                 with zipfile.ZipFile(file.file, "r") as zf:
-                    print(f"Zip file contains {len(zf.namelist())} entries")
                     for file_info in zf.namelist():
-                        print(f"Processing zip entry: {file_info}")
                         if zf.getinfo(file_info).is_dir():
-                            print(f"Skipping directory: {file_info}")
                             continue
 
                         if not should_process_file(file_info):
@@ -446,7 +432,6 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
 
             file_path = os.path.join(str(uuid.uuid4()), cast(str, file.filename))
             deduped_file_paths.append(file_path)
-            print(f"Saving file: {file.filename}")
             file_store.save_file(
                 file_name=file_path,
                 content=file.file,
