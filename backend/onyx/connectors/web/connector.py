@@ -28,7 +28,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
@@ -525,7 +525,9 @@ class WebConnector(LoadConnector):
                 )
             else:
                 # Could be a 5xx or another error, treat as unexpected
-                raise UnexpectedError(f"Unexpected error validating '{test_url}': {e}")
+                raise UnexpectedValidationError(
+                    f"Unexpected error validating '{test_url}': {e}"
+                )
 
 
 if __name__ == "__main__":

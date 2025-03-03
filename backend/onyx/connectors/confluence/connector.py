@@ -22,7 +22,7 @@ from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -451,11 +451,11 @@ class ConfluenceConnector(
                 raise InsufficientPermissionsError(
                     "Insufficient permissions to access Confluence resources (HTTP 403)."
                 )
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected Confluence error (status={status_code}): {e}"
             )
         except Exception as e:
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected error while validating Confluence settings: {e}"
             )
 

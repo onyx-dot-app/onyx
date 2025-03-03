@@ -22,7 +22,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -93,7 +93,7 @@ def _get_connector_runner(
         if not INTEGRATION_TESTS_MODE:
             runnable_connector.validate_connector_settings()
 
-    except UnexpectedError as e:
+    except UnexpectedValidationError as e:
         logger.exception(
             "Unable to instantiate connector due to an unexpected temporary issue."
         )

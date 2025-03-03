@@ -19,7 +19,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -671,12 +671,12 @@ class NotionConnector(LoadConnector, PollConnector):
                     "Please try again later."
                 )
             else:
-                raise UnexpectedError(
+                raise UnexpectedValidationError(
                     f"Unexpected Notion HTTP error (status={status_code}): {http_err}"
                 ) from http_err
 
         except Exception as exc:
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected error during Notion settings validation: {exc}"
             )
 
