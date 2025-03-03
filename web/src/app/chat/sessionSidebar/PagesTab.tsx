@@ -10,7 +10,6 @@ import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { FiPlus, FiTrash2, FiCheck, FiX } from "react-icons/fi";
-import { NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED } from "@/lib/constants";
 import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
 import { useState, useCallback, useRef, useContext, useEffect } from "react";
@@ -436,11 +435,7 @@ export function PagesTab({
         </DndContext>
       )}
 
-      <div
-        className={`pl-4 pr-3 ${
-          NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED && "pb-20"
-        }`}
-      >
+      <div className="pl-4 pr-3">
         {!isHistoryEmpty && (
           <>
             {Object.entries(groupedChatSesssions)

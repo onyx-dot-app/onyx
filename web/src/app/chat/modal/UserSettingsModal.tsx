@@ -25,7 +25,6 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FiTrash2 } from "react-icons/fi";
-import { NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED } from "@/lib/constants";
 import { deleteAllChatSessions } from "../lib";
 import { useChatContext } from "@/components/context/ChatContext";
 
