@@ -30,6 +30,10 @@ interface RerankingDetailsFormProps {
   originalRerankingDetails: RerankingDetails;
   modelTab: "open" | "cloud" | null;
   setModelTab: Dispatch<SetStateAction<"open" | "cloud" | null>>;
+  onValidationChange?: (
+    isValid: boolean,
+    errors: Record<string, string>
+  ) => void;
 }
 
 const RerankingDetailsForm = forwardRef<
@@ -43,6 +47,7 @@ const RerankingDetailsForm = forwardRef<
       currentRerankingDetails,
       modelTab,
       setModelTab,
+      onValidationChange,
     },
     ref
   ) => {
@@ -55,25 +60,77 @@ const RerankingDetailsForm = forwardRef<
     const combinedSettings = useContext(SettingsContext);
     const gpuEnabled = combinedSettings?.settings.gpu_enabled;
 
+    // Define the validation schema
+    const validationSchema = Yup.object().shape({
+      rerank_model_name: Yup.string().nullable(),
+      rerank_provider_type: Yup.mixed<RerankerProvider>()
+        .nullable()
+        .oneOf(Object.values(RerankerProvider))
+        .optional(),
+      rerank_api_key: Yup.string()
+        .nullable()
+        .test(
+          "required-if-cohere",
+          "API Key is required for Cohere reranking",
+          function (value) {
+            const { rerank_provider_type } = this.parent;
+            return (
+              rerank_provider_type !== RerankerProvider.COHERE ||
+              (value !== null && value !== "")
+            );
+          }
+        ),
+      rerank_api_url: Yup.string()
+        .url("Must be a valid URL")
+        .matches(/^https?:\/\//, "URL must start with http:// or https://")
+        .nullable()
+        .test(
+          "required-if-litellm",
+          "API URL is required for LiteLLM reranking",
+          function (value) {
+            const { rerank_provider_type } = this.parent;
+            return (
+              rerank_provider_type !== RerankerProvider.LITELLM ||
+              (value !== null && value !== "")
+            );
+          }
+        ),
+    });
+
     return (
       <Formik
         innerRef={ref}
         initialValues={currentRerankingDetails}
-        validationSchema={Yup.object().shape({
-          rerank_model_name: Yup.string().nullable(),
-          rerank_provider_type: Yup.mixed<RerankerProvider>()
-            .nullable()
-            .oneOf(Object.values(RerankerProvider))
-            .optional(),
-          api_key: Yup.string().nullable(),
-          num_rerank: Yup.number().min(1, "Must be at least 1"),
-          rerank_api_url: Yup.string()
-            .url("Must be a valid URL")
-            .matches(/^https?:\/\//, "URL must start with http:// or https://")
-            .nullable(),
-        })}
+        validationSchema={validationSchema}
         onSubmit={async (_, { setSubmitting }) => {
           setSubmitting(false);
+        }}
+        validate={(values) => {
+          // Update parent component with values
+          setRerankingDetails(values);
+
+          // Run validation and report errors
+          if (onValidationChange) {
+            // We'll return an empty object here since Yup will handle the actual validation
+            // But we need to check if there are any validation errors
+            const errors: Record<string, string> = {};
+            try {
+              // Manually validate against the schema
+              validationSchema.validateSync(values, { abortEarly: false });
+              onValidationChange(true, {});
+            } catch (validationError) {
+              if (validationError instanceof Yup.ValidationError) {
+                validationError.inner.forEach((err) => {
+                  if (err.path) {
+                    errors[err.path] = err.message;
+                  }
+                });
+                onValidationChange(false, errors);
+              }
+            }
+          }
+
+          return {}; // Return empty object as Formik will handle the errors
         }}
         enableReinitialize={true}
       >

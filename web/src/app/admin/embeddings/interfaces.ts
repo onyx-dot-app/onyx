@@ -22,8 +22,6 @@ export enum RerankerProvider {
 
 export enum EmbeddingPrecision {
   FLOAT = "float",
-  DOUBLE = "double",
-  INT8 = "int8",
   BFLOAT16 = "bfloat16",
 }
 

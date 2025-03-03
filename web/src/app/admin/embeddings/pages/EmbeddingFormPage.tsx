@@ -3,7 +3,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 
 import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   ArrowRight,
   WarningCircle,
   CaretDown,
+  Warning,
 } from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
@@ -81,6 +82,15 @@ export default function EmbeddingForm() {
   const [reindexType, setReindexType] = useState<ReindexType>(
     ReindexType.REINDEX
   );
+
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isFormValid, setIsFormValid] = useState(true);
+  const [rerankFormErrors, setRerankFormErrors] = useState<
+    Record<string, string>
+  >({});
+  const [isRerankFormValid, setIsRerankFormValid] = useState(true);
+  const advancedFormRef = useRef(null);
+  const rerankFormRef = useRef(null);
 
   const updateAdvancedEmbeddingDetails = (
     key: keyof AdvancedSearchConfiguration,
@@ -213,6 +223,28 @@ export default function EmbeddingForm() {
     }
   }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
 
+  const handleValidationChange = useCallback(
+    (isValid: boolean, errors: Record<string, string>) => {
+      setIsFormValid(isValid);
+      setFormErrors(errors);
+    },
+    []
+  );
+
+  const handleRerankValidationChange = useCallback(
+    (isValid: boolean, errors: Record<string, string>) => {
+      setIsRerankFormValid(isValid);
+      setRerankFormErrors(errors);
+    },
+    []
+  );
+
+  // Combine validation states for both forms
+  const isOverallFormValid = isFormValid && isRerankFormValid;
+  const combinedFormErrors = useMemo(() => {
+    return { ...formErrors, ...rerankFormErrors };
+  }, [formErrors, rerankFormErrors]);
+
   const ReIndexingButton = useMemo(() => {
     const ReIndexingButtonComponent = ({
       needsReIndex,
@@ -231,6 +263,7 @@ export default function EmbeddingForm() {
                   navigateToEmbeddingPage("search settings");
                 }
               }}
+              disabled={!isOverallFormValid}
               className="
                 enabled:cursor-pointer 
                 disabled:bg-accent/50 
@@ -257,6 +290,7 @@ export default function EmbeddingForm() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
+                  disabled={!isOverallFormValid}
                   className="
                     enabled:cursor-pointer 
                     disabled:bg-accent/50 
@@ -325,49 +359,98 @@ export default function EmbeddingForm() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-          <div className="relative group">
-            <WarningCircle
-              className="text-text-800 cursor-help"
-              size={20}
-              weight="fill"
-            />
-            <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
-              <p className="font-semibold mb-2">Needs re-indexing due to:</p>
-              <ul className="list-disc pl-5">
-                {currentEmbeddingModel != selectedProvider && (
-                  <li>Changed embedding provider</li>
-                )}
-                {searchSettings?.multipass_indexing !=
-                  advancedEmbeddingDetails.multipass_indexing && (
-                  <li>Multipass indexing modification</li>
-                )}
-                {searchSettings?.embedding_precision !=
-                  advancedEmbeddingDetails.embedding_precision && (
-                  <li>Embedding precision modification</li>
-                )}
-                {searchSettings?.reduced_dimension !=
-                  advancedEmbeddingDetails.reduced_dimension && (
-                  <li>Reduced dimension modification</li>
-                )}
-              </ul>
+          {isOverallFormValid && (
+            <div className="relative group">
+              <WarningCircle
+                className="text-text-800 cursor-help"
+                size={20}
+                weight="fill"
+              />
+              <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
+                <p className="font-semibold mb-2">Needs re-indexing due to:</p>
+                <ul className="list-disc pl-5">
+                  {currentEmbeddingModel != selectedProvider && (
+                    <li>Changed embedding provider</li>
+                  )}
+                  {searchSettings?.multipass_indexing !=
+                    advancedEmbeddingDetails.multipass_indexing && (
+                    <li>Multipass indexing modification</li>
+                  )}
+                  {searchSettings?.embedding_precision !=
+                    advancedEmbeddingDetails.embedding_precision && (
+                    <li>Embedding precision modification</li>
+                  )}
+                  {searchSettings?.reduced_dimension !=
+                    advancedEmbeddingDetails.reduced_dimension && (
+                    <li>Reduced dimension modification</li>
+                  )}
+                </ul>
+              </div>
             </div>
-          </div>
+          )}
+          {!isOverallFormValid &&
+            Object.keys(combinedFormErrors).length > 0 && (
+              <div className="relative group">
+                <Warning
+                  className="text-red-500 cursor-help"
+                  size={20}
+                  weight="fill"
+                />
+                <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
+                  <p className="font-semibold mb-2">Validation Errors:</p>
+                  <ul className="list-disc pl-5">
+                    {Object.entries(combinedFormErrors).map(
+                      ([field, error]) => (
+                        <li key={field}>
+                          {field}: {error}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
         </div>
       ) : (
-        <button
-          className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-          onClick={async () => {
-            updateSearch();
-            navigateToEmbeddingPage("search settings");
-          }}
-        >
-          Update Search
-        </button>
+        <div className="flex mx-auto gap-x-1 ml-auto items-center">
+          <button
+            className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+            onClick={() => {
+              updateSearch();
+              navigateToEmbeddingPage("search settings");
+            }}
+            disabled={!isOverallFormValid}
+          >
+            Update Search
+          </button>
+          {!isOverallFormValid &&
+            Object.keys(combinedFormErrors).length > 0 && (
+              <div className="relative group">
+                <Warning
+                  className="text-red-500 cursor-help"
+                  size={20}
+                  weight="fill"
+                />
+                <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
+                  <p className="font-semibold mb-2 text-red-400">
+                    Validation Errors:
+                  </p>
+                  <ul className="list-disc pl-5">
+                    {Object.entries(combinedFormErrors).map(
+                      ([field, error]) => (
+                        <li key={field}>{error}</li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
+        </div>
       );
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, reindexType, updateSearch]);
+  }, [needsReIndex, reindexType, isOverallFormValid, combinedFormErrors]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -549,6 +632,7 @@ export default function EmbeddingForm() {
 
             <CardSection>
               <RerankingDetailsForm
+                ref={rerankFormRef}
                 setModelTab={setModelTab}
                 modelTab={
                   originalRerankingDetails.rerank_model_name
@@ -558,6 +642,7 @@ export default function EmbeddingForm() {
                 currentRerankingDetails={rerankingDetails}
                 originalRerankingDetails={originalRerankingDetails}
                 setRerankingDetails={setRerankingDetails}
+                onValidationChange={handleRerankValidationChange}
               />
             </CardSection>
 
@@ -598,8 +683,11 @@ export default function EmbeddingForm() {
 
             <CardSection>
               <AdvancedEmbeddingFormPage
+                ref={advancedFormRef}
                 advancedEmbeddingDetails={advancedEmbeddingDetails}
                 updateAdvancedEmbeddingDetails={updateAdvancedEmbeddingDetails}
+                embeddingProviderType={selectedProvider.provider_type}
+                onValidationChange={handleValidationChange}
               />
             </CardSection>
 
