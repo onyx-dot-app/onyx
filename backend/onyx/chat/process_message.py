@@ -37,6 +37,7 @@ from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
+from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
@@ -86,6 +87,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import load_all_user_files
 from onyx.file_store.utils import save_files
@@ -313,6 +315,7 @@ def _get_force_search_settings(
     if should_force_search:
         # If we are using selected docs, just put something here so the Tool doesn't need to build its own args via an LLM call
         args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
+
         return ForceUseTool(
             force_use=True,
             tool_name=tool_name,
@@ -578,6 +581,8 @@ def stream_chat_message_objects(
 
         # Initialize flag for user file search
         use_search_for_user_files = False
+
+        user_files: list[InMemoryChatFile] | None = None
 
         if user_file_ids or user_folder_ids:
             # Load user files
@@ -963,7 +968,16 @@ def stream_chat_message_objects(
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
         )
-
+        if user_files:
+            print("YIELDING FILES")
+            yield UserKnowledgeFilePacket(
+                user_files=[
+                    FileDescriptor(
+                        id=str(file.file_id), type=ChatFileType.USER_KNOWLEDGE
+                    )
+                    for file in user_files
+                ]
+            )
         # reference_db_search_docs = None
         # qa_docs_response = None
         # # any files to associate with the AI message e.g. dall-e generated images

@@ -26,7 +26,6 @@ from onyx.db.persona import create_assistant_label
 from onyx.db.persona import create_update_persona
 from onyx.db.persona import delete_persona_label
 from onyx.db.persona import get_assistant_labels
-from shared_configs.contextvars import get_current_tenant_id
 from onyx.db.persona import get_persona_by_id
 from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
@@ -56,6 +55,7 @@ from onyx.server.models import DisplayPriorityRequest
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -201,6 +201,7 @@ def create_persona(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> PersonaSnapshot:
+    print(persona_upsert_request.__dict__)
     tenant_id = get_current_tenant_id()
 
     prompt_id = (

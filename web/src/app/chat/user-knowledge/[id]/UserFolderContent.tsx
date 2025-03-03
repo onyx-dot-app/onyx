@@ -90,7 +90,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   }, []);
 
   const handleBack = () => {
-    router.push("/chat/my-documents");
+    router.push("/chat/user-knowledge");
   };
   if (!folderDetails) {
     return (
@@ -104,7 +104,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             view it.
           </p>
           <Button onClick={handleBack} variant="outline" className="mt-2">
-            Back to My Documents
+            Back to Knowledge Groups
           </Button>
         </div>
       </div>
@@ -245,7 +245,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         message: "Folder moved successfully",
         type: "success",
       });
-      router.push(`/chat/my-documents/${targetFolderId}`);
+      router.push(`/chat/user-knowledge/${targetFolderId}`);
     } catch (error) {
       console.error("Error moving folder:", error);
       setPopup({

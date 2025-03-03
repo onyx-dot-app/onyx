@@ -36,13 +36,13 @@ const SortSelector: React.FC<SortSelectorProps> = ({ onSortChange }) => {
   return (
     <div className="relative h-fit">
       {isOpen && (
-        <div className="absolute right-0 top-full w-48 bg-white rounded-md shadow-lg z-10">
+        <div className="absolute right-0 top-full w-48 bg-white dark:bg-neutral-800 rounded-md shadow-lg z-10">
           <div className="py-1">
             {Object.values(SortType).map((sortType) => (
               <button
                 key={sortType}
                 onClick={() => handleSortChange(sortType)}
-                className="block w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-100 focus:outline-none"
+                className="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none"
               >
                 {sortType}
               </button>
@@ -53,7 +53,7 @@ const SortSelector: React.FC<SortSelectorProps> = ({ onSortChange }) => {
 
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 text-sm text-neutral-600 hover:text-neutral-800 focus:outline-none"
+        className="flex items-center space-x-2 text-sm text-neutral-600 dark:text-neutral-300 hover:text-neutral-800 dark:hover:text-neutral-100 focus:outline-none"
       >
         <span>{currentSort}</span>
         <SortIcon className="w-4 h-4" />
@@ -61,14 +61,18 @@ const SortSelector: React.FC<SortSelectorProps> = ({ onSortChange }) => {
     </div>
   );
 };
+
 const SkeletonLoader = () => (
   <div className="flex justify-center items-center w-full h-64">
-    <div className="animate-pulse flex flex-col items-center gap-4 w-full">
-      <div className="h-24 w-24 rounded-full bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 flex items-center justify-center">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary dark:border-neutral-300"></div>
+    <div className="animate-pulse flex flex-col items-center gap-5 w-full">
+      <div className="h-28 w-28 rounded-full  from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-20 w-20 border-t-2 border-b-2 border-r-0 border-l-0 border-primary dark:border-neutral-300"></div>
       </div>
-      <div className="h-4 w-48 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
-      <div className="h-3 w-32 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
+      <div className="space-y-3">
+        <div className="h-5 w-56 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
+        <div className="h-4 w-40 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
+        <div className="h-3 w-32 bg-gradient-to-r from-primary/20 to-primary/30 dark:from-neutral-700 dark:to-neutral-600 rounded-md"></div>
+      </div>
     </div>
   </div>
 );
@@ -106,7 +110,7 @@ export default function MyDocuments() {
 
   const handleFolderClick = (id: number) => {
     startTransition(() => {
-      router.push(`/chat/my-documents/${id}`);
+      router.push(`/chat/user-knowledge/${id}`);
       setPage(1);
       setCurrentFolder(id);
     });
@@ -117,7 +121,7 @@ export default function MyDocuments() {
       const folderResponse = await createFolder(name, description);
       startTransition(() => {
         router.push(
-          `/chat/my-documents/${folderResponse.id}?message=folder-created`
+          `/chat/user-knowledge/${folderResponse.id}?message=folder-created`
         );
         setPage(1);
         setCurrentFolder(folderResponse.id);
@@ -266,8 +270,8 @@ export default function MyDocuments() {
 
   return (
     <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-5xl flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14">
-      <header className="flex  w-full items-center justify-between gap-4  pt-2  -translate-y-px">
-        <h1 className=" flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
+      <header className="flex w-full items-center justify-between gap-4 pt-2 -translate-y-px">
+        <h1 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
           Knowledge Groups
         </h1>
         <div className="flex items-center gap-2">
@@ -287,8 +291,8 @@ export default function MyDocuments() {
         </div>
       </header>
       <main className="w-full mt-4">
-        <div className=" top-3 w-full z-[5] flex gap-4 bg-gradient-to-b via-50% max-lg:flex-col lg:sticky lg:items-center">
-          <div className="flex justify-between  w-full ">
+        <div className="top-3 w-full z-[5] flex gap-4 bg-gradient-to-b via-50% max-lg:flex-col lg:sticky lg:items-center">
+          <div className="flex justify-between w-full">
             <div className="bg-background-000 dark:bg-neutral-800 border md:max-w-96 border-border-200 dark:border-neutral-700 hover:border-border-100 dark:hover:border-neutral-600 transition-colors placeholder:text-text-500 dark:placeholder:text-neutral-400 focus:border-accent-secondary-100 focus-within:!border-accent-secondary-100 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 h-11 px-3 rounded-[0.6rem] w-full inline-flex cursor-text items-stretch gap-2">
               <div className="flex items-center">
                 <Search className="h-4 w-4 text-text-400 dark:text-neutral-400" />
@@ -304,6 +308,7 @@ export default function MyDocuments() {
             <SortSelector onSortChange={handleSortChange} />
           </div>
         </div>
+
         {isPending && (
           <div className="flex fixed left-20 top-1/3 justify-center items-center mt-4">
             <Loader2 className="h-6 w-6 animate-spin text-primary dark:text-neutral-300" />
@@ -341,7 +346,7 @@ export default function MyDocuments() {
           ) : (
             <div className="flex flex-col items-center justify-center h-64">
               <FolderOpen
-                className="w-20 h-20 text-orange-400 dark:text-orange-300 mb-4 "
+                className="w-20 h-20 text-orange-400 dark:text-orange-300 mb-4"
                 strokeWidth={1.5}
               />
               <p className="text-text-500 dark:text-neutral-400 text-lg font-normal">

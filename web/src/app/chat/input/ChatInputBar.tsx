@@ -35,7 +35,7 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { useDocumentsContext } from "../my-documents/DocumentsContext";
+import { useDocumentsContext } from "../user-knowledge/DocumentsContext";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";

@@ -88,12 +88,12 @@ import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
-import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
-import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
+import { FilePickerModal } from "@/app/chat/user-knowledge/components/FilePicker";
+import { useDocumentsContext } from "@/app/chat/user-knowledge/DocumentsContext";
 import {
   FileResponse,
   FolderResponse,
-} from "@/app/chat/my-documents/DocumentsContext";
+} from "@/app/chat/user-knowledge/DocumentsContext";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";

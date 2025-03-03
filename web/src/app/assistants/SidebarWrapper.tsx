@@ -21,6 +21,9 @@ import { HistorySidebar } from "../chat/sessionSidebar/HistorySidebar";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import AssistantModal from "./mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
+import { UserSettingsModal } from "../chat/modal/UserSettingsModal";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { useUser } from "@/components/user/UserProvider";
 
 interface SidebarWrapperProps<T extends object> {
   size?: "sm" | "lg";
@@ -60,6 +63,7 @@ export default function SidebarWrapper<T extends object>({
     }, 200);
   };
 
+  const { popup, setPopup } = usePopup();
   const settings = useContext(SettingsContext);
   useSidebarVisibility({
     sidebarVisible,
@@ -69,13 +73,18 @@ export default function SidebarWrapper<T extends object>({
     mobile: settings?.isMobile,
   });
 
+  const { user } = useUser();
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
   const router = useRouter();
+  const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
+  const { llmProviders } = useChatContext();
   useSidebarShortcut(router, toggleSidebar);
 
   return (
     <div className="flex relative overflow-x-hidden overscroll-contain flex-col w-full h-screen">
+      {popup}
+
       {showAssistantsModal && (
         <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
       )}
@@ -113,9 +122,18 @@ export default function SidebarWrapper<T extends object>({
           />
         </div>
       </div>
+      {userSettingsToggled && (
+        <UserSettingsModal
+          setPopup={setPopup}
+          llmProviders={llmProviders}
+          onClose={() => setUserSettingsToggled(false)}
+          defaultModel={user?.preferences?.default_model!}
+        />
+      )}
 
       <div className="absolute px-2 left-0 w-full top-0">
         <FunctionalHeader
+          toggleUserSettings={() => setUserSettingsToggled(true)}
           sidebarToggled={sidebarVisible}
           toggleSidebar={toggleSidebar}
           page="chat"

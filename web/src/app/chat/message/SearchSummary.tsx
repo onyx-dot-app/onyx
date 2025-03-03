@@ -50,6 +50,7 @@ export function SearchSummary({
   handleSearchQueryEdit,
   docs,
   toggleDocumentSelection,
+  userFileSearch,
 }: {
   index: number;
   finished: boolean;
@@ -57,6 +58,7 @@ export function SearchSummary({
   handleSearchQueryEdit?: (query: string) => void;
   docs: OnyxDocument[];
   toggleDocumentSelection: () => void;
+  userFileSearch: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [finalQuery, setFinalQuery] = useState(query);
@@ -107,7 +109,8 @@ export function SearchSummary({
           } text-xs desktop:text-sm mobile:ml-auto !line-clamp-1 !break-all px-0.5 flex-grow`}
           ref={searchingForRef}
         >
-          {finished ? "Searched" : "Searching"} for:{" "}
+          {finished ? "Searched" : "Searching"}{" "}
+          {userFileSearch && "knowledge groups "} for:{" "}
           <i>
             {index === 1
               ? finalQuery.length > 50

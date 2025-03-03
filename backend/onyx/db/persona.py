@@ -574,6 +574,8 @@ def upsert_persona(
             existing_persona.user_folders.clear()
             existing_persona.user_folders = user_folders or []
 
+        print("user_folder_ids", user_folder_ids)
+        print("user_folders", user_folders)
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
@@ -613,6 +615,8 @@ def upsert_persona(
             is_visible=is_visible,
             search_start_date=search_start_date,
             is_default_persona=is_default_persona,
+            user_folders=user_folders or [],
+            user_files=user_files or [],
             labels=labels or [],
         )
         db_session.add(new_persona)

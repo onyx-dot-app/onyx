@@ -184,7 +184,6 @@ export async function createPersona(
       return null;
     }
   }
-
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {

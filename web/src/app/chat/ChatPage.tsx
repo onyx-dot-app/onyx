@@ -24,6 +24,7 @@ import {
   constructSubQuestions,
   DocumentsResponse,
   AgenticMessageResponseIDInfo,
+  UserKnowledgeFilePacket,
 } from "./interfaces";
 
 import Prism from "prismjs";
@@ -86,6 +87,7 @@ import {
   SubQuestionPiece,
   AgentAnswerPiece,
   RefinedAnswerImprovement,
+  MinimalOnyxDocument,
 } from "@/lib/search/interfaces";
 import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -133,7 +135,7 @@ import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
-import { FilePickerModal } from "./my-documents/components/FilePicker";
+import { FilePickerModal } from "./user-knowledge/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
@@ -142,7 +144,7 @@ import {
   FileResponse,
   FolderResponse,
   useDocumentsContext,
-} from "./my-documents/DocumentsContext";
+} from "./user-knowledge/DocumentsContext";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
@@ -351,7 +353,7 @@ export function ChatPage({
     useState<Persona | null>(null);
 
   const [presentingDocument, setPresentingDocument] =
-    useState<OnyxDocument | null>(null);
+    useState<MinimalOnyxDocument | null>(null);
 
   // Current assistant is decided based on this ordering
   // 1. Alternative assistant (assistant selected explicitly by user)
@@ -1345,6 +1347,7 @@ export function ChatPage({
     let includeAgentic = false;
     let secondLevelMessageId: number | null = null;
     let isAgentic: boolean = false;
+    let files: FileDescriptor[] = [];
 
     let initialFetchDetails: null | {
       user_message_id: number;
@@ -1455,7 +1458,7 @@ export function ChatPage({
                   : user_message_id,
                 message: currMessage,
                 type: "user",
-                files: currentMessageFiles,
+                files: files,
                 toolCall: null,
                 parentMessageId: parentMessage?.messageId || SYSTEM_MESSAGE_ID,
               },
@@ -1513,6 +1516,15 @@ export function ChatPage({
               if ((packet as any).level === 1) {
                 second_level_generating = true;
               }
+            }
+            if (Object.hasOwn(packet, "user_files")) {
+              const userFiles = (packet as UserKnowledgeFilePacket).user_files;
+              // Ensure files are unique by id
+              const newUserFiles = userFiles.filter(
+                (newFile) =>
+                  !files.some((existingFile) => existingFile.id === newFile.id)
+              );
+              files = files.concat(newUserFiles);
             }
             if (Object.hasOwn(packet, "is_agentic")) {
               isAgentic = (packet as any).is_agentic;
@@ -1717,7 +1729,7 @@ export function ChatPage({
                   : initialFetchDetails.user_message_id!,
                 message: currMessage,
                 type: "user",
-                files: currentMessageFiles,
+                files: files,
                 toolCall: null,
                 parentMessageId: error ? null : lastSuccessfulMessageId,
                 childrenMessageIds: [
@@ -1966,7 +1978,10 @@ export function ChatPage({
   useEffect(() => {
     if (liveAssistant) {
       const hasSearchTool = liveAssistant.tools.some(
-        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+        (tool) =>
+          tool.in_code_tool_id === SEARCH_TOOL_ID &&
+          liveAssistant.user_file_ids?.length == 0 &&
+          liveAssistant.user_folder_ids?.length == 0
       );
       setRetrievalEnabled(hasSearchTool);
       if (!hasSearchTool) {
@@ -1978,7 +1993,10 @@ export function ChatPage({
   const [retrievalEnabled, setRetrievalEnabled] = useState(() => {
     if (liveAssistant) {
       return liveAssistant.tools.some(
-        (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
+        (tool) =>
+          tool.in_code_tool_id === SEARCH_TOOL_ID &&
+          liveAssistant.user_file_ids?.length == 0 &&
+          liveAssistant.user_folder_ids?.length == 0
       );
     }
     return false;
@@ -2368,6 +2386,31 @@ export function ChatPage({
       {showAssistantsModal && (
         <AssistantModal hideModal={() => setShowAssistantsModal(false)} />
       )}
+      {/* Debug Modal to display current state values */}
+      {/* <div className="fixed bottom-4 right-4 z-50 bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg max-w-md max-h-96 overflow-auto">
+        <h3 className="text-lg font-semibold mb-2">Debug State</h3>
+        <pre className="text-xs whitespace-pre-wrap">
+          {JSON.stringify(
+            {
+              retrievalEnabled,
+              currentPersona: currentPersona?.name,
+              alternativeAssistant: alternativeAssistant?.name,
+              messageHistoryLength: messageHistory.length,
+              currentSessionId: chatSessionIdRef.current,
+              currentSessionChatState,
+              documentSidebarVisible,
+              selectedDocuments: selectedDocuments?.length || 0,
+              liveAssistantUserFilesLength:
+                liveAssistant?.user_file_ids?.length || 0,
+              liveAssistantUserFoldersLength:
+                liveAssistant?.user_folder_ids?.length || 0,
+            },
+            null,
+            2
+          )}
+          {JSON.stringify({ liveAssistant })}
+        </pre>
+      </div> */}
 
       <div className="fixed inset-0 flex flex-col text-text-dark">
         <div className="h-[100dvh] overflow-y-hidden">
@@ -2641,6 +2684,9 @@ export function ChatPage({
                                     key={messageReactComponentKey}
                                   >
                                     <HumanMessage
+                                      setPresentingDocument={
+                                        setPresentingDocument
+                                      }
                                       disableSwitchingForStreaming={
                                         (nextMessage &&
                                           nextMessage.is_generating) ||
@@ -3124,6 +3170,7 @@ export function ChatPage({
                                 messageHistory[messageHistory.length - 1]
                                   ?.type != "user")) && (
                               <HumanMessage
+                                setPresentingDocument={setPresentingDocument}
                                 key={-2}
                                 messageId={-1}
                                 content={submittedMessage}

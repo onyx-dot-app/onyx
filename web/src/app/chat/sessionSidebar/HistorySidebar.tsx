@@ -310,7 +310,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               </Link>
               <Link
                 className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
-                href="/chat/my-documents"
+                href="/chat/user-knowledge"
               >
                 <KnowledgeGroupIcon
                   size={20}

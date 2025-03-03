@@ -1,6 +1,6 @@
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { useState } from "react";
-import { FileResponse } from "./my-documents/DocumentsContext";
+import { FileResponse } from "./user-knowledge/DocumentsContext";
 
 interface DocumentInfo {
   num_chunks: number;

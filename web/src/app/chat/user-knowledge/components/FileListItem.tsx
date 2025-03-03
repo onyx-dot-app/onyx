@@ -169,10 +169,10 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                 <FiArrowDown className="h-4 w-4" />
                 Move
               </Button>
-              <Button variant="menu" onClick={() => {}}>
+              {/* <Button variant="menu" onClick={() => {}}>
                 <FiSearch className="h-4 w-4" />
                 Summarize
-              </Button>
+              </Button> */}
               <Button
                 variant="menu"
                 onClick={() => onRename(file.id, file.name, false)}

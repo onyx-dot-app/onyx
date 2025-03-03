@@ -73,8 +73,8 @@ const DraggableItem: React.FC<{
   };
 
   const selectedClassName = isSelected
-    ? "bg-blue-100 border-blue-300 shadow-sm"
-    : "hover:bg-gray-100";
+    ? "bg-neutral-200 border-neutral-300 shadow-sm"
+    : "hover:bg-neutral-100/70 dark:hover:bg-neutral-800/50";
 
   if (type === "folder") {
     return (
@@ -97,11 +97,11 @@ const DraggableItem: React.FC<{
       {...attributes}
       {...listeners}
       className={`flex items-center p-2 cursor-pointer rounded-md ${
-        isDragging ? "bg-gray-200" : ""
+        isDragging ? "bg-neutral-200" : ""
       } ${selectedClassName}`}
       onClick={onClick}
     >
-      <FileIcon className="mr-2 text-gray-500" />
+      <FileIcon className="mr-2 text-neutral-500" />
       <span className="text-sm font-medium">{(item as FileResponse).name}</span>
     </div>
   );
@@ -116,12 +116,12 @@ const FilePickerFolderItem: React.FC<{
 }> = ({ folder, onClick, onSelect, isSelected, allFilesSelected }) => {
   const selectedClassName =
     isSelected || allFilesSelected
-      ? "from-blue-100 to-blue-50 border-blue-300 shadow-sm dark:from-blue-900 dark:to-blue-800 dark:border-blue-700"
-      : "from-[#f2f0e8]/80 to-[#F7F6F0] hover:from-[#f2f0e8] hover:to-[#F7F6F0] dark:from-neutral-800 dark:to-neutral-900 dark:hover:from-neutral-700 dark:hover:to-neutral-800";
+      ? "from-[#f2f0e8]/80 to-[#F7F6F0] hover:from-[#f2f0e8] hover:to-[#F7F6F0] dark:from-neutral-800 dark:to-neutral-900 dark:hover:from-neutral-700 dark:hover:to-neutral-800"
+      : "from-neutral-100 to-neutral-50 border-neutral-300 shadow-sm dark:from-neutral-800 dark:to-neutral-700 dark:border-neutral-700";
 
   return (
     <div
-      className={`${selectedClassName} border-0.5 border-border hover:border-border-200 dark:border-neutral-700 dark:hover:border-neutral-600 text-md group relative flex cursor-pointer flex-col overflow-x-hidden text-ellipsis rounded-xl bg-gradient-to-b py-4 pl-5 pr-4 transition-all ease-in-out hover:shadow-sm active:scale-[0.99]`}
+      className={`${selectedClassName} border border-neutral-50 hover:border-neutral-200 dark:border-neutral-700 dark:hover:border-neutral-600 text-md group relative flex cursor-pointer flex-col overflow-x-hidden text-ellipsis rounded-xl bg-gradient-to-b py-4 pl-5 pr-4 transition-all ease-in-out hover:shadow-sm active:scale-[0.99]`}
       onClick={onClick}
     >
       <div className="flex flex-col flex-1">
@@ -141,10 +141,10 @@ const FilePickerFolderItem: React.FC<{
           <Button
             variant="ghost"
             size="sm"
-            className={`ml-2 ${
+            className={`ml-2 h-6 w-6 p-0 rounded-full opacity-80 hover:opacity-100 ${
               isSelected || allFilesSelected
-                ? "text-blue-500 dark:text-blue-400"
-                : "text-gray-500 dark:text-neutral-400"
+                ? "text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                : "text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
             }`}
             onClick={(e) => {
               e.stopPropagation();
@@ -152,9 +152,9 @@ const FilePickerFolderItem: React.FC<{
             }}
           >
             {isSelected || allFilesSelected ? (
-              <X size={16} />
+              <X size={14} />
             ) : (
-              <PlusIcon size={16} />
+              <PlusIcon size={14} />
             )}
           </Button>
         </div>
@@ -520,7 +520,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     if (currentFolder !== null) {
       return (
         <div
-          className="flex items-center mb-2 text-sm text-gray-600 cursor-pointer hover:text-gray-800"
+          className="flex items-center mb-2 text-sm text-neutral-600 cursor-pointer hover:text-neutral-800"
           onClick={() => setCurrentFolder(null)}
         >
           <svg
@@ -684,17 +684,18 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       className="max-w-4xl flex flex-col w-full !overflow-hidden h-[70vh]"
       title={title}
     >
-      <div className="grid h-full grid-cols-2 overflow-y-hidden w-full divide-x divide-gray-200 dark:divide-neutral-700">
+      <div className="grid h-full grid-cols-2 overflow-y-hidden w-full divide-x divide-neutral-200 dark:divide-neutral-700">
         <div className="w-full h-full pb-4 overflow-y-auto">
-          <div className="sticky flex flex-col gap-y-2 border-b bg-background dark:bg-transparent z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
+          <div className="sticky flex flex-col gap-y-2  bg-background dark:bg-transparent z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
             <div className="w-full relative">
               <input
                 type="text"
                 placeholder="Search groups..."
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
+                className="w-full pl-10 pr-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
+
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg
                   className="h-5 w-5 text-text-dark dark:text-neutral-400"
@@ -800,8 +801,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                 No groups found
               </p>
               <a
-                href="/chat/my-documents"
-                className="inline-flex items-center text-sm justify-center text-blue-600 dark:text-blue-400 hover:underline"
+                href="/chat/user-knowledge"
+                className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
               >
                 <FolderIcon className="mr-2 h-4 w-4" />
                 Create folder in My Documents
@@ -810,13 +811,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           )}
         </div>
         <div
-          className={`w-full h-full px-4 pb-4 flex flex-col h-[450px] ${
-            isHoveringRight ? "bg-blue-50 dark:bg-blue-900/20" : ""
+          className={`w-full h-full px-5 pb-5 flex flex-col h-[450px] ${
+            isHoveringRight ? "bg-neutral-100 dark:bg-neutral-800/30" : ""
           }`}
           onDragEnter={() => setIsHoveringRight(true)}
           onDragLeave={() => setIsHoveringRight(false)}
         >
-          <div className="shrink flex h-full overflow-y-auto mb-1">
+          <div className="shrink flex h-full overflow-y-auto mb-3">
             <SelectedItemsList
               folders={selectedItems.folders}
               files={selectedItems.files}
@@ -825,14 +826,14 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             />
           </div>
 
-          <div className="flex flex-col">
-            <div className="p-4 flex-none border rounded-lg bg-neutral-50 dark:bg-neutral-800 dark:border-neutral-700">
+          <div className="flex flex-col space-y-3">
+            <div className="p-4 flex-none border rounded-lg bg-neutral-50 hover:bg-neutral-100 transition-colors duration-150 dark:bg-neutral-800 dark:hover:bg-neutral-750 dark:border-neutral-700">
               <label
                 htmlFor="file-upload"
                 className="cursor-pointer flex items-center justify-center space-x-2"
               >
-                <UploadIcon className="w-5 h-5 text-gray-600 dark:text-neutral-300" />
-                <span className="text-sm font-medium text-gray-700 dark:text-neutral-200">
+                <UploadIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
+                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
                   {isUploadingFile ? "Uploading..." : "Upload files"}
                 </span>
               </label>
@@ -846,33 +847,31 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               />
             </div>
 
-            <Separator className="my-2 dark:bg-neutral-700" />
+            <Separator className="dark:bg-neutral-700" />
 
-            <div className="flex flex-col">
-              <div className="flex flex-col gap-y-2">
-                <p className="text-sm text-text-subtle dark:text-neutral-400">
-                  Add links to the context
-                </p>
-              </div>
+            <div className="flex flex-col space-y-2">
+              <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                Add links to the context
+              </p>
               <form
-                className="flex gap-x-4 mt-2"
+                className="flex mt-1"
                 onSubmit={(e) => {
                   e.preventDefault();
                   handleCreateFileFromLink();
                 }}
               >
-                <div className="w-full gap-x-2 flex">
+                <div className="w-full flex items-center space-x-2">
                   <input
                     type="text"
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     placeholder="Enter URL"
-                    className="flex-grow !text-sm mr-2 px-2 py-1 border border-gray-300 dark:border-neutral-600 rounded dark:bg-neutral-800 dark:text-neutral-100"
+                    className="flex-grow text-sm px-3 py-1.5 border border-neutral-300 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-500"
                   />
                   <Button
                     variant="default"
-                    className="!text-sm"
-                    size="xs"
+                    className="text-sm h-8"
+                    size="sm"
                     onClick={handleCreateFileFromLink}
                     disabled={isCreatingFileFromLink || !linkUrl}
                   >
