@@ -78,7 +78,7 @@ class CloudEmbedding:
         self._closed = False
 
     async def _embed_openai(
-        self, texts: list[str], model: str | None
+        self, texts: list[str], model: str | None, reduced_dimension: int | None
     ) -> list[Embedding]:
         if not model:
             model = DEFAULT_OPENAI_MODEL
@@ -91,7 +91,11 @@ class CloudEmbedding:
         final_embeddings: list[Embedding] = []
         try:
             for text_batch in batch_list(texts, _OPENAI_MAX_INPUT_LEN):
-                response = await client.embeddings.create(input=text_batch, model=model)
+                response = await client.embeddings.create(
+                    input=text_batch,
+                    model=model,
+                    dimensions=reduced_dimension or openai.NOT_GIVEN,
+                )
                 final_embeddings.extend(
                     [embedding.embedding for embedding in response.data]
                 )
@@ -223,9 +227,10 @@ class CloudEmbedding:
         text_type: EmbedTextType,
         model_name: str | None = None,
         deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
     ) -> list[Embedding]:
         if self.provider == EmbeddingProvider.OPENAI:
-            return await self._embed_openai(texts, model_name)
+            return await self._embed_openai(texts, model_name, reduced_dimension)
         elif self.provider == EmbeddingProvider.AZURE:
             return await self._embed_azure(texts, f"azure/{deployment_name}")
         elif self.provider == EmbeddingProvider.LITELLM:
@@ -326,6 +331,7 @@ async def embed_text(
     prefix: str | None,
     api_url: str | None,
     api_version: str | None,
+    reduced_dimension: int | None,
     gpu_type: str = "UNKNOWN",
 ) -> list[Embedding]:
     if not all(texts):
@@ -369,6 +375,7 @@ async def embed_text(
                 model_name=model_name,
                 deployment_name=deployment_name,
                 text_type=text_type,
+                reduced_dimension=reduced_dimension,
             )
 
         if any(embedding is None for embedding in embeddings):
@@ -508,6 +515,7 @@ async def process_embed_request(
             text_type=embed_request.text_type,
             api_url=embed_request.api_url,
             api_version=embed_request.api_version,
+            reduced_dimension=embed_request.reduced_dimension,
             prefix=prefix,
             gpu_type=gpu_type,
         )

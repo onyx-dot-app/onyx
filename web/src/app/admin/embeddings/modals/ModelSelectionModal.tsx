@@ -51,9 +51,10 @@ export function ModelSelectionConfirmationModal({
             </Callout>
           )}
 
-          <div className="flex mt-8">
-            <Button className="mx-auto" variant="submit" onClick={onConfirm}>
-              Yes
+          <div className="flex mt-8 gap-x-2 justify-end">
+            <Button onClick={onConfirm}>Confirm</Button>
+            <Button variant="outline" onClick={onCancel}>
+              Cancel
             </Button>
           </div>
         </div>

@@ -320,7 +320,8 @@ class WebConnector(LoadConnector):
                 logger.warning(last_error)
                 continue
 
-            logger.info(f"{len(visited_links)}: Visiting {initial_url}")
+            index = len(visited_links)
+            logger.info(f"{index}: Visiting {initial_url}")
 
             try:
                 check_internet_connection(initial_url)
@@ -371,12 +372,10 @@ class WebConnector(LoadConnector):
                     initial_url = final_url
                     if initial_url in visited_links:
                         logger.info(
-                            f"{len(visited_links)}: {initial_url} redirected to {final_url} - already indexed"
+                            f"{index}: {initial_url} redirected to {final_url} - already indexed"
                         )
                         continue
-                    logger.info(
-                        f"{len(visited_links)}: {initial_url} redirected to {final_url}"
-                    )
+                    logger.info(f"{index}: {initial_url} redirected to {final_url}")
                     visited_links.add(initial_url)
 
                 if self.scroll_before_scraping:
@@ -410,7 +409,9 @@ class WebConnector(LoadConnector):
                 """For websites containing iframes that need to be scraped,
                 the code below can extract text from within these iframes.
                 """
-                logger.info(f"Length of cleaned text {len(parsed_html.cleaned_text)}")
+                logger.debug(
+                    f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
+                )
                 if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
                     iframe_count = page.frame_locator("iframe").locator("html").count()
                     if iframe_count > 0:
@@ -427,11 +428,13 @@ class WebConnector(LoadConnector):
                         else:
                             parsed_html.cleaned_text += "\n" + document_text
 
-                # Sometimes pages with #! will server duplicate content
+                # Sometimes pages with #! will serve duplicate content
                 # There are also just other ways this can happen
-                hashed_text = hash(parsed_html.cleaned_text)
+                hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
                 if hashed_text in content_hashes:
-                    logger.info(f"Skipping duplicate content for {initial_url}")
+                    logger.info(
+                        f"{index}: Skipping duplicate title + content for {initial_url}"
+                    )
                     continue
                 content_hashes.add(hashed_text)
 

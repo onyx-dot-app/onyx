@@ -46,7 +46,13 @@ from onyx.configs.constants import DEFAULT_BOOST, MilestoneRecordType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
-from onyx.db.enums import AccessType, IndexingMode, SyncType, SyncStatus
+from onyx.db.enums import (
+    AccessType,
+    EmbeddingPrecision,
+    IndexingMode,
+    SyncType,
+    SyncStatus,
+)
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.constants import TokenRateLimitScope
@@ -716,6 +722,23 @@ class SearchSettings(Base):
         ForeignKey("embedding_provider.provider_type"), nullable=True
     )
 
+    # Whether switching to this model should re-index all connectors in the background
+    # if no re-index is needed, will be ignored. Only used during the switch-over process.
+    background_reindex_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # allows for quantization -> less memory usage for a small performance hit
+    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
+        Enum(EmbeddingPrecision, native_enum=False)
+    )
+
+    # can be used to reduce dimensionality of vectors and save memory with
+    # a small performance hit. More details in the `Reducing embedding dimensions`
+    # section here:
+    # https://platform.openai.com/docs/guides/embeddings#embedding-models
+    # If not specified, will just use the model_dim without any reduction.
+    # NOTE: this is only currently available for OpenAI models
+    reduced_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Mini and Large Chunks (large chunk also checks for model max context)
     multipass_indexing: Mapped[bool] = mapped_column(Boolean, default=True)
 
@@ -796,6 +819,12 @@ class SearchSettings(Base):
         return SearchSettings.can_use_large_chunks(
             self.multipass_indexing, self.model_name, self.provider_type
         )
+
+    @property
+    def final_embedding_dim(self) -> int:
+        if self.reduced_dimension:
+            return self.reduced_dimension
+        return self.model_dim
 
     @staticmethod
     def can_use_large_chunks(
@@ -1761,6 +1790,7 @@ class ChannelConfig(TypedDict):
     channel_name: str | None  # None for default channel config
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
+    is_ephemeral: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
     answer_filters: NotRequired[list[AllowedAnswerFilters]]
     # If None then no follow up

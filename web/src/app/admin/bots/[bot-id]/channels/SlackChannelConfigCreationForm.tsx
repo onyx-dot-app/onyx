@@ -83,6 +83,8 @@ export const SlackChannelConfigCreationForm = ({
           respond_tag_only:
             existingSlackChannelConfig?.channel_config?.respond_tag_only ||
             false,
+          is_ephemeral:
+            existingSlackChannelConfig?.channel_config?.is_ephemeral || false,
           respond_to_bots:
             existingSlackChannelConfig?.channel_config?.respond_to_bots ||
             false,
@@ -135,6 +137,7 @@ export const SlackChannelConfigCreationForm = ({
           questionmark_prefilter_enabled: Yup.boolean().required(),
           respond_tag_only: Yup.boolean().required(),
           respond_to_bots: Yup.boolean().required(),
+          is_ephemeral: Yup.boolean().required(),
           show_continue_in_web_ui: Yup.boolean().required(),
           enable_auto_filters: Yup.boolean().required(),
           respond_member_group_list: Yup.array().of(Yup.string()).required(),

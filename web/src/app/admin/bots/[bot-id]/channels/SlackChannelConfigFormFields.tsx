@@ -597,6 +597,13 @@ export function SlackChannelConfigFormFields({
                 label="Respond to Bot messages"
                 tooltip="If not set, OnyxBot will always ignore messages from Bots"
               />
+              <CheckFormField
+                name="is_ephemeral"
+                label="Respond to user in a private (ephemeral) message"
+                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also 
+                chose 'Search' Assistant above, selecting this option will make documents that are private to the user 
+                available for their queries."
+              />
 
               <TextArrayField
                 name="respond_member_group_list"
@@ -635,11 +642,14 @@ export function SlackChannelConfigFormFields({
                   Privacy Alert
                 </Label>
                 <p className="text-sm text-text-darker mb-4">
-                  Please note that at least one of the documents accessible by
-                  your OnyxBot is marked as private and may contain sensitive
-                  information. These documents will be accessible to all users
-                  of this OnyxBot. Ensure this aligns with your intended
-                  document sharing policy.
+                  Please note that if the private (ephemeral) response is *not
+                  selected*, only public documents within the selected document
+                  sets will be accessible for user queries. If the private
+                  (ephemeral) response *is selected*, user quries can also
+                  leverage documents that the user has already been granted
+                  access to. Note that users will be able to share the response
+                  with others in the channel, so please ensure that this is
+                  aligned with your company sharing policies.
                 </p>
                 <div className="space-y-2">
                   <h4 className="text-sm text-text font-medium">

@@ -18,7 +18,7 @@ from onyx.onyxbot.slack.handlers.handle_standard_answers import (
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
 from onyx.onyxbot.slack.utils import fetch_user_ids_from_groups
-from onyx.onyxbot.slack.utils import respond_in_thread
+from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import slack_usage_report
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.utils.logger import setup_logger
@@ -29,7 +29,7 @@ logger_base = setup_logger()
 
 def send_msg_ack_to_user(details: SlackMessageInfo, client: WebClient) -> None:
     if details.is_bot_msg and details.sender_id:
-        respond_in_thread(
+        respond_in_thread_or_channel(
             client=client,
             channel=details.channel_to_respond,
             thread_ts=details.msg_to_respond,
@@ -202,7 +202,7 @@ def handle_message(
     # which would just respond to the sender
     if send_to and is_bot_msg:
         if sender_id:
-            respond_in_thread(
+            respond_in_thread_or_channel(
                 client=client,
                 channel=channel,
                 receiver_ids=[sender_id],
@@ -220,6 +220,7 @@ def handle_message(
             add_slack_user_if_not_exists(db_session, message_info.email)
 
         # first check if we need to respond with a standard answer
+        # standard answers should be published in a thread
         used_standard_answer = handle_standard_answers(
             message_info=message_info,
             receiver_ids=send_to,

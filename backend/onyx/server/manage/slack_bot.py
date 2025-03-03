@@ -71,6 +71,15 @@ def _form_channel_config(
             "also respond to a predetermined set of users."
         )
 
+    if (
+        slack_channel_config_creation_request.is_ephemeral
+        and slack_channel_config_creation_request.respond_member_group_list
+    ):
+        raise ValueError(
+            "Cannot set OnyxBot to respond to users in a private (ephemeral) message "
+            "and also respond to a selected list of users."
+        )
+
     channel_config: ChannelConfig = {
         "channel_name": cleaned_channel_name,
     }
@@ -90,6 +99,8 @@ def _form_channel_config(
     channel_config[
         "respond_to_bots"
     ] = slack_channel_config_creation_request.respond_to_bots
+
+    channel_config["is_ephemeral"] = slack_channel_config_creation_request.is_ephemeral
 
     channel_config["disabled"] = slack_channel_config_creation_request.disabled
 

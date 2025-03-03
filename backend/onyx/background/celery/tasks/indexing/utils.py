@@ -346,11 +346,10 @@ def validate_indexing_fences(
     return
 
 
-def _should_index(
+def should_index(
     cc_pair: ConnectorCredentialPair,
     last_index: IndexAttempt | None,
     search_settings_instance: SearchSettings,
-    search_settings_primary: bool,
     secondary_index_building: bool,
     db_session: Session,
 ) -> bool:
@@ -415,9 +414,9 @@ def _should_index(
     ):
         return False
 
-    if search_settings_primary:
+    if search_settings_instance.status.is_current():
         if cc_pair.indexing_trigger is not None:
-            # if a manual indexing trigger is on the cc pair, honor it for primary search settings
+            # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq

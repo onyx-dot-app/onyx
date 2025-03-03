@@ -30,6 +30,12 @@ class EmbedRequest(BaseModel):
     manual_passage_prefix: str | None = None
     api_url: str | None = None
     api_version: str | None = None
+
+    # allows for the truncation of the vector to a lower dimension
+    # to reduce memory usage. Currently only supported for OpenAI models.
+    # will be ignored for other providers.
+    reduced_dimension: int | None = None
+
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 

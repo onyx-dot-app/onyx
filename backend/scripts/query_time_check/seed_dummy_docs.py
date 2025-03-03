@@ -136,7 +136,7 @@ def seed_dummy_docs(
         search_settings = get_current_search_settings(db_session)
         multipass_config = get_multipass_config(search_settings)
         index_name = search_settings.index_name
-        embedding_dim = search_settings.model_dim
+        embedding_dim = search_settings.final_embedding_dim
 
     vespa_index = VespaIndex(
         index_name=index_name,

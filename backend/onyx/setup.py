@@ -21,6 +21,7 @@ from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
 from onyx.db.credentials import create_initial_public_credential
 from onyx.db.document import check_docs_exist
+from onyx.db.enums import EmbeddingPrecision
 from onyx.db.index_attempt import cancel_indexing_attempts_past_model
 from onyx.db.index_attempt import expire_index_attempts
 from onyx.db.llm import fetch_default_provider
@@ -32,7 +33,7 @@ from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.db.search_settings import update_current_search_settings
 from onyx.db.search_settings import update_secondary_search_settings
-from onyx.db.swap_index import check_index_swap
+from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.vespa.index import VespaIndex
@@ -73,7 +74,7 @@ def setup_onyx(
 
     The Tenant Service calls the tenants/create endpoint which runs this.
     """
-    check_index_swap(db_session=db_session)
+    check_and_perform_index_swap(db_session=db_session)
 
     active_search_settings = get_active_search_settings(db_session)
     search_settings = active_search_settings.primary
@@ -243,10 +244,18 @@ def setup_vespa(
         try:
             logger.notice(f"Setting up Vespa (attempt {x+1}/{num_attempts})...")
             document_index.ensure_indices_exist(
-                index_embedding_dim=index_setting.model_dim,
-                secondary_index_embedding_dim=secondary_index_setting.model_dim
-                if secondary_index_setting
-                else None,
+                primary_embedding_dim=index_setting.final_embedding_dim,
+                primary_embedding_precision=index_setting.embedding_precision,
+                secondary_index_embedding_dim=(
+                    secondary_index_setting.final_embedding_dim
+                    if secondary_index_setting
+                    else None
+                ),
+                secondary_index_embedding_precision=(
+                    secondary_index_setting.embedding_precision
+                    if secondary_index_setting
+                    else None
+                ),
             )
 
             logger.notice("Vespa setup complete.")
@@ -360,6 +369,11 @@ def setup_vespa_multitenant(supported_indices: list[SupportedEmbeddingModel]) ->
                 ],
                 embedding_dims=[index.dim for index in supported_indices]
                 + [index.dim for index in supported_indices],
+                # on the cloud, just use float for all indices, the option to change this
+                # is not exposed to the user
+                embedding_precisions=[
+                    EmbeddingPrecision.FLOAT for _ in range(len(supported_indices) * 2)
+                ],
             )
 
             logger.notice("Vespa setup complete.")
