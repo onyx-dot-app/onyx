@@ -267,7 +267,6 @@ export function PagesTab({
         >
           <ChatSessionDisplay
             chatSession={chat}
-            foldersExisting={foldersExisting}
             isSelected={currentChatId === chat.id}
             showShareModal={showShareModal}
             showDeleteModal={showDeleteModal}

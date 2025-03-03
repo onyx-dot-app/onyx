@@ -191,6 +191,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                     onChange={(e) => setNewFolderName(e.target.value)}
                     className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
                     onKeyDown={(e) => {
+                      e.stopPropagation();
                       if (e.key === "Enter") {
                         handleEdit();
                       }
