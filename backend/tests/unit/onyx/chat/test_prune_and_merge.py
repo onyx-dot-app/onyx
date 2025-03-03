@@ -37,6 +37,8 @@ def create_inference_chunk(
         metadata={},
         match_highlights=[],
         updated_at=None,
+        doc_summary="",
+        chunk_context="",
     )
 
 
