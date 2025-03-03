@@ -1,5 +1,5 @@
 import { Label, SubLabel } from "@/components/admin/connectors/Field";
-import { ErrorMessage, Field } from "formik";
+import { ErrorMessage, useField } from "formik";
 
 export default function NumberInput({
   label,
@@ -14,6 +14,18 @@ export default function NumberInput({
   description?: string;
   showNeverIfZero?: boolean;
 }) {
+  const [field, meta, helpers] = useField(name);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // If the input is empty, set the value to undefined or null
+    // This prevents the "NaN from empty string" error
+    if (e.target.value === "") {
+      helpers.setValue(undefined);
+    } else {
+      helpers.setValue(Number(e.target.value));
+    }
+  };
+
   return (
     <div className="w-full flex flex-col">
       <Label>
@@ -24,10 +36,14 @@ export default function NumberInput({
       </Label>
       {description && <SubLabel>{description}</SubLabel>}
 
-      <Field
+      <input
+        {...field}
         type="number"
-        name={name}
         min="-1"
+        onChange={handleChange}
+        value={
+          field.value === undefined || field.value === null ? "" : field.value
+        }
         className={`mt-2 block w-full px-3 py-2 
                 bg-[#fff] dark:bg-transparent border border-background-300 rounded-md 
                 text-sm shadow-sm placeholder-text-400
