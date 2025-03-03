@@ -252,7 +252,7 @@ export function FilterPopup({
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button>{trigger}</button>
+        <div>{trigger}</div>
       </PopoverTrigger>
       <PopoverContent
         className="bg-background w-[400px] p-0 shadow-lg"
