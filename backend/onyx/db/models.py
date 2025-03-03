@@ -2310,6 +2310,14 @@ class UserTenantMapping(Base):
         return value.lower() if value else value
 
 
+class UserTenantInvite(Base):
+    __tablename__ = "user_tenant_invite"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+
+
 # This is a mapping from tenant IDs to anonymous user paths
 class TenantAnonymousUserPath(Base):
     __tablename__ = "tenant_anonymous_user_path"

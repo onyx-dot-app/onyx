@@ -23,10 +23,10 @@ from ee.onyx.server.tenants.billing import fetch_tenant_stripe_information
 from ee.onyx.server.tenants.models import AnonymousUserPath
 from ee.onyx.server.tenants.models import BillingInformation
 from ee.onyx.server.tenants.models import ImpersonateRequest
+from ee.onyx.server.tenants.models import PendingUserSnapshot
 from ee.onyx.server.tenants.models import ProductGatingRequest
 from ee.onyx.server.tenants.models import ProductGatingResponse
 from ee.onyx.server.tenants.models import RequestInviteRequest
-from ee.onyx.server.tenants.models import RequestInviteResponse
 from ee.onyx.server.tenants.models import SubscriptionSessionResponse
 from ee.onyx.server.tenants.models import SubscriptionStatusResponse
 from ee.onyx.server.tenants.models import TenantByDomainResponse
@@ -34,8 +34,10 @@ from ee.onyx.server.tenants.product_gating import store_product_gating
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from ee.onyx.server.tenants.provisioning import get_tenant_by_domain_from_control_plane
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
+from ee.onyx.server.tenants.user_mapping import invite_self_to_tenant
 from ee.onyx.server.tenants.user_mapping import remove_all_users_from_tenant
 from ee.onyx.server.tenants.user_mapping import remove_users_from_tenant
+from onyx.auth.invited_users import get_pending_users
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import auth_backend
 from onyx.auth.users import current_admin_user
@@ -323,6 +325,23 @@ async def leave_organization(
 async def request_invite(
     invite_request: RequestInviteRequest,
     user: User | None = Depends(current_admin_user),
-) -> RequestInviteResponse:
-    # For now, just return a success response
-    return RequestInviteResponse(success=True, message="Invite request sent")
+) -> None:
+    print("requesting invite", user.email, invite_request.tenant_id)
+    try:
+        invite_self_to_tenant(user.email, invite_request.tenant_id)
+    except Exception as e:
+        logger.exception(
+            f"Failed to invite self to tenant {invite_request.tenant_id}: {e}"
+        )
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/users/pending")
+def list_pending_users(
+    _: User | None = Depends(current_admin_user),
+) -> list[PendingUserSnapshot]:
+    print("listing pending users")
+    pending_emails = get_pending_users()
+
+    print("pending emails", pending_emails)
+    return [PendingUserSnapshot(email=email) for email in pending_emails]

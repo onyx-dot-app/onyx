@@ -4,11 +4,14 @@ from fastapi_users import exceptions
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from onyx.auth.invited_users import get_pending_users
+from onyx.auth.invited_users import write_pending_users
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.models import UserTenantMapping
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = logging.getLogger(__name__)
 
@@ -76,3 +79,17 @@ def remove_all_users_from_tenant(tenant_id: str) -> None:
             UserTenantMapping.tenant_id == tenant_id
         ).delete()
         db_session.commit()
+
+
+def invite_self_to_tenant(email: str, tenant_id: str) -> None:
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        print("inviting self to tenant", email, tenant_id)
+        pending_users = get_pending_users()
+        if email in pending_users:
+            print("email already in pending users")
+            return
+        print("writing pending users", pending_users + [email])
+        write_pending_users(pending_users + [email])
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

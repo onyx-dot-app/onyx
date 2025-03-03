@@ -86,3 +86,7 @@ class RequestInviteRequest(BaseModel):
 class RequestInviteResponse(BaseModel):
     success: bool
     message: str
+
+
+class PendingUserSnapshot(BaseModel):
+    email: str
