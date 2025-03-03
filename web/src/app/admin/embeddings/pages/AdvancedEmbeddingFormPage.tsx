@@ -3,13 +3,15 @@ import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
 import { TrashIcon } from "@/components/icons/icons";
 import { FaPlus } from "react-icons/fa";
-import { AdvancedSearchConfiguration } from "../interfaces";
+import { AdvancedSearchConfiguration, EmbeddingPrecision } from "../interfaces";
 import {
   BooleanFormField,
   Label,
   SubLabel,
+  SelectorFormField,
 } from "@/components/admin/connectors/Field";
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
+import { StringOrNumberOption } from "@/components/Dropdown";
 
 interface AdvancedEmbeddingFormPageProps {
   updateAdvancedEmbeddingDetails: (
@@ -18,6 +20,14 @@ interface AdvancedEmbeddingFormPageProps {
   ) => void;
   advancedEmbeddingDetails: AdvancedSearchConfiguration;
 }
+
+// Options for embedding precision based on EmbeddingPrecision enum
+const embeddingPrecisionOptions: StringOrNumberOption[] = [
+  { name: EmbeddingPrecision.INT8, value: EmbeddingPrecision.INT8 },
+  { name: EmbeddingPrecision.BFLOAT16, value: EmbeddingPrecision.BFLOAT16 },
+  { name: EmbeddingPrecision.FLOAT, value: EmbeddingPrecision.FLOAT },
+  { name: EmbeddingPrecision.DOUBLE, value: EmbeddingPrecision.DOUBLE },
+];
 
 const AdvancedEmbeddingFormPage = forwardRef<
   FormikProps<any>,
@@ -33,6 +43,8 @@ const AdvancedEmbeddingFormPage = forwardRef<
           multipass_indexing: Yup.boolean(),
           disable_rerank_for_streaming: Yup.boolean(),
           num_rerank: Yup.number(),
+          embedding_precision: Yup.string().nullable(),
+          reduced_dimension: Yup.number().nullable(),
         })}
         onSubmit={async (_, { setSubmitting }) => {
           setSubmitting(false);
@@ -106,6 +118,23 @@ const AdvancedEmbeddingFormPage = forwardRef<
               optional={false}
               label="Number of Results to Rerank"
               name="num_rerank"
+            />
+
+            <SelectorFormField
+              name="embedding_precision"
+              label="Embedding Precision"
+              options={embeddingPrecisionOptions}
+              subtext="Select the precision for embedding vectors. Lower precision uses less storage but may reduce accuracy."
+            />
+
+            <NumberInput
+              description="Number of dimensions to reduce the embedding to. 
+              Will reduce memory usage but may reduce accuracy. 
+              If not specified, will just use the model_dim without any reduction. 
+              Currently only supported for OpenAI embedding models"
+              optional={true}
+              label="Reduced Dimension"
+              name="reduced_dimension"
             />
           </Form>
         )}

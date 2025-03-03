@@ -63,7 +63,7 @@ class IndexModelStatus(str, PyEnum):
     PRESENT = "PRESENT"
     FUTURE = "FUTURE"
 
-    def is_primary(self) -> bool:
+    def is_current(self) -> bool:
         return self == IndexModelStatus.PRESENT
 
 
@@ -86,3 +86,11 @@ class AccessType(str, PyEnum):
     PUBLIC = "public"
     PRIVATE = "private"
     SYNC = "sync"
+
+
+class EmbeddingPrecision(str, PyEnum):
+    # matches vespa tensor type
+    INT8 = "int8"
+    BFLOAT16 = "bfloat16"
+    FLOAT = "float"
+    DOUBLE = "double"

@@ -414,9 +414,9 @@ def should_index(
     ):
         return False
 
-    if search_settings_instance.status.is_primary():
+    if search_settings_instance.status.is_current():
         if cc_pair.indexing_trigger is not None:
-            # if a manual indexing trigger is on the cc pair, honor it for primary search settings
+            # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq

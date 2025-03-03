@@ -20,6 +20,13 @@ export enum RerankerProvider {
   LITELLM = "litellm",
 }
 
+export enum EmbeddingPrecision {
+  FLOAT = "float",
+  DOUBLE = "double",
+  INT8 = "int8",
+  BFLOAT16 = "bfloat16",
+}
+
 export interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
@@ -27,6 +34,8 @@ export interface AdvancedSearchConfiguration {
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
   num_rerank: number;
+  embedding_precision: EmbeddingPrecision;
+  reduced_dimension: number | null;
 }
 
 export interface SavedSearchSettings

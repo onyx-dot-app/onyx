@@ -38,6 +38,7 @@ class IndexingEmbedder(ABC):
         api_url: str | None,
         api_version: str | None,
         deployment_name: str | None,
+        reduced_dimension: int | None,
         callback: IndexingHeartbeatInterface | None,
     ):
         self.model_name = model_name
@@ -60,6 +61,7 @@ class IndexingEmbedder(ABC):
             api_url=api_url,
             api_version=api_version,
             deployment_name=deployment_name,
+            reduced_dimension=reduced_dimension,
             # The below are globally set, this flow always uses the indexing one
             server_host=INDEXING_MODEL_SERVER_HOST,
             server_port=INDEXING_MODEL_SERVER_PORT,
@@ -87,6 +89,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         api_url: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ):
         super().__init__(
@@ -99,6 +102,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             api_url,
             api_version,
             deployment_name,
+            reduced_dimension,
             callback,
         )
 
@@ -219,6 +223,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             api_url=search_settings.api_url,
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
+            reduced_dimension=search_settings.reduced_dimension,
             callback=callback,
         )
 

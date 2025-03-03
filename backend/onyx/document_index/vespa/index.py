@@ -26,6 +26,7 @@ from onyx.configs.chat_configs import VESPA_SEARCHER_THREADS
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
@@ -63,6 +64,7 @@ from onyx.document_index.vespa_constants import DATE_REPLACEMENT
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
+from onyx.document_index.vespa_constants import EMBEDDING_PRECISION_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
@@ -110,6 +112,21 @@ def _create_document_xml_lines(doc_names: list[str | None] | list[str]) -> str:
         if doc_name
     ]
     return "\n".join(doc_lines)
+
+
+def _replace_template_values_in_schema(
+    schema_template: str,
+    index_name: str,
+    embedding_dim: int,
+    embedding_precision: EmbeddingPrecision,
+) -> str:
+    return (
+        schema_template.replace(
+            EMBEDDING_PRECISION_REPLACEMENT_PAT, embedding_precision.value
+        )
+        .replace(DANSWER_CHUNK_REPLACEMENT_PAT, index_name)
+        .replace(VESPA_DIM_REPLACEMENT_PAT, str(embedding_dim))
+    )
 
 
 def add_ngrams_to_schema(schema_content: str) -> str:
@@ -163,8 +180,10 @@ class VespaIndex(DocumentIndex):
 
     def ensure_indices_exist(
         self,
-        index_embedding_dim: int,
+        primary_embedding_dim: int,
+        primary_embedding_precision: EmbeddingPrecision,
         secondary_index_embedding_dim: int | None,
+        secondary_index_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
         if MULTI_TENANT:
             logger.info(
@@ -221,18 +240,29 @@ class VespaIndex(DocumentIndex):
             schema_template = schema_f.read()
         schema_template = schema_template.replace(TENANT_ID_PAT, "")
 
-        schema = schema_template.replace(
-            DANSWER_CHUNK_REPLACEMENT_PAT, self.index_name
-        ).replace(VESPA_DIM_REPLACEMENT_PAT, str(index_embedding_dim))
+        schema = _replace_template_values_in_schema(
+            schema_template,
+            self.index_name,
+            primary_embedding_dim,
+            primary_embedding_precision,
+        )
 
         schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
         schema = schema.replace(TENANT_ID_PAT, "")
         zip_dict[f"schemas/{schema_names[0]}.sd"] = schema.encode("utf-8")
 
         if self.secondary_index_name:
-            upcoming_schema = schema_template.replace(
-                DANSWER_CHUNK_REPLACEMENT_PAT, self.secondary_index_name
-            ).replace(VESPA_DIM_REPLACEMENT_PAT, str(secondary_index_embedding_dim))
+            if secondary_index_embedding_dim is None:
+                raise ValueError("Secondary index embedding dimension is required")
+            if secondary_index_embedding_precision is None:
+                raise ValueError("Secondary index embedding precision is required")
+
+            upcoming_schema = _replace_template_values_in_schema(
+                schema_template,
+                self.secondary_index_name,
+                secondary_index_embedding_dim,
+                secondary_index_embedding_precision,
+            )
             zip_dict[f"schemas/{schema_names[1]}.sd"] = upcoming_schema.encode("utf-8")
 
         zip_file = in_memory_zip_from_file_bytes(zip_dict)
@@ -251,6 +281,7 @@ class VespaIndex(DocumentIndex):
     def register_multitenant_indices(
         indices: list[str],
         embedding_dims: list[int],
+        embedding_precisions: list[EmbeddingPrecision],
     ) -> None:
         if not MULTI_TENANT:
             raise ValueError("Multi-tenant is not enabled")
@@ -309,13 +340,14 @@ class VespaIndex(DocumentIndex):
 
         for i, index_name in enumerate(indices):
             embedding_dim = embedding_dims[i]
+            embedding_precision = embedding_precisions[i]
             logger.info(
                 f"Creating index: {index_name} with embedding dimension: {embedding_dim}"
             )
 
-            schema = schema_template.replace(
-                DANSWER_CHUNK_REPLACEMENT_PAT, index_name
-            ).replace(VESPA_DIM_REPLACEMENT_PAT, str(embedding_dim))
+            schema = _replace_template_values_in_schema(
+                schema_template, index_name, embedding_dim, embedding_precision
+            )
             schema = schema.replace(
                 TENANT_ID_PAT, TENANT_ID_REPLACEMENT if MULTI_TENANT else ""
             )

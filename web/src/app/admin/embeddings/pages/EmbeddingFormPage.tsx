@@ -24,12 +24,14 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
   AdvancedSearchConfiguration,
+  EmbeddingPrecision,
   RerankingDetails,
   SavedSearchSettings,
 } from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { Modal } from "@/components/Modal";
+import { InstantSwitchConfirmModal } from "../modals/InstantSwitchConfirmModal";
 
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
@@ -65,6 +67,8 @@ export default function EmbeddingForm() {
       disable_rerank_for_streaming: false,
       api_url: null,
       num_rerank: 0,
+      embedding_precision: EmbeddingPrecision.FLOAT,
+      reduced_dimension: null,
     });
 
   const [rerankingDetails, setRerankingDetails] = useState<RerankingDetails>({
@@ -108,6 +112,8 @@ export default function EmbeddingForm() {
   };
   const [displayPoorModelName, setDisplayPoorModelName] = useState(true);
   const [showPoorModel, setShowPoorModel] = useState(false);
+  const [showInstantSwitchConfirm, setShowInstantSwitchConfirm] =
+    useState(false);
   const [modelTab, setModelTab] = useState<"open" | "cloud" | null>(null);
 
   const {
@@ -141,6 +147,8 @@ export default function EmbeddingForm() {
           searchSettings.disable_rerank_for_streaming,
         num_rerank: searchSettings.num_rerank,
         api_url: null,
+        embedding_precision: searchSettings.embedding_precision,
+        reduced_dimension: searchSettings.reduced_dimension,
       });
 
       setRerankingDetails({
@@ -175,7 +183,11 @@ export default function EmbeddingForm() {
   const needsReIndex =
     currentEmbeddingModel != selectedProvider ||
     searchSettings?.multipass_indexing !=
-      advancedEmbeddingDetails.multipass_indexing;
+      advancedEmbeddingDetails.multipass_indexing ||
+    searchSettings?.embedding_precision !=
+      advancedEmbeddingDetails.embedding_precision ||
+    searchSettings?.reduced_dimension !=
+      advancedEmbeddingDetails.reduced_dimension;
 
   const updateSearch = useCallback(async () => {
     if (!selectedProvider) {
@@ -212,8 +224,12 @@ export default function EmbeddingForm() {
           <div className="flex items-center">
             <button
               onClick={() => {
-                handleReIndex();
-                navigateToEmbeddingPage("search settings");
+                if (reindexType == ReindexType.INSTANT) {
+                  setShowInstantSwitchConfirm(true);
+                } else {
+                  handleReIndex();
+                  navigateToEmbeddingPage("search settings");
+                }
               }}
               className="
                 enabled:cursor-pointer 
@@ -325,6 +341,14 @@ export default function EmbeddingForm() {
                   advancedEmbeddingDetails.multipass_indexing && (
                   <li>Multipass indexing modification</li>
                 )}
+                {searchSettings?.embedding_precision !=
+                  advancedEmbeddingDetails.embedding_precision && (
+                  <li>Embedding precision modification</li>
+                )}
+                {searchSettings?.reduced_dimension !=
+                  advancedEmbeddingDetails.reduced_dimension && (
+                  <li>Reduced dimension modification</li>
+                )}
               </ul>
             </div>
           </div>
@@ -378,7 +402,7 @@ export default function EmbeddingForm() {
         selectedProvider.provider_type
           ?.toLowerCase()
           .split(" ")[0] as EmbeddingProvider | null,
-        true
+        reindexType === ReindexType.REINDEX
       );
     } else {
       // This is a locally hosted model
@@ -387,7 +411,7 @@ export default function EmbeddingForm() {
         advancedEmbeddingDetails,
         rerankingDetails,
         null,
-        true
+        reindexType === ReindexType.REINDEX
       );
     }
 
@@ -498,6 +522,17 @@ export default function EmbeddingForm() {
               </div>
             </>
           </Modal>
+        )}
+
+        {showInstantSwitchConfirm && (
+          <InstantSwitchConfirmModal
+            onClose={() => setShowInstantSwitchConfirm(false)}
+            onConfirm={() => {
+              setShowInstantSwitchConfirm(false);
+              handleReIndex();
+              navigateToEmbeddingPage("search settings");
+            }}
+          />
         )}
 
         {formStep == 1 && (
