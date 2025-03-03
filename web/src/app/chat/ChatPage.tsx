@@ -1979,8 +1979,6 @@ export function ChatPage({
 
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   const [settingsToggled, setSettingsToggled] = useState(false);
-  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
-
   const currentPersona = alternativeAssistant || liveAssistant;
 
   const HORIZON_DISTANCE = 800;
@@ -2142,32 +2140,6 @@ export function ChatPage({
 
       <ChatPopup />
 
-      {showDeleteAllModal && (
-        <ConfirmEntityModal
-          entityType="All Chats"
-          entityName="all your chat sessions"
-          onClose={() => setShowDeleteAllModal(false)}
-          additionalDetails="This action cannot be undone. All your chat sessions will be deleted."
-          onSubmit={async () => {
-            const response = await deleteAllChatSessions("Chat");
-            if (response.ok) {
-              setShowDeleteAllModal(false);
-              setPopup({
-                message: "All your chat sessions have been deleted.",
-                type: "success",
-              });
-              refreshChatSessions();
-              router.push("/chat");
-            } else {
-              setPopup({
-                message: "Failed to delete all chat sessions.",
-                type: "error",
-              });
-            }
-          }}
-        />
-      )}
-
       {currentFeedback && (
         <FeedbackModal
           feedbackType={currentFeedback[0]}
@@ -2325,7 +2297,6 @@ export function ChatPage({
                   folders={folders}
                   removeToggle={removeToggle}
                   showShareModal={showShareModal}
-                  showDeleteAllModal={() => setShowDeleteAllModal(true)}
                 />
               </div>
 

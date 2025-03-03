@@ -329,7 +329,7 @@ export async function deleteChatSession(chatSessionId: string) {
   return response;
 }
 
-export async function deleteAllChatSessions(sessionType: "Chat" | "Search") {
+export async function deleteAllChatSessions() {
   const response = await fetch(`/api/chat/delete-all-chat-sessions`, {
     method: "DELETE",
     headers: {

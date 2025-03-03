@@ -107,7 +107,6 @@ export function PagesTab({
   closeSidebar,
   showShareModal,
   showDeleteModal,
-  showDeleteAllModal,
   toggleChatSessionSearchModal,
 }: {
   existingChats?: ChatSession[];
@@ -117,7 +116,6 @@ export function PagesTab({
   closeSidebar?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
-  showDeleteAllModal?: () => void;
 }) {
   const { setPopup, popup } = usePopup();
   const router = useRouter();
@@ -479,17 +477,6 @@ export function PagesTab({
           </p>
         )}
       </div>
-      {showDeleteAllModal && NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED && (
-        <div className="absolute w-full border-t border-t-border bg-background-100 bottom-0 left-0 p-4">
-          <button
-            className="px-4 w-full py-2 px-4 text-text-600 hover:text-text-800 bg-background-125 border border-border-strong/50 shadow-sm rounded-md transition-colors duration-200 flex items-center justify-center text-sm"
-            onClick={showDeleteAllModal}
-          >
-            <FiTrash2 className="mr-2" size={14} />
-            Clear All History
-          </button>
-        </div>
-      )}
     </div>
   );
 }
