@@ -2299,23 +2299,18 @@ class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
     __table_args__ = (
         UniqueConstraint("email", "tenant_id", name="uq_user_tenant"),
+        # This ensures a user can only be active in one tenant at a time
+        # Removed partial unique constraint from code, now handled in migrations
         {"schema": "public"},
     )
 
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
         return value.lower() if value else value
-
-
-class UserTenantInvite(Base):
-    __tablename__ = "user_tenant_invite"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String, nullable=False)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
 
 
 # This is a mapping from tenant IDs to anonymous user paths

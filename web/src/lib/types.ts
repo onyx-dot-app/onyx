@@ -65,6 +65,7 @@ export interface User {
   // we don't want to show them things like the reset password
   // functionality
   password_configured?: boolean;
+  new_tenant?: string | null;
 }
 
 export interface AllUsersResponse {

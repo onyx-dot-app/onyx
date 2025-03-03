@@ -22,7 +22,10 @@ def get_tenant_id_for_email(email: str) -> str:
     # Implement logic to get tenant_id from the mapping table
     with Session(get_sqlalchemy_engine()) as db_session:
         result = db_session.execute(
-            select(UserTenantMapping.tenant_id).where(UserTenantMapping.email == email)
+            select(UserTenantMapping.tenant_id).where(
+                UserTenantMapping.email == email,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
         )
         tenant_id = result.scalar_one_or_none()
     if tenant_id is None:
@@ -44,7 +47,9 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
         try:
             for email in emails:
-                db_session.add(UserTenantMapping(email=email, tenant_id=tenant_id))
+                db_session.add(
+                    UserTenantMapping(email=email, tenant_id=tenant_id, active=True)
+                )
         except Exception:
             logger.exception(f"Failed to add users to tenant {tenant_id}")
         db_session.commit()

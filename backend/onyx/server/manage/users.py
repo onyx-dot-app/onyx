@@ -563,9 +563,14 @@ def verify_user_logged_in(
     token_created_at = (
         None if MULTI_TENANT else get_current_token_creation(user, db_session)
     )
+
     organization_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
+
+    new_tenant = None
+    if organization_name != get_current_tenant_id():
+        new_tenant = organization_name
 
     user_info = UserInfo.from_model(
         user,
@@ -573,6 +578,7 @@ def verify_user_logged_in(
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
         is_cloud_superuser=user.email in SUPER_USERS,
         organization_name=organization_name,
+        new_tenant=new_tenant,
     )
 
     return user_info

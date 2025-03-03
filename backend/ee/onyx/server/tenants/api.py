@@ -326,7 +326,8 @@ async def request_invite(
     invite_request: RequestInviteRequest,
     user: User | None = Depends(current_admin_user),
 ) -> None:
-    print("requesting invite", user.email, invite_request.tenant_id)
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not authenticated")
     try:
         invite_self_to_tenant(user.email, invite_request.tenant_id)
     except Exception as e:
@@ -340,8 +341,6 @@ async def request_invite(
 def list_pending_users(
     _: User | None = Depends(current_admin_user),
 ) -> list[PendingUserSnapshot]:
-    print("listing pending users")
     pending_emails = get_pending_users()
 
-    print("pending emails", pending_emails)
     return [PendingUserSnapshot(email=email) for email in pending_emails]
