@@ -345,6 +345,7 @@ ChatPacket = (
     | AgenticMessageResponseIDInfo
     | StreamStopInfo
     | AgentSearchPacket
+    | UserKnowledgeFilePacket
 )
 ChatPacketStream = Iterator[ChatPacket]
 
@@ -623,10 +624,11 @@ def stream_chat_message_objects(
                 )
                 use_search_for_user_files = True
             else:
-                latest_query_files.extend(user_files)
-                logger.info(
-                    f"Using {len(user_files)} user files directly in context ({total_tokens}/{available_tokens} tokens)"
-                )
+                if user_files:
+                    latest_query_files.extend(user_files)
+                    logger.info(
+                        f"Using {len(user_files)} user files directly in context ({total_tokens}/{available_tokens} tokens)"
+                    )
 
         if user_message:
             attach_files_to_chat_message(
@@ -889,12 +891,6 @@ def stream_chat_message_objects(
                 logger.exception(
                     f"Error configuring search tool for user files: {str(e)}"
                 )
-                # If we fail to configure the search tool, fall back to using files directly
-                # but with a warning that it might exceed token limits
-                logger.warning(
-                    "Falling back to using files directly despite token limit concerns"
-                )
-                latest_query_files.extend(user_files)
                 use_search_for_user_files = False
 
         # TODO: unify message history with single message history
@@ -969,7 +965,6 @@ def stream_chat_message_objects(
             use_agentic_search=new_msg_req.use_agentic_search,
         )
         if user_files:
-            print("YIELDING FILES")
             yield UserKnowledgeFilePacket(
                 user_files=[
                     FileDescriptor(

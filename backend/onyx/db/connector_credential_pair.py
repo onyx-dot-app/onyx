@@ -222,8 +222,8 @@ def get_connector_credential_pair_for_user(
     stmt = _add_user_filters(stmt, user, get_editable)
     stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
     stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
-    if include_user_files:
-        stmt = stmt.options(selectinload(ConnectorCredentialPair.user_files))
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -603,9 +603,9 @@ def fetch_connector_credential_pairs(
     include_user_files: bool = False,
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair)
-    if include_user_files:
-        stmt = stmt.options(selectinload(ConnectorCredentialPair.user_files))
-    return db_session.scalars(stmt).all()
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
+    return list(db_session.scalars(stmt).unique().all())
 
 
 def resync_cc_pair(
