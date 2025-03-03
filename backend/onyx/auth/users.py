@@ -370,6 +370,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
     ) -> User:
+        print("OAUTH CALLBACK")
         referral_source = (
             getattr(request.state, "referral_source", None) if request else None
         )
@@ -1088,6 +1089,12 @@ def get_oauth_router(
 
         next_url = state_data.get("next_url", "/")
         referral_source = state_data.get("referral_source", None)
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            )(account_email)
+        except exceptions.UserNotExists:
+            tenant_id = None
 
         request.state.referral_source = referral_source
 
@@ -1119,9 +1126,21 @@ def get_oauth_router(
         # Login user
         response = await backend.login(strategy, user)
         await user_manager.on_after_login(user, request, response)
-
+        print(tenant_id)
         # Prepare redirect response
-        redirect_response = RedirectResponse(next_url, status_code=302)
+        if tenant_id is None:
+            if "?" in next_url:
+                redirect_response = RedirectResponse(
+                    f"{next_url}&new_organization=true", status_code=302
+                )
+            else:
+                redirect_response = RedirectResponse(
+                    f"{next_url}?new_organization=true", status_code=302
+                )
+
+        else:
+            # Add new_organization parameter to the redirect URL
+            redirect_response = RedirectResponse(next_url, status_code=302)
 
         # Copy headers and other attributes from 'response' to 'redirect_response'
         for header_name, header_value in response.headers.items():
@@ -1133,6 +1152,7 @@ def get_oauth_router(
             redirect_response.status_code = response.status_code
         if hasattr(response, "media_type"):
             redirect_response.media_type = response.media_type
+
         return redirect_response
 
     return router

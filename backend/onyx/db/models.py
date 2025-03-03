@@ -2294,6 +2294,7 @@ class PublicBase(DeclarativeBase):
     __abstract__ = True
 
 
+# Strictly keeps track of the tenant that a given user will authenticate to.
 class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
     __table_args__ = (

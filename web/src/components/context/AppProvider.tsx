@@ -6,6 +6,7 @@ import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
+import { NewOrganizationModal } from "../modals/NewOrganizationModal";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -15,6 +16,8 @@ interface AppProviderProps {
   hasAnyConnectors: boolean;
   hasImageCompatibleModel: boolean;
 }
+
+//
 
 export const AppProvider = ({
   children,
@@ -34,6 +37,7 @@ export const AppProvider = ({
             hasImageCompatibleModel={hasImageCompatibleModel}
           >
             {children}
+            {user && <NewOrganizationModal />}
           </AssistantsProvider>
         </ProviderContextProvider>
       </UserProvider>
