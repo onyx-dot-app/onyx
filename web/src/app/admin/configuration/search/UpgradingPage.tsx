@@ -170,9 +170,9 @@ export default function UpgradingPage({
                     Switching Embedding Models
                   </h3>
                   <p className="mb-4 text-text-800">
-                    You&apos;re currently switching embedding models, and you've
-                    selected the instant switch option. The transition will
-                    complete shortly.
+                    You&apos;re currently switching embedding models, and
+                    you&apos;ve selected the instant switch option. The
+                    transition will complete shortly.
                   </p>
                   <p className="text-text-600">
                     The new model will be active soon.
