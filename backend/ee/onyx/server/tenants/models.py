@@ -90,3 +90,7 @@ class RequestInviteResponse(BaseModel):
 
 class PendingUserSnapshot(BaseModel):
     email: str
+
+
+class ApproveUserRequest(BaseModel):
+    email: str

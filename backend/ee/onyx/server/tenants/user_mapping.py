@@ -2,12 +2,11 @@ import logging
 
 from fastapi_users import exceptions
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from onyx.auth.invited_users import get_pending_users
 from onyx.auth.invited_users import write_pending_users
+from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.models import UserTenantMapping
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -20,7 +19,8 @@ def get_tenant_id_for_email(email: str) -> str:
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
     # Implement logic to get tenant_id from the mapping table
-    with Session(get_sqlalchemy_engine()) as db_session:
+    with get_session_with_shared_schema() as db_session:
+        # First try to get an active tenant
         result = db_session.execute(
             select(UserTenantMapping.tenant_id).where(
                 UserTenantMapping.email == email,
@@ -28,6 +28,22 @@ def get_tenant_id_for_email(email: str) -> str:
             )
         )
         tenant_id = result.scalar_one_or_none()
+
+        # If no active tenant found, try to get the first inactive one
+        if tenant_id is None:
+            result = db_session.execute(
+                select(UserTenantMapping).where(
+                    UserTenantMapping.email == email,
+                    UserTenantMapping.active == False,  # noqa: E712
+                )
+            )
+            mapping = result.scalar_one_or_none()
+            if mapping:
+                # Mark this mapping as active
+                mapping.active = True
+                db_session.commit()
+                tenant_id = mapping.tenant_id
+
     if tenant_id is None:
         raise exceptions.UserNotExists()
     return tenant_id
@@ -48,7 +64,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
         try:
             for email in emails:
                 db_session.add(
-                    UserTenantMapping(email=email, tenant_id=tenant_id, active=True)
+                    UserTenantMapping(email=email, tenant_id=tenant_id, active=False)
                 )
         except Exception:
             logger.exception(f"Failed to add users to tenant {tenant_id}")
@@ -98,3 +114,21 @@ def invite_self_to_tenant(email: str, tenant_id: str) -> None:
         write_pending_users(pending_users + [email])
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+def approve_user_invite(email: str, tenant_id: str) -> None:
+    with get_session_with_shared_schema() as db_session:
+        # Create a new mapping entry for the user in this tenant
+        new_mapping = UserTenantMapping(email=email, tenant_id=tenant_id, active=True)
+        db_session.add(new_mapping)
+        db_session.commit()
+
+        # Also remove the user from pending users list
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
+            pending_users = get_pending_users()
+            if email in pending_users:
+                pending_users.remove(email)
+                write_pending_users(pending_users)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

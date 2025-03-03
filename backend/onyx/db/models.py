@@ -2298,7 +2298,6 @@ class PublicBase(DeclarativeBase):
 class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
     __table_args__ = (
-        UniqueConstraint("email", "tenant_id", name="uq_user_tenant"),
         # This ensures a user can only be active in one tenant at a time
         # Removed partial unique constraint from code, now handled in migrations
         {"schema": "public"},

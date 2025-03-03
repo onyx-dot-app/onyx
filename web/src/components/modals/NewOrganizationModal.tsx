@@ -184,8 +184,8 @@ export function NewOrganizationModal() {
                 <>
                   <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
                     <p className="text-green-800 dark:text-green-200">
-                      Welcome to your new organization! You're all set to get
-                      started.
+                      Welcome to your new organization! You&apos;re all set to
+                      get started.
                     </p>
                   </div>
                   <div className="flex justify-center pt-2">

@@ -21,7 +21,7 @@ import { InvitedUserSnapshot } from "@/lib/types";
 import { SearchBar } from "@/components/search/SearchBar";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
-
+import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 const UsersTables = ({
   q,
   setPopup,
@@ -44,6 +44,15 @@ const UsersTables = ({
     errorHandlingFetcher
   );
 
+  const {
+    data: pendingUsers,
+    error: pendingUsersError,
+    isLoading: pendingUsersLoading,
+    mutate: pendingUsersMutate,
+  } = useSWR<InvitedUserSnapshot[]>(
+    NEXT_PUBLIC_CLOUD_ENABLED ? "/api/tenants/users/pending" : null,
+    errorHandlingFetcher
+  );
   // Show loading animation only during the initial data fetch
   if (!validDomains) {
     return <ThreeDotsLoader />;
@@ -63,6 +72,7 @@ const UsersTables = ({
       <TabsList>
         <TabsTrigger value="current">Current Users</TabsTrigger>
         <TabsTrigger value="invited">Invited Users</TabsTrigger>
+        <TabsTrigger value="pending">Pending Users</TabsTrigger>
       </TabsList>
 
       <TabsContent value="current">
@@ -92,6 +102,23 @@ const UsersTables = ({
               mutate={invitedUsersMutate}
               error={invitedUsersError}
               isLoading={invitedUsersLoading}
+              q={q}
+            />
+          </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value="pending">
+        <Card>
+          <CardHeader>
+            <CardTitle>Pending Users</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <PendingUsersTable
+              users={pendingUsers || []}
+              setPopup={setPopup}
+              mutate={pendingUsersMutate}
+              error={pendingUsersError}
+              isLoading={pendingUsersLoading}
               q={q}
             />
           </CardContent>

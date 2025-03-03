@@ -31,6 +31,8 @@ def upgrade() -> None:
         schema="public",
     )
 
+    op.drop_constraint("uq_user_tenant", "user_tenant_mapping", schema="public")
+
     op.execute(
         "CREATE UNIQUE INDEX uq_user_active_tenant_idx ON public.user_tenant_mapping (email) WHERE active = true"
     )
@@ -39,6 +41,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         "ALTER TABLE public.user_tenant_mapping DROP CONSTRAINT IF EXISTS uq_user_active_tenant_constraint"
+    )
+
+    # Recreate the original unique constraint
+    op.create_unique_constraint(
+        "uq_user_tenant", "user_tenant_mapping", ["email", "tenant_id"], schema="public"
     )
 
     # Remove the active column

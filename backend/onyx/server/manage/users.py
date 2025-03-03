@@ -12,13 +12,11 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
-from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
 from sqlalchemy import Column
 from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy import update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import SUPER_USERS
@@ -296,13 +294,6 @@ def bulk_invite_users(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
 
-        except IntegrityError as e:
-            if isinstance(e.orig, UniqueViolation):
-                raise HTTPException(
-                    status_code=400,
-                    detail="User has already been invited to a Onyx organization",
-                )
-            raise
         except Exception as e:
             logger.error(f"Failed to add users to tenant {tenant_id}: {str(e)}")
 
