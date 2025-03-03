@@ -20,6 +20,9 @@ class UnexpectedError(ValidationError):
     Unexpected errors don't necessarily mean the credential is invalid,
     but rather that there was an error during the validation process
     or we encountered a currently unhandled error case.
+
+    Currently, unexpected errors are defined as transient and should not be used to
+    disable the connector.
     """
 
     def __init__(self, message: str = "Unexpected error during connector validation"):
