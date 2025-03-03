@@ -375,7 +375,22 @@ def delete_chat_session(
     db_session.commit()
 
 
-def delete_chat_sessions_older_than(days_old: int, db_session: Session) -> None:
+def get_chat_sessions_older_than(
+    days_old: int, db_session: Session
+) -> list[tuple[UUID | None, UUID]]:
+    """
+    Retrieves chat sessions older than a specified number of days.
+
+    Args:
+        days_old: The number of days to consider as "old".
+        db_session: The database session.
+
+    Returns:
+        A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
+    """
+
+    returned_sessions: list[tuple[UUID | None, UUID]] = []
+
     cutoff_time = datetime.utcnow() - timedelta(days=days_old)
     old_sessions = db_session.execute(
         select(ChatSession.user_id, ChatSession.id).where(
@@ -384,15 +399,9 @@ def delete_chat_sessions_older_than(days_old: int, db_session: Session) -> None:
     ).fetchall()
 
     for user_id, session_id in old_sessions:
-        try:
-            delete_chat_session(
-                user_id, session_id, db_session, include_deleted=True, hard_delete=True
-            )
-        except Exception:
-            logger.exception(
-                "delete_chat_session exceptioned. "
-                f"user_id={user_id} session_id={session_id}"
-            )
+        returned_sessions.append((user_id, session_id))
+
+    return returned_sessions
 
 
 def get_chat_message(

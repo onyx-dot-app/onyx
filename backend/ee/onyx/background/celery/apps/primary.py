@@ -4,7 +4,8 @@ from ee.onyx.server.reporting.usage_export_generation import create_new_usage_re
 from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import build_celery_task_wrapper
 from onyx.configs.app_configs import JOB_TIMEOUT
-from onyx.db.chat import delete_chat_sessions_older_than
+from onyx.db.chat import delete_chat_session
+from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -18,7 +19,26 @@ logger = setup_logger()
 @celery_app.task(soft_time_limit=JOB_TIMEOUT)
 def perform_ttl_management_task(retention_limit_days: int, *, tenant_id: str) -> None:
     with get_session_with_current_tenant() as db_session:
-        delete_chat_sessions_older_than(retention_limit_days, db_session)
+        old_chat_sessions = get_chat_sessions_older_than(
+            retention_limit_days, db_session
+        )
+
+    for user_id, session_id in old_chat_sessions:
+        # one session per delete so that we don't blow up if a deletion fails.
+        with get_session_with_current_tenant() as db_session:
+            try:
+                delete_chat_session(
+                    user_id,
+                    session_id,
+                    db_session,
+                    include_deleted=True,
+                    hard_delete=True,
+                )
+            except Exception:
+                logger.exception(
+                    "delete_chat_session exceptioned. "
+                    f"user_id={user_id} session_id={session_id}"
+                )
 
 
 #####
