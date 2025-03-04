@@ -15,6 +15,7 @@ import {
 } from "./interfaces";
 import { FiExternalLink } from "react-icons/fi";
 import {
+  AmazonIcon,
   CohereIcon,
   LiteLLMIcon,
   MixedBreadIcon,
@@ -244,6 +245,11 @@ const RerankingDetailsForm = forwardRef<
                             setIsApiKeyModalOpen(true);
                           } else if (
                             card.rerank_provider_type ==
+                            RerankerProvider.BEDROCK
+                          ) {
+                            setIsApiKeyModalOpen(true);
+                          } else if (
+                            card.rerank_provider_type ==
                             RerankerProvider.LITELLM
                           ) {
                             setShowLiteLLMConfigurationModal(true);
@@ -278,6 +284,9 @@ const RerankingDetailsForm = forwardRef<
                             ) : card.rerank_provider_type ===
                               RerankerProvider.COHERE ? (
                               <CohereIcon size={24} className="mr-2" />
+                            ) : card.rerank_provider_type ===
+                              RerankerProvider.BEDROCK ? (
+                              <AmazonIcon size={24} className="mr-2" />
                             ) : (
                               <MixedBreadIcon size={24} className="mr-2" />
                             )}
@@ -437,7 +446,10 @@ const RerankingDetailsForm = forwardRef<
                         placeholder={
                           values.rerank_api_key
                             ? "*".repeat(values.rerank_api_key.length)
-                            : undefined
+                            : values.rerank_provider_type ===
+                                RerankerProvider.BEDROCK
+                              ? "aws_ACCESSKEY_SECRETKEY_REGION"
+                              : "Enter your API key"
                         }
                         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                           const value = e.target.value;
@@ -448,7 +460,12 @@ const RerankingDetailsForm = forwardRef<
                           setFieldValue("api_key", value);
                         }}
                         type="password"
-                        label="Cohere API Key"
+                        label={
+                          values.rerank_provider_type ===
+                          RerankerProvider.BEDROCK
+                            ? "AWS Credentials in format: aws_ACCESSKEY_SECRETKEY_REGION"
+                            : "Cohere API Key"
+                        }
                         name="rerank_api_key"
                       />
                       <div className="flex w-full justify-end mt-4">
