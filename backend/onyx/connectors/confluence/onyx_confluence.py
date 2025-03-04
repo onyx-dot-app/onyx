@@ -144,6 +144,12 @@ class OnyxConfluence:
             self.static_credentials = credential_json
             return credential_json, False
 
+        if not OAUTH_CONFLUENCE_CLOUD_CLIENT_ID:
+            raise RuntimeError("OAUTH_CONFLUENCE_CLOUD_CLIENT_ID must be set!")
+
+        if not OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET:
+            raise RuntimeError("OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET must be set!")
+
         # check if we should refresh tokens. we're deciding to refresh halfway
         # to expiration
         now = datetime.now(timezone.utc)

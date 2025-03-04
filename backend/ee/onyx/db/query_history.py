@@ -134,6 +134,8 @@ def fetch_chat_sessions_eagerly_by_time(
     limit: int | None = 500,
     initial_time: datetime | None = None,
 ) -> list[ChatSession]:
+    """Sorted by newest to oldest, then by message id"""
+
     time_order: UnaryExpression = desc(ChatSession.time_created)
     message_order: UnaryExpression = asc(ChatMessage.id)
 
