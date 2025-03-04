@@ -37,7 +37,7 @@ schema DANSWER_CHUNK_NAME {
             summary: dynamic
         }
         # Title embedding (x1)
-        field title_embedding type tensor<float>(x[VARIABLE_DIM]) {
+        field title_embedding type tensor<EMBEDDING_PRECISION>(x[VARIABLE_DIM]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
@@ -45,7 +45,7 @@ schema DANSWER_CHUNK_NAME {
         }
         # Content embeddings (chunk + optional mini chunks embeddings)
         # "t" and "x" are arbitrary names, not special keywords
-        field embeddings type tensor<float>(t{},x[VARIABLE_DIM]) {
+        field embeddings type tensor<EMBEDDING_PRECISION>(t{},x[VARIABLE_DIM]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular

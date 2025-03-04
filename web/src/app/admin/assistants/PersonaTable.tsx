@@ -163,7 +163,7 @@ export function PersonasTable() {
       {popup}
       {deleteModalOpen && personaToDelete && (
         <ConfirmEntityModal
-          entityType="Persona"
+          entityType="Assistant"
           entityName={personaToDelete.name}
           onClose={closeDeleteModal}
           onSubmit={handleDeletePersona}

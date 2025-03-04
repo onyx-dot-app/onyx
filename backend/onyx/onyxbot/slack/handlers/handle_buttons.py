@@ -1,3 +1,4 @@
+import json
 from typing import Any
 from typing import cast
 
@@ -5,21 +6,32 @@ from slack_sdk import WebClient
 from slack_sdk.models.blocks import SectionBlock
 from slack_sdk.models.views import View
 from slack_sdk.socket_mode.request import SocketModeRequest
+from slack_sdk.webhook import WebhookClient
 
+from onyx.chat.models import ChatOnyxBotResponse
+from onyx.chat.models import CitationInfo
+from onyx.chat.models import QADocsResponse
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_FOLLOWUP_EMOJI
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import make_slack_api_rate_limited
+from onyx.context.search.models import SavedSearchDoc
+from onyx.db.chat import get_chat_message
+from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.feedback import create_chat_message_feedback
 from onyx.db.feedback import create_doc_retrieval_feedback
+from onyx.db.users import get_user_by_email
 from onyx.onyxbot.slack.blocks import build_follow_up_resolved_blocks
+from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.blocks import get_document_feedback_blocks
 from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
 from onyx.onyxbot.slack.constants import DISLIKE_BLOCK_ACTION_ID
 from onyx.onyxbot.slack.constants import FeedbackVisibility
+from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
 from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
+from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
 from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
@@ -35,13 +47,46 @@ from onyx.onyxbot.slack.utils import fetch_slack_user_ids_from_emails
 from onyx.onyxbot.slack.utils import get_channel_name_from_id
 from onyx.onyxbot.slack.utils import get_feedback_visibility
 from onyx.onyxbot.slack.utils import read_slack_thread
-from onyx.onyxbot.slack.utils import respond_in_thread
+from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.onyxbot.slack.utils import update_emote_react
+from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+def _convert_db_doc_id_to_document_ids(
+    citation_dict: dict[int, int], top_documents: list[SavedSearchDoc]
+) -> list[CitationInfo]:
+    citation_list_with_document_id = []
+    for citation_num, db_doc_id in citation_dict.items():
+        if db_doc_id is not None:
+            matching_doc = next(
+                (d for d in top_documents if d.db_doc_id == db_doc_id), None
+            )
+            if matching_doc:
+                citation_list_with_document_id.append(
+                    CitationInfo(
+                        citation_num=citation_num, document_id=matching_doc.document_id
+                    )
+                )
+    return citation_list_with_document_id
+
+
+def _build_citation_list(chat_message_detail: ChatMessageDetail) -> list[CitationInfo]:
+    citation_dict = chat_message_detail.citations
+    if citation_dict is None:
+        return []
+    else:
+        top_documents = (
+            chat_message_detail.context_docs.top_documents
+            if chat_message_detail.context_docs
+            else []
+        )
+        citation_list = _convert_db_doc_id_to_document_ids(citation_dict, top_documents)
+        return citation_list
 
 
 def handle_doc_feedback_button(
@@ -58,7 +103,7 @@ def handle_doc_feedback_button(
     external_id = build_feedback_id(query_event_id, doc_id, doc_rank)
 
     channel_id = req.payload["container"]["channel_id"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
 
     data = View(
         type="modal",
@@ -84,7 +129,7 @@ def handle_generate_answer_button(
     channel_id = req.payload["channel"]["id"]
     channel_name = req.payload["channel"]["name"]
     message_ts = req.payload["message"]["ts"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
     user_id = req.payload["user"]["id"]
     expert_info = expert_info_from_slack_id(user_id, client.web_client, user_cache={})
     email = expert_info.email if expert_info else None
@@ -106,7 +151,7 @@ def handle_generate_answer_button(
 
     # tell the user that we're working on it
     # Send an ephemeral message to the user that we're generating the answer
-    respond_in_thread(
+    respond_in_thread_or_channel(
         client=client.web_client,
         channel=channel_id,
         receiver_ids=[user_id],
@@ -142,6 +187,178 @@ def handle_generate_answer_button(
         )
 
 
+def handle_publish_ephemeral_message_button(
+    req: SocketModeRequest,
+    client: TenantSocketModeClient,
+    action_id: str,
+) -> None:
+    """
+    This function handles the Share with Everyone/Keep for Yourself buttons
+    for ephemeral messages.
+    """
+    channel_id = req.payload["channel"]["id"]
+    ephemeral_message_ts = req.payload["container"]["message_ts"]
+
+    slack_sender_id = req.payload["user"]["id"]
+    response_url = req.payload["response_url"]
+    webhook = WebhookClient(url=response_url)
+
+    # The additional data required that was added to buttons.
+    # Specifically, this contains the message_info, channel_conf information
+    # and some additional attributes.
+    value_dict = json.loads(req.payload["actions"][0]["value"])
+
+    original_question_ts = value_dict.get("original_question_ts")
+    if not original_question_ts:
+        raise ValueError("Missing original_question_ts in the payload")
+    if not ephemeral_message_ts:
+        raise ValueError("Missing ephemeral_message_ts in the payload")
+
+    feedback_reminder_id = value_dict.get("feedback_reminder_id")
+
+    slack_message_info = SlackMessageInfo(**value_dict["message_info"])
+    channel_conf = value_dict.get("channel_conf")
+
+    user_email = value_dict.get("message_info", {}).get("email")
+
+    chat_message_id = value_dict.get("chat_message_id")
+
+    # Obtain onyx_user and chat_message information
+    if not chat_message_id:
+        raise ValueError("Missing chat_message_id in the payload")
+
+    with get_session_with_current_tenant() as db_session:
+        onyx_user = get_user_by_email(user_email, db_session)
+        if not onyx_user:
+            raise ValueError("Cannot determine onyx_user_id from email in payload")
+        try:
+            chat_message = get_chat_message(chat_message_id, onyx_user.id, db_session)
+        except ValueError:
+            chat_message = get_chat_message(
+                chat_message_id, None, db_session
+            )  # is this good idea?
+        except Exception as e:
+            logger.error(f"Failed to get chat message: {e}")
+            raise e
+
+        chat_message_detail = translate_db_message_to_chat_message_detail(chat_message)
+
+        # construct the proper citation format and then the answer in the suitable format
+        # we need to construct the blocks.
+        citation_list = _build_citation_list(chat_message_detail)
+
+        onyx_bot_answer = ChatOnyxBotResponse(
+            answer=chat_message_detail.message,
+            citations=citation_list,
+            chat_message_id=chat_message_id,
+            docs=QADocsResponse(
+                top_documents=chat_message_detail.context_docs.top_documents
+                if chat_message_detail.context_docs
+                else [],
+                predicted_flow=None,
+                predicted_search=None,
+                applied_source_filters=None,
+                applied_time_cutoff=None,
+                recency_bias_multiplier=1.0,
+            ),
+            llm_selected_doc_indices=None,
+            error_msg=None,
+        )
+
+    # Note: we need to use the webhook and the respond_url to update/delete ephemeral messages
+    if action_id == SHOW_EVERYONE_ACTION_ID:
+        # Convert to non-ephemeral message in thread
+        try:
+            webhook.send(
+                response_type="ephemeral",
+                text="",
+                blocks=[],
+                replace_original=True,
+                delete_original=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send webhook: {e}")
+
+        # remove handling of empheremal block and add AI feedback.
+        all_blocks = build_slack_response_blocks(
+            answer=onyx_bot_answer,
+            message_info=slack_message_info,
+            channel_conf=channel_conf,
+            use_citations=True,
+            feedback_reminder_id=feedback_reminder_id,
+            skip_ai_feedback=False,
+            offer_ephemeral_publication=False,
+            skip_restated_question=True,
+        )
+        try:
+            # Post in thread as non-ephemeral message
+            respond_in_thread_or_channel(
+                client=client.web_client,
+                channel=channel_id,
+                receiver_ids=None,  # If respond_member_group_list is set, send to them. TODO: check!
+                text="Hello! Onyx has some results for you!",
+                blocks=all_blocks,
+                thread_ts=original_question_ts,
+                # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
+                unfurl=False,
+                send_as_ephemeral=False,
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish ephemeral message: {e}")
+            raise e
+
+    elif action_id == KEEP_TO_YOURSELF_ACTION_ID:
+        # Keep as ephemeral message in channel or thread, but remove the publish button and add feedback button
+
+        changed_blocks = build_slack_response_blocks(
+            answer=onyx_bot_answer,
+            message_info=slack_message_info,
+            channel_conf=channel_conf,
+            use_citations=True,
+            feedback_reminder_id=feedback_reminder_id,
+            skip_ai_feedback=False,
+            offer_ephemeral_publication=False,
+            skip_restated_question=True,
+        )
+
+        try:
+            if slack_message_info.thread_to_respond is not None:
+                # There seems to be a bug in slack where an update within the thread
+                # actually leads to the update to be posted in the channel. Therefore,
+                # for now we delete the original ephemeral message and post a new one
+                # if the ephemeral message is in a thread.
+                webhook.send(
+                    response_type="ephemeral",
+                    text="",
+                    blocks=[],
+                    replace_original=True,
+                    delete_original=True,
+                )
+
+                respond_in_thread_or_channel(
+                    client=client.web_client,
+                    channel=channel_id,
+                    receiver_ids=[slack_sender_id],
+                    text="Your personal response, sent as an ephemeral message.",
+                    blocks=changed_blocks,
+                    thread_ts=original_question_ts,
+                    # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
+                    unfurl=False,
+                    send_as_ephemeral=True,
+                )
+            else:
+                # This works fine if the ephemeral message is in the channel
+                webhook.send(
+                    response_type="ephemeral",
+                    text="Your personal response, sent as an ephemeral message.",
+                    blocks=changed_blocks,
+                    replace_original=True,
+                    delete_original=False,
+                )
+        except Exception as e:
+            logger.error(f"Failed to send webhook: {e}")
+
+
 def handle_slack_feedback(
     feedback_id: str,
     feedback_type: str,
@@ -153,13 +370,20 @@ def handle_slack_feedback(
 ) -> None:
     message_id, doc_id, doc_rank = decompose_action_id(feedback_id)
 
+    # Get Onyx user from Slack ID
+    expert_info = expert_info_from_slack_id(
+        user_id_to_post_confirmation, client, user_cache={}
+    )
+    email = expert_info.email if expert_info else None
+
     with get_session_with_current_tenant() as db_session:
+        onyx_user = get_user_by_email(email, db_session) if email else None
         if feedback_type in [LIKE_BLOCK_ACTION_ID, DISLIKE_BLOCK_ACTION_ID]:
             create_chat_message_feedback(
                 is_positive=feedback_type == LIKE_BLOCK_ACTION_ID,
                 feedback_text="",
                 chat_message_id=message_id,
-                user_id=None,  # no "user" for Slack bot for now
+                user_id=onyx_user.id if onyx_user else None,
                 db_session=db_session,
             )
             remove_scheduled_feedback_reminder(
@@ -213,7 +437,7 @@ def handle_slack_feedback(
         else:
             msg = f"<@{user_id_to_post_confirmation}> has {feedback_response_txt} the AI Answer"
 
-        respond_in_thread(
+        respond_in_thread_or_channel(
             client=client,
             channel=channel_id_to_post_confirmation,
             text=msg,
@@ -232,7 +456,7 @@ def handle_followup_button(
         action_id = cast(str, action.get("block_id"))
 
     channel_id = req.payload["container"]["channel_id"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
 
     update_emote_react(
         emoji=DANSWER_FOLLOWUP_EMOJI,
@@ -265,7 +489,7 @@ def handle_followup_button(
 
     blocks = build_follow_up_resolved_blocks(tag_ids=tag_ids, group_ids=group_ids)
 
-    respond_in_thread(
+    respond_in_thread_or_channel(
         client=client.web_client,
         channel=channel_id,
         text="Received your request for more help",
@@ -315,7 +539,7 @@ def handle_followup_resolved_button(
 ) -> None:
     channel_id = req.payload["container"]["channel_id"]
     message_ts = req.payload["container"]["message_ts"]
-    thread_ts = req.payload["container"]["thread_ts"]
+    thread_ts = req.payload["container"].get("thread_ts", None)
 
     clicker_name = get_clicker_name(req, client)
 
@@ -349,7 +573,7 @@ def handle_followup_resolved_button(
 
     resolved_block = SectionBlock(text=msg_text)
 
-    respond_in_thread(
+    respond_in_thread_or_channel(
         client=client.web_client,
         channel=channel_id,
         text="Your request for help as been addressed!",

@@ -51,13 +51,13 @@ export function Label({
   className?: string;
 }) {
   return (
-    <div
-      className={`block text-text-darker font-medium base ${className} ${
-        small ? "text-xs" : "text-sm"
+    <label
+      className={`block font-medium text-text-700 dark:text-neutral-100 ${className} ${
+        small ? "text-sm" : "text-base"
       }`}
     >
       {children}
-    </div>
+    </label>
   );
 }
 
@@ -686,7 +686,7 @@ export function SelectorFormField({
   defaultValue,
   tooltip,
   includeReset = false,
-  fontSize = "sm",
+  fontSize = "md",
   small = false,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);

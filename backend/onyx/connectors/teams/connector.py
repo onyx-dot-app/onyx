@@ -16,7 +16,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -302,7 +302,7 @@ class TeamsConnector(LoadConnector, PollConnector):
                 raise InsufficientPermissionsError(
                     "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
                 )
-            raise UnexpectedError(f"Unexpected error retrieving teams: {e}")
+            raise UnexpectedValidationError(f"Unexpected error retrieving teams: {e}")
 
         except Exception as e:
             error_str = str(e).lower()

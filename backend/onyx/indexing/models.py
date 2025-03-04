@@ -5,6 +5,7 @@ from pydantic import Field
 
 from onyx.access.models import DocumentAccess
 from onyx.connectors.models import Document
+from onyx.db.enums import EmbeddingPrecision
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 from shared_configs.model_server_models import Embedding
@@ -143,9 +144,19 @@ class IndexingSetting(EmbeddingModelDetail):
     model_dim: int
     index_name: str | None
     multipass_indexing: bool
+    embedding_precision: EmbeddingPrecision
+    reduced_dimension: int | None = None
+
+    background_reindex_enabled: bool = True
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
+
+    @property
+    def final_embedding_dim(self) -> int:
+        if self.reduced_dimension:
+            return self.reduced_dimension
+        return self.model_dim
 
     @classmethod
     def from_db_model(cls, search_settings: "SearchSettings") -> "IndexingSetting":
@@ -158,6 +169,9 @@ class IndexingSetting(EmbeddingModelDetail):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
+            embedding_precision=search_settings.embedding_precision,
+            reduced_dimension=search_settings.reduced_dimension,
+            background_reindex_enabled=search_settings.background_reindex_enabled,
         )
 
 

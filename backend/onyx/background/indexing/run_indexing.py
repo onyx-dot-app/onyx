@@ -22,6 +22,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -92,8 +93,13 @@ def _get_connector_runner(
         if not INTEGRATION_TESTS_MODE:
             runnable_connector.validate_connector_settings()
 
+    except UnexpectedValidationError as e:
+        logger.exception(
+            "Unable to instantiate connector due to an unexpected temporary issue."
+        )
+        raise e
     except Exception as e:
-        logger.exception("Unable to instantiate connector.")
+        logger.exception("Unable to instantiate connector. Pausing until fixed.")
         # since we failed to even instantiate the connector, we pause the CCPair since
         # it will never succeed
 

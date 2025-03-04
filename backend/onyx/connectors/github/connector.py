@@ -20,7 +20,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -284,7 +284,7 @@ class GithubConnector(LoadConnector, PollConnector):
                     user.get_repos().totalCount  # Just check if we can access repos
 
         except RateLimitExceededException:
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 "Validation failed due to GitHub rate-limits being exceeded. Please try again later."
             )
 

@@ -57,7 +57,9 @@ from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_ACTION_ID
 from onyx.onyxbot.slack.constants import FOLLOWUP_BUTTON_RESOLVED_ACTION_ID
 from onyx.onyxbot.slack.constants import GENERATE_ANSWER_BUTTON_ACTION_ID
 from onyx.onyxbot.slack.constants import IMMEDIATE_RESOLVED_BUTTON_ACTION_ID
+from onyx.onyxbot.slack.constants import KEEP_TO_YOURSELF_ACTION_ID
 from onyx.onyxbot.slack.constants import LIKE_BLOCK_ACTION_ID
+from onyx.onyxbot.slack.constants import SHOW_EVERYONE_ACTION_ID
 from onyx.onyxbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_doc_feedback_button
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_followup_button
@@ -66,6 +68,9 @@ from onyx.onyxbot.slack.handlers.handle_buttons import (
 )
 from onyx.onyxbot.slack.handlers.handle_buttons import (
     handle_generate_answer_button,
+)
+from onyx.onyxbot.slack.handlers.handle_buttons import (
+    handle_publish_ephemeral_message_button,
 )
 from onyx.onyxbot.slack.handlers.handle_buttons import handle_slack_feedback
 from onyx.onyxbot.slack.handlers.handle_message import handle_message
@@ -81,7 +86,7 @@ from onyx.onyxbot.slack.utils import get_onyx_bot_slack_bot_id
 from onyx.onyxbot.slack.utils import read_slack_thread
 from onyx.onyxbot.slack.utils import remove_onyx_bot_tag
 from onyx.onyxbot.slack.utils import rephrase_slack_message
-from onyx.onyxbot.slack.utils import respond_in_thread
+from onyx.onyxbot.slack.utils import respond_in_thread_or_channel
 from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
@@ -667,7 +672,11 @@ def process_feedback(req: SocketModeRequest, client: TenantSocketModeClient) -> 
         feedback_msg_reminder = cast(str, action.get("value"))
         feedback_id = cast(str, action.get("block_id"))
         channel_id = cast(str, req.payload["container"]["channel_id"])
-        thread_ts = cast(str, req.payload["container"]["thread_ts"])
+        thread_ts = cast(
+            str,
+            req.payload["container"].get("thread_ts")
+            or req.payload["container"].get("message_ts"),
+        )
     else:
         logger.error("Unable to process feedback. Action not found")
         return
@@ -783,7 +792,7 @@ def apologize_for_fail(
     details: SlackMessageInfo,
     client: TenantSocketModeClient,
 ) -> None:
-    respond_in_thread(
+    respond_in_thread_or_channel(
         client=client.web_client,
         channel=details.channel_to_respond,
         thread_ts=details.msg_to_respond,
@@ -859,6 +868,14 @@ def action_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> No
         if action["action_id"] in [DISLIKE_BLOCK_ACTION_ID, LIKE_BLOCK_ACTION_ID]:
             # AI Answer feedback
             return process_feedback(req, client)
+        elif action["action_id"] in [
+            SHOW_EVERYONE_ACTION_ID,
+            KEEP_TO_YOURSELF_ACTION_ID,
+        ]:
+            # Publish ephemeral message or keep hidden in main channel
+            return handle_publish_ephemeral_message_button(
+                req, client, action["action_id"]
+            )
         elif action["action_id"] == FEEDBACK_DOC_BUTTON_BLOCK_ACTION_ID:
             # Activation of the "source feedback" button
             return handle_doc_feedback_button(req, client)

@@ -77,11 +77,12 @@ export function ClientLayout({
             defaultModel={user?.preferences?.default_model!}
           />
         )}
+
         {settings?.settings.application_status ===
           ApplicationStatus.PAYMENT_REMINDER && (
           <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
             <strong className="font-bold">Warning:</strong> Your trial ends in
-            less than 2 days and no payment method has been added.
+            less than 5 days and no payment method has been added.
             <div className="mt-2">
               <Link href="/admin/billing">
                 <Button

@@ -28,7 +28,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
@@ -42,6 +42,10 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
+# Threshold for determining when to replace vs append iframe content
+IFRAME_TEXT_LENGTH_THRESHOLD = 700
+# Message indicating JavaScript is disabled, which often appears when scraping fails
+JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -138,7 +142,8 @@ def get_internal_links(
         # Account for malformed backslashes in URLs
         href = href.replace("\\", "/")
 
-        if should_ignore_pound and "#" in href:
+        # "#!" indicates the page is using a hashbang URL, which is a client-side routing technique
+        if should_ignore_pound and "#" in href and "#!" not in href:
             href = href.split("#")[0]
 
         if not is_valid_url(href):
@@ -288,6 +293,7 @@ class WebConnector(LoadConnector):
         and converts them into documents"""
         visited_links: set[str] = set()
         to_visit: list[str] = self.to_visit_list
+        content_hashes = set()
 
         if not to_visit:
             raise ValueError("No URLs to visit")
@@ -314,7 +320,8 @@ class WebConnector(LoadConnector):
                 logger.warning(last_error)
                 continue
 
-            logger.info(f"{len(visited_links)}: Visiting {initial_url}")
+            index = len(visited_links)
+            logger.info(f"{index}: Visiting {initial_url}")
 
             try:
                 check_internet_connection(initial_url)
@@ -347,7 +354,13 @@ class WebConnector(LoadConnector):
                     continue
 
                 page = context.new_page()
-                page_response = page.goto(initial_url)
+
+                # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+                page_response = page.goto(
+                    initial_url,
+                    timeout=30000,  # 30 seconds
+                )
+
                 last_modified = (
                     page_response.header_value("Last-Modified")
                     if page_response
@@ -359,12 +372,10 @@ class WebConnector(LoadConnector):
                     initial_url = final_url
                     if initial_url in visited_links:
                         logger.info(
-                            f"{len(visited_links)}: {initial_url} redirected to {final_url} - already indexed"
+                            f"{index}: {initial_url} redirected to {final_url} - already indexed"
                         )
                         continue
-                    logger.info(
-                        f"{len(visited_links)}: {initial_url} redirected to {final_url}"
-                    )
+                    logger.info(f"{index}: {initial_url} redirected to {final_url}")
                     visited_links.add(initial_url)
 
                 if self.scroll_before_scraping:
@@ -394,6 +405,38 @@ class WebConnector(LoadConnector):
                     continue
 
                 parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
+
+                """For websites containing iframes that need to be scraped,
+                the code below can extract text from within these iframes.
+                """
+                logger.debug(
+                    f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
+                )
+                if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
+                    iframe_count = page.frame_locator("iframe").locator("html").count()
+                    if iframe_count > 0:
+                        iframe_texts = (
+                            page.frame_locator("iframe")
+                            .locator("html")
+                            .all_inner_texts()
+                        )
+                        document_text = "\n".join(iframe_texts)
+                        """ 700 is the threshold value for the length of the text extracted
+                        from the iframe based on the issue faced """
+                        if len(parsed_html.cleaned_text) < IFRAME_TEXT_LENGTH_THRESHOLD:
+                            parsed_html.cleaned_text = document_text
+                        else:
+                            parsed_html.cleaned_text += "\n" + document_text
+
+                # Sometimes pages with #! will serve duplicate content
+                # There are also just other ways this can happen
+                hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
+                if hashed_text in content_hashes:
+                    logger.info(
+                        f"{index}: Skipping duplicate title + content for {initial_url}"
+                    )
+                    continue
+                content_hashes.add(hashed_text)
 
                 doc_batch.append(
                     Document(
@@ -485,7 +528,9 @@ class WebConnector(LoadConnector):
                 )
             else:
                 # Could be a 5xx or another error, treat as unexpected
-                raise UnexpectedError(f"Unexpected error validating '{test_url}': {e}")
+                raise UnexpectedValidationError(
+                    f"Unexpected error validating '{test_url}': {e}"
+                )
 
 
 if __name__ == "__main__":

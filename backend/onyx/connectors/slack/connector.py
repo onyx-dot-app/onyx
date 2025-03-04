@@ -21,7 +21,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
@@ -702,7 +702,9 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                     raise CredentialExpiredError(
                         f"Invalid or expired Slack bot token ({error_msg})."
                     )
-                raise UnexpectedError(f"Slack API returned a failure: {error_msg}")
+                raise UnexpectedValidationError(
+                    f"Slack API returned a failure: {error_msg}"
+                )
 
             # 3) If channels are specified, verify each is accessible
             if self.channels:
@@ -740,13 +742,13 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                 raise CredentialExpiredError(
                     f"Invalid or expired Slack bot token ({slack_error})."
                 )
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected Slack error '{slack_error}' during settings validation."
             )
         except ConnectorValidationError as e:
             raise e
         except Exception as e:
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected error during Slack settings validation: {e}"
             )
 

@@ -71,7 +71,7 @@ function Main() {
           <p className="text-text-600">
             Learn more about Unstructured{" "}
             <a
-              href="https://unstructured.io/docs"
+              href="https://docs.unstructured.io/welcome"
               target="_blank"
               rel="noopener noreferrer"
               className="text-blue-500 hover:underline font-medium"

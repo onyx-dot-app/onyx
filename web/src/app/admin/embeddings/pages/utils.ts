@@ -63,12 +63,14 @@ export const combineSearchSettings = (
   selectedProvider: CloudEmbeddingProvider | HostedEmbeddingModel,
   advancedEmbeddingDetails: AdvancedSearchConfiguration,
   rerankingDetails: RerankingDetails,
-  provider_type: EmbeddingProvider | null
+  provider_type: EmbeddingProvider | null,
+  background_reindex_enabled: boolean
 ): SavedSearchSettings => {
   return {
     ...selectedProvider,
     ...advancedEmbeddingDetails,
     ...rerankingDetails,
     provider_type: provider_type,
+    background_reindex_enabled,
   };
 };

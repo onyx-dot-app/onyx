@@ -18,7 +18,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -310,7 +310,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             # Catch-all for anything not captured by the above
             # Since we are unsure of the error and it may not disable the connector,
             #  raise an unexpected error (does not disable connector)
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected error during blob storage settings validation: {e}"
             )
 

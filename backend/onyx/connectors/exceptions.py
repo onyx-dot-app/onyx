@@ -14,12 +14,15 @@ class ConnectorValidationError(ValidationError):
         super().__init__(self.message)
 
 
-class UnexpectedError(ValidationError):
+class UnexpectedValidationError(ValidationError):
     """Raised when an unexpected error occurs during connector validation.
 
     Unexpected errors don't necessarily mean the credential is invalid,
     but rather that there was an error during the validation process
     or we encountered a currently unhandled error case.
+
+    Currently, unexpected validation errors are defined as transient and should not be
+    used to disable the connector.
     """
 
     def __init__(self, message: str = "Unexpected error during connector validation"):
