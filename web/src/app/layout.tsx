@@ -144,7 +144,6 @@ export default async function RootLayout({
 
   const { assistants, hasAnyConnectors, hasImageCompatibleModel } =
     assistantsData;
-  console.log(user);
 
   return getPageContent(
     <AppProvider

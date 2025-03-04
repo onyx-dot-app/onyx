@@ -10,21 +10,29 @@ import { useUser } from "../user/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
 import { useRouter } from "next/navigation";
 
+// App domain should not be hardcoded
+const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
+
+interface NewTenantModalProps {
+  tenantInfo: NewTenantInfo;
+  isInvite?: boolean;
+}
+
 export default function NewTenantModal({
   tenantInfo,
   isInvite = false,
-}: {
-  tenantInfo: NewTenantInfo;
-  isInvite?: boolean;
-}) {
+}: NewTenantModalProps) {
   const router = useRouter();
   const { setPopup } = usePopup();
   const { user } = useUser();
   const [isOpen, setIsOpen] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleJoinTenant = async () => {
     setIsLoading(true);
+    setError(null);
+
     try {
       if (isInvite) {
         // Accept the invitation through the API
@@ -37,25 +45,35 @@ export default function NewTenantModal({
         });
 
         if (!response.ok) {
-          throw new Error("Failed to accept invitation");
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || "Failed to accept invitation");
         }
 
         setPopup({
           message: "You have accepted the invitation.",
           type: "success",
         });
-        await logout();
-        router.push(`/auth/join?email=${user?.email}`);
       } else {
-        // For non-invite flow, log out and redirect to signup
-        await logout();
-        router.push(`/auth/join?email=${user?.email}`);
+        // For non-invite flow, just show success message
+        setPopup({
+          message: "Processing your team join request...",
+          type: "success",
+        });
       }
+
+      // Common logout and redirect for both flows
       await logout();
+      router.push(`/auth/join?email=${user?.email}`);
       setIsOpen(false);
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to join the team. Please try again.";
+
+      setError(message);
       setPopup({
-        message: "Failed to join the team. Please try again.",
+        message,
         type: "error",
       });
     } finally {
@@ -67,6 +85,8 @@ export default function NewTenantModal({
     if (!isInvite) return;
 
     setIsLoading(true);
+    setError(null);
+
     try {
       // Deny the invitation through the API
       const response = await fetch("/api/tenants/users/deny-invite", {
@@ -78,7 +98,8 @@ export default function NewTenantModal({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to decline invitation");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to decline invitation");
       }
 
       setPopup({
@@ -87,8 +108,14 @@ export default function NewTenantModal({
       });
       setIsOpen(false);
     } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to decline the invitation. Please try again.";
+
+      setError(message);
       setPopup({
-        message: "Failed to decline the invitation. Please try again.",
+        message,
         type: "error",
       });
     } finally {
@@ -106,6 +133,7 @@ export default function NewTenantModal({
       }}
       className="relative z-[1000]"
     >
+      {/* Modal backdrop */}
       <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -113,17 +141,22 @@ export default function NewTenantModal({
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {isInvite ? (
               <>
-                You have been invited to join an onyx.app team with{" "}
+                You have been invited to join an {APP_DOMAIN} team with{" "}
                 {tenantInfo.number_of_users} users.
               </>
             ) : (
               <>
-                Your request to join an onyx.app team with{" "}
+                Your request to join an {APP_DOMAIN} team with{" "}
                 {tenantInfo.number_of_users + 4} users has been approved.
               </>
             )}
           </Dialog.Title>
+
           <div className="space-y-4">
+            {error && (
+              <p className="text-red-500 dark:text-red-400 text-sm">{error}</p>
+            )}
+
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               {isInvite ? (
                 <>
@@ -134,10 +167,11 @@ export default function NewTenantModal({
               ) : (
                 <>
                   To finish joining the team, you&apos;ll need to create a new
-                  account with your email, <em> {user?.email}</em>.
+                  account with your email, <em>{user?.email}</em>.
                 </>
               )}
             </p>
+
             <div
               className={`flex ${
                 isInvite ? "justify-between" : "justify-center"
@@ -150,7 +184,11 @@ export default function NewTenantModal({
                   className="flex items-center flex-1"
                   disabled={isLoading}
                 >
-                  <X className="mr-2 h-4 w-4" />
+                  {isLoading ? (
+                    <span className="animate-spin mr-2">⟳</span>
+                  ) : (
+                    <X className="mr-2 h-4 w-4" />
+                  )}
                   Decline
                 </Button>
               )}

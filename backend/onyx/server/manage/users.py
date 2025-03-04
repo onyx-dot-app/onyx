@@ -418,6 +418,10 @@ async def delete_user(
     db_session.expunge(user_to_delete)
 
     try:
+        tenant_id = get_current_tenant_id()
+        fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+        )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
         logger.info(f"Deleted user {user_to_delete.email}")
 

@@ -7,18 +7,25 @@ import { Button } from "../ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Building, ArrowRight, Send, CheckCircle } from "lucide-react";
 
+// Define types for API responses
 interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;
   creator_email: string;
 }
 
+// App domain should not be hardcoded
+const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
+
 export function NewTeamModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [existingTenant, setExistingTenant] =
     useState<TenantByDomainResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasRequestedInvite, setHasRequestedInvite] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setPopup } = usePopup();
@@ -29,39 +36,43 @@ export function NewTeamModal() {
       setIsOpen(true);
       fetchTenantInfo();
 
-      // Remove the new_team parameter from the URL
+      // Remove the new_team parameter from the URL without page reload
       const newParams = new URLSearchParams(searchParams.toString());
       newParams.delete("new_team");
-
-      // Create new URL without the new_team parameter
       const newUrl =
         window.location.pathname +
         (newParams.toString() ? `?${newParams.toString()}` : "");
-
-      // Use history.replaceState to update the URL without causing a page reload
       window.history.replaceState({}, "", newUrl);
     }
   }, [searchParams]);
 
   const fetchTenantInfo = async () => {
     setIsLoading(true);
+    setError(null);
+
     try {
       const response = await fetch("/api/tenants/existing-team-by-domain");
-      if (response.ok) {
-        const data = (await response.json()) as TenantByDomainResponse;
-        setExistingTenant(data);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch team info: ${response.status}`);
       }
+
+      const data = (await response.json()) as TenantByDomainResponse;
+      setExistingTenant(data);
     } catch (error) {
       console.error("Failed to fetch tenant info:", error);
+      setError("Could not retrieve team information. Please try again later.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleRequestInvite = async () => {
-    try {
-      if (!existingTenant) return;
+    if (!existingTenant) return;
 
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
       const response = await fetch("/api/tenants/request-invite", {
         method: "POST",
         headers: {
@@ -71,7 +82,8 @@ export function NewTeamModal() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to request invite");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || "Failed to request invite");
       }
 
       setHasRequestedInvite(true);
@@ -80,10 +92,15 @@ export function NewTeamModal() {
         type: "success",
       });
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to request an invite";
+      setError(message);
       setPopup({
-        message: "Failed to request an invite. Please try again.",
+        message,
         type: "error",
       });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -93,10 +110,12 @@ export function NewTeamModal() {
     setIsOpen(false);
   };
 
-  if (!isOpen || !existingTenant) return null;
+  // Don't render if not open or no tenant found
+  if (!isOpen || (!existingTenant && !isLoading && !error)) return null;
 
   return (
     <Dialog open={isOpen} onClose={() => {}} className="relative z-[1000]">
+      {/* Modal backdrop */}
       <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
@@ -110,7 +129,7 @@ export function NewTeamModal() {
             ) : (
               <>
                 <Building className="mr-2 h-5 w-5" />
-                We found an existing team for onyx.app
+                We found an existing team for {APP_DOMAIN}
               </>
             )}
           </Dialog.Title>
@@ -119,6 +138,20 @@ export function NewTeamModal() {
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-neutral-100 mx-auto mb-4"></div>
               <p>Loading team information...</p>
+            </div>
+          ) : error ? (
+            <div className="space-y-4">
+              <p className="text-red-500 dark:text-red-400">{error}</p>
+              <div className="flex w-full pt-2">
+                <Button
+                  variant="agent"
+                  onClick={handleContinueToNewOrg}
+                  className="flex w-full text-center items-center justify-center"
+                >
+                  Continue with new team
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
@@ -130,7 +163,7 @@ export function NewTeamModal() {
                 <Button
                   variant="agent"
                   onClick={handleContinueToNewOrg}
-                  className="flex w-full text-center items-center"
+                  className="flex w-full text-center items-center justify-center"
                 >
                   Continue to try Onyx
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -140,17 +173,26 @@ export function NewTeamModal() {
           ) : (
             <div className="space-y-4">
               <p className="text-neutral-500 dark:text-neutral-200 text-sm mb-2">
-                Your request can be approved by any admin of onyx.app.
+                Your request can be approved by any admin of {APP_DOMAIN}.
               </p>
               <div className="mt-4">
-                <p className="text-neutral-800 dark:text-neutral-200 mb-2"></p>
                 <Button
                   onClick={handleRequestInvite}
                   variant="agent"
                   className="flex w-full items-center justify-center"
+                  disabled={isSubmitting}
                 >
-                  <Send className="mr-2 h-4 w-4" />
-                  Request to join your team
+                  {isSubmitting ? (
+                    <span className="flex items-center">
+                      <span className="animate-spin mr-2">⟳</span>
+                      Sending request...
+                    </span>
+                  ) : (
+                    <>
+                      <Send className="mr-2 h-4 w-4" />
+                      Request to join your team
+                    </>
+                  )}
                 </Button>
               </div>
               <div
