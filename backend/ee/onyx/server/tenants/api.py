@@ -34,6 +34,7 @@ from ee.onyx.server.tenants.models import TenantByDomainResponse
 from ee.onyx.server.tenants.product_gating import store_product_gating
 from ee.onyx.server.tenants.provisioning import delete_user_from_control_plane
 from ee.onyx.server.tenants.provisioning import get_tenant_by_domain_from_control_plane
+from ee.onyx.server.tenants.user_mapping import accept_user_invite
 from ee.onyx.server.tenants.user_mapping import approve_user_invite
 from ee.onyx.server.tenants.user_mapping import get_tenant_id_for_email
 from ee.onyx.server.tenants.user_mapping import invite_self_to_tenant
@@ -371,8 +372,6 @@ async def accept_invite(
         raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
-        from ee.onyx.server.tenants.user_mapping import accept_user_invite
-
         accept_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception(f"Failed to accept invite: {str(e)}")

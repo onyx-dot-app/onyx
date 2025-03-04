@@ -31,7 +31,5 @@ def get_pending_users() -> list[str]:
 
 def write_pending_users(emails: list[str]) -> int:
     store = get_kv_store()
-    print(f"Writing {len(emails)} pending users to key-value store")
-    print("key is ", KV_PENDING_USERS_KEY)
     store.store(KV_PENDING_USERS_KEY, cast(JSON_ro, emails))
     return len(emails)

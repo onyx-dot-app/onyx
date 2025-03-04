@@ -112,12 +112,9 @@ def remove_all_users_from_tenant(tenant_id: str) -> None:
 def invite_self_to_tenant(email: str, tenant_id: str) -> None:
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
-        print("inviting self to tenant", email, tenant_id)
         pending_users = get_pending_users()
         if email in pending_users:
-            print("email already in pending users")
             return
-        print("writing pending users", pending_users + [email])
         write_pending_users(pending_users + [email])
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)

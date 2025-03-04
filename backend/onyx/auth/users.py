@@ -370,7 +370,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         associate_by_email: bool = False,
         is_verified_by_default: bool = False,
     ) -> User:
-        print("OAUTH CALLBACK")
         referral_source = (
             getattr(request.state, "referral_source", None) if request else None
         )
@@ -1126,12 +1125,8 @@ def get_oauth_router(
         # Login user
         response = await backend.login(strategy, user)
         await user_manager.on_after_login(user, request, response)
-        print(tenant_id)
         # Prepare redirect response
         if tenant_id is None:
-            print("NEW TEAM")
-            print(next_url)
-            print("REDIRECTING TO NEW TEAM")
             if "?" in next_url:
                 redirect_response = RedirectResponse(
                     f"{next_url}&new_team=true", status_code=302
@@ -1140,11 +1135,8 @@ def get_oauth_router(
                 redirect_response = RedirectResponse(
                     f"{next_url}?new_team=true", status_code=302
                 )
-            print("REDIRECTING TO NEW TEAM")
-            print(redirect_response)
 
         else:
-            print("EXISTING TEAM")
             # Add new_team parameter to the redirect URL
             redirect_response = RedirectResponse(next_url, status_code=302)
 
