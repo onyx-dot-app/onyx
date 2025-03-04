@@ -148,3 +148,28 @@ def upsert_pgfilestore(
         db_session.commit()
 
     return pgfilestore
+
+
+def save_bytes_to_pgfilestore(
+    db_session: Session,
+    raw_bytes: bytes,
+    media_type: str,
+    identifier: str,
+    display_name: str,
+    file_origin: FileOrigin = FileOrigin.OTHER,
+) -> PGFileStore:
+    """
+    Saves raw bytes to PGFileStore and returns the resulting record.
+    """
+    file_name = f"{file_origin.name.lower()}_{identifier}"
+    lobj_oid = create_populate_lobj(BytesIO(raw_bytes), db_session)
+    pgfilestore = upsert_pgfilestore(
+        file_name=file_name,
+        display_name=display_name,
+        file_origin=file_origin,
+        file_type=media_type,
+        lobj_oid=lobj_oid,
+        db_session=db_session,
+        commit=True,
+    )
+    return pgfilestore

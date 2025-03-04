@@ -55,6 +55,9 @@ schema DANSWER_CHUNK_NAME {
         field blurb type string {
             indexing: summary | attribute
         }
+        field image_file_name type string {
+            indexing: summary | attribute
+        }
         # https://docs.vespa.ai/en/attributes.html potential enum store for speed, but probably not worth it
         field source_type type string {
             indexing: summary | attribute

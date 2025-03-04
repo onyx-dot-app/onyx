@@ -332,7 +332,7 @@ class WebConnector(LoadConnector):
                 if initial_url.split(".")[-1] == "pdf":
                     # PDF files are not checked for links
                     response = requests.get(initial_url)
-                    page_text, metadata = read_pdf_file(
+                    page_text, metadata, images = read_pdf_file(
                         file=io.BytesIO(response.content)
                     )
                     last_modified = response.headers.get("Last-Modified")

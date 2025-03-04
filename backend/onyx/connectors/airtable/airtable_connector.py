@@ -200,7 +200,6 @@ class AirtableConnector(LoadConnector):
                                         return attachment_response.content
 
                             logger.error(f"Failed to refresh attachment for {filename}")
-
                         raise
 
                 attachment_content = get_attachment_with_retry(url, record_id)
