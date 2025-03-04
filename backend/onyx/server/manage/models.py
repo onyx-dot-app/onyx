@@ -53,14 +53,14 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
 
 
-class NewTenantInfo(BaseModel):
+class TenantSnapshot(BaseModel):
     tenant_id: str
     number_of_users: int
 
 
 class TenantInfo(BaseModel):
-    invitation: NewTenantInfo | None = None
-    new_tenant: NewTenantInfo | None = None
+    invitation: TenantSnapshot | None = None
+    new_tenant: TenantSnapshot | None = None
 
 
 class UserInfo(BaseModel):

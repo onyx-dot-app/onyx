@@ -8,6 +8,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 import { NewTeamModal } from "../modals/NewTeamModal";
 import NewTenantModal from "../modals/NewTenantModal";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -31,6 +32,7 @@ export const AppProvider = ({
   // Render user-related modals based on conditionals
   const renderUserModals = () => {
     if (!user) return null;
+    if (!NEXT_PUBLIC_CLOUD_ENABLED) return null;
 
     return (
       <>

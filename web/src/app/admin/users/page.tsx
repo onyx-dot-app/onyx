@@ -73,7 +73,9 @@ const UsersTables = ({
       <TabsList>
         <TabsTrigger value="current">Current Users</TabsTrigger>
         <TabsTrigger value="invited">Invited Users</TabsTrigger>
-        <TabsTrigger value="pending">Pending Users</TabsTrigger>
+        {NEXT_PUBLIC_CLOUD_ENABLED && (
+          <TabsTrigger value="pending">Pending Users</TabsTrigger>
+        )}
       </TabsList>
 
       <TabsContent value="current">
@@ -108,23 +110,25 @@ const UsersTables = ({
           </CardContent>
         </Card>
       </TabsContent>
-      <TabsContent value="pending">
-        <Card>
-          <CardHeader>
-            <CardTitle>Pending Users</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PendingUsersTable
-              users={pendingUsers || []}
-              setPopup={setPopup}
-              mutate={pendingUsersMutate}
-              error={pendingUsersError}
-              isLoading={pendingUsersLoading}
-              q={q}
-            />
-          </CardContent>
-        </Card>
-      </TabsContent>
+      {NEXT_PUBLIC_CLOUD_ENABLED && (
+        <TabsContent value="pending">
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Users</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PendingUsersTable
+                users={pendingUsers || []}
+                setPopup={setPopup}
+                mutate={pendingUsersMutate}
+                error={pendingUsersError}
+                isLoading={pendingUsersLoading}
+                q={q}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      )}
     </Tabs>
   );
 };

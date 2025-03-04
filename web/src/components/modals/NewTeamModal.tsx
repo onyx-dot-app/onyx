@@ -6,16 +6,13 @@ import { Dialog } from "@headlessui/react";
 import { Button } from "../ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Building, ArrowRight, Send, CheckCircle } from "lucide-react";
+import { useUser } from "../user/UserProvider";
 
-// Define types for API responses
 interface TenantByDomainResponse {
   tenant_id: string;
   number_of_users: number;
   creator_email: string;
 }
-
-// App domain should not be hardcoded
-const APP_DOMAIN = process.env.NEXT_PUBLIC_APP_DOMAIN || "onyx.app";
 
 export function NewTeamModal() {
   const [isOpen, setIsOpen] = useState(false);
@@ -26,6 +23,8 @@ export function NewTeamModal() {
   const [hasRequestedInvite, setHasRequestedInvite] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { user } = useUser();
+  const appDomain = user?.email.split("@")[1];
   const router = useRouter();
   const searchParams = useSearchParams();
   const { setPopup } = usePopup();
@@ -129,7 +128,7 @@ export function NewTeamModal() {
             ) : (
               <>
                 <Building className="mr-2 h-5 w-5" />
-                We found an existing team for {APP_DOMAIN}
+                We found an existing team for {appDomain}
               </>
             )}
           </Dialog.Title>
@@ -173,7 +172,7 @@ export function NewTeamModal() {
           ) : (
             <div className="space-y-4">
               <p className="text-neutral-500 dark:text-neutral-200 text-sm mb-2">
-                Your request can be approved by any admin of {APP_DOMAIN}.
+                Your request can be approved by any admin of {appDomain}.
               </p>
               <div className="mt-4">
                 <Button

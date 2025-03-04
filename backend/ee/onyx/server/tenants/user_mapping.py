@@ -8,7 +8,7 @@ from onyx.auth.invited_users import write_pending_users
 from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import UserTenantMapping
-from onyx.server.manage.models import NewTenantInfo
+from onyx.server.manage.models import TenantSnapshot
 from onyx.setup import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
@@ -247,7 +247,7 @@ def get_tenant_count(tenant_id: str) -> int:
         return user_count
 
 
-def get_tenant_invitation(email: str) -> NewTenantInfo | None:
+def get_tenant_invitation(email: str) -> TenantSnapshot | None:
     with get_session_with_shared_schema() as db_session:
         # Get the first tenant invitation for this user
         invitation = (
@@ -269,7 +269,7 @@ def get_tenant_invitation(email: str) -> NewTenantInfo | None:
                 )
                 .count()
             )
-            return NewTenantInfo(
+            return TenantSnapshot(
                 tenant_id=invitation.tenant_id, number_of_users=user_count
             )
 

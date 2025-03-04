@@ -53,8 +53,8 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
-from onyx.server.manage.models import NewTenantInfo
 from onyx.server.manage.models import TenantInfo
+from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -565,16 +565,19 @@ def verify_user_logged_in(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
 
-    new_tenant: NewTenantInfo | None = None
-    if team_name != get_current_tenant_id():
-        user_count = fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.user_mapping", "get_tenant_count", None
-        )(team_name)
-        new_tenant = NewTenantInfo(tenant_id=team_name, number_of_users=user_count)
+    new_tenant: TenantSnapshot | None = None
+    tenant_invitation: TenantSnapshot | None = None
 
-    tenant_invitation = fetch_ee_implementation_or_noop(
-        "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
-    )(user.email)
+    if MULTI_TENANT:
+        if team_name != get_current_tenant_id():
+            user_count = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_count", None
+            )(team_name)
+            new_tenant = TenantSnapshot(tenant_id=team_name, number_of_users=user_count)
+
+        tenant_invitation = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+        )(user.email)
 
     user_info = UserInfo.from_model(
         user,
