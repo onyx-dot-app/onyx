@@ -24,6 +24,9 @@ import { Monitor, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FiTrash2 } from "react-icons/fi";
+import { deleteAllChatSessions } from "../lib";
+import { useChatContext } from "@/components/context/ChatContext";
 
 type SettingsSection = "settings" | "password";
 
@@ -47,6 +50,8 @@ export function UserSettingsModal({
     updateUserShortcuts,
     updateUserTemperatureOverrideEnabled,
   } = useUser();
+  const { refreshChatSessions } = useChatContext();
+  const router = useRouter();
   const containerRef = useRef<HTMLDivElement>(null);
   const messageRef = useRef<HTMLDivElement>(null);
   const { theme, setTheme } = useTheme();
@@ -57,6 +62,8 @@ export function UserSettingsModal({
   const [isLoading, setIsLoading] = useState(false);
   const [activeSection, setActiveSection] =
     useState<SettingsSection>("settings");
+  const [isDeleteAllLoading, setIsDeleteAllLoading] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -132,7 +139,6 @@ export function UserSettingsModal({
     );
   });
 
-  const router = useRouter();
   const handleChangedefaultModel = async (defaultModel: string | null) => {
     try {
       const response = await setUserDefaultModel(defaultModel);
@@ -204,6 +210,31 @@ export function UserSettingsModal({
     }
   };
   const showPasswordSection = user?.password_configured;
+
+  const handleDeleteAllChats = async () => {
+    setIsDeleteAllLoading(true);
+    try {
+      const response = await deleteAllChatSessions();
+      if (response.ok) {
+        setPopup({
+          message: "All your chat sessions have been deleted.",
+          type: "success",
+        });
+        refreshChatSessions();
+        router.push("/chat");
+      } else {
+        throw new Error("Failed to delete all chat sessions");
+      }
+    } catch (error) {
+      setPopup({
+        message: "Failed to delete all chat sessions",
+        type: "error",
+      });
+    } finally {
+      setIsDeleteAllLoading(false);
+      setShowDeleteConfirmation(false);
+    }
+  };
 
   return (
     <Modal
@@ -349,6 +380,51 @@ export function UserSettingsModal({
                       }
                     }}
                   />
+                </div>
+                <div className="pt-4 border-t border-border">
+                  {!showDeleteConfirmation ? (
+                    <div className="space-y-3">
+                      <p className="text-sm text-neutral-600 ">
+                        This will permanently delete all your chat sessions and
+                        cannot be undone.
+                      </p>
+                      <Button
+                        variant="destructive"
+                        className="w-full flex items-center justify-center"
+                        onClick={() => setShowDeleteConfirmation(true)}
+                      >
+                        <FiTrash2 className="mr-2" size={14} />
+                        Delete All Chats
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm text-neutral-600 ">
+                        Are you sure you want to delete all your chat sessions?
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          className="flex-1 flex items-center justify-center"
+                          onClick={handleDeleteAllChats}
+                          disabled={isDeleteAllLoading}
+                        >
+                          {isDeleteAllLoading
+                            ? "Deleting..."
+                            : "Yes, Delete All"}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => setShowDeleteConfirmation(false)}
+                          disabled={isDeleteAllLoading}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
