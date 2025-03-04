@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 from typing import Any
 from typing import cast
+from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -11,6 +12,7 @@ from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import nullsfirst
 from sqlalchemy import or_
+from sqlalchemy import Row
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
@@ -389,17 +391,17 @@ def get_chat_sessions_older_than(
         A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
     """
 
-    returned_sessions: list[tuple[UUID | None, UUID]] = []
-
     cutoff_time = datetime.utcnow() - timedelta(days=days_old)
-    old_sessions = db_session.execute(
+    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
         select(ChatSession.user_id, ChatSession.id).where(
             ChatSession.time_created < cutoff_time
         )
     ).fetchall()
 
-    for user_id, session_id in old_sessions:
-        returned_sessions.append((user_id, session_id))
+    # convert old_sessions to a conventional list of tuples
+    returned_sessions: list[tuple[UUID | None, UUID]] = [
+        (user_id, session_id) for user_id, session_id in old_sessions
+    ]
 
     return returned_sessions
 
