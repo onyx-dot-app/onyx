@@ -6,6 +6,7 @@ import { Dialog } from "@headlessui/react";
 import { Button } from "../ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Building, Users, ArrowRight, Send, CheckCircle } from "lucide-react";
+import { Separator } from "../ui/separator";
 
 interface TenantInfo {
   tenant_id: string;
@@ -101,42 +102,45 @@ export function NewOrganizationModal() {
   if (!isOpen) return null;
 
   return (
-    <Dialog open={isOpen} onClose={() => {}} className="relative z-50">
-      <div className="fixed inset-0 bg-black/50" aria-hidden="true" />
+    <Dialog open={isOpen} onClose={() => {}} className="relative z-[1000]">
+      <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-gray-800 p-6 shadow-xl border border-gray-200 dark:border-gray-700">
+        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-xl border border-neutral-200 dark:border-neutral-700">
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {hasRequestedInvite ? (
               <>
-                <CheckCircle className="mr-2 h-5 w-5 text-green-500" /> Invite
-                Requested
+                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-white" />
+                Invite Requested
               </>
             ) : (
               <>
-                <Building className="mr-2 h-5 w-5" /> Welcome to Your
-                Organization
+                <Building className="mr-2 h-5 w-5" />
+                We found an existing team for onyx.app
               </>
             )}
           </Dialog.Title>
 
+          <p className="text-neutral-500 dark:text-neutral-200  text-sm mb-2">
+            Your request can be approved by any admin of onyx.app.
+          </p>
           {isLoading ? (
             <div className="py-8 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100 mx-auto mb-4"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-neutral-100 mx-auto mb-4"></div>
               <p>Loading organization information...</p>
             </div>
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
-              <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
-                <p className="text-green-800 dark:text-green-200">
+              <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-400 dark:border-neutral-700">
+                <p className="text-neutral-800  dark:text-neutral-200">
                   Your invite request has been sent. Play around in your own
                   organization while you wait for approval.
                 </p>
               </div>
-              <div className="flex justify-center pt-2">
+              <div className="flex w-full pt-2">
                 <Button
                   onClick={handleContinueToNewOrg}
-                  className="flex items-center"
+                  className="flex w-full text-center items-center"
                 >
                   Continue to your new organization
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -147,48 +151,58 @@ export function NewOrganizationModal() {
             <div className="space-y-4">
               {existingTenant ? (
                 <>
-                  <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
-                    <p className="text-blue-800 dark:text-blue-200 mb-2">
-                      We found an organization with your email domain:
-                    </p>
-                    <div className="flex items-center text-sm text-blue-700 dark:text-blue-300 mb-1">
-                      <Users className="mr-2 h-4 w-4" />
-                      <span>{existingTenant.number_of_users} users</span>
-                    </div>
-                    <div className="flex items-center text-sm text-blue-700 dark:text-blue-300">
-                      <span className="mr-2">👤</span>
-                      <span>Created by {existingTenant.creator_email}</span>
-                    </div>
-                  </div>
-                  <p className="font-medium">Would you like to:</p>
-                  <div className="flex flex-col space-y-3 pt-2">
+                  <div className="mt-4">
+                    <p className="text-neutral-800 dark:text-neutral-200 mb-2"></p>
                     <Button
+                      onClick={handleRequestInvite}
+                      variant="agent"
+                      className="flex w-full items-center justify-center"
+                    >
+                      <Send className="mr-2 h-4 w-4" />
+                      Request to join your team
+                    </Button>
+                    {/* <div className="flex items-center text-sm text-neutral-700 dark:text-neutral-300 mb-1">
+                      <Users className="mr-2 h-4 w-4" />
+                      <span>
+                        {existingTenant.number_of_users} user
+                        {existingTenant.number_of_users === 1 ? "" : "s"}
+                      </span>
+                    </div> */}
+                    {/* <div className="flex items-center text-sm text-neutral-700 dark:text-neutral-300">
+                      <Building className="mr-2 h-4 w-4" />
+                      <span>Created by {existingTenant.creator_email}</span>
+                    </div> */}
+                  </div>
+                  {/* <Separator className="my-4" /> */}
+                  {/* <p className="font-medium">Would you like to:</p> */}
+                  <div className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0">
+                    {/* <Button
                       onClick={handleRequestInvite}
                       variant="outline"
                       className="flex items-center justify-center"
                     >
                       <Send className="mr-2 h-4 w-4" />
                       Ask for an invite to this organization
-                    </Button>
-                    <Button
+                    </Button> */}
+                    {/* <Button
                       onClick={handleContinueToNewOrg}
                       variant="secondary"
                       className="flex items-center justify-center"
                     >
-                      <Building className="mr-2 h-4 w-4" />
-                      Continue to your new organization
-                    </Button>
+                      <Building className="mr-2 h-4 w-4" /> */}
+                    + Create new team
+                    {/* </Button> */}
                   </div>
                 </>
               ) : (
                 <>
-                  <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-100 dark:border-green-800">
-                    <p className="text-green-800 dark:text-green-200">
+                  <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <p className="text-neutral-800 dark:text-neutral-200">
                       Welcome to your new organization! You&apos;re all set to
                       get started.
                     </p>
                   </div>
-                  <div className="flex justify-center pt-2">
+                  <div className="flex justify-end pt-2">
                     <Button
                       onClick={handleContinueToNewOrg}
                       className="flex items-center"

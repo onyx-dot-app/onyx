@@ -1,18 +1,20 @@
-import logging
-
 from fastapi_users import exceptions
 from sqlalchemy import select
 
+from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import get_pending_users
+from onyx.auth.invited_users import write_invited_users
 from onyx.auth.invited_users import write_pending_users
 from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import UserTenantMapping
+from onyx.server.manage.models import NewTenantInfo
+from onyx.setup import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
-logger = logging.getLogger(__name__)
+logger = setup_logger()
 
 
 def get_tenant_id_for_email(email: str) -> str:
@@ -118,17 +120,136 @@ def invite_self_to_tenant(email: str, tenant_id: str) -> None:
 
 def approve_user_invite(email: str, tenant_id: str) -> None:
     with get_session_with_shared_schema() as db_session:
+        # Delete all existing records for this email
+        db_session.query(UserTenantMapping).filter(
+            UserTenantMapping.email == email
+        ).delete()
+
         # Create a new mapping entry for the user in this tenant
         new_mapping = UserTenantMapping(email=email, tenant_id=tenant_id, active=True)
         db_session.add(new_mapping)
         db_session.commit()
 
-        # Also remove the user from pending users list
-        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-        try:
-            pending_users = get_pending_users()
-            if email in pending_users:
-                pending_users.remove(email)
-                write_pending_users(pending_users)
-        finally:
-            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    # Also remove the user from pending users list
+    # Remove from pending users
+    pending_users = get_pending_users()
+    if email in pending_users:
+        pending_users.remove(email)
+        write_pending_users(pending_users)
+
+    # Add to invited users
+    invited_users = get_invited_users()
+    if email not in invited_users:
+        invited_users.append(email)
+        write_invited_users(invited_users)
+
+
+def accept_user_invite(email: str, tenant_id: str) -> None:
+    """
+    Accept an invitation to join a tenant.
+    This activates the user's mapping to the tenant.
+    """
+    with get_session_with_shared_schema() as db_session:
+        # Find the mapping for this user and tenant
+        mapping = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.email == email,
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.active == False,  # noqa: E712
+            )
+            .first()
+        )
+
+        if mapping:
+            # Set all other mappings for this user to inactive
+            db_session.query(UserTenantMapping).filter(
+                UserTenantMapping.email == email,
+                UserTenantMapping.active == True,  # noqa: E712
+            ).update({"active": False})
+
+            # Activate this mapping
+            mapping.active = True
+            db_session.commit()
+            logger.info(f"User {email} accepted invitation to tenant {tenant_id}")
+        else:
+            logger.warning(
+                f"No invitation found for user {email} in tenant {tenant_id}"
+            )
+
+
+def deny_user_invite(email: str, tenant_id: str) -> None:
+    """
+    Deny an invitation to join a tenant.
+    This removes the user's mapping to the tenant.
+    """
+    with get_session_with_shared_schema() as db_session:
+        # Delete the mapping for this user and tenant
+        result = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.email == email,
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.active == False,  # noqa: E712
+            )
+            .delete()
+        )
+
+        db_session.commit()
+        if result:
+            logger.info(f"User {email} denied invitation to tenant {tenant_id}")
+        else:
+            logger.warning(
+                f"No invitation found for user {email} in tenant {tenant_id}"
+            )
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+    try:
+        pending_users = get_invited_users()
+        pending_users.remove(email)
+        write_invited_users(pending_users)
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+
+
+def get_tenant_count(tenant_id: str) -> int:
+    with get_session_with_shared_schema() as db_session:
+        # Count the number of active users for this tenant
+        user_count = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
+            .count()
+        )
+
+        return user_count
+
+
+def get_tenant_invitation(email: str) -> NewTenantInfo | None:
+    with get_session_with_shared_schema() as db_session:
+        # Get the first tenant invitation for this user
+        invitation = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.email == email,
+                UserTenantMapping.active == False,  # noqa: E712
+            )
+            .first()
+        )
+
+        if invitation:
+            # Get the user count for this tenant
+            user_count = (
+                db_session.query(UserTenantMapping)
+                .filter(
+                    UserTenantMapping.tenant_id == invitation.tenant_id,
+                    UserTenantMapping.active == True,  # noqa: E712
+                )
+                .count()
+            )
+            return NewTenantInfo(
+                tenant_id=invitation.tenant_id, number_of_users=user_count
+            )
+
+        return None

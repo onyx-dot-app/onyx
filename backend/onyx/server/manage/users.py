@@ -53,6 +53,8 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import NewTenantInfo
+from onyx.server.manage.models import TenantInfo
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -544,8 +546,8 @@ def verify_user_logged_in(
         if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
             return fetch_no_auth_user(store, anonymous_user_enabled=True)
-
         raise BasicAuthenticationError(detail="User Not Authenticated")
+
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
         raise BasicAuthenticationError(
             detail="Access denied. User's OIDC token has expired.",
@@ -562,6 +564,16 @@ def verify_user_logged_in(
     new_tenant = None
     if organization_name != get_current_tenant_id():
         new_tenant = organization_name
+        print("organization_name", organization_name)
+        print("get_current_tenant_id()", get_current_tenant_id())
+
+        user_count = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_count", None
+        )(organization_name)
+
+    tenant_invitation = fetch_ee_implementation_or_noop(
+        "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+    )(user.email)
 
     user_info = UserInfo.from_model(
         user,
@@ -569,7 +581,12 @@ def verify_user_logged_in(
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
         is_cloud_superuser=user.email in SUPER_USERS,
         organization_name=organization_name,
-        new_tenant=new_tenant,
+        tenant_info=TenantInfo(
+            new_tenant=NewTenantInfo(tenant_id=new_tenant, number_of_users=user_count)
+            if new_tenant
+            else None,
+            invitation=tenant_invitation,
+        ),
     )
 
     return user_info

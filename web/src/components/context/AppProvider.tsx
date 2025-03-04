@@ -7,6 +7,7 @@ import { AssistantsProvider } from "./AssistantsContext";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 import { NewOrganizationModal } from "../modals/NewOrganizationModal";
+import NewTenantModal from "./NewTenantModal";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -37,7 +38,18 @@ export const AppProvider = ({
             hasImageCompatibleModel={hasImageCompatibleModel}
           >
             {children}
+
             {user && <NewOrganizationModal />}
+
+            {user?.tenant_info?.new_tenant && (
+              <NewTenantModal tenantInfo={user.tenant_info.new_tenant} />
+            )}
+            {user?.tenant_info?.invitation && (
+              <NewTenantModal
+                isInvite
+                tenantInfo={user.tenant_info.invitation}
+              />
+            )}
           </AssistantsProvider>
         </ProviderContextProvider>
       </UserProvider>

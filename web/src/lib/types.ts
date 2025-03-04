@@ -65,7 +65,17 @@ export interface User {
   // we don't want to show them things like the reset password
   // functionality
   password_configured?: boolean;
-  new_tenant?: string | null;
+  tenant_info?: TenantInfo | null;
+}
+
+export interface TenantInfo {
+  new_tenant?: NewTenantInfo | null;
+  invitation?: NewTenantInfo | null;
+}
+
+export interface NewTenantInfo {
+  tenant_id: string;
+  number_of_users: number;
 }
 
 export interface AllUsersResponse {

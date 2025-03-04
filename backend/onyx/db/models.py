@@ -2299,12 +2299,12 @@ class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
     __table_args__ = (
         # This ensures a user can only be active in one tenant at a time
-        # Removed partial unique constraint from code, now handled in migrations
+        # and that a user can only have one record per tenant
         {"schema": "public"},
     )
 
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @validates("email")

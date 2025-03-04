@@ -175,6 +175,7 @@ export const getCurrentUserSS = async (): Promise<User | null> => {
           .join("; "),
       },
     });
+
     if (!response.ok) {
       return null;
     }

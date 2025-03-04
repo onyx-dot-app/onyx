@@ -13,6 +13,7 @@ import { set } from "lodash";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
+import { useRouter } from "next/navigation";
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -29,6 +30,7 @@ export function EmailPasswordForm({
 }) {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
+  const router = useRouter();
   const [isWorking, setIsWorking] = useState(false);
   return (
     <>
@@ -78,6 +80,11 @@ export function EmailPasswordForm({
               });
               setIsWorking(false);
               return;
+            } else {
+              setPopup({
+                type: "success",
+                message: "Account created successfully. Please log in.",
+              });
             }
           }
 
@@ -91,7 +98,9 @@ export function EmailPasswordForm({
               window.location.href = "/auth/waiting-on-verification";
             } else {
               // See above comment
-              window.location.href = nextUrl ? encodeURI(nextUrl) : "/";
+              window.location.href = nextUrl
+                ? encodeURI(nextUrl)
+                : "/?new_organization=true";
             }
           } else {
             setIsWorking(false);

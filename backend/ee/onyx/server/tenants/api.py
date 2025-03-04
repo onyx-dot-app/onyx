@@ -355,3 +355,43 @@ async def approve_user(
 ) -> None:
     tenant_id = get_current_tenant_id()
     approve_user_invite(approve_user_request.email, tenant_id)
+
+
+@router.post("/users/accept-invite")
+async def accept_invite(
+    invite_request: RequestInviteRequest,
+    user: User | None = Depends(current_admin_user),
+) -> None:
+    """
+    Accept an invitation to join a tenant.
+    """
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from ee.onyx.server.tenants.user_mapping import accept_user_invite
+
+        accept_user_invite(user.email, invite_request.tenant_id)
+    except Exception as e:
+        logger.exception(f"Failed to accept invite: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to accept invitation")
+
+
+@router.post("/users/deny-invite")
+async def deny_invite(
+    invite_request: RequestInviteRequest,
+    user: User | None = Depends(current_admin_user),
+) -> None:
+    """
+    Deny an invitation to join a tenant.
+    """
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        from ee.onyx.server.tenants.user_mapping import deny_user_invite
+
+        deny_user_invite(user.email, invite_request.tenant_id)
+    except Exception as e:
+        logger.exception(f"Failed to deny invite: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to deny invitation")

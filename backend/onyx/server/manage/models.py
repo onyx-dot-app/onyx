@@ -53,6 +53,16 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
 
 
+class NewTenantInfo(BaseModel):
+    tenant_id: str
+    number_of_users: int
+
+
+class TenantInfo(BaseModel):
+    invitation: NewTenantInfo | None = None
+    new_tenant: NewTenantInfo | None = None
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
@@ -68,7 +78,7 @@ class UserInfo(BaseModel):
     organization_name: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
-    new_tenant: str | None = None
+    tenant_info: TenantInfo | None = None
 
     @classmethod
     def from_model(
@@ -79,7 +89,7 @@ class UserInfo(BaseModel):
         is_cloud_superuser: bool = False,
         organization_name: str | None = None,
         is_anonymous_user: bool | None = None,
-        new_tenant: str | None = None,
+        tenant_info: TenantInfo | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -111,7 +121,7 @@ class UserInfo(BaseModel):
             current_token_expiry_length=expiry_length,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
-            new_tenant=new_tenant,
+            tenant_info=tenant_info,
         )
 
 
