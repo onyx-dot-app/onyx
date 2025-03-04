@@ -557,19 +557,19 @@ def verify_user_logged_in(
         None if MULTI_TENANT else get_current_token_creation(user, db_session)
     )
 
-    organization_name = fetch_ee_implementation_or_noop(
+    team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
 
     new_tenant = None
-    if organization_name != get_current_tenant_id():
-        new_tenant = organization_name
-        print("organization_name", organization_name)
+    if team_name != get_current_tenant_id():
+        new_tenant = team_name
+        print("team_name", team_name)
         print("get_current_tenant_id()", get_current_tenant_id())
 
         user_count = fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "get_tenant_count", None
-        )(organization_name)
+        )(team_name)
 
     tenant_invitation = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
@@ -580,7 +580,7 @@ def verify_user_logged_in(
         current_token_created_at=token_created_at,
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
         is_cloud_superuser=user.email in SUPER_USERS,
-        organization_name=organization_name,
+        team_name=team_name,
         tenant_info=TenantInfo(
             new_tenant=NewTenantInfo(tenant_id=new_tenant, number_of_users=user_count)
             if new_tenant

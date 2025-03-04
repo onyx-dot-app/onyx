@@ -1129,6 +1129,9 @@ def get_oauth_router(
         print(tenant_id)
         # Prepare redirect response
         if tenant_id is None:
+            print("NEW TEAM")
+            print(next_url)
+            print("REDIRECTING TO NEW TEAM")
             if "?" in next_url:
                 redirect_response = RedirectResponse(
                     f"{next_url}&new_team=true", status_code=302
@@ -1137,8 +1140,11 @@ def get_oauth_router(
                 redirect_response = RedirectResponse(
                     f"{next_url}?new_team=true", status_code=302
                 )
+            print("REDIRECTING TO NEW TEAM")
+            print(redirect_response)
 
         else:
+            print("EXISTING TEAM")
             # Add new_team parameter to the redirect URL
             redirect_response = RedirectResponse(next_url, status_code=302)
 

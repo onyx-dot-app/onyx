@@ -75,7 +75,7 @@ class UserInfo(BaseModel):
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
     is_cloud_superuser: bool = False
-    organization_name: str | None = None
+    team_name: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
@@ -87,7 +87,7 @@ class UserInfo(BaseModel):
         current_token_created_at: datetime | None = None,
         expiry_length: int | None = None,
         is_cloud_superuser: bool = False,
-        organization_name: str | None = None,
+        team_name: str | None = None,
         is_anonymous_user: bool | None = None,
         tenant_info: TenantInfo | None = None,
     ) -> "UserInfo":
@@ -111,7 +111,7 @@ class UserInfo(BaseModel):
                     temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
-            organization_name=organization_name,
+            team_name=team_name,
             # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
             # where they previously had this set + used OIDC, and now they switched to
             # basic auth are now constantly getting redirected back to the login page

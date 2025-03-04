@@ -49,7 +49,7 @@ export default function NewTenantModal({
       } else {
         // For non-invite flow, log out and redirect to signup
         await logout();
-        router.push(`/auth/signup?email=${user?.email}`);
+        router.push(`/auth/join?email=${user?.email}`);
       }
       await logout();
       setIsOpen(false);
@@ -109,7 +109,7 @@ export default function NewTenantModal({
       <div className="fixed inset-0 bg-[#000]/50" aria-hidden="true" />
 
       <div className="fixed inset-0 flex items-center justify-center p-4">
-        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-gray-800 p-6 shadow-xl border border-gray-200 dark:border-gray-700">
+        <Dialog.Panel className="mx-auto w-full max-w-md rounded-lg bg-white dark:bg-neutral-800 p-6 shadow-xl border border-neutral-200 dark:border-neutral-700">
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {isInvite ? (
               <>
@@ -124,7 +124,7 @@ export default function NewTenantModal({
             )}
           </Dialog.Title>
           <div className="space-y-4">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
+            <p className="text-sm text-neutral-600 dark:text-neutral-400">
               {isInvite ? (
                 <>
                   By accepting this invitation, you'll join the team and have

@@ -98,7 +98,7 @@ FORBIDDEN_COMMON_EMAIL_DOMAINS = [
 ]
 
 
-@router.get("/anonymous-user-path2")
+@router.get("/existing-team-by-domain")
 def get_existing_tenant_by_domain(
     user: User | None = Depends(current_admin_user),
 ) -> TenantByDomainResponse | None:
@@ -107,8 +107,9 @@ def get_existing_tenant_by_domain(
     domain = user.email.split("@")[1]
     if domain in FORBIDDEN_COMMON_EMAIL_DOMAINS:
         return None
+    tenant_id = get_current_tenant_id()
 
-    return get_tenant_by_domain_from_control_plane(domain)
+    return get_tenant_by_domain_from_control_plane(domain, tenant_id)
 
 
 @router.get("/anonymous-user-path")
@@ -278,7 +279,7 @@ async def impersonate_user(
     return response
 
 
-@router.post("/leave-organization")
+@router.post("/leave-team")
 async def leave_organization(
     user_email: UserByEmail,
     current_user: User | None = Depends(current_admin_user),

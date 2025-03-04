@@ -28,7 +28,7 @@ const Page = async (props: {
 
   const teamName = Array.isArray(searchParams?.team)
     ? searchParams?.team[0]
-    : searchParams?.team || "your organization";
+    : searchParams?.team || "your team";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -52,7 +52,7 @@ const Page = async (props: {
   // if user is already logged in, take them to the main app page
   if (currentUser && currentUser.is_active && !currentUser.is_anonymous_user) {
     if (!authTypeMetadata?.requiresVerification || currentUser.is_verified) {
-      return redirect("/chat?new_organization=true");
+      return redirect("/chat?new_team=true");
     }
     return redirect("/auth/waiting-on-verification");
   }
@@ -60,7 +60,7 @@ const Page = async (props: {
 
   // only enable this page if basic login is enabled
   if (authTypeMetadata?.authType !== "basic" && !cloud) {
-    return redirect("/chat?new_organization=true");
+    return redirect("/chat?new_team=true");
   }
 
   let authUrl: string | null = null;

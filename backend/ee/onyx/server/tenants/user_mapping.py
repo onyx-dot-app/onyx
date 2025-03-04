@@ -21,31 +21,34 @@ def get_tenant_id_for_email(email: str) -> str:
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
     # Implement logic to get tenant_id from the mapping table
-    with get_session_with_shared_schema() as db_session:
-        # First try to get an active tenant
-        result = db_session.execute(
-            select(UserTenantMapping.tenant_id).where(
-                UserTenantMapping.email == email,
-                UserTenantMapping.active == True,  # noqa: E712
-            )
-        )
-        tenant_id = result.scalar_one_or_none()
-
-        # If no active tenant found, try to get the first inactive one
-        if tenant_id is None:
+    try:
+        with get_session_with_shared_schema() as db_session:
+            # First try to get an active tenant
             result = db_session.execute(
-                select(UserTenantMapping).where(
+                select(UserTenantMapping.tenant_id).where(
                     UserTenantMapping.email == email,
-                    UserTenantMapping.active == False,  # noqa: E712
+                    UserTenantMapping.active == True,  # noqa: E712
                 )
             )
-            mapping = result.scalar_one_or_none()
-            if mapping:
-                # Mark this mapping as active
-                mapping.active = True
-                db_session.commit()
-                tenant_id = mapping.tenant_id
+            tenant_id = result.scalar_one_or_none()
 
+            # If no active tenant found, try to get the first inactive one
+            if tenant_id is None:
+                result = db_session.execute(
+                    select(UserTenantMapping).where(
+                        UserTenantMapping.email == email,
+                        UserTenantMapping.active == False,  # noqa: E712
+                    )
+                )
+                mapping = result.scalar_one_or_none()
+                if mapping:
+                    # Mark this mapping as active
+                    mapping.active = True
+                    db_session.commit()
+                    tenant_id = mapping.tenant_id
+    except Exception as e:
+        logger.exception(f"Error getting tenant id for email {email}: {e}")
+        raise exceptions.UserNotExists()
     if tenant_id is None:
         raise exceptions.UserNotExists()
     return tenant_id
@@ -155,7 +158,6 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
             db_session.query(UserTenantMapping)
             .filter(
                 UserTenantMapping.email == email,
-                UserTenantMapping.tenant_id == tenant_id,
                 UserTenantMapping.active == True,  # noqa: E712
             )
             .first()

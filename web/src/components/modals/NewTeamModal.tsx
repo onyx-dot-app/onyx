@@ -24,17 +24,29 @@ export function NewTeamModal() {
   const { setPopup } = usePopup();
 
   useEffect(() => {
-    const hasNewOrgParam = searchParams.has("new_team");
-    if (hasNewOrgParam) {
+    const hasNewTeamParam = searchParams.has("new_team");
+    if (hasNewTeamParam) {
       setIsOpen(true);
       fetchTenantInfo();
+
+      // Remove the new_team parameter from the URL
+      const newParams = new URLSearchParams(searchParams.toString());
+      newParams.delete("new_team");
+
+      // Create new URL without the new_team parameter
+      const newUrl =
+        window.location.pathname +
+        (newParams.toString() ? `?${newParams.toString()}` : "");
+
+      // Use history.replaceState to update the URL without causing a page reload
+      window.history.replaceState({}, "", newUrl);
     }
   }, [searchParams]);
 
   const fetchTenantInfo = async () => {
     setIsLoading(true);
     try {
-      const response = await fetch("/api/tenants/anonymous-user-path2");
+      const response = await fetch("/api/tenants/existing-team-by-domain");
       if (response.ok) {
         const data = (await response.json()) as TenantByDomainResponse;
         setExistingTenant(data);
@@ -92,7 +104,7 @@ export function NewTeamModal() {
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {hasRequestedInvite ? (
               <>
-                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-white" />
+                <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-[#fff]" />
                 Join Request Sent
               </>
             ) : (
@@ -141,8 +153,11 @@ export function NewTeamModal() {
                   Request to join your team
                 </Button>
               </div>
-              <div className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0">
-                + Create new team
+              <div
+                onClick={handleContinueToNewOrg}
+                className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0"
+              >
+                + Continue with new team
               </div>
             </div>
           )}
