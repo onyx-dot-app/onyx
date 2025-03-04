@@ -5,7 +5,7 @@ from types import TracebackType
 from typing import cast
 from typing import Optional
 
-import aioboto3
+import aioboto3  # type: ignore
 import httpx
 import openai
 import vertexai  # type: ignore
