@@ -561,15 +561,12 @@ def verify_user_logged_in(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
 
-    new_tenant = None
+    new_tenant: NewTenantInfo | None = None
     if team_name != get_current_tenant_id():
-        new_tenant = team_name
-        print("team_name", team_name)
-        print("get_current_tenant_id()", get_current_tenant_id())
-
         user_count = fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "get_tenant_count", None
         )(team_name)
+        new_tenant = NewTenantInfo(tenant_id=team_name, number_of_users=user_count)
 
     tenant_invitation = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
@@ -582,9 +579,7 @@ def verify_user_logged_in(
         is_cloud_superuser=user.email in SUPER_USERS,
         team_name=team_name,
         tenant_info=TenantInfo(
-            new_tenant=NewTenantInfo(tenant_id=new_tenant, number_of_users=user_count)
-            if new_tenant
-            else None,
+            new_tenant=new_tenant,
             invitation=tenant_invitation,
         ),
     )

@@ -25,12 +25,13 @@ def get_tenant_id_for_email(email: str) -> str:
         with get_session_with_shared_schema() as db_session:
             # First try to get an active tenant
             result = db_session.execute(
-                select(UserTenantMapping.tenant_id).where(
+                select(UserTenantMapping).where(
                     UserTenantMapping.email == email,
                     UserTenantMapping.active == True,  # noqa: E712
                 )
             )
-            tenant_id = result.scalar_one_or_none()
+            mapping = result.scalar_one_or_none()
+            tenant_id = mapping.tenant_id if mapping else None
 
             # If no active tenant found, try to get the first inactive one
             if tenant_id is None:
@@ -46,6 +47,7 @@ def get_tenant_id_for_email(email: str) -> str:
                     mapping.active = True
                     db_session.commit()
                     tenant_id = mapping.tenant_id
+
     except Exception as e:
         logger.exception(f"Error getting tenant id for email {email}: {e}")
         raise exceptions.UserNotExists()

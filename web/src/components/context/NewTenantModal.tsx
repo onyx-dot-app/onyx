@@ -127,13 +127,13 @@ export default function NewTenantModal({
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               {isInvite ? (
                 <>
-                  By accepting this invitation, you'll join the team and have
-                  access to all shared resources. You can collaborate with other
-                  members using your email {user?.email}.
+                  By accepting this invitation, you&apos;ll join the team and
+                  have access to all shared resources. You can collaborate with
+                  other members using your email {user?.email}.
                 </>
               ) : (
                 <>
-                  To finish joining the team, you'll need to create a new
+                  To finish joining the team, you&apos;ll need to create a new
                   account with your email, <em> {user?.email}</em>.
                 </>
               )}
