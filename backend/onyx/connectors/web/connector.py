@@ -158,33 +158,9 @@ def get_internal_links(
 def start_playwright() -> Tuple[Playwright, BrowserContext]:
     playwright = sync_playwright().start()
 
-    # Use more realistic browser options
-    browser = playwright.chromium.launch(
-        headless=True,  # Keep headless for automation
-        args=[
-            "--disable-blink-features=AutomationControlled",
-            "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64;\
-                  x64) AppleWebKit/537.36 (KHTML, like Gecko)\
-                      Chrome/123.0.0.0 Safari/537.36",
-            "--window-size=1920,1080",
-        ],
-    )
+    browser = playwright.chromium.launch(headless=True)
 
-    # Create a more realistic browser context
-    context = browser.new_context(
-        viewport={"width": 1920, "height": 1080},
-        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64)\
-              AppleWebKit/537.36 (KHTML, like Gecko)\
-                  Chrome/123.0.0.0 Safari/537.36",
-        locale="en-US",
-        timezone_id="America/New_York",
-        # Add some permissions to appear more like a real browser
-        permissions=["geolocation", "notifications"],
-        # Add some device characteristics
-        device_scale_factor=1.0,
-        is_mobile=False,
-        has_touch=False,
-    )
+    context = browser.new_context()
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID
