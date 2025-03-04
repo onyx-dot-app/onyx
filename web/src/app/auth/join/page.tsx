@@ -67,9 +67,10 @@ const Page = async (props: {
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
   }
+  const emailDomain = defaultEmail?.split("@")[1];
 
   return (
-    <AuthFlowContainer authState="join ">
+    <AuthFlowContainer authState="join">
       <HealthCheckBanner />
       <AuthErrorDisplay searchParams={searchParams} />
 
@@ -77,9 +78,7 @@ const Page = async (props: {
         <div className="absolute top-10x w-full"></div>
         <div className="flex w-full flex-col justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
-            Join your new onyx.app Team
-            {/* , Pablo */}
-            {/* {teamName} */}
+            Join your new {emailDomain} Team
           </h2>
 
           {cloud && authUrl && (

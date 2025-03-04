@@ -1131,15 +1131,15 @@ def get_oauth_router(
         if tenant_id is None:
             if "?" in next_url:
                 redirect_response = RedirectResponse(
-                    f"{next_url}&new_organization=true", status_code=302
+                    f"{next_url}&new_team=true", status_code=302
                 )
             else:
                 redirect_response = RedirectResponse(
-                    f"{next_url}?new_organization=true", status_code=302
+                    f"{next_url}?new_team=true", status_code=302
                 )
 
         else:
-            # Add new_organization parameter to the redirect URL
+            # Add new_team parameter to the redirect URL
             redirect_response = RedirectResponse(next_url, status_code=302)
 
         # Copy headers and other attributes from 'response' to 'redirect_response'

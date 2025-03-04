@@ -5,14 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Dialog } from "@headlessui/react";
 import { Button } from "../ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Building, Users, ArrowRight, Send, CheckCircle } from "lucide-react";
-import { Separator } from "../ui/separator";
-
-interface TenantInfo {
-  tenant_id: string;
-  number_of_users: number;
-  creator_email: string;
-}
+import { Building, ArrowRight, Send, CheckCircle } from "lucide-react";
 
 interface TenantByDomainResponse {
   tenant_id: string;
@@ -41,13 +34,7 @@ export function NewTeamModal() {
   const fetchTenantInfo = async () => {
     setIsLoading(true);
     try {
-      const response2 = await fetch("/api/me");
-      const me = await response2.json();
-
-      const response3 = await fetch("/api/tenants/anonymous-user-path");
-
       const response = await fetch("/api/tenants/anonymous-user-path2");
-
       if (response.ok) {
         const data = (await response.json()) as TenantByDomainResponse;
         setExistingTenant(data);
@@ -63,7 +50,6 @@ export function NewTeamModal() {
     try {
       if (!existingTenant) return;
 
-      // Call the API to request an invite
       const response = await fetch("/api/tenants/request-invite", {
         method: "POST",
         headers: {
@@ -90,16 +76,12 @@ export function NewTeamModal() {
   };
 
   const handleContinueToNewOrg = () => {
-    // Remove the new_team parameter and close the modal
     const newUrl = window.location.pathname;
     router.replace(newUrl);
     setIsOpen(false);
   };
 
-  // Note: We've removed the handleContinueToExistingOrg function as per requirements
-  // to never show both "Continue to existing" and "Continue to new" team options
-
-  if (!isOpen) return null;
+  if (!isOpen || !existingTenant) return null;
 
   return (
     <Dialog open={isOpen} onClose={() => {}} className="relative z-[1000]">
@@ -128,12 +110,10 @@ export function NewTeamModal() {
             </div>
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
-              {/* <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-700"> */}
-              <p className="text-neutral-700  dark:text-neutral-200">
+              <p className="text-neutral-700 dark:text-neutral-200">
                 Your join request has been sent. You can explore on your own
                 while waiting for the team admin to approve your request.
               </p>
-              {/* </div> */}
               <div className="flex w-full pt-2">
                 <Button
                   variant="agent"
@@ -147,74 +127,23 @@ export function NewTeamModal() {
             </div>
           ) : (
             <div className="space-y-4">
-              {existingTenant ? (
-                <>
-                  <p className="text-neutral-500 dark:text-neutral-200  text-sm mb-2">
-                    Your request can be approved by any admin of onyx.app.
-                  </p>
-                  <div className="mt-4">
-                    <p className="text-neutral-800 dark:text-neutral-200 mb-2"></p>
-                    <Button
-                      onClick={handleRequestInvite}
-                      variant="agent"
-                      className="flex w-full items-center justify-center"
-                    >
-                      <Send className="mr-2 h-4 w-4" />
-                      Request to join your team
-                    </Button>
-                    {/* <div className="flex items-center text-sm text-neutral-700 dark:text-neutral-300 mb-1">
-                      <Users className="mr-2 h-4 w-4" />
-                      <span>
-                        {existingTenant.number_of_users} user
-                        {existingTenant.number_of_users === 1 ? "" : "s"}
-                      </span>
-                    </div> */}
-                    {/* <div className="flex items-center text-sm text-neutral-700 dark:text-neutral-300">
-                      <Building className="mr-2 h-4 w-4" />
-                      <span>Created by {existingTenant.creator_email}</span>
-                    </div> */}
-                  </div>
-                  {/* <Separator className="my-4" /> */}
-                  {/* <p className="font-medium">Would you like to:</p> */}
-                  <div className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0">
-                    {/* <Button
-                      onClick={handleRequestInvite}
-                      variant="outline"
-                      className="flex items-center justify-center"
-                    >
-                      <Send className="mr-2 h-4 w-4" />
-                      Ask for an invite to this team
-                    </Button> */}
-                    {/* <Button
-                      onClick={handleContinueToNewOrg}
-                      variant="secondary"
-                      className="flex items-center justify-center"
-                    >
-                      <Building className="mr-2 h-4 w-4" /> */}
-                    + Create new team
-                    {/* </Button> */}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <p className="text-neutral-800 dark:text-neutral-200">
-                      Welcome to your new team! You&apos;re all set to get
-                      started.
-                    </p>
-                  </div>
-                  <div className="flex justify-end pt-2">
-                    <Button
-                      variant="agent"
-                      onClick={handleContinueToNewOrg}
-                      className="flex items-center"
-                    >
-                      Continue to your new team
-                      <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </div>
-                </>
-              )}
+              <p className="text-neutral-500 dark:text-neutral-200 text-sm mb-2">
+                Your request can be approved by any admin of onyx.app.
+              </p>
+              <div className="mt-4">
+                <p className="text-neutral-800 dark:text-neutral-200 mb-2"></p>
+                <Button
+                  onClick={handleRequestInvite}
+                  variant="agent"
+                  className="flex w-full items-center justify-center"
+                >
+                  <Send className="mr-2 h-4 w-4" />
+                  Request to join your team
+                </Button>
+              </div>
+              <div className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0">
+                + Create new team
+              </div>
             </div>
           )}
         </Dialog.Panel>

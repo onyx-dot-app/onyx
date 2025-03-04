@@ -44,6 +44,8 @@ export default function NewTenantModal({
           message: "You have accepted the invitation.",
           type: "success",
         });
+        await logout();
+        router.push(`/auth/join?email=${user?.email}`);
       } else {
         // For non-invite flow, log out and redirect to signup
         await logout();
@@ -112,7 +114,7 @@ export default function NewTenantModal({
             {isInvite ? (
               <>
                 You have been invited to join an onyx.app team with{" "}
-                {tenantInfo.number_of_users + 4} users.
+                {tenantInfo.number_of_users} users.
               </>
             ) : (
               <>

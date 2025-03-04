@@ -150,7 +150,26 @@ def accept_user_invite(email: str, tenant_id: str) -> None:
     This activates the user's mapping to the tenant.
     """
     with get_session_with_shared_schema() as db_session:
-        # Find the mapping for this user and tenant
+        # First check if there's an active mapping for this user and tenant
+        active_mapping = (
+            db_session.query(UserTenantMapping)
+            .filter(
+                UserTenantMapping.email == email,
+                UserTenantMapping.tenant_id == tenant_id,
+                UserTenantMapping.active == True,  # noqa: E712
+            )
+            .first()
+        )
+
+        # If an active mapping exists, delete it
+        if active_mapping:
+            db_session.delete(active_mapping)
+            db_session.commit()
+            logger.info(
+                f"Deleted existing active mapping for user {email} in tenant {tenant_id}"
+            )
+
+        # Find the inactive mapping for this user and tenant
         mapping = (
             db_session.query(UserTenantMapping)
             .filter(
@@ -205,8 +224,9 @@ def deny_user_invite(email: str, tenant_id: str) -> None:
     token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
     try:
         pending_users = get_invited_users()
-        pending_users.remove(email)
-        write_invited_users(pending_users)
+        if email in pending_users:
+            pending_users.remove(email)
+            write_invited_users(pending_users)
     finally:
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 

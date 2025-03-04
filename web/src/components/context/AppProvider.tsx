@@ -44,6 +44,7 @@ export const AppProvider = ({
             {user?.tenant_info?.new_tenant && (
               <NewTenantModal tenantInfo={user.tenant_info.new_tenant} />
             )}
+
             {user?.tenant_info?.invitation && (
               <NewTenantModal
                 isInvite={true}

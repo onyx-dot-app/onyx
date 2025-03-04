@@ -43,6 +43,7 @@ from onyx.auth.invited_users import get_pending_users
 from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import auth_backend
 from onyx.auth.users import current_admin_user
+from onyx.auth.users import current_user
 from onyx.auth.users import get_redis_strategy
 from onyx.auth.users import optional_user
 from onyx.auth.users import User
@@ -360,7 +361,7 @@ async def approve_user(
 @router.post("/users/accept-invite")
 async def accept_invite(
     invite_request: RequestInviteRequest,
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_user),
 ) -> None:
     """
     Accept an invitation to join a tenant.
@@ -380,7 +381,7 @@ async def accept_invite(
 @router.post("/users/deny-invite")
 async def deny_invite(
     invite_request: RequestInviteRequest,
-    user: User | None = Depends(current_admin_user),
+    user: User | None = Depends(current_user),
 ) -> None:
     """
     Deny an invitation to join a tenant.
