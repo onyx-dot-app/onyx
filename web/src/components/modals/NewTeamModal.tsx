@@ -20,7 +20,7 @@ interface TenantByDomainResponse {
   creator_email: string;
 }
 
-export function NewOrganizationModal() {
+export function NewTeamModal() {
   const [isOpen, setIsOpen] = useState(false);
   const [existingTenant, setExistingTenant] =
     useState<TenantByDomainResponse | null>(null);
@@ -31,7 +31,7 @@ export function NewOrganizationModal() {
   const { setPopup } = usePopup();
 
   useEffect(() => {
-    const hasNewOrgParam = searchParams.has("new_organization");
+    const hasNewOrgParam = searchParams.has("new_team");
     if (hasNewOrgParam) {
       setIsOpen(true);
       fetchTenantInfo();
@@ -78,7 +78,7 @@ export function NewOrganizationModal() {
 
       setHasRequestedInvite(true);
       setPopup({
-        message: "Your invite request has been sent to the organization admin.",
+        message: "Your invite request has been sent to the team admin.",
         type: "success",
       });
     } catch (error) {
@@ -90,14 +90,14 @@ export function NewOrganizationModal() {
   };
 
   const handleContinueToNewOrg = () => {
-    // Remove the new_organization parameter and close the modal
+    // Remove the new_team parameter and close the modal
     const newUrl = window.location.pathname;
     router.replace(newUrl);
     setIsOpen(false);
   };
 
   // Note: We've removed the handleContinueToExistingOrg function as per requirements
-  // to never show both "Continue to existing" and "Continue to new" organization options
+  // to never show both "Continue to existing" and "Continue to new" team options
 
   if (!isOpen) return null;
 
@@ -111,7 +111,7 @@ export function NewOrganizationModal() {
             {hasRequestedInvite ? (
               <>
                 <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-white" />
-                Invite Requested
+                Join Request Sent
               </>
             ) : (
               <>
@@ -121,28 +121,26 @@ export function NewOrganizationModal() {
             )}
           </Dialog.Title>
 
-          <p className="text-neutral-500 dark:text-neutral-200  text-sm mb-2">
-            Your request can be approved by any admin of onyx.app.
-          </p>
           {isLoading ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-neutral-100 mx-auto mb-4"></div>
-              <p>Loading organization information...</p>
+              <p>Loading team information...</p>
             </div>
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
-              <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-400 dark:border-neutral-700">
-                <p className="text-neutral-800  dark:text-neutral-200">
-                  Your invite request has been sent. Play around in your own
-                  organization while you wait for approval.
-                </p>
-              </div>
+              {/* <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-300 dark:border-neutral-700"> */}
+              <p className="text-neutral-700  dark:text-neutral-200">
+                Your join request has been sent. You can explore on your own
+                while waiting for the team admin to approve your request.
+              </p>
+              {/* </div> */}
               <div className="flex w-full pt-2">
                 <Button
+                  variant="agent"
                   onClick={handleContinueToNewOrg}
                   className="flex w-full text-center items-center"
                 >
-                  Continue to your new organization
+                  Continue to try Onyx
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -151,6 +149,9 @@ export function NewOrganizationModal() {
             <div className="space-y-4">
               {existingTenant ? (
                 <>
+                  <p className="text-neutral-500 dark:text-neutral-200  text-sm mb-2">
+                    Your request can be approved by any admin of onyx.app.
+                  </p>
                   <div className="mt-4">
                     <p className="text-neutral-800 dark:text-neutral-200 mb-2"></p>
                     <Button
@@ -182,7 +183,7 @@ export function NewOrganizationModal() {
                       className="flex items-center justify-center"
                     >
                       <Send className="mr-2 h-4 w-4" />
-                      Ask for an invite to this organization
+                      Ask for an invite to this team
                     </Button> */}
                     {/* <Button
                       onClick={handleContinueToNewOrg}
@@ -198,16 +199,17 @@ export function NewOrganizationModal() {
                 <>
                   <div className="p-4 bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-700">
                     <p className="text-neutral-800 dark:text-neutral-200">
-                      Welcome to your new organization! You&apos;re all set to
-                      get started.
+                      Welcome to your new team! You&apos;re all set to get
+                      started.
                     </p>
                   </div>
                   <div className="flex justify-end pt-2">
                     <Button
+                      variant="agent"
                       onClick={handleContinueToNewOrg}
                       className="flex items-center"
                     >
-                      Continue to your new organization
+                      Continue to your new team
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </div>

@@ -216,11 +216,7 @@ export function ChatPage({
   const isInitialLoad = useRef(true);
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
 
-  const {
-    assistants: availableAssistants,
-    finalAssistants,
-    pinnedAssistants,
-  } = useAssistants();
+  const { assistants: availableAssistants, pinnedAssistants } = useAssistants();
 
   const [showApiKeyModal, setShowApiKeyModal] = useState(
     !shouldShowWelcomeModal
@@ -230,7 +226,7 @@ export function ChatPage({
   const slackChatId = searchParams.get("slackChatId");
   const existingChatIdRaw = searchParams.get("chatId");
 
-  const [showHistorySidebar, setShowHistorySidebar] = useState(false); // State to track if sidebar is open
+  const [showHistorySidebar, setShowHistorySidebar] = useState(false);
 
   const existingChatSessionId = existingChatIdRaw ? existingChatIdRaw : null;
 

@@ -6,8 +6,8 @@ import { SettingsProvider } from "../settings/SettingsProvider";
 import { AssistantsProvider } from "./AssistantsContext";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
-import { NewOrganizationModal } from "../modals/NewOrganizationModal";
 import NewTenantModal from "./NewTenantModal";
+import { NewTeamModal } from "../modals/NewTeamModal";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -39,14 +39,14 @@ export const AppProvider = ({
           >
             {children}
 
-            {user && <NewOrganizationModal />}
+            {user && <NewTeamModal />}
 
             {user?.tenant_info?.new_tenant && (
               <NewTenantModal tenantInfo={user.tenant_info.new_tenant} />
             )}
             {user?.tenant_info?.invitation && (
               <NewTenantModal
-                isInvite
+                isInvite={true}
                 tenantInfo={user.tenant_info.invitation}
               />
             )}

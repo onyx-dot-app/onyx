@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Dialog } from "@headlessui/react";
 import { Button } from "../ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { Building, ArrowRight, CheckCircle, X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { logout } from "@/lib/user";
 import { useUser } from "../user/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
@@ -53,7 +53,7 @@ export default function NewTenantModal({
       setIsOpen(false);
     } catch (error) {
       setPopup({
-        message: "Failed to join the organization. Please try again.",
+        message: "Failed to join the team. Please try again.",
         type: "error",
       });
     } finally {
@@ -111,53 +111,35 @@ export default function NewTenantModal({
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {isInvite ? (
               <>
-                <Building className="mr-2 h-5 w-5" />
-                Organization Invitation
+                You have been invited to join an onyx.app team with{" "}
+                {tenantInfo.number_of_users + 4} users.
               </>
             ) : (
               <>
-                <CheckCircle className="mr-2 h-5 w-5 text-green-500" />
-                Organization Joined
+                Your request to join an onyx.app team with{" "}
+                {tenantInfo.number_of_users + 4} users has been approved.
               </>
             )}
           </Dialog.Title>
           <div className="space-y-4">
-            <div className="p-4 bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
-              {isInvite ? (
-                <p className="text-gray-800 dark:text-gray-200 mb-2">
-                  You have been invited to join{" "}
-                  <span className="font-medium">{tenantInfo.tenant_id}</span>,
-                  an organization with {tenantInfo.number_of_users} users.
-                </p>
-              ) : (
-                <p className="text-gray-800 dark:text-gray-200 mb-2">
-                  Your request to join an organization with{" "}
-                  {tenantInfo.number_of_users} users has been approved. You will
-                  now be part of this organization.
-                </p>
-              )}
-            </div>
-
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {isInvite ? (
                 <>
-                  By accepting this invitation, you'll join the organization and
-                  have access to all shared resources. You can collaborate with
-                  other members using your email {user?.email}.
+                  By accepting this invitation, you'll join the team and have
+                  access to all shared resources. You can collaborate with other
+                  members using your email {user?.email}.
                 </>
               ) : (
                 <>
-                  To join this organization, you'll need to create a new account
-                  with your email {user?.email}. Once you do, you'll
-                  automatically be part of this organization and have access to
-                  all its shared resources.
+                  To finish joining the team, you'll need to create a new
+                  account with your email, <em> {user?.email}</em>.
                 </>
               )}
             </p>
             <div
               className={`flex ${
                 isInvite ? "justify-between" : "justify-center"
-              } w-full pt-4 gap-4`}
+              } w-full pt-2 gap-4`}
             >
               {isInvite && (
                 <Button
@@ -170,7 +152,9 @@ export default function NewTenantModal({
                   Decline
                 </Button>
               )}
+
               <Button
+                variant="agent"
                 onClick={handleJoinTenant}
                 className={`flex items-center justify-center ${
                   isInvite ? "flex-1" : "w-full"

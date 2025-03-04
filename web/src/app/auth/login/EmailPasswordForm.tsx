@@ -21,12 +21,14 @@ export function EmailPasswordForm({
   referralSource,
   nextUrl,
   defaultEmail,
+  isJoin = false,
 }: {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
   defaultEmail?: string | null;
+  isJoin?: boolean;
 }) {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
@@ -146,7 +148,7 @@ export function EmailPasswordForm({
               disabled={isSubmitting}
               className="mx-auto  !py-4 w-full"
             >
-              {isSignup ? "Sign Up" : "Log In"}
+              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
               <Link

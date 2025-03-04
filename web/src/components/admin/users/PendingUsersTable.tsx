@@ -91,12 +91,12 @@ const PendingUsersTable = ({
     <>
       {userToApprove && (
         <ConfirmEntityModal
-          entityType="User Request"
+          entityType="Join Request"
           entityName={userToApprove}
           onClose={() => setUserToApprove(null)}
           onSubmit={() => handleAcceptRequest(userToApprove)}
           actionButtonText="Approve"
-          additionalDetails="This will grant the user access to your organization."
+          additionalDetails="This will grant the user access to your team."
           variant="action"
         />
       )}
@@ -121,8 +121,8 @@ const PendingUsersTable = ({
                       size="sm"
                       onClick={() => setUserToApprove(user.email)}
                     >
-                      <CheckIcon className="mr-2 h-4 w-4" />
-                      Accept Request
+                      <CheckIcon className="h-4 w-4" />
+                      Accept Join Request
                     </Button>
                   </div>
                 </TableCell>

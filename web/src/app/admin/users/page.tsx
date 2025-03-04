@@ -218,7 +218,7 @@ const AddUserButton = ({
           entityName="your Access Logic"
           onClose={() => setShowConfirmation(false)}
           onSubmit={handleConfirmFirstInvite}
-          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your instance."
+          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your team."
           actionButtonText="Continue"
           variant="action"
         />
