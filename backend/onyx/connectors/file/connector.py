@@ -17,8 +17,8 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.connectors.vision_enabled_connector import VisionEnabledConnector
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -236,6 +236,7 @@ def _process_file(
         )
     ]
 
+
 class LocalFileConnector(LoadConnector, VisionEnabledConnector):
     """
     Connector that reads files from Postgres and yields Documents, including
@@ -291,6 +292,7 @@ class LocalFileConnector(LoadConnector, VisionEnabledConnector):
 
                     if len(documents) >= self.batch_size:
                         yield documents
+
                         documents = []
 
             if documents:
