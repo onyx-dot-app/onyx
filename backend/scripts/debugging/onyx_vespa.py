@@ -37,7 +37,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from sqlalchemy import and_
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
@@ -65,6 +64,7 @@ from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
