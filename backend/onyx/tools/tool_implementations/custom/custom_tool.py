@@ -132,10 +132,10 @@ class CustomTool(BaseTool):
 
         if response.response_type == "image" or response.response_type == "csv":
             image_response = cast(CustomToolFileResponse, response.tool_result)
-            return json.dumps({"file_ids": image_response.file_ids})
+            return json.dumps({"file_ids": image_response.file_ids}, ensure_ascii=False)
 
         # For JSON or other responses, return as-is
-        return json.dumps(response.tool_result)
+        return json.dumps(response.tool_result, ensure_ascii=False)
 
     """For LLMs which do NOT support explicit tool calling"""
 
@@ -371,7 +371,7 @@ def build_custom_tools_from_openapi_schema_and_headers(
 ) -> list[CustomTool]:
     if dynamic_schema_info:
         # Process dynamic schema information
-        schema_str = json.dumps(openapi_schema)
+        schema_str = json.dumps(openapi_schema, ensure_ascii=False)
         placeholders = {
             CHAT_SESSION_ID_PLACEHOLDER: dynamic_schema_info.chat_session_id,
             MESSAGE_ID_PLACEHOLDER: dynamic_schema_info.message_id,
