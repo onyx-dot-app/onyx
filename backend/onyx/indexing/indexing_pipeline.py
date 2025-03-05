@@ -10,6 +10,9 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.model_configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
+)
 from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -139,7 +142,8 @@ def _get_aggregated_boost_factor(
     short_chunk_content_dict = {
         chunk_num: chunk.content
         for chunk_num, chunk in enumerate(chunks)
-        if len(chunk.content.split()) <= 10
+        if len(chunk.content.split())
+        <= INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH
     }
     short_chunk_contents = list(short_chunk_content_dict.values())
     short_chunk_keys = list(short_chunk_content_dict.keys())
@@ -150,7 +154,8 @@ def _get_aggregated_boost_factor(
         )
         # Create a mapping of chunk positions to their scores
         score_map = {
-            short_chunk_keys[i]: score for i, (_, score) in enumerate(predictions)
+            short_chunk_keys[i]: prediction.content_boost_factor
+            for i, prediction in enumerate(predictions)
         }
         # Default to 1.0 for longer chunks, use predicted score for short chunks
         chunk_content_scores = [score_map.get(i, 1.0) for i in range(len(chunks))]
@@ -167,36 +172,40 @@ def _get_aggregated_boost_factor(
         failures: list[ConnectorFailure] = []
 
         for chunk in chunks:
-            if len(chunk.content.split()) <= 10:
-                try:
-                    chunk_content_scores.append(
-                        information_content_classification_model.predict(
-                            [chunk.content]
-                        )[0][1]
-                    )
-                    chunks_with_scores.append(chunk)
-                except Exception as e:
-                    logger.exception(
-                        f"Error predicting content classification for chunk: {e}. Adding to missed content classifications."
-                    )
-                    # chunk_content_scores.append(1.0)
-                    failures.append(
-                        ConnectorFailure(
-                            failed_document=DocumentFailure(
-                                document_id=chunk.source_document.id,
-                                document_link=(
-                                    chunk.source_document.sections[0].link
-                                    if chunk.source_document.sections
-                                    else None
-                                ),
-                            ),
-                            failure_message=str(e),
-                            exception=e,
-                        )
-                    )
-            else:
+            if (
+                len(chunk.content.split())
+                > INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH
+            ):
                 chunk_content_scores.append(1.0)
                 chunks_with_scores.append(chunk)
+                continue
+
+            try:
+                chunk_content_scores.append(
+                    information_content_classification_model.predict([chunk.content])[
+                        0
+                    ].content_boost_factor
+                )
+                chunks_with_scores.append(chunk)
+            except Exception as e:
+                logger.exception(
+                    f"Error predicting content classification for chunk: {e}. Adding to missed content classifications."
+                )
+
+                failures.append(
+                    ConnectorFailure(
+                        failed_document=DocumentFailure(
+                            document_id=chunk.source_document.id,
+                            document_link=(
+                                chunk.source_document.sections[0].link
+                                if chunk.source_document.sections
+                                else None
+                            ),
+                        ),
+                        failure_message=str(e),
+                        exception=e,
+                    )
+                )
 
         return chunks_with_scores, chunk_content_scores, failures
 

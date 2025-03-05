@@ -22,14 +22,15 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
 from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import INFORMATION_CONTENT_MODEL_TAG
 from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
+from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
-
 
 logger = setup_logger()
 
@@ -43,9 +44,21 @@ _INTENT_MODEL: HybridClassifier | None = None
 
 _INFORMATION_CONTENT_MODEL: SetFitModel | None = None
 
-_INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = (
-    "Does this sentence have very specific information: "  # spec to model version!
-)
+_INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = ""  # spec to model version!
+
+
+def _create_local_path(
+    model_name_or_path: str, tag: str | None, local_files_only: bool
+) -> str:
+    if tag is None:
+        local_path = snapshot_download(
+            repo_id=model_name_or_path, local_files_only=local_files_only
+        )
+    else:
+        local_path = snapshot_download(
+            repo_id=model_name_or_path, revision=tag, local_files_only=local_files_only
+        )
+    return local_path
 
 
 def get_connector_classifier_tokenizer() -> AutoTokenizer:
@@ -101,16 +114,14 @@ def get_intent_model_tokenizer() -> AutoTokenizer:
 
 def get_local_intent_model(
     model_name_or_path: str = INTENT_MODEL_VERSION,
-    tag: str = INTENT_MODEL_TAG,
+    tag: str | None = INTENT_MODEL_TAG,
 ) -> HybridClassifier:
     global _INTENT_MODEL
     if _INTENT_MODEL is None:
         try:
             # Calculate where the cache should be, then load from local if available
             logger.notice(f"Loading model from local cache: {model_name_or_path}")
-            local_path = snapshot_download(
-                repo_id=model_name_or_path, revision=tag, local_files_only=True
-            )
+            local_path = _create_local_path(model_name_or_path, tag, True)
             _INTENT_MODEL = HybridClassifier.from_pretrained(local_path)
             logger.notice(f"Loaded model from local cache: {local_path}")
         except Exception as e:
@@ -118,7 +129,7 @@ def get_local_intent_model(
             try:
                 # Attempt to download the model snapshot
                 logger.notice(f"Downloading model snapshot for {model_name_or_path}")
-                local_path = snapshot_download(repo_id=model_name_or_path, revision=tag)
+                local_path = _create_local_path(model_name_or_path, tag, False)
                 _INTENT_MODEL = HybridClassifier.from_pretrained(local_path)
             except Exception as e:
                 logger.error(
@@ -128,10 +139,37 @@ def get_local_intent_model(
     return _INTENT_MODEL
 
 
-def get_local_information_content_model() -> SetFitModel:
+def get_local_information_content_model(
+    model_name_or_path: str = INFORMATION_CONTENT_MODEL_VERSION,
+    tag: str | None = INFORMATION_CONTENT_MODEL_TAG,
+) -> SetFitModel:
     global _INFORMATION_CONTENT_MODEL
     if _INFORMATION_CONTENT_MODEL is None:
-        _INFORMATION_CONTENT_MODEL = SetFitModel(INFORMATION_CONTENT_MODEL_VERSION)
+        try:
+            # Calculate where the cache should be, then load from local if available
+            logger.notice(
+                f"Loading content information model from local cache: {model_name_or_path}"
+            )
+            local_path = _create_local_path(model_name_or_path, tag, True)
+            _INFORMATION_CONTENT_MODEL = SetFitModel.from_pretrained(local_path)
+            logger.notice(
+                f"Loaded content information model from local cache: {local_path}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load content information model directly: {e}")
+            try:
+                # Attempt to download the model snapshot
+                logger.notice(
+                    f"Downloading content information model snapshot for {model_name_or_path}"
+                )
+                local_path = _create_local_path(model_name_or_path, tag, False)
+                _INFORMATION_CONTENT_MODEL = SetFitModel.from_pretrained(local_path)
+            except Exception as e:
+                logger.error(
+                    f"Failed to load content information model even after attempted snapshot download: {e}"
+                )
+                raise
+
     return _INFORMATION_CONTENT_MODEL
 
 
@@ -254,12 +292,12 @@ def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
 @simple_log_function_time()
 def run_content_classification_inference(
     text_inputs: list[str],
-) -> list[tuple[int, float]]:
+) -> list[ContentClassificationPrediction]:
     def _prob_to_score(prob: float) -> float:
         if prob < 0.25:
             raw_score = 0.0
         elif prob < 0.75:
-            raw_score = min(1.0, (prob - 0.25) / 0.5)
+            raw_score = (prob - 0.25) / 0.5
         else:
             raw_score = 1.0
         return (
@@ -287,17 +325,20 @@ def run_content_classification_inference(
         for scaled_logit in scaled_logits
     ]
 
-    output_scores = [
+    prediction_scores = [
         _prob_to_score(p_temp) for p_temp in output_probabilities_with_temp
     ]
 
-    # output_classes = [1] * len(text_inputs)
-    # output_scores = [0.9] * len(text_inputs)
-
-    return [
-        (predicted_label, output_score)
-        for predicted_label, output_score in zip(output_classes, output_scores)
+    content_classification_predictions = [
+        ContentClassificationPrediction(
+            predicted_label=predicted_label, content_boost_factor=output_score
+        )
+        for predicted_label, output_score in list(
+            zip(output_classes, prediction_scores)
+        )
     ]
+
+    return content_classification_predictions
 
 
 def map_keywords(
@@ -449,11 +490,10 @@ async def process_analysis_request(
 @router.post("/content-classification")
 async def process_content_classification_request(
     content_classification_requests: list[str],
-) -> list[tuple[int, float]]:
-    content_classification_result = run_content_classification_inference(
+) -> list[ContentClassificationPrediction]:
+    return run_content_classification_inference(
         [
             _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX + req
             for req in content_classification_requests
         ]
     )
-    return content_classification_result

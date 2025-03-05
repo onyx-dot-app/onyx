@@ -36,6 +36,7 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
+from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
@@ -392,7 +393,7 @@ class InformationContentClassificationModel:
     def predict(
         self,
         queries: list[str],
-    ) -> list[tuple[int, float]]:
+    ) -> list[ContentClassificationPrediction]:
         response = requests.post(self.content_server_endpoint, json=queries)
         response.raise_for_status()
 
