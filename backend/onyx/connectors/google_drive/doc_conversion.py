@@ -62,6 +62,7 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     """
     return is_valid_image_type(mime_type)
 
+
 def _extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
@@ -241,10 +242,7 @@ def _extract_sections_basic(
             GDriveMimeType.MARKDOWN.value,
         ]:
             text_data = (
-                service.files()
-                .get_media(fileId=file["id"])
-                .execute()
-                .decode("utf-8")
+                service.files().get_media(fileId=file["id"]).execute().decode("utf-8")
             )
             return [Section(link=link, text=text_data)]
 
@@ -310,9 +308,6 @@ def _extract_sections_basic(
     except Exception as e:
         logger.exception(f"Error extracting sections from file: {e}")
         return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
-
-
-
 
 
 def convert_drive_item_to_document(
