@@ -52,12 +52,12 @@ class RedisConnectorIndex:
 
     def __init__(
         self,
-        tenant_id: str | None,
+        tenant_id: str,
         id: int,
         search_settings_id: int,
         redis: redis.Redis,
     ) -> None:
-        self.tenant_id: str | None = tenant_id
+        self.tenant_id: str = tenant_id
         self.id = id
         self.search_settings_id = search_settings_id
         self.redis = redis
@@ -93,10 +93,7 @@ class RedisConnectorIndex:
 
     @property
     def fenced(self) -> bool:
-        if self.redis.exists(self.fence_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.fence_key))
 
     @property
     def payload(self) -> RedisConnectorIndexPayload | None:
@@ -106,9 +103,7 @@ class RedisConnectorIndex:
             return None
 
         fence_str = fence_bytes.decode("utf-8")
-        payload = RedisConnectorIndexPayload.model_validate_json(cast(str, fence_str))
-
-        return payload
+        return RedisConnectorIndexPayload.model_validate_json(cast(str, fence_str))
 
     def set_fence(
         self,
@@ -123,10 +118,7 @@ class RedisConnectorIndex:
         self.redis.sadd(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
 
     def terminating(self, celery_task_id: str) -> bool:
-        if self.redis.exists(f"{self.terminate_key}_{celery_task_id}"):
-            return True
-
-        return False
+        return bool(self.redis.exists(f"{self.terminate_key}_{celery_task_id}"))
 
     def set_terminate(self, celery_task_id: str) -> None:
         """This sets a signal. It does not block!"""
@@ -146,10 +138,7 @@ class RedisConnectorIndex:
 
     def watchdog_signaled(self) -> bool:
         """Check the state of the watchdog."""
-        if self.redis.exists(self.watchdog_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.watchdog_key))
 
     def set_active(self) -> None:
         """This sets a signal to keep the indexing flow from getting cleaned up within
@@ -160,10 +149,7 @@ class RedisConnectorIndex:
         self.redis.set(self.active_key, 0, ex=self.ACTIVE_TTL)
 
     def active(self) -> bool:
-        if self.redis.exists(self.active_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.active_key))
 
     def set_connector_active(self) -> None:
         """This sets a signal to keep the indexing flow from getting cleaned up within
@@ -180,10 +166,7 @@ class RedisConnectorIndex:
         return False
 
     def generator_locked(self) -> bool:
-        if self.redis.exists(self.generator_lock_key):
-            return True
-
-        return False
+        return bool(self.redis.exists(self.generator_lock_key))
 
     def set_generator_complete(self, payload: int | None) -> None:
         if not payload:

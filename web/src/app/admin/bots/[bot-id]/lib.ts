@@ -14,6 +14,7 @@ interface SlackChannelConfigCreationRequest {
   answer_validity_check_enabled: boolean;
   questionmark_prefilter_enabled: boolean;
   respond_tag_only: boolean;
+  is_ephemeral: boolean;
   respond_to_bots: boolean;
   show_continue_in_web_ui: boolean;
   respond_member_group_list: string[];
@@ -45,6 +46,7 @@ const buildRequestBodyFromCreationRequest = (
     channel_name: creationRequest.channel_name,
     respond_tag_only: creationRequest.respond_tag_only,
     respond_to_bots: creationRequest.respond_to_bots,
+    is_ephemeral: creationRequest.is_ephemeral,
     show_continue_in_web_ui: creationRequest.show_continue_in_web_ui,
     enable_auto_filters: creationRequest.enable_auto_filters,
     respond_member_group_list: creationRequest.respond_member_group_list,

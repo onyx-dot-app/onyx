@@ -181,7 +181,7 @@ const SignedUpUserTable = ({
                 : "All Roles"}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent className="bg-background-50">
+          <SelectContent className="bg-background">
             {Object.entries(USER_ROLE_LABELS)
               .filter(([role]) => role !== UserRole.EXT_PERM_USER)
               .map(([role, label]) => (

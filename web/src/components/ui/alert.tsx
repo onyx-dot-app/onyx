@@ -8,12 +8,14 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        info: "border-black/50 dark:border-black dark:border-black/50 dark:dark:border-black",
-
+        broken:
+          "border-red-500/50 text-red-500 dark:border-red-500 [&>svg]:text-red-500 dark:border-red-900/50 dark:text-red-100 dark:dark:border-red-900 dark:[&>svg]:text-red-700 bg-red-50 dark:bg-red-950",
+        ark: "border-amber-500/50 text-amber-500 dark:border-amber-500 [&>svg]:text-amber-500 dark:border-amber-900/50 dark:text-amber-900 dark:dark:border-amber-900 dark:[&>svg]:text-amber-900 bg-amber-50 dark:bg-amber-950",
+        info: "border-[#fff]/50 dark:border-[#fff] dark:border-[#fff]/50 dark:dark:border-[#fff]",
         default:
           "bg-neutral-50 text-neutral-darker dark:bg-neutral-950 dark:text-text",
         destructive:
-          "border-red-500/50 text-red-500 dark:border-red-500 [&>svg]:text-red-500 dark:border-red-900/50 dark:text-red-900 dark:dark:border-red-900 dark:[&>svg]:text-red-900",
+          "border-red-500/50 text-red-500 dark:border-red-500 [&>svg]:text-red-500 dark:border-red-900/50 dark:text-red-600 dark:dark:border-red-900 dark:[&>svg]:text-red-900",
       },
     },
     defaultVariants: {

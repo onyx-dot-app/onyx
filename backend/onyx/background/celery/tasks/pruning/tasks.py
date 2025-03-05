@@ -55,6 +55,7 @@ from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.server.utils import make_short_id
+from onyx.utils.logger import format_error_for_logging
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import pruning_ctx
 from onyx.utils.logger import setup_logger
@@ -113,7 +114,7 @@ def _is_pruning_due(cc_pair: ConnectorCredentialPair) -> bool:
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
+def check_for_pruning(self: Task, *, tenant_id: str) -> bool | None:
     r = get_redis_client()
     r_replica = get_redis_replica_client()
     r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
@@ -194,12 +195,14 @@ def check_for_pruning(self: Task, *, tenant_id: str | None) -> bool | None:
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
-    except Exception:
+    except Exception as e:
+        error_msg = format_error_for_logging(e)
+        task_logger.warning(f"Unexpected pruning check exception: {error_msg}")
         task_logger.exception("Unexpected exception during pruning check")
     finally:
         if lock_beat.owned():
             lock_beat.release()
-
+    task_logger.info(f"check_for_pruning finished: tenant={tenant_id}")
     return True
 
 
@@ -208,7 +211,7 @@ def try_creating_prune_generator_task(
     cc_pair: ConnectorCredentialPair,
     db_session: Session,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> str | None:
     """Checks for any conditions that should block the pruning generator task from being
     created, then creates the task.
@@ -301,13 +304,19 @@ def try_creating_prune_generator_task(
         redis_connector.prune.set_fence(payload)
 
         payload_id = payload.id
-    except Exception:
+    except Exception as e:
+        error_msg = format_error_for_logging(e)
+        task_logger.warning(
+            f"Unexpected try_creating_prune_generator_task exception: cc_pair={cc_pair.id} {error_msg}"
+        )
         task_logger.exception(f"Unexpected exception: cc_pair={cc_pair.id}")
         return None
     finally:
         if lock.owned():
             lock.release()
-
+    task_logger.info(
+        f"try_creating_prune_generator_task finished: cc_pair={cc_pair.id} payload_id={payload_id}"
+    )
     return payload_id
 
 
@@ -324,7 +333,7 @@ def connector_pruning_generator_task(
     cc_pair_id: int,
     connector_id: int,
     credential_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """connector pruning task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -512,7 +521,7 @@ def connector_pruning_generator_task(
 
 
 def monitor_ccpair_pruning_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     fence_key = key_bytes.decode("utf-8")
     cc_pair_id_str = RedisConnector.get_id_from_fence_key(fence_key)
@@ -558,7 +567,7 @@ def monitor_ccpair_pruning_taskset(
 
 
 def validate_pruning_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     r: Redis,
     r_replica: Redis,
     r_celery: Redis,
@@ -606,7 +615,7 @@ def validate_pruning_fences(
 
 
 def validate_pruning_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     reserved_tasks: set[str],
     queued_tasks: set[str],

@@ -33,7 +33,7 @@ export default function OAuthCallbackPage() {
   const connector = pathname?.split("/")[3];
 
   useEffect(() => {
-    const handleOAuthCallback = async () => {
+    const onFirstLoad = async () => {
       // Examples
       // connector (url segment)= "google-drive"
       // sourceType (for looking up metadata) = "google_drive"
@@ -85,10 +85,19 @@ export default function OAuthCallbackPage() {
         }
 
         setStatusMessage("Success!");
-        setStatusDetails(
-          `Your authorization with ${sourceMetadata.displayName} completed successfully.`
-        );
-        setRedirectUrl(response.redirect_on_success); // Extract the redirect URL
+
+        // set the continuation link
+        if (response.finalize_url) {
+          setRedirectUrl(response.finalize_url);
+          setStatusDetails(
+            `Your authorization with ${sourceMetadata.displayName} completed successfully. Additional steps are required to complete credential setup.`
+          );
+        } else {
+          setRedirectUrl(response.redirect_on_success);
+          setStatusDetails(
+            `Your authorization with ${sourceMetadata.displayName} completed successfully.`
+          );
+        }
         setIsError(false);
       } catch (error) {
         console.error("OAuth error:", error);
@@ -100,15 +109,15 @@ export default function OAuthCallbackPage() {
       }
     };
 
-    handleOAuthCallback();
+    onFirstLoad();
   }, [code, state, connector]);
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="mx-auto h-screen flex flex-col">
       <AdminPageTitle title={pageTitle} icon={<KeyIcon size={32} />} />
 
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <CardSection className="max-w-md">
+      <div className="flex-1 flex flex-col items-center justify-center">
+        <CardSection className="max-w-md w-[500px] h-[250px] p-8">
           <h1 className="text-2xl font-bold mb-4">{statusMessage}</h1>
           <p className="text-text-500">{statusDetails}</p>
           {redirectUrl && !isError && (

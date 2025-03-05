@@ -2,6 +2,7 @@ import logging
 import multiprocessing
 import time
 from typing import Any
+from typing import cast
 
 import sentry_sdk
 from celery import Task
@@ -131,9 +132,9 @@ def on_task_postrun(
     # Get tenant_id directly from kwargs- each celery task has a tenant_id kwarg
     if not kwargs:
         logger.error(f"Task {task.name} (ID: {task_id}) is missing kwargs")
-        tenant_id = None
+        tenant_id = POSTGRES_DEFAULT_SCHEMA
     else:
-        tenant_id = kwargs.get("tenant_id")
+        tenant_id = cast(str, kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
 
     task_logger.debug(
         f"Task {task.name} (ID: {task_id}) completed with state: {state} "

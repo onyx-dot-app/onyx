@@ -24,7 +24,7 @@ from onyx.db.engine import get_session_with_current_tenant
     bind=True,
     base=AbortableTask,
 )
-def kombu_message_cleanup_task(self: Any, tenant_id: str | None) -> int:
+def kombu_message_cleanup_task(self: Any, tenant_id: str) -> int:
     """Runs periodically to clean up the kombu_message table"""
 
     # we will select messages older than this amount to clean up

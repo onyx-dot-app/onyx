@@ -29,6 +29,7 @@ export function ReindexingProgressTable({
             <TableHead className="w-1/7 sm:w-1/5">Connector Name</TableHead>
             <TableHead className="w-3/7 sm:w-1/5">Status</TableHead>
             <TableHead className="w-3/7 sm:w-1/5">Docs Re-Indexed</TableHead>
+            <TableHead className="w-3/7 sm:w-1/5"></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>

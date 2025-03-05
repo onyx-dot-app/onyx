@@ -37,8 +37,11 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_external_group_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -55,6 +58,7 @@ from onyx.redis.redis_connector_ext_group_sync import (
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.server.utils import make_short_id
+from onyx.utils.logger import format_error_for_logging
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -119,7 +123,7 @@ def _is_external_group_sync_due(cc_pair: ConnectorCredentialPair) -> bool:
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool | None:
+def check_for_external_group_sync(self: Task, *, tenant_id: str) -> bool | None:
     # we need to use celery's redis client to access its redis data
     # (which lives on a different db number)
     r = get_redis_client()
@@ -148,7 +152,10 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool 
             for source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC:
                 # These are ordered by cc_pair id so the first one is the one we want
                 cc_pairs_to_dedupe = get_cc_pairs_by_source(
-                    db_session, source, only_sync=True
+                    db_session,
+                    source,
+                    access_type=AccessType.SYNC,
+                    status=ConnectorCredentialPairStatus.ACTIVE,
                 )
                 # We only want to sync one cc_pair per source type
                 # in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC so we dedupe here
@@ -195,12 +202,17 @@ def check_for_external_group_sync(self: Task, *, tenant_id: str | None) -> bool 
         task_logger.info(
             "Soft time limit exceeded, task is being terminated gracefully."
         )
-    except Exception:
+    except Exception as e:
+        error_msg = format_error_for_logging(e)
+        task_logger.warning(
+            f"Unexpected check_for_external_group_sync exception: tenant={tenant_id} {error_msg}"
+        )
         task_logger.exception(f"Unexpected exception: tenant={tenant_id}")
     finally:
         if lock_beat.owned():
             lock_beat.release()
 
+    task_logger.info(f"check_for_external_group_sync finished: tenant={tenant_id}")
     return True
 
 
@@ -208,7 +220,7 @@ def try_creating_external_group_sync_task(
     app: Celery,
     cc_pair_id: int,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> str | None:
     """Returns an int if syncing is needed. The int represents the number of sync tasks generated.
     Returns None if no syncing is required."""
@@ -267,12 +279,19 @@ def try_creating_external_group_sync_task(
         redis_connector.external_group_sync.set_fence(payload)
 
         payload_id = payload.id
-    except Exception:
+    except Exception as e:
+        error_msg = format_error_for_logging(e)
+        task_logger.warning(
+            f"Unexpected try_creating_external_group_sync_task exception: cc_pair={cc_pair_id} {error_msg}"
+        )
         task_logger.exception(
             f"Unexpected exception while trying to create external group sync task: cc_pair={cc_pair_id}"
         )
         return None
 
+    task_logger.info(
+        f"try_creating_external_group_sync_task finished: cc_pair={cc_pair_id} payload_id={payload_id}"
+    )
     return payload_id
 
 
@@ -287,7 +306,7 @@ def try_creating_external_group_sync_task(
 def connector_external_group_sync_generator_task(
     self: Task,
     cc_pair_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """
     External group sync task for a given connector credential pair
@@ -361,11 +380,35 @@ def connector_external_group_sync_generator_task(
             cc_pair = get_connector_credential_pair_from_id(
                 db_session=db_session,
                 cc_pair_id=cc_pair_id,
+                eager_load_credential=True,
             )
             if cc_pair is None:
                 raise ValueError(
                     f"No connector credential pair found for id: {cc_pair_id}"
                 )
+
+            try:
+                created = validate_ccpair_for_user(
+                    cc_pair.connector.id,
+                    cc_pair.credential.id,
+                    db_session,
+                    enforce_creation=False,
+                )
+                if not created:
+                    task_logger.warning(
+                        f"Unable to create connector credential pair for id: {cc_pair_id}"
+                    )
+            except Exception:
+                task_logger.exception(
+                    f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
+                )
+                update_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                    status=ConnectorCredentialPairStatus.INVALID,
+                )
+                raise
 
             source_type = cc_pair.connector.source
 
@@ -378,8 +421,18 @@ def connector_external_group_sync_generator_task(
             logger.info(
                 f"Syncing external groups for {source_type} for cc_pair: {cc_pair_id}"
             )
-
-            external_user_groups: list[ExternalUserGroup] = ext_group_sync_func(cc_pair)
+            external_user_groups: list[ExternalUserGroup] = []
+            try:
+                external_user_groups = ext_group_sync_func(tenant_id, cc_pair)
+            except ConnectorValidationError as e:
+                msg = f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
+                update_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                    status=ConnectorCredentialPairStatus.INVALID,
+                )
+                raise e
 
             logger.info(
                 f"Syncing {len(external_user_groups)} external user groups for {source_type}"
@@ -405,6 +458,14 @@ def connector_external_group_sync_generator_task(
                 sync_status=SyncStatus.SUCCESS,
             )
     except Exception as e:
+        error_msg = format_error_for_logging(e)
+        task_logger.warning(
+            f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id} {error_msg}"
+        )
+        task_logger.exception(
+            f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
+        )
+
         msg = f"External group sync exceptioned: cc_pair={cc_pair_id} payload_id={payload.id}"
         task_logger.exception(msg)
         emit_background_error(msg + f"\n\n{e}", cc_pair_id=cc_pair_id)
@@ -432,7 +493,7 @@ def connector_external_group_sync_generator_task(
 
 
 def validate_external_group_sync_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     celery_app: Celery,
     r: Redis,
     r_replica: Redis,
@@ -464,7 +525,7 @@ def validate_external_group_sync_fences(
 
 
 def validate_external_group_sync_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     reserved_tasks: set[str],
     r_celery: Redis,

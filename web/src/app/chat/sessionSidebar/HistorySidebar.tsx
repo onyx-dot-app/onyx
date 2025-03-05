@@ -4,10 +4,7 @@ import React, {
   ForwardedRef,
   forwardRef,
   useContext,
-  useState,
   useCallback,
-  useLayoutEffect,
-  useRef,
 } from "react";
 import Link from "next/link";
 import {
@@ -50,9 +47,9 @@ import {
 } from "@dnd-kit/sortable";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { CirclePlus, CircleX, PinIcon } from "lucide-react";
+import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import { turborepoTraceAccess } from "next/dist/build/turborepo-access-trace";
+import { TruncatedText } from "@/components/ui/truncatedText";
 
 interface HistorySidebarProps {
   liveAssistant?: Persona | null;
@@ -67,8 +64,8 @@ interface HistorySidebarProps {
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
   explicitlyUntoggle: () => void;
-  showDeleteAllModal?: () => void;
   setShowAssistantsModal: (show: boolean) => void;
+  toggleChatSessionSearchModal?: () => void;
 }
 
 interface SortableAssistantProps {
@@ -101,24 +98,6 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
     ...(isDragging ? { zIndex: 1000, position: "relative" as const } : {}),
   };
 
-  const nameRef = useRef<HTMLParagraphElement>(null);
-  const hiddenNameRef = useRef<HTMLSpanElement>(null);
-  const [isNameTruncated, setIsNameTruncated] = useState(false);
-
-  useLayoutEffect(() => {
-    const checkTruncation = () => {
-      if (nameRef.current && hiddenNameRef.current) {
-        const visibleWidth = nameRef.current.offsetWidth;
-        const fullTextWidth = hiddenNameRef.current.offsetWidth;
-        setIsNameTruncated(fullTextWidth > visibleWidth);
-      }
-    };
-
-    checkTruncation();
-    window.addEventListener("resize", checkTruncation);
-    return () => window.removeEventListener("resize", checkTruncation);
-  }, [assistant.name]);
-
   return (
     <div
       ref={setNodeRef}
@@ -146,27 +125,11 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
         } relative flex items-center gap-x-2 py-1 px-2 rounded-md`}
       >
         <AssistantIcon assistant={assistant} size={16} className="flex-none" />
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <p
-                ref={nameRef}
-                className="text-base text-left w-fit line-clamp-1 text-ellipsis text-black dark:text-[#D4D4D4]"
-              >
-                {assistant.name}
-              </p>
-            </TooltipTrigger>
-            {isNameTruncated && (
-              <TooltipContent>{assistant.name}</TooltipContent>
-            )}
-          </Tooltip>
-        </TooltipProvider>
-        <span
-          ref={hiddenNameRef}
-          className="absolute left-[-9999px] whitespace-nowrap"
-        >
-          {assistant.name}
-        </span>
+        <TruncatedText
+          className="text-base mr-4 text-left w-fit line-clamp-1 text-ellipsis text-black dark:text-[#D4D4D4]"
+          text={assistant.name}
+        />
+
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -217,8 +180,8 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       toggleSidebar,
       removeToggle,
       showShareModal,
+      toggleChatSessionSearchModal,
       showDeleteModal,
-      showDeleteAllModal,
     },
     ref: ForwardedRef<HTMLDivElement>
   ) => {
@@ -355,7 +318,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               )}
             </div>
           )}
-
           <div className="h-full  relative overflow-x-hidden overflow-y-auto">
             <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
               Assistants
@@ -432,13 +394,13 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             </div>
 
             <PagesTab
+              toggleChatSessionSearchModal={toggleChatSessionSearchModal}
               showDeleteModal={showDeleteModal}
               showShareModal={showShareModal}
               closeSidebar={removeToggle}
               existingChats={existingChats}
               currentChatId={currentChatId}
               folders={folders}
-              showDeleteAllModal={showDeleteAllModal}
             />
           </div>
         </div>

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import TypeVarTuple
 
 from fastapi import HTTPException
 from sqlalchemy import delete
@@ -8,15 +9,18 @@ from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
+from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
+from onyx.db.models import Credential
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import IndexModelStatus
@@ -31,10 +35,12 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 logger = setup_logger()
 
+R = TypeVarTuple("R")
+
 
 def _add_user_filters(
-    stmt: Select, user: User | None, get_editable: bool = True
-) -> Select:
+    stmt: Select[tuple[*R]], user: User | None, get_editable: bool = True
+) -> Select[tuple[*R]]:
     # If user is None and auth is disabled, assume the user is an admin
     if (user is None and DISABLE_AUTH) or (user and user.role == UserRole.ADMIN):
         return stmt
@@ -98,17 +104,52 @@ def get_connector_credential_pairs_for_user(
     get_editable: bool = True,
     ids: list[int] | None = None,
     eager_load_connector: bool = False,
+    eager_load_credential: bool = False,
+    eager_load_user: bool = False,
 ) -> list[ConnectorCredentialPair]:
+    if eager_load_user:
+        assert (
+            eager_load_credential
+        ), "eager_load_credential must be True if eager_load_user is True"
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
-        stmt = stmt.options(joinedload(ConnectorCredentialPair.connector))
+        stmt = stmt.options(selectinload(ConnectorCredentialPair.connector))
+
+    if eager_load_credential:
+        load_opts = selectinload(ConnectorCredentialPair.credential)
+        if eager_load_user:
+            load_opts = load_opts.joinedload(Credential.user)
+        stmt = stmt.options(load_opts)
 
     stmt = _add_user_filters(stmt, user, get_editable)
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
 
-    return list(db_session.scalars(stmt).all())
+    return list(db_session.scalars(stmt).unique().all())
+
+
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
+def get_connector_credential_pairs_for_user_parallel(
+    user: User | None,
+    get_editable: bool = True,
+    ids: list[int] | None = None,
+    eager_load_connector: bool = False,
+    eager_load_credential: bool = False,
+    eager_load_user: bool = False,
+) -> list[ConnectorCredentialPair]:
+    with get_session_context_manager() as db_session:
+        return get_connector_credential_pairs_for_user(
+            db_session,
+            user,
+            get_editable,
+            ids,
+            eager_load_connector,
+            eager_load_credential,
+            eager_load_user,
+        )
 
 
 def get_connector_credential_pairs(
@@ -149,6 +190,16 @@ def get_cc_pair_groups_for_ids(
     )
     stmt = stmt.where(UserGroup__ConnectorCredentialPair.cc_pair_id.in_(cc_pair_ids))
     return list(db_session.scalars(stmt).all())
+
+
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
+def get_cc_pair_groups_for_ids_parallel(
+    cc_pair_ids: list[int],
+) -> list[UserGroup__ConnectorCredentialPair]:
+    with get_session_context_manager() as db_session:
+        return get_cc_pair_groups_for_ids(db_session, cc_pair_ids)
 
 
 def get_connector_credential_pair_for_user(
@@ -194,9 +245,14 @@ def get_connector_credential_pair_from_id_for_user(
 def get_connector_credential_pair_from_id(
     db_session: Session,
     cc_pair_id: int,
+    eager_load_credential: bool = False,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair).distinct()
     stmt = stmt.where(ConnectorCredentialPair.id == cc_pair_id)
+
+    if eager_load_credential:
+        stmt = stmt.options(joinedload(ConnectorCredentialPair.credential))
+
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -396,8 +452,8 @@ def add_credential_to_connector(
     # If we are in the seeding flow, we shouldn't need to check if the credential belongs to the user
     if seeding_flow:
         credential = fetch_credential_by_id(
-            db_session=db_session,
             credential_id=credential_id,
+            db_session=db_session,
         )
     else:
         credential = fetch_credential_by_id_for_user(

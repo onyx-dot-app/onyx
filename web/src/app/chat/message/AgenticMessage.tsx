@@ -7,14 +7,9 @@ import React, {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
@@ -44,7 +39,7 @@ import { ValidSources } from "@/lib/types";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import RegenerateOption from "../RegenerateOption";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
@@ -54,6 +49,10 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { StatusRefinement } from "../Refinement";
+import { copyAll, handleCopy } from "./copyingUtils";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+import { ErrorBanner, Resubmit } from "./Resubmit";
 
 export const AgenticMessage = ({
   isStreamingQuestions,
@@ -88,7 +87,9 @@ export const AgenticMessage = ({
   secondLevelSubquestions,
   toggleDocDisplay,
   error,
+  resubmit,
 }: {
+  resubmit?: () => void;
   isStreamingQuestions: boolean;
   isGenerating: boolean;
   docSidebarToggled?: boolean;
@@ -117,7 +118,7 @@ export const AgenticMessage = ({
   isComplete?: boolean;
   handleFeedback?: (feedbackType: FeedbackType) => void;
   overriddenModel?: string;
-  regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
+  regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   setPresentingDocument?: (document: OnyxDocument) => void;
   toggleDocDisplay?: (agentic: boolean) => void;
   error?: string | null;
@@ -312,6 +313,8 @@ export const AgenticMessage = ({
     [anchorCallback, paragraphCallback, streamedContent]
   );
 
+  const markdownRef = useRef<HTMLDivElement>(null);
+
   const renderedAlternativeMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
@@ -457,7 +460,6 @@ export const AgenticMessage = ({
                     finalContent.length > 8) ||
                   (files && files.length > 0) ? (
                     <>
-                      {/* <FileDisplay files={files || []} /> */}
                       <div className="w-full  py-4 flex flex-col gap-4">
                         <div className="flex items-center gap-x-2 px-4">
                           <div className="text-black text-lg font-medium">
@@ -492,7 +494,11 @@ export const AgenticMessage = ({
 
                         <div className="px-4">
                           {typeof content === "string" ? (
-                            <div className="overflow-x-visible !text-sm max-w-content-max">
+                            <div
+                              onCopy={(e) => handleCopy(e, markdownRef)}
+                              ref={markdownRef}
+                              className="overflow-x-visible !text-sm max-w-content-max"
+                            >
                               {isViewingInitialAnswer
                                 ? renderedMarkdown
                                 : renderedAlternativeMarkdown}
@@ -501,9 +507,7 @@ export const AgenticMessage = ({
                             content
                           )}
                           {error && (
-                            <p className="mt-2 text-red-700 text-sm my-auto">
-                              {error}
-                            </p>
+                            <ErrorBanner error={error} resubmit={resubmit} />
                           )}
                         </div>
                       </div>
@@ -511,15 +515,13 @@ export const AgenticMessage = ({
                   ) : isComplete ? (
                     error && (
                       <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
-                        {error}
+                        <ErrorBanner error={error} resubmit={resubmit} />
                       </p>
                     )
                   ) : (
                     <>
                       {error && (
-                        <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
-                          {error}
-                        </p>
+                        <ErrorBanner error={error} resubmit={resubmit} />
                       )}
                     </>
                   )}
@@ -558,7 +560,16 @@ export const AgenticMessage = ({
                             )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
-                            <CopyButton content={content.toString()} />
+                            <CopyButton
+                              copyAllFn={() =>
+                                copyAll(
+                                  (isViewingInitialAnswer
+                                    ? finalContent
+                                    : finalAlternativeContent) as string,
+                                  markdownRef
+                                )
+                              }
+                            />
                           </CustomTooltip>
                           <CustomTooltip showTick line content="Good response">
                             <HoverableIcon
@@ -644,7 +655,16 @@ export const AgenticMessage = ({
                             )}
                           </div>
                           <CustomTooltip showTick line content="Copy">
-                            <CopyButton content={content.toString()} />
+                            <CopyButton
+                              copyAllFn={() =>
+                                copyAll(
+                                  (isViewingInitialAnswer
+                                    ? finalContent
+                                    : finalAlternativeContent) as string,
+                                  markdownRef
+                                )
+                              }
+                            />
                           </CustomTooltip>
 
                           <CustomTooltip showTick line content="Good response">

@@ -1,5 +1,5 @@
 # fill in the template
-envsubst '$SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME' < "/etc/nginx/conf.d/$1" > /etc/nginx/conf.d/app.conf
+envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME' < "/etc/nginx/conf.d/$1" > /etc/nginx/conf.d/app.conf
 
 # wait for the api_server to be ready
 echo "Waiting for API server to boot up; this may take a minute or two..."

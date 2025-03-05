@@ -18,6 +18,7 @@ Remember to provide inline citations in the format [1], [2], [3], etc.
 
 ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
 
+CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
 
 CHAT_USER_PROMPT = f"""
 Refer to the following context documents when responding to me.{{optional_ignore_statement}}

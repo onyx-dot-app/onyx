@@ -10,7 +10,7 @@ interface UserPreferences {
   pinned_assistants?: number[];
   default_model: string | null;
   recent_assistants: number[];
-  auto_scroll: boolean | null;
+  auto_scroll: boolean;
   shortcut_enabled: boolean;
   temperature_override_enabled: boolean;
 }
@@ -167,18 +167,36 @@ export interface OAuthPrepareAuthorizationResponse {
   url: string;
 }
 
-export interface OAuthSlackCallbackResponse {
+export interface OAuthBaseCallbackResponse {
   success: boolean;
   message: string;
-  team_id: string;
-  authed_user_id: string;
+  finalize_url: string | null;
   redirect_on_success: string;
 }
 
-export interface OAuthGoogleDriveCallbackResponse {
+export interface OAuthSlackCallbackResponse extends OAuthBaseCallbackResponse {
+  team_id: string;
+  authed_user_id: string;
+}
+
+export interface ConfluenceAccessibleResource {
+  id: string;
+  name: string;
+  url: string;
+  scopes: string[];
+  avatarUrl: string;
+}
+
+export interface OAuthConfluencePrepareFinalizationResponse {
   success: boolean;
   message: string;
-  redirect_on_success: string;
+  accessible_resources: ConfluenceAccessibleResource[];
+}
+
+export interface OAuthConfluenceFinalizeResponse {
+  success: boolean;
+  message: string;
+  redirect_url: string;
 }
 
 export interface CCPairBasicInfo {
@@ -255,6 +273,7 @@ export interface ChannelConfig {
   channel_name: string;
   respond_tag_only?: boolean;
   respond_to_bots?: boolean;
+  is_ephemeral?: boolean;
   show_continue_in_web_ui?: boolean;
   respond_member_group_list?: string[];
   answer_filters?: AnswerFilterOption[];
@@ -382,6 +401,7 @@ export const oauthSupportedSources: ConfigurableSources[] = [
   ValidSources.Slack,
   // NOTE: temporarily disabled until our GDrive App is approved
   // ValidSources.GoogleDrive,
+  ValidSources.Confluence,
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];

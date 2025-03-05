@@ -1,7 +1,10 @@
 import abc
 from collections.abc import Generator
 from collections.abc import Iterator
+from types import TracebackType
 from typing import Any
+from typing import Generic
+from typing import TypeVar
 
 from pydantic import BaseModel
 
@@ -111,6 +114,69 @@ class OAuthConnector(BaseConnector):
         raise NotImplementedError
 
 
+T = TypeVar("T", bound="CredentialsProviderInterface")
+
+
+class CredentialsProviderInterface(abc.ABC, Generic[T]):
+    @abc.abstractmethod
+    def __enter__(self) -> T:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_tenant_id(self) -> str | None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_provider_key(self) -> str:
+        """a unique key that the connector can use to lock around a credential
+        that might be used simultaneously.
+
+        Will typically be the credential id, but can also just be something random
+        in cases when there is nothing to lock (aka static credentials)
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def get_credentials(self) -> dict[str, Any]:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def set_credentials(self, credential_json: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def is_dynamic(self) -> bool:
+        """If dynamic, the credentials may change during usage ... maening the client
+        needs to use the locking features of the credentials provider to operate
+        correctly.
+
+        If static, the client can simply reference the credentials once and use them
+        through the entire indexing run.
+        """
+        raise NotImplementedError
+
+
+class CredentialsConnector(BaseConnector):
+    """Implement this if the connector needs to be able to read and write credentials
+    on the fly. Typically used with shared credentials/tokens that might be renewed
+    at any time."""
+
+    @abc.abstractmethod
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        raise NotImplementedError
+
+
 # Event driven
 class EventConnector(BaseConnector):
     @abc.abstractmethod
@@ -146,46 +212,3 @@ class CheckpointConnector(BaseConnector):
         ```
         """
         raise NotImplementedError
-
-
-class ConnectorValidationError(Exception):
-    """General exception for connector validation errors."""
-
-    def __init__(self, message: str):
-        self.message = message
-        super().__init__(self.message)
-
-
-class UnexpectedError(Exception):
-    """Raised when an unexpected error occurs during connector validation.
-
-    Unexpected errors don't necessarily mean the credential is invalid,
-    but rather that there was an error during the validation process
-    or we encountered a currently unhandled error case.
-    """
-
-    def __init__(self, message: str = "Unexpected error during connector validation"):
-        super().__init__(message)
-
-
-class CredentialInvalidError(ConnectorValidationError):
-    """Raised when a connector's credential is invalid."""
-
-    def __init__(self, message: str = "Credential is invalid"):
-        super().__init__(message)
-
-
-class CredentialExpiredError(ConnectorValidationError):
-    """Raised when a connector's credential is expired."""
-
-    def __init__(self, message: str = "Credential has expired"):
-        super().__init__(message)
-
-
-class InsufficientPermissionsError(ConnectorValidationError):
-    """Raised when the credential does not have sufficient API permissions."""
-
-    def __init__(
-        self, message: str = "Insufficient permissions for the requested operation"
-    ):
-        super().__init__(message)

@@ -24,6 +24,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.tools.models import ToolCallFinalResult
 
+
 if TYPE_CHECKING:
     pass
 
@@ -180,6 +181,7 @@ class ChatSessionDetails(BaseModel):
     name: str | None
     persona_id: int | None = None
     time_created: str
+    time_updated: str
     shared_status: ChatSessionSharedStatus
     folder_id: int | None = None
     current_alternate_model: str | None = None
@@ -240,6 +242,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
     refined_answer_improvement: bool | None = None
+    is_agentic: bool | None = None
     error: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
@@ -282,3 +285,35 @@ class AdminSearchRequest(BaseModel):
 
 class AdminSearchResponse(BaseModel):
     documents: list[SearchDoc]
+
+
+class ChatSessionSummary(BaseModel):
+    id: UUID
+    name: str | None = None
+    persona_id: int | None = None
+    time_created: datetime
+    shared_status: ChatSessionSharedStatus
+    folder_id: int | None = None
+    current_alternate_model: str | None = None
+    current_temperature_override: float | None = None
+
+
+class ChatSessionGroup(BaseModel):
+    title: str
+    chats: list[ChatSessionSummary]
+
+
+class ChatSearchResponse(BaseModel):
+    groups: list[ChatSessionGroup]
+    has_more: bool
+    next_page: int | None = None
+
+
+class ChatSearchRequest(BaseModel):
+    query: str | None = None
+    page: int = 1
+    page_size: int = 10
+
+
+class CreateChatResponse(BaseModel):
+    chat_session_id: str

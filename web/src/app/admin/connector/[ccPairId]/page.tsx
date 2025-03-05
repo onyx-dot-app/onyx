@@ -455,15 +455,15 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <Title>Indexing Attempts</Title>
         </div>
         {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
-          <Alert className="border-alert bg-yellow-50 my-2">
-            <AlertCircle className="h-4 w-4 text-yellow-700" />
-            <AlertTitle className="text-yellow-950 font-semibold">
+          <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2">
+            <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
+            <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
               Some documents failed to index
             </AlertTitle>
-            <AlertDescription className="text-yellow-900">
+            <AlertDescription className="text-yellow-900 dark:text-yellow-300">
               {isResolvingErrors ? (
                 <span>
-                  <span className="text-sm text-yellow-700 animate-pulse">
+                  <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
                     Resolving failures
                   </span>
                 </span>
@@ -471,7 +471,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 <>
                   We ran into some issues while processing some documents.{" "}
                   <b
-                    className="text-link cursor-pointer"
+                    className="text-link cursor-pointer dark:text-blue-300"
                     onClick={() => setShowIndexAttemptErrors(true)}
                   >
                     View details.

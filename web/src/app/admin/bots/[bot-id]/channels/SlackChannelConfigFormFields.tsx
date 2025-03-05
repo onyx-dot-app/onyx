@@ -1,13 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import {
-  FieldArray,
-  Form,
-  useFormikContext,
-  ErrorMessage,
-  Field,
-} from "formik";
+import { FieldArray, useFormikContext, ErrorMessage, Field } from "formik";
 import { CCPairDescriptor, DocumentSet } from "@/lib/types";
 import {
   Label,
@@ -18,14 +12,13 @@ import {
 } from "@/components/admin/connectors/Field";
 import { Button } from "@/components/ui/button";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import CollapsibleSection from "@/app/admin/assistants/CollapsibleSection";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
 import { StandardAnswerCategoryDropdownField } from "@/components/standardAnswers/StandardAnswerCategoryDropdown";
 import { RadioGroup } from "@/components/ui/radio-group";
 import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
-import { AlertCircle, View } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import {
   Tooltip,
@@ -50,6 +43,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import { CheckFormField } from "@/components/ui/CheckField";
+import { Input } from "@/components/ui/input";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;
@@ -178,9 +172,13 @@ export function SlackChannelConfigFormFields({
     );
   }, [documentSets]);
 
-  const { data: channelOptions, isLoading } = useSWR(
+  const {
+    data: channelOptions,
+    error,
+    isLoading,
+  } = useSWR(
     `/api/manage/admin/slack-app/bots/${slack_bot_id}/channels`,
-    async (url: string) => {
+    async () => {
       const channels = await fetchSlackChannels(slack_bot_id);
       return channels.map((channel: any) => ({
         name: channel.name,
@@ -201,17 +199,17 @@ export function SlackChannelConfigFormFields({
             <Badge variant="agent" className="bg-blue-100 text-blue-800">
               Default Configuration
             </Badge>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-neutral-600">
               This default configuration will apply across all Slack channels
               the bot is added to in the Slack workspace, as well as direct
               messages (DMs), unless disabled.
             </p>
-            <div className="mt-4 p-4 bg-gray-100 rounded-md border border-gray-300">
+            <div className="mt-4 p-4 bg-neutral-100 rounded-md border border-neutral-300">
               <CheckFormField
                 name="disabled"
                 label="Disable Default Configuration"
               />
-              <p className="mt-2 text-sm text-gray-600 italic">
+              <p className="mt-2 text-sm text-neutral-600 italic">
                 Warning: Disabling the default configuration means the bot
                 won&apos;t respond in Slack channels or DMs unless explicitly
                 configured for them.
@@ -227,20 +225,42 @@ export function SlackChannelConfigFormFields({
             >
               Select A Slack Channel:
             </label>{" "}
-            <Field name="channel_name">
-              {({ field, form }: { field: any; form: any }) => (
-                <SearchMultiSelectDropdown
-                  options={channelOptions || []}
-                  onSelect={(selected) => {
-                    form.setFieldValue("channel_name", selected.name);
-                  }}
-                  initialSearchTerm={field.value}
-                  onSearchTermChange={(term) => {
-                    form.setFieldValue("channel_name", term);
-                  }}
+            {error ? (
+              <div>
+                <div className="text-red-600 text-sm mb-4">
+                  {error.message || "Unable to fetch Slack channels."}
+                  {" Please enter the channel name manually."}
+                </div>
+                <TextFormField
+                  name="channel_name"
+                  label="Channel Name"
+                  placeholder="Enter channel name"
                 />
-              )}
-            </Field>
+              </div>
+            ) : (
+              <>
+                <Field name="channel_name">
+                  {({ field, form }: { field: any; form: any }) => (
+                    <SearchMultiSelectDropdown
+                      options={channelOptions || []}
+                      onSelect={(selected) => {
+                        form.setFieldValue("channel_name", selected.name);
+                      }}
+                      initialSearchTerm={field.value}
+                      onSearchTermChange={(term) => {
+                        form.setFieldValue("channel_name", term);
+                      }}
+                    />
+                  )}
+                </Field>
+                <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
+                  Note: This list shows public and private channels where the
+                  bot is a member (up to 500 channels). If you don&apos;t see a
+                  channel, make sure the bot is added to that channel in Slack
+                  first, or type the channel name manually.
+                </p>
+              </>
+            )}
           </>
         )}
         <div className="space-y-2 mt-4">
@@ -577,6 +597,13 @@ export function SlackChannelConfigFormFields({
                 label="Respond to Bot messages"
                 tooltip="If not set, OnyxBot will always ignore messages from Bots"
               />
+              <CheckFormField
+                name="is_ephemeral"
+                label="Respond to user in a private (ephemeral) message"
+                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also 
+                chose 'Search' Assistant above, selecting this option will make documents that are private to the user 
+                available for their queries."
+              />
 
               <TextArrayField
                 name="respond_member_group_list"
@@ -615,11 +642,14 @@ export function SlackChannelConfigFormFields({
                   Privacy Alert
                 </Label>
                 <p className="text-sm text-text-darker mb-4">
-                  Please note that at least one of the documents accessible by
-                  your OnyxBot is marked as private and may contain sensitive
-                  information. These documents will be accessible to all users
-                  of this OnyxBot. Ensure this aligns with your intended
-                  document sharing policy.
+                  Please note that if the private (ephemeral) response is *not
+                  selected*, only public documents within the selected document
+                  sets will be accessible for user queries. If the private
+                  (ephemeral) response *is selected*, user quries can also
+                  leverage documents that the user has already been granted
+                  access to. Note that users will be able to share the response
+                  with others in the channel, so please ensure that this is
+                  aligned with your company sharing policies.
                 </p>
                 <div className="space-y-2">
                   <h4 className="text-sm text-text font-medium">

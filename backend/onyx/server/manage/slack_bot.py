@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
@@ -73,6 +71,15 @@ def _form_channel_config(
             "also respond to a predetermined set of users."
         )
 
+    if (
+        slack_channel_config_creation_request.is_ephemeral
+        and slack_channel_config_creation_request.respond_member_group_list
+    ):
+        raise ValueError(
+            "Cannot set OnyxBot to respond to users in a private (ephemeral) message "
+            "and also respond to a selected list of users."
+        )
+
     channel_config: ChannelConfig = {
         "channel_name": cleaned_channel_name,
     }
@@ -92,6 +99,8 @@ def _form_channel_config(
     channel_config[
         "respond_to_bots"
     ] = slack_channel_config_creation_request.respond_to_bots
+
+    channel_config["is_ephemeral"] = slack_channel_config_creation_request.is_ephemeral
 
     channel_config["disabled"] = slack_channel_config_creation_request.disabled
 
@@ -345,6 +354,10 @@ def list_bot_configs(
     ]
 
 
+MAX_SLACK_PAGES = 5
+SLACK_API_CHANNELS_PER_PAGE = 100
+
+
 @router.get(
     "/admin/slack-app/bots/{bot_id}/channels",
 )
@@ -353,38 +366,72 @@ def get_all_channels_from_slack_api(
     db_session: Session = Depends(get_session),
     _: User | None = Depends(current_admin_user),
 ) -> list[SlackChannel]:
+    """
+    Fetches channels the bot is a member of from the Slack API.
+    Handles pagination with a limit to avoid excessive API calls.
+    """
     tokens = fetch_slack_bot_tokens(db_session, bot_id)
     if not tokens or "bot_token" not in tokens:
         raise HTTPException(
             status_code=404, detail="Bot token not found for the given bot ID"
         )
 
-    bot_token = tokens["bot_token"]
-    client = WebClient(token=bot_token)
+    client = WebClient(token=tokens["bot_token"])
+    all_channels = []
+    next_cursor = None
+    current_page = 0
 
     try:
-        channels = []
-        cursor = None
-        while True:
-            response = client.conversations_list(
-                types="public_channel,private_channel",
-                exclude_archived=True,
-                limit=1000,
-                cursor=cursor,
-            )
-            for channel in response["channels"]:
-                channels.append(SlackChannel(id=channel["id"], name=channel["name"]))
+        # Use users_conversations with limited pagination
+        while current_page < MAX_SLACK_PAGES:
+            current_page += 1
 
-            response_metadata: dict[str, Any] = response.get("response_metadata", {})
-            if isinstance(response_metadata, dict):
-                cursor = response_metadata.get("next_cursor")
-                if not cursor:
-                    break
+            # Make API call with cursor if we have one
+            if next_cursor:
+                response = client.users_conversations(
+                    types="public_channel,private_channel",
+                    exclude_archived=True,
+                    cursor=next_cursor,
+                    limit=SLACK_API_CHANNELS_PER_PAGE,
+                )
             else:
-                break
+                response = client.users_conversations(
+                    types="public_channel,private_channel",
+                    exclude_archived=True,
+                    limit=SLACK_API_CHANNELS_PER_PAGE,
+                )
+
+            # Add channels to our list
+            if "channels" in response and response["channels"]:
+                all_channels.extend(response["channels"])
+
+            # Check if we need to paginate
+            if (
+                "response_metadata" in response
+                and "next_cursor" in response["response_metadata"]
+            ):
+                next_cursor = response["response_metadata"]["next_cursor"]
+                if next_cursor:
+                    if current_page == MAX_SLACK_PAGES:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="Workspace has too many channels to paginate over in this call.",
+                        )
+                    continue
+
+            # If we get here, no more pages
+            break
+
+        channels = [
+            SlackChannel(id=channel["id"], name=channel["name"])
+            for channel in all_channels
+        ]
 
         return channels
+
     except SlackApiError as e:
+        # Handle rate limiting or other API errors
         raise HTTPException(
-            status_code=500, detail=f"Error fetching channels from Slack API: {str(e)}"
+            status_code=500,
+            detail=f"Error fetching channels from Slack API: {str(e)}",
         )

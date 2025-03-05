@@ -72,11 +72,13 @@ def set_new_search_settings(
             and not search_settings.index_name.endswith(ALT_INDEX_SUFFIX)
         ):
             index_name += ALT_INDEX_SUFFIX
-        search_values = search_settings_new.dict()
+        search_values = search_settings_new.model_dump()
         search_values["index_name"] = index_name
         new_search_settings_request = SavedSearchSettings(**search_values)
     else:
-        new_search_settings_request = SavedSearchSettings(**search_settings_new.dict())
+        new_search_settings_request = SavedSearchSettings(
+            **search_settings_new.model_dump()
+        )
 
     secondary_search_settings = get_secondary_search_settings(db_session)
 
@@ -103,8 +105,10 @@ def set_new_search_settings(
     document_index = get_default_document_index(search_settings, new_search_settings)
 
     document_index.ensure_indices_exist(
-        index_embedding_dim=search_settings.model_dim,
-        secondary_index_embedding_dim=new_search_settings.model_dim,
+        primary_embedding_dim=search_settings.final_embedding_dim,
+        primary_embedding_precision=search_settings.embedding_precision,
+        secondary_index_embedding_dim=new_search_settings.final_embedding_dim,
+        secondary_index_embedding_precision=new_search_settings.embedding_precision,
     )
 
     # Pause index attempts for the currently in use index to preserve resources
@@ -135,6 +139,17 @@ def cancel_new_embedding(
             search_settings=secondary_search_settings,
             new_status=IndexModelStatus.PAST,
             db_session=db_session,
+        )
+
+        # remove the old index from the vector db
+        primary_search_settings = get_current_search_settings(db_session)
+        document_index = get_default_document_index(primary_search_settings, None)
+        document_index.ensure_indices_exist(
+            primary_embedding_dim=primary_search_settings.final_embedding_dim,
+            primary_embedding_precision=primary_search_settings.embedding_precision,
+            # just finished swap, no more secondary index
+            secondary_index_embedding_dim=None,
+            secondary_index_embedding_precision=None,
         )
 
 

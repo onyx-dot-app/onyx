@@ -76,6 +76,10 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
+            embedding_precision=search_settings.embedding_precision,
+            reduced_dimension=search_settings.reduced_dimension,
+            # Whether switching to this model requires re-indexing
+            background_reindex_enabled=search_settings.background_reindex_enabled,
             # Reranking Details
             rerank_model_name=search_settings.rerank_model_name,
             rerank_provider_type=search_settings.rerank_provider_type,

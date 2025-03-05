@@ -1,0 +1,37 @@
+services:
+  indexing_model_server:
+    image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile.model_server
+    command: >
+      /bin/sh -c "if [ \"${DISABLE_MODEL_SERVER:-false}\" = \"True\" ]; then
+        echo 'Skipping service...';
+        exit 0;
+      else
+        exec uvicorn model_server.main:app --host 0.0.0.0 --port 9000;
+      fi"
+    restart: on-failure
+    environment:
+      - INDEX_BATCH_SIZE=${INDEX_BATCH_SIZE:-}
+      - MIN_THREADS_ML_MODELS=${MIN_THREADS_ML_MODELS:-}
+      - INDEXING_ONLY=True
+      # Set to debug to get more fine-grained logs
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - CLIENT_EMBEDDING_TIMEOUT=${CLIENT_EMBEDDING_TIMEOUT:-}
+
+      # Analytics Configs
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    volumes:
+      # Not necessary, this is just to reduce download time during startup
+      - indexing_huggingface_model_cache:/root/.cache/huggingface/
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "6"
+    ports:
+      - "9000:9000"  # <-- Add this line to expose the port to the host
+
+volumes:
+  indexing_huggingface_model_cache:

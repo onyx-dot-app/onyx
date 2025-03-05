@@ -187,7 +187,7 @@ class IndexingCallback(IndexingCallbackBase):
 
 
 def validate_indexing_fence(
-    tenant_id: str | None,
+    tenant_id: str,
     key_bytes: bytes,
     reserved_tasks: set[str],
     r_celery: Redis,
@@ -311,7 +311,7 @@ def validate_indexing_fence(
 
 
 def validate_indexing_fences(
-    tenant_id: str | None,
+    tenant_id: str,
     r_replica: Redis,
     r_celery: Redis,
     lock_beat: RedisLock,
@@ -346,11 +346,10 @@ def validate_indexing_fences(
     return
 
 
-def _should_index(
+def should_index(
     cc_pair: ConnectorCredentialPair,
     last_index: IndexAttempt | None,
     search_settings_instance: SearchSettings,
-    search_settings_primary: bool,
     secondary_index_building: bool,
     db_session: Session,
 ) -> bool:
@@ -415,9 +414,9 @@ def _should_index(
     ):
         return False
 
-    if search_settings_primary:
+    if search_settings_instance.status.is_current():
         if cc_pair.indexing_trigger is not None:
-            # if a manual indexing trigger is on the cc pair, honor it for primary search settings
+            # if a manual indexing trigger is on the cc pair, honor it for live search settings
             return True
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
@@ -442,7 +441,7 @@ def try_creating_indexing_task(
     reindex: bool,
     db_session: Session,
     r: Redis,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     """Checks for any conditions that should block the indexing task from being
     created, then creates the task.

@@ -2,7 +2,9 @@ import os
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 
 
 @pytest.fixture
@@ -11,12 +13,16 @@ def confluence_connector() -> ConfluenceConnector:
         wiki_base="https://danswerai.atlassian.net",
         is_cloud=True,
     )
-    connector.load_credentials(
+
+    credentials_provider = OnyxStaticCredentialsProvider(
+        None,
+        DocumentSource.CONFLUENCE,
         {
-            "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
-        }
+            "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
+        },
     )
+    connector.set_credentials_provider(credentials_provider)
     return connector
 
 

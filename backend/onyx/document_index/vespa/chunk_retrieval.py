@@ -310,6 +310,11 @@ def query_vespa(
             f"Request Headers: {e.request.headers}\n"
             f"Request Payload: {params}\n"
             f"Exception: {str(e)}"
+            + (
+                f"\nResponse: {e.response.text}"
+                if isinstance(e, httpx.HTTPStatusError)
+                else ""
+            )
         )
         raise httpx.HTTPError(error_base) from e
 

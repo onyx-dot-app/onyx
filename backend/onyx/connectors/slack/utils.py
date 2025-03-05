@@ -72,6 +72,7 @@ def make_slack_api_rate_limited(
     @wraps(call)
     def rate_limited_call(**kwargs: Any) -> SlackResponse:
         last_exception = None
+
         for _ in range(max_retries):
             try:
                 # Make the API call

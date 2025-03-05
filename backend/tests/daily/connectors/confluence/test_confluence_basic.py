@@ -5,7 +5,9 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
 
 
@@ -18,12 +20,15 @@ def confluence_connector() -> ConfluenceConnector:
         page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
     )
 
-    connector.load_credentials(
+    credentials_provider = OnyxStaticCredentialsProvider(
+        None,
+        DocumentSource.CONFLUENCE,
         {
             "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
             "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
-        }
+        },
     )
+    connector.set_credentials_provider(credentials_provider)
     return connector
 
 
@@ -87,7 +92,7 @@ def test_confluence_connector_basic(
     assert len(txt_doc.sections) == 1
     assert txt_doc.sections[0].text == "small"
     assert txt_doc.primary_owners
-    assert txt_doc.primary_owners[0].email == "chris@danswer.ai"
+    assert txt_doc.primary_owners[0].email == "chris@onyx.app"
     assert (
         txt_doc.sections[0].link
         == "https://danswerai.atlassian.net/wiki/pages/viewpageattachments.action?pageId=52494430&preview=%2F52494430%2F52527123%2Fsmall-file.txt"
