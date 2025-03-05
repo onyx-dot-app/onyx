@@ -136,7 +136,7 @@ def fetch_chat_sessions_eagerly_by_time(
 ) -> list[ChatSession]:
     """Sorted by newest to oldest, then by message id"""
 
-    time_order: UnaryExpression = desc(ChatSession.time_created)
+    asc_time_order: UnaryExpression = asc(ChatSession.time_created)
     message_order: UnaryExpression = asc(ChatMessage.id)
 
     filters: list[ColumnElement | BinaryExpression] = [
@@ -149,8 +149,7 @@ def fetch_chat_sessions_eagerly_by_time(
     subquery = (
         db_session.query(ChatSession.id, ChatSession.time_created)
         .filter(*filters)
-        .order_by(ChatSession.id, time_order)
-        .distinct(ChatSession.id)
+        .order_by(asc_time_order)
         .limit(limit)
         .subquery()
     )
@@ -166,7 +165,7 @@ def fetch_chat_sessions_eagerly_by_time(
                 ChatMessage.chat_message_feedbacks
             ),
         )
-        .order_by(time_order, message_order)
+        .order_by(asc_time_order, message_order)
     )
 
     chat_sessions = query.all()
