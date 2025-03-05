@@ -26,7 +26,7 @@ from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.saml import router as saml_router
 from ee.onyx.server.seeding import seed_db
-from ee.onyx.server.tenants.api import router as tenants_router
+from ee.onyx.server.tenants.router import router as tenants_router
 from ee.onyx.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )

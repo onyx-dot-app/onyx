@@ -95,7 +95,7 @@ const Page = async (props: {
             </div>
           )}
 
-          <EmailPasswordForm
+          <EmailPasswordFormau
             isSignup
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
