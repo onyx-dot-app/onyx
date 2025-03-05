@@ -11,11 +11,11 @@ from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.confluence.utils import build_confluence_document_id
 from onyx.connectors.confluence.utils import convert_attachment_to_content
 from onyx.connectors.confluence.utils import datetime_from_string
-from onyx.connectors.confluence.onyx_confluence import extract_text_from_confluence_html
 from onyx.connectors.confluence.utils import process_attachment
 from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -84,7 +84,11 @@ _FULL_EXTENSION_FILTER_STRING = "".join(
 
 
 class ConfluenceConnector(
-    LoadConnector, PollConnector, SlimConnector, CredentialsConnector, VisionEnabledConnector
+    LoadConnector,
+    PollConnector,
+    SlimConnector,
+    CredentialsConnector,
+    VisionEnabledConnector,
 ):
     def __init__(
         self,
@@ -160,8 +164,6 @@ class ConfluenceConnector(
             "max_backoff_retries": 10,
             "max_backoff_seconds": 60,
         }
-
-
 
     @property
     def confluence_client(self) -> OnyxConfluence:
