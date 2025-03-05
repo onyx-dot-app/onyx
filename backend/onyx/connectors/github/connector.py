@@ -124,14 +124,14 @@ class GithubConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         repo_owner: str,
-        repo_name: str | None = None,
+        repositories: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         state_filter: str = "all",
         include_prs: bool = True,
         include_issues: bool = False,
     ) -> None:
         self.repo_owner = repo_owner
-        self.repo_name = repo_name
+        self.repositories = repositories
         self.batch_size = batch_size
         self.state_filter = state_filter
         self.include_prs = include_prs
@@ -157,10 +157,41 @@ class GithubConnector(LoadConnector, PollConnector):
             )
 
         try:
-            return github_client.get_repo(f"{self.repo_owner}/{self.repo_name}")
+            return github_client.get_repo(f"{self.repo_owner}/{self.repositories}")
         except RateLimitExceededException:
             _sleep_after_rate_limit_exception(github_client)
             return self._get_github_repo(github_client, attempt_num + 1)
+
+    def _get_github_repos(
+        self, github_client: Github, attempt_num: int = 0
+    ) -> list[Repository.Repository]:
+        """Get specific repositories based on comma-separated repo_name string."""
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError(
+                "Re-tried fetching repos too many times. Something is going wrong with fetching objects from Github"
+            )
+
+        try:
+            repos = []
+            # Split repo_name by comma and strip whitespace
+            repo_names = [
+                name.strip() for name in (cast(str, self.repositories)).split(",")
+            ]
+
+            for repo_name in repo_names:
+                if repo_name:  # Skip empty strings
+                    try:
+                        repo = github_client.get_repo(f"{self.repo_owner}/{repo_name}")
+                        repos.append(repo)
+                    except GithubException as e:
+                        logger.warning(
+                            f"Could not fetch repo {self.repo_owner}/{repo_name}: {e}"
+                        )
+
+            return repos
+        except RateLimitExceededException:
+            _sleep_after_rate_limit_exception(github_client)
+            return self._get_github_repos(github_client, attempt_num + 1)
 
     def _get_all_repos(
         self, github_client: Github, attempt_num: int = 0
@@ -189,11 +220,17 @@ class GithubConnector(LoadConnector, PollConnector):
         if self.github_client is None:
             raise ConnectorMissingCredentialError("GitHub")
 
-        repos = (
-            [self._get_github_repo(self.github_client)]
-            if self.repo_name
-            else self._get_all_repos(self.github_client)
-        )
+        repos = []
+        if self.repositories:
+            if "," in self.repositories:
+                # Multiple repositories specified
+                repos = self._get_github_repos(self.github_client)
+            else:
+                # Single repository (backward compatibility)
+                repos = [self._get_github_repo(self.github_client)]
+        else:
+            # All repositories
+            repos = self._get_all_repos(self.github_client)
 
         for repo in repos:
             if self.include_prs:
@@ -268,11 +305,48 @@ class GithubConnector(LoadConnector, PollConnector):
             )
 
         try:
-            if self.repo_name:
-                test_repo = self.github_client.get_repo(
-                    f"{self.repo_owner}/{self.repo_name}"
-                )
-                test_repo.get_contents("")
+            if self.repositories:
+                if "," in self.repositories:
+                    # Multiple repositories specified
+                    repo_names = [name.strip() for name in self.repositories.split(",")]
+                    if not repo_names:
+                        raise ConnectorValidationError(
+                            "Invalid connector settings: No valid repository names provided."
+                        )
+
+                    # Validate at least one repository exists and is accessible
+                    valid_repos = False
+                    validation_errors = []
+
+                    for repo_name in repo_names:
+                        if not repo_name:
+                            continue
+
+                        try:
+                            test_repo = self.github_client.get_repo(
+                                f"{self.repo_owner}/{repo_name}"
+                            )
+                            test_repo.get_contents("")
+                            valid_repos = True
+                            # If at least one repo is valid, we can proceed
+                            break
+                        except GithubException as e:
+                            validation_errors.append(
+                                f"Repository '{repo_name}': {e.data.get('message', str(e))}"
+                            )
+
+                    if not valid_repos:
+                        error_msg = (
+                            "None of the specified repositories could be accessed: "
+                        )
+                        error_msg += ", ".join(validation_errors)
+                        raise ConnectorValidationError(error_msg)
+                else:
+                    # Single repository (backward compatibility)
+                    test_repo = self.github_client.get_repo(
+                        f"{self.repo_owner}/{self.repositories}"
+                    )
+                    test_repo.get_contents("")
             else:
                 # Try to get organization first
                 try:
@@ -298,10 +372,15 @@ class GithubConnector(LoadConnector, PollConnector):
                     "Your GitHub token does not have sufficient permissions for this repository (HTTP 403)."
                 )
             elif e.status == 404:
-                if self.repo_name:
-                    raise ConnectorValidationError(
-                        f"GitHub repository not found with name: {self.repo_owner}/{self.repo_name}"
-                    )
+                if self.repositories:
+                    if "," in self.repositories:
+                        raise ConnectorValidationError(
+                            f"None of the specified GitHub repositories could be found for owner: {self.repo_owner}"
+                        )
+                    else:
+                        raise ConnectorValidationError(
+                            f"GitHub repository not found with name: {self.repo_owner}/{self.repositories}"
+                        )
                 else:
                     raise ConnectorValidationError(
                         f"GitHub user or organization not found: {self.repo_owner}"
@@ -310,6 +389,7 @@ class GithubConnector(LoadConnector, PollConnector):
                 raise ConnectorValidationError(
                     f"Unexpected GitHub error (status={e.status}): {e.data}"
                 )
+
         except Exception as exc:
             raise Exception(
                 f"Unexpected error during GitHub settings validation: {exc}"
@@ -321,7 +401,7 @@ if __name__ == "__main__":
 
     connector = GithubConnector(
         repo_owner=os.environ["REPO_OWNER"],
-        repo_name=os.environ["REPO_NAME"],
+        repositories=os.environ["REPOSITORIES"],
     )
     connector.load_credentials(
         {"github_access_token": os.environ["GITHUB_ACCESS_TOKEN"]}
