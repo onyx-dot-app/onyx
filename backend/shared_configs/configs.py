@@ -23,12 +23,11 @@ INDEXING_MODEL_SERVER_PORT = int(
 # Onyx custom Deep Learning Models
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
-INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
-INTENT_MODEL_TAG = "v1.0.3"
-INFORMATION_CONTENT_MODEL_VERSION = (
-    "sentence-transformers/paraphrase-mpnet-base-v2"  # TODO: replace with Onyx FT model
-)
-
+INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
+# INTENT_MODEL_TAG = "v1.0.3"
+INTENT_MODEL_TAG: str | None = None
+INFORMATION_CONTENT_MODEL_VERSION = "onyx-dot-app/information-content-model"
+INFORMATION_CONTENT_MODEL_TAG: str | None = None
 
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
