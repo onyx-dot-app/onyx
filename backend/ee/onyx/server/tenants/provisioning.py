@@ -55,7 +55,11 @@ logger = logging.getLogger(__name__)
 async def get_or_provision_tenant(
     email: str, referral_source: str | None = None, request: Request | None = None
 ) -> str:
-    """Get existing tenant ID for an email or create a new tenant if none exists."""
+    """
+    Get existing tenant ID for an email or create a new tenant if none exists.
+    This function should only be called after we have verified we want this user's tenant to exist.
+    It returns the tenant ID associated with the email, creating a new tenant if necessary.
+    """
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
 
