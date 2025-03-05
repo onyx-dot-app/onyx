@@ -80,6 +80,7 @@ class ConfluenceCloudOAuth:
         "search:confluence%20"
         # granular scope
         "read:attachment:confluence%20"  # possibly unneeded unless calling v2 attachments api
+        "read:content-details:confluence%20"  # for permission sync
         "offline_access"
     )
 
