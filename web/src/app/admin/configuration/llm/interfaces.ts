@@ -7,14 +7,12 @@ import {
   MicrosoftIconSVG,
   MistralIcon,
   MetaIcon,
-  OpenAIIcon,
   GeminiIcon,
-  OpenSourceIcon,
   AnthropicSVG,
   IconProps,
   OpenAIISVG,
+  DeepseekIcon,
 } from "@/components/icons/icons";
-import { FaRobot } from "react-icons/fa";
 
 export interface CustomConfigKey {
   name: string;
@@ -76,30 +74,31 @@ export interface LLMProviderDescriptor {
 }
 
 export const getProviderIcon = (providerName: string, modelName?: string) => {
+  const modelIconMap: Record<
+    string,
+    ({ size, className }: IconProps) => JSX.Element
+  > = {
+    amazon: AmazonIcon,
+    phi: MicrosoftIconSVG,
+    mistral: MistralIcon,
+    ministral: MistralIcon,
+    llama: MetaIcon,
+    gemini: GeminiIcon,
+    deepseek: DeepseekIcon,
+    claude: AnthropicIcon,
+  };
+
   const modelNameToIcon = (
     modelName: string,
     fallbackIcon: ({ size, className }: IconProps) => JSX.Element
   ): (({ size, className }: IconProps) => JSX.Element) => {
-    if (modelName?.toLowerCase().includes("amazon")) {
-      return AmazonIcon;
+    const lowerModelName = modelName?.toLowerCase();
+    for (const [key, icon] of Object.entries(modelIconMap)) {
+      if (lowerModelName?.includes(key)) {
+        return icon;
+      }
     }
-    if (modelName?.toLowerCase().includes("phi")) {
-      return MicrosoftIconSVG;
-    }
-    if (modelName?.toLowerCase().includes("mistral")) {
-      return MistralIcon;
-    }
-    if (modelName?.toLowerCase().includes("llama")) {
-      return MetaIcon;
-    }
-    if (modelName?.toLowerCase().includes("gemini")) {
-      return GeminiIcon;
-    }
-    if (modelName?.toLowerCase().includes("claude")) {
-      return AnthropicIcon;
-    } else {
-      return fallbackIcon;
-    }
+    return fallbackIcon;
   };
 
   switch (providerName) {

@@ -523,6 +523,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
+            logger.debug(f"Current tenant user count: {user_count}")
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 if user_count == 1:
@@ -544,7 +545,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-        logger.notice(f"User {user.id} has registered.")
+        logger.debug(f"User {user.id} has registered.")
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
             data={"action": "create"},

@@ -55,7 +55,11 @@ def _create_indexable_chunks(
             # The section is not really used past this point since we have already done the other processing
             # for the chunking and embedding.
             sections=[
-                Section(text=preprocessed_doc["content"], link=preprocessed_doc["url"])
+                Section(
+                    text=preprocessed_doc["content"],
+                    link=preprocessed_doc["url"],
+                    image_file_name=None,
+                )
             ],
             source=DocumentSource.WEB,
             semantic_identifier=preprocessed_doc["title"],
@@ -93,6 +97,7 @@ def _create_indexable_chunks(
             document_sets=set(),
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
+            image_file_name=None,
         )
 
         chunks.append(chunk)

@@ -98,8 +98,16 @@ def choose_tool(
         # For tool calling LLMs, we want to insert the task prompt as part of this flow, this is because the LLM
         # may choose to not call any tools and just generate the answer, in which case the task prompt is needed.
         prompt=built_prompt,
-        tools=[tool.tool_definition() for tool in tools] or None,
-        tool_choice=("required" if tools and force_use_tool.force_use else None),
+        tools=(
+            [tool.tool_definition() for tool in tools] or None
+            if using_tool_calling_llm
+            else None
+        ),
+        tool_choice=(
+            "required"
+            if tools and force_use_tool.force_use and using_tool_calling_llm
+            else None
+        ),
         structured_response_format=structured_response_format,
     )
 

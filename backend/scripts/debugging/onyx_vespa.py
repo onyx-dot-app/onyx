@@ -207,7 +207,7 @@ def query_vespa(
     yql: str, tenant_id: Optional[str] = None, limit: int = 10
 ) -> List[Dict[str, Any]]:
     # Perform a Vespa query using YQL syntax.
-    filters = IndexFilters(tenant_id=tenant_id, access_control_list=[])
+    filters = IndexFilters(tenant_id=None, access_control_list=[])
     filter_string = build_vespa_filters(filters, remove_trailing_and=True)
     full_yql = yql.strip()
     if filter_string:
@@ -472,9 +472,7 @@ def get_document_acls(
             print("-" * 80)
 
 
-def get_current_chunk_count(
-    document_id: str, index_name: str, tenant_id: str
-) -> int | None:
+def get_current_chunk_count(document_id: str) -> int | None:
     with get_session_with_current_tenant() as session:
         return (
             session.query(Document.chunk_count)
@@ -486,7 +484,7 @@ def get_current_chunk_count(
 def get_number_of_chunks_we_think_exist(
     document_id: str, index_name: str, tenant_id: str
 ) -> int:
-    current_chunk_count = get_current_chunk_count(document_id, index_name, tenant_id)
+    current_chunk_count = get_current_chunk_count(document_id)
     print(f"Current chunk count: {current_chunk_count}")
 
     doc_info = VespaIndex.enrich_basic_chunk_info(
@@ -635,6 +633,7 @@ def delete_where(
     """
     Removes visited documents in `cluster` where the given selection
     is true, using Vespa's 'delete where' endpoint.
+
 
     :param index_name: Typically <namespace>/<document-type> from your schema
     :param selection:  The selection string, e.g., "true" or "foo contains 'bar'"
@@ -799,7 +798,7 @@ def main() -> None:
     args = parser.parse_args()
     vespa_debug = VespaDebugging(args.tenant_id)
 
-    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id or "public")
     if args.action == "delete-all-documents":
         if not args.tenant_id:
             parser.error("--tenant-id is required for delete-all-documents action")

@@ -104,14 +104,14 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.info(f"Provisioning tenant: {tenant_id}")
+    logger.debug(f"Provisioning tenant {tenant_id} for user {email}")
     token = None
 
     try:
         if not create_schema_if_not_exists(tenant_id):
-            logger.info(f"Created schema for tenant {tenant_id}")
+            logger.debug(f"Created schema for tenant {tenant_id}")
         else:
-            logger.info(f"Schema already exists for tenant {tenant_id}")
+            logger.debug(f"Schema already exists for tenant {tenant_id}")
 
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 

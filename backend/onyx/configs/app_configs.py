@@ -640,3 +640,6 @@ TEST_ENV = os.environ.get("TEST_ENV", "").lower() == "true"
 MOCK_LLM_RESPONSE = (
     os.environ.get("MOCK_LLM_RESPONSE") if os.environ.get("MOCK_LLM_RESPONSE") else None
 )
+
+
+DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20

@@ -5,6 +5,7 @@ from types import TracebackType
 from typing import cast
 from typing import Optional
 
+import aioboto3  # type: ignore
 import httpx
 import openai
 import vertexai  # type: ignore
@@ -28,11 +29,13 @@ from model_server.constants import DEFAULT_VERTEX_MODEL
 from model_server.constants import DEFAULT_VOYAGE_MODEL
 from model_server.constants import EmbeddingModelTextType
 from model_server.constants import EmbeddingProvider
+from model_server.utils import pass_aws_key
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
+from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
@@ -182,17 +185,24 @@ class CloudEmbedding:
         vertexai.init(project=project_id, credentials=credentials)
         client = TextEmbeddingModel.from_pretrained(model)
 
-        embeddings = await client.get_embeddings_async(
-            [
-                TextEmbeddingInput(
-                    text,
-                    embedding_type,
-                )
-                for text in texts
-            ],
-            auto_truncate=True,  # This is the default
-        )
-        return [embedding.values for embedding in embeddings]
+        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
+
+        # Split into batches of 25 texts
+        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+        batches = [
+            inputs[i : i + max_texts_per_batch]
+            for i in range(0, len(inputs), max_texts_per_batch)
+        ]
+
+        # Dispatch all embedding calls asynchronously at once
+        tasks = [
+            client.get_embeddings_async(batch, auto_truncate=True) for batch in batches
+        ]
+
+        # Wait for all tasks to complete in parallel
+        results = await asyncio.gather(*tasks)
+
+        return [embedding.values for batch in results for embedding in batch]
 
     async def _embed_litellm_proxy(
         self, texts: list[str], model_name: str | None
@@ -447,7 +457,7 @@ async def local_rerank(query: str, docs: list[str], model_name: str) -> list[flo
     )
 
 
-async def cohere_rerank(
+async def cohere_rerank_api(
     query: str, docs: list[str], model_name: str, api_key: str
 ) -> list[float]:
     cohere_client = CohereAsyncClient(api_key=api_key)
@@ -455,6 +465,45 @@ async def cohere_rerank(
     results = response.results
     sorted_results = sorted(results, key=lambda item: item.index)
     return [result.relevance_score for result in sorted_results]
+
+
+async def cohere_rerank_aws(
+    query: str,
+    docs: list[str],
+    model_name: str,
+    region_name: str,
+    aws_access_key_id: str,
+    aws_secret_access_key: str,
+) -> list[float]:
+    session = aioboto3.Session(
+        aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key
+    )
+    async with session.client(
+        "bedrock-runtime", region_name=region_name
+    ) as bedrock_client:
+        body = json.dumps(
+            {
+                "query": query,
+                "documents": docs,
+                "api_version": 2,
+            }
+        )
+        # Invoke the Bedrock model asynchronously
+        response = await bedrock_client.invoke_model(
+            modelId=model_name,
+            accept="application/json",
+            contentType="application/json",
+            body=body,
+        )
+
+        # Read the response asynchronously
+        response_body = json.loads(await response["body"].read())
+
+        # Extract and sort the results
+        results = response_body.get("results", [])
+        sorted_results = sorted(results, key=lambda item: item["index"])
+
+        return [result["relevance_score"] for result in sorted_results]
 
 
 async def litellm_rerank(
@@ -572,15 +621,32 @@ async def process_rerank_request(rerank_request: RerankRequest) -> RerankRespons
         elif rerank_request.provider_type == RerankerProvider.COHERE:
             if rerank_request.api_key is None:
                 raise RuntimeError("Cohere Rerank Requires an API Key")
-            sim_scores = await cohere_rerank(
+            sim_scores = await cohere_rerank_api(
                 query=rerank_request.query,
                 docs=rerank_request.documents,
                 model_name=rerank_request.model_name,
                 api_key=rerank_request.api_key,
             )
             return RerankResponse(scores=sim_scores)
+
+        elif rerank_request.provider_type == RerankerProvider.BEDROCK:
+            if rerank_request.api_key is None:
+                raise RuntimeError("Bedrock Rerank Requires an API Key")
+            aws_access_key_id, aws_secret_access_key, aws_region = pass_aws_key(
+                rerank_request.api_key
+            )
+            sim_scores = await cohere_rerank_aws(
+                query=rerank_request.query,
+                docs=rerank_request.documents,
+                model_name=rerank_request.model_name,
+                region_name=aws_region,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+            )
+            return RerankResponse(scores=sim_scores)
         else:
             raise ValueError(f"Unsupported provider: {rerank_request.provider_type}")
+
     except Exception as e:
         logger.exception(f"Error during reranking process:\n{str(e)}")
         raise HTTPException(

@@ -90,6 +90,8 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "anthropic.claude-3-5-sonnet-20240620-v1:0",
   "anthropic.claude-3-5-sonnet-20241022-v2:0",
   "anthropic.claude-3-7-sonnet-20250219-v1:0",
+  "claude-3.7-sonnet@202502019",
+  "claude-3-7-sonnet-202502019",
   // google gemini model names
   "gemini-1.5-pro",
   "gemini-1.5-flash",
@@ -98,6 +100,8 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "gemini-1.5-pro-002",
   "gemini-1.5-flash-002",
   "gemini-2.0-flash-exp",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-pro-exp-02-05",
   // amazon models
   "amazon.nova-lite@v1",
   "amazon.nova-pro@v1",

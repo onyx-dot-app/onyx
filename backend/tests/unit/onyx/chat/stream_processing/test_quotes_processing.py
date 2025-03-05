@@ -150,6 +150,7 @@ def test_fuzzy_match_quotes_to_docs() -> None:
         metadata={},
         match_highlights=[],
         updated_at=None,
+        image_file_name=None,
     )
     test_chunk_1 = InferenceChunk(
         document_id="test doc 1",
@@ -168,6 +169,7 @@ def test_fuzzy_match_quotes_to_docs() -> None:
         metadata={},
         match_highlights=[],
         updated_at=None,
+        image_file_name=None,
     )
 
     test_quotes = [
