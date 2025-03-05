@@ -161,6 +161,7 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         jira_project_url: str,
+        jira_jql_query_base: str = "",
         comment_email_blacklist: list[str] | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         # if a ticket has one of the labels specified in this list, we will just
@@ -230,6 +231,9 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
             f"updated >= '{start_date_str}' AND "
             f"updated <= '{end_date_str}'"
         )
+
+        if self.jira_jql_query_base:
+            jql = f" {self.jira_jql_query_base} AND " + jql
 
         document_batch = []
         for doc in fetch_jira_issues_batch(
