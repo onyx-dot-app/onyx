@@ -139,7 +139,7 @@ def process_attachment(
         try:
             text = extract_file_text(
                 file=BytesIO(raw_bytes),
-                file_name=Path(attachment["title"]),
+                file_name=attachment["title"],
             )
 
             # Skip if the text is too long
@@ -202,7 +202,7 @@ def _process_text_attachment(
     try:
         extracted_text = extract_file_text(
             io.BytesIO(raw_bytes),
-            file_name=Path(attachment["title"]),
+            file_name=attachment["title"],
             break_on_unprocessable=False,
         )
     except Exception as e:
