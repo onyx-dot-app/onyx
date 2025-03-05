@@ -300,6 +300,9 @@ def cloud_beat_task_generator(
     tenant_ids: list[str] = []
     num_processed_tenants = 0
 
+    tenant_ids = get_all_tenant_ids()
+    gated_tenants = get_gated_tenants()
+
     try:
         tenant_ids = get_all_tenant_ids()
         gated_tenants = get_gated_tenants()

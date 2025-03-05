@@ -31,6 +31,8 @@ export const ConfirmEntityModal = ({
     switch (entityType) {
       case "Default Persona":
         return "change the default status of";
+      case "Join Request":
+        return "approve the join request of";
       default:
         return "modify";
     }

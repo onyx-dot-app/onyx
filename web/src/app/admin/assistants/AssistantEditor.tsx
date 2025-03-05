@@ -1095,8 +1095,7 @@ export function AssistantEditor({
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
-                          Anyone from your organization can view and use this
-                          assistant
+                          Anyone from your team can view and use this assistant
                         </p>
                       ) : (
                         <>

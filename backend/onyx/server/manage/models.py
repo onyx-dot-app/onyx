@@ -53,6 +53,16 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
 
 
+class TenantSnapshot(BaseModel):
+    tenant_id: str
+    number_of_users: int
+
+
+class TenantInfo(BaseModel):
+    invitation: TenantSnapshot | None = None
+    new_tenant: TenantSnapshot | None = None
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
@@ -65,9 +75,10 @@ class UserInfo(BaseModel):
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
     is_cloud_superuser: bool = False
-    organization_name: str | None = None
+    team_name: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
+    tenant_info: TenantInfo | None = None
 
     @classmethod
     def from_model(
@@ -76,8 +87,9 @@ class UserInfo(BaseModel):
         current_token_created_at: datetime | None = None,
         expiry_length: int | None = None,
         is_cloud_superuser: bool = False,
-        organization_name: str | None = None,
+        team_name: str | None = None,
         is_anonymous_user: bool | None = None,
+        tenant_info: TenantInfo | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -99,7 +111,7 @@ class UserInfo(BaseModel):
                     temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
-            organization_name=organization_name,
+            team_name=team_name,
             # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
             # where they previously had this set + used OIDC, and now they switched to
             # basic auth are now constantly getting redirected back to the login page
@@ -109,6 +121,7 @@ class UserInfo(BaseModel):
             current_token_expiry_length=expiry_length,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
+            tenant_info=tenant_info,
         )
 
 

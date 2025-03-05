@@ -13,6 +13,7 @@ import { set } from "lodash";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
+import { useRouter } from "next/navigation";
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -20,15 +21,18 @@ export function EmailPasswordForm({
   referralSource,
   nextUrl,
   defaultEmail,
+  isJoin = false,
 }: {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
   defaultEmail?: string | null;
+  isJoin?: boolean;
 }) {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
+  const router = useRouter();
   const [isWorking, setIsWorking] = useState(false);
   return (
     <>
@@ -78,6 +82,11 @@ export function EmailPasswordForm({
               });
               setIsWorking(false);
               return;
+            } else {
+              setPopup({
+                type: "success",
+                message: "Account created successfully. Please log in.",
+              });
             }
           }
 
@@ -91,7 +100,9 @@ export function EmailPasswordForm({
               window.location.href = "/auth/waiting-on-verification";
             } else {
               // See above comment
-              window.location.href = nextUrl ? encodeURI(nextUrl) : "/";
+              window.location.href = nextUrl
+                ? encodeURI(nextUrl)
+                : `/chat${isSignup ? "?new_team=true" : ""}`;
             }
           } else {
             setIsWorking(false);
@@ -137,7 +148,7 @@ export function EmailPasswordForm({
               disabled={isSubmitting}
               className="mx-auto  !py-4 w-full"
             >
-              {isSignup ? "Sign Up" : "Log In"}
+              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
               <Link

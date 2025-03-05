@@ -12,7 +12,6 @@ import Text from "@/components/ui/text";
 import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 
 const Page = async (props: {
@@ -26,6 +25,10 @@ const Page = async (props: {
   const defaultEmail = Array.isArray(searchParams?.email)
     ? searchParams?.email[0]
     : searchParams?.email || null;
+
+  const teamName = Array.isArray(searchParams?.team)
+    ? searchParams?.team[0]
+    : searchParams?.team || "your team";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -64,9 +67,10 @@ const Page = async (props: {
   if (cloud && authTypeMetadata) {
     authUrl = await getAuthUrlSS(authTypeMetadata.authType, null);
   }
+  const emailDomain = defaultEmail?.split("@")[1];
 
   return (
-    <AuthFlowContainer authState="signup">
+    <AuthFlowContainer authState="join">
       <HealthCheckBanner />
       <AuthErrorDisplay searchParams={searchParams} />
 
@@ -74,15 +78,8 @@ const Page = async (props: {
         <div className="absolute top-10x w-full"></div>
         <div className="flex w-full flex-col justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
-            {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
+            Join your new {emailDomain} Team
           </h2>
-          {cloud && (
-            <>
-              <div className="w-full flex flex-col items-center space-y-4 mb-4 mt-4">
-                <ReferralSourceSelector />
-              </div>
-            </>
-          )}
 
           {cloud && authUrl && (
             <div className="w-full justify-center">
@@ -97,6 +94,7 @@ const Page = async (props: {
 
           <EmailPasswordForm
             isSignup
+            isJoin
             shouldVerify={authTypeMetadata?.requiresVerification}
             nextUrl={nextUrl}
             defaultEmail={defaultEmail}
