@@ -6,7 +6,6 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from PIL import Image
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
@@ -22,7 +21,7 @@ def prepare_image_bytes(image_data: bytes) -> str:
     image_data = _resize_image_if_needed(image_data)
 
     # encode image (base64)
-    encoded_image = _encode_image(image_data)
+    encoded_image = _encode_image_for_llm_prompt(image_data)
 
     return encoded_image
 
@@ -71,14 +70,8 @@ def summarize_image_with_error_handling(
     if llm is None:
         return None
 
-    try:
-        user_prompt = user_prompt_template.format(title=context_name)
-        return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
-    except Exception as e:
-        if CONTINUE_ON_CONNECTOR_FAILURE:
-            logger.warning(f"Image summarization failed for {context_name}: {e}")
-            return None
-        raise
+    user_prompt = user_prompt_template.format(title=context_name)
+    return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
 
 
 def _summarize_image(
@@ -110,7 +103,7 @@ def _summarize_image(
         raise ValueError(f"Summarization failed. Messages: {messages}") from e
 
 
-def _encode_image(image_data: bytes) -> str:
+def _encode_image_for_llm_prompt(image_data: bytes) -> str:
     """Getting the base64 string."""
     base64_encoded_data = base64.b64encode(image_data).decode("utf-8")
 
@@ -124,7 +117,7 @@ def _resize_image_if_needed(image_data: bytes, max_size_mb: int = 20) -> bytes:
     if len(image_data) > max_size_bytes:
         with Image.open(BytesIO(image_data)) as img:
             # Reduce dimensions for better size reduction
-            img.thumbnail((800, 800), Image.Resampling.LANCZOS)
+            img.thumbnail((1024, 1024), Image.Resampling.LANCZOS)
             output = BytesIO()
 
             # Save with lower quality for compression

@@ -1,3 +1,4 @@
+import io
 import math
 import time
 from collections.abc import Callable
@@ -5,6 +6,7 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 from typing import cast
 from typing import TYPE_CHECKING
@@ -15,8 +17,6 @@ from urllib.parse import urlparse
 
 import requests
 from pydantic import BaseModel
-import io
-
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import (
@@ -67,7 +67,7 @@ def validate_attachment_filetype(
 
     # For non-image files, check if we support the extension
     title = attachment.get("title", "")
-    extension = title.split(".")[-1].lower() if "." in title else ""
+    extension = Path(title).suffix.lstrip(".").lower() if "." in title else ""
     return extension in ["pdf", "doc", "docx", "txt", "md", "rtf"]
 
 
@@ -123,7 +123,11 @@ def process_attachment(
             )
 
         # Download the attachment
-        raw_bytes = confluence_client.get_attachment_by_id(attachment["id"])
+        raw_bytes = _download_attachment(confluence_client, attachment)
+        if raw_bytes is None:
+            return AttachmentProcessingResult(
+                text=None, file_name=None, error="Failed to download attachment"
+            )
 
         # Process image attachments with LLM if available
         if media_type.startswith("image/") and llm:
@@ -135,7 +139,7 @@ def process_attachment(
         try:
             text = extract_file_text(
                 file=BytesIO(raw_bytes),
-                file_name=attachment["title"],
+                file_name=Path(attachment["title"]),
             )
 
             # Skip if the text is too long
@@ -173,7 +177,7 @@ def _process_image_attachment(
             section, file_name = store_image_and_create_section(
                 db_session=db_session,
                 image_data=raw_bytes,
-                file_name=attachment["id"],
+                file_name=Path(attachment["id"]).name,
                 display_name=attachment["title"],
                 media_type=media_type,
                 llm=llm,
@@ -198,7 +202,7 @@ def _process_text_attachment(
     try:
         extracted_text = extract_file_text(
             io.BytesIO(raw_bytes),
-            file_name=attachment["title"],
+            file_name=Path(attachment["title"]),
             break_on_unprocessable=False,
         )
     except Exception as e:
@@ -462,6 +466,7 @@ def update_param_in_path(path: str, param: str, value: str) -> str:
         + "?"
         + "&".join(f"{k}={quote(v[0])}" for k, v in query_params.items())
     )
+
 
 def attachment_to_file_record(
     confluence_client: "OnyxConfluence",

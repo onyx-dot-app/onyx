@@ -111,9 +111,9 @@ def update_image_sections_with_query(
                 answer_text if answer_text else "No relevant info found.",
             )
 
-        except Exception as e:
+        except Exception:
             logger.exception(
-                f"Error updating image section with query: {e} source image url: {chunk.image_file_name}"
+                f"Error updating image section with query source image url: {chunk.image_file_name}"
             )
             return chunk.unique_id, "Error analyzing image."
 
