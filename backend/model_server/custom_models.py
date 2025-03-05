@@ -257,9 +257,7 @@ def warm_up_intent_model() -> None:
 
 
 def warm_up_information_content_model() -> None:
-    logger.notice(
-        "Warming up Content Model"
-    )  # TODO: add version once we have proper model
+    logger.notice("Warming up Content Model")  # TODO: add version if needed
 
     information_content_model = get_local_information_content_model()
     information_content_model.device
