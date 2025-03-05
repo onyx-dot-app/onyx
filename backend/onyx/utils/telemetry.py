@@ -43,6 +43,7 @@ def _get_or_generate_customer_id_mt(tenant_id: str) -> str:
 
 
 def get_or_generate_uuid() -> str:
+    return "hi"
     # TODO: split out the whole "instance UUID" generation logic into a separate
     # utility function. Telemetry should not be aware at all of how the UUID is
     # generated/stored.

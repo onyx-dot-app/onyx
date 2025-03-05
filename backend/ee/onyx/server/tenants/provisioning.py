@@ -54,20 +54,26 @@ logger = logging.getLogger(__name__)
 
 async def get_or_provision_tenant(
     email: str, referral_source: str | None = None, request: Request | None = None
-) -> str:
-    """Get existing tenant ID for an email or create a new tenant if none exists."""
+) -> tuple[str, bool]:
+    """Get existing tenant ID for an email or create a new tenant if none exists.
+
+    Returns:
+        tuple: (tenant_id, is_newly_created) - The tenant ID and a boolean indicating if it was newly created
+    """
     if not MULTI_TENANT:
-        return POSTGRES_DEFAULT_SCHEMA
+        return POSTGRES_DEFAULT_SCHEMA, False
 
     if referral_source and request:
         await submit_to_hubspot(email, referral_source, request)
 
+    is_newly_created = False
     try:
         tenant_id = get_tenant_id_for_email(email)
     except exceptions.UserNotExists:
         # If tenant does not exist and in Multi tenant mode, provision a new tenant
         try:
             tenant_id = await create_tenant(email, referral_source)
+            is_newly_created = True
         except Exception as e:
             logger.error(f"Tenant provisioning failed: {e}")
             raise HTTPException(status_code=500, detail="Failed to provision tenant.")
@@ -77,7 +83,7 @@ async def get_or_provision_tenant(
             status_code=401, detail="User does not belong to an organization"
         )
 
-    return tenant_id
+    return tenant_id, is_newly_created
 
 
 async def create_tenant(email: str, referral_source: str | None = None) -> str:
@@ -115,35 +121,11 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
 
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Await the Alembic migrations
-        await asyncio.to_thread(run_alembic_migrations, tenant_id)
+        # Await the Alembic migrations up to the specified revision
+        await asyncio.to_thread(run_alembic_migrations, tenant_id, "465f78d9b7f9")
 
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            configure_default_api_keys(db_session)
-
-            current_search_settings = (
-                db_session.query(SearchSettings)
-                .filter_by(status=IndexModelStatus.FUTURE)
-                .first()
-            )
-            cohere_enabled = (
-                current_search_settings is not None
-                and current_search_settings.provider_type == EmbeddingProvider.COHERE
-            )
-            setup_onyx(db_session, tenant_id, cohere_enabled=cohere_enabled)
-
+        # Add users to tenant - this is needed for authentication
         add_users_to_tenant([email], tenant_id)
-
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-            create_milestone_and_report(
-                user=None,
-                distinct_id=tenant_id,
-                event_type=MilestoneRecordType.TENANT_CREATED,
-                properties={
-                    "email": email,
-                },
-                db_session=db_session,
-            )
 
     except Exception as e:
         logger.exception(f"Failed to create tenant {tenant_id}")
@@ -349,3 +331,62 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
                 raise Exception(
                     f"Failed to delete tenant on control plane: {error_text}"
                 )
+
+
+async def complete_tenant_setup(tenant_id: str, email: str) -> None:
+    """Complete the tenant setup process after user creation.
+
+    This function handles the remaining steps of tenant provisioning after the initial
+    schema creation and user authentication:
+    1. Completes the remaining Alembic migrations
+    2. Configures default API keys
+    3. Sets up Onyx
+    4. Creates milestone record
+    """
+    if not MULTI_TENANT:
+        raise HTTPException(status_code=403, detail="Multi-tenancy is not enabled")
+
+    logger.debug(f"Completing setup for tenant {tenant_id}")
+    token = None
+
+    try:
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+
+        # Complete the remaining Alembic migrations
+        await asyncio.to_thread(run_alembic_migrations, tenant_id)
+
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            configure_default_api_keys(db_session)
+
+            current_search_settings = (
+                db_session.query(SearchSettings)
+                .filter_by(status=IndexModelStatus.FUTURE)
+                .first()
+            )
+            cohere_enabled = (
+                current_search_settings is not None
+                and current_search_settings.provider_type == EmbeddingProvider.COHERE
+            )
+            setup_onyx(db_session, tenant_id, cohere_enabled=cohere_enabled)
+
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            create_milestone_and_report(
+                user=None,
+                distinct_id=tenant_id,
+                event_type=MilestoneRecordType.TENANT_CREATED,
+                properties={
+                    "email": email,
+                },
+                db_session=db_session,
+            )
+
+        logger.info(f"Tenant setup completed for {tenant_id}")
+
+    except Exception as e:
+        logger.exception(f"Failed to complete tenant setup for {tenant_id}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to complete tenant setup: {str(e)}"
+        )
+    finally:
+        if token is not None:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
