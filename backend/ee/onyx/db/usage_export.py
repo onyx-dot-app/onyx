@@ -27,6 +27,8 @@ def get_empty_chat_messages_entries__paginated(
     first element is the most recent timestamp out of the sessions iterated
     - this timestamp can be used to paginate forward in time
     second element is a list of messages belonging to all the sessions iterated
+
+    Only messages of type USER are returned
     """
     chat_sessions = fetch_chat_sessions_eagerly_by_time(
         start=period[0],

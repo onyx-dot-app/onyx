@@ -48,10 +48,15 @@ def fetch_and_process_chat_session_history(
     feedback_type: QAFeedbackType | None,
     limit: int | None = 500,
 ) -> list[ChatSessionSnapshot]:
+    # observed to be slow a scale of 8192 sessions and 4 messages per session
+
+    # this is a little slow (5 seconds)
     chat_sessions = fetch_chat_sessions_eagerly_by_time(
         start=start, end=end, db_session=db_session, limit=limit
     )
 
+    # this is VERY slow (80 seconds) due to create_chat_chain being called
+    # for each session. Needs optimizing.
     chat_session_snapshots = [
         snapshot_from_chat_session(chat_session=chat_session, db_session=db_session)
         for chat_session in chat_sessions
@@ -246,6 +251,8 @@ def get_query_history_as_csv(
             detail="Query history has been disabled by the administrator.",
         )
 
+    # this call is very expensive and is timing out via endpoint
+    # TODO: optimize call and/or generate via background task
     complete_chat_session_history = fetch_and_process_chat_session_history(
         db_session=db_session,
         start=start or datetime.fromtimestamp(0, tz=timezone.utc),

@@ -10,7 +10,9 @@ from onyx.db.seeding.chat_history_seeding import seed_chat_history
 def test_usage_reports(reset: None) -> None:
     EXPECTED_SESSIONS = 2048
     MESSAGES_PER_SESSION = 4
-    EXPECTED_MESSAGES = EXPECTED_SESSIONS * MESSAGES_PER_SESSION
+
+    # divide by 2 because only messages of type USER are returned
+    EXPECTED_MESSAGES = EXPECTED_SESSIONS * MESSAGES_PER_SESSION / 2
 
     seed_chat_history(EXPECTED_SESSIONS, MESSAGES_PER_SESSION, 90)
 
