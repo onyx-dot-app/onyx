@@ -19,7 +19,7 @@ def go_main(num_sessions: int, num_messages: int, num_days: int) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Sample API Usage - Seed chat history")
+    parser = argparse.ArgumentParser(description="Seed chat history")
     parser.add_argument(
         "--sessions",
         type=int,
@@ -37,9 +37,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--days",
         type=int,
-        default=4,
+        default=90,
         help="Number of days looking backwards over which to seed the timestamps with",
     )
 
     args = parser.parse_args()
-    go_main(args.sessions, args.messages)
+    go_main(args.sessions, args.messages, args.days)
