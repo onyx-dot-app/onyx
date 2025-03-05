@@ -31,8 +31,15 @@ class VisionEnabledConnector:
         """
         self.image_analysis_llm: LLM | None = None
         if ENABLE_INDEXING_TIME_IMAGE_ANALYSIS:
-            self.image_analysis_llm = get_default_llm_with_vision()
-            if self.image_analysis_llm is None:
+            try:
+                self.image_analysis_llm = get_default_llm_with_vision()
+                if self.image_analysis_llm is None:
+                    logger.warning(
+                        "No LLM with vision found; image summarization will be disabled"
+                    )
+            except Exception as e:
                 logger.warning(
-                    "No LLM with vision found; image summarization will be disabled"
+                    f"Failed to initialize vision LLM due to an error: {str(e)}. "
+                    "Image summarization will be disabled."
                 )
+                self.image_analysis_llm = None
