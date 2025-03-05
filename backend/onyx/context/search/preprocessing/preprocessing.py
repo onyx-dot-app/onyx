@@ -118,7 +118,9 @@ def retrieval_preprocessing(
     )
 
     run_query_analysis = (
-        None if skip_query_analysis else FunctionCall(query_analysis, (query,), {})
+        None
+        if (skip_query_analysis or search_request.precomputed_is_keyword is not None)
+        else FunctionCall(query_analysis, (query,), {})
     )
 
     functions_to_run = [
@@ -143,11 +145,12 @@ def retrieval_preprocessing(
 
     # The extracted keywords right now are not very reliable, not using for now
     # Can maybe use for highlighting
-    is_keyword, extracted_keywords = (
-        parallel_results[run_query_analysis.result_id]
-        if run_query_analysis
-        else (False, None)
-    )
+    is_keyword, _extracted_keywords = False, None
+    if search_request.precomputed_is_keyword is not None:
+        is_keyword = search_request.precomputed_is_keyword
+        _extracted_keywords = search_request.precomputed_keywords
+    elif run_query_analysis:
+        is_keyword, _extracted_keywords = parallel_results[run_query_analysis.result_id]
 
     all_query_terms = query.split()
     processed_keywords = (
@@ -247,4 +250,5 @@ def retrieval_preprocessing(
         chunks_above=chunks_above,
         chunks_below=chunks_below,
         full_doc=search_request.full_doc,
+        precomputed_query_embedding=search_request.precomputed_query_embedding,
     )

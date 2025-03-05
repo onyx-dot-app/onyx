@@ -13,6 +13,11 @@ AGENT_NEGATIVE_VALUE_STR = "no"
 AGENT_ANSWER_SEPARATOR = "Answer:"
 
 
+EMBEDDING_KEY = "embedding"
+IS_KEYWORD_KEY = "is_keyword"
+KEYWORDS_KEY = "keywords"
+
+
 class AgentLLMErrorType(str, Enum):
     TIMEOUT = "timeout"
     RATE_LIMIT = "rate_limit"

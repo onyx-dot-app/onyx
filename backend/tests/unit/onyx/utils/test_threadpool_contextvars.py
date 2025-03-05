@@ -4,7 +4,9 @@ import time
 from onyx.utils.threadpool_concurrency import FunctionCall
 from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import wait_on_background
 
 # Create a test contextvar
 test_var = contextvars.ContextVar("test_var", default="default")
@@ -129,3 +131,39 @@ def test_contextvar_isolation_between_runs() -> None:
 
     # Verify second run results
     assert all(result in ["thread3", "thread4"] for result in second_results)
+
+
+def test_run_in_background_preserves_contextvar() -> None:
+    """Test that run_in_background preserves contextvar values and modifications are isolated"""
+
+    def modify_and_sleep() -> tuple[str, str]:
+        """Modifies contextvar, sleeps, and returns original, modified, and final values"""
+        original = test_var.get()
+        test_var.set("modified_in_background")
+        time.sleep(0.1)  # Ensure we can check main thread during execution
+        final = test_var.get()
+        return original, final
+
+    # Set initial value in main thread
+    token = test_var.set("initial_value")
+    try:
+        # Start background task
+        task = run_in_background(modify_and_sleep)
+
+        # Verify main thread value remains unchanged while task runs
+        assert test_var.get() == "initial_value"
+
+        # Get results from background thread
+        original, modified = wait_on_background(task)
+
+        # Verify the background thread:
+        # 1. Saw the initial value
+        assert original == "initial_value"
+        # 2. Successfully modified its own copy
+        assert modified == "modified_in_background"
+
+        # Verify main thread value is still unchanged after task completion
+        assert test_var.get() == "initial_value"
+    finally:
+        # Clean up
+        test_var.reset(token)

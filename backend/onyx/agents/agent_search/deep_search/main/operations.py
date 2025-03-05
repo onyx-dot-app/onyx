@@ -13,7 +13,6 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
-from onyx.context.search.models import IndexFilters
 from onyx.tools.models import SearchQueryInfo
 from onyx.utils.logger import setup_logger
 
@@ -144,8 +143,6 @@ def get_query_info(results: list[QueryRetrievalResult]) -> SearchQueryInfo:
         if result.query_info is not None:
             query_info = result.query_info
             break
-    return query_info or SearchQueryInfo(
-        predicted_search=None,
-        final_filters=IndexFilters(access_control_list=None),
-        recency_bias_multiplier=1.0,
-    )
+
+    assert query_info is not None, "must have query info"
+    return query_info

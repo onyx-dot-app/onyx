@@ -1,4 +1,5 @@
 from onyx.chat.models import LlmDoc
+from onyx.chat.models import OnyxContext
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.prompt_utils import clean_up_source
 
@@ -29,3 +30,12 @@ def section_to_dict(section: InferenceSection, section_num: int) -> dict:
             "%B %d, %Y %H:%M"
         )
     return doc_dict
+
+
+def context_from_inference_section(section: InferenceSection) -> OnyxContext:
+    return OnyxContext(
+        content=section.combined_content,
+        document_id=section.center_chunk.document_id,
+        semantic_identifier=section.center_chunk.semantic_identifier,
+        blurb=section.center_chunk.blurb,
+    )

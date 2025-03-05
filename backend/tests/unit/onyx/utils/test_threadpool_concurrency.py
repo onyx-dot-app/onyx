@@ -1,8 +1,14 @@
+import contextvars
 import time
 
 import pytest
 
+from onyx.utils.threadpool_concurrency import run_in_background
 from onyx.utils.threadpool_concurrency import run_with_timeout
+from onyx.utils.threadpool_concurrency import wait_on_background
+
+# Create a context variable for testing
+test_context_var = contextvars.ContextVar("test_var", default="default")
 
 
 def test_run_with_timeout_completes() -> None:
@@ -59,3 +65,86 @@ def test_run_with_timeout_with_args_and_kwargs() -> None:
     # Test with positional and keyword args
     result2 = run_with_timeout(1.0, complex_function, x=5, y=3, multiply=True)
     assert result2 == 15
+
+
+def test_run_in_background_and_wait_success() -> None:
+    """Test that run_in_background and wait_on_background work correctly for successful execution"""
+
+    def background_function(x: int) -> int:
+        time.sleep(0.1)  # Small delay to ensure it's actually running in background
+        return x * 2
+
+    # Start the background task
+    task = run_in_background(background_function, 21)
+
+    # Verify we can do other work while task is running
+    start_time = time.time()
+    result = wait_on_background(task)
+    elapsed = time.time() - start_time
+
+    assert result == 42
+    assert elapsed >= 0.1  # Verify we actually waited for the sleep
+
+
+@pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")
+def test_run_in_background_propagates_exceptions() -> None:
+    """Test that exceptions in background tasks are properly propagated"""
+
+    def error_function() -> None:
+        time.sleep(0.1)  # Small delay to ensure it's actually running in background
+        raise ValueError("Test background error")
+
+    task = run_in_background(error_function)
+
+    with pytest.raises(ValueError) as exc_info:
+        wait_on_background(task)
+
+    assert "Test background error" in str(exc_info.value)
+
+
+def test_run_in_background_with_args_and_kwargs() -> None:
+    """Test that args and kwargs are properly passed to the background function"""
+
+    def complex_function(x: int, y: int, multiply: bool = False) -> int:
+        time.sleep(0.1)  # Small delay to ensure it's actually running in background
+        if multiply:
+            return x * y
+        return x + y
+
+    # Test with args
+    task1 = run_in_background(complex_function, 5, 3)
+    result1 = wait_on_background(task1)
+    assert result1 == 8
+
+    # Test with args and kwargs
+    task2 = run_in_background(complex_function, 5, 3, multiply=True)
+    result2 = wait_on_background(task2)
+    assert result2 == 15
+
+
+def test_multiple_background_tasks() -> None:
+    """Test running multiple background tasks concurrently"""
+
+    def slow_add(x: int, y: int) -> int:
+        time.sleep(0.2)  # Make each task take some time
+        return x + y
+
+    # Start multiple tasks
+    start_time = time.time()
+    task1 = run_in_background(slow_add, 1, 2)
+    task2 = run_in_background(slow_add, 3, 4)
+    task3 = run_in_background(slow_add, 5, 6)
+
+    # Wait for all results
+    result1 = wait_on_background(task1)
+    result2 = wait_on_background(task2)
+    result3 = wait_on_background(task3)
+    elapsed = time.time() - start_time
+
+    # Verify results
+    assert result1 == 3
+    assert result2 == 7
+    assert result3 == 11
+
+    # Verify tasks ran in parallel (total time should be ~0.2s, not ~0.6s)
+    assert 0.2 <= elapsed < 0.4  # Allow some buffer for test environment variations

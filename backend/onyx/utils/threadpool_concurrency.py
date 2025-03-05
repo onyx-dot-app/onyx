@@ -118,7 +118,7 @@ def run_functions_in_parallel(
     return results
 
 
-class TimeoutThread(threading.Thread):
+class TimeoutThread(threading.Thread, Generic[R]):
     def __init__(
         self, timeout: float, func: Callable[..., R], *args: Any, **kwargs: Any
     ):
@@ -157,5 +157,36 @@ def run_with_timeout(
         raise task.exception
     if task.is_alive():
         task.end()
+
+    return task.result
+
+
+# NOTE: this function should really only be used when run_functions_tuples_in_parallel is
+# difficult to use. It's up to the programmer to call wait_on_background on the thread after
+# the code you want to run in parallel is finished. As with all python thread parallelism,
+# this is only useful for I/O bound tasks.
+def run_in_background(
+    func: Callable[..., R], *args: Any, **kwargs: Any
+) -> TimeoutThread[R]:
+    """
+    Runs a function in a background thread. Returns a TimeoutThread object that can be used
+    to wait for the function to finish with wait_on_background.
+    """
+    context = contextvars.copy_context()
+    # Timeout not used in the non-blocking case
+    task = TimeoutThread(-1, context.run, func, *args, **kwargs)
+    task.start()
+    return task
+
+
+def wait_on_background(task: TimeoutThread[R]) -> R:
+    """
+    Used in conjunction with run_in_background. blocks until the task is finished,
+    then returns the result of the task.
+    """
+    task.join()
+
+    if task.exception is not None:
+        raise task.exception
 
     return task.result

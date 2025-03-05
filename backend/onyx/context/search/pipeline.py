@@ -332,6 +332,14 @@ class SearchPipeline:
         return expanded_inference_sections
 
     @property
+    def retrieved_sections(self) -> list[InferenceSection]:
+        if self._retrieved_sections is not None:
+            return self._retrieved_sections
+
+        self._retrieved_sections = self._get_sections()
+        return self._retrieved_sections
+
+    @property
     def reranked_sections(self) -> list[InferenceSection]:
         """Reranking is always done at the chunk level since section merging could create arbitrarily
         long sections which could be:
@@ -343,7 +351,7 @@ class SearchPipeline:
         if self._reranked_sections is not None:
             return self._reranked_sections
 
-        retrieved_sections = self._get_sections()
+        retrieved_sections = self.retrieved_sections
         if self.retrieved_sections_callback is not None:
             self.retrieved_sections_callback(retrieved_sections)
 
