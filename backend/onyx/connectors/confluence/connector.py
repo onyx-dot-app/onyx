@@ -66,9 +66,6 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 _SLIM_DOC_BATCH_SIZE = 5000
 
 _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT = [
-    "png",
-    "jpg",
-    "jpeg",
     "gif",
     "mp4",
     "mov",
