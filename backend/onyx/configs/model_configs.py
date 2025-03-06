@@ -137,8 +137,8 @@ if _LITELLM_EXTRA_BODY_RAW:
 # Evaluated via custom ML model
 
 USE_INFORMATION_CONTENT_CLASSIFICATION = (
-    os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION") or "true"
-).lower() == "true"
+    os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION", "false").lower() == "true"
+)
 
 # Cutoff below which we start using the information content classification model
 INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = float(
