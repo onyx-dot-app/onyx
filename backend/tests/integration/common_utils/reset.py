@@ -25,7 +25,7 @@ from onyx.indexing.models import IndexingSetting
 from onyx.setup import setup_postgres
 from onyx.setup import setup_vespa
 from onyx.utils.logger import setup_logger
-from tests.integration.common_utils.timeout import run_with_timeout
+from tests.integration.common_utils.timeout import run_with_timeout_multiproc
 
 logger = setup_logger()
 
@@ -161,7 +161,7 @@ def reset_postgres(
     for _ in range(NUM_TRIES):
         logger.info(f"Downgrading Postgres... ({_ + 1}/{NUM_TRIES})")
         try:
-            run_with_timeout(
+            run_with_timeout_multiproc(
                 downgrade_postgres,
                 TIMEOUT,
                 kwargs={

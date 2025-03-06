@@ -33,6 +33,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import RefinedAnswerImprovement
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_VALIDATION
 from onyx.configs.agent_configs import AGENT_TIMEOUT_CONNECT_LLM_COMPARE_ANSWERS
 from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_COMPARE_ANSWERS
 from onyx.llm.chat_llm import LLMRateLimitError
@@ -112,6 +113,7 @@ def compare_answers(
             model.invoke,
             prompt=msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_COMPARE_ANSWERS,
+            max_tokens=AGENT_MAX_TOKENS_VALIDATION,
         )
 
     except (LLMTimeoutError, TimeoutError):
