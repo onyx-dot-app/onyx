@@ -279,3 +279,15 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_intfloat_multilingual_e5_small",
     ),
 ]
+# Maximum (least severe) downgrade factor for chunks above the cutoff
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX") or 1.0
+)
+# Minimum (most severe) downgrade factor for short chunks below the cutoff if no content
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.8
+)
+# Temperature for the information content classification model
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE") or 4.0
+)

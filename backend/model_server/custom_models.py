@@ -13,14 +13,14 @@ from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.onyx_torch_model import ConnectorClassifier
 from model_server.onyx_torch_model import HybridClassifier
 from model_server.utils import simple_log_function_time
-from onyx.configs.model_configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
-from onyx.configs.model_configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
-from onyx.configs.model_configs import (
-    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
-)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
+from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
+)
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import INFORMATION_CONTENT_MODEL_TAG
 from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
