@@ -10,9 +10,6 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolChoice
 from onyx.agents.agent_search.orchestration.states import ToolChoiceState
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
-from onyx.agents.agent_search.shared_graph_utils.constants import EMBEDDING_KEY
-from onyx.agents.agent_search.shared_graph_utils.constants import IS_KEYWORD_KEY
-from onyx.agents.agent_search.shared_graph_utils.constants import KEYWORDS_KEY
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
@@ -20,6 +17,7 @@ from onyx.chat.tool_handling.tool_response_handler import (
 )
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import setup_logger
@@ -54,6 +52,7 @@ def choose_tool(
 
     embedding_thread: TimeoutThread[Embedding] | None = None
     keyword_thread: TimeoutThread[tuple[bool, list[str]]] | None = None
+    override_kwargs: SearchToolOverrideKwargs | None = None
     if (
         not agent_config.behavior.use_agentic_search
         and agent_config.tooling.search_tool is not None
@@ -61,6 +60,7 @@ def choose_tool(
             not force_use_tool.force_use or force_use_tool.tool_name == SearchTool.name
         )
     ):
+        override_kwargs = SearchToolOverrideKwargs()
         # Run in a background thread to avoid blocking the main thread
         embedding_thread = run_in_background(
             get_query_embedding,
@@ -108,16 +108,19 @@ def choose_tool(
         if embedding_thread and tool.name == SearchTool._NAME:
             # Wait for the embedding thread to finish
             embedding = wait_on_background(embedding_thread)
-            tool_args[EMBEDDING_KEY] = embedding
+            assert override_kwargs is not None, "must have override kwargs"
+            override_kwargs.precomputed_query_embedding = embedding
         if keyword_thread and tool.name == SearchTool._NAME:
             is_keyword, keywords = wait_on_background(keyword_thread)
-            tool_args[IS_KEYWORD_KEY] = is_keyword
-            tool_args[KEYWORDS_KEY] = keywords
+            assert override_kwargs is not None, "must have override kwargs"
+            override_kwargs.precomputed_is_keyword = is_keyword
+            override_kwargs.precomputed_keywords = keywords
         return ToolChoiceUpdate(
             tool_choice=ToolChoice(
                 tool=tool,
                 tool_args=tool_args,
                 id=str(uuid4()),
+                search_tool_override_kwargs=override_kwargs,
             ),
         )
 
@@ -190,16 +193,19 @@ def choose_tool(
     if embedding_thread and selected_tool.name == SearchTool._NAME:
         # Wait for the embedding thread to finish
         embedding = wait_on_background(embedding_thread)
-        selected_tool_call_request["args"][EMBEDDING_KEY] = embedding
+        assert override_kwargs is not None, "must have override kwargs"
+        override_kwargs.precomputed_query_embedding = embedding
     if keyword_thread and selected_tool.name == SearchTool._NAME:
         is_keyword, keywords = wait_on_background(keyword_thread)
-        selected_tool_call_request["args"][IS_KEYWORD_KEY] = is_keyword
-        selected_tool_call_request["args"][KEYWORDS_KEY] = keywords
+        assert override_kwargs is not None, "must have override kwargs"
+        override_kwargs.precomputed_is_keyword = is_keyword
+        override_kwargs.precomputed_keywords = keywords
 
     return ToolChoiceUpdate(
         tool_choice=ToolChoice(
             tool=selected_tool,
             tool_args=selected_tool_call_request["args"],
             id=selected_tool_call_request["id"],
+            search_tool_override_kwargs=override_kwargs,
         ),
     )

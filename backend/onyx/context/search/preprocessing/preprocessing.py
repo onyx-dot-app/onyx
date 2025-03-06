@@ -117,6 +117,8 @@ def retrieval_preprocessing(
         else None
     )
 
+    # Sometimes this is pre-computed in parallel with other heavy tasks to improve
+    # latency, and in that case we don't need to run the model again
     run_query_analysis = (
         None
         if (skip_query_analysis or search_request.precomputed_is_keyword is not None)

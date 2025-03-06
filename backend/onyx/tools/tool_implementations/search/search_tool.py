@@ -3,12 +3,10 @@ from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 from typing import cast
+from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
-from onyx.agents.agent_search.shared_graph_utils.constants import EMBEDDING_KEY
-from onyx.agents.agent_search.shared_graph_utils.constants import IS_KEYWORD_KEY
-from onyx.agents.agent_search.shared_graph_utils.constants import KEYWORDS_KEY
 from onyx.chat.chat_utils import llm_doc_from_inference_section
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
@@ -56,7 +54,6 @@ from onyx.tools.tool_implementations.search_like_tool_utils import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
-from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
 
@@ -287,20 +284,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
-        precomputed_query_embedding = cast(
-            Embedding | None, llm_kwargs.get(EMBEDDING_KEY)
-        )
-        precomputed_is_keyword = cast(bool | None, llm_kwargs.get(IS_KEYWORD_KEY))
-        precomputed_keywords = cast(list[str] | None, llm_kwargs.get(KEYWORDS_KEY))
+        precomputed_query_embedding = None
+        precomputed_is_keyword = None
+        precomputed_keywords = None
         force_no_rerank = False
         alternate_db_session = None
         retrieved_sections_callback = None
         skip_query_analysis = False
         if override_kwargs:
-            force_no_rerank = override_kwargs.force_no_rerank
+            force_no_rerank = use_alt_not_None(override_kwargs.force_no_rerank, False)
             alternate_db_session = override_kwargs.alternate_db_session
             retrieved_sections_callback = override_kwargs.retrieved_sections_callback
-            skip_query_analysis = override_kwargs.skip_query_analysis
+            skip_query_analysis = use_alt_not_None(
+                override_kwargs.skip_query_analysis, False
+            )
+            precomputed_query_embedding = override_kwargs.precomputed_query_embedding
+            precomputed_is_keyword = override_kwargs.precomputed_is_keyword
+            precomputed_keywords = override_kwargs.precomputed_keywords
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
             return
@@ -397,6 +397,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 # SearchTool passed in to allow for access to SearchTool properties.
 # We can't just call SearchTool methods in the graph because we're operating on
 # the retrieved docs (reranking, deduping, etc.) after the SearchTool has run.
+#
+# The various inference sections are passed in as functions to allow for lazy
+# evaluation. The SearchPipeline object properties that they correspond to are
+# actually functions defined with @property decorators, and passing them into
+# this function causes them to get evaluated immediately which is undesirable.
 def yield_search_responses(
     query: str,
     get_retrieved_sections: Callable[[], list[InferenceSection]],
@@ -449,3 +454,10 @@ def yield_search_responses(
     llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
 
     yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
+
+
+T = TypeVar("T")
+
+
+def use_alt_not_None(value: T | None, alt: T) -> T:
+    return value if value is not None else alt
