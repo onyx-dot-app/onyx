@@ -111,5 +111,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.vespa",
         "onyx.background.celery.tasks.connector_deletion",
         "onyx.background.celery.tasks.doc_permission_syncing",
+        "onyx.background.celery.tasks.indexing",
     ]
 )

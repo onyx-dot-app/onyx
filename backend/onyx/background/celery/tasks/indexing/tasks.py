@@ -1170,6 +1170,7 @@ def connector_indexing_proxy_task(
     return
 
 
+# primary
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
@@ -1217,6 +1218,7 @@ def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
                 )
 
 
+# light worker
 @shared_task(
     name=OnyxCeleryTask.CLEANUP_CHECKPOINT,
     bind=True,
