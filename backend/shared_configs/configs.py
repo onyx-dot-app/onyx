@@ -285,7 +285,7 @@ INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
 )
 # Minimum (most severe) downgrade factor for short chunks below the cutoff if no content
 INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.8
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.7
 )
 # Temperature for the information content classification model
 INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
