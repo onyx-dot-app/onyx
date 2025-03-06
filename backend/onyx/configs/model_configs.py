@@ -132,3 +132,15 @@ if _LITELLM_EXTRA_BODY_RAW:
         LITELLM_EXTRA_BODY = json.loads(_LITELLM_EXTRA_BODY_RAW)
     except Exception:
         pass
+
+# Whether and how to lower scores for short chunks w/o relevant context
+# Evaluated via custom ML model
+
+USE_INFORMATION_CONTENT_CLASSIFICATION = (
+    os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION") or "true"
+).lower() == "true"
+
+# Cutoff below which we start using the information content classification model
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
+)
