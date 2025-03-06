@@ -20,7 +20,7 @@ import {
 import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
 import { AppProvider } from "@/components/context/AppProvider";
 import { PHProvider } from "./providers";
-import { getCurrentUserSS } from "@/lib/userSS";
+import { getCurrentUserSS, getMinimalUserInfoSS } from "@/lib/userSS";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
@@ -30,6 +30,8 @@ import { ThemeProvider } from "next-themes";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
+import CompleteTenantSetupPage from "./auth/waiting-on-setup/WaitingOnSetup";
+import WaitingOnSetupPage from "./auth/waiting-on-setup/WaitingOnSetup";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -70,12 +72,17 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [combinedSettings, assistantsData, user] = await Promise.all([
-    fetchSettingsSS(),
-    fetchAssistantData(),
-    getCurrentUserSS(),
-  ]);
+  const [combinedSettings, assistantsData, user, minimalUserInfo] =
+    await Promise.all([
+      fetchSettingsSS(),
+      fetchAssistantData(),
+      getCurrentUserSS(),
+      getMinimalUserInfoSS(),
+    ]);
 
+  // if (!user && minimalUserInfo) {
+  //   return <CompleteTenantSetupPage />;
+  // }
   const productGating =
     combinedSettings?.settings.application_status ?? ApplicationStatus.ACTIVE;
 
@@ -134,6 +141,11 @@ export default async function RootLayout({
 
   if (productGating === ApplicationStatus.GATED_ACCESS) {
     return getPageContent(<AccessRestrictedPage />);
+  }
+  if (!user && minimalUserInfo) {
+    return getPageContent(
+      <WaitingOnSetupPage minimalUserInfo={minimalUserInfo} />
+    );
   }
 
   if (!combinedSettings) {

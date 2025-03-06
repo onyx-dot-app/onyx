@@ -180,6 +180,7 @@ SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def is_valid_schema_name(name: str) -> bool:
+    print(f"Checking if {name} is valid")
     return SCHEMA_NAME_REGEX.match(name) is not None
 
 
@@ -474,17 +475,27 @@ def get_session_generator_with_tenant() -> Generator[Session, None, None]:
 
 def get_session() -> Generator[Session, None, None]:
     tenant_id = get_current_tenant_id()
+    print(f"Retrieved tenant_id: {tenant_id}")
+
     if tenant_id == POSTGRES_DEFAULT_SCHEMA and MULTI_TENANT:
+        print("Authentication error: User must authenticate")
         raise BasicAuthenticationError(detail="User must authenticate")
 
     engine = get_sqlalchemy_engine()
+    print("SQLAlchemy engine obtained")
 
     with Session(engine, expire_on_commit=False) as session:
         if MULTI_TENANT:
+            print("MULTI_TENANT mode enabled")
             if not is_valid_schema_name(tenant_id):
+                print(f"Invalid tenant ID detected: {tenant_id}")
                 raise HTTPException(status_code=400, detail="Invalid tenant ID")
+            print(f"Setting search_path to tenant schema: {tenant_id}")
             session.execute(text(f'SET search_path = "{tenant_id}"'))
+        else:
+            print("MULTI_TENANT mode disabled")
         yield session
+        print("Session yielded and closed")
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

@@ -15,6 +15,12 @@ interface UserPreferences {
   temperature_override_enabled: boolean;
 }
 
+export interface MinimalUserInfo {
+  id: string;
+  email: string;
+  is_active: boolean;
+}
+
 export enum UserRole {
   LIMITED = "limited",
   BASIC = "basic",

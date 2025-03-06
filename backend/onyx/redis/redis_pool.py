@@ -315,13 +315,20 @@ async def retrieve_auth_token_data_from_redis(request: Request) -> dict | None:
 
     try:
         redis = await get_async_redis_connection()
-        redis_key = REDIS_AUTH_KEY_PREFIX + token
+        print("[Redis] Obtained async Redis connection")
+        redis_key = f"{REDIS_AUTH_KEY_PREFIX}{token}"
+        print(f"[Redis] Fetching token data for key: {redis_key}")
         token_data_str = await redis.get(redis_key)
+        print(
+            f"[Redis] Retrieved token data: {'found' if token_data_str else 'not found'}"
+        )
 
         if not token_data_str:
-            logger.debug(f"Token key {redis_key} not found or expired in Redis")
+            logger.debug(f"[Redis] Token key '{redis_key}' not found or expired")
             return None
 
+        print("[Redis] Decoding token data")
+        print(f"[Redis] Token data: {token_data_str}")
         return json.loads(token_data_str)
     except json.JSONDecodeError:
         logger.error("Error decoding token data from Redis")

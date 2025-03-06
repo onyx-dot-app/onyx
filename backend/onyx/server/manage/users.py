@@ -32,6 +32,7 @@ from onyx.auth.users import anonymous_user_enabled
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.auth.users import optional_minimal_user
 from onyx.auth.users import optional_user
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.app_configs import DEV_MODE
@@ -44,6 +45,7 @@ from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_total_users_count
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
+from onyx.db.models import MinimalUser
 from onyx.db.models import User
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
@@ -55,6 +57,7 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import MinimalUserInfo
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -532,6 +535,27 @@ def get_current_token_creation(
     except Exception as e:
         logger.error(f"Error fetching AccessToken: {e}")
         return None
+
+
+@router.get("/me-info")
+def verify_user_attempting_to_login(
+    request: Request,
+    user: MinimalUser | None = Depends(optional_minimal_user),
+    # db_session: Session = Depends(get_session),
+) -> MinimalUserInfo:
+    # Check if the authentication cookie exists
+    # Print cookie names for debugging
+    cookie_names = list(request.cookies.keys())
+    logger.info(f"Available cookies: {cookie_names}")
+
+    if not request.cookies.get(FASTAPI_USERS_AUTH_COOKIE_NAME):
+        raise HTTPException(status_code=401, detail="User not found")
+    # print("I AM IN THIS FUNCTION 4")
+    # if user is None:
+    #     print("I AM IN THIS FUNCTION 5")
+    #     raise HTTPException(status_code=401, detail="User not found")
+    # print("I AM IN THIS FUNCTION 6")
+    return MinimalUserInfo(id="", email="", is_active=True)
 
 
 @router.get("/me")

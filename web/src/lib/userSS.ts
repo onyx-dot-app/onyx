@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { User } from "./types";
+import { MinimalUserInfo, User } from "./types";
 import { buildUrl } from "./utilsSS";
 import { ReadonlyRequestCookies } from "next/dist/server/web/spec-extension/adapters/request-cookies";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
@@ -162,6 +162,30 @@ export const logoutSS = async (
     }
   }
 };
+export const getMinimalUserInfoSS =
+  async (): Promise<MinimalUserInfo | null> => {
+    try {
+      const response = await fetch(buildUrl("/me-info"), {
+        credentials: "include",
+        headers: {
+          cookie: (await cookies())
+            .getAll()
+            .map((cookie) => `${cookie.name}=${cookie.value}`)
+            .join("; "),
+        },
+
+        next: { revalidate: 0 },
+      });
+      if (!response.ok) {
+        console.error("Failed to fetch minimal user info");
+        return null;
+      }
+      return await response.json();
+    } catch (e) {
+      console.log(`Error fetching minimal user info: ${e}`);
+      return null;
+    }
+  };
 
 export const getCurrentUserSS = async (): Promise<User | null> => {
   try {

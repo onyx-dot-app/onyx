@@ -25,8 +25,11 @@ def add_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
     ) -> Response:
         try:
             if MULTI_TENANT:
+                print("Shold set tenant id")
                 tenant_id = await _get_tenant_id_from_request(request, logger)
+                print(f"Tenant id: {tenant_id}")
             else:
+                print("Should not set tenant id")
                 tenant_id = POSTGRES_DEFAULT_SCHEMA
 
             CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
@@ -64,8 +67,9 @@ async def _get_tenant_id_from_request(
 
     try:
         # Look up token data in Redis
-
+        print("I AM IN THIS FUNCTION 7")
         token_data = await retrieve_auth_token_data_from_redis(request)
+        print("I AM IN THIS FUNCTION 8")
 
         if not token_data:
             logger.debug(

@@ -10,6 +10,7 @@ from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
 from onyx.auth.users import current_user_with_expired_token
+from onyx.auth.users import optional_minimal_user
 from onyx.configs.app_configs import APP_API_PREFIX
 from onyx.server.onyx_api.ingestion import api_key_dep
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -114,6 +115,7 @@ def check_router_auth(
                     or depends_fn == current_user_with_expired_token
                     or depends_fn == current_chat_accesssible_user
                     or depends_fn == control_plane_dep
+                    or depends_fn == optional_minimal_user
                     or depends_fn == current_cloud_superuser
                 ):
                     found_auth = True

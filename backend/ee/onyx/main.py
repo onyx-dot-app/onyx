@@ -27,6 +27,7 @@ from ee.onyx.server.reporting.usage_export_api import router as usage_export_rou
 from ee.onyx.server.saml import router as saml_router
 from ee.onyx.server.seeding import seed_db
 from ee.onyx.server.tenants.api import router as tenants_router
+from ee.onyx.server.tenants.router import router as new_router
 from ee.onyx.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )
@@ -123,6 +124,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, user_group_router)
     # Analytics endpoints
     include_router_with_global_prefix_prepended(application, analytics_router)
+    include_router_with_global_prefix_prepended(application, new_router)
     include_router_with_global_prefix_prepended(application, query_history_router)
     # EE only backend APIs
     include_router_with_global_prefix_prepended(application, query_router)

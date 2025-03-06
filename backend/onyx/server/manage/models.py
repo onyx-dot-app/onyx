@@ -112,6 +112,12 @@ class UserInfo(BaseModel):
         )
 
 
+class MinimalUserInfo(BaseModel):
+    id: str
+    email: str
+    is_active: bool
+
+
 class UserByEmail(BaseModel):
     user_email: str
 
