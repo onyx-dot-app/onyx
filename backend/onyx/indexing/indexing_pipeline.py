@@ -485,7 +485,7 @@ def index_doc_batch(
             raise RuntimeError(
                 f"Some documents were not successfully indexed. "
                 f"Updatable IDs: {updatable_ids}, "
-                f"Returned IDs: {all_returned_doc_ids}"
+                f"Returned IDs: {all_returned_doc_ids}. "
                 "This should never happen."
             )
 
