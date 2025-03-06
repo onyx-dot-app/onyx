@@ -2318,3 +2318,16 @@ class TenantAnonymousUserPath(Base):
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
     )
+
+
+class AdditionalBase(DeclarativeBase):
+    __abstract__ = True
+
+
+class MinimalUser(SQLAlchemyBaseUserTableUUID, AdditionalBase):
+    # oauth_accounts: Mapped[list[OAuthAccount]] = relationship(
+    #     "OAuthAccount", lazy="joined", cascade="all, delete-orphan"
+    # )
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, native_enum=False, default=UserRole.BASIC)
+    )

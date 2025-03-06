@@ -14,8 +14,10 @@ from onyx.db.engine import get_sqlalchemy_engine
 logger = logging.getLogger(__name__)
 
 
-def run_alembic_migrations(schema_name: str) -> None:
-    logger.info(f"Starting Alembic migrations for schema: {schema_name}")
+def run_alembic_migrations(schema_name: str, target_revision: str = "head") -> None:
+    logger.info(
+        f"Starting Alembic migrations for schema: {schema_name} to target: {target_revision}"
+    )
 
     try:
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -37,11 +39,10 @@ def run_alembic_migrations(schema_name: str) -> None:
         alembic_cfg.cmd_opts.x = [f"schema={schema_name}"]  # type: ignore
 
         # Run migrations programmatically
-        command.upgrade(alembic_cfg, "head")
+        command.upgrade(alembic_cfg, target_revision)
 
-        # Run migrations programmatically
         logger.info(
-            f"Alembic migrations completed successfully for schema: {schema_name}"
+            f"Alembic migrations completed successfully for schema: {schema_name} to target: {target_revision}"
         )
 
     except Exception as e:

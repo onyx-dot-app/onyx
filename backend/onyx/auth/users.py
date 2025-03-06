@@ -90,6 +90,7 @@ from onyx.db.engine import get_async_session
 from onyx.db.engine import get_async_session_with_tenant
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
+from onyx.db.models import MinimalUser
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
 from onyx.db.users import get_user_by_email
@@ -186,6 +187,7 @@ def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
 
 
 def verify_email_is_invited(email: str) -> None:
+    return None
     whitelist = get_invited_users()
     if not whitelist:
         return
@@ -215,6 +217,7 @@ def verify_email_is_invited(email: str) -> None:
 
 
 def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
+    return None
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if not get_user_by_email(email, db_session):
             verify_email_is_invited(email)
@@ -235,6 +238,13 @@ def verify_email_domain(email: str) -> None:
             )
 
 
+class SimpleUserManager(UUIDIDMixin, BaseUserManager[MinimalUser, uuid.UUID]):
+    reset_password_token_secret = USER_AUTH_SECRET
+    verification_token_secret = USER_AUTH_SECRET
+    verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
+    user_db: SQLAlchemyUserDatabase[MinimalUser, uuid.UUID]
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
@@ -247,8 +257,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )(user_email)
         async with get_async_session_with_tenant(tenant_id) as db_session:
             if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
-                    db_session, User, OAuthAccount
+                tenant_user_db = SQLAlchemyUserAdminDB[MinimalUser, uuid.UUID](
+                    db_session, MinimalUser, OAuthAccount
                 )
                 user = await tenant_user_db.get_by_email(user_email)
             else:
@@ -277,7 +287,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             else None
         )
 
-        tenant_id = await fetch_ee_implementation_or_noop(
+        tenant_id, is_newly_created = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -309,7 +319,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 else:
                     user_create.role = UserRole.BASIC
             try:
-                user = await super().create(user_create, safe=safe, request=request)  # type: ignore
+                simple_tennat_user_db = SQLAlchemyUserAdminDB[MinimalUser, uuid.UUID](
+                    db_session, MinimalUser, OAuthAccount
+                )
+                user = await SimpleUserManager(simple_tennat_user_db).create(
+                    user_create, safe=safe, request=request
+                )  # type: ignore
             except exceptions.UserAlreadyExists:
                 user = await self.get_by_email(user_create.email)
                 # Handle case where user has used product outside of web and is now creating an account through web
@@ -374,7 +389,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             getattr(request.state, "referral_source", None) if request else None
         )
 
-        tenant_id = await fetch_ee_implementation_or_noop(
+        tenant_id, is_newly_created = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -511,7 +526,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
-        tenant_id = await fetch_ee_implementation_or_noop(
+        tenant_id, is_newly_created = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -563,7 +578,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 status.HTTP_500_INTERNAL_SERVER_ERROR,
                 "Your admin has not enabled this feature.",
             )
-        tenant_id = await fetch_ee_implementation_or_noop(
+        tenant_id, is_newly_created = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -587,8 +602,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> Optional[User]:
         email = credentials.username
 
-        # Get tenant_id from mapping table
-        tenant_id = await fetch_ee_implementation_or_noop(
+        # Get tenant_id from mapping
+        tenant_id, is_newly_created = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
@@ -709,7 +724,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
     async def write_token(self, user: User) -> str:
         redis = await get_async_redis_connection()
 
-        tenant_id = await fetch_ee_implementation_or_noop(
+        tenant_id, is_newly_created = await fetch_ee_implementation_or_noop(
             "onyx.server.tenants.provisioning",
             "get_or_provision_tenant",
             async_return_default_schema,
