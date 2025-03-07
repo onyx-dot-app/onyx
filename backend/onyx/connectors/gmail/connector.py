@@ -28,7 +28,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.models import SlimDocument
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -115,7 +115,7 @@ def _get_message_body(payload: dict[str, Any]) -> str:
     return message_body
 
 
-def message_to_section(message: Dict[str, Any]) -> tuple[Section, dict[str, str]]:
+def message_to_section(message: Dict[str, Any]) -> tuple[TextSection, dict[str, str]]:
     link = f"https://mail.google.com/mail/u/0/#inbox/{message['id']}"
 
     payload = message.get("payload", {})
@@ -142,7 +142,7 @@ def message_to_section(message: Dict[str, Any]) -> tuple[Section, dict[str, str]
 
     message_body_text: str = _get_message_body(payload)
 
-    return Section(link=link, text=message_body_text + message_data), metadata
+    return TextSection(link=link, text=message_body_text + message_data), metadata
 
 
 def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:

@@ -16,7 +16,7 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.vision_enabled_connector import VisionEnabledConnector
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
@@ -65,7 +65,7 @@ def _create_image_section(
     parent_file_name: str,
     display_name: str,
     idx: int = 0,
-) -> tuple[Section, str | None]:
+) -> tuple[TextSection, str | None]:
     """
     Create a Section object for a single image and store the image in PGFileStore.
     If summarization is enabled and we have an LLM, summarize the image.
@@ -207,7 +207,7 @@ def _process_file(
     sections = []
     link_in_meta = metadata.get("link")
     if text_content.strip():
-        sections.append(Section(link=link_in_meta, text=text_content.strip()))
+        sections.append(TextSection(link=link_in_meta, text=text_content.strip()))
 
     # Then any extracted images from docx, etc.
     for idx, (img_data, img_name) in enumerate(embedded_images, start=1):

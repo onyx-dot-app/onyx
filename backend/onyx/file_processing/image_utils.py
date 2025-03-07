@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.llm.interfaces import LLM
@@ -21,7 +21,7 @@ def store_image_and_create_section(
     media_type: str = "image/unknown",
     llm: LLM | None = None,
     file_origin: FileOrigin = FileOrigin.OTHER,
-) -> Tuple[Section, str | None]:
+) -> Tuple[TextSection, str | None]:
     """
     Stores an image in PGFileStore and creates a Section object with optional summarization.
 
@@ -55,7 +55,7 @@ def store_image_and_create_section(
         logger.error(f"Failed to store image: {e}")
         if not CONTINUE_ON_CONNECTOR_FAILURE:
             raise
-        return Section(text=""), None
+        return TextSection(text=""), None
 
     # Summarization logic
     summary_text = ""
@@ -65,6 +65,6 @@ def store_image_and_create_section(
         )
 
     return (
-        Section(text=summary_text, image_file_name=stored_file_name),
+        TextSection(text=summary_text, image_file_name=stored_file_name),
         stored_file_name,
     )

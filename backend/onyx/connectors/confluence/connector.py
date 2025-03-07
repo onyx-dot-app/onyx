@@ -33,7 +33,7 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.vision_enabled_connector import VisionEnabledConnector
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -245,12 +245,12 @@ class ConfluenceConnector(
             )
 
             # Create the main section for the page content
-            sections = [Section(text=page_content, link=page_url)]
+            sections = [TextSection(text=page_content, link=page_url)]
 
             # Process comments if available
             comment_text = self._get_comment_string_for_page_id(page_id)
             if comment_text:
-                sections.append(Section(text=comment_text, link=f"{page_url}#comments"))
+                sections.append(TextSection(text=comment_text, link=f"{page_url}#comments"))
 
             # Process attachments
             if "children" in page and "attachment" in page["children"]:
@@ -269,7 +269,7 @@ class ConfluenceConnector(
 
                     if result.text:
                         # Create a section for the attachment text
-                        attachment_section = Section(
+                        attachment_section = TextSection(
                             text=result.text,
                             link=f"{page_url}#attachment-{attachment['id']}",
                             image_file_name=result.file_name,
@@ -380,7 +380,7 @@ class ConfluenceConnector(
 
                     if content_text:
                         doc.sections.append(
-                            Section(
+                            TextSection(
                                 text=content_text,
                                 link=object_url,
                                 image_file_name=file_storage_name,

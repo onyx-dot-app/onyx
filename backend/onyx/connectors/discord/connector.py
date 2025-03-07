@@ -20,7 +20,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -32,7 +32,7 @@ _SNIPPET_LENGTH = 30
 
 def _convert_message_to_document(
     message: DiscordMessage,
-    sections: list[Section],
+    sections: list[TextSection],
 ) -> Document:
     """
     Convert a discord message to a document
@@ -123,8 +123,8 @@ async def _fetch_documents_from_channel(
         if channel_message.type != MessageType.default:
             continue
 
-        sections: list[Section] = [
-            Section(
+        sections: list[TextSection] = [
+            TextSection(
                 text=channel_message.content,
                 link=channel_message.jump_url,
             )
@@ -142,7 +142,7 @@ async def _fetch_documents_from_channel(
                 continue
 
             sections = [
-                Section(
+                TextSection(
                     text=thread_message.content,
                     link=thread_message.jump_url,
                 )
@@ -160,7 +160,7 @@ async def _fetch_documents_from_channel(
                 continue
 
             sections = [
-                Section(
+                TextSection(
                     text=thread_message.content,
                     link=thread_message.jump_url,
                 )

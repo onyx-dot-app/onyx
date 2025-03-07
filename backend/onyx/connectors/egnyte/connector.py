@@ -24,7 +24,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import detect_encoding
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -111,7 +111,7 @@ def _process_egnyte_file(
     # Create the document
     return Document(
         id=f"egnyte-{file_metadata['entry_id']}",
-        sections=[Section(text=file_content_raw.strip(), link=web_url)],
+        sections=[TextSection(text=file_content_raw.strip(), link=web_url)],
         source=DocumentSource.EGNYTE,
         semantic_identifier=file_name,
         metadata=metadata,

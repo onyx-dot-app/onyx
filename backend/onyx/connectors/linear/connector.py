@@ -21,7 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
@@ -241,13 +241,13 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                     Document(
                         id=node["id"],
                         sections=[
-                            Section(
+                            TextSection(
                                 link=node["url"],
                                 text=node["description"] or "",
                             )
                         ]
                         + [
-                            Section(
+                            TextSection(
                                 link=node["url"],
                                 text=comment["body"] or "",
                             )

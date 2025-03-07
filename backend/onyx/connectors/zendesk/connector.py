@@ -17,7 +17,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.models import SlimDocument
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -168,7 +168,7 @@ def _article_to_document(
     return new_author_mapping, Document(
         id=f"article:{article['id']}",
         sections=[
-            Section(
+            TextSection(
                 link=article.get("html_url"),
                 text=parse_html_page_basic(article["body"]),
             )
@@ -268,7 +268,7 @@ def _ticket_to_document(
 
     return new_author_mapping, Document(
         id=f"zendesk_ticket_{ticket['id']}",
-        sections=[Section(link=ticket_display_url, text=full_text)],
+        sections=[TextSection(link=ticket_display_url, text=full_text)],
         source=DocumentSource.ZENDESK,
         semantic_identifier=f"Ticket #{ticket['id']}: {subject or 'No Subject'}",
         doc_updated_at=update_time,

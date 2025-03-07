@@ -2,7 +2,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from tests.unit.onyx.indexing.conftest import MockHeartbeat
@@ -35,11 +35,11 @@ def test_chunk_document(embedder: DefaultIndexingEmbedder) -> None:
         metadata={"tags": ["tag1", "tag2"]},
         doc_updated_at=None,
         sections=[
-            Section(text=short_section_1, link="link1"),
-            Section(text=short_section_2, link="link2"),
-            Section(text=long_section, link="link3"),
-            Section(text=short_section_3, link="link4"),
-            Section(text=short_section_4, link="link5"),
+            TextSection(text=short_section_1, link="link1"),
+            TextSection(text=short_section_2, link="link2"),
+            TextSection(text=long_section, link="link3"),
+            TextSection(text=short_section_3, link="link4"),
+            TextSection(text=short_section_4, link="link5"),
         ],
     )
 
@@ -67,7 +67,7 @@ def test_chunker_heartbeat(
         metadata={"tags": ["tag1", "tag2"]},
         doc_updated_at=None,
         sections=[
-            Section(text="This is a short section.", link="link1"),
+            TextSection(text="This is a short section.", link="link1"),
         ],
     )
 

@@ -26,10 +26,18 @@ class ConnectorMissingCredentialError(PermissionError):
         )
 
 
-class Section(BaseModel):
+# class TextSection(BaseModel):
+#     text: str
+#     link: str | None = None
+#     image_file_name: str | None = None
+
+class TextSection(BaseModel):
     text: str
     link: str | None = None
-    image_file_name: str | None = None
+
+class ImageSection(TextSection):
+    link: str | None = None
+    image_file_name: str
 
 
 class BasicExpertInfo(BaseModel):
@@ -99,7 +107,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[Section]
+    sections: list[TextSection | ImageSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     metadata: dict[str, str | list[str]]

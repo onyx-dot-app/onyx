@@ -14,7 +14,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -45,7 +45,7 @@ _FIREFLIES_API_QUERY = """
 
 
 def _create_doc_from_transcript(transcript: dict) -> Document | None:
-    sections: List[Section] = []
+    sections: List[TextSection] = []
     current_speaker_name = None
     current_link = ""
     current_text = ""
@@ -57,7 +57,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
         if sentence["speaker_name"] != current_speaker_name:
             if current_speaker_name is not None:
                 sections.append(
-                    Section(
+                    TextSection(
                         link=current_link,
                         text=current_text.strip(),
                     )
@@ -71,7 +71,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
 
     # Sometimes these links (links with a timestamp) do not work, it is a bug with Fireflies.
     sections.append(
-        Section(
+        TextSection(
             link=current_link,
             text=current_text.strip(),
         )

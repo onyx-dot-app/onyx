@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 
 BASE_VIEW_ID = "viwVUEJjWPd8XYjh8"
 
@@ -76,11 +76,11 @@ def create_test_document(
     if not all_fields_as_metadata:
         sections.extend(
             [
-                Section(
+                TextSection(
                     text=f"Title:\n------------------------\n{title}\n------------------------",
                     link=f"{link_base}/{id}",
                 ),
-                Section(
+                TextSection(
                     text=f"Description:\n------------------------\n{description}\n------------------------",
                     link=f"{link_base}/{id}",
                 ),
@@ -90,7 +90,7 @@ def create_test_document(
     if attachments:
         for attachment_text, attachment_link in attachments:
             sections.append(
-                Section(
+                TextSection(
                     text=f"Attachment:\n------------------------\n{attachment_text}\n------------------------",
                     link=attachment_link,
                 ),

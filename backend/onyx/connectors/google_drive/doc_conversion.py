@@ -19,7 +19,7 @@ from onyx.connectors.google_drive.section_extraction import get_document_section
 from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.models import SlimDocument
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
@@ -67,7 +67,7 @@ def _extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
     image_analysis_llm: LLM | None = None,
-) -> list[Section]:
+) -> list[TextSection]:
     """
     Extends the existing logic to handle either a docx with embedded images
     or standalone images (PNG, JPG, etc).
@@ -96,7 +96,7 @@ def _extract_sections_basic(
         except Exception as e:
             logger.warning(f"Failed to fetch or summarize image: {e}")
             return [
-                Section(
+                TextSection(
                     link=link,
                     text="",
                     image_file_name=link,
@@ -105,7 +105,7 @@ def _extract_sections_basic(
 
     if mime_type not in supported_file_types:
         # Unsupported file types can still have a title, finding this way is still useful
-        return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
+        return [TextSection(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
 
     try:
         # ---------------------------
@@ -153,7 +153,7 @@ def _extract_sections_basic(
                             for row in values:
                                 text += "\t".join(str(cell) for cell in row) + "\n"
                             sections.append(
-                                Section(
+                                TextSection(
                                     link=f"{link}#gid={sheet_id}",
                                     text=text,
                                 )
@@ -189,7 +189,7 @@ def _extract_sections_basic(
                     # Work similarly to the xlsx_to_text function used for file connector
                     # but returns Sections instead of a string
                     sections = [
-                        Section(
+                        TextSection(
                             link=link,
                             text=(
                                 f"Sheet: {sheet.title}\n\n"
@@ -212,7 +212,7 @@ def _extract_sections_basic(
                     f"Error extracting data from Excel file '{file['name']}': {e}"
                 )
                 return [
-                    Section(link=link, text="Error extracting data from Excel file")
+                    TextSection(link=link, text="Error extracting data from Excel file")
                 ]
 
         # ---------------------------
@@ -233,7 +233,7 @@ def _extract_sections_basic(
                 .execute()
                 .decode("utf-8")
             )
-            return [Section(link=link, text=text)]
+            return [TextSection(link=link, text=text)]
 
         # ---------------------------
         # Plain text and Markdown files
@@ -244,7 +244,7 @@ def _extract_sections_basic(
             text_data = (
                 service.files().get_media(fileId=file["id"]).execute().decode("utf-8")
             )
-            return [Section(link=link, text=text_data)]
+            return [TextSection(link=link, text=text_data)]
 
         # ---------------------------
         # Word, PowerPoint, PDF files
@@ -261,7 +261,7 @@ def _extract_sections_basic(
                     file=io.BytesIO(response_bytes),
                     file_name=file_name,
                 )
-                return [Section(link=link, text=text)]
+                return [TextSection(link=link, text=text)]
 
             if mime_type == GDriveMimeType.WORD_DOC.value:
                 # Use docx_to_text_and_images to get text plus embedded images
@@ -270,7 +270,7 @@ def _extract_sections_basic(
                 )
                 sections = []
                 if text.strip():
-                    sections.append(Section(link=link, text=text.strip()))
+                    sections.append(TextSection(link=link, text=text.strip()))
 
                 # Process each embedded image using the standardized function
                 with get_session_with_current_tenant() as db_session:
@@ -293,11 +293,11 @@ def _extract_sections_basic(
 
             elif mime_type == GDriveMimeType.PDF.value:
                 text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_bytes))
-                return [Section(link=link, text=text)]
+                return [TextSection(link=link, text=text)]
 
             elif mime_type == GDriveMimeType.POWERPOINT.value:
                 text_data = pptx_to_text(io.BytesIO(response_bytes))
-                return [Section(link=link, text=text_data)]
+                return [TextSection(link=link, text=text_data)]
 
         # Catch-all case, should not happen since there should be specific handling
         # for each of the supported file types
@@ -307,7 +307,7 @@ def _extract_sections_basic(
 
     except Exception as e:
         logger.exception(f"Error extracting sections from file: {e}")
-        return [Section(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
+        return [TextSection(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
 
 
 def convert_drive_item_to_document(
@@ -327,7 +327,7 @@ def convert_drive_item_to_document(
             return None
 
         # If it's a Google Doc, we might do advanced parsing
-        sections: list[Section] = []
+        sections: list[TextSection] = []
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
                 # get_document_sections is the advanced approach for Google Docs
