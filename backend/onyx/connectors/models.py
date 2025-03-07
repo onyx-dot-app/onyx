@@ -37,12 +37,11 @@ class Section(BaseModel):
 
 
 class TextSection(BaseModel):
-    text: str
     link: str | None = None
-    image_file_name: str | None = None
 
 
-class ImageSection(TextSection):
+class ImageSection(BaseModel):
+    text: str
     image_file_name: str
 
 
