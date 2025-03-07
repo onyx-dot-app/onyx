@@ -180,7 +180,9 @@ def _convert_packet_stream_to_response(
                 agent_sub_queries[sub_query_id].sub_query += packet.sub_query
         elif isinstance(packet, ExtendedToolResponse):
             # we shouldn't get this ... it gets intercepted and translated to QADocsResponse
-            logger.warning("")
+            logger.warning(
+                "_convert_packet_stream_to_response: Unexpected chat packet type ExtendedToolResponse!"
+            )
         elif isinstance(packet, RefinedAnswerImprovement):
             response.agent_refined_answer_improvement = (
                 packet.refined_answer_improvement
