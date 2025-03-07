@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Plus, FolderOpen, Loader2 } from "lucide-react";
+import { Search, Plus, FolderOpen, Loader2, MessageSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { PageSelector } from "@/components/PageSelector";
@@ -269,22 +269,22 @@ export default function MyDocuments() {
   }, [folders, searchQuery, sortType]);
 
   return (
-    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-5xl flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14">
+    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14">
       <header className="flex w-full items-center justify-between gap-4 pt-2 -translate-y-px">
         <h1 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
-          Knowledge Groups
+          My Documents
         </h1>
         <div className="flex items-center gap-2">
           <CreateEntityModal
-            title="Create New Knowledge Group"
-            entityName="Knowledge Group"
+            title="Create New Folder"
+            entityName="Folder"
             open={isCreateFolderOpen}
             setOpen={setIsCreateFolderOpen}
             onSubmit={handleCreateFolder}
             trigger={
               <Button className="inline-flex items-center justify-center relative shrink-0 h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap pl-2 pr-3 gap-1">
                 <Plus className="h-5 w-5" />
-                New Group
+                New Folder
               </Button>
             }
           />
@@ -299,7 +299,7 @@ export default function MyDocuments() {
               </div>
               <input
                 type="text"
-                placeholder="Search groups..."
+                placeholder="Search documents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full placeholder:text-text-500 dark:placeholder:text-neutral-400 m-0 bg-transparent p-0 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
@@ -325,23 +325,34 @@ export default function MyDocuments() {
           {isLoading ? (
             <SkeletonLoader />
           ) : filteredFolders.length > 0 ? (
-            <div
-              className={`mt-4 grid gap-3 md:mt-8 ${
-                true ? "md:grid-cols-2" : ""
-              } md:gap-6 transition-all duration-300 ease-in-out`}
-            >
-              {filteredFolders.map((folder) => (
-                <SharedFolderItem
-                  key={folder.id}
-                  folder={folder}
-                  onClick={handleFolderClick}
-                  description={folder.description}
-                  lastUpdated={folder.created_at}
-                  onRename={() => onRenameItem(folder.id, folder.name, true)}
-                  onDelete={() => handleDeleteItem(folder.id, true)}
-                  onMove={() => handleMoveItem(folder.id, currentFolder, true)}
-                />
-              ))}
+            <div className="mt-6">
+              <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
+                <div className="w-[40%]">Name</div>
+                <div className="w-[30%]">Last Modified</div>
+                <div className="w-[30%]">Total Tokens</div>
+              </div>
+              <div className="flex flex-col">
+                {filteredFolders.map((folder) => (
+                  <SharedFolderItem
+                    key={folder.id}
+                    folder={{
+                      ...folder,
+                      tokens: folder.files.reduce(
+                        (acc, file) => acc + (file.token_count || 0),
+                        0
+                      ),
+                    }}
+                    onClick={handleFolderClick}
+                    description={folder.description}
+                    lastUpdated={folder.created_at}
+                    onRename={() => onRenameItem(folder.id, folder.name, true)}
+                    onDelete={() => handleDeleteItem(folder.id, true)}
+                    onMove={() =>
+                      handleMoveItem(folder.id, currentFolder, true)
+                    }
+                  />
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex flex-col items-center justify-center h-64">
@@ -354,24 +365,18 @@ export default function MyDocuments() {
               </p>
             </div>
           )}
-          <div className="mt-3 flex">
-            <div className="mx-auto">
-              <PageSelector
-                currentPage={page}
-                totalPages={Math.ceil((folders?.length || 0) / pageLimit)}
-                onPageChange={(newPage) => {
-                  setPage(newPage);
-                  window.scrollTo({
-                    top: 0,
-                    left: 0,
-                    behavior: "smooth",
-                  });
-                }}
-              />
-            </div>
-          </div>
         </div>
       </main>
+      {/* Chat Button (Fixed to bottom right) */}
+      <div className="fixed bottom-8 right-8">
+        <Button
+          size="lg"
+          className="shadow-lg rounded-full hover:shadow-xl transition-shadow"
+        >
+          <MessageSquare className="w-5 h-5" />
+          Chat with all My Documents
+        </Button>
+      </div>
     </div>
   );
 }

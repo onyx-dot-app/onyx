@@ -11,6 +11,7 @@ import {
   Router,
   X,
 } from "lucide-react";
+import { ContextUsage } from "./ContextUsage";
 import { SelectedItemsList } from "./SelectedItemsList";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -47,6 +48,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
+import { getTimeAgoString } from "@/lib/dateUtils";
 
 const DraggableItem: React.FC<{
   id: string;
@@ -73,8 +75,8 @@ const DraggableItem: React.FC<{
   };
 
   const selectedClassName = isSelected
-    ? "bg-neutral-200 border-neutral-300 shadow-sm"
-    : "hover:bg-neutral-100/70 dark:hover:bg-neutral-800/50";
+    ? "bg-[#f2f0e8]/50 dark:bg-[#1a1a1a]/50"
+    : "hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50";
 
   if (type === "folder") {
     return (
@@ -90,19 +92,37 @@ const DraggableItem: React.FC<{
     );
   }
 
+  const file = item as FileResponse;
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className={`flex items-center p-2 cursor-pointer rounded-md ${
-        isDragging ? "bg-neutral-200" : ""
-      } ${selectedClassName}`}
+      className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
       onClick={onClick}
     >
-      <FileIcon className="mr-2 text-neutral-500" />
-      <span className="text-sm font-medium">{(item as FileResponse).name}</span>
+      <div className="flex items-center flex-1 min-w-0">
+        <div className="flex items-center gap-3 w-[60%] min-w-0">
+          <FileIcon className="h-4 w-4 text-blue-400 dark:text-blue-300 shrink-0" />
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="truncate text-text-dark dark:text-text-dark">
+                  {file.name}
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>{file.name}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+
+        <div className="w-[40%] text-sm text-text-400 dark:text-neutral-400">
+          {file.lastModified && getTimeAgoString(new Date(file.lastModified))}
+        </div>
+      </div>
     </div>
   );
 };
@@ -116,20 +136,21 @@ const FilePickerFolderItem: React.FC<{
 }> = ({ folder, onClick, onSelect, isSelected, allFilesSelected }) => {
   const selectedClassName =
     isSelected || allFilesSelected
-      ? "from-[#f2f0e8]/80 to-[#F7F6F0] hover:from-[#f2f0e8] hover:to-[#F7F6F0] dark:from-neutral-800 dark:to-neutral-900 dark:hover:from-neutral-700 dark:hover:to-neutral-800"
-      : "from-neutral-100 to-neutral-50 border-neutral-300 shadow-sm dark:from-neutral-800 dark:to-neutral-700 dark:border-neutral-700";
+      ? "bg-[#f2f0e8]/50 dark:bg-[#1a1a1a]/50"
+      : "hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50";
 
   return (
     <div
-      className={`${selectedClassName} border border-neutral-50 hover:border-neutral-200 dark:border-neutral-700 dark:hover:border-neutral-600 text-md group relative flex cursor-pointer flex-col overflow-x-hidden text-ellipsis rounded-xl bg-gradient-to-b py-4 pl-5 pr-4 transition-all ease-in-out hover:shadow-sm active:scale-[0.99]`}
+      className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
       onClick={onClick}
     >
-      <div className="flex flex-col flex-1">
-        <div className="font-tiempos flex items-center justify-between">
+      <div className="flex items-center flex-1 min-w-0">
+        <div className="flex items-center gap-3 w-[60%] min-w-0">
+          <FolderIcon className="h-4 w-4 text-blue-400 dark:text-blue-300 shrink-0" />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-truncate text-text-dark dark:text-neutral-200 inline-block max-w-md">
+                <span className="truncate text-text-dark dark:text-text-dark">
                   {folder.name}
                 </span>
               </TooltipTrigger>
@@ -138,32 +159,28 @@ const FilePickerFolderItem: React.FC<{
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <Button
-            variant="ghost"
-            size="sm"
-            className={`ml-2 h-6 w-6 p-0 rounded-full opacity-80 hover:opacity-100 ${
-              isSelected || allFilesSelected
-                ? "text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                : "text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-            }`}
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect();
-            }}
-          >
-            {isSelected || allFilesSelected ? (
-              <X size={14} />
-            ) : (
-              <PlusIcon size={14} />
-            )}
-          </Button>
         </div>
-        {folder.description && (
-          <div className="text-text-400 dark:text-neutral-400 mt-1 line-clamp-2 text-xs">
-            {folder.description}
-          </div>
-        )}
+
+        <div className="w-[40%] pl-3 text-sm text-text-400 dark:text-neutral-400">
+          {folder.files.length} {folder.files.length === 1 ? "file" : "files"}
+        </div>
       </div>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="ml-2 h-6 w-6 p-0 rounded-full opacity-80 hover:opacity-100 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+      >
+        {isSelected || allFilesSelected ? (
+          <X size={14} />
+        ) : (
+          <PlusIcon size={14} />
+        )}
+      </Button>
     </div>
   );
 };
@@ -174,6 +191,12 @@ export interface FilePickerModalProps {
   onSave: () => void;
   title: string;
   buttonContent: string;
+}
+
+// Define a model descriptor interface
+interface LLMModelDescriptor {
+  modelName: string;
+  maxTokens: number;
 }
 
 export const FilePickerModal: React.FC<FilePickerModalProps> = ({
@@ -235,7 +258,15 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
   const { setPopup } = usePopup();
 
-  // Initialize selectedFileIds and selectedFolderIds based on props
+  // Create model descriptors and selectedModel state
+  const modelDescriptors: LLMModelDescriptor[] = [
+    { modelName: "Claude 3 Opus", maxTokens: 200000 },
+    { modelName: "Claude 3 Sonnet", maxTokens: 180000 },
+    { modelName: "GPT-4", maxTokens: 128000 },
+  ];
+
+  const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
+
   useEffect(() => {
     if (isOpen) {
       // Initialize selected file IDs
@@ -372,15 +403,21 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const selectedItems = useMemo(() => {
-    const items: { folders: FolderResponse[]; files: FileResponse[] } = {
+    const items: {
+      folders: FolderResponse[];
+      files: FileResponse[];
+      totalTokens: number;
+    } = {
       folders: [],
       files: [],
+      totalTokens: 0,
     };
 
     // First handle selected files that are not in any folder
     selectedFiles.forEach((file) => {
       if (!folders.some((f) => f.id === file.folder_id)) {
         items.files.push(file);
+        items.totalTokens += file.token_count || 0;
       }
     });
 
@@ -390,12 +427,18 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       if (isRecentFolder(folder.id)) {
         if (selectedFolderIds.has(folder.id)) {
           items.folders.push(folder);
+          folder.files.forEach((file) => {
+            items.totalTokens += file.token_count || 0;
+          });
         } else {
           // For the recent folder, include individually selected files
           const selectedFilesInFolder = folder.files.filter((file) =>
             selectedFileIds.has(file.id)
           );
           items.files.push(...selectedFilesInFolder);
+          selectedFilesInFolder.forEach((file) => {
+            items.totalTokens += file.token_count || 0;
+          });
         }
         return;
       }
@@ -403,6 +446,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       // For regular folders
       if (selectedFolderIds.has(folder.id)) {
         items.folders.push(folder);
+        folder.files.forEach((file) => {
+          items.totalTokens += file.token_count || 0;
+        });
       } else {
         const selectedFilesInFolder = folder.files.filter((file) =>
           selectedFileIds.has(file.id)
@@ -412,8 +458,14 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           folder.files.length > 0
         ) {
           items.folders.push(folder);
+          folder.files.forEach((file) => {
+            items.totalTokens += file.token_count || 0;
+          });
         } else {
           items.files.push(...selectedFilesInFolder);
+          selectedFilesInFolder.forEach((file) => {
+            items.totalTokens += file.token_count || 0;
+          });
         }
       }
     });
@@ -509,11 +561,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const filteredFolders = folders.filter(function (folder) {
-    return (
-      folder.name.toLowerCase().includes(searchQuery.toLowerCase()) &&
-      folder.files &&
-      folder.files.length > 0
-    );
+    return folder.name.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
   const renderNavigation = () => {
@@ -684,202 +732,238 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       className="max-w-4xl flex flex-col w-full !overflow-hidden h-[70vh]"
       title={title}
     >
-      <div className="grid h-full grid-cols-2 overflow-y-hidden w-full divide-x divide-neutral-200 dark:divide-neutral-700">
-        <div className="w-full h-full pb-4 overflow-y-auto">
-          <div className="sticky flex flex-col gap-y-2  bg-background dark:bg-transparent z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
-            <div className="w-full relative">
-              <input
-                type="text"
-                placeholder="Search groups..."
-                className="w-full pl-10 pr-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
+      <div className="flex flex-col h-full">
+        <div className="grid flex-1 overflow-y-hidden w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
+          <div className="w-full h-full pb-4 overflow-y-auto">
+            <div className="sticky flex flex-col gap-y-2  bg-background dark:bg-transparent z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
+              <div className="w-full relative">
+                <input
+                  type="text"
+                  placeholder="Search documents..."
+                  className="w-full pl-10 pr-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
 
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <svg
-                  className="h-5 w-5 text-text-dark dark:text-neutral-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <svg
+                    className="h-5 w-5 text-text-dark dark:text-neutral-400"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    />
+                  </svg>
+                </div>
+              </div>
+              {renderNavigation()}
+            </div>
+
+            {filteredFolders.length + currentFolderFiles.length > 0 ? (
+              <div className="flex-grow pr-4">
+                <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-3 text-sm font-medium text-text-400 dark:text-neutral-400">
+                  <div className="flex items-center gap-3 w-[60%] min-w-0">
+                    <span>Name</span>
+                  </div>
+                  <div className="w-[40%] ">
+                    {currentFolder === null ? "Files" : "Last Modified"}
+                  </div>
+                </div>
+
+                <DndContext
+                  sensors={sensors}
+                  onDragStart={handleDragStart}
+                  onDragMove={handleDragMove}
+                  onDragEnd={handleDragEnd}
+                  onDragCancel={handleDragCancel}
+                  collisionDetection={closestCenter}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  <SortableContext
+                    items={[
+                      ...filteredFolders.map((f) => `folder-${f.id}`),
+                      ...currentFolderFiles.map((f) => `file-${f.id}`),
+                    ]}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="overflow-y-auto space-y-3">
+                      {currentFolder === null
+                        ? filteredFolders.map((folder) => (
+                            <FilePickerFolderItem
+                              key={`folder-${folder.id}`}
+                              folder={folder}
+                              onClick={() => handleFolderClick(folder.id)}
+                              onSelect={() => handleFolderSelect(folder)}
+                              isSelected={selectedFolderIds.has(folder.id)}
+                              allFilesSelected={isAllFilesInFolderSelected(
+                                folder
+                              )}
+                            />
+                          ))
+                        : currentFolderFiles.map((file) => (
+                            <DraggableItem
+                              key={`file-${file.id}`}
+                              id={`file-${file.id}`}
+                              type="file"
+                              item={file}
+                              onClick={() => handleFileSelect(file)}
+                              isSelected={selectedFileIds.has(file.id)}
+                            />
+                          ))}
+                    </div>
+                  </SortableContext>
+
+                  <DragOverlay>
+                    {activeId ? (
+                      <DraggableItem
+                        id={activeId}
+                        type={activeId.startsWith("folder") ? "folder" : "file"}
+                        item={
+                          activeId.startsWith("folder")
+                            ? folders.find(
+                                (f) =>
+                                  f.id === parseInt(activeId.split("-")[1], 10)
+                              )!
+                            : currentFolderFiles.find(
+                                (f) =>
+                                  f.id === parseInt(activeId.split("-")[1], 10)
+                              )!
+                        }
+                        isSelected={
+                          activeId.startsWith("folder")
+                            ? selectedFolderIds.has(
+                                parseInt(activeId.split("-")[1], 10)
+                              )
+                            : selectedFileIds.has(
+                                parseInt(activeId.split("-")[1], 10)
+                              )
+                        }
+                      />
+                    ) : null}
+                  </DragOverlay>
+                </DndContext>
+              </div>
+            ) : folders.length > 0 ? (
+              <div className="flex-grow overflow-y-auto px-4">
+                <p className="text-text-subtle dark:text-neutral-400">
+                  No groups found
+                </p>
+              </div>
+            ) : (
+              <div className="flex-grow flex-col overflow-y-auto px-4 flex items-start justify-start gap-y-2">
+                <p className="text-sm text-muted-foreground dark:text-neutral-400">
+                  No groups found
+                </p>
+                <a
+                  href="/chat/user-knowledge"
+                  className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
+                >
+                  <FolderIcon className="mr-2 h-4 w-4" />
+                  Create folder in My Documents
+                </a>
+              </div>
+            )}
+          </div>
+          <div
+            className={`w-full h-full flex flex-col ${
+              isHoveringRight ? "bg-neutral-100 dark:bg-neutral-800/30" : ""
+            }`}
+            onDragEnter={() => setIsHoveringRight(true)}
+            onDragLeave={() => setIsHoveringRight(false)}
+          >
+            <div className="px-5 pb-5 flex-1 flex flex-col">
+              <div className="shrink flex h-full overflow-y-auto mb-3">
+                <SelectedItemsList
+                  folders={selectedItems.folders}
+                  files={selectedItems.files}
+                  onRemoveFile={handleRemoveFile}
+                  onRemoveFolder={handleRemoveFolder}
+                />
+              </div>
+
+              <div className="flex flex-col space-y-3">
+                <div className="p-4 flex-none border rounded-lg bg-neutral-50 hover:bg-neutral-100 transition-colors duration-150 dark:bg-neutral-800 dark:hover:bg-neutral-750 dark:border-neutral-700">
+                  <label
+                    htmlFor="file-upload"
+                    className="cursor-pointer flex items-center justify-center space-x-2"
+                  >
+                    <UploadIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
+                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
+                      {isUploadingFile ? "Uploading..." : "Upload files"}
+                    </span>
+                  </label>
+                  <input
+                    id="file-upload"
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={handleFileUpload}
+                    disabled={isUploadingFile}
                   />
-                </svg>
+                </div>
+
+                <Separator className="dark:bg-neutral-700" />
+
+                <div className="flex flex-col space-y-2">
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    Add links to the context
+                  </p>
+                  <form
+                    className="flex mt-1"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      handleCreateFileFromLink();
+                    }}
+                  >
+                    <div className="w-full flex items-center space-x-2">
+                      <input
+                        type="text"
+                        value={linkUrl}
+                        onChange={(e) => setLinkUrl(e.target.value)}
+                        placeholder="Enter URL"
+                        className="flex-grow text-sm px-3 py-1.5 border border-neutral-300 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-500"
+                      />
+                      <Button
+                        variant="default"
+                        className="text-sm h-8"
+                        size="sm"
+                        onClick={handleCreateFileFromLink}
+                        disabled={isCreatingFileFromLink || !linkUrl}
+                      >
+                        {isCreatingFileFromLink ? "Creating..." : "Create"}
+                      </Button>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
-            {renderNavigation()}
           </div>
-
-          {filteredFolders.length + currentFolderFiles.length > 0 ? (
-            <div className="flex-grow pr-4">
-              <DndContext
-                sensors={sensors}
-                onDragStart={handleDragStart}
-                onDragMove={handleDragMove}
-                onDragEnd={handleDragEnd}
-                onDragCancel={handleDragCancel}
-                collisionDetection={closestCenter}
-              >
-                <SortableContext
-                  items={[
-                    ...filteredFolders.map((f) => `folder-${f.id}`),
-                    ...currentFolderFiles.map((f) => `file-${f.id}`),
-                  ]}
-                  strategy={verticalListSortingStrategy}
-                >
-                  <div className="overflow-y-auto space-y-3">
-                    {currentFolder === null
-                      ? filteredFolders.map((folder) => (
-                          <FilePickerFolderItem
-                            key={`folder-${folder.id}`}
-                            folder={folder}
-                            onClick={() => handleFolderClick(folder.id)}
-                            onSelect={() => handleFolderSelect(folder)}
-                            isSelected={selectedFolderIds.has(folder.id)}
-                            allFilesSelected={isAllFilesInFolderSelected(
-                              folder
-                            )}
-                          />
-                        ))
-                      : currentFolderFiles.map((file) => (
-                          <DraggableItem
-                            key={`file-${file.id}`}
-                            id={`file-${file.id}`}
-                            type="file"
-                            item={file}
-                            onClick={() => handleFileSelect(file)}
-                            isSelected={selectedFileIds.has(file.id)}
-                          />
-                        ))}
-                  </div>
-                </SortableContext>
-
-                <DragOverlay>
-                  {activeId ? (
-                    <DraggableItem
-                      id={activeId}
-                      type={activeId.startsWith("folder") ? "folder" : "file"}
-                      item={
-                        activeId.startsWith("folder")
-                          ? folders.find(
-                              (f) =>
-                                f.id === parseInt(activeId.split("-")[1], 10)
-                            )!
-                          : currentFolderFiles.find(
-                              (f) =>
-                                f.id === parseInt(activeId.split("-")[1], 10)
-                            )!
-                      }
-                      isSelected={
-                        activeId.startsWith("folder")
-                          ? selectedFolderIds.has(
-                              parseInt(activeId.split("-")[1], 10)
-                            )
-                          : selectedFileIds.has(
-                              parseInt(activeId.split("-")[1], 10)
-                            )
-                      }
-                    />
-                  ) : null}
-                </DragOverlay>
-              </DndContext>
-            </div>
-          ) : folders.length > 0 ? (
-            <div className="flex-grow overflow-y-auto px-4">
-              <p className="text-text-subtle dark:text-neutral-400">
-                No groups found
-              </p>
-            </div>
-          ) : (
-            <div className="flex-grow flex-col overflow-y-auto px-4 flex items-start justify-start gap-y-2">
-              <p className="text-sm text-muted-foreground dark:text-neutral-400">
-                No groups found
-              </p>
-              <a
-                href="/chat/user-knowledge"
-                className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
-              >
-                <FolderIcon className="mr-2 h-4 w-4" />
-                Create folder in My Documents
-              </a>
-            </div>
-          )}
         </div>
-        <div
-          className={`w-full h-full px-5 pb-5 flex flex-col h-[450px] ${
-            isHoveringRight ? "bg-neutral-100 dark:bg-neutral-800/30" : ""
-          }`}
-          onDragEnter={() => setIsHoveringRight(true)}
-          onDragLeave={() => setIsHoveringRight(false)}
-        >
-          <div className="shrink flex h-full overflow-y-auto mb-3">
-            <SelectedItemsList
-              folders={selectedItems.folders}
-              files={selectedItems.files}
-              onRemoveFile={handleRemoveFile}
-              onRemoveFolder={handleRemoveFolder}
-            />
-          </div>
 
-          <div className="flex flex-col space-y-3">
-            <div className="p-4 flex-none border rounded-lg bg-neutral-50 hover:bg-neutral-100 transition-colors duration-150 dark:bg-neutral-800 dark:hover:bg-neutral-750 dark:border-neutral-700">
-              <label
-                htmlFor="file-upload"
-                className="cursor-pointer flex items-center justify-center space-x-2"
-              >
-                <UploadIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
-                <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                  {isUploadingFile ? "Uploading..." : "Upload files"}
-                </span>
-              </label>
-              <input
-                id="file-upload"
-                type="file"
-                multiple
-                className="hidden"
-                onChange={handleFileUpload}
-                disabled={isUploadingFile}
+        <div className="px-5 py-4 border-t border-neutral-200 dark:border-neutral-700">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">
+                Selected context:
+              </span>
+              <ContextUsage
+                totalTokens={selectedItems.totalTokens}
+                maxTokens={selectedModel.maxTokens}
+                modelName={selectedModel.modelName}
+                compact={true}
               />
             </div>
-
-            <Separator className="dark:bg-neutral-700" />
-
-            <div className="flex flex-col space-y-2">
-              <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                Add links to the context
-              </p>
-              <form
-                className="flex mt-1"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleCreateFileFromLink();
-                }}
-              >
-                <div className="w-full flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={linkUrl}
-                    onChange={(e) => setLinkUrl(e.target.value)}
-                    placeholder="Enter URL"
-                    className="flex-grow text-sm px-3 py-1.5 border border-neutral-300 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-500"
-                  />
-                  <Button
-                    variant="default"
-                    className="text-sm h-8"
-                    size="sm"
-                    onClick={handleCreateFileFromLink}
-                    disabled={isCreatingFileFromLink || !linkUrl}
-                  >
-                    {isCreatingFileFromLink ? "Creating..." : "Create"}
-                  </Button>
-                </div>
-              </form>
-            </div>
+            <Button
+              onClick={onSave}
+              disabled={selectedItems.totalTokens === 0}
+              className="px-6"
+            >
+              Set Context
+            </Button>
           </div>
         </div>
       </div>

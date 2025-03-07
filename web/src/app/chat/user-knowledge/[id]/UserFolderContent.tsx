@@ -12,14 +12,10 @@ import { Input } from "@/components/ui/input";
 import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { MoveFolderModal } from "@/components/MoveFolderModal";
 import { FolderResponse } from "../DocumentsContext";
-import { SharingPanel } from "./components/panels/SharingPanel";
-import { ContextLimitPanel } from "./components/panels/ContextLimitPanel";
-import { AddWebsitePanel } from "./components/panels/AddWebsitePanel";
-import { Textarea } from "@/components/ui/textarea";
+import { getDisplayNameForModel } from "@/lib/hooks";
 
 export default function UserFolderContent({ folderId }: { folderId: number }) {
   const router = useRouter();
-  const { assistants } = useAssistants();
   const { llmProviders } = useChatContext();
   const { popup, setPopup } = usePopup();
   const {
@@ -104,7 +100,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             view it.
           </p>
           <Button onClick={handleBack} variant="outline" className="mt-2">
-            Back to Knowledge Groups
+            Back to My Documents
           </Button>
         </div>
       </div>
@@ -160,12 +156,12 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     setNewItemName("");
   };
 
-  const handleEditDescription = () => {
-    if (folderDetails) {
-      setEditingDescription(true);
-      setNewDescription(folderDetails.description);
-    }
-  };
+  // const handleEditDescription = () => {
+  //   if (folderDetails) {
+  //     setEditingDescription(true);
+  //     setNewDescription(folderDetails.description);
+  //   }
+  // };
 
   const handleSaveDescription = async () => {
     if (folderDetails && newDescription !== folderDetails.description) {
@@ -274,7 +270,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   };
 
   return (
-    <div className="min-h-full w-full min-w-0 flex-1 mx-auto max-w-5xl px-4 pb-20 md:pl-8 mt-6 md:pr-8 2xl:pr-14">
+    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14 relative">
       {popup}
       {folderCreatedPopup}
       <DeleteEntityModal
@@ -291,121 +287,93 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         folders={folders}
         currentFolderId={folderId}
       />
-      <div className="flex justify-between w-full items-start mb-6">
-        <div className="flex flex-col w-full mr-4">
-          <div
-            className="flex w-fit text-sm mb-4 items-center cursor-pointer text-neutral-700 dark:text-neutral-300"
-            onClick={handleBack}
-          >
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to My Knowledge Groups
-          </div>
-          {editingItemId === folderDetails.id ? (
-            <div className="flex items-center">
-              <Input
-                value={newItemName}
-                onChange={(e) => setNewItemName(e.target.value)}
-                className="mr-2"
-              />
-              <Button
-                onClick={() => handleSaveRename(folderDetails.id, true)}
-                className="mr-2"
-              >
-                Save
-              </Button>
-              <Button onClick={handleCancelRename} variant="outline">
-                Cancel
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center">
+
+      <div className="flex flex-col w-full">
+        <div className="flex items-center mb-4">
+          <nav className="flex items-center text-sm">
+            <span
+              className="text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center"
+              onClick={handleBack}
+            >
+              My Documents
+            </span>
+            <span className="mx-2 text-neutral-500">/</span>
+            {editingItemId === folderDetails.id ? (
+              <div className="flex items-center">
+                <Input
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  className="mr-2 h-8"
+                />
+                <Button
+                  onClick={() => handleSaveRename(folderDetails.id, true)}
+                  className="mr-2 h-8 py-0"
+                  size="sm"
+                >
+                  Save
+                </Button>
+                <Button
+                  onClick={handleCancelRename}
+                  variant="outline"
+                  className="h-8 py-0"
+                  size="sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
               <h1
-                className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden cursor-pointer mr-4 text-neutral-900 dark:text-neutral-100"
+                className="text-neutral-900 dark:text-neutral-100 font-medium cursor-pointer"
                 onClick={() =>
                   handleRenameItem(folderDetails.id, folderDetails.name, true)
                 }
               >
                 {folderDetails.name}
               </h1>
-            </div>
-          )}
-
-          {editingDescription ? (
-            <div className="flex flex-col mb-4">
-              <Textarea
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.target.value)}
-                className="mb-2"
-                rows={3}
-              />
-              <div className="flex">
-                <Button onClick={handleSaveDescription} className="mr-2">
-                  Save
-                </Button>
-                <Button onClick={handleCancelDescription} variant="outline">
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <p
-              className="text-neutral-600 dark:text-neutral-200 mb-4 cursor-pointer"
-              onClick={handleEditDescription}
-            >
-              {folderDetails.description}
-            </p>
-          )}
-
-          <DocumentList
-            isLoading={false}
-            files={folderDetails.files}
-            onRename={handleRenameItem}
-            onDelete={handleDeleteItem}
-            onDownload={async (documentId: string) => {
-              const blob = await downloadItem(documentId);
-              const url = URL.createObjectURL(blob);
-              window.open(url, "_blank");
-            }}
-            onUpload={handleUpload}
-            onMove={handleMoveFile}
-            folders={folders}
-            disabled={folderDetails.id === -1}
-            editingItemId={editingItemId}
-            onSaveRename={handleSaveRename}
-            onCancelRename={handleCancelRename}
-            newItemName={newItemName}
-            setNewItemName={setNewItemName}
-          />
+            )}
+          </nav>
         </div>
 
-        <div className="w-[500px] bg-[#fff] dark:bg-neutral-800 mt-20 relative rounded-md border border-neutral-200 dark:border-neutral-700 overflow-hidden">
-          <ContextLimitPanel
-            isOpen={isCapacityOpen}
-            onToggle={() => setIsCapacityOpen(!isCapacityOpen)}
-            totalTokens={totalTokens}
-          />
+        {/* Status Bar */}
 
-          <SharingPanel
-            assistantIds={folderDetails.assistant_ids}
-            assistants={assistants}
-            isOpen={isSharedOpen}
-            onToggle={() => setIsSharedOpen(!isSharedOpen)}
-          />
+        {/* Upload Section */}
+        {/* Document List */}
+        <DocumentList
+          folderId={folderId}
+          isLoading={false}
+          files={folderDetails.files}
+          onRename={handleRenameItem}
+          onDelete={handleDeleteItem}
+          onDownload={async (documentId: string) => {
+            const blob = await downloadItem(documentId);
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank");
+          }}
+          onUpload={handleUpload}
+          onMove={handleMoveFile}
+          folders={folders}
+          disabled={folderDetails.id === -1}
+          editingItemId={editingItemId}
+          onSaveRename={handleSaveRename}
+          onCancelRename={handleCancelRename}
+          newItemName={newItemName}
+          setNewItemName={setNewItemName}
+          tokenPercentage={tokenPercentage}
+          totalTokens={totalTokens}
+          maxTokens={maxTokens}
+          selectedModelName={selectedModel.modelName}
+        />
 
-          <AddWebsitePanel
-            folderId={folderId}
-            onCreateFileFromLink={handleCreateFileFromLink}
-          />
-
-          <div className="p-4">
-            <Button
-              variant="default"
-              className="w-full"
-              onClick={handleStartChat}
-            >
-              <MessageSquare className="w-4 h-4 mr-2" />
-              Chat with This Group
-            </Button>
-          </div>
+        {/* Chat Button (Fixed to bottom right) */}
+        <div className="fixed bottom-8 right-8">
+          <Button
+            size="lg"
+            onClick={handleStartChat}
+            className="shadow-lg rounded-full hover:shadow-xl transition-shadow"
+          >
+            <MessageSquare className="w-5 h-5" />
+            Chat with this Folder
+          </Button>
         </div>
       </div>
     </div>

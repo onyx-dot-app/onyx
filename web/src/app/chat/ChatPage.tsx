@@ -2013,7 +2013,6 @@ export function ChatPage({
 
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   const [settingsToggled, setSettingsToggled] = useState(false);
-  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []

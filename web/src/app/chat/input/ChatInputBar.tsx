@@ -783,38 +783,15 @@ export function ChatInputBar({
 
             <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
               <div className="space-x-1 flex  px-4 ">
-                {retrievalEnabled ? (
-                  <ChatInputOption
-                    flexPriority="stiff"
-                    name="File"
-                    Icon={FiPlusCircle}
-                    onClick={() => {
-                      const input = document.createElement("input");
-                      input.type = "file";
-                      input.multiple = true;
-                      input.onchange = (event: any) => {
-                        const files = Array.from(
-                          event?.target?.files || []
-                        ) as File[];
-                        if (files.length > 0) {
-                          handleFileUpload(files);
-                        }
-                      };
-                      input.click();
-                    }}
-                    tooltipContent={"Upload files"}
-                  />
-                ) : (
-                  <ChatInputOption
-                    flexPriority="stiff"
-                    name="File"
-                    Icon={FiPlusCircle}
-                    onClick={() => {
-                      toggleDocSelection();
-                    }}
-                    tooltipContent={"Upload files and attach user files"}
-                  />
-                )}
+                <ChatInputOption
+                  flexPriority="stiff"
+                  name="File"
+                  Icon={FiPlusCircle}
+                  onClick={() => {
+                    toggleDocSelection();
+                  }}
+                  tooltipContent={"Upload files and attach user files"}
+                />
 
                 <LLMPopover
                   llmProviders={llmProviders}
