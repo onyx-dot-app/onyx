@@ -235,6 +235,8 @@ class Chunker:
         metadata_suffix_semantic: str = "",
         metadata_suffix_keyword: str = "",
         image_file_name: str | None = None,
+        doc_summary: str = "",
+        chunk_context: str = "",
     ) -> None:
         """
         Helper to create a new DocAwareChunk, append it to chunks_list.
@@ -252,6 +254,8 @@ class Chunker:
             metadata_suffix_keyword=metadata_suffix_keyword,
             mini_chunk_texts=self._get_mini_chunk_texts(text),
             large_chunk_id=None,
+            doc_summary=doc_summary,
+            chunk_context=chunk_context,
         )
         chunks_list.append(new_chunk)
 
@@ -271,27 +275,6 @@ class Chunker:
         chunks: list[DocAwareChunk] = []
         link_offsets: dict[int, str] = {}
         chunk_text = ""
-
-        def _create_chunk(
-            text: str,
-            links: dict[int, str],
-            is_continuation: bool = False,
-        ) -> DocAwareChunk:
-            return DocAwareChunk(
-                source_document=document,
-                chunk_id=len(chunks),
-                blurb=self._extract_blurb(text),
-                content=text,
-                source_links=links or {0: ""},
-                section_continuation=is_continuation,
-                title_prefix=title_prefix,
-                metadata_suffix_semantic=metadata_suffix_semantic,
-                metadata_suffix_keyword=metadata_suffix_keyword,
-                mini_chunk_texts=self._get_mini_chunk_texts(text),
-                large_chunk_id=None,
-                chunk_context="",
-                doc_summary="",
-            )
 
         section_link_text: str
 
@@ -467,7 +450,6 @@ class Chunker:
             metadata_suffix_semantic = ""
             metadata_tokens = 0
 
-        
         single_chunk_fits = True
         doc_token_count = 0
         if self.enable_contextual_rag:
