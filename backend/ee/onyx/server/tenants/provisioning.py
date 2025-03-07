@@ -60,8 +60,6 @@ async def get_or_provision_tenant(
     Get existing tenant ID for an email or create a new tenant if none exists.
     This function should only be called after we have verified we want this user's tenant to exist.
     It returns the tenant ID associated with the email, creating a new tenant if necessary.
-
-    Includes retry logic and improved error handling to address race conditions.
     """
     # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
@@ -79,58 +77,36 @@ async def get_or_provision_tenant(
         # User doesn't exist, so we need to create a new tenant or assign an existing one
         pass
 
-    # Maximum number of retries for tenant provisioning
-    max_retries = 3
-    retry_count = 0
-    last_error = None
+    try:
+        # Try to get a pre-provisioned tenant
+        tenant_id = await get_available_tenant()
 
-    while retry_count < max_retries:
-        try:
-            # Try to get a pre-provisioned tenant
-            tenant_id = await get_available_tenant()
-
+        if tenant_id:
+            # If we have a pre-provisioned tenant, assign it to the user
+            await assign_tenant_to_user(tenant_id, email, referral_source)
+            logger.info(f"Assigned pre-provisioned tenant {tenant_id} to user {email}")
+            return tenant_id
+        else:
+            # If no pre-provisioned tenant is available, create a new one on-demand
+            tenant_id = await create_tenant(email, referral_source)
             if tenant_id:
-                # If we have a pre-provisioned tenant, assign it to the user
-                await assign_tenant_to_user(tenant_id, email, referral_source)
-                logger.info(
-                    f"Assigned pre-provisioned tenant {tenant_id} to user {email}"
-                )
                 return tenant_id
-            else:
-                # If no pre-provisioned tenant is available, create a new one on-demand
-                tenant_id = await create_tenant(email, referral_source)
-                if tenant_id:
-                    return tenant_id
 
-            # If we reach here, something went wrong but didn't raise an exception
-            retry_count += 1
-            await asyncio.sleep(1)  # Short delay before retry
-
-        except Exception as e:
-            last_error = e
-            retry_count += 1
-            logger.warning(
-                f"Tenant provisioning attempt {retry_count} failed: {str(e)}. "
-                f"{'Retrying...' if retry_count < max_retries else 'Max retries reached.'}"
-            )
-            if retry_count < max_retries:
-                # Exponential backoff
-                await asyncio.sleep(2**retry_count)
-            else:
-                break
-
-    # If we've exhausted all retries, log and raise an exception
-    error_msg = f"Failed to provision tenant after {max_retries} attempts"
-    logger.error(error_msg, exc_info=last_error)
-    raise HTTPException(
-        status_code=500, detail="Failed to provision tenant. Please try again later."
-    )
+    except Exception as e:
+        # If we've encountered an error, log and raise an exception
+        error_msg = "Failed to provision tenant"
+        logger.error(error_msg, exc_info=e)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to provision tenant. Please try again later.",
+        )
 
 
 async def create_tenant(email: str, referral_source: str | None = None) -> str:
     """
     Create a new tenant on-demand when no pre-provisioned tenants are available.
     This is the fallback method when we can't use a pre-provisioned tenant.
+
     """
     tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
     logger.info(f"Creating new tenant {tenant_id} for user {email}")
