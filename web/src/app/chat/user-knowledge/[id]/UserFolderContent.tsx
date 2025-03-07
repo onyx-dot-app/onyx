@@ -270,7 +270,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   };
 
   return (
-    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14 relative">
+    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-6 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-7 md:pr-8 2xl:pr-14 relative">
       {popup}
       {folderCreatedPopup}
       <DeleteEntityModal
@@ -290,16 +290,16 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
       <div className="flex flex-col w-full">
         <div className="flex items-center mb-4">
-          <nav className="flex items-center text-sm">
+          <nav className="flex text-lg items-center">
             <span
-              className="text-neutral-700 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center"
+              className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
               onClick={handleBack}
             >
               My Documents
             </span>
             <span className="mx-2 text-neutral-500">/</span>
             {editingItemId === folderDetails.id ? (
-              <div className="flex items-center">
+              <div className="flex  -my-1 items-center">
                 <Input
                   value={newItemName}
                   onChange={(e) => setNewItemName(e.target.value)}
@@ -323,7 +323,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               </div>
             ) : (
               <h1
-                className="text-neutral-900 dark:text-neutral-100 font-medium cursor-pointer"
+                className="text-neutral-900 dark:text-neutral-100 font-medium cursor-pointer "
                 onClick={() =>
                   handleRenameItem(folderDetails.id, folderDetails.name, true)
                 }
@@ -361,7 +361,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           tokenPercentage={tokenPercentage}
           totalTokens={totalTokens}
           maxTokens={maxTokens}
-          selectedModelName={selectedModel.modelName}
+          selectedModelName={getDisplayNameForModel(selectedModel.modelName)}
         />
 
         {/* Chat Button (Fixed to bottom right) */}

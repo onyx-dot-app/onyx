@@ -37,10 +37,10 @@ interface DocumentListProps {
   newItemName: string;
   setNewItemName: React.Dispatch<React.SetStateAction<string>>;
   folderId: number;
-  tokenPercentage: number;
-  totalTokens: number;
-  maxTokens: number;
-  selectedModelName: string;
+  tokenPercentage?: number;
+  totalTokens?: number;
+  maxTokens?: number;
+  selectedModelName?: string;
 }
 
 export const DocumentList: React.FC<DocumentListProps> = ({
@@ -132,12 +132,21 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     <div className="w-full">
       {presentingDocument && (
         <TextView
-          presentingDocument={presentingDocument}
+          presentingDocument={{
+            semantic_identifier: presentingDocument.name,
+            document_id: presentingDocument.document_id,
+          }}
           onClose={() => setPresentingDocument(null)}
         />
       )}
 
-      <div className="">
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+          Documents in this Folder
+        </h2>
+      </div>
+
+      <div className="mb-6">
         <FileUploadSection
           disabled={disabled}
           disabledMessage={
@@ -150,11 +159,6 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           isUploading={uploadingFiles.length > 0}
           onUploadComplete={handleUploadComplete}
         />
-      </div>
-      <div className="flex mt-6 justify-between items-center">
-        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
-          Documents in this Folder
-        </h2>
       </div>
 
       <div className="flex items-center gap-6 my-2 border-neutral-200 dark:border-neutral-700 pb-4">
@@ -179,13 +183,14 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                 />
               </div>
               <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                {totalTokens.toLocaleString()} / {maxTokens.toLocaleString()}{" "}
-                tokens
+                {totalTokens?.toLocaleString() || "0"} /{" "}
+                {maxTokens?.toLocaleString() || "0"} tokens
               </span>
             </div>
           </div>
         </div>
       </div>
+
       <div className="space-y-2">
         {isLoading ? (
           Array.from({ length: 3 }).map((_, index) => (
@@ -232,21 +237,46 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             </div>
 
             {files.map((file) => (
-              <FileListItem
-                key={file.id}
-                file={file}
-                onRename={onRename}
-                onDelete={onDelete}
-                onDownload={onDownload}
-                onMove={onMove}
-                folders={folders}
-                editingItemId={editingItemId}
-                onSaveRename={onSaveRename}
-                onCancelRename={onCancelRename}
-                newItemName={newItemName}
-                setNewItemName={setNewItemName}
-                onView={() => setPresentingDocument(file)}
-              />
+              <div key={file.id}>
+                {editingItemId === file.id ? (
+                  <div className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <div className="flex-1 flex items-center gap-3">
+                      <Input
+                        value={newItemName}
+                        onChange={(e) => setNewItemName(e.target.value)}
+                        className="mr-2"
+                        autoFocus
+                      />
+                      <Button
+                        onClick={() => onSaveRename(file.id, false)}
+                        className="mr-2"
+                        size="sm"
+                      >
+                        Save
+                      </Button>
+                      <Button
+                        onClick={onCancelRename}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <FileListItem
+                    file={file}
+                    view="list"
+                    onRename={onRename}
+                    onDelete={onDelete}
+                    onDownload={onDownload}
+                    onMove={onMove}
+                    folders={folders}
+                    onSelect={() => setPresentingDocument(file)}
+                    isIndexed={file.indexed || false}
+                  />
+                )}
+              </div>
             ))}
 
             {files.length === 0 && uploadingFiles.length === 0 && (
