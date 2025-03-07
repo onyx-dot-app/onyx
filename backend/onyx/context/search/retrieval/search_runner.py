@@ -256,9 +256,15 @@ def retrieve_chunks(
                 continue
             simplified_queries.add(simplified_rephrase)
 
-            q_copy = query.copy(update={"query": rephrase}, deep=True)
-            q_copy.precomputed_query_embedding = (
-                None  # need to recompute for each rephrase
+            q_copy = query.model_copy(
+                update={
+                    "query": rephrase,
+                    # need to recompute for each rephrase
+                    # note that `SearchQuery` is a frozen model, so we can't update
+                    # it below
+                    "precomputed_query_embedding": None,
+                },
+                deep=True,
             )
             run_queries.append(
                 (
