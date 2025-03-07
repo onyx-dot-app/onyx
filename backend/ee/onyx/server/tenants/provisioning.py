@@ -131,8 +131,6 @@ async def create_tenant(email: str, referral_source: str | None = None) -> str:
     """
     Create a new tenant on-demand when no pre-provisioned tenants are available.
     This is the fallback method when we can't use a pre-provisioned tenant.
-
-    Includes improved transaction handling and error recovery.
     """
     tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
     logger.info(f"Creating new tenant {tenant_id} for user {email}")
@@ -143,28 +141,7 @@ async def create_tenant(email: str, referral_source: str | None = None) -> str:
 
         # Notify control plane if not already done in provision_tenant
         if not DEV_MODE and referral_source:
-            # Use retry logic for control plane notification
-            max_retries = 3
-            retry_count = 0
-
-            while retry_count < max_retries:
-                try:
-                    await notify_control_plane(tenant_id, email, referral_source)
-                    break  # Success, exit the retry loop
-                except Exception:
-                    retry_count += 1
-                    if retry_count >= max_retries:
-                        logger.exception(
-                            f"Failed to notify control plane after {max_retries} attempts"
-                        )
-                        # We don't want to fail the entire tenant creation if only the notification fails
-                        # Consider adding this to a queue for later retry
-                    else:
-                        # Exponential backoff for retries
-                        await asyncio.sleep(2**retry_count)
-                        logger.warning(
-                            f"Retrying control plane notification ({retry_count}/{max_retries})"
-                        )
+            await notify_control_plane(tenant_id, email, referral_source)
 
     except Exception as e:
         logger.exception(f"Tenant provisioning failed: {str(e)}")

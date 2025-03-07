@@ -8,7 +8,6 @@ import uuid
 from celery import shared_task
 from celery import Task
 from redis.lock import Lock as RedisLock
-from sqlalchemy.orm import Session
 
 from ee.onyx.server.tenants.provisioning import setup_tenant
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
@@ -20,7 +19,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.db.engine import get_sqlalchemy_engine
+from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.models import AvailableTenant
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.configs import MULTI_TENANT
@@ -70,7 +69,7 @@ def check_available_tenants(self: Task) -> None:
 
     try:
         # Get the current count of available tenants
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_with_shared_schema() as db_session:
             available_tenants_count = db_session.query(AvailableTenant).count()
 
         # Get the target number of available tenants
@@ -161,7 +160,7 @@ def pre_provision_tenant(self: Task) -> None:
 
         # Store the pre-provisioned tenant in the database
         task_logger.info(f"Storing pre-provisioned tenant '{tenant_id}' in database")
-        with Session(get_sqlalchemy_engine()) as db_session:
+        with get_session_with_shared_schema() as db_session:
             # Use a transaction to ensure atomicity
             db_session.begin()
             try:
