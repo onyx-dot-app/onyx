@@ -16,7 +16,7 @@ from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk
 from onyx.indexing.models import IndexingSetting
 from shared_configs.enums import RerankerProvider
-
+from shared_configs.model_server_models import Embedding
 
 MAX_METRICS_CONTENT = (
     200  # Just need enough characters to identify where in the doc the chunk is
@@ -151,6 +151,10 @@ class SearchRequest(ChunkContext):
     evaluation_type: LLMEvaluationType = LLMEvaluationType.UNSPECIFIED
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    precomputed_query_embedding: Embedding | None = None
+    precomputed_is_keyword: bool | None = None
+    precomputed_keywords: list[str] | None = None
+
 
 class SearchQuery(ChunkContext):
     "Processed Request that is directly passed to the SearchPipeline"
@@ -174,6 +178,8 @@ class SearchQuery(ChunkContext):
     num_hits: int = NUM_RETURNED_HITS
     offset: int = 0
     model_config = ConfigDict(frozen=True)
+
+    precomputed_query_embedding: Embedding | None = None
 
 
 class RetrievalDetails(ChunkContext):

@@ -66,9 +66,6 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 _SLIM_DOC_BATCH_SIZE = 5000
 
 _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT = [
-    "png",
-    "jpg",
-    "jpeg",
     "gif",
     "mp4",
     "mov",
@@ -240,7 +237,7 @@ class ConfluenceConnector(
             # Extract basic page information
             page_id = page["id"]
             page_title = page["title"]
-            page_url = f"{self.wiki_base}/wiki{page['_links']['webui']}"
+            page_url = f"{self.wiki_base}{page['_links']['webui']}"
 
             # Get the page content
             page_content = extract_text_from_confluence_html(
@@ -305,7 +302,7 @@ class ConfluenceConnector(
 
             # Create the document
             return Document(
-                id=build_confluence_document_id(self.wiki_base, page_id, self.is_cloud),
+                id=build_confluence_document_id(self.wiki_base, page["_links"]["webui"], self.is_cloud),
                 sections=sections,
                 source=DocumentSource.CONFLUENCE,
                 semantic_identifier=page_title,
@@ -376,7 +373,7 @@ class ConfluenceConnector(
                     content_text, file_storage_name = response
 
                     object_url = build_confluence_document_id(
-                        self.wiki_base, page["_links"]["webui"], self.is_cloud
+                        self.wiki_base, attachment["_links"]["webui"], self.is_cloud
                     )
 
                     if content_text:

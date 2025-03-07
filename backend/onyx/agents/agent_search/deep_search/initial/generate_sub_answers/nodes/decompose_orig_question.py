@@ -34,6 +34,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQuestionPiece
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_SUBQUESTION_GENERATION
 from onyx.configs.agent_configs import AGENT_NUM_DOCS_FOR_DECOMPOSITION
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION,
@@ -141,6 +142,7 @@ def decompose_orig_question(
             model.stream(
                 msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION,
+                max_tokens=AGENT_MAX_TOKENS_SUBQUESTION_GENERATION,
             ),
             dispatch_subquestion(0, writer),
             sep_callback=dispatch_subquestion_sep(0, writer),

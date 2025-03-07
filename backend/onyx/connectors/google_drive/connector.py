@@ -316,7 +316,9 @@ class GoogleDriveConnector(
         # validate that the user has access to the drive APIs by performing a simple
         # request and checking for a 401
         try:
-            retry_builder()(get_root_folder_id)(drive_service)
+            # default is ~17mins of retries, don't do that here for cases so we don't
+            # waste 17mins everytime we run into a user without access to drive APIs
+            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
         except HttpError as e:
             if e.status_code == 401:
                 # fail gracefully, let the other impersonations continue

@@ -190,10 +190,12 @@ export const connectorConfigs: Record<
             fields: [
               {
                 type: "text",
-                query: "Enter the repository name:",
-                label: "Repository Name",
-                name: "repo_name",
+                query: "Enter the repository name(s):",
+                label: "Repository Name(s)",
+                name: "repositories",
                 optional: false,
+                description:
+                  "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)",
               },
             ],
           },
@@ -1358,7 +1360,7 @@ export interface WebConfig {
 
 export interface GithubConfig {
   repo_owner: string;
-  repo_name: string;
+  repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
 }

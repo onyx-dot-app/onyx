@@ -9,18 +9,23 @@ from onyx.agents.agent_search.basic.states import BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContexts
 from onyx.tools.tool_implementations.search.search_tool import (
-    SEARCH_DOC_CONTENT_ID,
+    SEARCH_RESPONSE_SUMMARY_ID,
+)
+from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
+from onyx.tools.tool_implementations.search.search_utils import (
+    context_from_inference_section,
 )
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
 
 
+@log_function_time(print_only=True)
 def basic_use_tool_response(
     state: BasicState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> BasicOutput:
@@ -50,11 +55,13 @@ def basic_use_tool_response(
     for yield_item in tool_call_responses:
         if yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID:
             final_search_results = cast(list[LlmDoc], yield_item.response)
-        elif yield_item.id == SEARCH_DOC_CONTENT_ID:
-            search_contexts = cast(OnyxContexts, yield_item.response).contexts
-            for doc in search_contexts:
-                if doc.document_id not in initial_search_results:
-                    initial_search_results.append(doc)
+        elif yield_item.id == SEARCH_RESPONSE_SUMMARY_ID:
+            search_response_summary = cast(SearchResponseSummary, yield_item.response)
+            for section in search_response_summary.top_sections:
+                if section.center_chunk.document_id not in initial_search_results:
+                    initial_search_results.append(
+                        context_from_inference_section(section)
+                    )
 
     new_tool_call_chunk = AIMessageChunk(content="")
     if not agent_config.behavior.skip_gen_ai_answer_generation:

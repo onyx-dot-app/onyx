@@ -464,12 +464,29 @@ def index_doc_batch(
             ),
         )
 
-        successful_doc_ids = {record.document_id for record in insertion_records}
-        if successful_doc_ids != set(updatable_ids):
+        all_returned_doc_ids = (
+            {record.document_id for record in insertion_records}
+            .union(
+                {
+                    record.failed_document.document_id
+                    for record in vector_db_write_failures
+                    if record.failed_document
+                }
+            )
+            .union(
+                {
+                    record.failed_document.document_id
+                    for record in embedding_failures
+                    if record.failed_document
+                }
+            )
+        )
+        if all_returned_doc_ids != set(updatable_ids):
             raise RuntimeError(
                 f"Some documents were not successfully indexed. "
                 f"Updatable IDs: {updatable_ids}, "
-                f"Successful IDs: {successful_doc_ids}"
+                f"Returned IDs: {all_returned_doc_ids}. "
+                "This should never happen."
             )
 
         last_modified_ids = []

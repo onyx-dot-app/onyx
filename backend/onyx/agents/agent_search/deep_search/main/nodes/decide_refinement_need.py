@@ -50,13 +50,7 @@ def decide_refinement_need(
         )
     ]
 
-    if graph_config.behavior.allow_refinement:
-        return RequireRefinemenEvalUpdate(
-            require_refined_answer_eval=decision,
-            log_messages=log_messages,
-        )
-    else:
-        return RequireRefinemenEvalUpdate(
-            require_refined_answer_eval=False,
-            log_messages=log_messages,
-        )
+    return RequireRefinemenEvalUpdate(
+        require_refined_answer_eval=graph_config.behavior.allow_refinement and decision,
+        log_messages=log_messages,
+    )

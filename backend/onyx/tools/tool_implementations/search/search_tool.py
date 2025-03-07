@@ -3,6 +3,7 @@ from collections.abc import Callable
 from collections.abc import Generator
 from typing import Any
 from typing import cast
+from typing import TypeVar
 
 from sqlalchemy.orm import Session
 
@@ -11,7 +12,6 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContext
 from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
@@ -42,6 +42,9 @@ from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
+from onyx.tools.tool_implementations.search.search_utils import (
+    context_from_inference_section,
+)
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     build_next_prompt_for_search_like_tool,
@@ -281,16 +284,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self, override_kwargs: SearchToolOverrideKwargs | None = None, **llm_kwargs: Any
     ) -> Generator[ToolResponse, None, None]:
         query = cast(str, llm_kwargs[QUERY_FIELD])
+        precomputed_query_embedding = None
+        precomputed_is_keyword = None
+        precomputed_keywords = None
         force_no_rerank = False
         alternate_db_session = None
         retrieved_sections_callback = None
         skip_query_analysis = False
         if override_kwargs:
-            force_no_rerank = override_kwargs.force_no_rerank
+            force_no_rerank = use_alt_not_None(override_kwargs.force_no_rerank, False)
             alternate_db_session = override_kwargs.alternate_db_session
             retrieved_sections_callback = override_kwargs.retrieved_sections_callback
-            skip_query_analysis = override_kwargs.skip_query_analysis
-
+            skip_query_analysis = use_alt_not_None(
+                override_kwargs.skip_query_analysis, False
+            )
+            precomputed_query_embedding = override_kwargs.precomputed_query_embedding
+            precomputed_is_keyword = override_kwargs.precomputed_is_keyword
+            precomputed_keywords = override_kwargs.precomputed_keywords
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
             return
@@ -327,6 +337,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     if self.retrieval_options
                     else None
                 ),
+                precomputed_query_embedding=precomputed_query_embedding,
+                precomputed_is_keyword=precomputed_is_keyword,
+                precomputed_keywords=precomputed_keywords,
             ),
             user=self.user,
             llm=self.llm,
@@ -345,8 +358,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         yield from yield_search_responses(
             query,
-            search_pipeline.reranked_sections,
-            search_pipeline.final_context_sections,
+            lambda: search_pipeline.retrieved_sections,
+            lambda: search_pipeline.reranked_sections,
+            lambda: search_pipeline.final_context_sections,
             search_query_info,
             lambda: search_pipeline.section_relevance,
             self,
@@ -383,10 +397,16 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 # SearchTool passed in to allow for access to SearchTool properties.
 # We can't just call SearchTool methods in the graph because we're operating on
 # the retrieved docs (reranking, deduping, etc.) after the SearchTool has run.
+#
+# The various inference sections are passed in as functions to allow for lazy
+# evaluation. The SearchPipeline object properties that they correspond to are
+# actually functions defined with @property decorators, and passing them into
+# this function causes them to get evaluated immediately which is undesirable.
 def yield_search_responses(
     query: str,
-    reranked_sections: list[InferenceSection],
-    final_context_sections: list[InferenceSection],
+    get_retrieved_sections: Callable[[], list[InferenceSection]],
+    get_reranked_sections: Callable[[], list[InferenceSection]],
+    get_final_context_sections: Callable[[], list[InferenceSection]],
     search_query_info: SearchQueryInfo,
     get_section_relevance: Callable[[], list[SectionRelevancePiece] | None],
     search_tool: SearchTool,
@@ -395,7 +415,7 @@ def yield_search_responses(
         id=SEARCH_RESPONSE_SUMMARY_ID,
         response=SearchResponseSummary(
             rephrased_query=query,
-            top_sections=final_context_sections,
+            top_sections=get_retrieved_sections(),
             predicted_flow=QueryFlow.QUESTION_ANSWER,
             predicted_search=search_query_info.predicted_search,
             final_filters=search_query_info.final_filters,
@@ -407,13 +427,8 @@ def yield_search_responses(
         id=SEARCH_DOC_CONTENT_ID,
         response=OnyxContexts(
             contexts=[
-                OnyxContext(
-                    content=section.combined_content,
-                    document_id=section.center_chunk.document_id,
-                    semantic_identifier=section.center_chunk.semantic_identifier,
-                    blurb=section.center_chunk.blurb,
-                )
-                for section in reranked_sections
+                context_from_inference_section(section)
+                for section in get_reranked_sections()
             ]
         ),
     )
@@ -424,6 +439,7 @@ def yield_search_responses(
         response=section_relevance,
     )
 
+    final_context_sections = get_final_context_sections()
     pruned_sections = prune_sections(
         sections=final_context_sections,
         section_relevance_list=section_relevance_list_impl(
@@ -438,3 +454,10 @@ def yield_search_responses(
     llm_docs = [llm_doc_from_inference_section(section) for section in pruned_sections]
 
     yield ToolResponse(id=FINAL_CONTEXT_DOCUMENTS_ID, response=llm_docs)
+
+
+T = TypeVar("T")
+
+
+def use_alt_not_None(value: T | None, alt: T) -> T:
+    return value if value is not None else alt

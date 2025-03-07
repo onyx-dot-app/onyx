@@ -61,6 +61,7 @@ export function EmailPasswordForm({
 
             if (!response.ok) {
               setIsWorking(false);
+
               const errorDetail = (await response.json()).detail;
               let errorMsg = "Unknown error";
               if (typeof errorDetail === "object" && errorDetail.reason) {
@@ -96,12 +97,13 @@ export function EmailPasswordForm({
           } else {
             setIsWorking(false);
             const errorDetail = (await loginResponse.json()).detail;
-
             let errorMsg = "Unknown error";
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
               errorMsg = "Invalid email or password";
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
               errorMsg = "Create an account to set a password";
+            } else if (typeof errorDetail === "string") {
+              errorMsg = errorDetail;
             }
             if (loginResponse.status === 429) {
               errorMsg = "Too many requests. Please try again later.";

@@ -587,14 +587,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> Optional[User]:
         email = credentials.username
 
-        # Get tenant_id from mapping table
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(
-            email=email,
-        )
+        tenant_id: str | None = None
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.provisioning",
+                "get_tenant_id_for_email",
+                None,
+            )(
+                email=email,
+            )
+        except Exception as e:
+            logger.warning(
+                f"User attempted to login with invalid credentials: {str(e)}"
+            )
+
         if not tenant_id:
             # User not found in mapping
             self.password_helper.hash(credentials.password)

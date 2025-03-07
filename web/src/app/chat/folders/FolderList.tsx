@@ -303,7 +303,6 @@ const FolderItem = ({
               key={chatSession.id}
               chatSession={chatSession}
               isSelected={chatSession.id === currentChatId}
-              skipGradient={isDragOver}
               showShareModal={showShareModal}
               showDeleteModal={showDeleteModal}
             />

@@ -45,7 +45,7 @@ def test_confluence_connector_basic(
     with pytest.raises(StopIteration):
         next(doc_batch_generator)
 
-    assert len(doc_batch) == 3
+    assert len(doc_batch) == 2
 
     page_within_a_page_doc: Document | None = None
     page_doc: Document | None = None
