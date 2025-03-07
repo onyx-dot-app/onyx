@@ -511,28 +511,8 @@ async def assign_tenant_to_user(
             )
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
-        raise HTTPException(status_code=500, detail="Failed to assign tenant to user")
+        raise Exception("Failed to assign tenant to user")
 
     # Notify control plane with retry logic
     if not DEV_MODE:
-        max_retries = 3
-        retry_count = 0
-
-        while retry_count < max_retries:
-            try:
-                await notify_control_plane(tenant_id, email, referral_source)
-                break  # Success, exit the retry loop
-            except Exception:
-                retry_count += 1
-                if retry_count >= max_retries:
-                    logger.exception(
-                        f"Failed to notify control plane after {max_retries} attempts"
-                    )
-                    # Consider implementing a background task to retry later or
-                    # add to a dead letter queue for manual intervention
-                else:
-                    # Exponential backoff for retries
-                    await asyncio.sleep(2**retry_count)
-                    logger.warning(
-                        f"Retrying control plane notification ({retry_count}/{max_retries})"
-                    )
+        await notify_control_plane(tenant_id, email, referral_source)
