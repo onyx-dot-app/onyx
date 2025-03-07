@@ -3,6 +3,7 @@ import json
 import os
 from typing import cast
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from onyx.access.models import default_public_access
@@ -23,6 +24,7 @@ from onyx.db.document import check_docs_exist
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.index_attempt import mock_successful_index_attempt
+from onyx.db.models import Document as DbDocument
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import IndexBatchParams
@@ -35,13 +37,15 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.documents.models import ConnectorBase
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
 
 def _create_indexable_chunks(
     preprocessed_docs: list[dict],
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> tuple[list[Document], list[DocMetadataAwareIndexChunk]]:
     ids_to_documents = {}
     chunks = []
@@ -59,9 +63,10 @@ def _create_indexable_chunks(
             doc_updated_at=None,
             primary_owners=[],
             secondary_owners=[],
+            chunk_count=preprocessed_doc["chunk_ind"] + 1,
         )
-        if preprocessed_doc["chunk_ind"] == 0:
-            ids_to_documents[document.id] = document
+
+        ids_to_documents[document.id] = document
 
         chunk = DocMetadataAwareIndexChunk(
             chunk_id=preprocessed_doc["chunk_ind"],
@@ -83,12 +88,13 @@ def _create_indexable_chunks(
                 mini_chunk_embeddings=[],
             ),
             title_embedding=preprocessed_doc["title_embedding"],
-            tenant_id=tenant_id,
+            tenant_id=tenant_id if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA,
             access=default_public_access,
             document_sets=set(),
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
         )
+
         chunks.append(chunk)
 
     return list(ids_to_documents.values()), chunks
@@ -107,7 +113,7 @@ def load_processed_docs(cohere_enabled: bool) -> list[dict]:
 
 
 def seed_initial_documents(
-    db_session: Session, tenant_id: str | None, cohere_enabled: bool = False
+    db_session: Session, tenant_id: str, cohere_enabled: bool = False
 ) -> None:
     """
     Seed initial documents so users don't have an empty index to start
@@ -155,9 +161,7 @@ def seed_initial_documents(
         logger.info("Embedding model has been updated, skipping")
         return
 
-    document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name, secondary_index_name=None
-    )
+    document_index = get_default_document_index(search_settings, None)
 
     # Create a connector so the user can delete it if they want
     # or reindex it with a new search model if they want
@@ -191,6 +195,7 @@ def seed_initial_documents(
         last_successful_index_time=last_index_time,
         seeding_flow=True,
     )
+
     cc_pair_id = cast(int, result.data)
     processed_docs = fetch_versioned_implementation(
         "onyx.seeding.load_docs",
@@ -240,4 +245,13 @@ def seed_initial_documents(
         db_session=db_session,
     )
 
+    # Since we bypass the indexing flow, we need to manually update the chunk count
+    for doc in docs:
+        db_session.execute(
+            update(DbDocument)
+            .where(DbDocument.id == doc.id)
+            .values(chunk_count=doc.chunk_count)
+        )
+
+    db_session.commit()
     kv_store.store(KV_DOCUMENTS_SEEDED_KEY, True)

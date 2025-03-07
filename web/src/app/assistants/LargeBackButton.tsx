@@ -8,7 +8,7 @@ export function LargeBackButton() {
   return (
     <div className="cursor-pointer" onClick={() => router.back()}>
       <FiChevronLeft
-        className="mr-1 my-auto p-1 hover:bg-hover rounded cursor-pointer"
+        className="mr-1 my-auto p-1 hover:bg-accent-background-hovered rounded cursor-pointer"
         size={32}
       />
     </div>

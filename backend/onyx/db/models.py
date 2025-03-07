@@ -148,10 +148,12 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     putting here for simpicity
     """
 
-    # if specified, controls the assistants that are shown to the user + their order
-    # if not specified, all assistants are shown
-    auto_scroll: Mapped[bool] = mapped_column(Boolean, default=True)
-    shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    temperature_override_enabled: Mapped[bool | None] = mapped_column(
+        Boolean, default=None
+    )
+    auto_scroll: Mapped[bool | None] = mapped_column(Boolean, default=None)
+    shortcut_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+
     chosen_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )
@@ -161,9 +163,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     hidden_assistants: Mapped[list[int]] = mapped_column(
         postgresql.JSONB(), nullable=False, default=[]
     )
-    recent_assistants: Mapped[list[dict]] = mapped_column(
-        postgresql.JSONB(), nullable=False, default=list, server_default="[]"
-    )
+
     pinned_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )
@@ -204,6 +204,13 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
+
+    @property
+    def password_configured(self) -> bool:
+        """
+        Returns True if the user has at least one OAuth (or OIDC) account.
+        """
+        return not bool(self.oauth_accounts)
 
 
 class AccessToken(SQLAlchemyBaseAccessTokenTableUUID, Base):
@@ -326,13 +333,26 @@ class ChatMessage__SearchDoc(Base):
     )
 
 
+class AgentSubQuery__SearchDoc(Base):
+    __tablename__ = "agent__sub_query__search_doc"
+
+    sub_query_id: Mapped[int] = mapped_column(
+        ForeignKey("agent__sub_query.id"), primary_key=True
+    )
+    search_doc_id: Mapped[int] = mapped_column(
+        ForeignKey("search_doc.id"), primary_key=True
+    )
+
+
 class Document__Tag(Base):
     __tablename__ = "document__tag"
 
     document_id: Mapped[str] = mapped_column(
         ForeignKey("document.id"), primary_key=True
     )
-    tag_id: Mapped[int] = mapped_column(ForeignKey("tag.id"), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(
+        ForeignKey("tag.id"), primary_key=True, index=True
+    )
 
 
 class Persona__Tool(Base):
@@ -473,6 +493,10 @@ class ConnectorCredentialPair(Base):
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
     )
 
+    background_errors: Mapped[list["BackgroundError"]] = relationship(
+        "BackgroundError", back_populates="cc_pair", cascade="all, delete-orphan"
+    )
+
 
 class Document(Base):
     __tablename__ = "document"
@@ -544,6 +568,14 @@ class Document(Base):
         "Tag",
         secondary=Document__Tag.__table__,
         back_populates="documents",
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_document_sync_status",
+            last_modified,
+            last_synced,
+        ),
     )
 
 
@@ -747,6 +779,34 @@ class SearchSettings(Base):
     def api_key(self) -> str | None:
         return self.cloud_provider.api_key if self.cloud_provider is not None else None
 
+    @property
+    def large_chunks_enabled(self) -> bool:
+        """
+        Given multipass usage and an embedder, decides whether large chunks are allowed
+        based on model/provider constraints.
+        """
+        # Only local models that support a larger context are from Nomic
+        # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+        return SearchSettings.can_use_large_chunks(
+            self.multipass_indexing, self.model_name, self.provider_type
+        )
+
+    @staticmethod
+    def can_use_large_chunks(
+        multipass: bool, model_name: str, provider_type: EmbeddingProvider | None
+    ) -> bool:
+        """
+        Given multipass usage and an embedder, decides whether large chunks are allowed
+        based on model/provider constraints.
+        """
+        # Only local models that support a larger context are from Nomic
+        # Cohere does not support larger contexts (they recommend not going above ~512 tokens)
+        return (
+            multipass
+            and model_name.startswith("nomic-ai")
+            and provider_type != EmbeddingProvider.COHERE
+        )
+
 
 class IndexAttempt(Base):
     """
@@ -784,6 +844,19 @@ class IndexAttempt(Base):
         ForeignKey("search_settings.id", ondelete="SET NULL"),
         nullable=True,
     )
+
+    # for polling connectors, the start and end time of the poll window
+    # will be set when the index attempt starts
+    poll_range_start: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+    poll_range_end: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    # Points to the last checkpoint that was saved for this run. The pointer here
+    # can be taken to the FileStore to grab the actual checkpoint value
+    checkpoint_pointer: Mapped[str | None] = mapped_column(String, nullable=True)
 
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -828,6 +901,13 @@ class IndexAttempt(Base):
             desc("time_updated"),
             unique=False,
         ),
+        Index(
+            "ix_index_attempt_cc_pair_settings_poll",
+            "connector_credential_pair_id",
+            "search_settings_id",
+            "status",
+            desc("time_updated"),
+        ),
     )
 
     def __repr__(self) -> str:
@@ -844,25 +924,33 @@ class IndexAttempt(Base):
 
 
 class IndexAttemptError(Base):
-    """
-    Represents an error that was encountered during an IndexAttempt.
-    """
-
     __tablename__ = "index_attempt_errors"
 
     id: Mapped[int] = mapped_column(primary_key=True)
 
     index_attempt_id: Mapped[int] = mapped_column(
         ForeignKey("index_attempt.id"),
-        nullable=True,
+        nullable=False,
+    )
+    connector_credential_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("connector_credential_pair.id"),
+        nullable=False,
     )
 
-    # The index of the batch where the error occurred (if looping thru batches)
-    # Just informational.
-    batch: Mapped[int | None] = mapped_column(Integer, default=None)
-    doc_summaries: Mapped[list[Any]] = mapped_column(postgresql.JSONB())
-    error_msg: Mapped[str | None] = mapped_column(Text, default=None)
-    traceback: Mapped[str | None] = mapped_column(Text, default=None)
+    document_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    document_link: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    entity_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    failed_time_range_start: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    failed_time_range_end: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    failure_message: Mapped[str] = mapped_column(Text)
+    is_resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -870,21 +958,6 @@ class IndexAttemptError(Base):
 
     # This is the reverse side of the relationship
     index_attempt = relationship("IndexAttempt", back_populates="error_rows")
-
-    __table_args__ = (
-        Index(
-            "index_attempt_id",
-            "time_created",
-        ),
-    )
-
-    def __repr__(self) -> str:
-        return (
-            f"<IndexAttempt(id={self.id!r}, "
-            f"index_attempt_id={self.index_attempt_id!r}, "
-            f"error_msg={self.error_msg!r})>"
-            f"time_created={self.time_created!r}, "
-        )
 
 
 class SyncRecord(Base):
@@ -1021,6 +1094,11 @@ class SearchDoc(Base):
         secondary=ChatMessage__SearchDoc.__table__,
         back_populates="search_docs",
     )
+    sub_queries = relationship(
+        "AgentSubQuery",
+        secondary=AgentSubQuery__SearchDoc.__table__,
+        back_populates="search_docs",
+    )
 
 
 class ToolCall(Base):
@@ -1089,6 +1167,10 @@ class ChatSession(Base):
     llm_override: Mapped[LLMOverride | None] = mapped_column(
         PydanticType(LLMOverride), nullable=True
     )
+
+    # The latest temperature override specified by the user
+    temperature_override: Mapped[float | None] = mapped_column(Float, nullable=True)
+
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
@@ -1157,6 +1239,9 @@ class ChatMessage(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
+    is_agentic: Mapped[bool] = mapped_column(Boolean, default=False)
+    refined_answer_improvement: Mapped[bool] = mapped_column(Boolean, nullable=True)
+
     chat_session: Mapped[ChatSession] = relationship("ChatSession")
     prompt: Mapped[Optional["Prompt"]] = relationship("Prompt")
 
@@ -1181,6 +1266,11 @@ class ChatMessage(Base):
         "ToolCall",
         back_populates="message",
         uselist=False,
+    )
+
+    sub_questions: Mapped[list["AgentSubQuestion"]] = relationship(
+        "AgentSubQuestion",
+        back_populates="primary_message",
     )
 
     standard_answers: Mapped[list["StandardAnswer"]] = relationship(
@@ -1215,6 +1305,71 @@ class ChatFolder(Base):
             # Bigger ID (created later) show earlier
             return self.id > other.id
         return self.display_priority < other.display_priority
+
+
+class AgentSubQuestion(Base):
+    """
+    A sub-question is a question that is asked of the LLM to gather supporting
+    information to answer a primary question.
+    """
+
+    __tablename__ = "agent__sub_question"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    primary_question_id: Mapped[int] = mapped_column(ForeignKey("chat_message.id"))
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+    sub_question: Mapped[str] = mapped_column(Text)
+    level: Mapped[int] = mapped_column(Integer)
+    level_question_num: Mapped[int] = mapped_column(Integer)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    sub_answer: Mapped[str] = mapped_column(Text)
+    sub_question_doc_results: Mapped[JSON_ro] = mapped_column(postgresql.JSONB())
+
+    # Relationships
+    primary_message: Mapped["ChatMessage"] = relationship(
+        "ChatMessage",
+        foreign_keys=[primary_question_id],
+        back_populates="sub_questions",
+    )
+    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
+    sub_queries: Mapped[list["AgentSubQuery"]] = relationship(
+        "AgentSubQuery", back_populates="parent_question"
+    )
+
+
+class AgentSubQuery(Base):
+    """
+    A sub-query is a vector DB query that gathers supporting information to answer a sub-question.
+    """
+
+    __tablename__ = "agent__sub_query"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    parent_question_id: Mapped[int] = mapped_column(
+        ForeignKey("agent__sub_question.id")
+    )
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("chat_session.id")
+    )
+    sub_query: Mapped[str] = mapped_column(Text)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships
+    parent_question: Mapped["AgentSubQuestion"] = relationship(
+        "AgentSubQuestion", back_populates="sub_queries"
+    )
+    chat_session: Mapped["ChatSession"] = relationship("ChatSession")
+    search_docs: Mapped[list["SearchDoc"]] = relationship(
+        "SearchDoc",
+        secondary=AgentSubQuery__SearchDoc.__table__,
+        back_populates="sub_queries",
+    )
 
 
 """
@@ -1597,7 +1752,7 @@ class ChannelConfig(TypedDict):
     """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
     in Postgres"""
 
-    channel_name: str
+    channel_name: str | None  # None for default channel config
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
@@ -1606,6 +1761,7 @@ class ChannelConfig(TypedDict):
     # If empty list, follow up with no tags
     follow_up_tags: NotRequired[list[str]]
     show_continue_in_web_ui: NotRequired[bool]  # defaults to False
+    disabled: NotRequired[bool]  # defaults to False
 
 
 class SlackChannelConfig(Base):
@@ -1618,7 +1774,6 @@ class SlackChannelConfig(Base):
     persona_id: Mapped[int | None] = mapped_column(
         ForeignKey("persona.id"), nullable=True
     )
-    # JSON for flexibility. Contains things like: channel name, team members, etc.
     channel_config: Mapped[ChannelConfig] = mapped_column(
         postgresql.JSONB(), nullable=False
     )
@@ -1627,7 +1782,10 @@ class SlackChannelConfig(Base):
         Boolean, nullable=False, default=False
     )
 
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
     persona: Mapped[Persona | None] = relationship("Persona")
+
     slack_bot: Mapped["SlackBot"] = relationship(
         "SlackBot",
         back_populates="slack_channel_configs",
@@ -1636,6 +1794,21 @@ class SlackChannelConfig(Base):
         "StandardAnswerCategory",
         secondary=SlackChannelConfig__StandardAnswerCategory.__table__,
         back_populates="slack_channel_configs",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "slack_bot_id",
+            "is_default",
+            name="uq_slack_channel_config_slack_bot_id_default",
+        ),
+        Index(
+            "ix_slack_channel_config_slack_bot_id_default",
+            "slack_bot_id",
+            "is_default",
+            unique=True,
+            postgresql_where=(is_default is True),  #   type: ignore
+        ),
     )
 
 
@@ -1718,6 +1891,25 @@ class PGFileStore(Base):
     file_type: Mapped[str] = mapped_column(String, default="text/plain")
     file_metadata: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
     lobj_oid: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class AgentSearchMetrics(Base):
+    __tablename__ = "agent__search_metrics"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), nullable=True
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    agent_type: Mapped[str] = mapped_column(String)
+    start_time: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
+    base_duration_s: Mapped[float] = mapped_column(Float)
+    full_duration_s: Mapped[float] = mapped_column(Float)
+    base_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    refined_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
+    all_metrics: Mapped[JSON_ro] = mapped_column(postgresql.JSONB(), nullable=True)
 
 
 """
@@ -1958,6 +2150,31 @@ class StandardAnswer(Base):
         "ChatMessage",
         secondary=ChatMessage__StandardAnswer.__table__,
         back_populates="standard_answers",
+    )
+
+
+class BackgroundError(Base):
+    """Important background errors. Serves to:
+    1. Ensure that important logs are kept around and not lost on rotation/container restarts
+    2. A trail for high-signal events so that the debugger doesn't need to remember/know every
+       possible relevant log line.
+    """
+
+    __tablename__ = "background_error"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    message: Mapped[str] = mapped_column(String)
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # option to link the error to a specific CC Pair
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"), nullable=True
+    )
+
+    cc_pair: Mapped["ConnectorCredentialPair | None"] = relationship(
+        "ConnectorCredentialPair", back_populates="background_errors"
     )
 
 

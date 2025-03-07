@@ -31,11 +31,12 @@ export default async function Layout({
     llmProviders,
     folders,
     openedFolders,
-    toggleSidebar,
+    sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,
     ccPairs,
     inputPrompts,
+    proSearchToggled,
   } = data;
 
   return (
@@ -43,9 +44,10 @@ export default async function Layout({
       <InstantSSRAutoRefresh />
       <ChatProvider
         value={{
+          proSearchToggled,
           inputPrompts,
           chatSessions,
-          toggledSidebar: toggleSidebar,
+          sidebarInitiallyVisible,
           availableSources,
           ccPairs,
           documentSets,

@@ -76,7 +76,7 @@ export function ToolsTable({ tools }: { tools: ToolSnapshot[] }) {
                   {tool.in_code_tool_id === null ? (
                     <div className="my-auto">
                       <div
-                        className="hover:bg-hover rounded p-1 cursor-pointer"
+                        className="hover:bg-accent-background-hovered rounded p-1 cursor-pointer"
                         onClick={async () => {
                           const response = await deleteCustomTool(tool.id);
                           if (response.data) {

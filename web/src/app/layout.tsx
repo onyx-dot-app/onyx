@@ -8,21 +8,28 @@ import {
   CUSTOM_ANALYTICS_ENABLED,
   GTM_ENABLED,
   SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
+  NEXT_PUBLIC_CLOUD_ENABLED,
 } from "@/lib/constants";
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
 import { Inter } from "next/font/google";
-import { EnterpriseSettings, GatingType } from "./admin/settings/interfaces";
+import {
+  EnterpriseSettings,
+  ApplicationStatus,
+} from "./admin/settings/interfaces";
 import { fetchAssistantData } from "@/lib/chat/fetchAssistantdata";
 import { AppProvider } from "@/components/context/AppProvider";
 import { PHProvider } from "./providers";
 import { getCurrentUserSS } from "@/lib/userSS";
-import CardSection from "@/components/admin/CardSection";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
-import { LogoType } from "@/components/logo/Logo";
 import { Hanken_Grotesk } from "next/font/google";
+import { WebVitals } from "./web-vitals";
+import { ThemeProvider } from "next-themes";
+import CloudError from "@/components/errorPages/CloudErrorPage";
+import Error from "@/components/errorPages/ErrorPage";
+import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 
 
 // declare global {
@@ -77,10 +84,14 @@ export default async function RootLayout({
   ]);
 
   const productGating =
-    combinedSettings?.settings.product_gating ?? GatingType.NONE;
+    combinedSettings?.settings.application_status ?? ApplicationStatus.ACTIVE;
 
   const getPageContent = async (content: React.ReactNode) => (
-    <html lang="en" className={`${inter.variable} ${hankenGrotesk.variable}`}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${hankenGrotesk.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <meta
           name="viewport"
@@ -112,89 +123,29 @@ export default async function RootLayout({
           />
         )}
       </head>
+
       <body className={`relative ${inter.variable} font-hanken`}>
-        <div
-          className={`text-default min-h-screen bg-background ${
-            process.env.THEME_IS_DARK?.toLowerCase() === "true" ? "dark" : ""
-          }`}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
         >
-          <PHProvider>{content}</PHProvider>
-        </div>
+          <div className="text-text min-h-screen bg-background">
+            <PHProvider>{content}</PHProvider>
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );
 
-  if (!combinedSettings) {
-    return getPageContent(
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="mb-2 flex items-center max-w-[175px]">
-          <LogoType />
-        </div>
-
-        <CardSection className="max-w-md">
-          <h1 className="text-2xl font-bold mb-4 text-error">Error</h1>
-          <p className="text-text-500">
-            Your Onyx instance was not configured properly and your settings
-            could not be loaded. This could be due to an admin configuration
-            issue, an incomplete setup, or backend services that may not be up
-            and running yet.
-          </p>
-          <p className="mt-4">
-            If you&apos;re an admin, please check{" "}
-            <a
-              className="text-link"
-              href="https://docs.onyx.app/introduction?utm_source=app&utm_medium=error_page&utm_campaign=config_error"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              our docs
-            </a>{" "}
-            to see how to configure Onyx properly. If you&apos;re a user, please
-            contact your admin to fix this error.
-          </p>
-          <p className="mt-4">
-            For additional support and guidance, you can reach out to our
-            community on{" "}
-            <a
-              className="text-link"
-              href="https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Slack
-            </a>
-            .
-          </p>
-        </CardSection>
-      </div>
-    );
+  if (productGating === ApplicationStatus.GATED_ACCESS) {
+    return getPageContent(<AccessRestrictedPage />);
   }
 
-  if (productGating === GatingType.FULL) {
+  if (!combinedSettings) {
     return getPageContent(
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="mb-2 flex items-center max-w-[175px]">
-          <LogoType />
-        </div>
-        <CardSection className="w-full max-w-md">
-          <h1 className="text-2xl font-bold mb-4 text-error">
-            Access Restricted
-          </h1>
-          <p className="text-text-500 mb-4">
-            We regret to inform you that your access to Onyx has been
-            temporarily suspended due to a lapse in your subscription.
-          </p>
-          <p className="text-text-500 mb-4">
-            To reinstate your access and continue benefiting from Onyx&apos;s
-            powerful features, please update your payment information.
-          </p>
-          <p className="text-text-500">
-            If you&apos;re an admin, you can resolve this by visiting the
-            billing section. For other users, please reach out to your
-            administrator to address this matter.
-          </p>
-        </CardSection>
-      </div>
+      NEXT_PUBLIC_CLOUD_ENABLED ? <CloudError /> : <Error />
     );
   }
 
@@ -213,6 +164,7 @@ export default async function RootLayout({
         <PostHogPageView />
       </Suspense>
       {children}
+      {process.env.NEXT_PUBLIC_POSTHOG_KEY && <WebVitals />}
     </AppProvider>
   );
 }

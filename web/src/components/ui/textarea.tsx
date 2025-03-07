@@ -16,7 +16,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             "w-full",
             "rounded-md",
             "border",
-            "border-neutral-200",
+            "border-background-200",
             "bg-white",
             "px-3",
             "py-2",
@@ -29,11 +29,6 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
             // "focus-visible:ring-offset-2",
             "disabled:cursor-not-allowed",
             "disabled:opacity-50",
-            "dark:border-neutral-800",
-            "dark:bg-neutral-950",
-            "dark:ring-offset-neutral-950",
-            "dark:placeholder:text-neutral-400",
-            "dark:focus-visible:ring-neutral-300",
           ].join(" "),
           className
         )}

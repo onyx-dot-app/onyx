@@ -32,7 +32,7 @@ const QuoteDisplay = ({ quoteInfo }: { quoteInfo: Quote }) => {
                 }, 1000);
               }}
             >
-              <div className="p-1 rounded hover:bg-hover cursor-pointer">
+              <div className="p-1 rounded hover:bg-accent-background-hovered cursor-pointer">
                 {copyClicked ? (
                   <CheckmarkIcon
                     className="my-auto flex flex-shrink-0"
@@ -48,7 +48,7 @@ const QuoteDisplay = ({ quoteInfo }: { quoteInfo: Quote }) => {
       )}
       <button className="text-sm flex w-fit">
         <a
-          className="flex max-w-[250px] shrink box-border p-2 border border-border rounded-lg hover:bg-hover-light"
+          className="flex max-w-[250px] shrink box-border p-2 border border-border rounded-lg hover:bg-accent-background"
           href={quoteInfo.link || undefined}
           target="_blank"
           rel="noopener noreferrer"
@@ -105,7 +105,7 @@ export const QuotesSection = (props: QuotesSectionProps) => {
     <ResponseSection
       status={status}
       header={
-        <div className="ml-2 text-emphasis font-bold">
+        <div className="ml-2 text-text-darker font-bold">
           {<QuotesHeader {...props} />}
         </div>
       }

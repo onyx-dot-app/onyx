@@ -63,8 +63,8 @@ export function Modal({
     <div
       onMouseDown={handleMouseDown}
       className={cn(
-        `fixed inset-0 bg-black bg-opacity-25 backdrop-blur-sm h-full
-        flex items-center justify-center z-[9999] transition-opacity duration-300 ease-in-out`
+        `fixed inset-0 bg-neutral-950/50 border border-neutral-200 dark:border-neutral-800 bg-opacity-30 backdrop-blur-sm h-full
+        flex items-center justify-center z-50 transition-opacity duration-300 ease-in-out`
       )}
     >
       <div
@@ -75,8 +75,8 @@ export function Modal({
           }
         }}
         className={`
-          bg-background 
-          text-emphasis 
+          bg-neutral-50 dark:bg-neutral-800
+          text-neutral-950 dark:text-neutral-50
           rounded 
           shadow-2xl 
           transform 
@@ -85,7 +85,7 @@ export function Modal({
           ease-in-out
           relative
           ${width ?? "w-11/12 max-w-4xl"}
-          ${noPadding ? "" : removeBottomPadding ? "pt-10 px-10" : "p-10"}
+          ${noPadding ? "" : removeBottomPadding ? "pt-8 px-8" : "p-8"}
           ${className || ""}
           flex
           flex-col
@@ -96,14 +96,14 @@ export function Modal({
           <div className="absolute top-2 right-2">
             <button
               onClick={onOutsideClick}
-              className="cursor-pointer text-text-500 hover:text-text-700 transition-colors duration-200 p-2"
+              className="cursor-pointer text-neutral-500 hover:text-neutral-700 dark:text-neutral-400 dark:hover:text-neutral-300 transition-colors duration-200 p-2"
               aria-label="Close modal"
             >
               <XIcon className="w-5 h-5" />
             </button>
           </div>
         )}
-        <div className="flex-shrink-0">
+        <div className="items-start flex-shrink-0">
           {title && (
             <>
               <div className="flex">
@@ -116,13 +116,11 @@ export function Modal({
                   {icon && icon({ size: 30 })}
                 </h2>
               </div>
-              {!hideDividerForTitle && <Separator />}
+              {!hideDividerForTitle ? <Separator /> : <div className="my-4" />}
             </>
           )}
         </div>
-        <div className="flex-grow overflow-y-auto overflow-x-hidden">
-          {children}
-        </div>
+        {children}
       </div>
     </div>
   );

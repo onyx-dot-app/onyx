@@ -4,17 +4,21 @@ import userMutationFetcher from "@/lib/admin/users/userMutationFetcher";
 import useSWRMutation from "swr/mutation";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { useRouter } from "next/navigation";
 
 export const LeaveOrganizationButton = ({
   user,
   setPopup,
   mutate,
+  className,
+  children,
 }: {
   user: User;
   setPopup: (spec: PopupSpec) => void;
   mutate: () => void;
+  className?: string;
+  children?: React.ReactNode;
 }) => {
   const router = useRouter();
   const { trigger, isMutating } = useSWRMutation(
@@ -46,8 +50,9 @@ export const LeaveOrganizationButton = ({
   return (
     <>
       {showLeaveModal && (
-        <DeleteEntityModal
-          deleteButtonText="Leave"
+        <ConfirmEntityModal
+          variant="action"
+          actionButtonText="Leave"
           entityType="organization"
           entityName="your organization"
           onClose={() => setShowLeaveModal(false)}
@@ -57,13 +62,12 @@ export const LeaveOrganizationButton = ({
       )}
 
       <Button
-        className="w-min"
+        className={className}
         onClick={() => setShowLeaveModal(true)}
         disabled={isMutating}
-        size="sm"
-        variant="destructive"
+        variant="ghost"
       >
-        Leave Organization
+        {children}
       </Button>
     </>
   );

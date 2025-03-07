@@ -53,7 +53,7 @@ export function ImageUpload({
               }
             >
               <input {...getInputProps()} />
-              <b className="text-emphasis">
+              <b className="text-text-darker">
                 Drag and drop a .png or .jpg file, or click to select a file!
               </b>
             </div>

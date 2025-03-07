@@ -4,9 +4,7 @@ import { ValidSources } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { FaSwatchbook } from "react-icons/fa";
-import { NewChatIcon } from "@/components/icons/icons";
 import { useState } from "react";
-import { useUserGroups } from "@/lib/hooks";
 import {
   deleteCredential,
   swapCredential,
@@ -81,14 +79,24 @@ export default function CredentialSection({
     selectedCredential: Credential<any>,
     connectorId: number
   ) => {
-    await swapCredential(selectedCredential.id, connectorId);
-    mutate(buildSimilarCredentialInfoURL(sourceType));
-    refresh();
+    const response = await swapCredential(selectedCredential.id, connectorId);
+    if (response.ok) {
+      mutate(buildSimilarCredentialInfoURL(sourceType));
+      refresh();
 
-    setPopup({
-      message: "Swapped credential succesfully!",
-      type: "success",
-    });
+      setPopup({
+        message: "Swapped credential successfully!",
+        type: "success",
+      });
+    } else {
+      const errorData = await response.json();
+      setPopup({
+        message: `Issue swapping credential: ${
+          errorData.detail || errorData.message || "Unknown error"
+        }`,
+        type: "error",
+      });
+    }
   };
 
   const onUpdateCredential = async (
@@ -160,7 +168,7 @@ export default function CredentialSection({
           onClick={() => {
             setShowModifyCredential(true);
           }}
-          className="flex items-center gap-x-2 cursor-pointer bg-background-100 border-border border-2 hover:bg-border p-1.5 rounded-lg text-text-700"
+          className="flex items-center gap-x-2 cursor-pointer bg-neutral-800 border-neutral-600 border-2 hover:bg-neutral-700 p-1.5 rounded-lg text-neutral-300"
         >
           <FaSwatchbook />
           Update Credentials
@@ -207,7 +215,7 @@ export default function CredentialSection({
       {showCreateCredential && (
         <Modal
           onOutsideClick={closeCreateCredential}
-          className="max-w-3xl rounded-lg"
+          className="max-w-3xl flex flex-col items-start rounded-lg"
           title={`Create ${getSourceDisplayName(sourceType)} Credential`}
         >
           {oauthDetailsLoading ? (

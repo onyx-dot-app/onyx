@@ -84,7 +84,7 @@ function Main() {
             {isApiKeySet ? (
               <div className="w-full p-3 border rounded-md bg-background text-text flex items-center">
                 <span className="flex-grow">••••••••••••••••</span>
-                <Lock className="h-5 w-5 text-gray-400" />
+                <Lock className="h-5 w-5 text-text-400" />
               </div>
             ) : (
               <input

@@ -40,15 +40,12 @@ const CreateButton = ({
 }) => (
   <div className="flex justify-end w-full">
     <Button
-      className="enabled:cursor-pointer disabled:cursor-not-allowed disabled:bg-blue-200 bg-blue-400 flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
       onClick={onClick}
       type="button"
       disabled={isSubmitting || (!isAdmin && groups.length === 0)}
     >
-      <div className="flex items-center gap-x-1">
-        <PlusCircleIcon size={16} className="text-indigo-100" />
-        Create
-      </div>
+      <PlusCircleIcon className="h-4 w-4" />
+      Create
     </Button>
   </div>
 );
@@ -114,9 +111,15 @@ export default function CreateCredential({
 
     const { name, is_public, groups, ...credentialValues } = values;
 
+    const filteredCredentialValues = Object.fromEntries(
+      Object.entries(credentialValues).filter(
+        ([_, value]) => value !== null && value !== ""
+      )
+    );
+
     try {
       const response = await submitCredential({
-        credential_json: credentialValues,
+        credential_json: filteredCredentialValues,
         admin_public: true,
         curator_public: is_public,
         groups: groups,
@@ -163,7 +166,7 @@ export default function CreateCredential({
   }
 
   if (sourceType == "google_drive") {
-    return <GDriveMain />;
+    return <GDriveMain setPopup={setPopup} />;
   }
 
   const credentialTemplate: dictionaryType = credentialTemplates[sourceType];
@@ -197,7 +200,7 @@ export default function CreateCredential({
               for information on setting up this connector.
             </p>
           )}
-          <CardSection className="w-full  !border-0 mt-4 flex flex-col gap-y-6">
+          <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
               placeholder="(Optional) credential name.."
@@ -218,7 +221,7 @@ export default function CreateCredential({
               />
             ))}
             {!swapConnector && (
-              <div className="mt-4 flex flex-col sm:flex-row justify-between items-end">
+              <div className="mt-4 flex w-full flex-col sm:flex-row justify-between items-end">
                 <div className="w-full sm:w-3/4 mb-4 sm:mb-0">
                   {isPaidEnterpriseFeaturesEnabled && (
                     <div className="flex flex-col items-start">

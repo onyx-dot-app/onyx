@@ -34,33 +34,33 @@ function Calendar({
         table: "w-full border-collapse space-y-1",
         head_row: "flex",
         head_cell:
-          "text-calendar-text-muted rounded-md w-9 font-normal text-[0.8rem] dark:text-calendar-text-muted-dark",
+          "text-neutral-500 rounded-md w-9 font-normal text-[0.8rem] dark:text-neutral-400",
         row: "flex w-full mt-2",
-        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-calendar-bg-outside-selected [&:has([aria-selected])]:bg-calendar-bg-selected first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 dark:[&:has([aria-selected].day-outside)]:bg-calendar-bg-outside-selected-dark dark:[&:has([aria-selected])]:bg-calendar-bg-selected-dark",
+        cell: "h-9 w-9 text-center text-sm p-0 relative [&:has([aria-selected].day-range-end)]:rounded-r-md [&:has([aria-selected].day-outside)]:bg-neutral-100/50 [&:has([aria-selected])]:bg-neutral-100 first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20 dark:[&:has([aria-selected].day-outside)]:bg-neutral-800/50 dark:[&:has([aria-selected])]:bg-neutral-800",
         day: cn(
           buttonVariants({ variant: "ghost" }),
           "h-9 w-9 p-0 font-normal aria-selected:opacity-100"
         ),
-        day_range_end:
-          "day-range-end bg-calendar-range-end !text-calendar-text-end",
+        day_range_end: "day-range-end",
         day_selected:
-          "bg text-calendar-text-selected hover:bg-calendar-bg-selected hover:text-calendar-text-selected  dark:bg-calendar-bg-selected-dark dark:text-calendar-text-selected-dark dark:hover:bg-calendar-bg-selected-dark dark:hover:text-calendar-text-selected-dark ",
+          "bg-neutral-900 text-neutral-50 hover:bg-neutral-900 hover:text-neutral-50 focus:bg-neutral-900 focus:text-neutral-50 dark:bg-neutral-50 dark:text-neutral-900 dark:hover:bg-neutral-50 dark:hover:text-neutral-900 dark:focus:bg-neutral-50 dark:focus:text-neutral-900",
         day_today:
-          "bg-calendar-today-bg text-calendar-today-text dark:bg-calendar-today-bg-dark dark:text-calendar-today-text-dark",
+          "bg-neutral-100 text-neutral-900 dark:bg-neutral-800 dark:text-neutral-50",
         day_outside:
-          "day-outside text-calendar-text-muted opacity-50 aria-selected:bg-calendar-bg-outside-selected aria-selected:text-calendar-text-muted aria-selected:opacity-30 dark:text-calendar-text-muted-dark dark:aria-selected:bg-calendar-bg-outside-selected-dark dark:aria-selected:text-calendar-text-muted-dark",
-        day_disabled:
-          "text-calendar-text-muted opacity-50 dark:text-calendar-text-muted-dark",
+          "day-outside text-neutral-500 aria-selected:bg-neutral-100/50 aria-selected:text-neutral-500 dark:text-neutral-400 dark:aria-selected:bg-neutral-800/50 dark:aria-selected:text-neutral-400",
+        day_disabled: "text-neutral-500 opacity-50 dark:text-neutral-400",
         day_range_middle:
-          "aria-selected:bg-calendar-range-middle aria-selected:text-calendar-text-in-range dark:aria-selected:bg-calendar-range-middle-dark dark:aria-selected:text-calendar-text-in-range-dark",
+          "aria-selected:bg-neutral-100 aria-selected:text-neutral-900 dark:aria-selected:bg-neutral-800 dark:aria-selected:text-neutral-50",
         day_hidden: "invisible",
-        day_range_start:
-          "bg-calendar-background-selected ring-calendar-ring-selected ring text-text-900",
         ...classNames,
       }}
       components={{
-        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
-        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+        IconLeft: ({ className, ...props }) => (
+          <ChevronLeft className={cn("h-4 w-4", className)} {...props} />
+        ),
+        IconRight: ({ className, ...props }) => (
+          <ChevronRight className={cn("h-4 w-4", className)} {...props} />
+        ),
       }}
       {...props}
     />

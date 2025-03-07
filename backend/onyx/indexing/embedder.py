@@ -1,6 +1,10 @@
+import time
 from abc import ABC
 from abc import abstractmethod
+from collections import defaultdict
 
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import DocumentFailure
 from onyx.db.models import SearchSettings
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import ChunkEmbedding
@@ -217,3 +221,49 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             deployment_name=search_settings.deployment_name,
             callback=callback,
         )
+
+
+def embed_chunks_with_failure_handling(
+    chunks: list[DocAwareChunk],
+    embedder: IndexingEmbedder,
+) -> tuple[list[IndexChunk], list[ConnectorFailure]]:
+    """Tries to embed all chunks in one large batch. If that batch fails for any reason,
+    goes document by document to isolate the failure(s).
+    """
+
+    # First try to embed all chunks in one batch
+    try:
+        return embedder.embed_chunks(chunks=chunks), []
+    except Exception:
+        logger.exception("Failed to embed chunk batch. Trying individual docs.")
+        # wait a couple seconds to let any rate limits or temporary issues resolve
+        time.sleep(2)
+
+    # Try embedding each document's chunks individually
+    chunks_by_doc: dict[str, list[DocAwareChunk]] = defaultdict(list)
+    for chunk in chunks:
+        chunks_by_doc[chunk.source_document.id].append(chunk)
+
+    embedded_chunks: list[IndexChunk] = []
+    failures: list[ConnectorFailure] = []
+
+    for doc_id, chunks_for_doc in chunks_by_doc.items():
+        try:
+            doc_embedded_chunks = embedder.embed_chunks(chunks=chunks_for_doc)
+            embedded_chunks.extend(doc_embedded_chunks)
+        except Exception as e:
+            logger.exception(f"Failed to embed chunks for document '{doc_id}'")
+            failures.append(
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc_id,
+                        document_link=(
+                            chunks_for_doc[0].get_link() if chunks_for_doc else None
+                        ),
+                    ),
+                    failure_message=str(e),
+                    exception=e,
+                )
+            )
+
+    return embedded_chunks, failures

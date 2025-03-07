@@ -22,7 +22,6 @@ from onyx.db.chat import get_search_docs_for_chat_message
 from onyx.db.chat import get_valid_messages_from_query_sessions
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.db.search_settings import get_current_search_settings
@@ -37,6 +36,7 @@ from onyx.server.query_and_chat.models import SearchSessionDetailResponse
 from onyx.server.query_and_chat.models import SourceTag
 from onyx.server.query_and_chat.models import TagResponse
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -49,8 +49,9 @@ def admin_search(
     question: AdminSearchRequest,
     user: User | None = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str = Depends(get_current_tenant_id),
 ) -> AdminSearchResponse:
+    tenant_id = get_current_tenant_id()
+
     query = question.query
     logger.notice(f"Received admin search query: {query}")
     user_acl_filters = build_access_filters_for_user(user, db_session)
@@ -64,9 +65,8 @@ def admin_search(
         tenant_id=tenant_id,
     )
     search_settings = get_current_search_settings(db_session)
-    document_index = get_default_document_index(
-        primary_index_name=search_settings.index_name, secondary_index_name=None
-    )
+    document_index = get_default_document_index(search_settings, None)
+
     if not isinstance(document_index, VespaIndex):
         raise HTTPException(
             status_code=400,

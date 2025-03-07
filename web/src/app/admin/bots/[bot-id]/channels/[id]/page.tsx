@@ -67,7 +67,8 @@ async function EditslackChannelConfigPage(props: {
       />
     );
   }
-  const documentSets = (await documentSetsResponse.json()) as DocumentSet[];
+  const response = await documentSetsResponse.json();
+  const documentSets = response as DocumentSet[];
 
   if (assistantsFetchError) {
     return (
@@ -79,7 +80,7 @@ async function EditslackChannelConfigPage(props: {
   }
 
   return (
-    <div className="container mx-auto">
+    <div className="max-w-4xl container mx-auto">
       <InstantSSRAutoRefresh />
 
       <BackButton />

@@ -12,7 +12,7 @@ export default function Title({
   return (
     <h1
       className={cn(
-        "text-lg text-text-800 font-medium",
+        "text-lg text-neutral-800 dark:text-neutral-200 font-medium",
         size === "lg" && "text-2xl",
         size === "md" && "text-xl",
         size === "sm" && "text-lg",

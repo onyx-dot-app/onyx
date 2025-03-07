@@ -1,8 +1,8 @@
 import { useChatContext } from "@/components/context/ChatContext";
 import {
   getDisplayNameForModel,
-  LlmOverride,
-  useLlmOverride,
+  LlmDescriptor,
+  useLlmManager,
 } from "@/lib/hooks";
 import { StringOrNumberOption } from "@/components/Dropdown";
 
@@ -40,9 +40,9 @@ export function RegenerateDropdown({
   };
 
   const Dropdown = (
-    <div className="overflow-y-auto py-2 min-w-fit bg-white dark:bg-gray-800 rounded-md shadow-lg">
+    <div className="overflow-y-auto border border-neutral-800  py-2 min-w-fit bg-neutral-50 dark:bg-neutral-900 rounded-md shadow-lg">
       <div className="mb-1 flex items-center justify-between px-4 pt-2">
-        <span className="text-sm text-text-500 dark:text-text-400">
+        <span className="text-sm text-neutral-600 dark:text-neutral-400">
           Regenerate with
         </span>
       </div>
@@ -50,8 +50,10 @@ export function RegenerateDropdown({
         <div
           key={option.value}
           role="menuitem"
-          className={`flex items-center m-1.5 p-1.5 text-sm cursor-pointer focus-visible:outline-0 group relative hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md my-0 px-3 mx-2 gap-2.5 py-3 !pr-3 ${
-            option.value === selected ? "bg-gray-100 dark:bg-gray-700" : ""
+          className={`flex items-center m-1.5 p-1.5 text-sm cursor-pointer focus-visible:outline-0 group relative hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-md my-0 px-3 mx-2 gap-2.5 py-3 !pr-3 ${
+            option.value === selected
+              ? "bg-neutral-200 dark:bg-neutral-800"
+              : ""
           }`}
           onClick={() => onSelect(option.value)}
         >
@@ -63,7 +65,7 @@ export function RegenerateDropdown({
             </div>
           </div>
           {option.value === selected && (
-            <FiCheck className="text-blue-500 dark:text-blue-400" />
+            <FiCheck className="text-neutral-700 dark:text-neutral-300" />
           )}
         </div>
       ))}
@@ -104,13 +106,13 @@ export default function RegenerateOption({
   onDropdownVisibleChange,
 }: {
   selectedAssistant: Persona;
-  regenerate: (modelOverRide: LlmOverride) => Promise<void>;
+  regenerate: (modelOverRide: LlmDescriptor) => Promise<void>;
   overriddenModel?: string;
   onHoverChange: (isHovered: boolean) => void;
   onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
   const { llmProviders } = useChatContext();
-  const llmOverrideManager = useLlmOverride(llmProviders);
+  const llmManager = useLlmManager(llmProviders);
 
   const [_, llmName] = getFinalLLM(llmProviders, selectedAssistant, null);
 
@@ -146,7 +148,7 @@ export default function RegenerateOption({
   );
 
   const currentModelName =
-    llmOverrideManager?.llmOverride.modelName ||
+    llmManager?.currentLlm.modelName ||
     (selectedAssistant
       ? selectedAssistant.llm_model_version_override || llmName
       : llmName);

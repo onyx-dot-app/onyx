@@ -123,7 +123,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
     );
   } else if (!assistantStats?.daily_stats?.length) {
     content = (
-      <div className="h-80 text-gray-500 flex flex-col">
+      <div className="h-80 text-text-500 flex flex-col">
         <p className="m-auto">
           No data found for this assistant in the selected date range
         </p>
@@ -162,7 +162,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
                 )}
                 <div>
                   <h3 className="text-lg font-normal">{assistant?.name}</h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-text-500">
                     {assistant?.description}
                   </p>
                 </div>
@@ -173,13 +173,13 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
             <CardContent className="pt-6">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm font-medium text-gray-500">
+                  <p className="text-sm font-medium text-text-500">
                     Total Messages
                   </p>
                   <p className="text-2xl font-normal">{totalMessages}</p>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-gray-500">
+                  <p className="text-sm font-medium text-text-500">
                     Total Unique Users
                   </p>
                   <p className="text-2xl font-normal">{totalUniqueUsers}</p>

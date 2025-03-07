@@ -226,7 +226,7 @@ export function ChatSessionDisplay({
               <div
                 className={`flex  ${
                   isRenamingChat ? "-mr-2" : ""
-                } text-text-darker text-sm leading-normal relative gap-x-2`}
+                } text-text-dark text-sm leading-normal relative gap-x-2`}
               >
                 {isRenamingChat ? (
                   <div className="flex items-center w-full" ref={renamingRef}>
@@ -248,7 +248,7 @@ export function ChatSessionDisplay({
                         className="w-full text-sm bg-transparent border-b border-text-darker outline-none"
                       />
                     </div>
-                    <div className="flex text-[#6c6c6c] flex-none">
+                    <div className="flex text-text-500 flex-none">
                       <button onClick={onRename} className="p-1">
                         <FiCheck size={14} />
                       </button>
@@ -267,10 +267,10 @@ export function ChatSessionDisplay({
                     </div>
                   </div>
                 ) : (
-                  <p className="break-all font-normal overflow-hidden whitespace-nowrap w-full mr-3 relative">
+                  <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
                     {chatName || `Unnamed Chat`}
                     <span
-                      className={`absolute right-0 top-0 h-full w-8 bg-gradient-to-r from-transparent 
+                      className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
                       ${
                         isSelected
                           ? "to-background-chat-selected"
@@ -325,7 +325,7 @@ export function ChatSessionDisplay({
                             }
                             popover={
                               <div
-                                className={`border border-border rounded-lg bg-background z-50 ${
+                                className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
                                   isDeleteModalOpen ? "w-64" : "w-32"
                                 }`}
                               >
@@ -360,7 +360,7 @@ export function ChatSessionDisplay({
                                     </p>
                                     <div className="flex justify-center gap-2">
                                       <button
-                                        className="px-3 py-1 text-sm bg-gray-200 rounded"
+                                        className="px-3 py-1 text-sm bg-background-200 rounded"
                                         onClick={handleCancelDelete}
                                       >
                                         Cancel

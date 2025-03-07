@@ -24,7 +24,9 @@ from onyx.context.search.models import SearchRequest
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
 from onyx.context.search.postprocessing.postprocessing import search_postprocessing
 from onyx.context.search.preprocessing.preprocessing import retrieval_preprocessing
-from onyx.context.search.retrieval.search_runner import retrieve_chunks
+from onyx.context.search.retrieval.search_runner import (
+    retrieve_chunks,
+)
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.models import User
@@ -49,28 +51,31 @@ class SearchPipeline:
         user: User | None,
         llm: LLM,
         fast_llm: LLM,
+        skip_query_analysis: bool,
         db_session: Session,
         bypass_acl: bool = False,  # NOTE: VERY DANGEROUS, USE WITH CAUTION
         retrieval_metrics_callback: (
             Callable[[RetrievalMetricsContainer], None] | None
         ) = None,
+        retrieved_sections_callback: Callable[[list[InferenceSection]], None]
+        | None = None,
         rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
         prompt_config: PromptConfig | None = None,
     ):
+        # NOTE: The Search Request contains a lot of fields that are overrides, many of them can be None
+        # and typically are None. The preprocessing will fetch default values to replace these empty overrides.
         self.search_request = search_request
         self.user = user
         self.llm = llm
         self.fast_llm = fast_llm
+        self.skip_query_analysis = skip_query_analysis
         self.db_session = db_session
         self.bypass_acl = bypass_acl
         self.retrieval_metrics_callback = retrieval_metrics_callback
         self.rerank_metrics_callback = rerank_metrics_callback
 
         self.search_settings = get_current_search_settings(db_session)
-        self.document_index = get_default_document_index(
-            primary_index_name=self.search_settings.index_name,
-            secondary_index_name=None,
-        )
+        self.document_index = get_default_document_index(self.search_settings, None)
         self.prompt_config: PromptConfig | None = prompt_config
 
         # Preprocessing steps generate this
@@ -81,6 +86,8 @@ class SearchPipeline:
         self._retrieved_chunks: list[InferenceChunk] | None = None
         # Another call made to the document index to get surrounding sections
         self._retrieved_sections: list[InferenceSection] | None = None
+
+        self.retrieved_sections_callback = retrieved_sections_callback
         # Reranking and LLM section selection can be run together
         # If only LLM selection is on, the reranked chunks are yielded immediatly
         self._reranked_sections: list[InferenceSection] | None = None
@@ -103,6 +110,7 @@ class SearchPipeline:
             search_request=self.search_request,
             user=self.user,
             llm=self.llm,
+            skip_query_analysis=self.skip_query_analysis,
             db_session=self.db_session,
             bypass_acl=self.bypass_acl,
         )
@@ -157,6 +165,12 @@ class SearchPipeline:
         that have a corresponding chunk.
 
         This step should be fast for any document index implementation.
+
+        Current implementation timing is approximately broken down in timing as:
+        - 200 ms to get the embedding of the query
+        - 15 ms to get chunks from the document index
+        - possibly more to get additional surrounding chunks
+        - possibly more for query expansion (multilingual)
         """
         if self._retrieved_sections is not None:
             return self._retrieved_sections
@@ -329,9 +343,13 @@ class SearchPipeline:
         if self._reranked_sections is not None:
             return self._reranked_sections
 
+        retrieved_sections = self._get_sections()
+        if self.retrieved_sections_callback is not None:
+            self.retrieved_sections_callback(retrieved_sections)
+
         self._postprocessing_generator = search_postprocessing(
             search_query=self.search_query,
-            retrieved_sections=self._get_sections(),
+            retrieved_sections=retrieved_sections,
             llm=self.fast_llm,
             rerank_metrics_callback=self.rerank_metrics_callback,
         )
@@ -406,8 +424,18 @@ class SearchPipeline:
 
     @property
     def section_relevance_list(self) -> list[bool]:
-        llm_indices = relevant_sections_to_indices(
-            relevance_sections=self.section_relevance,
-            items=self.final_context_sections,
+        return section_relevance_list_impl(
+            section_relevance=self.section_relevance,
+            final_context_sections=self.final_context_sections,
         )
-        return [ind in llm_indices for ind in range(len(self.final_context_sections))]
+
+
+def section_relevance_list_impl(
+    section_relevance: list[SectionRelevancePiece] | None,
+    final_context_sections: list[InferenceSection],
+) -> list[bool]:
+    llm_indices = relevant_sections_to_indices(
+        relevance_sections=section_relevance,
+        items=final_context_sections,
+    )
+    return [ind in llm_indices for ind in range(len(final_context_sections))]

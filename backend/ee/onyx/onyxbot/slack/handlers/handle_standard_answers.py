@@ -80,7 +80,7 @@ def oneoff_standard_answers(
 def _handle_standard_answers(
     message_info: SlackMessageInfo,
     receiver_ids: list[str] | None,
-    slack_channel_config: SlackChannelConfig | None,
+    slack_channel_config: SlackChannelConfig,
     prompt: Prompt | None,
     logger: OnyxLoggingAdapter,
     client: WebClient,
@@ -94,13 +94,10 @@ def _handle_standard_answers(
     Returns True if standard answers are found to match the user's message and therefore,
     we still need to respond to the users.
     """
-    # if no channel config, then no standard answers are configured
-    if not slack_channel_config:
-        return False
 
     slack_thread_id = message_info.thread_to_respond
     configured_standard_answer_categories = (
-        slack_channel_config.standard_answer_categories if slack_channel_config else []
+        slack_channel_config.standard_answer_categories
     )
     configured_standard_answers = set(
         [

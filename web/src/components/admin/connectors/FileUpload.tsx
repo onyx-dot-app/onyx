@@ -50,7 +50,7 @@ export const FileUpload: FC<FileUploadProps> = ({
               }
             >
               <input {...getInputProps()} />
-              <b className="text-emphasis">
+              <b className="text-text-darker">
                 {message ||
                   `Drag and drop ${
                     multiple ? "some files" : "a file"

@@ -139,7 +139,7 @@ function ToolForm({
             py-1 
             px-3 
             text-sm
-            hover:bg-hover-light
+            hover:bg-accent-background
           "
           onClick={() => {
             const definition = values.definition;
@@ -193,7 +193,7 @@ function ToolForm({
         <div className="my-4">
           <h3 className="text-base font-semibold mb-2">Available methods</h3>
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-200">
+            <table className="min-w-full bg-white border border-background-200">
               <thead>
                 <tr>
                   <th className="px-4 py-2 border-b">Name</th>
@@ -228,7 +228,7 @@ function ToolForm({
           <h3 className="text-xl font-bold mb-2 text-primary-600">
             Custom Headers
           </h3>
-          <p className="text-sm mb-6 text-gray-600 italic">
+          <p className="text-sm mb-6 text-text-600 italic">
             Specify custom headers for each request to this tool&apos;s API.
           </p>
           <FieldArray
@@ -240,17 +240,17 @@ function ToolForm({
                     (header: { key: string; value: string }, index: number) => (
                       <div
                         key={index}
-                        className="flex items-center space-x-2 bg-gray-50 p-3 rounded-lg shadow-sm"
+                        className="flex items-center space-x-2 bg-background-50 p-3 rounded-lg shadow-sm"
                       >
                         <Field
                           name={`customHeaders.${index}.key`}
                           placeholder="Header Key"
-                          className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                         <Field
                           name={`customHeaders.${index}.value`}
                           placeholder="Header Value"
-                          className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                          className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
                         <Button
                           type="button"

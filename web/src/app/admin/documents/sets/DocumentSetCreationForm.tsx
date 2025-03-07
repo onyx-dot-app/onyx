@@ -188,8 +188,8 @@ export const DocumentSetCreationForm = ({
                                   flex 
                                   cursor-pointer ` +
                                     (isSelected
-                                      ? " bg-background-strong"
-                                      : " hover:bg-hover")
+                                      ? " bg-background-200"
+                                      : " hover:bg-accent-background-hovered")
                                   }
                                   onClick={() => {
                                     if (isSelected) {
@@ -304,8 +304,8 @@ export const DocumentSetCreationForm = ({
                               flex 
                               cursor-pointer ` +
                                 (isSelected
-                                  ? " bg-background-strong"
-                                  : " hover:bg-hover")
+                                  ? " bg-background-200"
+                                  : " hover:bg-accent-background-hovered")
                               }
                               onClick={() => {
                                 if (isSelected) {

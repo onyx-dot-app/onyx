@@ -37,7 +37,7 @@ const IsVisibleSection = ({
               );
               onUpdate(response);
             }}
-            className="flex text-error cursor-pointer hover:bg-hover py-1 px-2 w-fit rounded-full"
+            className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
             <div className="select-none">Hidden</div>
             <div className="ml-1 my-auto">
@@ -53,7 +53,7 @@ const IsVisibleSection = ({
               );
               onUpdate(response);
             }}
-            className="flex cursor-pointer hover:bg-hover py-1 px-2 w-fit rounded-full"
+            className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
             <div className="my-auto select-none">Visible</div>
             <div className="ml-1 my-auto">

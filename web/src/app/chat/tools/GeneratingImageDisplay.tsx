@@ -56,11 +56,11 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
   }, [isCompleted]);
 
   return (
-    <div className="object-cover object-center border border-neutral-200 bg-neutral-100 items-center justify-center overflow-hidden flex rounded-lg w-96 h-96 transition-opacity duration-300 opacity-100">
+    <div className="object-cover object-center border border-background-200 bg-background-100 items-center justify-center overflow-hidden flex rounded-lg w-96 h-96 transition-opacity duration-300 opacity-100">
       <div className="m-auto relative flex">
         <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 100 100">
           <circle
-            className="text-gray-200"
+            className="text-text-200"
             strokeWidth="8"
             stroke="currentColor"
             fill="transparent"
@@ -69,7 +69,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
             cy="50"
           />
           <circle
-            className="text-gray-800 transition-all duration-300"
+            className="text-text-800 transition-all duration-300"
             strokeWidth="8"
             strokeDasharray={276.46}
             strokeDashoffset={276.46 * (1 - progress / 100)}
@@ -83,7 +83,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
         </svg>
         <div className="absolute inset-0 flex items-center justify-center">
           <svg
-            className="w-6 h-6 text-neutral-500 animate-pulse-strong"
+            className="w-6 h-6 text-text-500 animate-pulse-strong"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

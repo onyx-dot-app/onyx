@@ -24,6 +24,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.tools.models import ToolCallFinalResult
 
+
 if TYPE_CHECKING:
     pass
 
@@ -40,6 +41,11 @@ class UpdateChatSessionThreadRequest(BaseModel):
     # If not specified, use Onyx default persona
     chat_session_id: UUID
     new_alternate_model: str
+
+
+class UpdateChatSessionTemperatureRequest(BaseModel):
+    chat_session_id: UUID
+    temperature_override: float
 
 
 class ChatSessionCreationRequest(BaseModel):
@@ -108,6 +114,10 @@ class CreateChatMessageRequest(ChunkContext):
     llm_override: LLMOverride | None = None
     prompt_override: PromptOverride | None = None
 
+    # Allows the caller to override the temperature for the chat session
+    # this does persist in the chat thread details
+    temperature_override: float | None = None
+
     # allow user to specify an alternate assistnat
     alternate_assistant_id: int | None = None
 
@@ -124,6 +134,12 @@ class CreateChatMessageRequest(ChunkContext):
     # forces the LLM to return a structured response, see
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
+
+    # If true, ignores most of the search options and uses pro search instead.
+    # TODO: decide how many of the above options we want to pass through to pro search
+    use_agentic_search: bool = False
+
+    skip_gen_ai_answer_generation: bool = False
 
     @model_validator(mode="after")
     def check_search_doc_ids_or_retrieval_options(self) -> "CreateChatMessageRequest":
@@ -168,6 +184,7 @@ class ChatSessionDetails(BaseModel):
     shared_status: ChatSessionSharedStatus
     folder_id: int | None = None
     current_alternate_model: str | None = None
+    current_temperature_override: float | None = None
 
 
 class ChatSessionsResponse(BaseModel):
@@ -190,6 +207,22 @@ class SearchFeedbackRequest(BaseModel):
         return self
 
 
+class SubQueryDetail(BaseModel):
+    query: str
+    query_id: int
+    # TODO: store these to enable per-query doc selection
+    doc_ids: list[int] | None = None
+
+
+class SubQuestionDetail(BaseModel):
+    level: int
+    level_question_num: int
+    question: str
+    answer: str
+    sub_queries: list[SubQueryDetail] | None = None
+    context_docs: RetrievalDocs | None = None
+
+
 class ChatMessageDetail(BaseModel):
     message_id: int
     parent_message: int | None = None
@@ -201,11 +234,14 @@ class ChatMessageDetail(BaseModel):
     time_sent: datetime
     overridden_model: str | None
     alternate_assistant_id: int | None = None
-    # Dict mapping citation number to db_doc_id
     chat_session_id: UUID | None = None
+    # Dict mapping citation number to db_doc_id
     citations: dict[int, int] | None = None
+    sub_questions: list[SubQuestionDetail] | None = None
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
+    refined_answer_improvement: bool | None = None
+    error: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
         initial_dict = super().model_dump(mode="json", *args, **kwargs)  # type: ignore
@@ -231,6 +267,7 @@ class ChatSessionDetailResponse(BaseModel):
     time_created: datetime
     shared_status: ChatSessionSharedStatus
     current_alternate_model: str | None
+    current_temperature_override: float | None
 
 
 # This one is not used anymore
@@ -246,3 +283,35 @@ class AdminSearchRequest(BaseModel):
 
 class AdminSearchResponse(BaseModel):
     documents: list[SearchDoc]
+
+
+class ChatSessionSummary(BaseModel):
+    id: UUID
+    name: str | None = None
+    persona_id: int | None = None
+    time_created: datetime
+    shared_status: ChatSessionSharedStatus
+    folder_id: int | None = None
+    current_alternate_model: str | None = None
+    current_temperature_override: float | None = None
+
+
+class ChatSessionGroup(BaseModel):
+    title: str
+    chats: list[ChatSessionSummary]
+
+
+class ChatSearchResponse(BaseModel):
+    groups: list[ChatSessionGroup]
+    has_more: bool
+    next_page: int | None = None
+
+
+class ChatSearchRequest(BaseModel):
+    query: str | None = None
+    page: int = 1
+    page_size: int = 10
+
+
+class CreateChatResponse(BaseModel):
+    chat_session_id: str

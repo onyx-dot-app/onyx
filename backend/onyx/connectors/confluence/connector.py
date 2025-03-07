@@ -5,6 +5,8 @@ from typing import Any
 from urllib.parse import quote
 
 
+from requests.exceptions import HTTPError
+
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
@@ -17,6 +19,10 @@ from onyx.connectors.confluence.utils import build_confluence_document_id
 from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import extract_text_from_confluence_html
 from onyx.connectors.confluence.utils import validate_attachment_filetype
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -28,6 +34,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -248,20 +255,29 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         }
 
         # Get labels
-        label_dicts = confluence_object["metadata"]["labels"]["results"]
-        page_labels = [label["name"] for label in label_dicts]
+        label_dicts = (
+            confluence_object.get("metadata", {}).get("labels", {}).get("results", [])
+        )
+        page_labels = [label.get("name") for label in label_dicts if label.get("name")]
         if page_labels:
             doc_metadata["labels"] = page_labels
 
         # Get last modified and author email
-        last_modified = datetime_from_string(confluence_object["version"]["when"])
-        author_email = confluence_object["version"].get("by", {}).get("email")
+        version_dict = confluence_object.get("version", {})
+        last_modified = (
+            datetime_from_string(version_dict.get("when"))
+            if version_dict.get("when")
+            else None
+        )
+        author_email = version_dict.get("by", {}).get("email")
+
+        title = confluence_object.get("title", "Untitled Document")
 
         return Document(
             id=object_url,
             sections=[Section(link=object_url, text=object_text)],
             source=DocumentSource.CONFLUENCE,
-            semantic_identifier=confluence_object["title"],
+            semantic_identifier=title,
             doc_updated_at=last_modified,
             primary_owners=(
                 [BasicExpertInfo(email=author_email)] if author_email else None
@@ -326,6 +342,7 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         doc_metadata_list: list[SlimDocument] = []
 
@@ -393,4 +410,42 @@ class ConfluenceConnector(LoadConnector, PollConnector, SlimConnector):
                 yield doc_metadata_list[:_SLIM_DOC_BATCH_SIZE]
                 doc_metadata_list = doc_metadata_list[_SLIM_DOC_BATCH_SIZE:]
 
+                if callback:
+                    if callback.should_stop():
+                        raise RuntimeError(
+                            "retrieve_all_slim_documents: Stop signal detected"
+                        )
+
+                    callback.progress("retrieve_all_slim_documents", 1)
+
         yield doc_metadata_list
+
+    def validate_connector_settings(self) -> None:
+        if self._confluence_client is None:
+            raise ConnectorMissingCredentialError("Confluence credentials not loaded.")
+
+        try:
+            spaces = self._confluence_client.get_all_spaces(limit=1)
+        except HTTPError as e:
+            status_code = e.response.status_code if e.response else None
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Confluence credentials (HTTP 401)."
+                )
+            elif status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Insufficient permissions to access Confluence resources (HTTP 403)."
+                )
+            raise UnexpectedError(
+                f"Unexpected Confluence error (status={status_code}): {e}"
+            )
+        except Exception as e:
+            raise UnexpectedError(
+                f"Unexpected error while validating Confluence settings: {e}"
+            )
+
+        if not spaces or not spaces.get("results"):
+            raise ConnectorValidationError(
+                "No Confluence spaces found. Either your credentials lack permissions, or "
+                "there truly are no spaces in this Confluence instance."
+            )

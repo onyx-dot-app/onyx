@@ -16,6 +16,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import PreviousMessage
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import message_to_string
+from onyx.llm.utils import model_supports_image_input
 from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.tools.message import ToolCallSummary
 from onyx.tools.models import ToolResponse
@@ -78,7 +79,8 @@ class ImageShape(str, Enum):
     LANDSCAPE = "landscape"
 
 
-class ImageGenerationTool(Tool):
+# override_kwargs is not supported for image generation tools
+class ImageGenerationTool(Tool[None]):
     _NAME = "run_image_generation"
     _DESCRIPTION = "Generate an image from a prompt."
     _DISPLAY_NAME = "Image Generation"
@@ -254,7 +256,9 @@ class ImageGenerationTool(Tool):
                 "An error occurred during image generation. Please try again later."
             )
 
-    def run(self, **kwargs: str) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: None = None, **kwargs: str
+    ) -> Generator[ToolResponse, None, None]:
         prompt = cast(str, kwargs["prompt"])
         shape = ImageShape(kwargs.get("shape", ImageShape.SQUARE))
         format = self.output_format
@@ -316,12 +320,22 @@ class ImageGenerationTool(Tool):
             for img in img_generation_response
             if img.image_data is not None
         ]
-        prompt_builder.update_user_prompt(
-            build_image_generation_user_prompt(
-                query=prompt_builder.get_user_message_content(),
-                img_urls=img_urls,
-                b64_imgs=b64_imgs,
-            )
+
+        user_prompt = build_image_generation_user_prompt(
+            query=prompt_builder.get_user_message_content(),
+            supports_image_input=model_supports_image_input(
+                prompt_builder.llm_config.model_name,
+                prompt_builder.llm_config.model_provider,
+            ),
+            prompts=[
+                prompt
+                for response in img_generation_response
+                for prompt in response.revised_prompt
+            ],
+            img_urls=img_urls,
+            b64_imgs=b64_imgs,
         )
+
+        prompt_builder.update_user_prompt(user_prompt)
 
         return prompt_builder

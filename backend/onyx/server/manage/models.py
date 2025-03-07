@@ -44,11 +44,13 @@ class UserPreferences(BaseModel):
     chosen_assistants: list[int] | None = None
     hidden_assistants: list[int] = []
     visible_assistants: list[int] = []
-    recent_assistants: list[int] | None = None
     default_model: str | None = None
-    auto_scroll: bool | None = None
     pinned_assistants: list[int] | None = None
     shortcut_enabled: bool | None = None
+
+    # These will default to workspace settings on the frontend if not set
+    auto_scroll: bool | None = None
+    temperature_override_enabled: bool | None = None
 
 
 class UserInfo(BaseModel):
@@ -65,6 +67,7 @@ class UserInfo(BaseModel):
     is_cloud_superuser: bool = False
     organization_name: str | None = None
     is_anonymous_user: bool | None = None
+    password_configured: bool | None = None
 
     @classmethod
     def from_model(
@@ -83,15 +86,17 @@ class UserInfo(BaseModel):
             is_superuser=user.is_superuser,
             is_verified=user.is_verified,
             role=user.role,
+            password_configured=user.password_configured,
             preferences=(
                 UserPreferences(
                     shortcut_enabled=user.shortcut_enabled,
-                    auto_scroll=user.auto_scroll,
                     chosen_assistants=user.chosen_assistants,
                     default_model=user.default_model,
                     hidden_assistants=user.hidden_assistants,
                     pinned_assistants=user.pinned_assistants,
                     visible_assistants=user.visible_assistants,
+                    auto_scroll=user.auto_scroll,
+                    temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
             organization_name=organization_name,
@@ -186,6 +191,7 @@ class SlackChannelConfigCreationRequest(BaseModel):
     response_type: SlackBotResponseType
     # XXX this is going away soon
     standard_answer_categories: list[int] = Field(default_factory=list)
+    disabled: bool = False
 
     @field_validator("answer_filters", mode="before")
     @classmethod
@@ -214,6 +220,7 @@ class SlackChannelConfig(BaseModel):
     # XXX this is going away soon
     standard_answer_categories: list[StandardAnswerCategory]
     enable_auto_filters: bool
+    is_default: bool
 
     @classmethod
     def from_model(
@@ -236,6 +243,7 @@ class SlackChannelConfig(BaseModel):
                 for standard_answer_category_model in slack_channel_config_model.standard_answer_categories
             ],
             enable_auto_filters=slack_channel_config_model.enable_auto_filters,
+            is_default=slack_channel_config_model.is_default,
         )
 
 
@@ -278,3 +286,8 @@ class AllUsersResponse(BaseModel):
     accepted_pages: int
     invited_pages: int
     slack_users_pages: int
+
+
+class SlackChannel(BaseModel):
+    id: str
+    name: str

@@ -38,7 +38,7 @@ export function EditableValue({
               onSubmit(initialValue);
             }
           }}
-          className="border bg-background-strong border-gray-300 rounded py-1 px-1 w-12 h-4 my-auto"
+          className="border bg-background-200 border-background-300 rounded py-1 px-1 w-12 h-4 my-auto"
         />
         <div
           onClick={async () => {
@@ -58,7 +58,7 @@ export function EditableValue({
   return (
     <div className="h-full flex flex-col">
       <div
-        className="flex my-auto cursor-pointer hover:bg-hover rounded"
+        className="flex my-auto cursor-pointer hover:bg-accent-background-hovered rounded"
         onClick={() => setIsOpen(true)}
       >
         <div className={"flex " + (consistentWidth && " w-6")}>

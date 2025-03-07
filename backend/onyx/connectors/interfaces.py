@@ -1,18 +1,22 @@
 import abc
+from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
-
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
 SecondsSinceUnixEpoch = float
 
 GenerateDocumentsOutput = Iterator[list[Document]]
 GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
+CheckpointOutput = Generator[Document | ConnectorFailure, None, ConnectorCheckpoint]
 
 
 class BaseConnector(abc.ABC):
@@ -40,6 +44,14 @@ class BaseConnector(abc.ABC):
                 raise RuntimeError(custom_parser_req_msg)
         return metadata_lines
 
+    def validate_connector_settings(self) -> None:
+        """
+        Override this if your connector needs to validate credentials or settings.
+        Raise an exception if invalid, otherwise do nothing.
+
+        Default is a no-op (always successful).
+        """
+
 
 # Large set update or reindex, generally pulling a complete state or from a savestate file
 class LoadConnector(BaseConnector):
@@ -63,6 +75,7 @@ class SlimConnector(BaseConnector):
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
+        callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         raise NotImplementedError
 
@@ -102,4 +115,34 @@ class OAuthConnector(BaseConnector):
 class EventConnector(BaseConnector):
     @abc.abstractmethod
     def handle_event(self, event: Any) -> GenerateDocumentsOutput:
+        raise NotImplementedError
+
+
+class CheckpointConnector(BaseConnector):
+    @abc.abstractmethod
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ConnectorCheckpoint,
+    ) -> CheckpointOutput:
+        """Yields back documents or failures. Final return is the new checkpoint.
+
+        Final return can be access via either:
+
+        ```
+        try:
+            for document_or_failure in connector.load_from_checkpoint(start, end, checkpoint):
+                print(document_or_failure)
+        except StopIteration as e:
+            checkpoint = e.value  # Extracting the return value
+            print(checkpoint)
+        ```
+
+        OR
+
+        ```
+        checkpoint = yield from connector.load_from_checkpoint(start, end, checkpoint)
+        ```
+        """
         raise NotImplementedError

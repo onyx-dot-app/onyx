@@ -73,8 +73,8 @@ export function FilterPopup({
     <li
       className={`px-3 py-2 flex items-center gap-x-2 cursor-pointer transition-colors duration-200 ${
         selectedFilter === category
-          ? "bg-gray-100 text-gray-900"
-          : "text-gray-600 hover:bg-gray-50"
+          ? "bg-background-100 text-text-900"
+          : "text-text-600 hover:bg-background-50"
       }`}
       onMouseDown={() => {
         setSelectedFilter(category);
@@ -124,7 +124,7 @@ export function FilterPopup({
                 )
               )
             }
-            className="text-gray-600 hover:text-gray-800"
+            className="text-text-600 hover:text-text-800"
           >
             <FiChevronLeft size={20} />
           </button>
@@ -144,14 +144,14 @@ export function FilterPopup({
                 )
               )
             }
-            className="text-gray-600 hover:text-gray-800"
+            className="text-text-600 hover:text-text-800"
           >
             <FiChevronRight size={20} />
           </button>
         </div>
         <div className="grid grid-cols-7 gap-1 text-center mb-2">
           {days.map((day) => (
-            <div key={day} className="text-xs font-medium text-gray-400">
+            <div key={day} className="text-xs font-medium text-text-400">
               {day}
             </div>
           ))}
@@ -173,12 +173,12 @@ export function FilterPopup({
               <button
                 key={index + 1}
                 className={`w-8 h-8 text-sm rounded-full flex items-center justify-center
-                  ${isInRange ? "bg-blue-100" : "hover:bg-gray-100"}
+                  ${isInRange ? "bg-blue-100" : "hover:bg-background-100"}
                   ${isStart || isEnd ? "bg-blue-500 text-white" : ""}
                   ${
                     isInRange && !isStart && !isEnd
                       ? "text-blue-600"
-                      : "text-gray-700"
+                      : "text-text-700"
                   }
                 `}
                 onClick={() => {
@@ -239,13 +239,13 @@ export function FilterPopup({
   };
 
   const isDocumentSetSelected = (docSet: DocumentSet) =>
-    filterManager.selectedDocumentSets.includes(docSet.id.toString());
+    filterManager.selectedDocumentSets.includes(docSet.name);
 
   const toggleDocumentSet = (docSet: DocumentSet) => {
     filterManager.setSelectedDocumentSets((prev) =>
-      prev.includes(docSet.id.toString())
-        ? prev.filter((id) => id !== docSet.id.toString())
-        : [...prev, docSet.id.toString()]
+      prev.includes(docSet.name)
+        ? prev.filter((id) => id !== docSet.name)
+        : [...prev, docSet.name]
     );
   };
 
@@ -259,7 +259,7 @@ export function FilterPopup({
         align="start"
       >
         <div className="flex h-[325px]">
-          <div className="w-1/3 border-r border-gray-200 p-2">
+          <div className="w-1/3 border-r border-background-200 p-2">
             <ul className="space-y-1">
               <FilterOption
                 category={FilterCategories.date}
@@ -294,13 +294,13 @@ export function FilterPopup({
               <div className="p-4">
                 {renderCalendar()}
                 {filterManager.timeRange ? (
-                  <div className="mt-2 text-xs text-gray-600">
+                  <div className="mt-2 text-xs text-text-600">
                     Selected:{" "}
                     {filterManager.timeRange.from.toLocaleDateString()} -{" "}
                     {filterManager.timeRange.to.toLocaleDateString()}
                   </div>
                 ) : (
-                  <div className="mt-2 text-xs text-gray-600">
+                  <div className="mt-2 text-xs text-text-600">
                     No time restriction selected
                   </div>
                 )}
@@ -334,7 +334,7 @@ export function FilterPopup({
                     />
                   </div>
                 </div>
-                <ul className="space-y-1">
+                <ul className="space-y-1 default-scrollbar overflow-y-auto max-h-64">
                   {availableSources.map((source) => (
                     <SelectableDropdown
                       icon={
@@ -398,24 +398,24 @@ export function FilterPopup({
           >
             Clear Filters
           </Button>
-          <div className="text-xs text-gray-500 flex items-center space-x-1">
+          <div className="text-xs text-text-500 flex items-center space-x-1">
             {filterManager.selectedSources.length > 0 && (
-              <span className="bg-gray-100 px-1.5 py-0.5 rounded-full">
+              <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
                 {filterManager.selectedSources.length} sources
               </span>
             )}
             {filterManager.selectedDocumentSets.length > 0 && (
-              <span className="bg-gray-100 px-1.5 py-0.5 rounded-full">
+              <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
                 {filterManager.selectedDocumentSets.length} sets
               </span>
             )}
             {filterManager.selectedTags.length > 0 && (
-              <span className="bg-gray-100 px-1.5 py-0.5 rounded-full">
+              <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
                 {filterManager.selectedTags.length} tags
               </span>
             )}
             {filterManager.timeRange && (
-              <span className="bg-gray-100 px-1.5 py-0.5 rounded-full">
+              <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
                 Date range
               </span>
             )}

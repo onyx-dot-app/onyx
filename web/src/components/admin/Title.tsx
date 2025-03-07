@@ -19,7 +19,7 @@ export function AdminPageTitle({
         <HealthCheckBanner />
       </div>
       <div className="w-full flex">
-        <h1 className="text-3xl text-text-800 font-bold flex gap-x-2">
+        <h1 className="text-3xl text-text-900 font-bold flex gap-x-2">
           {icon} {title}
         </h1>
         {farRightElement && <div className="ml-auto">{farRightElement}</div>}

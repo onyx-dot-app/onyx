@@ -3,7 +3,13 @@
 import React from "react";
 import { Option } from "@/components/Dropdown";
 import { generateRandomIconShape } from "@/lib/assistantIconUtils";
-import { CCPairBasicInfo, DocumentSet, User, UserGroup } from "@/lib/types";
+import {
+  CCPairBasicInfo,
+  DocumentSet,
+  User,
+  UserGroup,
+  UserRole,
+} from "@/lib/types";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { ArrayHelpers, FieldArray, Form, Formik, FormikProps } from "formik";
@@ -33,20 +39,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { FiInfo } from "react-icons/fi";
 import * as Yup from "yup";
 import CollapsibleSection from "./CollapsibleSection";
 import { SuccessfulPersonaUpdateRedirectType } from "./enums";
 import { Persona, PersonaLabel, StarterMessage } from "./interfaces";
 import {
-  createPersonaLabel,
   PersonaUpsertParameters,
   createPersona,
-  deletePersonaLabel,
-  updatePersonaLabel,
   updatePersona,
+  deletePersona,
 } from "./lib";
 import {
   CameraIcon,
@@ -73,16 +76,16 @@ import {
   Option as DropdownOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
-import { TagIcon, UserIcon, XIcon } from "lucide-react";
+import { TagIcon, UserIcon, XIcon, InfoIcon } from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { DeleteEntityModal } from "@/components/modals/DeleteEntityModal";
-import { DeletePersonaButton } from "./[id]/DeletePersonaButton";
+import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import Title from "@/components/ui/title";
+import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 
 function findSearchTool(tools: ToolSnapshot[]) {
-  return tools.find((tool) => tool.in_code_tool_id === "SearchTool");
+  return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
 }
 
 function findImageGenerationTool(tools: ToolSnapshot[]) {
@@ -110,7 +113,6 @@ export function AssistantEditor({
   documentSets,
   user,
   defaultPublic,
-  redirectType,
   llmProviders,
   tools,
   shouldAddAssistantToUserPreferences,
@@ -121,7 +123,6 @@ export function AssistantEditor({
   documentSets: DocumentSet[];
   user: User | null;
   defaultPublic: boolean;
-  redirectType: SuccessfulPersonaUpdateRedirectType;
   llmProviders: FullLLMProvider[];
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
@@ -129,6 +130,8 @@ export function AssistantEditor({
 }) {
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isAdminPage = searchParams.get("admin") === "true";
 
   const { popup, setPopup } = usePopup();
   const { labels, refreshLabels, createLabel, updateLabel, deleteLabel } =
@@ -218,9 +221,12 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
+  const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
+
   const initialValues = {
     name: existingPersona?.name ?? "",
     description: existingPersona?.description ?? "",
+    datetime_aware: existingPrompt?.datetime_aware ?? false,
     system_prompt: existingPrompt?.system_prompt ?? "",
     task_prompt: existingPrompt?.task_prompt ?? "",
     is_public: existingPersona?.is_public ?? defaultPublic,
@@ -237,11 +243,9 @@ export function AssistantEditor({
       existingPersona?.llm_model_provider_override ?? null,
     llm_model_version_override:
       existingPersona?.llm_model_version_override ?? null,
-    starter_messages: existingPersona?.starter_messages ?? [
-      {
-        message: "",
-      },
-    ],
+    starter_messages: existingPersona?.starter_messages?.length
+      ? existingPersona.starter_messages
+      : [{ message: "" }],
     enabled_tools_map: enabledToolsMap,
     icon_color: existingPersona?.icon_color ?? defautIconColor,
     icon_shape: existingPersona?.icon_shape ?? defaultIconShape,
@@ -255,6 +259,7 @@ export function AssistantEditor({
         (u) => u.id !== existingPersona.owner?.id
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
+    is_default_persona: existingPersona?.is_default_persona ?? false,
   };
 
   interface AssistantPrompt {
@@ -311,27 +316,42 @@ export function AssistantEditor({
   const [isRequestSuccessful, setIsRequestSuccessful] = useState(false);
 
   const { data: userGroups } = useUserGroups();
-  // const { data: allUsers } = useUsers() as {
-  //   data: MinimalUserSnapshot[] | undefined;
-  // };
 
   const { data: users } = useSWR<MinimalUserSnapshot[]>(
     "/api/users",
     errorHandlingFetcher
   );
 
-  const mapUsersToMinimalSnapshot = (users: any): MinimalUserSnapshot[] => {
-    if (!users || !Array.isArray(users.users)) return [];
-    return users.users.map((user: any) => ({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-    }));
-  };
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
   if (!labels) {
     return <></>;
   }
+
+  const openDeleteModal = () => {
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+  };
+
+  const handleDeletePersona = async () => {
+    if (existingPersona) {
+      const response = await deletePersona(existingPersona.id);
+      if (response.ok) {
+        await refreshAssistants();
+        router.push(
+          isAdminPage ? `/admin/assistants?u=${Date.now()}` : `/chat`
+        );
+      } else {
+        setPopup({
+          type: "error",
+          message: `Failed to delete persona - ${await response.text()}`,
+        });
+      }
+    }
+  };
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -348,8 +368,9 @@ export function AssistantEditor({
           <BackButton />
         </div>
       )}
+
       {labelToDelete && (
-        <DeleteEntityModal
+        <ConfirmEntityModal
           entityType="label"
           entityName={labelToDelete.name}
           onClose={() => setLabelToDelete(null)}
@@ -369,6 +390,14 @@ export function AssistantEditor({
             }
             setLabelToDelete(null);
           }}
+        />
+      )}
+      {deleteModalOpen && existingPersona && (
+        <ConfirmEntityModal
+          entityType="Persona"
+          entityName={existingPersona.name}
+          onClose={closeDeleteModal}
+          onSubmit={handleDeletePersona}
         />
       )}
       {popup}
@@ -405,6 +434,7 @@ export function AssistantEditor({
             label_ids: Yup.array().of(Yup.number()),
             selectedUsers: Yup.array().of(Yup.object()),
             selectedGroups: Yup.array().of(Yup.number()),
+            is_default_persona: Yup.boolean().required(),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -425,6 +455,19 @@ export function AssistantEditor({
                   "Must provide either Instructions or Reminders (Advanced)",
               });
             }
+          )
+          .test(
+            "default-persona-public",
+            "Default persona must be public",
+            function (values) {
+              if (values.is_default_persona && !values.is_public) {
+                return this.createError({
+                  path: "is_public",
+                  message: "Default persona must be public",
+                });
+              }
+              return true;
+            }
           )}
         onSubmit={async (values, formikHelpers) => {
           if (
@@ -443,26 +486,10 @@ export function AssistantEditor({
           let enabledTools = Object.keys(values.enabled_tools_map)
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
+
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
             : false;
-          const imageGenerationToolEnabled = imageGenerationTool
-            ? enabledTools.includes(imageGenerationTool.id)
-            : false;
-
-          if (imageGenerationToolEnabled) {
-            if (
-              // model must support image input for image generation
-              // to work
-              !checkLLMSupportsImageInput(
-                values.llm_model_version_override || defaultModelName || ""
-              )
-            ) {
-              enabledTools = enabledTools.filter(
-                (toolId) => toolId !== imageGenerationTool!.id
-              );
-            }
-          }
 
           // if disable_retrieval is set, set num_chunks to 0
           // to tell the backend to not fetch any documents
@@ -473,7 +500,7 @@ export function AssistantEditor({
             )
             .map((message: { message: string; name?: string }) => ({
               message: message.message,
-              name: message.name || message.message,
+              name: message.message,
             }));
 
           // don't set groups if marked as public
@@ -481,7 +508,6 @@ export function AssistantEditor({
           const submissionData: PersonaUpsertParameters = {
             ...values,
             existing_prompt_id: existingPrompt?.id ?? null,
-            is_default_persona: admin!,
             starter_messages: starterMessages,
             groups: groups,
             users: values.is_public
@@ -545,8 +571,9 @@ export function AssistantEditor({
             }
 
             await refreshAssistants();
+
             router.push(
-              redirectType === SuccessfulPersonaUpdateRedirectType.ADMIN
+              isAdminPage
                 ? `/admin/assistants?u=${Date.now()}`
                 : `/chat?assistantId=${assistantId}`
             );
@@ -743,7 +770,6 @@ export function AssistantEditor({
                 name="description"
                 label="Description"
                 placeholder="Use this Assistant to help draft professional emails"
-                data-testid="assistant-description-input"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
@@ -808,10 +834,7 @@ export function AssistantEditor({
                               </TooltipProvider>
                             </div>
                           </div>
-                          <p
-                            className="text-sm text-subtle"
-                            style={{ color: "rgb(113, 114, 121)" }}
-                          >
+                          <p className="text-sm text-neutral-700 dark:text-neutral-400">
                             Attach additional unique knowledge to this assistant
                           </p>
                         </div>
@@ -905,102 +928,42 @@ export function AssistantEditor({
                     {imageGenerationTool && (
                       <>
                         <div className="flex items-center content-start mb-2">
-                          <TooltipProvider>
-                            <Tooltip>
-                              <TooltipTrigger>
-                                <CheckboxField
-                                  size="sm"
-                                  id={`enabled_tools_map.${imageGenerationTool.id}`}
-                                  name={`enabled_tools_map.${imageGenerationTool.id}`}
-                                  onCheckedChange={() => {
-                                    if (
-                                      currentLLMSupportsImageOutput &&
-                                      isImageGenerationAvailable
-                                    ) {
-                                      toggleToolInValues(
-                                        imageGenerationTool.id
-                                      );
-                                    }
-                                  }}
-                                  className={
-                                    !currentLLMSupportsImageOutput ||
-                                    !isImageGenerationAvailable
-                                      ? "opacity-50 cursor-not-allowed"
-                                      : ""
-                                  }
-                                />
-                              </TooltipTrigger>
-                              {(!currentLLMSupportsImageOutput ||
-                                !isImageGenerationAvailable) && (
-                                <TooltipContent side="top" align="center">
-                                  <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                                    {!currentLLMSupportsImageOutput
-                                      ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
-                                      : "Image Generation requires an OpenAI or Azure Dalle configuration."}
-                                  </p>
-                                </TooltipContent>
-                              )}
-                            </Tooltip>
-                          </TooltipProvider>
-                          <div className="flex flex-col ml-2">
-                            <span className="text-sm">
-                              {imageGenerationTool.display_name}
-                            </span>
-                            <span className="text-xs text-subtle">
-                              Generate and manipulate images using AI-powered
-                              tools
-                            </span>
-                          </div>
+                          <BooleanFormField
+                            name={`enabled_tools_map.${imageGenerationTool.id}`}
+                            label={imageGenerationTool.display_name}
+                            subtext="Generate and manipulate images using AI-powered tools"
+                            disabled={
+                              !currentLLMSupportsImageOutput ||
+                              !isImageGenerationAvailable
+                            }
+                            disabledTooltip={
+                              !currentLLMSupportsImageOutput
+                                ? "To use Image Generation, select GPT-4 or another image compatible model as the default model for this Assistant."
+                                : "Image Generation requires an OpenAI or Azure Dall-E configuration."
+                            }
+                          />
                         </div>
                       </>
                     )}
 
                     {internetSearchTool && (
                       <>
-                        <div className="flex items-center content-start mb-2">
-                          <Checkbox
-                            size="sm"
-                            id={`enabled_tools_map.${internetSearchTool.id}`}
-                            checked={
-                              values.enabled_tools_map[internetSearchTool.id]
-                            }
-                            onCheckedChange={() => {
-                              toggleToolInValues(internetSearchTool.id);
-                            }}
-                            name={`enabled_tools_map.${internetSearchTool.id}`}
-                          />
-                          <div className="flex flex-col ml-2">
-                            <span className="text-sm">
-                              {internetSearchTool.display_name}
-                            </span>
-                            <span className="text-xs text-subtle">
-                              Access real-time information and search the web
-                              for up-to-date results
-                            </span>
-                          </div>
-                        </div>
+                        <BooleanFormField
+                          name={`enabled_tools_map.${internetSearchTool.id}`}
+                          label={internetSearchTool.display_name}
+                          subtext="Access real-time information and search the web for up-to-date results"
+                        />
                       </>
                     )}
 
                     {customTools.length > 0 &&
                       customTools.map((tool) => (
-                        <React.Fragment key={tool.id}>
-                          <div className="flex items-center content-start mb-2">
-                            <Checkbox
-                              size="sm"
-                              id={`enabled_tools_map.${tool.id}`}
-                              checked={values.enabled_tools_map[tool.id]}
-                              onCheckedChange={() => {
-                                toggleToolInValues(tool.id);
-                              }}
-                            />
-                            <div className="ml-2">
-                              <span className="text-sm">
-                                {tool.display_name}
-                              </span>
-                            </div>
-                          </div>
-                        </React.Fragment>
+                        <BooleanFormField
+                          key={tool.id}
+                          name={`enabled_tools_map.${tool.id}`}
+                          label={tool.display_name}
+                          subtext={tool.description}
+                        />
                       ))}
                   </div>
                 </div>
@@ -1051,6 +1014,22 @@ export function AssistantEditor({
               {showAdvancedOptions && (
                 <>
                   <div className="max-w-4xl w-full">
+                    {user?.role == UserRole.ADMIN && (
+                      <BooleanFormField
+                        onChange={(checked) => {
+                          if (checked) {
+                            setFieldValue("is_public", true);
+                            setFieldValue("is_default_persona", true);
+                          }
+                        }}
+                        name="is_default_persona"
+                        label="Featured Assistant"
+                        subtext="If set, this assistant will be pinned for all new users and appear in the Featured list in the assistant explorer. This also makes the assistant public."
+                      />
+                    )}
+
+                    <Separator />
+
                     <div className="flex gap-x-2 items-center ">
                       <div className="block font-medium text-sm">Access</div>
                     </div>
@@ -1060,21 +1039,59 @@ export function AssistantEditor({
 
                     <div className="min-h-[100px]">
                       <div className="flex items-center mb-2">
-                        <SwitchField
-                          name="is_public"
-                          size="md"
-                          onCheckedChange={(checked) => {
-                            setFieldValue("is_public", checked);
-                            if (checked) {
-                              setFieldValue("selectedUsers", []);
-                              setFieldValue("selectedGroups", []);
-                            }
-                          }}
-                        />
+                        <TooltipProvider delayDuration={0}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <SwitchField
+                                  name="is_public"
+                                  size="md"
+                                  onCheckedChange={(checked) => {
+                                    if (values.is_default_persona && !checked) {
+                                      setShowVisibilityWarning(true);
+                                    } else {
+                                      setFieldValue("is_public", checked);
+                                      if (!checked) {
+                                        // Even though this code path should not be possible,
+                                        // we set the default persona to false to be safe
+                                        setFieldValue(
+                                          "is_default_persona",
+                                          false
+                                        );
+                                      }
+                                      if (checked) {
+                                        setFieldValue("selectedUsers", []);
+                                        setFieldValue("selectedGroups", []);
+                                      }
+                                    }
+                                  }}
+                                  disabled={values.is_default_persona}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            {values.is_default_persona && (
+                              <TooltipContent side="top" align="center">
+                                Default persona must be public. Set
+                                &quot;Default Persona&quot; to false to change
+                                visibility.
+                              </TooltipContent>
+                            )}
+                          </Tooltip>
+                        </TooltipProvider>
                         <span className="text-sm ml-2">
                           {values.is_public ? "Public" : "Private"}
                         </span>
                       </div>
+
+                      {showVisibilityWarning && (
+                        <div className="flex items-center text-warning mt-2">
+                          <InfoIcon size={16} className="mr-2" />
+                          <span className="text-sm">
+                            Default persona must be public. Visibility has been
+                            automatically set to public.
+                          </span>
+                        </div>
+                      )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
@@ -1180,7 +1197,9 @@ export function AssistantEditor({
                       )}
                     </div>
                   </div>
+
                   <Separator />
+
                   <div className="w-full flex flex-col">
                     <div className="flex gap-x-2 items-center">
                       <div className="block font-medium text-sm">
@@ -1191,6 +1210,7 @@ export function AssistantEditor({
                     <SubLabel>
                       Sample messages that help users understand what this
                       assistant can do and how to interact with it effectively.
+                      New input fields will appear automatically as you type.
                     </SubLabel>
 
                     <div className="w-full">
@@ -1257,7 +1277,7 @@ export function AssistantEditor({
                           setFieldValue("label_ids", newLabelIds);
                         }}
                         itemComponent={({ option }) => (
-                          <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-hover cursor-pointer border-b border-border last:border-b-0">
+                          <div className="flex items-center justify-between px-4 py-3 text-sm hover:bg-accent-background-hovered cursor-pointer border-b border-border last:border-b-0">
                             <div
                               className="flex-grow"
                               onClick={() => {
@@ -1353,7 +1373,6 @@ export function AssistantEditor({
                         <BooleanFormField
                           small
                           removeIndent
-                          alignTop
                           name="llm_relevance_filter"
                           label="AI Relevance Filter"
                           subtext="If enabled, the LLM will filter out documents that are not useful for answering the user query prior to generating a response. This typically improves the quality of the response but incurs slightly higher cost."
@@ -1362,7 +1381,6 @@ export function AssistantEditor({
                         <BooleanFormField
                           small
                           removeIndent
-                          alignTop
                           name="include_citations"
                           label="Citations"
                           subtext="Response will include citations ([1], [2], etc.) for documents referenced by the LLM. In general, we recommend to leave this enabled in order to increase trust in the LLM answer."
@@ -1370,6 +1388,16 @@ export function AssistantEditor({
                       </div>
                     </div>
                   </div>
+                  <Separator />
+
+                  <BooleanFormField
+                    small
+                    removeIndent
+                    name="datetime_aware"
+                    label="Date and Time Aware"
+                    subtext='Toggle this option to let the assistant know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'
+                  />
+
                   <Separator />
 
                   <TextFormField
@@ -1385,18 +1413,10 @@ export function AssistantEditor({
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
-                  <div className="flex justify-end">
-                    {existingPersona && (
-                      <DeletePersonaButton
-                        personaId={existingPersona!.id}
-                        redirectType={SuccessfulPersonaUpdateRedirectType.ADMIN}
-                      />
-                    )}
-                  </div>
                 </>
               )}
 
-              <div className="mt-12 gap-x-2 w-full  justify-end flex">
+              <div className="mt-12 gap-x-2 w-full justify-end flex">
                 <Button
                   type="submit"
                   disabled={isSubmitting || isRequestSuccessful}
@@ -1410,6 +1430,18 @@ export function AssistantEditor({
                 >
                   Cancel
                 </Button>
+              </div>
+
+              <div className="flex justify-end">
+                {existingPersona && (
+                  <Button
+                    variant="destructive"
+                    onClick={openDeleteModal}
+                    type="button"
+                  >
+                    Delete
+                  </Button>
+                )}
               </div>
             </Form>
           );

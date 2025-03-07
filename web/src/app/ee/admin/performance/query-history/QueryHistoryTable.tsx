@@ -42,11 +42,13 @@ function QueryHistoryTableRow({
   return (
     <TableRow
       key={chatSessionMinimal.id}
-      className="hover:bg-hover-light cursor-pointer relative"
+      className="hover:bg-accent-background cursor-pointer relative"
     >
       <TableCell>
         <Text className="whitespace-normal line-clamp-5">
-          {chatSessionMinimal.first_user_message || "-"}
+          {chatSessionMinimal.first_user_message ||
+            chatSessionMinimal.name ||
+            "-"}
         </Text>
       </TableCell>
       <TableCell>

@@ -5,6 +5,8 @@ not follow the expected behavior, etc.
 NOTE: cannot use Celery directly due to
 https://github.com/celery/celery/issues/7007#issuecomment-1740139367"""
 import multiprocessing as mp
+import sys
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from multiprocessing.context import SpawnProcess
@@ -15,8 +17,21 @@ from typing import Optional
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.configs import TENANT_ID_PREFIX
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+
+
+class SimpleJobException(Exception):
+    """lets us raise an exception that will return a specific error code"""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        code: int | None = kwargs.pop("code", None)
+        self.code = code
+        super().__init__(*args, **kwargs)
+
 
 JobStatusType = (
     Literal["error"]
@@ -28,7 +43,10 @@ JobStatusType = (
 
 
 def _initializer(
-    func: Callable, args: list | tuple, kwargs: dict[str, Any] | None = None
+    func: Callable,
+    queue: mp.Queue,
+    args: list | tuple,
+    kwargs: dict[str, Any] | None = None,
 ) -> Any:
     """Initialize the child process with a fresh SQLAlchemy Engine.
 
@@ -39,6 +57,15 @@ def _initializer(
         kwargs = {}
 
     logger.info("Initializing spawned worker child process.")
+    # 1. Get tenant_id from args or fallback to default
+    tenant_id = POSTGRES_DEFAULT_SCHEMA
+    for arg in reversed(args):
+        if isinstance(arg, str) and arg.startswith(TENANT_ID_PREFIX):
+            tenant_id = arg
+            break
+
+    # 2. Set the tenant context before running anything
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
     # Reset the engine in the child process
     SqlEngine.reset_engine()
@@ -52,13 +79,31 @@ def _initializer(
     )
 
     # Proceed with executing the target function
-    return func(*args, **kwargs)
+    try:
+        return func(*args, **kwargs)
+    except SimpleJobException as e:
+        logger.exception("SimpleJob raised a SimpleJobException")
+        error_msg = traceback.format_exc()
+        queue.put(error_msg)  # Send the exception to the parent process
+
+        sys.exit(e.code)  # use the given exit code
+    except Exception:
+        logger.exception("SimpleJob raised an exception")
+        error_msg = traceback.format_exc()
+        queue.put(error_msg)  # Send the exception to the parent process
+
+        sys.exit(255)  # use 255 to indicate a generic exception
+    finally:
+        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 def _run_in_process(
-    func: Callable, args: list | tuple, kwargs: dict[str, Any] | None = None
+    func: Callable,
+    queue: mp.Queue,
+    args: list | tuple,
+    kwargs: dict[str, Any] | None = None,
 ) -> None:
-    _initializer(func, args, kwargs)
+    _initializer(func, queue, args, kwargs)
 
 
 @dataclass
@@ -67,6 +112,8 @@ class SimpleJob:
 
     id: int
     process: Optional["SpawnProcess"] = None
+    queue: Optional[mp.Queue] = None
+    _exception: Optional[str] = None
 
     def cancel(self) -> bool:
         return self.release()
@@ -100,9 +147,15 @@ class SimpleJob:
     def exception(self) -> str:
         """Needed to match the Dask API, but not implemented since we don't currently
         have a way to get back the exception information from the child process."""
-        return (
-            f"Job with ID '{self.id}' was killed or encountered an unhandled exception."
-        )
+
+        """Retrieve exception from the multiprocessing queue if available."""
+        if self._exception is None and self.queue and not self.queue.empty():
+            self._exception = self.queue.get()  # Get exception from queue
+
+        if self._exception:
+            return self._exception
+
+        return f"Job with ID '{self.id}' did not report an exception."
 
 
 class SimpleJobClient:
@@ -137,8 +190,11 @@ class SimpleJobClient:
         # this approach allows us to always "spawn" a new process regardless of
         # get_start_method's current setting
         ctx = mp.get_context("spawn")
-        process = ctx.Process(target=_run_in_process, args=(func, args), daemon=True)
-        job = SimpleJob(id=job_id, process=process)
+        queue = ctx.Queue()
+        process = ctx.Process(
+            target=_run_in_process, args=(func, queue, args), daemon=True
+        )
+        job = SimpleJob(id=job_id, process=process, queue=queue)
         process.start()
 
         self.jobs[job_id] = job

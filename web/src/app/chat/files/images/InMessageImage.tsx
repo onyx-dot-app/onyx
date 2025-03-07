@@ -16,7 +16,7 @@ export function InMessageImage({ fileId }: { fileId: string }) {
 
       <div className="relative w-full h-full max-w-96 max-h-96">
         {!imageLoaded && (
-          <div className="absolute inset-0 bg-gray-200 animate-pulse rounded-lg" />
+          <div className="absolute inset-0 bg-background-200 animate-pulse rounded-lg" />
         )}
 
         <img

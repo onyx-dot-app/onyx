@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.engine import get_sqlalchemy_engine
-from onyx.document_index.document_index_utils import get_both_index_names
+from onyx.document_index.document_index_utils import get_both_index_properties
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 
 
@@ -19,7 +19,7 @@ def test_vespa_update() -> None:
     doc_id = "test-vespa-update"
 
     with Session(get_sqlalchemy_engine()) as db_session:
-        primary_index_name, _ = get_both_index_names(db_session)
+        primary_index_name, _, _, _ = get_both_index_properties(db_session)
         endpoint = (
             f"{DOCUMENT_ID_ENDPOINT.format(index_name=primary_index_name)}/{doc_id}"
         )

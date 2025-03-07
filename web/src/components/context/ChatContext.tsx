@@ -11,10 +11,12 @@ import {
 import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 import { Folder } from "@/app/chat/folders/interfaces";
+import { useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 interface ChatContextProps {
   chatSessions: ChatSession[];
-  toggledSidebar: boolean;
+  sidebarInitiallyVisible: boolean;
   availableSources: ValidSources[];
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
@@ -32,6 +34,7 @@ interface ChatContextProps {
   refreshFolders: () => Promise<void>;
   refreshInputPrompts: () => Promise<void>;
   inputPrompts: InputPrompt[];
+  proSearchToggled: boolean;
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);
@@ -49,6 +52,8 @@ export const ChatProvider: React.FC<{
   >;
   children: React.ReactNode;
 }> = ({ value, children }) => {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
   const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
   const [folders, setFolders] = useState(value?.folders || []);
@@ -70,6 +75,16 @@ export const ChatProvider: React.FC<{
       if (!response.ok) throw new Error("Failed to fetch chat sessions");
       const { sessions } = await response.json();
       setChatSessions(sessions);
+
+      const currentSessionId = searchParams.get("chatId");
+      if (
+        currentSessionId &&
+        !sessions.some(
+          (session: ChatSession) => session.id === currentSessionId
+        )
+      ) {
+        router.replace("/chat");
+      }
     } catch (error) {
       console.error("Error refreshing chat sessions:", error);
     }

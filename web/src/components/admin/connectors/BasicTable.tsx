@@ -26,7 +26,7 @@ export const BasicTable: FC<BasicTableProps> = ({
     <div>
       <table className="w-full table-auto">
         <thead>
-          <tr className="text-left bg-gray-700">
+          <tr className="text-left bg-background-700">
             {columns.map((column, index) => {
               const isRightAligned = column?.alignment === "right";
               return (
@@ -55,7 +55,7 @@ export const BasicTable: FC<BasicTableProps> = ({
               key={rowIndex}
               className={
                 "text-sm" +
-                (onSelect ? " hover:bg-gray-800 cursor-pointer" : "")
+                (onSelect ? " hover:bg-background-800 cursor-pointer" : "")
               }
               onClick={() => onSelect && onSelect(row)}
             >
@@ -67,7 +67,7 @@ export const BasicTable: FC<BasicTableProps> = ({
                     className={
                       (column.width ? `w-${column.width} ` : "") +
                       (isRightAligned ? "flex" : "") +
-                      "py-2 px-4 border-b border-gray-800"
+                      "py-2 px-4 border-b border-background-800"
                     }
                   >
                     <div>{row[column.key]}</div>

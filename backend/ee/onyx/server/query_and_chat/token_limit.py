@@ -13,7 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.api_key import is_api_key_email_address
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
 from onyx.db.models import TokenRateLimit
@@ -28,21 +28,21 @@ from onyx.server.query_and_chat.token_limit import _user_is_rate_limited_by_glob
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
-def _check_token_rate_limits(user: User | None, tenant_id: str | None) -> None:
+def _check_token_rate_limits(user: User | None) -> None:
     if user is None:
         # Unauthenticated users are only rate limited by global settings
-        _user_is_rate_limited_by_global(tenant_id)
+        _user_is_rate_limited_by_global()
 
     elif is_api_key_email_address(user.email):
         # API keys are only rate limited by global settings
-        _user_is_rate_limited_by_global(tenant_id)
+        _user_is_rate_limited_by_global()
 
     else:
         run_functions_tuples_in_parallel(
             [
-                (_user_is_rate_limited, (user.id, tenant_id)),
-                (_user_is_rate_limited_by_group, (user.id, tenant_id)),
-                (_user_is_rate_limited_by_global, (tenant_id,)),
+                (_user_is_rate_limited, (user.id,)),
+                (_user_is_rate_limited_by_group, (user.id,)),
+                (_user_is_rate_limited_by_global, ()),
             ]
         )
 
@@ -52,8 +52,8 @@ User rate limits
 """
 
 
-def _user_is_rate_limited(user_id: UUID, tenant_id: str | None) -> None:
-    with get_session_with_tenant(tenant_id) as db_session:
+def _user_is_rate_limited(user_id: UUID) -> None:
+    with get_session_with_current_tenant() as db_session:
         user_rate_limits = fetch_all_user_token_rate_limits(
             db_session=db_session, enabled_only=True, ordered=False
         )
@@ -93,8 +93,8 @@ User Group rate limits
 """
 
 
-def _user_is_rate_limited_by_group(user_id: UUID, tenant_id: str | None) -> None:
-    with get_session_with_tenant(tenant_id) as db_session:
+def _user_is_rate_limited_by_group(user_id: UUID) -> None:
+    with get_session_with_current_tenant() as db_session:
         group_rate_limits = _fetch_all_user_group_rate_limits(user_id, db_session)
 
         if group_rate_limits:

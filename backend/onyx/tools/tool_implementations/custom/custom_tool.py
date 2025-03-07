@@ -17,7 +17,7 @@ from requests import JSONDecodeError
 
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.constants import FileOrigin
-from onyx.db.engine import get_session_with_default_tenant
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
@@ -74,6 +74,7 @@ class CustomToolCallSummary(BaseModel):
     tool_result: Any  # The response data
 
 
+# override_kwargs is not supported for custom tools
 class CustomTool(BaseTool):
     def __init__(
         self,
@@ -204,7 +205,7 @@ class CustomTool(BaseTool):
     def _save_and_get_file_references(
         self, file_content: bytes | str, content_type: str
     ) -> List[str]:
-        with get_session_with_default_tenant() as db_session:
+        with get_session_with_current_tenant() as db_session:
             file_store = get_default_file_store(db_session)
 
             file_id = str(uuid.uuid4())
@@ -235,7 +236,9 @@ class CustomTool(BaseTool):
 
     """Actual execution of the tool"""
 
-    def run(self, **kwargs: Any) -> Generator[ToolResponse, None, None]:
+    def run(
+        self, override_kwargs: dict[str, Any] | None = None, **kwargs: Any
+    ) -> Generator[ToolResponse, None, None]:
         request_body = kwargs.get(REQUEST_BODY)
 
         path_params = {}
@@ -325,7 +328,7 @@ class CustomTool(BaseTool):
 
         # Load files from storage
         files = []
-        with get_session_with_default_tenant() as db_session:
+        with get_session_with_current_tenant() as db_session:
             file_store = get_default_file_store(db_session)
 
             for file_id in response.tool_result.file_ids:

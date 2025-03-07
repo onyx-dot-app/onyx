@@ -12,6 +12,7 @@ import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
 from fastapi import APIRouter
 from fastapi import HTTPException
+from fastapi import Request
 from google.oauth2 import service_account  # type: ignore
 from litellm import aembedding
 from litellm.exceptions import RateLimitError
@@ -97,12 +98,17 @@ class CloudEmbedding:
             return final_embeddings
         except Exception as e:
             error_string = (
-                f"Error embedding text with OpenAI: {str(e)} \n"
-                f"Model: {model} \n"
-                f"Provider: {self.provider} \n"
-                f"Texts: {texts}"
+                f"Exception embedding text with OpenAI - {type(e)}: "
+                f"Model: {model} "
+                f"Provider: {self.provider} "
+                f"Exception: {e}"
             )
             logger.error(error_string)
+
+            # only log text when it's not an authentication error.
+            if not isinstance(e, openai.AuthenticationError):
+                logger.debug(f"Exception texts: {texts}")
+
             raise RuntimeError(error_string)
 
     async def _embed_cohere(
@@ -320,6 +326,7 @@ async def embed_text(
     prefix: str | None,
     api_url: str | None,
     api_version: str | None,
+    gpu_type: str = "UNKNOWN",
 ) -> list[Embedding]:
     if not all(texts):
         logger.error("Empty strings provided for embedding")
@@ -373,8 +380,11 @@ async def embed_text(
 
         elapsed = time.monotonic() - start
         logger.info(
-            f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
-            f"with provider {provider_type} in {elapsed:.2f}"
+            f"event=embedding_provider "
+            f"texts={len(texts)} "
+            f"chars={total_chars} "
+            f"provider={provider_type} "
+            f"elapsed={elapsed:.2f}"
         )
     elif model_name is not None:
         logger.info(
@@ -402,6 +412,14 @@ async def embed_text(
         logger.info(
             f"Successfully embedded {len(texts)} texts with {total_chars} total characters "
             f"with local model {model_name} in {elapsed:.2f}"
+        )
+        logger.info(
+            f"event=embedding_model "
+            f"texts={len(texts)} "
+            f"chars={total_chars} "
+            f"model={model_name} "
+            f"gpu={gpu_type} "
+            f"elapsed={elapsed:.2f}"
         )
     else:
         logger.error("Neither model name nor provider specified for embedding")
@@ -455,8 +473,15 @@ async def litellm_rerank(
 
 
 @router.post("/bi-encoder-embed")
-async def process_embed_request(
+async def route_bi_encoder_embed(
+    request: Request,
     embed_request: EmbedRequest,
+) -> EmbedResponse:
+    return await process_embed_request(embed_request, request.app.state.gpu_type)
+
+
+async def process_embed_request(
+    embed_request: EmbedRequest, gpu_type: str = "UNKNOWN"
 ) -> EmbedResponse:
     if not embed_request.texts:
         raise HTTPException(status_code=400, detail="No texts to be embedded")
@@ -484,6 +509,7 @@ async def process_embed_request(
             api_url=embed_request.api_url,
             api_version=embed_request.api_version,
             prefix=prefix,
+            gpu_type=gpu_type,
         )
         return EmbedResponse(embeddings=embeddings)
     except RateLimitError as e:

@@ -10,7 +10,8 @@ from onyx.connectors.onyx_jira.connector import JiraConnector
 @pytest.fixture
 def jira_connector() -> JiraConnector:
     connector = JiraConnector(
-        "https://danswerai.atlassian.net/jira/software/c/projects/AS/boards/6",
+        jira_base_url="https://danswerai.atlassian.net",
+        project_key="AS",
         comment_email_blacklist=[],
     )
     connector.load_credentials(
@@ -34,11 +35,11 @@ def test_jira_connector_basic(jira_connector: JiraConnector) -> None:
     doc = doc_batch[0]
 
     assert doc.id == "https://danswerai.atlassian.net/browse/AS-2"
-    assert doc.semantic_identifier == "test123small"
+    assert doc.semantic_identifier == "AS-2: test123small"
     assert doc.source == DocumentSource.JIRA
     assert doc.metadata == {"priority": "Medium", "status": "Backlog"}
     assert doc.secondary_owners is None
-    assert doc.title is None
+    assert doc.title == "AS-2 test123small"
     assert doc.from_ingestion_api is False
     assert doc.additional_info is None
 

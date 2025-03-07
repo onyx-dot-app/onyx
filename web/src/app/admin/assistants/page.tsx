@@ -1,15 +1,11 @@
-"use client";
 import { PersonasTable } from "./PersonaTable";
-import { FiPlusSquare } from "react-icons/fi";
-import Link from "next/link";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
 import { AssistantsIcon } from "@/components/icons/icons";
 import { AdminPageTitle } from "@/components/admin/Title";
-import LabelManagement from "./LabelManagement";
 import { SubLabel } from "@/components/admin/connectors/Field";
-
+import CreateButton from "@/components/ui/createButton";
 export default async function Page() {
   return (
     <div className="mx-auto container">
@@ -33,15 +29,7 @@ export default async function Page() {
         <Separator />
 
         <Title>Create an Assistant</Title>
-        <Link
-          href="/admin/assistants/new"
-          className="flex py-2 px-4 mt-2 border border-border h-fit cursor-pointer hover:bg-hover text-sm w-40"
-        >
-          <div className="mx-auto flex">
-            <FiPlusSquare className="my-auto mr-2" />
-            New Assistant
-          </div>
-        </Link>
+        <CreateButton href="/assistants/new?admin=true" text="New Assistant" />
 
         <Separator />
 

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
+from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.credentials import alter_credential
 from onyx.db.credentials import cleanup_gmail_credentials
 from onyx.db.credentials import create_credential
@@ -99,6 +100,12 @@ def swap_credentials_for_connector(
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> StatusResponse:
+    validate_ccpair_for_user(
+        credential_swap_req.connector_id,
+        credential_swap_req.new_credential_id,
+        db_session,
+    )
+
     connector_credential_pair = swap_credentials_connector(
         new_credential_id=credential_swap_req.new_credential_id,
         connector_id=credential_swap_req.connector_id,

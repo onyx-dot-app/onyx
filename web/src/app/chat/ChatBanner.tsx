@@ -3,7 +3,7 @@
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useContext, useState, useRef, useLayoutEffect } from "react";
 import { ChevronDownIcon } from "@/components/icons/icons";
-import { MinimalMarkdown } from "@/components/chat_search/MinimalMarkdown";
+import { MinimalMarkdown } from "@/components/chat/MinimalMarkdown";
 
 export function ChatBanner() {
   const settings = useContext(SettingsContext);
@@ -61,7 +61,7 @@ export function ChatBanner() {
       onMouseLeave={handleMouseLeave}
       aria-expanded={isExpanded}
     >
-      <div className="text-emphasis text-sm w-full">
+      <div className="text-text-darker text-sm w-full">
         {/* Padding for consistent spacing */}
         <div className="relative p-2">
           {/* Collapsible container */}
@@ -113,7 +113,7 @@ export function ChatBanner() {
             aria-label="Expand banner content"
             onClick={() => setIsExpanded(true)}
           >
-            <ChevronDownIcon className="h-3 w-3 text-emphasis" />
+            <ChevronDownIcon className="h-3 w-3 text-text-darker" />
           </button>
         )}
       </div>

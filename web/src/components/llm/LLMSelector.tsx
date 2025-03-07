@@ -85,7 +85,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
           <span>{userSettings ? "System Default" : "User Default"}</span>
           {userSettings && (
             <span className=" my-auto font-normal ml-1">
-              ({defaultModelDisplayName})
+              ({defaultModelDisplayName}) asdf
             </span>
           )}
         </SelectItem>

@@ -235,8 +235,8 @@ export function EmbeddingModelSelection({
           onClick={() => setModelTab(null)}
           className={`mr-4 p-2 font-bold  ${
             !modelTab
-              ? "rounded bg-background-900 text-text-100 underline"
-              : " hover:underline bg-background-100"
+              ? "rounded bg-neutral-900 dark:bg-neutral-950 text-neutral-100 dark:text-neutral-300 underline"
+              : " hover:underline bg-neutral-100 dark:bg-neutral-900"
           }`}
         >
           Current
@@ -246,8 +246,8 @@ export function EmbeddingModelSelection({
             onClick={() => setModelTab("cloud")}
             className={`mx-2 p-2 font-bold  ${
               modelTab == "cloud"
-                ? "rounded bg-background-900 text-text-100 underline"
-                : " hover:underline bg-background-100"
+                ? "rounded bg-neutral-900 dark:bg-neutral-950 text-neutral-100 dark:text-neutral-300 underline"
+                : " hover:underline bg-neutral-100 dark:bg-neutral-900"
             }`}
           >
             Cloud-based
@@ -258,8 +258,8 @@ export function EmbeddingModelSelection({
             onClick={() => setModelTab("open")}
             className={` mx-2 p-2 font-bold  ${
               modelTab == "open"
-                ? "rounded bg-background-900 text-text-100 underline"
-                : "hover:underline bg-background-100"
+                ? "rounded bg-neutral-900 dark:bg-neutral-950 text-neutral-100 dark:text-neutral-300 underline"
+                : "hover:underline bg-neutral-100 dark:bg-neutral-900"
             }`}
           >
             Self-hosted

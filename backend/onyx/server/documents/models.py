@@ -8,9 +8,9 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from ee.onyx.server.query_history.models import ChatSessionMinimal
+from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import DocumentErrorSummary
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -19,7 +19,6 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
-from onyx.db.models import IndexAttemptError as DbIndexAttemptError
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
 from onyx.server.models import FullUserSnapshot
@@ -84,7 +83,9 @@ class ConnectorSnapshot(ConnectorBase):
     source: DocumentSource
 
     @classmethod
-    def from_connector_db_model(cls, connector: Connector) -> "ConnectorSnapshot":
+    def from_connector_db_model(
+        cls, connector: Connector, credential_ids: list[int] | None = None
+    ) -> "ConnectorSnapshot":
         return ConnectorSnapshot(
             id=connector.id,
             name=connector.name,
@@ -93,9 +94,10 @@ class ConnectorSnapshot(ConnectorBase):
             connector_specific_config=connector.connector_specific_config,
             refresh_freq=connector.refresh_freq,
             prune_freq=connector.prune_freq,
-            credential_ids=[
-                association.credential.id for association in connector.credentials
-            ],
+            credential_ids=(
+                credential_ids
+                or [association.credential.id for association in connector.credentials]
+            ),
             indexing_start=connector.indexing_start,
             time_created=connector.time_created,
             time_updated=connector.time_updated,
@@ -150,6 +152,7 @@ class CredentialSnapshot(CredentialBase):
 class IndexAttemptSnapshot(BaseModel):
     id: int
     status: IndexingStatus | None
+    from_beginning: bool
     new_docs_indexed: int  # only includes completely new docs
     total_docs_indexed: int  # includes docs that are updated
     docs_removed_from_index: int
@@ -166,6 +169,7 @@ class IndexAttemptSnapshot(BaseModel):
         return IndexAttemptSnapshot(
             id=index_attempt.id,
             status=index_attempt.status,
+            from_beginning=index_attempt.from_beginning,
             new_docs_indexed=index_attempt.new_docs_indexed or 0,
             total_docs_indexed=index_attempt.total_docs_indexed or 0,
             docs_removed_from_index=index_attempt.docs_removed_from_index or 0,
@@ -181,31 +185,6 @@ class IndexAttemptSnapshot(BaseModel):
         )
 
 
-class IndexAttemptError(BaseModel):
-    id: int
-    index_attempt_id: int | None
-    batch_number: int | None
-    doc_summaries: list[DocumentErrorSummary]
-    error_msg: str | None
-    traceback: str | None
-    time_created: str
-
-    @classmethod
-    def from_db_model(cls, error: DbIndexAttemptError) -> "IndexAttemptError":
-        doc_summaries = [
-            DocumentErrorSummary.from_dict(summary) for summary in error.doc_summaries
-        ]
-        return IndexAttemptError(
-            id=error.id,
-            index_attempt_id=error.index_attempt_id,
-            batch_number=error.batch,
-            doc_summaries=doc_summaries,
-            error_msg=error.error_msg,
-            traceback=error.traceback,
-            time_created=error.time_created.isoformat(),
-        )
-
-
 # These are the types currently supported by the pagination hook
 # More api endpoints can be refactored and be added here for use with the pagination hook
 PaginatedType = TypeVar(
@@ -214,6 +193,7 @@ PaginatedType = TypeVar(
     FullUserSnapshot,
     InvitedUserSnapshot,
     ChatSessionMinimal,
+    IndexAttemptErrorPydantic,
 )
 
 
@@ -357,6 +337,7 @@ class ConnectorCredentialPairDescriptor(BaseModel):
     name: str | None = None
     connector: ConnectorSnapshot
     credential: CredentialSnapshot
+    access_type: AccessType
 
 
 class RunConnectorRequest(BaseModel):

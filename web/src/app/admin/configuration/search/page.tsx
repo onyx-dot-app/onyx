@@ -111,14 +111,14 @@ function Main() {
                   <div className="space-y-4">
                     <div>
                       <Text className="font-semibold">Reranking Model</Text>
-                      <Text className="text-gray-700">
+                      <Text className="text-text-700">
                         {searchSettings.rerank_model_name || "Not set"}
                       </Text>
                     </div>
 
                     <div>
                       <Text className="font-semibold">Results to Rerank</Text>
-                      <Text className="text-gray-700">
+                      <Text className="text-text-700">
                         {searchSettings.num_rerank}
                       </Text>
                     </div>
@@ -127,7 +127,7 @@ function Main() {
                       <Text className="font-semibold">
                         Multilingual Expansion
                       </Text>
-                      <Text className="text-gray-700">
+                      <Text className="text-text-700">
                         {searchSettings.multilingual_expansion.length > 0
                           ? searchSettings.multilingual_expansion.join(", ")
                           : "None"}
@@ -136,7 +136,7 @@ function Main() {
 
                     <div>
                       <Text className="font-semibold">Multipass Indexing</Text>
-                      <Text className="text-gray-700">
+                      <Text className="text-text-700">
                         {searchSettings.multipass_indexing
                           ? "Enabled"
                           : "Disabled"}
@@ -147,7 +147,7 @@ function Main() {
                       <Text className="font-semibold">
                         Disable Reranking for Streaming
                       </Text>
-                      <Text className="text-gray-700">
+                      <Text className="text-text-700">
                         {searchSettings.disable_rerank_for_streaming
                           ? "Yes"
                           : "No"}

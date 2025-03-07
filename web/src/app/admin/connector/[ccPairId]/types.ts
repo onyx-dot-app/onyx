@@ -12,6 +12,19 @@ export enum ConnectorCredentialPairStatus {
   ACTIVE = "ACTIVE",
   PAUSED = "PAUSED",
   DELETING = "DELETING",
+  INVALID = "INVALID",
+}
+
+/**
+ * Returns true if the status is not currently active (i.e. paused or invalid), but not deleting
+ */
+export function statusIsNotCurrentlyActive(
+  status: ConnectorCredentialPairStatus
+): boolean {
+  return (
+    status === ConnectorCredentialPairStatus.PAUSED ||
+    status === ConnectorCredentialPairStatus.INVALID
+  );
 }
 
 export interface CCPairFullInfo {
@@ -36,4 +49,28 @@ export interface PaginatedIndexAttempts {
   index_attempts: IndexAttemptSnapshot[];
   page: number;
   total_pages: number;
+}
+
+export interface IndexAttemptError {
+  id: number;
+  connector_credential_pair_id: number;
+
+  document_id: string | null;
+  document_link: string | null;
+
+  entity_id: string | null;
+  failed_time_range_start: string | null;
+  failed_time_range_end: string | null;
+
+  failure_message: string;
+  is_resolved: boolean;
+
+  time_created: string;
+
+  index_attempt_id: number;
+}
+
+export interface PaginatedIndexAttemptErrors {
+  items: IndexAttemptError[];
+  total_items: number;
 }

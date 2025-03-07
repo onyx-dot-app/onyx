@@ -109,7 +109,7 @@ export const TokenRateLimitTable = ({
                       }
                       className={`px-1 py-0.5 rounded select-none w-24 ${
                         isAdmin
-                          ? "hover:bg-hover-light cursor-pointer"
+                          ? "hover:bg-accent-background cursor-pointer"
                           : "opacity-50"
                       }`}
                     >
@@ -131,7 +131,7 @@ export const TokenRateLimitTable = ({
                   </div>
                 </TableCell>
                 {shouldRenderGroupName() && (
-                  <TableCell className="font-bold text-emphasis">
+                  <TableCell className="font-bold text-text-darker">
                     {tokenRateLimit.group_name}
                   </TableCell>
                 )}

@@ -59,7 +59,7 @@ function SummaryRow({
   return (
     <TableRow
       onClick={onToggle}
-      className="border-border group hover:bg-background-settings-hover bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
+      className="border-border dark:hover:bg-neutral-800 dark:border-neutral-700 group hover:bg-background-settings-hover/20 bg-background-sidebar py-4 rounded-sm !border cursor-pointer"
     >
       <TableCell>
         <div className="text-xl flex items-center truncate ellipsis gap-x-2 font-semibold">
@@ -76,37 +76,26 @@ function SummaryRow({
       </TableCell>
 
       <TableCell>
-        <div className="text-sm text-gray-500">Total Connectors</div>
+        <div className="text-sm text-neutral-500 dark:text-neutral-300">
+          Total Connectors
+        </div>
         <div className="text-xl font-semibold">{summary.count}</div>
       </TableCell>
 
       <TableCell>
-        <div className="text-sm text-gray-500">Active Connectors</div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center mt-1">
-                <div className="w-full bg-white rounded-full h-2 mr-2">
-                  <div
-                    className="bg-green-500 h-2 rounded-full"
-                    style={{ width: `${activePercentage}%` }}
-                  ></div>
-                </div>
-                <span className="text-sm font-medium whitespace-nowrap">
-                  {summary.active} ({activePercentage.toFixed(0)}%)
-                </span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              {summary.active} out of {summary.count} connectors are active
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="text-sm text-neutral-500 dark:text-neutral-300">
+          Active Connectors
+        </div>
+        <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
+          {summary.active}/{summary.count}
+        </p>
       </TableCell>
 
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
-          <div className="text-sm text-gray-500">Public Connectors</div>
+          <div className="text-sm text-neutral-500 dark:text-neutral-300">
+            Public Connectors
+          </div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
             {summary.public}/{summary.count}
           </p>
@@ -114,14 +103,18 @@ function SummaryRow({
       )}
 
       <TableCell>
-        <div className="text-sm text-gray-500">Total Docs Indexed</div>
+        <div className="text-sm text-neutral-500 dark:text-neutral-300">
+          Total Docs Indexed
+        </div>
         <div className="text-xl font-semibold">
           {summary.totalDocsIndexed.toLocaleString()}
         </div>
       </TableCell>
 
       <TableCell>
-        <div className="text-sm text-gray-500">Errors</div>
+        <div className="text-sm text-neutral-500 dark:text-neutral-300">
+          Errors
+        </div>
 
         <div className="flex items-center text-lg gap-x-1 font-semibold">
           {summary.errors > 0 && <Warning className="text-error h-6 w-6" />}
@@ -166,6 +159,19 @@ function ConnectorRow({
           Paused
         </Badge>
       );
+    } else if (
+      ccPairsIndexingStatus.cc_pair_status ===
+      ConnectorCredentialPairStatus.INVALID
+    ) {
+      return (
+        <Badge
+          tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
+          circle
+          variant="invalid"
+        >
+          Invalid
+        </Badge>
+      );
     }
 
     // ACTIVE case
@@ -178,7 +184,7 @@ function ConnectorRow({
         );
       case "not_started":
         return (
-          <Badge circle variant="purple">
+          <Badge circle variant="not_started">
             Scheduled
           </Badge>
         );
@@ -193,11 +199,13 @@ function ConnectorRow({
 
   return (
     <TableRow
-      className={`hover:bg-hover-light ${
-        invisible
-          ? "invisible !h-0 !-mb-10 !border-none"
-          : "!border !border-border"
-      }  w-full cursor-pointer relative `}
+      className={`
+border border-border dark:border-neutral-700
+        hover:bg-accent-background ${
+          invisible
+            ? "invisible !h-0 !-mb-10 !border-none"
+            : "!border border-border dark:border-neutral-700"
+        }  w-full cursor-pointer relative `}
       onClick={() => {
         router.push(`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`);
       }}
@@ -219,16 +227,13 @@ function ConnectorRow({
             </Badge>
           ) : ccPairsIndexingStatus.access_type === "sync" ? (
             <Badge
-              variant={isEditable ? "orange" : "default"}
+              variant={isEditable ? "auto-sync" : "default"}
               icon={FiRefreshCw}
             >
-              Sync
+              Auto-Sync
             </Badge>
           ) : (
-            <Badge
-              variant={isEditable ? "in_progress" : "default"}
-              icon={FiLock}
-            >
+            <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
               Private
             </Badge>
           )}
@@ -457,7 +462,10 @@ export function CCPairIndexingStatusTable({
                   />
                   {connectorsToggled[source] && (
                     <>
-                      <TableRow className="border border-border">
+                      <TableRow
+                        noHover
+                        className="border  !  border-border dark:border-neutral-700"
+                      >
                         <TableHead>Name</TableHead>
                         <TableHead>Last Indexed</TableHead>
                         <TableHead>Activity</TableHead>

@@ -40,7 +40,7 @@ const SelectedFilter = ({
       px-2 
       w-fit 
       select-none 
-      hover:bg-hover 
+      hover:bg-accent-background-hovered 
       bg-background 
       shadow-md 
     "

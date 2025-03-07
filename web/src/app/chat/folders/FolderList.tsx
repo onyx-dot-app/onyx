@@ -184,7 +184,7 @@ const FolderItem = ({
       onDragLeave={() => setIsDragOver(false)}
       onDrop={handleDrop}
       className={`transition duration-300 ease-in-out rounded-md ${
-        isDragOver ? "bg-hover" : ""
+        isDragOver ? "bg-accent-background-hovered" : ""
       }`}
     >
       <BasicSelectable fullWidth selected={false}>
@@ -261,7 +261,7 @@ const FolderItem = ({
                           </button>
                           <button
                             onClick={cancelDelete}
-                            className="bg-gray-300 hover:bg-gray-200 px-2 py-1 rounded text-xs"
+                            className="bg-background-300 hover:bg-background-200 px-2 py-1 rounded text-xs"
                           >
                             No
                           </button>

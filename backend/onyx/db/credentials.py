@@ -14,6 +14,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY,
 )
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import Credential__UserGroup
@@ -168,8 +169,8 @@ def fetch_credential_by_id_for_user(
 
 
 def fetch_credential_by_id(
-    db_session: Session,
     credential_id: int,
+    db_session: Session,
 ) -> Credential | None:
     stmt = select(Credential).distinct()
     stmt = stmt.where(Credential.id == credential_id)
@@ -244,6 +245,10 @@ def swap_credentials_connector(
     # Update the existing pair with the new credential
     existing_pair.credential_id = new_credential_id
     existing_pair.credential = new_credential
+
+    # Update ccpair status if it's in INVALID state
+    if existing_pair.status == ConnectorCredentialPairStatus.INVALID:
+        existing_pair.status = ConnectorCredentialPairStatus.ACTIVE
 
     # Commit the changes
     db_session.commit()
@@ -417,8 +422,8 @@ def create_initial_public_credential(db_session: Session) -> None:
         "There must exist an empty public credential for data connectors that do not require additional Auth."
     )
     first_credential = fetch_credential_by_id(
-        db_session=db_session,
         credential_id=PUBLIC_CREDENTIAL_ID,
+        db_session=db_session,
     )
 
     if first_credential is not None:

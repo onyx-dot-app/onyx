@@ -70,6 +70,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Set up application files
 COPY ./onyx /app/onyx
 COPY ./shared_configs /app/shared_configs
+COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic /app/alembic
 COPY ./alembic.ini /app/alembic.ini
 COPY ./pytest.ini /app/pytest.ini

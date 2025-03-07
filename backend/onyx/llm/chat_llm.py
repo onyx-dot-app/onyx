@@ -26,6 +26,8 @@ from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
+from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
 )
@@ -34,6 +36,7 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -47,6 +50,18 @@ litellm.drop_params = True
 litellm.telemetry = False
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
+
+
+class LLMTimeoutError(Exception):
+    """
+    Exception raised when an LLM call times out.
+    """
+
+
+class LLMRateLimitError(Exception):
+    """
+    Exception raised when an LLM call is rate limited.
+    """
 
 
 def _base_msg_to_role(msg: BaseMessage) -> str:
@@ -228,15 +243,15 @@ class DefaultMultiLLM(LLM):
     def __init__(
         self,
         api_key: str | None,
-        timeout: int,
         model_provider: str,
         model_name: str,
+        timeout: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
         max_output_tokens: int | None = None,
         custom_llm_provider: str | None = None,
-        temperature: float = GEN_AI_TEMPERATURE,
+        temperature: float | None = None,
         custom_config: dict[str, str] | None = None,
         extra_headers: dict[str, str] | None = None,
         extra_body: dict | None = LITELLM_EXTRA_BODY,
@@ -244,9 +259,16 @@ class DefaultMultiLLM(LLM):
         long_term_logger: LongTermLogger | None = None,
     ):
         self._timeout = timeout
+        if timeout is None:
+            if model_is_reasoning_model(model_name):
+                self._timeout = QA_TIMEOUT * 10  # Reasoning models are slow
+            else:
+                self._timeout = QA_TIMEOUT
+
+        self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
+
         self._model_provider = model_provider
         self._model_version = model_name
-        self._temperature = temperature
         self._api_key = api_key
         self._deployment_name = deployment_name
         self._api_base = api_base
@@ -379,6 +401,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None,
         stream: bool,
         structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
     ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -387,7 +410,9 @@ class DefaultMultiLLM(LLM):
 
         try:
             return litellm.completion(
+                mock_response=MOCK_LLM_RESPONSE,
                 # model choice
+                # model="openai/gpt-4",
                 model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
                 # NOTE: have to pass in None instead of empty string for these
                 # otherwise litellm can have some issues with bedrock
@@ -402,12 +427,26 @@ class DefaultMultiLLM(LLM):
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=self._temperature,
-                timeout=self._timeout,
+                temperature=0,
+                timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
-                **({"parallel_tool_calls": False} if tools else {}),
+                **(
+                    {"parallel_tool_calls": False}
+                    if tools
+                    and self.config.model_name
+                    not in [
+                        "o3-mini",
+                        "o3-preview",
+                        "o1",
+                        "o1-preview",
+                        "o1-mini",
+                        "o1-mini-2024-09-12",
+                        "o3-mini-2025-01-31",
+                    ]
+                    else {}
+                ),  # TODO: remove once LITELLM has patched
                 **(
                     {"response_format": structured_response_format}
                     if structured_response_format
@@ -418,6 +457,12 @@ class DefaultMultiLLM(LLM):
         except Exception as e:
             self._record_error(processed_prompt, e)
             # for break pointing
+            if isinstance(e, litellm.Timeout):
+                raise LLMTimeoutError(e)
+
+            elif isinstance(e, litellm.RateLimitError):
+                raise LLMRateLimitError(e)
+
             raise e
 
     @property
@@ -438,6 +483,7 @@ class DefaultMultiLLM(LLM):
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -445,7 +491,12 @@ class DefaultMultiLLM(LLM):
         response = cast(
             litellm.ModelResponse,
             self._completion(
-                prompt, tools, tool_choice, False, structured_response_format
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=False,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
             ),
         )
         choice = response.choices[0]
@@ -463,21 +514,31 @@ class DefaultMultiLLM(LLM):
         tools: list[dict] | None = None,
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
     ) -> Iterator[BaseMessage]:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
 
-        if (
-            DISABLE_LITELLM_STREAMING or self.config.model_name == "o1-2024-12-17"
-        ):  # TODO: remove once litellm supports streaming
-            yield self.invoke(prompt, tools, tool_choice, structured_response_format)
+        if DISABLE_LITELLM_STREAMING:
+            yield self.invoke(
+                prompt,
+                tools,
+                tool_choice,
+                structured_response_format,
+                timeout_override,
+            )
             return
 
         output = None
         response = cast(
             litellm.CustomStreamWrapper,
             self._completion(
-                prompt, tools, tool_choice, True, structured_response_format
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=True,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
             ),
         )
         try:

@@ -46,7 +46,7 @@ export function PersonaSelector({
         </div>
       }
     >
-      <div className="select-none text-sm font-bold flex text-emphasis px-2 py-1.5 cursor-pointer w-fit hover:bg-hover rounded">
+      <div className="select-none text-sm font-bold flex text-text-darker px-2 py-1.5 cursor-pointer w-fit hover:bg-accent-background-hovered rounded">
         {currentlySelectedPersona?.name || "Default"}
         <FiChevronDown className="my-auto ml-2" />
       </div>

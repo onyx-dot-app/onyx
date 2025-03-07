@@ -40,6 +40,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import CreateButton from "@/components/ui/createButton";
 
 const numToDisplay = 50;
 
@@ -54,7 +55,7 @@ const EditRow = ({
 
   if (!isEditable) {
     return (
-      <div className="text-emphasis font-medium my-auto p-1">
+      <div className="text-text-darkerfont-medium my-auto p-1">
         {documentSet.name}
       </div>
     );
@@ -67,7 +68,7 @@ const EditRow = ({
           <TooltipTrigger asChild>
             <div
               className={`
-              text-emphasis font-medium my-auto p-1 hover:bg-hover-light flex items-center select-none
+              text-text-darkerfont-medium my-auto p-1 hover:bg-accent-background flex items-center select-none
               ${documentSet.is_up_to_date ? "cursor-pointer" : "cursor-default"}
             `}
               style={{ wordBreak: "normal", overflowWrap: "break-word" }}
@@ -212,7 +213,7 @@ const DocumentSetTable = ({
                       </Badge>
                     ) : (
                       <Badge
-                        variant={isEditable ? "in_progress" : "outline"}
+                        variant={isEditable ? "private" : "default"}
                         icon={FiLock}
                       >
                         Private
@@ -305,9 +306,13 @@ const Main = () => {
       <div className="mb-3"></div>
 
       <div className="flex mb-6">
-        <Link href="/admin/documents/sets/new">
+        <CreateButton
+          href="/admin/documents/sets/new"
+          text="New Document Set"
+        />
+        {/* <Link href="/admin/documents/sets/new">
           <Button variant="navigate">New Document Set</Button>
-        </Link>
+        </Link> */}
       </div>
 
       {documentSets.length > 0 && (

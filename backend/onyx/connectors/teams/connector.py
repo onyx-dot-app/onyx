@@ -5,6 +5,7 @@ from typing import Any
 
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
+from office365.runtime.client_request_exception import ClientRequestException  # type: ignore
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from office365.teams.team import Team  # type: ignore
@@ -12,6 +13,10 @@ from office365.teams.team import Team  # type: ignore
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -180,23 +185,28 @@ class TeamsConnector(LoadConnector, PollConnector):
         self.batch_size = batch_size
         self.graph_client: GraphClient | None = None
         self.requested_team_list: list[str] = teams
+        self.msal_app: msal.ConfidentialClientApplication | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         teams_client_id = credentials["teams_client_id"]
         teams_client_secret = credentials["teams_client_secret"]
         teams_directory_id = credentials["teams_directory_id"]
 
+        authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
+        self.msal_app = msal.ConfidentialClientApplication(
+            authority=authority_url,
+            client_id=teams_client_id,
+            client_credential=teams_client_secret,
+        )
+
         def _acquire_token_func() -> dict[str, Any]:
             """
             Acquire token via MSAL
             """
-            authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
-            app = msal.ConfidentialClientApplication(
-                authority=authority_url,
-                client_id=teams_client_id,
-                client_credential=teams_client_secret,
-            )
-            token = app.acquire_token_for_client(
+            if self.msal_app is None:
+                raise RuntimeError("MSAL app is not initialized")
+
+            token = self.msal_app.acquire_token_for_client(
                 scopes=["https://graph.microsoft.com/.default"]
             )
             return token
@@ -273,6 +283,50 @@ class TeamsConnector(LoadConnector, PollConnector):
         start_datetime = datetime.fromtimestamp(start, timezone.utc)
         end_datetime = datetime.fromtimestamp(end, timezone.utc)
         return self._fetch_from_teams(start=start_datetime, end=end_datetime)
+
+    def validate_connector_settings(self) -> None:
+        if self.graph_client is None:
+            raise ConnectorMissingCredentialError("Teams credentials not loaded.")
+
+        try:
+            # Minimal call to confirm we can retrieve Teams
+            found_teams = self._get_all_teams()
+
+        except ClientRequestException as e:
+            status_code = e.response.status_code
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Microsoft Teams credentials (401 Unauthorized)."
+                )
+            elif status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
+                )
+            raise UnexpectedError(f"Unexpected error retrieving teams: {e}")
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if (
+                "unauthorized" in error_str
+                or "401" in error_str
+                or "invalid_grant" in error_str
+            ):
+                raise CredentialExpiredError(
+                    "Invalid or expired Microsoft Teams credentials."
+                )
+            elif "forbidden" in error_str or "403" in error_str:
+                raise InsufficientPermissionsError(
+                    "App lacks required permissions to read from Microsoft Teams."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Teams validation: {e}"
+            )
+
+        if not found_teams:
+            raise ConnectorValidationError(
+                "No Teams found for the given credentials. "
+                "Either there are no Teams in this tenant, or your app does not have permission to view them."
+            )
 
 
 if __name__ == "__main__":

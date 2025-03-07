@@ -1,14 +1,18 @@
 from typing import Any
-from typing import cast
 from unittest.mock import Mock
+from uuid import UUID
 
 import pytest
+from langchain_core.messages import HumanMessage
 from pytest_mock import MockerFixture
+from sqlalchemy.orm import Session
 
 from onyx.chat.answer import Answer
-from onyx.chat.answer import AnswerStream
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import PromptConfig
+from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.context.search.models import SearchRequest
+from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from tests.regression.answer_quality.run_qa import _process_and_write_query_results
@@ -32,37 +36,51 @@ def test_skip_gen_ai_answer_generation_flag(
     mock_search_tool: SearchTool,
     answer_style_config: AnswerStyleConfig,
     prompt_config: PromptConfig,
+    mocker: MockerFixture,
 ) -> None:
+    mocker.patch(
+        "onyx.chat.answer.gpu_status_request",
+        return_value=True,
+    )
     question = config["question"]
     skip_gen_ai_answer_generation = config["skip_gen_ai_answer_generation"]
 
-    mock_llm = Mock()
+    mock_llm = Mock(spec=LLM)
     mock_llm.config = Mock()
     mock_llm.config.model_name = "gpt-4o-mini"
     mock_llm.stream = Mock()
     mock_llm.stream.return_value = [Mock()]
+
     answer = Answer(
-        question=question,
+        db_session=Mock(spec=Session),
         answer_style_config=answer_style_config,
-        prompt_config=prompt_config,
         llm=mock_llm,
-        single_message_history="history",
+        fast_llm=mock_llm,
         tools=[mock_search_tool],
-        force_use_tool=(
-            ForceUseTool(
-                tool_name=mock_search_tool.name,
-                args={"query": question},
-                force_use=True,
-            )
+        force_use_tool=ForceUseTool(
+            tool_name=mock_search_tool.name,
+            args={"query": question},
+            force_use=True,
         ),
         skip_explicit_tool_calling=True,
-        return_contexts=True,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
+        search_request=SearchRequest(query=question),
+        prompt_builder=AnswerPromptBuilder(
+            user_message=HumanMessage(content=question),
+            message_history=[],
+            llm_config=mock_llm.config,
+            raw_user_query=question,
+            raw_user_uploaded_files=[],
+        ),
+        chat_session_id=UUID("123e4567-e89b-12d3-a456-426614174000"),
+        current_agent_message_id=0,
     )
-    count = 0
-    for _ in cast(AnswerStream, answer.processed_streamed_output):
-        count += 1
-    assert count == 3 if skip_gen_ai_answer_generation else 4
+    results = list(answer.processed_streamed_output)
+    for res in results:
+        print(res)
+
+    expected_count = 4 if skip_gen_ai_answer_generation else 5
+    assert len(results) == expected_count
     if not skip_gen_ai_answer_generation:
         mock_llm.stream.assert_called_once()
     else:

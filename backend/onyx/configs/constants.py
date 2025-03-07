@@ -15,6 +15,12 @@ ID_SEPARATOR = ":;:"
 DEFAULT_BOOST = 0
 SESSION_KEY = "session"
 
+# Cookies
+FASTAPI_USERS_AUTH_COOKIE_NAME = (
+    "fastapiusersauth"  # Currently a constant, but logic allows for configuration
+)
+TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
+
 NO_AUTH_USER_ID = "__no_auth_user__"
 NO_AUTH_USER_EMAIL = "anonymous@onyx.app"
 
@@ -38,6 +44,13 @@ DEFAULT_PERSONA_ID = 0
 
 DEFAULT_CC_PAIR_ID = 1
 
+# subquestion level and question number for basic flow
+BASIC_KEY = (-1, -1)
+AGENT_SEARCH_INITIAL_KEY = (0, 0)
+CANCEL_CHECK_INTERVAL = 20
+DISPATCH_SEP_CHAR = "\n"
+FORMAT_DOCS_SEPARATOR = "\n\n"
+NUM_EXPLORATORY_DOCS = 15
 # Postgres connection constants for application_name
 POSTGRES_WEB_APP_NAME = "web"
 POSTGRES_INDEXER_APP_NAME = "indexer"
@@ -85,18 +98,27 @@ CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
-# needs to be long enough to cover the maximum time it takes to download an object
+
+# hard timeout applied by the watchdog to the indexing connector run
+# to handle hung connectors
+CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT = 3 * 60 * 60  # 3 hours (in seconds)
+
+# soft timeout for the lock taken by the indexing connector run
+# allows the lock to eventually expire if the managing code around it dies
 # if we can get callbacks as object bytes download, we could lower this a lot.
-CELERY_INDEXING_LOCK_TIMEOUT = 3 * 60 * 60  # 60 min
+# CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 15 minutes
+# hard termination should always fire first if the connector is hung
+CELERY_INDEXING_LOCK_TIMEOUT = CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT + 900
+
 
 # how long a task should wait for associated fence to be ready
 CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
 
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
-CELERY_PRUNING_LOCK_TIMEOUT = 300  # 5 min
+CELERY_PRUNING_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
-CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 300  # 5 min
+CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT = 3600  # 1 hour (in seconds)
 
 CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT = 300  # 5 min
 
@@ -112,6 +134,7 @@ class DocumentSource(str, Enum):
     GMAIL = "gmail"
     REQUESTTRACKER = "requesttracker"
     GITHUB = "github"
+    GITBOOK = "gitbook"
     GITLAB = "gitlab"
     GURU = "guru"
     BOOKSTACK = "bookstack"
@@ -150,6 +173,9 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
+
+    # Special case just for integration tests
+    MOCK_CONNECTOR = "mock_connector"
 
 
 DocumentSourceRequiringTenantContext: list[DocumentSource] = [DocumentSource.FILE]
@@ -229,6 +255,7 @@ class FileOrigin(str, Enum):
     CHAT_IMAGE_GEN = "chat_image_gen"
     CONNECTOR = "connector"
     GENERATED_REPORT = "generated_report"
+    INDEXING_CHECKPOINT = "indexing_checkpoint"
     OTHER = "other"
 
 
@@ -250,11 +277,17 @@ class PostgresAdvisoryLocks(Enum):
 
 
 class OnyxCeleryQueues:
+    # "celery" is the default queue defined by celery and also the queue
+    # we are running in the primary worker to run system tasks
+    # Tasks running in this queue should be designed specifically to run quickly
+    PRIMARY = "celery"
+
     # Light queue
     VESPA_METADATA_SYNC = "vespa_metadata_sync"
     DOC_PERMISSIONS_UPSERT = "doc_permissions_upsert"
     CONNECTOR_DELETION = "connector_deletion"
     LLM_MODEL_UPDATE = "llm_model_update"
+    CHECKPOINT_CLEANUP = "checkpoint_cleanup"
 
     # Heavy queue
     CONNECTOR_PRUNING = "connector_pruning"
@@ -274,13 +307,13 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_DELETION_BEAT_LOCK = "da_lock:check_connector_deletion_beat"
     CHECK_PRUNE_BEAT_LOCK = "da_lock:check_prune_beat"
     CHECK_INDEXING_BEAT_LOCK = "da_lock:check_indexing_beat"
+    CHECK_CHECKPOINT_CLEANUP_BEAT_LOCK = "da_lock:check_checkpoint_cleanup_beat"
     CHECK_CONNECTOR_DOC_PERMISSIONS_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_doc_permissions_sync_beat"
     )
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
-    MONITOR_VESPA_SYNC_BEAT_LOCK = "da_lock:monitor_vespa_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
@@ -294,11 +327,28 @@ class OnyxRedisLocks:
     SLACK_BOT_HEARTBEAT_PREFIX = "da_heartbeat:slack_bot"
     ANONYMOUS_USER_ENABLED = "anonymous_user_enabled"
 
-    CLOUD_CHECK_INDEXING_BEAT_LOCK = "da_lock:cloud_check_indexing_beat"
+    CLOUD_BEAT_TASK_GENERATOR_LOCK = "da_lock:cloud_beat_task_generator"
+    CLOUD_CHECK_ALEMBIC_BEAT_LOCK = "da_lock:cloud_check_alembic"
 
 
 class OnyxRedisSignals:
-    VALIDATE_INDEXING_FENCES = "signal:validate_indexing_fences"
+    BLOCK_VALIDATE_INDEXING_FENCES = "signal:block_validate_indexing_fences"
+    BLOCK_VALIDATE_EXTERNAL_GROUP_SYNC_FENCES = (
+        "signal:block_validate_external_group_sync_fences"
+    )
+    BLOCK_VALIDATE_PERMISSION_SYNC_FENCES = (
+        "signal:block_validate_permission_sync_fences"
+    )
+    BLOCK_PRUNING = "signal:block_pruning"
+    BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
+    BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
+    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
+        "signal:block_validate_connector_deletion_fences"
+    )
+
+
+class OnyxRedisConstants:
+    ACTIVE_FENCES = "active_fences"
 
 
 class OnyxCeleryPriority(int, Enum):
@@ -315,8 +365,19 @@ ONYX_CLOUD_CELERY_TASK_PREFIX = "cloud"
 # the tenant id we use for system level redis operations
 ONYX_CLOUD_TENANT_ID = "cloud"
 
+# the redis namespace for runtime variables
+ONYX_CLOUD_REDIS_RUNTIME = "runtime"
+
 
 class OnyxCeleryTask:
+    DEFAULT = "celery"
+
+    CLOUD_BEAT_TASK_GENERATOR = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_generate_beat_tasks"
+    CLOUD_MONITOR_ALEMBIC = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_alembic"
+    CLOUD_MONITOR_CELERY_QUEUES = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
+    )
+
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"
@@ -324,8 +385,14 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
-    MONITOR_VESPA_SYNC = "monitor_vespa_sync"
+
+    # Connector checkpoint cleanup
+    CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
+    CLEANUP_CHECKPOINT = "cleanup_checkpoint"
+
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
+    MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
         "connector_permission_sync_generator_task"
@@ -342,8 +409,6 @@ class OnyxCeleryTask:
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
-
-    CLOUD_CHECK_FOR_INDEXING = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_for_indexing"
 
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}

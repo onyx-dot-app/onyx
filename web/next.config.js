@@ -22,7 +22,7 @@ const cspHeader = `
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  productionBrowserSourceMaps: true,
+  productionBrowserSourceMaps: false,
   output: "standalone",
   publicRuntimeConfig: {
     version,
@@ -68,11 +68,33 @@ const nextConfig = {
       },
     ];
   },
+  async rewrites() {
+    return [
+      {
+        source: "/api/docs/:path*", // catch /api/docs and /api/docs/...
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/docs/:path*`,
+      },
+      {
+        source: "/api/docs", // if you also need the exact /api/docs
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/docs`,
+      },
+      {
+        source: "/openapi.json",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/openapi.json`,
+      },
+    ];
+  },
 };
 
 // Sentry configuration for error monitoring:
 // - Without SENTRY_AUTH_TOKEN and NEXT_PUBLIC_SENTRY_DSN: Sentry is completely disabled
-// - With both configured: Only unhandled errors are captured (no performance/session tracking)
+// - With both configured: Capture errors and limited performance data
 
 // Determine if Sentry should be enabled
 const sentryEnabled = Boolean(
@@ -86,12 +108,16 @@ const sentryWebpackPluginOptions = {
   authToken: process.env.SENTRY_AUTH_TOKEN,
   silent: !sentryEnabled, // Silence output when Sentry is disabled
   dryRun: !sentryEnabled, // Don't upload source maps when Sentry is disabled
-  sourceMaps: {
-    include: ["./.next"],
-    validate: false,
-    urlPrefix: "~/_next",
-    skip: !sentryEnabled,
-  },
+  ...(sentryEnabled && {
+    sourceMaps: {
+      include: ["./.next"],
+      ignore: ["node_modules"],
+      urlPrefix: "~/_next",
+      stripPrefix: ["webpack://_N_E/"],
+      validate: true,
+      cleanArtifacts: true,
+    },
+  }),
 };
 
 // Export the module with conditional Sentry configuration

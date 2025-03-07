@@ -64,19 +64,16 @@ export default function StarterMessagesList({
             size="icon"
             onClick={() => {
               arrayHelpers.remove(index);
-              if (
-                index === values.length - 2 &&
-                !values[values.length - 1].message
-              ) {
-                arrayHelpers.pop();
-              }
             }}
-            className={`text-gray-400 hover:text-red-500 ${
+            className={`text-text-400 hover:text-red-500 ${
               index === values.length - 1 && !starterMessage.message
                 ? "opacity-50 cursor-not-allowed"
                 : ""
             }`}
-            disabled={index === values.length - 1 && !starterMessage.message}
+            disabled={
+              (index === values.length - 1 && !starterMessage.message) ||
+              (values.length === 1 && index === 0) // should never happen, but just in case
+            }
           >
             <FiTrash2 className="h-4 w-4" />
           </Button>
@@ -108,7 +105,7 @@ export default function StarterMessagesList({
                       4 ||
                     isRefreshing ||
                     !autoStarterMessageEnabled
-                      ? "bg-neutral-800 text-neutral-300 cursor-not-allowed"
+                      ? "bg-background-800 text-text-300 cursor-not-allowed"
                       : ""
                   }
                 `}

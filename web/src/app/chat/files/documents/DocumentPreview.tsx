@@ -27,7 +27,7 @@ export function DocumentPreview({
         ${alignBubble && "min-w-52 max-w-48"}
         flex
         items-center
-        bg-hover-light/50
+        bg-accent-background/50
         border
         border-border
         rounded-lg
@@ -80,10 +80,10 @@ export function DocumentPreview({
       {open && (
         <button
           onClick={() => open()}
-          className="ml-2 p-2 rounded-full hover:bg-gray-200 transition-colors duration-200"
+          className="ml-2 p-2 rounded-full hover:bg-background-200 transition-colors duration-200"
           aria-label="Expand document"
         >
-          <ExpandTwoIcon className="w-5 h-5 text-gray-600" />
+          <ExpandTwoIcon className="w-5 h-5 text-text-600" />
         </button>
       )}
     </div>
@@ -117,7 +117,7 @@ export function InputDocumentPreview({
         flex
         items-center
         p-2
-        bg-hover
+        bg-accent-background-hovered
         border
         border-border
         rounded-md

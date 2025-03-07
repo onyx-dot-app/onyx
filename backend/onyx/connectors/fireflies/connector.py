@@ -50,6 +50,9 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
     current_link = ""
     current_text = ""
 
+    if transcript["sentences"] is None:
+        return None
+
     for sentence in transcript["sentences"]:
         if sentence["speaker_name"] != current_speaker_name:
             if current_speaker_name is not None:
@@ -184,12 +187,12 @@ class FirefliesConnector(PollConnector, LoadConnector):
         return self._process_transcripts()
 
     def poll_source(
-        self, start_unixtime: SecondsSinceUnixEpoch, end_unixtime: SecondsSinceUnixEpoch
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        start_datetime = datetime.fromtimestamp(
-            start_unixtime, tz=timezone.utc
-        ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-        end_datetime = datetime.fromtimestamp(end_unixtime, tz=timezone.utc).strftime(
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%S.000Z"
+        )
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc).strftime(
             "%Y-%m-%dT%H:%M:%S.000Z"
         )
 

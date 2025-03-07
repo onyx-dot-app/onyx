@@ -15,7 +15,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import PostgresAdvisoryLocks
-from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import get_session_with_current_tenant
 
 
 @shared_task(
@@ -24,7 +24,7 @@ from onyx.db.engine import get_session_with_tenant
     bind=True,
     base=AbortableTask,
 )
-def kombu_message_cleanup_task(self: Any, tenant_id: str | None) -> int:
+def kombu_message_cleanup_task(self: Any, tenant_id: str) -> int:
     """Runs periodically to clean up the kombu_message table"""
 
     # we will select messages older than this amount to clean up
@@ -36,7 +36,7 @@ def kombu_message_cleanup_task(self: Any, tenant_id: str | None) -> int:
     ctx["deleted"] = 0
     ctx["cleanup_age"] = KOMBU_MESSAGE_CLEANUP_AGE
     ctx["page_limit"] = KOMBU_MESSAGE_CLEANUP_PAGE_LIMIT
-    with get_session_with_tenant(tenant_id) as db_session:
+    with get_session_with_current_tenant() as db_session:
         # Exit the task if we can't take the advisory lock
         result = db_session.execute(
             text("SELECT pg_try_advisory_lock(:id)"),

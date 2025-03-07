@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
+import { FiLoader } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
-import { FilterManager, LlmOverrideManager } from "@/lib/hooks";
+import { FilterManager, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import {
@@ -24,7 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Hoverable } from "@/components/Hoverable";
 import { ChatState } from "../types";
-import UnconfiguredProviderText from "@/components/chat_search/UnconfiguredProviderText";
+import UnconfiguredProviderText from "@/components/chat/UnconfiguredProviderText";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { CalendarIcon, TagIcon, XIcon } from "lucide-react";
 import { FilterPopup } from "@/components/search/filtering/FilterPopup";
@@ -34,8 +35,93 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
+import { AgenticToggle } from "./AgenticToggle";
+import { SettingsContext } from "@/components/settings/SettingsProvider";
+import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
+import { FidgetSpinner } from "react-loader-spinner";
+import { LoadingAnimation } from "@/components/Loading";
 
 const MAX_INPUT_HEIGHT = 200;
+export const SourceChip2 = ({
+  icon,
+  title,
+  onRemove,
+  onClick,
+  includeTooltip,
+  includeAnimation,
+  truncateTitle = true,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  onRemove?: () => void;
+  onClick?: () => void;
+  truncateTitle?: boolean;
+  includeTooltip?: boolean;
+  includeAnimation?: boolean;
+}) => {
+  const [isNew, setIsNew] = useState(true);
+  const [isTooltipOpen, setIsTooltipOpen] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsNew(false), 300);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <TooltipProvider>
+      <Tooltip
+        delayDuration={0}
+        open={isTooltipOpen}
+        onOpenChange={setIsTooltipOpen}
+      >
+        <TooltipTrigger
+          onMouseEnter={() => setIsTooltipOpen(true)}
+          onMouseLeave={() => setIsTooltipOpen(false)}
+        >
+          <div
+            onClick={onClick ? onClick : undefined}
+            className={`
+            h-6
+            px-2
+            bg-background-dark
+            rounded-2xl
+            justify-center
+            items-center
+            inline-flex
+            ${includeAnimation && isNew ? "animate-fade-in-scale" : ""}
+            ${onClick ? "cursor-pointer" : ""}
+          `}
+          >
+            <div className="w-[17px] h-4 p-[3px] flex-col justify-center items-center gap-2.5 inline-flex">
+              <div className="h-2.5 relative">{icon}</div>
+            </div>
+            <div className="text-text-800 text-xs font-medium leading-normal">
+              {truncateTitle ? truncateString(title, 50) : title}
+            </div>
+            {onRemove && (
+              <XIcon
+                size={12}
+                className="text-text-800 ml-2 cursor-pointer"
+                onClick={(e: React.MouseEvent<SVGSVGElement>) => {
+                  e.stopPropagation();
+                  onRemove();
+                }}
+              />
+            )}
+          </div>
+        </TooltipTrigger>
+        {includeTooltip && title.length > 50 && (
+          <TooltipContent
+            className="!pointer-events-none z-[2000000]"
+            onMouseEnter={() => setIsTooltipOpen(false)}
+          >
+            <p>{title}</p>
+          </TooltipContent>
+        )}
+      </Tooltip>
+    </TooltipProvider>
+  );
+};
 
 export const SourceChip = ({
   icon,
@@ -53,11 +139,11 @@ export const SourceChip = ({
   <div
     onClick={onClick ? onClick : undefined}
     className={`
-      flex-none
+        flex-none
         flex
         items-center
         px-1
-        bg-gray-background
+        bg-background-background
         text-xs
         text-text-darker
         border
@@ -68,6 +154,7 @@ export const SourceChip = ({
         gap-x-1
         h-6
         ${onClick ? "cursor-pointer" : ""}
+        animate-fade-in-scale
       `}
   >
     {icon}
@@ -93,7 +180,7 @@ interface ChatInputBarProps {
   setMessage: (message: string) => void;
   stopGenerating: () => void;
   onSubmit: () => void;
-  llmOverrideManager: LlmOverrideManager;
+  llmManager: LlmManager;
   chatState: ChatState;
   alternativeAssistant: Persona | null;
   // assistants
@@ -109,6 +196,8 @@ interface ChatInputBarProps {
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
+  proSearchEnabled: boolean;
+  setProSearchEnabled: (proSearchEnabled: boolean) => void;
 }
 
 export function ChatInputBar({
@@ -136,9 +225,12 @@ export function ChatInputBar({
   availableSources,
   availableDocumentSets,
   availableTags,
-  llmOverrideManager,
+  llmManager,
+  proSearchEnabled,
+  setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
+  const settings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -340,7 +432,7 @@ export function ChatInputBar({
               ref={suggestionsRef}
               className="text-sm absolute w-[calc(100%-2rem)] top-0 transform -translate-y-full"
             >
-              <div className="rounded-lg py-1 sm-1.5 bg-background border border-border shadow-lg px-1.5 mt-2 z-10">
+              <div className="rounded-lg py-1 sm-1.5 bg-input-background border border-border dark:border-none shadow-lg px-1.5 mt-2 z-10">
                 {assistantTagOptions.map((currentAssistant, index) => (
                   <button
                     key={index}
@@ -384,7 +476,7 @@ export function ChatInputBar({
               ref={suggestionsRef}
               className="text-sm absolute inset-x-0 top-0 w-full transform -translate-y-full"
             >
-              <div className="rounded-lg py-1.5 bg-background border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
+              <div className="rounded-lg py-1.5 bg-input-background dark:border-none border border-border shadow-lg mx-2 px-1.5 mt-2 rounded z-10">
                 {filteredPrompts.map(
                   (currentPrompt: InputPrompt, index: number) => (
                     <button
@@ -431,8 +523,11 @@ export function ChatInputBar({
               flex-col
               border
               shadow
-              border-[#DCDAD4]/60
+              bg-input-background
+              border-input-border
+              dark:border-none
               rounded-lg
+              overflow-hidden
               text-text-chatbar
               [&:has(textarea:focus)]::ring-1
               [&:has(textarea:focus)]::ring-black
@@ -478,6 +573,7 @@ export function ChatInputBar({
               onKeyDownCapture={handleKeyDown}
               onChange={handleInputChange}
               ref={textAreaRef}
+              id="onyx-chat-input-textarea"
               className={`
                 m-0
                 w-full
@@ -485,8 +581,11 @@ export function ChatInputBar({
                 resize-none
                 rounded-lg
                 border-0
-                bg-background
-                placeholder:text-text-muted
+                bg-input-background
+                font-normal
+                text-base
+                leading-6
+                placeholder:text-input-text
                 ${
                   textAreaRef.current &&
                   textAreaRef.current.scrollHeight > MAX_INPUT_HEIGHT
@@ -497,10 +596,10 @@ export function ChatInputBar({
                 break-word
                 overscroll-contain
                 outline-none
-                placeholder-subtle
                 resize-none
                 px-5
                 py-4
+                dark:text-[#D4D4D4]
               `}
               autoFocus
               style={{ scrollbarWidth: "thin" }}
@@ -534,7 +633,7 @@ export function ChatInputBar({
               filterManager.selectedDocumentSets.length > 0 ||
               filterManager.selectedTags.length > 0 ||
               filterManager.selectedSources.length > 0) && (
-              <div className="flex gap-x-.5 px-2">
+              <div className="flex bg-input-background gap-x-.5 px-2">
                 <div className="flex gap-x-1 px-2 overflow-visible overflow-x-scroll items-end miniscroll">
                   {filterManager.selectedTags &&
                     filterManager.selectedTags.map((tag, index) => (
@@ -620,12 +719,16 @@ export function ChatInputBar({
                       <SourceChip
                         key={`file-${index}`}
                         icon={
-                          <img
-                            className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
-                            src={buildImgUrl(file.id)}
-                          />
+                          file.isUploading ? (
+                            <FiLoader className="animate-spin" />
+                          ) : (
+                            <img
+                              className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
+                              src={buildImgUrl(file.id)}
+                            />
+                          )
                         }
-                        title={file.name || "File"}
+                        title={file.name || "File" + file.id}
                         onRemove={() => {
                           setFiles(
                             files.filter(
@@ -653,8 +756,8 @@ export function ChatInputBar({
               </div>
             )}
 
-            <div className="flex justify-between items-center overflow-hidden px-4 mb-2">
-              <div className="flex gap-x-1">
+            <div className="flex pr-4 pb-2 justify-between bg-input-background items-center w-full ">
+              <div className="space-x-1 flex  px-4 ">
                 <ChatInputOption
                   flexPriority="stiff"
                   name="File"
@@ -678,7 +781,7 @@ export function ChatInputBar({
 
                 <LLMPopover
                   llmProviders={llmProviders}
-                  llmOverrideManager={llmOverrideManager}
+                  llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
                 />
@@ -694,55 +797,53 @@ export function ChatInputBar({
                         flexPriority="stiff"
                         name="Filters"
                         Icon={FiFilter}
+                        toggle
                         tooltipContent="Filter your search"
                       />
                     }
                   />
                 )}
               </div>
-              <div className="flex my-auto">
+              <div className="flex items-center my-auto">
+                {retrievalEnabled && settings?.settings.pro_search_enabled && (
+                  <AgenticToggle
+                    proSearchEnabled={proSearchEnabled}
+                    setProSearchEnabled={setProSearchEnabled}
+                  />
+                )}
                 <button
+                  id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${
                     chatState == "streaming" ||
                     chatState == "toolBuilding" ||
                     chatState == "loading"
                       ? chatState != "streaming"
-                        ? "bg-background-400"
-                        : "bg-background-800"
-                      : ""
-                  } h-[28px] w-[28px] rounded-full`}
+                        ? "bg-neutral-500 dark:bg-neutral-400 "
+                        : "bg-neutral-900 dark:bg-neutral-50"
+                      : "bg-red-200"
+                  } h-[22px] w-[22px] rounded-full`}
                   onClick={() => {
-                    if (
-                      chatState == "streaming" ||
-                      chatState == "toolBuilding" ||
-                      chatState == "loading"
-                    ) {
+                    if (chatState == "streaming") {
                       stopGenerating();
                     } else if (message) {
                       onSubmit();
                     }
                   }}
-                  disabled={
-                    (chatState == "streaming" ||
-                      chatState == "toolBuilding" ||
-                      chatState == "loading") &&
-                    chatState != "streaming"
-                  }
                 >
                   {chatState == "streaming" ||
                   chatState == "toolBuilding" ||
                   chatState == "loading" ? (
                     <StopGeneratingIcon
-                      size={10}
-                      className="text-emphasis m-auto text-white flex-none"
+                      size={8}
+                      className="text-neutral-50 dark:text-neutral-900 m-auto text-white flex-none"
                     />
                   ) : (
                     <SendIcon
-                      size={26}
-                      className={`text-emphasis text-white p-1 my-auto rounded-full ${
+                      size={22}
+                      className={`text-neutral-50 dark:text-neutral-900 p-1 my-auto rounded-full ${
                         chatState == "input" && message
-                          ? "bg-submit-background"
-                          : "bg-disabled-submit-background"
+                          ? "bg-neutral-900 dark:bg-neutral-50"
+                          : "bg-neutral-500 dark:bg-neutral-400"
                       }`}
                     />
                   )}

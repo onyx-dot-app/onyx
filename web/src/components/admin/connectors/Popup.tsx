@@ -1,16 +1,19 @@
 import { useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
-import { CheckCircle, XCircle } from "lucide-react";
+import { Check, CheckCircle, XCircle } from "lucide-react";
+import { Warning } from "@phosphor-icons/react";
+import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
+
 const popupVariants = cva(
-  "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-white z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
+  "fixed bottom-4 left-4 p-4 rounded-lg shadow-xl text-[#fff] z-[10000] flex items-center space-x-3 transition-all duration-300 ease-in-out",
   {
     variants: {
       type: {
-        success: "bg-green-500",
-        error: "bg-red-500",
-        info: "bg-blue-500",
-        warning: "bg-yellow-500",
+        success: "bg-green-500 dark:bg-green-600",
+        error: "bg-red-500 dark:bg-red-600",
+        info: "bg-blue-500 dark:bg-blue-600",
+        warning: "bg-yellow-500 dark:bg-yellow-600",
       },
     },
     defaultVariants: {
@@ -26,9 +29,9 @@ export interface PopupSpec extends VariantProps<typeof popupVariants> {
 export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
   <div className={cn(popupVariants({ type }))}>
     {type === "success" ? (
-      <CheckCircle className="w-6 h-6 animate-pulse" />
+      <Check className="w-6 h-6" />
     ) : type === "error" ? (
-      <XCircle className="w-6 h-6 animate-pulse" />
+      <Warning className="w-6 h-6 " />
     ) : type === "info" ? (
       <svg
         className="w-6 h-6"
@@ -58,7 +61,23 @@ export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
         />
       </svg>
     )}
-    <span className="font-medium">{message}</span>
+    <div className="flex flex-col justify-center items-start">
+      <p className="font-medium">{message}</p>
+      {type === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK && (
+        <p className="text-xs">
+          Need help?{" "}
+          <a
+            href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline hover:text-red-100 dark:hover:text-red-200"
+          >
+            Join our community
+          </a>{" "}
+          for support!
+        </p>
+      )}
+    </div>
   </div>
 );
 

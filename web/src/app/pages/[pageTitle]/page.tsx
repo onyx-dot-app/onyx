@@ -9,7 +9,6 @@ import { User } from "@/lib/types";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { notFound } from 'next/navigation'
 import { fetchEEASettings } from "@/lib/eea/fetchEEASettings";
-import FixedLogo from "@/app/chat/shared_chat_search/FixedLogo";
 //import { useRouter } from "next/navigation";
 import { BackIcon } from "@/components/icons/icons";
 import Link from "next/link";

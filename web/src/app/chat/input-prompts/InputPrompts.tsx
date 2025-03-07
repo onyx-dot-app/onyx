@@ -177,7 +177,7 @@ export default function InputPrompts() {
     };
 
     return (
-      <div className="border rounded-lg p-4 mb-4 relative">
+      <div className="border dark:border-none dark:bg-[#333333] rounded-lg p-4 mb-4 relative">
         {isEditing ? (
           <>
             <div className="absolute top-2 right-2">
@@ -234,8 +234,12 @@ export default function InputPrompts() {
             <div className="whitespace-pre-wrap">{prompt.content}</div>
             <div className="absolute top-2 right-2">
               <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
+                <DropdownMenuTrigger className="hover:bg-transparent" asChild>
+                  <Button
+                    className="!hover:bg-transparent"
+                    variant="ghost"
+                    size="sm"
+                  >
                     <MoreVertical size={14} />
                   </Button>
                 </DropdownMenuTrigger>

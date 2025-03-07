@@ -55,8 +55,13 @@ class DocAwareChunk(BaseChunk):
 
     def to_short_descriptor(self) -> str:
         """Used when logging the identity of a chunk"""
+        return f"{self.source_document.to_short_descriptor()} Chunk ID: {self.chunk_id}"
+
+    def get_link(self) -> str | None:
         return (
-            f"Chunk ID: '{self.chunk_id}'; {self.source_document.to_short_descriptor()}"
+            self.source_document.sections[0].link
+            if self.source_document.sections
+            else None
         )
 
 
@@ -79,7 +84,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
            negative -> ranked lower.
     """
 
-    tenant_id: str | None = None
+    tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
     boost: int
@@ -91,7 +96,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         access: "DocumentAccess",
         document_sets: set[str],
         boost: int,
-        tenant_id: str | None,
+        tenant_id: str,
     ) -> "DocMetadataAwareIndexChunk":
         index_chunk_data = index_chunk.model_dump()
         return cls(

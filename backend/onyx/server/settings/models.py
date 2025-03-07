@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from onyx.configs.constants import NotificationType
 from onyx.db.models import Notification as NotificationDBModel
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
 class PageType(str, Enum):
@@ -12,10 +13,10 @@ class PageType(str, Enum):
     SEARCH = "search"
 
 
-class GatingType(str, Enum):
-    FULL = "full"  # Complete restriction of access to the product or service
-    PARTIAL = "partial"  # Full access but warning (no credit card on file)
-    NONE = "none"  # No restrictions, full access to all features
+class ApplicationStatus(str, Enum):
+    PAYMENT_REMINDER = "payment_reminder"
+    GATED_ACCESS = "gated_access"
+    ACTIVE = "active"
 
 
 class Notification(BaseModel):
@@ -43,11 +44,15 @@ class Settings(BaseModel):
 
     maximum_chat_retention_days: int | None = None
     gpu_enabled: bool | None = None
-    product_gating: GatingType = GatingType.NONE
+    application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
+    pro_search_enabled: bool | None = None
+
+    temperature_override_enabled: bool | None = False
+    auto_scroll: bool | None = False
 
 
 class UserSettings(Settings):
     notifications: list[Notification]
     needs_reindexing: bool
-    tenant_id: str | None = None
+    tenant_id: str = POSTGRES_DEFAULT_SCHEMA

@@ -4,6 +4,8 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
+import { CombinedSettings } from "@/app/admin/settings/interfaces";
+import { SettingsContext } from "../settings/SettingsProvider";
 
 interface UserContextType {
   user: User | null;
@@ -18,6 +20,7 @@ interface UserContextType {
     assistantId: number,
     isPinned: boolean
   ) => Promise<boolean>;
+  updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -25,13 +28,46 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export function UserProvider({
   children,
   user,
+  settings,
 }: {
   children: React.ReactNode;
   user: User | null;
+  settings: CombinedSettings;
 }) {
-  const [upToDateUser, setUpToDateUser] = useState<User | null>(user);
-
+  const updatedSettings = useContext(SettingsContext);
   const posthog = usePostHog();
+
+  // For auto_scroll and temperature_override_enabled:
+  // - If user has a preference set, use that
+  // - Otherwise, use the workspace setting if available
+  function mergeUserPreferences(
+    currentUser: User | null,
+    currentSettings: CombinedSettings | null
+  ): User | null {
+    if (!currentUser) return null;
+    return {
+      ...currentUser,
+      preferences: {
+        ...currentUser.preferences,
+        auto_scroll:
+          currentUser.preferences?.auto_scroll ??
+          currentSettings?.settings?.auto_scroll ??
+          false,
+        temperature_override_enabled:
+          currentUser.preferences?.temperature_override_enabled ??
+          currentSettings?.settings?.temperature_override_enabled ??
+          false,
+      },
+    };
+  }
+
+  const [upToDateUser, setUpToDateUser] = useState<User | null>(
+    mergeUserPreferences(user, settings)
+  );
+
+  useEffect(() => {
+    setUpToDateUser(mergeUserPreferences(user, updatedSettings));
+  }, [user, updatedSettings]);
 
   useEffect(() => {
     if (!posthog) return;
@@ -57,6 +93,41 @@ export function UserProvider({
       console.error("Error fetching current user:", error);
     }
   };
+  const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              temperature_override_enabled: enabled,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(
+        `/api/temperature-override-enabled?temperature_override_enabled=${enabled}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user temperature override setting");
+      }
+    } catch (error) {
+      console.error("Error updating user temperature override setting:", error);
+      throw error;
+    }
+  };
+
   const updateUserShortcuts = async (enabled: boolean) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -184,6 +255,7 @@ export function UserProvider({
         refreshUser,
         updateUserAutoScroll,
         updateUserShortcuts,
+        updateUserTemperatureOverrideEnabled,
         toggleAssistantPinnedStatus,
         isAdmin: upToDateUser?.role === UserRole.ADMIN,
         // Curator status applies for either global or basic curator

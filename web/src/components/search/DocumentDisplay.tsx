@@ -18,8 +18,9 @@ import { FiTag } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { CustomTooltip, TooltipGroup } from "../tooltip/CustomTooltip";
 import { WarningCircle } from "@phosphor-icons/react";
-import TextView from "../chat_search/TextView";
+import TextView from "../chat/TextView";
 import { openDocument } from "@/lib/search/utils";
+import { SubQuestionDetail } from "@/app/chat/interfaces";
 
 export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
@@ -86,7 +87,7 @@ export const buildDocumentSummaryDisplay = (
             finalJSX[finalJSX.length - 1] = finalJSX[finalJSX.length - 1] + " ";
           }
           finalJSX.push(
-            <b key={index} className="text-default bg-highlight-text">
+            <b key={index} className="text-text font-bold">
               {currentText}
             </b>
           );
@@ -430,12 +431,13 @@ export function CompactDocumentCard({
   url?: string;
   updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
+  console.log("document", document);
   return (
     <div
       onClick={() => {
         openDocument(document, updatePresentingDocument);
       }}
-      className="max-w-[250px]  gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
+      className="max-w-[200px]  gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0  flex-col  content-start items-start gap-0 "
     >
       <div className="text-sm  !pb-0 !mb-0 font-semibold flex  items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
         {icon}
@@ -444,19 +446,51 @@ export function CompactDocumentCard({
           "..."}
       </div>
       {document.blurb && (
-        <div className="text-xs mb-0 text-gray-600 line-clamp-2">
+        <div className="text-xs mb-0 text-neutral-600 dark:text-neutral-300 line-clamp-2">
           {document.blurb}
         </div>
       )}
       {document.updated_at && (
         <div className=" flex mt-0 pt-0 items-center justify-between w-full ">
           {!isNaN(new Date(document.updated_at).getTime()) && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-text-500">
               Updated {new Date(document.updated_at).toLocaleDateString()}
             </span>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+export function CompactQuestionCard({
+  question,
+  openQuestion,
+}: {
+  question: SubQuestionDetail;
+  openQuestion: (question: SubQuestionDetail) => void;
+}) {
+  return (
+    <div
+      onClick={() => openQuestion(question)}
+      className="max-w-[250px] gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
+    >
+      <div className="text-sm !pb-0 !mb-0 font-semibold flex items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
+        Question
+      </div>
+      <div className="text-xs mb-0 text-text-600 line-clamp-2">
+        {question.question}
+      </div>
+      <div className="flex mt-0 pt-0 items-center justify-between w-full">
+        <span className="text-xs text-text-500">
+          {question.context_docs?.top_documents.length || 0} context docs
+        </span>
+        {question.sub_queries && (
+          <span className="text-xs text-text-500">
+            {question.sub_queries.length} subqueries
+          </span>
+        )}
+      </div>
     </div>
   );
 }

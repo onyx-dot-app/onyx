@@ -10,6 +10,10 @@ from celery.signals import worker_ready
 from celery.signals import worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
+from onyx.background.celery.celery_utils import httpx_init_vespa_pool
+from onyx.configs.app_configs import MANAGED_VESPA
+from onyx.configs.app_configs import VESPA_CLOUD_CERT_PATH
+from onyx.configs.app_configs import VESPA_CLOUD_KEY_PATH
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from onyx.db.engine import SqlEngine
 from onyx.utils.logger import setup_logger
@@ -19,6 +23,7 @@ logger = setup_logger()
 
 celery_app = Celery(__name__)
 celery_app.config_from_object("onyx.background.celery.configs.light")
+celery_app.Task = app_base.TenantAwareTask  # type: ignore [misc]
 
 
 @signals.task_prerun.connect
@@ -54,12 +59,23 @@ def on_celeryd_init(sender: str, conf: Any = None, **kwargs: Any) -> None:
 
 @worker_init.connect
 def on_worker_init(sender: Worker, **kwargs: Any) -> None:
+    EXTRA_CONCURRENCY = 8  # small extra fudge factor for connection limits
+
     logger.info("worker_init signal received.")
 
     logger.info(f"Concurrency: {sender.concurrency}")  # type: ignore
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_LIGHT_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=8)  # type: ignore
+    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=EXTRA_CONCURRENCY)  # type: ignore
+
+    if MANAGED_VESPA:
+        httpx_init_vespa_pool(
+            sender.concurrency + EXTRA_CONCURRENCY,  # type: ignore
+            ssl_cert=VESPA_CLOUD_CERT_PATH,
+            ssl_key=VESPA_CLOUD_KEY_PATH,
+        )
+    else:
+        httpx_init_vespa_pool(sender.concurrency + EXTRA_CONCURRENCY)  # type: ignore
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)

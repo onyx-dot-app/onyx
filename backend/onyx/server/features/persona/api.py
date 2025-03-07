@@ -18,7 +18,6 @@ from onyx.auth.users import current_user
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NotificationType
-from onyx.db.engine import get_current_tenant_id
 from onyx.db.engine import get_session
 from onyx.db.models import StarterMessageModel as StarterMessage
 from onyx.db.models import User
@@ -32,6 +31,7 @@ from onyx.db.persona import get_personas_for_user
 from onyx.db.persona import mark_persona_as_deleted
 from onyx.db.persona import mark_persona_as_not_deleted
 from onyx.db.persona import update_all_personas_display_priority
+from onyx.db.persona import update_persona_is_default
 from onyx.db.persona import update_persona_label
 from onyx.db.persona import update_persona_public_status
 from onyx.db.persona import update_persona_shared_users
@@ -55,7 +55,7 @@ from onyx.server.models import DisplayPriorityRequest
 from onyx.tools.utils import is_image_generation_available
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
-
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -70,6 +70,10 @@ class IsVisibleRequest(BaseModel):
 
 class IsPublicRequest(BaseModel):
     is_public: bool
+
+
+class IsDefaultRequest(BaseModel):
+    is_default_persona: bool
 
 
 @admin_router.patch("/{persona_id}/visible")
@@ -103,6 +107,25 @@ def patch_user_presona_public_status(
         )
     except ValueError as e:
         logger.exception("Failed to update persona public status")
+        raise HTTPException(status_code=403, detail=str(e))
+
+
+@admin_router.patch("/{persona_id}/default")
+def patch_persona_default_status(
+    persona_id: int,
+    is_default_request: IsDefaultRequest,
+    user: User | None = Depends(current_curator_or_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    try:
+        update_persona_is_default(
+            persona_id=persona_id,
+            is_default=is_default_request.is_default_persona,
+            db_session=db_session,
+            user=user,
+        )
+    except ValueError as e:
+        logger.exception("Failed to update persona default status")
         raise HTTPException(status_code=403, detail=str(e))
 
 
@@ -178,8 +201,9 @@ def create_persona(
     persona_upsert_request: PersonaUpsertRequest,
     user: User | None = Depends(current_user),
     db_session: Session = Depends(get_session),
-    tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> PersonaSnapshot:
+    tenant_id = get_current_tenant_id()
+
     prompt_id = (
         persona_upsert_request.prompt_ids[0]
         if persona_upsert_request.prompt_ids
@@ -192,8 +216,7 @@ def create_persona(
         name=build_prompt_name_from_persona_name(persona_upsert_request.name),
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
-        # TODO: The PersonaUpsertRequest should provide the value for datetime_aware
-        datetime_aware=False,
+        datetime_aware=persona_upsert_request.datetime_aware,
         include_citations=persona_upsert_request.include_citations,
         prompt_id=prompt_id,
     )
@@ -237,8 +260,7 @@ def update_persona(
         db_session=db_session,
         user=user,
         name=build_prompt_name_from_persona_name(persona_upsert_request.name),
-        # TODO: The PersonaUpsertRequest should provide the value for datetime_aware
-        datetime_aware=False,
+        datetime_aware=persona_upsert_request.datetime_aware,
         system_prompt=persona_upsert_request.system_prompt,
         task_prompt=persona_upsert_request.task_prompt,
         include_citations=persona_upsert_request.include_citations,

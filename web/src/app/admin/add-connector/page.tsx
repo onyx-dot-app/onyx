@@ -27,8 +27,12 @@ function SourceTile({
         w-40 
         cursor-pointer
         shadow-md
-        hover:bg-hover
-        ${preSelect ? "bg-hover subtle-pulse" : "bg-hover-light"}
+        hover:bg-accent-background-hovered
+        ${
+          preSelect
+            ? "bg-accent-background-hovered subtle-pulse"
+            : "bg-accent-background"
+        }
       `}
       href={sourceMetadata.adminUrl}
     >

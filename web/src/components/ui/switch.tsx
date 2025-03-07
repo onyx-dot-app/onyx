@@ -44,8 +44,8 @@ export const Switch = React.forwardRef<
           "focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-50 " +
           "data-[state=checked]:bg-neutral-900 data-[state=unchecked]:bg-neutral-200 " +
           "dark:focus-visible:ring-neutral-300 dark:focus-visible:ring-offset-neutral-950 " +
-          "dark:data-[state=checked]:bg-neutral-50 dark:data-[state=unchecked]:bg-neutral-800",
-        sizeClasses[size],
+          "dark:data-[state=checked]:bg-neutral-200 dark:data-[state=unchecked]:bg-neutral-700 " +
+          sizeClasses[size],
         className
       )}
       {...props}
@@ -63,7 +63,7 @@ export const Switch = React.forwardRef<
   );
 });
 
-Switch.displayName = "Switch";
+Switch.displayName = SwitchPrimitives.Root.displayName;
 
 interface SwitchFieldProps extends Omit<BaseSwitchProps, "checked"> {
   name: string;

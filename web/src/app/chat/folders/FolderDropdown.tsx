@@ -162,12 +162,12 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         onDrop={handleDrop}
       >
         <div
-          className="sticky top-0 bg-background-sidebar z-10"
+          className="sticky top-0 bg-background-sidebar dark:bg-transparent z-10"
           style={{ zIndex: 1000 - index }}
         >
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative bg-background-sidebar sticky top-0"
+            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 relative sticky top-0"
             style={{ zIndex: 10 - index }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
@@ -189,7 +189,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                     type="text"
                     value={newFolderName}
                     onChange={(e) => setNewFolderName(e.target.value)}
-                    className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-[#6c6c6c] transition-colors duration-200"
+                    className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleEdit();
@@ -241,7 +241,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                       </p>
                       <div className="flex justify-center gap-2">
                         <button
-                          className="px-3 py-1 text-sm bg-gray-200 rounded"
+                          className="px-3 py-1 text-sm bg-background-200 rounded"
                           onClick={handleCancelDelete}
                         >
                           Cancel

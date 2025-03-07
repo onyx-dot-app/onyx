@@ -111,7 +111,7 @@ export default function ImpersonatePage() {
 
               <button
                 type="submit"
-                className="w-full py-3 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors"
+                className="w-full py-3 bg-agent text-white rounded-lg hover:bg-accent/90 transition-colors"
               >
                 Impersonate User
               </button>

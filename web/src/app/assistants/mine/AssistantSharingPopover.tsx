@@ -131,7 +131,7 @@ export function AssistantSharingPopover({
 
         <div className="mb-4">
           <h3 className="text-sm font-semibold mb-2">Current Status</h3>
-          <div className="bg-gray-50 rounded-lg p-2">{sharedStatus}</div>
+          <div className="bg-background-50 rounded-lg p-2">{sharedStatus}</div>
         </div>
 
         <div className="mb-4">
@@ -159,8 +159,8 @@ export function AssistantSharingPopover({
               ]);
             }}
             itemComponent={({ option }) => (
-              <div className="flex items-center px-4 py-2.5 cursor-pointer hover:bg-gray-100">
-                <UsersIcon className="mr-3 text-gray-500" />
+              <div className="flex items-center px-4 py-2.5 cursor-pointer hover:bg-background-100">
+                <UsersIcon className="mr-3 text-text-500" />
                 <span className="flex-grow">{option.name}</span>
                 <FiPlus className="text-blue-500" />
               </div>
@@ -170,7 +170,7 @@ export function AssistantSharingPopover({
 
         {selectedUsers.length > 0 && (
           <div className="mb-4">
-            <h4 className="text-xs font-medium text-gray-700 mb-2">
+            <h4 className="text-xs font-medium text-text-700 mb-2">
               Selected Users:
             </h4>
             <div className="flex flex-wrap gap-2">

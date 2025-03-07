@@ -19,7 +19,7 @@ export function BasicClickable({
         border-border
         rounded
         font-medium 
-        text-emphasis 
+        text-text-darker 
         text-sm
         relative
         px-1 py-1.5
@@ -27,7 +27,7 @@ export function BasicClickable({
         bg-background
         select-none
         overflow-hidden
-        hover:bg-hover-light
+        hover:bg-accent-background
         ${fullWidth ? "w-full" : ""}
         ${className ? className : ""}
         `}
@@ -64,7 +64,7 @@ export function EmphasizedClickable({
               : `min-h-[42px] py-2 px-4`
         }
         w-fit 
-        bg-hover
+        bg-accent-background-hovered
         border-1 border-border-medium border bg-background-100 
         text-sm
         rounded-lg

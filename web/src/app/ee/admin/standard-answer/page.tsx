@@ -29,6 +29,7 @@ import { PageSelector } from "@/components/PageSelector";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 import Text from "@/components/ui/text";
 import { TableHeader } from "@/components/ui/table";
+import CreateButton from "@/components/ui/createButton";
 
 const NUM_RESULTS_PER_PAGE = 10;
 
@@ -77,7 +78,7 @@ const CategoryBubble = ({
       text-xs
       font-semibold
       text-emphasis
-      bg-hover
+      bg-accent-background-hovered
       rounded-full
       items-center
       w-fit
@@ -130,7 +131,7 @@ const StandardAnswersTableRow = ({
         />,
         <ReactMarkdown
           key={`answer-${standardAnswer.id}`}
-          className="prose"
+          className="prose dark:prose-invert"
           remarkPlugins={[remarkGfm]}
         >
           {standardAnswer.answer}
@@ -402,11 +403,10 @@ const Main = () => {
       )}
       <div className="mb-2"></div>
 
-      <Link className="flex mb-3 mt-2 w-fit" href="/admin/standard-answer/new">
-        <Button className="my-auto" variant="submit" size="sm">
-          New Standard Answer
-        </Button>
-      </Link>
+      <CreateButton
+        href="/admin/standard-answer/new"
+        text="New Standard Answer"
+      />
 
       <Separator />
 

@@ -33,14 +33,14 @@ function StandardDropdownOption<T>({
   return (
     <button
       onClick={() => handleSelect(option)}
-      className={`w-full text-left block px-4 py-2.5 text-sm bg-white hover:bg-gray-50 ${
-        index !== 0 ? "border-t border-gray-200" : ""
+      className={`w-full text-left block px-4 py-2.5 text-sm bg-white dark:bg-neutral-800 hover:bg-background-50 ${
+        index !== 0 ? "border-t border-background-200" : ""
       }`}
       role="menuitem"
     >
-      <p className="font-medium  text-xs text-gray-900">{option.name}</p>
+      <p className="font-medium  text-xs text-text-900">{option.name}</p>
       {option.description && (
-        <p className="text-xs text-gray-500">{option.description}</p>
+        <p className="text-xs text-text-500">{option.description}</p>
       )}
     </button>
   );
@@ -52,15 +52,19 @@ export function SearchMultiSelectDropdown({
   itemComponent,
   onCreate,
   onDelete,
+  onSearchTermChange,
+  initialSearchTerm = "",
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
   itemComponent?: FC<{ option: StringOrNumberOption }>;
   onCreate?: (name: string) => void;
   onDelete?: (name: string) => void;
+  onSearchTermChange?: (term: string) => void;
+  initialSearchTerm?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSelect = (option: StringOrNumberOption) => {
@@ -89,6 +93,10 @@ export function SearchMultiSelectDropdown({
     };
   }, []);
 
+  useEffect(() => {
+    setSearchTerm(initialSearchTerm);
+  }, [initialSearchTerm]);
+
   return (
     <div className="relative text-left w-full" ref={dropdownRef}>
       <div>
@@ -105,21 +113,21 @@ export function SearchMultiSelectDropdown({
             }
           }}
           onFocus={() => setIsOpen(true)}
-          className="inline-flex justify-between w-full px-4 py-2 text-sm bg-background border border-border rounded-md shadow-sm"
+          className="inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-text-800 border border-background-300 rounded-md shadow-sm"
         />
         <button
           type="button"
-          className="absolute top-0 right-0 text-sm h-full px-2 border-l border-border"
+          className="absolute top-0 right-0 text-sm h-full px-2 border-l border-background-300"
           aria-expanded={isOpen}
           aria-haspopup="true"
           onClick={() => setIsOpen(!isOpen)}
         >
-          <ChevronDownIcon className="my-auto w-4 h-4" />
+          <ChevronDownIcon className="my-auto w-4 h-4 text-text-600" />
         </button>
       </div>
 
       {isOpen && (
-        <div className="absolute z-10 mt-1 w-full rounded-md shadow-lg bg-background border border-border max-h-60 overflow-y-auto">
+        <div className="absolute z-10 mt-1 w-full rounded-md shadow-lg bg-white border border-background-300 max-h-60 overflow-y-auto">
           <div
             role="menu"
             aria-orientation="vertical"
@@ -152,9 +160,9 @@ export function SearchMultiSelectDropdown({
                   option.name.toLowerCase() === searchTerm.toLowerCase()
               ) && (
                 <>
-                  <div className="border-t border-border"></div>
+                  <div className="border-t border-background-300"></div>
                   <button
-                    className="w-full text-left flex items-center px-4 py-2 text-sm hover:bg-hover"
+                    className="w-full text-left flex items-center px-4 py-2 text-sm text-text-800 hover:bg-background-100"
                     role="menuitem"
                     onClick={() => {
                       onCreate(searchTerm);
@@ -162,7 +170,7 @@ export function SearchMultiSelectDropdown({
                       setSearchTerm("");
                     }}
                   >
-                    <PlusIcon className="w-4 h-4 mr-2" />
+                    <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
                     Create label &quot;{searchTerm}&quot;
                   </button>
                 </>
@@ -170,7 +178,7 @@ export function SearchMultiSelectDropdown({
 
             {filteredOptions.length === 0 &&
               (!onCreate || searchTerm.trim() === "") && (
-                <div className="px-4 py-2.5 text-sm text-text-muted">
+                <div className="px-4 py-2.5 text-sm text-text-500">
                   No matches found
                 </div>
               )}
@@ -257,7 +265,8 @@ export function DefaultDropdownElement({
         cursor-pointer 
         bg-transparent 
         rounded
-        hover:bg-hover
+        text-text-dark
+        hover:bg-accent-background-hovered
       `}
       onClick={onSelect}
       title={title}
@@ -442,7 +451,7 @@ export function ControlledPopup({
             border-border 
             z-30 
             rounded 
-            text-emphasis 
+            text-text-darker 
             shadow-lg`}
           style={{ transform: "translateY(calc(-100% - 5px))" }}
         >

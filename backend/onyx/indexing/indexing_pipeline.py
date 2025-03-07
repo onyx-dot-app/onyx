@@ -1,23 +1,21 @@
-import traceback
 from collections.abc import Callable
 from functools import partial
-from http import HTTPStatus
 from typing import Protocol
 
-import httpx
 from pydantic import BaseModel
 from pydantic import ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
-from onyx.configs.app_configs import INDEXING_EXCEPTION_LIMIT
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
@@ -29,21 +27,23 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
-from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.models import Document as DBDocument
+from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
+from onyx.document_index.document_index_utils import (
+    get_multipass_config,
+)
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
-from onyx.document_index.vespa.indexing_utils import (
-    get_multipass_config,
-)
 from onyx.indexing.chunker import Chunker
+from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -65,6 +65,8 @@ class IndexingPipelineResult(BaseModel):
     total_docs: int
     # number of chunks that were inserted into Vespa
     total_chunks: int
+
+    failures: list[ConnectorFailure]
 
 
 class IndexingPipelineProtocol(Protocol):
@@ -155,14 +157,10 @@ def index_doc_batch_with_handler(
     document_index: DocumentIndex,
     document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
-    attempt_id: int | None,
     db_session: Session,
+    tenant_id: str,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
 ) -> IndexingPipelineResult:
-    index_pipeline_result = IndexingPipelineResult(
-        new_docs=0, total_docs=len(document_batch), total_chunks=0
-    )
     try:
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
@@ -175,47 +173,28 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
         )
     except Exception as e:
-        if isinstance(e, httpx.HTTPStatusError):
-            if e.response.status_code == HTTPStatus.INSUFFICIENT_STORAGE:
-                logger.error(
-                    "NOTE: HTTP Status 507 Insufficient Storage indicates "
-                    "you need to allocate more memory or disk space to the "
-                    "Vespa/index container."
+        # don't log the batch directly, it's too much text
+        document_ids = [doc.id for doc in document_batch]
+        logger.exception(f"Failed to index document batch: {document_ids}")
+
+        index_pipeline_result = IndexingPipelineResult(
+            new_docs=0,
+            total_docs=len(document_batch),
+            total_chunks=0,
+            failures=[
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=document.id,
+                        document_link=(
+                            document.sections[0].link if document.sections else None
+                        ),
+                    ),
+                    failure_message=str(e),
+                    exception=e,
                 )
-
-        if INDEXING_EXCEPTION_LIMIT == 0:
-            raise
-
-        trace = traceback.format_exc()
-        create_index_attempt_error(
-            attempt_id,
-            batch=index_attempt_metadata.batch_num,
-            docs=document_batch,
-            exception_msg=str(e),
-            exception_traceback=trace,
-            db_session=db_session,
+                for document in document_batch
+            ],
         )
-        logger.exception(
-            f"Indexing batch {index_attempt_metadata.batch_num} failed. msg='{e}' trace='{trace}'"
-        )
-
-        index_attempt_metadata.num_exceptions += 1
-        if index_attempt_metadata.num_exceptions == INDEXING_EXCEPTION_LIMIT:
-            logger.warning(
-                f"Maximum number of exceptions for this index attempt "
-                f"({INDEXING_EXCEPTION_LIMIT}) has been reached. "
-                f"The next exception will abort the indexing attempt."
-            )
-        elif index_attempt_metadata.num_exceptions > INDEXING_EXCEPTION_LIMIT:
-            logger.warning(
-                f"Maximum number of exceptions for this index attempt "
-                f"({INDEXING_EXCEPTION_LIMIT}) has been exceeded."
-            )
-            raise RuntimeError(
-                f"Maximum exception limit of {INDEXING_EXCEPTION_LIMIT} exceeded."
-            )
-        else:
-            pass
 
     return index_pipeline_result
 
@@ -338,8 +317,8 @@ def index_doc_batch(
     document_index: DocumentIndex,
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
+    tenant_id: str,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
     filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
 ) -> IndexingPipelineResult:
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -357,7 +336,6 @@ def index_doc_batch(
         is_public=False,
     )
 
-    logger.debug("Filtering Documents")
     filtered_documents = filter_fnc(document_batch)
 
     ctx = index_doc_batch_prepare(
@@ -376,15 +354,37 @@ def index_doc_batch(
             document_ids=[doc.id for doc in filtered_documents],
             db_session=db_session,
         )
+        db_session.commit()
         return IndexingPipelineResult(
-            new_docs=0, total_docs=len(filtered_documents), total_chunks=0
+            new_docs=0,
+            total_docs=len(filtered_documents),
+            total_chunks=0,
+            failures=[],
         )
 
+    doc_descriptors = [
+        {
+            "doc_id": doc.id,
+            "doc_length": doc.get_total_char_length(),
+        }
+        for doc in ctx.updatable_docs
+    ]
+    logger.debug(f"Starting indexing process for documents: {doc_descriptors}")
+
     logger.debug("Starting chunking")
+    # NOTE: no special handling for failures here, since the chunker is not
+    # a common source of failure for the indexing pipeline
     chunks: list[DocAwareChunk] = chunker.chunk(ctx.updatable_docs)
 
     logger.debug("Starting embedding")
-    chunks_with_embeddings = embedder.embed_chunks(chunks) if chunks else []
+    chunks_with_embeddings, embedding_failures = (
+        embed_chunks_with_failure_handling(
+            chunks=chunks,
+            embedder=embedder,
+        )
+        if chunks
+        else ([], [])
+    )
 
     updatable_ids = [doc.id for doc in ctx.updatable_docs]
 
@@ -450,7 +450,11 @@ def index_doc_batch(
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
         # in this set
-        insertion_records = document_index.index(
+        (
+            insertion_records,
+            vector_db_write_failures,
+        ) = write_chunks_to_vector_db_with_backoff(
+            document_index=document_index,
             chunks=access_aware_chunks,
             index_batch_params=IndexBatchParams(
                 doc_id_to_previous_chunk_cnt=doc_id_to_previous_chunk_cnt,
@@ -510,6 +514,7 @@ def index_doc_batch(
         new_docs=len([r for r in insertion_records if r.already_existed is False]),
         total_docs=len(filtered_documents),
         total_chunks=len(access_aware_chunks),
+        failures=vector_db_write_failures + embedding_failures,
     )
 
     return result
@@ -520,14 +525,14 @@ def build_indexing_pipeline(
     embedder: IndexingEmbedder,
     document_index: DocumentIndex,
     db_session: Session,
+    tenant_id: str,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
-    attempt_id: int | None = None,
-    tenant_id: str | None = None,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    multipass_config = get_multipass_config(db_session, primary_index=True)
+    search_settings = get_current_search_settings(db_session)
+    multipass_config = get_multipass_config(search_settings)
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
@@ -543,7 +548,6 @@ def build_indexing_pipeline(
         embedder=embedder,
         document_index=document_index,
         ignore_time_skip=ignore_time_skip,
-        attempt_id=attempt_id,
         db_session=db_session,
         tenant_id=tenant_id,
     )

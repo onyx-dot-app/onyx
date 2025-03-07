@@ -60,11 +60,12 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     llmProviders,
     folders,
     openedFolders,
-    toggleSidebar,
+    sidebarInitiallyVisible,
     defaultAssistantId,
     shouldShowWelcomeModal,
     ccPairs,
     inputPrompts,
+    proSearchToggled,
   } = data;
 
   return (
@@ -73,7 +74,8 @@ export async function Layout({ children }: { children: React.ReactNode }) {
       value={{
         inputPrompts,
         chatSessions,
-        toggledSidebar: toggleSidebar,
+        proSearchToggled,
+        sidebarInitiallyVisible,
         availableSources,
         ccPairs,
         documentSets,

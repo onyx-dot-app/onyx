@@ -6,7 +6,6 @@ interface CalloutProps {
   type?: "default" | "warning" | "danger" | "notice";
   className?: string;
 }
-
 export function Callout({
   children,
   icon,
@@ -21,9 +20,12 @@ export function Callout({
         "my-6 flex items-start rounded-md border border-l-4 p-4",
         className,
         {
-          "border-rose-300 bg-rose-50": type === "danger",
-          "border-amber-300 bg-amber-50": type === "warning",
-          "border-sky-300 bg-sky-50": type === "notice",
+          "border-rose-300 bg-rose-50 dark:border-rose-500 dark:bg-rose-950/50":
+            type === "danger",
+          "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-900/30":
+            type === "warning",
+          "border-sky-300 bg-sky-50 dark:border-sky-500 dark:bg-sky-950/50":
+            type === "notice",
         }
       )}
       {...props}
@@ -31,9 +33,11 @@ export function Callout({
       {icon && <span className="mr-4 text-2xl">{icon}</span>}
       <div className="flex-1">
         {title && (
-          <div className="font-medium mb-1 flex items-center">{title}</div>
+          <div className="font-medium mb-1 flex items-center dark:text-[#fff]">
+            {title}
+          </div>
         )}
-        {children}
+        <div className="dark:text-gray-300">{children}</div>
       </div>
     </div>
   );

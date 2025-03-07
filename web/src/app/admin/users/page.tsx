@@ -78,7 +78,6 @@ const UsersTables = ({
           </CardContent>
         </Card>
       </TabsContent>
-
       <TabsContent value="invited">
         <Card>
           <CardHeader>

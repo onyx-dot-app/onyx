@@ -38,7 +38,9 @@ export const ConnectorTitle = ({
     const typedConnector = connector as Connector<GithubConfig>;
     additionalMetadata.set(
       "Repo",
-      `${typedConnector.connector_specific_config.repo_owner}/${typedConnector.connector_specific_config.repo_name}`
+      typedConnector.connector_specific_config.repo_name
+        ? `${typedConnector.connector_specific_config.repo_owner}/${typedConnector.connector_specific_config.repo_name}`
+        : `${typedConnector.connector_specific_config.repo_owner}/*`
     );
   } else if (connector.source === "gitlab") {
     const typedConnector = connector as Connector<GitlabConfig>;
@@ -86,7 +88,7 @@ export const ConnectorTitle = ({
     );
   }
 
-  const mainSectionClassName = "text-blue-500 flex w-fit";
+  const mainSectionClassName = "text-blue-500 dark:text-blue-100 flex w-fit";
   const mainDisplay = (
     <>
       {sourceMetadata.icon({ size: 20 })}

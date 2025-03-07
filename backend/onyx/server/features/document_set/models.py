@@ -68,6 +68,7 @@ class DocumentSet(BaseModel):
                     credential=CredentialSnapshot.from_credential_db_model(
                         cc_pair.credential
                     ),
+                    access_type=cc_pair.access_type,
                 )
                 for cc_pair in document_set_model.connector_credential_pairs
             ],

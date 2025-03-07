@@ -6,12 +6,12 @@ import { Row } from "./interfaces";
 
 export function DraggableRow({
   row,
-  forceDragging,
   isAdmin = true,
+  isDragOverlay = false,
 }: {
   row: Row;
-  forceDragging?: boolean;
   isAdmin?: boolean;
+  isDragOverlay?: boolean;
 }) {
   const {
     attributes,
@@ -22,29 +22,25 @@ export function DraggableRow({
     isDragging,
   } = useSortable({
     id: row.id,
+    disabled: isDragOverlay,
   });
+
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition: transition,
+    transition,
   };
 
   return (
     <TableRow
       ref={setNodeRef}
-      style={style}
-      className={isDragging ? "invisible" : "bg-background"}
+      style={isDragOverlay ? undefined : style}
+      className={isDragging && !isDragOverlay ? "opacity-0" : ""}
     >
       <TableCell>
-        {isAdmin && (
-          <DragHandle
-            isDragging={isDragging || forceDragging}
-            {...attributes}
-            {...listeners}
-          />
-        )}
+        {isAdmin && <DragHandle isDragging={isDragging} {...listeners} />}
       </TableCell>
-      {row.cells.map((column, ind) => (
-        <TableCell key={ind}>{column}</TableCell>
+      {row.cells.map((cell, index) => (
+        <TableCell key={index}>{cell}</TableCell>
       ))}
     </TableRow>
   );

@@ -6,30 +6,28 @@ import { BackendChatSession } from "../../interfaces";
 import {
   buildLatestMessageChain,
   getCitedDocumentsFromMessage,
-  getHumanAndAIMessageFromMessageNumber,
   processRawChatHistory,
 } from "../../lib";
 import { AIMessage, HumanMessage } from "../../message/Messages";
+import { AgenticMessage } from "../../message/AgenticMessage";
 import { Callout } from "@/components/ui/callout";
-import { Separator } from "@/components/ui/separator";
-import { useRouter } from "next/navigation";
 import { useContext, useEffect, useState } from "react";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Button } from "@/components/ui/button";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import TextView from "@/components/chat_search/TextView";
+import TextView from "@/components/chat/TextView";
 import { DocumentResults } from "../../documentSidebar/DocumentResults";
 import { Modal } from "@/components/Modal";
-import FunctionalHeader from "@/components/chat_search/Header";
-import FixedLogo from "../../shared_chat_search/FixedLogo";
-import { useDocumentSelection } from "../../useDocumentSelection";
+import FunctionalHeader from "@/components/chat/Header";
+import FixedLogo from "@/components/logo/FixedLogo";
+import { useRouter } from "next/navigation";
 
 function BackToOnyxButton({
-  documentSidebarToggled,
+  documentSidebarVisible,
 }: {
-  documentSidebarToggled: boolean;
+  documentSidebarVisible: boolean;
 }) {
   const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
@@ -49,7 +47,7 @@ function BackToOnyxButton({
             transition-all 
             duration-300 
             ease-in-out
-            ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
+            ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
         `}
       ></div>
     </div>
@@ -64,7 +62,7 @@ export function SharedChatDisplay({
   persona: Persona;
 }) {
   const settings = useContext(SettingsContext);
-  const [documentSidebarToggled, setDocumentSidebarToggled] = useState(false);
+  const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
     useState<number | null>(null);
   const [isReady, setIsReady] = useState(false);
@@ -72,7 +70,7 @@ export function SharedChatDisplay({
     useState<OnyxDocument | null>(null);
 
   const toggleDocumentSidebar = () => {
-    setDocumentSidebarToggled(!documentSidebarToggled);
+    setDocumentSidebarVisible(!documentSidebarVisible);
   };
 
   useEffect(() => {
@@ -87,7 +85,7 @@ export function SharedChatDisplay({
             Did not find a shared chat with the specified ID.
           </Callout>
         </div>
-        <BackToOnyxButton documentSidebarToggled={documentSidebarToggled} />
+        <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
       </div>
     );
   }
@@ -104,10 +102,11 @@ export function SharedChatDisplay({
           onClose={() => setPresentingDocument(null)}
         />
       )}
-      {documentSidebarToggled && settings?.isMobile && (
+      {documentSidebarVisible && settings?.isMobile && (
         <div className="md:hidden">
           <Modal noPadding noScroll>
             <DocumentResults
+              agenticMessage={false}
               isSharedChat={true}
               selectedMessage={
                 selectedMessageForDocDisplay
@@ -118,7 +117,7 @@ export function SharedChatDisplay({
                   : null
               }
               toggleDocumentSelection={() => {
-                setDocumentSidebarToggled(true);
+                setDocumentSidebarVisible(true);
               }}
               selectedDocuments={[]}
               clearSelectedDocuments={() => {}}
@@ -129,7 +128,7 @@ export function SharedChatDisplay({
               setPresentingDocument={setPresentingDocument}
               modal={true}
               closeSidebar={() => {
-                setDocumentSidebarToggled(false);
+                setDocumentSidebarVisible(false);
               }}
             />
           </Modal>
@@ -159,10 +158,11 @@ export function SharedChatDisplay({
                   duration-300
                   ease-in-out
                   h-full
-                  ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
+                  ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
             `}
               >
                 <DocumentResults
+                  agenticMessage={false}
                   modal={false}
                   isSharedChat={true}
                   selectedMessage={
@@ -174,7 +174,7 @@ export function SharedChatDisplay({
                       : null
                   }
                   toggleDocumentSelection={() => {
-                    setDocumentSidebarToggled(true);
+                    setDocumentSidebarVisible(true);
                   }}
                   clearSelectedDocuments={() => {}}
                   selectedDocumentTokens={0}
@@ -183,7 +183,7 @@ export function SharedChatDisplay({
                   isOpen={true}
                   setPresentingDocument={setPresentingDocument}
                   closeSidebar={() => {
-                    setDocumentSidebarToggled(false);
+                    setDocumentSidebarVisible(false);
                   }}
                   selectedDocuments={[]}
                 />
@@ -205,7 +205,7 @@ export function SharedChatDisplay({
                     <h1 className="text-3xl text-strong font-bold">
                       {chatSession.description || `Unnamed Chat`}
                     </h1>
-                    <p className=" text-emphasis">
+                    <p className=" text-text-darker">
                       {humanReadableFormat(chatSession.time_created)}
                     </p>
                     <div
@@ -214,7 +214,7 @@ export function SharedChatDisplay({
                       bg-gradient-to-b via-50% z-[-1] from-background via-background to-background/10 flex
                       transition-all duration-300 ease-in-out
                       ${
-                        documentSidebarToggled
+                        documentSidebarVisible
                           ? "left-[200px] transform -translate-x-[calc(50%+100px)]"
                           : "left-1/2 transform -translate-x-1/2"
                       }
@@ -224,7 +224,7 @@ export function SharedChatDisplay({
                 </div>
                 {isReady ? (
                   <div className="w-full pt-24 pb-16">
-                    {messages.map((message) => {
+                    {messages.map((message, i) => {
                       if (message.type === "user") {
                         return (
                           <HumanMessage
@@ -234,44 +234,159 @@ export function SharedChatDisplay({
                             files={message.files}
                           />
                         );
+                      } else if (message.type === "assistant") {
+                        const secondLevelMessage =
+                          messages[messages.indexOf(message) + 1]?.type ===
+                          "assistant"
+                            ? messages[messages.indexOf(message) + 1]
+                            : undefined;
+
+                        const secondLevelAssistantMessage =
+                          messages[messages.indexOf(message) + 1]?.type ===
+                          "assistant"
+                            ? messages[messages.indexOf(message) + 1]?.message
+                            : undefined;
+
+                        const agenticDocs =
+                          messages[messages.indexOf(message) + 1]?.type ===
+                          "assistant"
+                            ? messages[messages.indexOf(message) + 1]?.documents
+                            : undefined;
+
+                        if (messages[i - 1]?.type === "assistant") {
+                          return null;
+                        }
+
+                        if (
+                          message.sub_questions &&
+                          message.sub_questions.length > 0
+                        ) {
+                          return (
+                            <AgenticMessage
+                              isStreamingQuestions={false}
+                              isGenerating={false}
+                              shared
+                              key={message.messageId}
+                              isImprovement={message.isImprovement}
+                              secondLevelGenerating={false}
+                              secondLevelSubquestions={message.sub_questions?.filter(
+                                (subQuestion) => subQuestion.level === 1
+                              )}
+                              secondLevelAssistantMessage={
+                                (message.second_level_message &&
+                                message.second_level_message.length > 0
+                                  ? message.second_level_message
+                                  : secondLevelAssistantMessage) || undefined
+                              }
+                              subQuestions={
+                                message.sub_questions?.filter(
+                                  (subQuestion) => subQuestion.level === 0
+                                ) || []
+                              }
+                              agenticDocs={message.agentic_docs || agenticDocs}
+                              toggleDocDisplay={(agentic: boolean) => {
+                                if (agentic) {
+                                  setSelectedMessageForDocDisplay(
+                                    message.messageId
+                                  );
+                                } else {
+                                  setSelectedMessageForDocDisplay(
+                                    secondLevelMessage
+                                      ? secondLevelMessage.messageId
+                                      : null
+                                  );
+                                }
+                              }}
+                              docs={message?.documents}
+                              setPresentingDocument={setPresentingDocument}
+                              overriddenModel={message.overridden_model}
+                              currentPersona={persona}
+                              messageId={message.messageId}
+                              content={message.message}
+                              files={message.files}
+                              query={message.query || undefined}
+                              citedDocuments={getCitedDocumentsFromMessage(
+                                message
+                              )}
+                              toolCall={message.toolCall}
+                              isComplete={true}
+                              selectedDocuments={[]}
+                              toggleDocumentSelection={() => {
+                                if (
+                                  !documentSidebarVisible ||
+                                  (documentSidebarVisible &&
+                                    selectedMessageForDocDisplay ===
+                                      message.messageId)
+                                ) {
+                                  setDocumentSidebarVisible(
+                                    !documentSidebarVisible
+                                  );
+                                }
+                                setSelectedMessageForDocDisplay(
+                                  message.messageId
+                                );
+                              }}
+                            />
+                          );
+                        } else {
+                          return (
+                            <AIMessage
+                              shared
+                              key={message.messageId}
+                              docs={message?.documents}
+                              setPresentingDocument={setPresentingDocument}
+                              overriddenModel={message.overridden_model}
+                              currentPersona={persona}
+                              messageId={message.messageId}
+                              content={message.message}
+                              files={message.files}
+                              query={message.query || undefined}
+                              citedDocuments={getCitedDocumentsFromMessage(
+                                message
+                              )}
+                              toolCall={message.toolCall}
+                              isComplete={true}
+                              hasDocs={
+                                (message.documents &&
+                                  message.documents.length > 0) === true
+                              }
+                              selectedDocuments={[]}
+                              toggleDocumentSelection={() => {
+                                if (
+                                  !documentSidebarVisible ||
+                                  (documentSidebarVisible &&
+                                    selectedMessageForDocDisplay ===
+                                      message.messageId)
+                                ) {
+                                  setDocumentSidebarVisible(
+                                    !documentSidebarVisible
+                                  );
+                                }
+                                setSelectedMessageForDocDisplay(
+                                  message.messageId
+                                );
+                              }}
+                              retrievalDisabled={false}
+                            />
+                          );
+                        }
                       } else {
                         return (
-                          <AIMessage
-                            shared
-                            query={message.query || undefined}
-                            hasDocs={
-                              (message.documents &&
-                                message.documents.length > 0) === true
-                            }
-                            toolCall={message.toolCall}
-                            docs={message.documents}
-                            setPresentingDocument={setPresentingDocument}
-                            currentPersona={persona}
-                            key={message.messageId}
-                            messageId={message.messageId}
-                            content={message.message}
-                            files={message.files || []}
-                            citedDocuments={getCitedDocumentsFromMessage(
-                              message
-                            )}
-                            // toggleDocumentSelection={() => {
-                            //   setDocumentSidebarToggled(true);
-                            // }}
-                            toggleDocumentSelection={() => {
-                              if (
-                                !documentSidebarToggled ||
-                                (documentSidebarToggled &&
-                                  selectedMessageForDocDisplay ===
-                                    message.messageId)
-                              ) {
-                                toggleDocumentSidebar();
+                          <div key={message.messageId}>
+                            <AgenticMessage
+                              shared
+                              isStreamingQuestions={false}
+                              isGenerating={false}
+                              subQuestions={message.sub_questions || []}
+                              currentPersona={persona}
+                              messageId={message.messageId}
+                              content={
+                                <p className="text-red-700 text-sm my-auto">
+                                  {message.message}
+                                </p>
                               }
-                              setSelectedMessageForDocDisplay(
-                                message.messageId
-                              );
-                            }}
-                            isComplete
-                          />
+                            />
+                          </div>
                         );
                       }
                     })}
@@ -293,7 +408,7 @@ export function SharedChatDisplay({
                           transition-all 
                           duration-300 
                           ease-in-out
-                          ${documentSidebarToggled ? "w-[400px]" : "w-[0px]"}
+                          ${documentSidebarVisible ? "w-[400px]" : "w-[0px]"}
                       `}
                 ></div>
               )}
@@ -301,7 +416,7 @@ export function SharedChatDisplay({
           </div>
 
           <FixedLogo backgroundToggled={false} />
-          <BackToOnyxButton documentSidebarToggled={documentSidebarToggled} />
+          <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
         </div>
       </div>
     </>

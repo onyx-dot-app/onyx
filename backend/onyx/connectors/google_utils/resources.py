@@ -26,6 +26,7 @@ def _get_google_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+    service: Resource
     if isinstance(creds, ServiceAccountCredentials):
         creds = creds.with_subject(user_email)
         service = build(service_name, service_version, credentials=creds)

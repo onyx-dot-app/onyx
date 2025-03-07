@@ -16,6 +16,7 @@ from model_server.custom_models import router as custom_models_router
 from model_server.custom_models import warm_up_intent_model
 from model_server.encoders import router as encoders_router
 from model_server.management_endpoints import router as management_router
+from model_server.utils import get_gpu_type
 from onyx import __version__
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import INDEXING_ONLY
@@ -58,12 +59,10 @@ def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
-    if torch.cuda.is_available():
-        logger.notice("CUDA GPU is available")
-    elif torch.backends.mps.is_available():
-        logger.notice("Mac MPS is available")
-    else:
-        logger.notice("GPU is not available, using CPU")
+    gpu_type = get_gpu_type()
+    logger.notice(f"Torch GPU Detection: gpu_type={gpu_type}")
+
+    app.state.gpu_type = gpu_type
 
     if TEMP_HF_CACHE_PATH.is_dir():
         logger.notice("Moving contents of temp_huggingface to huggingface cache.")

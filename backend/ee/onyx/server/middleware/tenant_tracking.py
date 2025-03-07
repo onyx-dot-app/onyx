@@ -10,6 +10,7 @@ from fastapi import Response
 from ee.onyx.auth.users import decode_anonymous_user_jwt_token
 from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import extract_tenant_from_api_key_header
+from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.engine import is_valid_schema_name
 from onyx.redis.redis_pool import retrieve_auth_token_data_from_redis
 from shared_configs.configs import MULTI_TENANT
@@ -32,7 +33,7 @@ def add_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> Non
             return await call_next(request)
 
         except Exception as e:
-            logger.error(f"Error in tenant ID middleware: {str(e)}")
+            logger.exception(f"Error in tenant ID middleware: {str(e)}")
             raise
 
 
@@ -43,11 +44,12 @@ async def _get_tenant_id_from_request(
     Attempt to extract tenant_id from:
     1) The API key header
     2) The Redis-based token (stored in Cookie: fastapiusersauth)
+    3)  Reset token cookie
     Fallback: POSTGRES_DEFAULT_SCHEMA
     """
     # Check for API key
     tenant_id = extract_tenant_from_api_key_header(request)
-    if tenant_id:
+    if tenant_id is not None:
         return tenant_id
 
     # Check for anonymous user cookie
@@ -62,6 +64,7 @@ async def _get_tenant_id_from_request(
 
     try:
         # Look up token data in Redis
+
         token_data = await retrieve_auth_token_data_from_redis(request)
 
         if not token_data:
@@ -85,8 +88,18 @@ async def _get_tenant_id_from_request(
         if not is_valid_schema_name(tenant_id):
             raise HTTPException(status_code=400, detail="Invalid tenant ID format")
 
-        return tenant_id
-
     except Exception as e:
         logger.error(f"Unexpected error in _get_tenant_id_from_request: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+    finally:
+        if tenant_id:
+            return tenant_id
+
+        # As a final step, check for explicit tenant_id cookie
+        tenant_id_cookie = request.cookies.get(TENANT_ID_COOKIE_NAME)
+        if tenant_id_cookie and is_valid_schema_name(tenant_id_cookie):
+            return tenant_id_cookie
+
+        # If we've reached this point, return the default schema
+        return POSTGRES_DEFAULT_SCHEMA

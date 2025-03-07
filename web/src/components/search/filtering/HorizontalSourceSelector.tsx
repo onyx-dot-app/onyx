@@ -99,7 +99,7 @@ export function HorizontalSourceSelector({
             className="
               flex items-center space-x-1 border 
               border-border rounded-lg px-3 py-1.5 
-              hover:bg-hover text-sm cursor-pointer
+              hover:bg-accent-background-hovered text-sm cursor-pointer
               bg-background-search-filter
             "
           >

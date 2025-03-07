@@ -83,35 +83,6 @@ export const preprocessLaTeX = (content: string) => {
   return inlineProcessedContent;
 };
 
-export const markdownToHtml = (content: string): string => {
-  if (!content || !content.trim()) {
-    return "";
-  }
-
-  // Basic markdown to HTML conversion for common patterns
-  const processedContent = content
-    .replace(/(\*\*|__)((?:(?!\1).)*?)\1/g, "<strong>$2</strong>") // Bold with ** or __, non-greedy and no nesting
-    .replace(/(\*|_)([^*_\n]+?)\1(?!\*|_)/g, "<em>$2</em>"); // Italic with * or _
-
-  // Handle code blocks and links
-  const withCodeAndLinks = processedContent
-    .replace(/`([^`]+)`/g, "<code>$1</code>") // Inline code
-    .replace(
-      /```(\w*)\n([\s\S]*?)```/g,
-      (_, lang, code) =>
-        `<pre><code class="language-${lang}">${code.trim()}</code></pre>`
-    ) // Code blocks
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'); // Links
-
-  // Handle paragraphs
-  return withCodeAndLinks
-    .split(/\n\n+/)
-    .map((para) => para.trim())
-    .filter((para) => para.length > 0)
-    .map((para) => `<p>${para}</p>`)
-    .join("\n");
-};
-
 interface MarkdownSegment {
   type: "text" | "link" | "code" | "bold" | "italic" | "codeblock";
   text: string; // The visible/plain text

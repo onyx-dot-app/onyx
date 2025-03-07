@@ -31,7 +31,7 @@ export function HidableSection({
   return (
     <div>
       <div
-        className="flex hover:bg-hover-light rounded cursor-pointer p-2"
+        className="flex hover:bg-accent-background rounded cursor-pointer p-2"
         onClick={() => setIsHidden(!isHidden)}
       >
         <SectionHeader includeMargin={false}>{sectionTitle}</SectionHeader>

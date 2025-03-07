@@ -9,6 +9,7 @@ from typing import cast
 from github import Github
 from github import RateLimitExceededException
 from github import Repository
+from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
@@ -16,6 +17,10 @@ from github.PullRequest import PullRequest
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -25,7 +30,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -120,7 +124,7 @@ class GithubConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         repo_owner: str,
-        repo_name: str,
+        repo_name: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         state_filter: str = "all",
         include_prs: bool = True,
@@ -158,53 +162,81 @@ class GithubConnector(LoadConnector, PollConnector):
             _sleep_after_rate_limit_exception(github_client)
             return self._get_github_repo(github_client, attempt_num + 1)
 
+    def _get_all_repos(
+        self, github_client: Github, attempt_num: int = 0
+    ) -> list[Repository.Repository]:
+        if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
+            raise RuntimeError(
+                "Re-tried fetching repos too many times. Something is going wrong with fetching objects from Github"
+            )
+
+        try:
+            # Try to get organization first
+            try:
+                org = github_client.get_organization(self.repo_owner)
+                return list(org.get_repos())
+            except GithubException:
+                # If not an org, try as a user
+                user = github_client.get_user(self.repo_owner)
+                return list(user.get_repos())
+        except RateLimitExceededException:
+            _sleep_after_rate_limit_exception(github_client)
+            return self._get_all_repos(github_client, attempt_num + 1)
+
     def _fetch_from_github(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
         if self.github_client is None:
             raise ConnectorMissingCredentialError("GitHub")
 
-        repo = self._get_github_repo(self.github_client)
+        repos = (
+            [self._get_github_repo(self.github_client)]
+            if self.repo_name
+            else self._get_all_repos(self.github_client)
+        )
 
-        if self.include_prs:
-            pull_requests = repo.get_pulls(
-                state=self.state_filter, sort="updated", direction="desc"
-            )
+        for repo in repos:
+            if self.include_prs:
+                logger.info(f"Fetching PRs for repo: {repo.name}")
+                pull_requests = repo.get_pulls(
+                    state=self.state_filter, sort="updated", direction="desc"
+                )
 
-            for pr_batch in _batch_github_objects(
-                pull_requests, self.github_client, self.batch_size
-            ):
-                doc_batch: list[Document] = []
-                for pr in pr_batch:
-                    if start is not None and pr.updated_at < start:
-                        yield doc_batch
-                        return
-                    if end is not None and pr.updated_at > end:
-                        continue
-                    doc_batch.append(_convert_pr_to_document(cast(PullRequest, pr)))
-                yield doc_batch
+                for pr_batch in _batch_github_objects(
+                    pull_requests, self.github_client, self.batch_size
+                ):
+                    doc_batch: list[Document] = []
+                    for pr in pr_batch:
+                        if start is not None and pr.updated_at < start:
+                            yield doc_batch
+                            break
+                        if end is not None and pr.updated_at > end:
+                            continue
+                        doc_batch.append(_convert_pr_to_document(cast(PullRequest, pr)))
+                    yield doc_batch
 
-        if self.include_issues:
-            issues = repo.get_issues(
-                state=self.state_filter, sort="updated", direction="desc"
-            )
+            if self.include_issues:
+                logger.info(f"Fetching issues for repo: {repo.name}")
+                issues = repo.get_issues(
+                    state=self.state_filter, sort="updated", direction="desc"
+                )
 
-            for issue_batch in _batch_github_objects(
-                issues, self.github_client, self.batch_size
-            ):
-                doc_batch = []
-                for issue in issue_batch:
-                    issue = cast(Issue, issue)
-                    if start is not None and issue.updated_at < start:
-                        yield doc_batch
-                        return
-                    if end is not None and issue.updated_at > end:
-                        continue
-                    if issue.pull_request is not None:
-                        # PRs are handled separately
-                        continue
-                    doc_batch.append(_convert_issue_to_document(issue))
-                yield doc_batch
+                for issue_batch in _batch_github_objects(
+                    issues, self.github_client, self.batch_size
+                ):
+                    doc_batch = []
+                    for issue in issue_batch:
+                        issue = cast(Issue, issue)
+                        if start is not None and issue.updated_at < start:
+                            yield doc_batch
+                            break
+                        if end is not None and issue.updated_at > end:
+                            continue
+                        if issue.pull_request is not None:
+                            # PRs are handled separately
+                            continue
+                        doc_batch.append(_convert_issue_to_document(issue))
+                    yield doc_batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         return self._fetch_from_github()
@@ -225,6 +257,63 @@ class GithubConnector(LoadConnector, PollConnector):
             adjusted_start_datetime = epoch
 
         return self._fetch_from_github(adjusted_start_datetime, end_datetime)
+
+    def validate_connector_settings(self) -> None:
+        if self.github_client is None:
+            raise ConnectorMissingCredentialError("GitHub credentials not loaded.")
+
+        if not self.repo_owner:
+            raise ConnectorValidationError(
+                "Invalid connector settings: 'repo_owner' must be provided."
+            )
+
+        try:
+            if self.repo_name:
+                test_repo = self.github_client.get_repo(
+                    f"{self.repo_owner}/{self.repo_name}"
+                )
+                test_repo.get_contents("")
+            else:
+                # Try to get organization first
+                try:
+                    org = self.github_client.get_organization(self.repo_owner)
+                    org.get_repos().totalCount  # Just check if we can access repos
+                except GithubException:
+                    # If not an org, try as a user
+                    user = self.github_client.get_user(self.repo_owner)
+                    user.get_repos().totalCount  # Just check if we can access repos
+
+        except RateLimitExceededException:
+            raise UnexpectedError(
+                "Validation failed due to GitHub rate-limits being exceeded. Please try again later."
+            )
+
+        except GithubException as e:
+            if e.status == 401:
+                raise CredentialExpiredError(
+                    "GitHub credential appears to be invalid or expired (HTTP 401)."
+                )
+            elif e.status == 403:
+                raise InsufficientPermissionsError(
+                    "Your GitHub token does not have sufficient permissions for this repository (HTTP 403)."
+                )
+            elif e.status == 404:
+                if self.repo_name:
+                    raise ConnectorValidationError(
+                        f"GitHub repository not found with name: {self.repo_owner}/{self.repo_name}"
+                    )
+                else:
+                    raise ConnectorValidationError(
+                        f"GitHub user or organization not found: {self.repo_owner}"
+                    )
+            else:
+                raise ConnectorValidationError(
+                    f"Unexpected GitHub error (status={e.status}): {e.data}"
+                )
+        except Exception as exc:
+            raise Exception(
+                f"Unexpected error during GitHub settings validation: {exc}"
+            )
 
 
 if __name__ == "__main__":
