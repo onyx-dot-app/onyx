@@ -118,7 +118,6 @@ def pre_provision_tenant(self: Task) -> None:
     This function fully sets up the tenant with all necessary configurations,
     so it's ready to be assigned to a user immediately.
     """
-    task_logger.info("STARTING PRE_PROVISION_TENANT")
     # The MULTI_TENANT check is now done at the caller level (check_available_tenants)
     # rather than inside this function
 
@@ -130,7 +129,7 @@ def pre_provision_tenant(self: Task) -> None:
 
     # Allow multiple pre-provisioning tasks to run, but ensure they don't overlap
     if not lock_provision.acquire(blocking=False):
-        task_logger.info(
+        task_logger.debug(
             "Skipping pre_provision_tenant task because it is already running"
         )
         return
@@ -138,28 +137,28 @@ def pre_provision_tenant(self: Task) -> None:
     try:
         # Generate a new tenant ID
         tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
-        task_logger.info(f"Starting pre-provisioning for tenant {tenant_id}")
+        task_logger.info(f"Pre-provisioning tenant: {tenant_id}")
 
         # Create the schema for the new tenant
         schema_created = create_schema_if_not_exists(tenant_id)
         if schema_created:
-            task_logger.info(f"Created schema for tenant '{tenant_id}'")
+            task_logger.debug(f"Created schema for tenant: {tenant_id}")
         else:
-            task_logger.info(f"Schema already exists for tenant '{tenant_id}'")
+            task_logger.debug(f"Schema already exists for tenant: {tenant_id}")
 
         # Set up the tenant with all necessary configurations
-        task_logger.info(f"Setting up tenant configuration for '{tenant_id}'")
+        task_logger.debug(f"Setting up tenant configuration: {tenant_id}")
         asyncio.run(setup_tenant(tenant_id))
-        task_logger.info(f"Tenant configuration completed for '{tenant_id}'")
+        task_logger.debug(f"Tenant configuration completed: {tenant_id}")
 
         # Get the current Alembic version
         alembic_version = get_current_alembic_version(tenant_id)
-        task_logger.info(
-            f"Tenant '{tenant_id}' using Alembic version: {alembic_version}"
+        task_logger.debug(
+            f"Tenant {tenant_id} using Alembic version: {alembic_version}"
         )
 
         # Store the pre-provisioned tenant in the database
-        task_logger.info(f"Storing pre-provisioned tenant '{tenant_id}' in database")
+        task_logger.debug(f"Storing pre-provisioned tenant in database: {tenant_id}")
         with get_session_with_shared_schema() as db_session:
             # Use a transaction to ensure atomicity
             db_session.begin()
@@ -171,15 +170,16 @@ def pre_provision_tenant(self: Task) -> None:
                 )
                 db_session.add(new_tenant)
                 db_session.commit()
-                task_logger.info(f"Successfully pre-provisioned tenant {tenant_id}")
+                task_logger.info(f"Successfully pre-provisioned tenant: {tenant_id}")
             except Exception:
                 db_session.rollback()
-                task_logger.exception(
-                    f"Failed to store pre-provisioned tenant {tenant_id}"
+                task_logger.error(
+                    f"Failed to store pre-provisioned tenant: {tenant_id}",
+                    exc_info=True,
                 )
                 raise
 
     except Exception:
-        task_logger.exception("Error in pre_provision_tenant task")
+        task_logger.error("Error in pre_provision_tenant task", exc_info=True)
     finally:
         lock_provision.release()
