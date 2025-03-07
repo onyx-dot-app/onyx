@@ -4,33 +4,36 @@ import { CheckmarkIcon, CopyMessageIcon } from "./icons/icons";
 
 export function CopyButton({
   content,
+  copyAllFn,
   onClick,
 }: {
-  content?: string | { html: string; plainText: string };
+  content?: string;
+  copyAllFn?: () => void;
   onClick?: () => void;
 }) {
   const [copyClicked, setCopyClicked] = useState(false);
 
-  const copyToClipboard = async (
-    content: string | { html: string; plainText: string }
-  ) => {
+  const copyToClipboard = async () => {
     try {
+      // If copyAllFn is provided, use it instead of the default behavior
+      if (copyAllFn) {
+        await copyAllFn();
+        return;
+      }
+
+      // Fall back to original behavior if no copyAllFn is provided
+      if (!content) return;
+
       const clipboardItem = new ClipboardItem({
-        "text/html": new Blob(
-          [typeof content === "string" ? content : content.html],
-          { type: "text/html" }
-        ),
-        "text/plain": new Blob(
-          [typeof content === "string" ? content : content.plainText],
-          { type: "text/plain" }
-        ),
+        "text/html": new Blob([content], { type: "text/html" }),
+        "text/plain": new Blob([content], { type: "text/plain" }),
       });
       await navigator.clipboard.write([clipboardItem]);
     } catch (err) {
       // Fallback to basic text copy if HTML copy fails
-      await navigator.clipboard.writeText(
-        typeof content === "string" ? content : content.plainText
-      );
+      if (content) {
+        await navigator.clipboard.writeText(content);
+      }
     }
   };
 
@@ -38,9 +41,7 @@ export function CopyButton({
     <HoverableIcon
       icon={copyClicked ? <CheckmarkIcon /> : <CopyMessageIcon />}
       onClick={() => {
-        if (content) {
-          copyToClipboard(content);
-        }
+        copyToClipboard();
         onClick && onClick();
 
         setCopyClicked(true);

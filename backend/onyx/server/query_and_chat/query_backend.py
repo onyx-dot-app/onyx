@@ -159,6 +159,7 @@ def get_user_search_sessions(
                 name=sessions_with_documents_dict[search.id],
                 persona_id=search.persona_id,
                 time_created=search.time_created.isoformat(),
+                time_updated=search.time_updated.isoformat(),
                 shared_status=search.shared_status,
                 folder_id=search.folder_id,
                 current_alternate_model=search.current_alternate_model,

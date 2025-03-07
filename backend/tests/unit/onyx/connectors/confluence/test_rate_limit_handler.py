@@ -3,9 +3,7 @@ from unittest.mock import Mock
 import pytest
 from requests import HTTPError
 
-from onyx.connectors.confluence.onyx_confluence import (
-    handle_confluence_rate_limit,
-)
+from onyx.connectors.confluence.utils import handle_confluence_rate_limit
 
 
 @pytest.fixture
@@ -50,6 +48,8 @@ def mock_confluence_call() -> Mock:
 #             mock_sleep.assert_called_with(int(retry_after))
 
 
+# NOTE(rkuo): This tests an older version of rate limiting that is being deprecated
+# and probably should go away soon.
 def test_non_rate_limit_error(mock_confluence_call: Mock) -> None:
     mock_confluence_call.side_effect = HTTPError(
         response=Mock(status_code=500, text="Internal Server Error")

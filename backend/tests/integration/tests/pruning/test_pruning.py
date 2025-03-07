@@ -142,8 +142,12 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
             selected_cc_pair = CCPairManager.get_indexing_status_by_id(
                 cc_pair_1.id, user_performing_action=admin_user
             )
+
             assert selected_cc_pair is not None, "cc_pair not found after indexing!"
-            assert selected_cc_pair.docs_indexed == 15
+
+            # used to be 15, but now
+            # localhost:8889/ and localhost:8889/index.html are deduped
+            assert selected_cc_pair.docs_indexed == 14
 
             logger.info("Removing about.html.")
             os.remove(os.path.join(website_tgt, "about.html"))
@@ -160,23 +164,28 @@ def test_web_pruning(reset: None, vespa_client: vespa_fixture) -> None:
                 cc_pair_1.id, user_performing_action=admin_user
             )
             assert selected_cc_pair is not None, "cc_pair not found after pruning!"
-            assert selected_cc_pair.docs_indexed == 13
+            assert selected_cc_pair.docs_indexed == 12
 
             # check vespa
+            root_id = f"http://{hostname}:{port}/"
             index_id = f"http://{hostname}:{port}/index.html"
             about_id = f"http://{hostname}:{port}/about.html"
             courses_id = f"http://{hostname}:{port}/courses.html"
 
-            doc_ids = [index_id, about_id, courses_id]
+            doc_ids = [root_id, index_id, about_id, courses_id]
             retrieved_docs_dict = vespa_client.get_documents_by_id(doc_ids)["documents"]
             retrieved_docs = {
                 doc["fields"]["document_id"]: doc["fields"]
                 for doc in retrieved_docs_dict
             }
 
-            # verify index.html exists in Vespa
-            retrieved_doc = retrieved_docs.get(index_id)
+            # verify root exists in Vespa
+            retrieved_doc = retrieved_docs.get(root_id)
             assert retrieved_doc
+
+            # verify index.html does not exist in Vespa since it is a duplicate of root
+            retrieved_doc = retrieved_docs.get(index_id)
+            assert not retrieved_doc
 
             # verify about and courses do not exist
             retrieved_doc = retrieved_docs.get(about_id)

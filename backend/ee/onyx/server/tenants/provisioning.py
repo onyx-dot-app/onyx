@@ -55,7 +55,11 @@ logger = logging.getLogger(__name__)
 async def get_or_provision_tenant(
     email: str, referral_source: str | None = None, request: Request | None = None
 ) -> str:
-    """Get existing tenant ID for an email or create a new tenant if none exists."""
+    """
+    Get existing tenant ID for an email or create a new tenant if none exists.
+    This function should only be called after we have verified we want this user's tenant to exist.
+    It returns the tenant ID associated with the email, creating a new tenant if necessary.
+    """
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
 
@@ -104,14 +108,14 @@ async def provision_tenant(tenant_id: str, email: str) -> None:
             status_code=409, detail="User already belongs to an organization"
         )
 
-    logger.info(f"Provisioning tenant: {tenant_id}")
+    logger.debug(f"Provisioning tenant {tenant_id} for user {email}")
     token = None
 
     try:
         if not create_schema_if_not_exists(tenant_id):
-            logger.info(f"Created schema for tenant {tenant_id}")
+            logger.debug(f"Created schema for tenant {tenant_id}")
         else:
-            logger.info(f"Schema already exists for tenant {tenant_id}")
+            logger.debug(f"Schema already exists for tenant {tenant_id}")
 
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
@@ -200,33 +204,15 @@ async def rollback_tenant_provisioning(tenant_id: str) -> None:
 
 
 def configure_default_api_keys(db_session: Session) -> None:
-    if OPENAI_DEFAULT_API_KEY:
-        open_provider = LLMProviderUpsertRequest(
-            name="OpenAI",
-            provider=OPENAI_PROVIDER_NAME,
-            api_key=OPENAI_DEFAULT_API_KEY,
-            default_model_name="gpt-4",
-            fast_default_model_name="gpt-4o-mini",
-            model_names=OPEN_AI_MODEL_NAMES,
-        )
-        try:
-            full_provider = upsert_llm_provider(open_provider, db_session)
-            update_default_provider(full_provider.id, db_session)
-        except Exception as e:
-            logger.error(f"Failed to configure OpenAI provider: {e}")
-    else:
-        logger.error(
-            "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
-        )
-
     if ANTHROPIC_DEFAULT_API_KEY:
         anthropic_provider = LLMProviderUpsertRequest(
             name="Anthropic",
             provider=ANTHROPIC_PROVIDER_NAME,
             api_key=ANTHROPIC_DEFAULT_API_KEY,
-            default_model_name="claude-3-5-sonnet-20241022",
+            default_model_name="claude-3-7-sonnet-20250219",
             fast_default_model_name="claude-3-5-sonnet-20241022",
             model_names=ANTHROPIC_MODEL_NAMES,
+            display_model_names=["claude-3-5-sonnet-20241022"],
         )
         try:
             full_provider = upsert_llm_provider(anthropic_provider, db_session)
@@ -236,6 +222,26 @@ def configure_default_api_keys(db_session: Session) -> None:
     else:
         logger.error(
             "ANTHROPIC_DEFAULT_API_KEY not set, skipping Anthropic provider configuration"
+        )
+
+    if OPENAI_DEFAULT_API_KEY:
+        open_provider = LLMProviderUpsertRequest(
+            name="OpenAI",
+            provider=OPENAI_PROVIDER_NAME,
+            api_key=OPENAI_DEFAULT_API_KEY,
+            default_model_name="gpt-4o",
+            fast_default_model_name="gpt-4o-mini",
+            model_names=OPEN_AI_MODEL_NAMES,
+            display_model_names=["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"],
+        )
+        try:
+            full_provider = upsert_llm_provider(open_provider, db_session)
+            update_default_provider(full_provider.id, db_session)
+        except Exception as e:
+            logger.error(f"Failed to configure OpenAI provider: {e}")
+    else:
+        logger.error(
+            "OPENAI_DEFAULT_API_KEY not set, skipping OpenAI provider configuration"
         )
 
     if COHERE_DEFAULT_API_KEY:

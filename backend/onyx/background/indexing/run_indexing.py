@@ -15,13 +15,15 @@ from onyx.background.indexing.memory_tracer import MemoryTracer
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import INDEXING_SIZE_WARNING_THRESHOLD
 from onyx.configs.app_configs import INDEXING_TRACER_INTERVAL
+from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.app_configs import LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE
 from onyx.configs.app_configs import POLL_CONNECTOR_OFFSET
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -54,6 +56,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.variable_functionality import global_version
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -66,7 +69,6 @@ def _get_connector_runner(
     batch_size: int,
     start_time: datetime,
     end_time: datetime,
-    tenant_id: str | None,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
 ) -> ConnectorRunner:
     """
@@ -85,18 +87,23 @@ def _get_connector_runner(
             input_type=task,
             connector_specific_config=attempt.connector_credential_pair.connector.connector_specific_config,
             credential=attempt.connector_credential_pair.credential,
-            tenant_id=tenant_id,
         )
 
         # validate the connector settings
+        if not INTEGRATION_TESTS_MODE:
+            runnable_connector.validate_connector_settings()
 
-        runnable_connector.validate_connector_settings()
-
+    except UnexpectedValidationError as e:
+        logger.exception(
+            "Unable to instantiate connector due to an unexpected temporary issue."
+        )
+        raise e
     except Exception as e:
-        logger.exception(f"Unable to instantiate connector due to {e}")
-
+        logger.exception("Unable to instantiate connector. Pausing until fixed.")
         # since we failed to even instantiate the connector, we pause the CCPair since
-        # it will never succeed. Sometimes there are cases where the connector will
+        # it will never succeed
+
+        # Sometimes there are cases where the connector will
         # intermittently fail to initialize in which case we should pass in
         # leave_connector_active=True to allow it to continue.
         # For example, if there is nightly maintenance on a Confluence Server instance,
@@ -240,7 +247,7 @@ def _check_failure_threshold(
 def _run_indexing(
     db_session: Session,
     index_attempt_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> None:
     """
@@ -387,7 +394,6 @@ def _run_indexing(
                 batch_size=INDEX_BATCH_SIZE,
                 start_time=window_start,
                 end_time=window_end,
-                tenant_id=tenant_id,
             )
 
             # don't use a checkpoint if we're explicitly indexing from
@@ -680,7 +686,7 @@ def _run_indexing(
 
 def run_indexing_entrypoint(
     index_attempt_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
     connector_credential_pair_id: int,
     is_ee: bool = False,
     callback: IndexingHeartbeatInterface | None = None,
@@ -700,7 +706,7 @@ def run_indexing_entrypoint(
         attempt = transition_attempt_to_in_progress(index_attempt_id, db_session)
 
         tenant_str = ""
-        if tenant_id is not None:
+        if MULTI_TENANT:
             tenant_str = f" for tenant {tenant_id}"
 
         connector_name = attempt.connector_credential_pair.connector.name

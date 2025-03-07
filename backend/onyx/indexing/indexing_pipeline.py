@@ -158,8 +158,8 @@ def index_doc_batch_with_handler(
     document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
+    tenant_id: str,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
 ) -> IndexingPipelineResult:
     try:
         index_pipeline_result = index_doc_batch(
@@ -173,7 +173,10 @@ def index_doc_batch_with_handler(
             tenant_id=tenant_id,
         )
     except Exception as e:
-        logger.exception(f"Failed to index document batch: {document_batch}")
+        # don't log the batch directly, it's too much text
+        document_ids = [doc.id for doc in document_batch]
+        logger.exception(f"Failed to index document batch: {document_ids}")
+
         index_pipeline_result = IndexingPipelineResult(
             new_docs=0,
             total_docs=len(document_batch),
@@ -314,8 +317,8 @@ def index_doc_batch(
     document_index: DocumentIndex,
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
+    tenant_id: str,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
     filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
 ) -> IndexingPipelineResult:
     """Takes different pieces of the indexing pipeline and applies it to a batch of documents
@@ -461,12 +464,29 @@ def index_doc_batch(
             ),
         )
 
-        successful_doc_ids = {record.document_id for record in insertion_records}
-        if successful_doc_ids != set(updatable_ids):
+        all_returned_doc_ids = (
+            {record.document_id for record in insertion_records}
+            .union(
+                {
+                    record.failed_document.document_id
+                    for record in vector_db_write_failures
+                    if record.failed_document
+                }
+            )
+            .union(
+                {
+                    record.failed_document.document_id
+                    for record in embedding_failures
+                    if record.failed_document
+                }
+            )
+        )
+        if all_returned_doc_ids != set(updatable_ids):
             raise RuntimeError(
                 f"Some documents were not successfully indexed. "
                 f"Updatable IDs: {updatable_ids}, "
-                f"Successful IDs: {successful_doc_ids}"
+                f"Returned IDs: {all_returned_doc_ids}. "
+                "This should never happen."
             )
 
         last_modified_ids = []
@@ -522,9 +542,9 @@ def build_indexing_pipeline(
     embedder: IndexingEmbedder,
     document_index: DocumentIndex,
     db_session: Session,
+    tenant_id: str,
     chunker: Chunker | None = None,
     ignore_time_skip: bool = False,
-    tenant_id: str | None = None,
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""

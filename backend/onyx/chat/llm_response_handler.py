@@ -15,6 +15,8 @@ from onyx.chat.stream_processing.answer_response_handler import (
 from onyx.chat.tool_handling.tool_response_handler import ToolResponseHandler
 
 
+# This is Legacy code that is not used anymore.
+# It is kept here for reference.
 class LLMResponseHandlerManager:
     """
     This class is responsible for postprocessing the LLM response stream.

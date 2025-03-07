@@ -31,7 +31,7 @@ from onyx.utils.timing import log_function_time
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
-
+from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
 
@@ -109,6 +109,20 @@ def combine_retrieval_results(
     return sorted_chunks
 
 
+def get_query_embedding(query: str, db_session: Session) -> Embedding:
+    search_settings = get_current_search_settings(db_session)
+
+    model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
+        # The below are globally set, this flow always uses the indexing one
+        server_host=MODEL_SERVER_HOST,
+        server_port=MODEL_SERVER_PORT,
+    )
+
+    query_embedding = model.encode([query], text_type=EmbedTextType.QUERY)[0]
+    return query_embedding
+
+
 @log_function_time(print_only=True)
 def doc_index_retrieval(
     query: SearchQuery,
@@ -121,16 +135,9 @@ def doc_index_retrieval(
     from the large chunks to the referenced chunks,
     dedupes the chunks, and cleans the chunks.
     """
-    search_settings = get_current_search_settings(db_session)
-
-    model = EmbeddingModel.from_db_model(
-        search_settings=search_settings,
-        # The below are globally set, this flow always uses the indexing one
-        server_host=MODEL_SERVER_HOST,
-        server_port=MODEL_SERVER_PORT,
+    query_embedding = query.precomputed_query_embedding or get_query_embedding(
+        query.query, db_session
     )
-
-    query_embedding = model.encode([query.query], text_type=EmbedTextType.QUERY)[0]
 
     top_chunks = document_index.hybrid_retrieval(
         query=query.query,
@@ -249,7 +256,16 @@ def retrieve_chunks(
                 continue
             simplified_queries.add(simplified_rephrase)
 
-            q_copy = query.copy(update={"query": rephrase}, deep=True)
+            q_copy = query.model_copy(
+                update={
+                    "query": rephrase,
+                    # need to recompute for each rephrase
+                    # note that `SearchQuery` is a frozen model, so we can't update
+                    # it below
+                    "precomputed_query_embedding": None,
+                },
+                deep=True,
+            )
             run_queries.append(
                 (
                     doc_index_retrieval,

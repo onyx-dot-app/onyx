@@ -46,6 +46,7 @@ from onyx.agents.agent_search.shared_graph_utils.models import RefinedAgentStats
 from onyx.agents.agent_search.shared_graph_utils.operators import (
     dedup_inference_section_list,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import _should_restrict_tokens
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     dispatch_main_answer_stop_info,
 )
@@ -68,6 +69,8 @@ from onyx.chat.models import StreamingError
 from onyx.configs.agent_configs import AGENT_ANSWER_GENERATION_BY_FAST_LLM
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
 from onyx.configs.agent_configs import AGENT_MAX_STREAMED_DOCS_FOR_REFINED_ANSWER
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_ANSWER_GENERATION
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_VALIDATION
 from onyx.configs.agent_configs import AGENT_MIN_ORIG_QUESTION_DOCS
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
@@ -179,8 +182,9 @@ def generate_validate_refined_answer(
     )
     for tool_response in yield_search_responses(
         query=question,
-        reranked_sections=answer_generation_documents.streaming_documents,
-        final_context_sections=answer_generation_documents.context_documents,
+        get_retrieved_sections=lambda: answer_generation_documents.context_documents,
+        get_reranked_sections=lambda: answer_generation_documents.streaming_documents,
+        get_final_context_sections=lambda: answer_generation_documents.context_documents,
         search_query_info=query_info,
         get_section_relevance=lambda: relevance_list,
         search_tool=graph_config.tooling.search_tool,
@@ -302,7 +306,11 @@ def generate_validate_refined_answer(
 
     def stream_refined_answer() -> list[str]:
         for message in model.stream(
-            msg, timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION
+            msg,
+            timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_GENERATION,
+            max_tokens=AGENT_MAX_TOKENS_ANSWER_GENERATION
+            if _should_restrict_tokens(model.config)
+            else None,
         ):
             # TODO: in principle, the answer here COULD contain images, but we don't support that yet
             content = message.content
@@ -409,6 +417,7 @@ def generate_validate_refined_answer(
             validation_model.invoke,
             prompt=msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_VALIDATION,
+            max_tokens=AGENT_MAX_TOKENS_VALIDATION,
         )
         refined_answer_quality = binary_string_test_after_answer_separator(
             text=cast(str, validation_response.content),

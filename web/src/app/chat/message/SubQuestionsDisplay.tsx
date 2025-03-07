@@ -24,6 +24,7 @@ import { CodeBlock } from "./CodeBlock";
 import { CheckIcon, ChevronDown } from "lucide-react";
 import { PHASE_MIN_MS, useStreamingMessages } from "./StreamingMessages";
 import { CirclingArrowIcon } from "@/components/icons/icons";
+import { handleCopy } from "./copyingUtils";
 
 export const StatusIndicator = ({ status }: { status: ToggleState }) => {
   return (
@@ -292,6 +293,7 @@ const SubQuestionDisplay: React.FC<{
     }
   }, [currentlyClosed]);
 
+  const analysisRef = useRef<HTMLDivElement>(null);
   const renderedMarkdown = useMemo(() => {
     return (
       <ReactMarkdown
@@ -428,7 +430,11 @@ const SubQuestionDisplay: React.FC<{
                           />
                         </div>
                         {analysisToggled && (
-                          <div className="flex flex-wrap gap-2">
+                          <div
+                            ref={analysisRef}
+                            onCopy={(e) => handleCopy(e, analysisRef)}
+                            className="flex flex-wrap gap-2"
+                          >
                             {renderedMarkdown}
                           </div>
                         )}

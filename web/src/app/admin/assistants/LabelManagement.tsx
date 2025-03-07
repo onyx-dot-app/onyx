@@ -100,11 +100,6 @@ export default function LabelManagement() {
                       width="w-full max-w-xs"
                       name={`editLabelName_${label.id}`}
                       label="Label Name"
-                      value={
-                        values.editLabelId === label.id
-                          ? values.editLabelName
-                          : label.name
-                      }
                       onChange={(e) => {
                         setFieldValue("editLabelId", label.id);
                         setFieldValue("editLabelName", e.target.value);

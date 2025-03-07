@@ -167,7 +167,7 @@ def _convert_delta_to_message_chunk(
     stop_reason: str | None = None,
 ) -> BaseMessageChunk:
     """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
-    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else None)
+    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else "unknown")
     content = _dict.get("content") or ""
     additional_kwargs = {}
     if _dict.get("function_call"):
@@ -402,6 +402,7 @@ class DefaultMultiLLM(LLM):
         stream: bool,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -429,6 +430,7 @@ class DefaultMultiLLM(LLM):
                 # model params
                 temperature=0,
                 timeout=timeout_override or self._timeout,
+                max_tokens=max_tokens,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
@@ -484,6 +486,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -497,6 +500,7 @@ class DefaultMultiLLM(LLM):
                 stream=False,
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
+                max_tokens=max_tokens,
             ),
         )
         choice = response.choices[0]
@@ -515,6 +519,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -539,6 +544,7 @@ class DefaultMultiLLM(LLM):
                 stream=True,
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
+                max_tokens=max_tokens,
             ),
         )
         try:

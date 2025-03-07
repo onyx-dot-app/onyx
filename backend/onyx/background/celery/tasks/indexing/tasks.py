@@ -23,9 +23,9 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.background.celery.tasks.indexing.utils import _should_index
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
+from onyx.background.celery.tasks.indexing.utils import should_index
 from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
 from onyx.background.indexing.checkpointing_utils import cleanup_checkpoint
@@ -48,7 +48,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
-from onyx.connectors.interfaces import ConnectorValidationError
+from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -61,7 +61,7 @@ from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.swap_index import check_index_swap
+from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
 from onyx.redis.redis_connector import RedisConnector
@@ -182,7 +182,7 @@ class SimpleJobResult:
 
 
 class ConnectorIndexingContext(BaseModel):
-    tenant_id: str | None
+    tenant_id: str
     cc_pair_id: int
     search_settings_id: int
     index_attempt_id: int
@@ -210,7 +210,7 @@ class ConnectorIndexingLogBuilder:
 
 
 def monitor_ccpair_indexing_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     # if the fence doesn't exist, there's nothing to do
     fence_key = key_bytes.decode("utf-8")
@@ -358,7 +358,7 @@ def monitor_ccpair_indexing_taskset(
     soft_time_limit=300,
     bind=True,
 )
-def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
+def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     """a lightweight task used to kick off indexing tasks.
     Occcasionally does some validation of existing state to clear up error conditions"""
 
@@ -406,7 +406,7 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
 
         # check for search settings swap
         with get_session_with_current_tenant() as db_session:
-            old_search_settings = check_index_swap(db_session=db_session)
+            old_search_settings = check_and_perform_index_swap(db_session=db_session)
             current_search_settings = get_current_search_settings(db_session)
             # So that the first time users aren't surprised by really slow speed of first
             # batch of documents indexed
@@ -439,6 +439,15 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
             with get_session_with_current_tenant() as db_session:
                 search_settings_list = get_active_search_settings_list(db_session)
                 for search_settings_instance in search_settings_list:
+                    # skip non-live search settings that don't have background reindex enabled
+                    # those should just auto-change to live shortly after creation without
+                    # requiring any indexing till that point
+                    if (
+                        not search_settings_instance.status.is_current()
+                        and not search_settings_instance.background_reindex_enabled
+                    ):
+                        continue
+
                     redis_connector_index = redis_connector.new_index(
                         search_settings_instance.id
                     )
@@ -456,23 +465,18 @@ def check_for_indexing(self: Task, *, tenant_id: str | None) -> int | None:
                         cc_pair.id, search_settings_instance.id, db_session
                     )
 
-                    search_settings_primary = False
-                    if search_settings_instance.id == search_settings_list[0].id:
-                        search_settings_primary = True
-
-                    if not _should_index(
+                    if not should_index(
                         cc_pair=cc_pair,
                         last_index=last_attempt,
                         search_settings_instance=search_settings_instance,
-                        search_settings_primary=search_settings_primary,
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
                     ):
                         continue
 
                     reindex = False
-                    if search_settings_instance.id == search_settings_list[0].id:
-                        # the indexing trigger is only checked and cleared with the primary search settings
+                    if search_settings_instance.status.is_current():
+                        # the indexing trigger is only checked and cleared with the current search settings
                         if cc_pair.indexing_trigger is not None:
                             if cc_pair.indexing_trigger == IndexingMode.REINDEX:
                                 reindex = True
@@ -598,7 +602,7 @@ def connector_indexing_task(
     cc_pair_id: int,
     search_settings_id: int,
     is_ee: bool,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> int | None:
     """Indexing task. For a cc pair, this task pulls all document IDs from the source
     and compares those IDs to locally stored documents and deletes all locally stored IDs missing
@@ -890,7 +894,7 @@ def connector_indexing_proxy_task(
     index_attempt_id: int,
     cc_pair_id: int,
     search_settings_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
 ) -> None:
     """celery out of process task execution strategy is pool=prefork, but it uses fork,
     and forking is inherently unstable.
@@ -899,6 +903,9 @@ def connector_indexing_proxy_task(
 
     TODO(rkuo): refactor this so that there is a single return path where we canonically
     log the result of running this function.
+
+    NOTE: we try/except all db access in this function because as a watchdog, this function
+    needs to be extremely stable.
     """
     start = time.monotonic()
 
@@ -924,6 +931,7 @@ def connector_indexing_proxy_task(
         task_logger.error("self.request.id is None!")
 
     client = SimpleJobClient()
+    task_logger.info(f"submitting connector_indexing_task with tenant_id={tenant_id}")
 
     job = client.submit(
         connector_indexing_task,
@@ -1016,7 +1024,7 @@ def connector_indexing_proxy_task(
                     job.release()
                     break
 
-            # if a termination signal is detected, clean up and break
+            # if a termination signal is detected, break (exit point will clean up)
             if self.request.id and redis_connector_index.terminating(self.request.id):
                 task_logger.warning(
                     log_builder.build("Indexing watchdog - termination signal detected")
@@ -1025,6 +1033,7 @@ def connector_indexing_proxy_task(
                 result.status = IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL
                 break
 
+            # if activity timeout is detected, break (exit point will clean up)
             if not redis_connector_index.connector_active():
                 task_logger.warning(
                     log_builder.build(
@@ -1033,25 +1042,6 @@ def connector_indexing_proxy_task(
                     )
                 )
 
-                try:
-                    with get_session_with_current_tenant() as db_session:
-                        mark_attempt_failed(
-                            index_attempt_id,
-                            db_session,
-                            "Indexing watchdog - activity timeout exceeded: "
-                            f"attempt={index_attempt_id} "
-                            f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
-                        )
-                except Exception:
-                    # if the DB exceptions, we'll just get an unfriendly failure message
-                    # in the UI instead of the cancellation message
-                    logger.exception(
-                        log_builder.build(
-                            "Indexing watchdog - transient exception marking index attempt as failed"
-                        )
-                    )
-
-                job.cancel()
                 result.status = (
                     IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT
                 )
@@ -1070,15 +1060,15 @@ def connector_indexing_proxy_task(
 
                     if not index_attempt.is_finished():
                         continue
+
             except Exception:
-                # if the DB exceptioned, just restart the check.
-                # polling the index attempt status doesn't need to be strongly consistent
                 task_logger.exception(
                     log_builder.build(
                         "Indexing watchdog - transient exception looking up index attempt"
                     )
                 )
                 continue
+
     except Exception as e:
         result.status = IndexingWatchdogTerminalStatus.WATCHDOG_EXCEPTIONED
         if isinstance(e, ConnectorValidationError):
@@ -1139,8 +1129,6 @@ def connector_indexing_proxy_task(
                     "Connector termination signal detected",
                 )
         except Exception:
-            # if the DB exceptions, we'll just get an unfriendly failure message
-            # in the UI instead of the cancellation message
             task_logger.exception(
                 log_builder.build(
                     "Indexing watchdog - transient exception marking index attempt as canceled"
@@ -1148,6 +1136,25 @@ def connector_indexing_proxy_task(
             )
 
         job.cancel()
+    elif result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT:
+        try:
+            with get_session_with_current_tenant() as db_session:
+                mark_attempt_failed(
+                    index_attempt_id,
+                    db_session,
+                    "Indexing watchdog - activity timeout exceeded: "
+                    f"attempt={index_attempt_id} "
+                    f"timeout={CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                )
+        except Exception:
+            logger.exception(
+                log_builder.build(
+                    "Indexing watchdog - transient exception marking index attempt as failed"
+                )
+            )
+        job.cancel()
+    else:
+        pass
 
     task_logger.info(
         log_builder.build(
@@ -1167,7 +1174,7 @@ def connector_indexing_proxy_task(
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
 )
-def check_for_checkpoint_cleanup(*, tenant_id: str | None) -> None:
+def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
     """Clean up old checkpoints that are older than 7 days."""
     locked = False
     redis_client = get_redis_client(tenant_id=tenant_id)

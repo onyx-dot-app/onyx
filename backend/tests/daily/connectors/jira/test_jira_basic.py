@@ -10,7 +10,8 @@ from onyx.connectors.onyx_jira.connector import JiraConnector
 @pytest.fixture
 def jira_connector() -> JiraConnector:
     connector = JiraConnector(
-        "https://danswerai.atlassian.net/jira/software/c/projects/AS/boards/6",
+        jira_base_url="https://danswerai.atlassian.net",
+        project_key="AS",
         comment_email_blacklist=[],
     )
     connector.load_credentials(

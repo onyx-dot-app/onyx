@@ -10,13 +10,19 @@ import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { FiPlus, FiTrash2, FiCheck, FiX } from "react-icons/fi";
-import { NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED } from "@/lib/constants";
 import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
 import { useState, useCallback, useRef, useContext, useEffect } from "react";
 import { Caret } from "@/components/icons/icons";
 import { groupSessionsByDateRange } from "../lib";
 import React from "react";
+import {
+  Tooltip,
+  TooltipProvider,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
+import { Search } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -100,15 +106,15 @@ export function PagesTab({
   closeSidebar,
   showShareModal,
   showDeleteModal,
-  showDeleteAllModal,
+  toggleChatSessionSearchModal,
 }: {
   existingChats?: ChatSession[];
   currentChatId?: string;
   folders?: Folder[];
+  toggleChatSessionSearchModal?: () => void;
   closeSidebar?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
-  showDeleteAllModal?: () => void;
 }) {
   const { setPopup, popup } = usePopup();
   const router = useRouter();
@@ -258,7 +264,6 @@ export function PagesTab({
         >
           <ChatSessionDisplay
             chatSession={chat}
-            foldersExisting={foldersExisting}
             isSelected={currentChatId === chat.id}
             showShareModal={showShareModal}
             showDeleteModal={showDeleteModal}
@@ -318,8 +323,28 @@ export function PagesTab({
     <div className="flex flex-col gap-y-2 flex-grow">
       {popup}
       <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
-        <div className="flex justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
+        <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
           <p>Chats</p>
+
+          <TooltipProvider delayDuration={1000}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="my-auto mr-auto  group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
+                  onClick={() => {
+                    toggleChatSessionSearchModal?.();
+                  }}
+                >
+                  <Search
+                    className="flex-none text-text-mobile-sidebar"
+                    size={12}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Search Chats</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
           <button
             onClick={handleCreateFolder}
             className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"
@@ -409,11 +434,7 @@ export function PagesTab({
         </DndContext>
       )}
 
-      <div
-        className={`pl-4 pr-3 ${
-          NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED && "pb-20"
-        }`}
-      >
+      <div className="pl-4 pr-3">
         {!isHistoryEmpty && (
           <>
             {Object.entries(groupedChatSesssions)
@@ -450,17 +471,6 @@ export function PagesTab({
           </p>
         )}
       </div>
-      {showDeleteAllModal && NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED && (
-        <div className="absolute w-full border-t border-t-border bg-background-100 bottom-0 left-0 p-4">
-          <button
-            className="px-4 w-full py-2 px-4 text-text-600 hover:text-text-800 bg-background-125 border border-border-strong/50 shadow-sm rounded-md transition-colors duration-200 flex items-center justify-center text-sm"
-            onClick={showDeleteAllModal}
-          >
-            <FiTrash2 className="mr-2" size={14} />
-            Clear All History
-          </button>
-        </div>
-      )}
     </div>
   );
 }

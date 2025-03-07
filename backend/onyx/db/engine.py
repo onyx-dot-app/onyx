@@ -218,6 +218,7 @@ class SqlEngine:
             final_engine_kwargs.update(engine_kwargs)
 
         logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+        # echo=True here for inspecting all emitted db queries
         engine = create_engine(connection_string, **final_engine_kwargs)
 
         if USE_IAM_AUTH:
@@ -257,11 +258,11 @@ class SqlEngine:
                 cls._engine = None
 
 
-def get_all_tenant_ids() -> list[str] | list[None]:
+def get_all_tenant_ids() -> list[str]:
     """Returning [None] means the only tenant is the 'public' or self hosted tenant."""
 
     if not MULTI_TENANT:
-        return [None]
+        return [POSTGRES_DEFAULT_SCHEMA]
 
     with get_session_with_shared_schema() as session:
         result = session.execute(
@@ -416,7 +417,7 @@ def get_session_with_shared_schema() -> Generator[Session, None, None]:
 
 
 @contextmanager
-def get_session_with_tenant(*, tenant_id: str | None) -> Generator[Session, None, None]:
+def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]:
     """
     Generate a database session for a specific tenant.
     """

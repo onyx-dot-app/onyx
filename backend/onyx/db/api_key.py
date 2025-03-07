@@ -16,7 +16,6 @@ from onyx.configs.constants import UNNAMED_KEY_PLACEHOLDER
 from onyx.db.models import ApiKey
 from onyx.db.models import User
 from onyx.server.api_key.models import APIKeyArgs
-from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
 
@@ -73,7 +72,7 @@ def insert_api_key(
     # Get tenant_id from context var (will be default schema for single tenant)
     tenant_id = get_current_tenant_id()
 
-    api_key = generate_api_key(tenant_id if MULTI_TENANT else None)
+    api_key = generate_api_key(tenant_id)
     api_key_user_id = uuid.uuid4()
 
     display_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER

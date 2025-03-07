@@ -34,7 +34,7 @@ def _get_deletion_status(
     connector_id: int,
     credential_id: int,
     db_session: Session,
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> TaskQueueState | None:
     """We no longer store TaskQueueState in the DB for a deletion attempt.
     This function populates TaskQueueState by just checking redis.
@@ -67,7 +67,7 @@ def get_deletion_attempt_snapshot(
     connector_id: int,
     credential_id: int,
     db_session: Session,
-    tenant_id: str | None = None,
+    tenant_id: str,
 ) -> DeletionAttemptSnapshot | None:
     deletion_task = _get_deletion_status(
         connector_id, credential_id, db_session, tenant_id

@@ -213,6 +213,12 @@ class AuthType(str, Enum):
     CLOUD = "cloud"
 
 
+class QueryHistoryType(str, Enum):
+    DISABLED = "disabled"
+    ANONYMIZED = "anonymized"
+    NORMAL = "normal"
+
+
 # Special characters for password validation
 PASSWORD_SPECIAL_CHARS = "!@#$%^&*()_+-=[]{}|;:,.<>?"
 
@@ -342,6 +348,9 @@ class OnyxRedisSignals:
     BLOCK_PRUNING = "signal:block_pruning"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
+    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
+        "signal:block_validate_connector_deletion_fences"
+    )
 
 
 class OnyxRedisConstants:

@@ -51,13 +51,13 @@ export function Label({
   className?: string;
 }) {
   return (
-    <div
-      className={`block text-text-darker font-medium base ${className} ${
-        small ? "text-xs" : "text-sm"
+    <label
+      className={`block font-medium text-text-700 dark:text-neutral-100 ${className} ${
+        small ? "text-sm" : "text-base"
       }`}
     >
       {children}
-    </div>
+    </label>
   );
 }
 
@@ -132,7 +132,6 @@ export function TextFormField({
   label,
   subtext,
   placeholder,
-  value,
   type = "text",
   optional,
   includeRevert,
@@ -157,7 +156,6 @@ export function TextFormField({
   vertical,
   className,
 }: {
-  value?: string; // Escape hatch for setting the value of the field - conflicts with Formik
   name: string;
   removeLabel?: boolean;
   label: string;
@@ -253,7 +251,6 @@ export function TextFormField({
           min={min}
           as={isTextArea ? "textarea" : "input"}
           type={type}
-          defaultValue={value}
           data-testid={name}
           name={name}
           id={name}
@@ -689,7 +686,7 @@ export function SelectorFormField({
   defaultValue,
   tooltip,
   includeReset = false,
-  fontSize = "sm",
+  fontSize = "md",
   small = false,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);

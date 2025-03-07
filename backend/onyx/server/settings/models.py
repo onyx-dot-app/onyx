@@ -4,7 +4,9 @@ from enum import Enum
 from pydantic import BaseModel
 
 from onyx.configs.constants import NotificationType
+from onyx.configs.constants import QueryHistoryType
 from onyx.db.models import Notification as NotificationDBModel
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
 class PageType(str, Enum):
@@ -47,11 +49,17 @@ class Settings(BaseModel):
     anonymous_user_enabled: bool | None = None
     pro_search_enabled: bool | None = None
 
-    temperature_override_enabled: bool = False
-    auto_scroll: bool = False
+    temperature_override_enabled: bool | None = False
+    auto_scroll: bool | None = False
+    query_history_type: QueryHistoryType | None = None
+
+    # Image processing settings
+    image_extraction_and_analysis_enabled: bool | None = False
+    search_time_image_analysis_enabled: bool | None = False
+    image_analysis_max_size_mb: int | None = 20
 
 
 class UserSettings(Settings):
     notifications: list[Notification]
     needs_reindexing: bool
-    tenant_id: str | None = None
+    tenant_id: str = POSTGRES_DEFAULT_SCHEMA

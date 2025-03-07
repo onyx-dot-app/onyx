@@ -214,7 +214,7 @@ def verify_email_is_invited(email: str) -> None:
     raise PermissionError("User not on allowed user whitelist")
 
 
-def verify_email_in_whitelist(email: str, tenant_id: str | None = None) -> None:
+def verify_email_in_whitelist(email: str, tenant_id: str) -> None:
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         if not get_user_by_email(email, db_session):
             verify_email_is_invited(email)
@@ -411,7 +411,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "refresh_token": refresh_token,
             }
 
-            user: User
+            user: User | None = None
 
             try:
                 # Attempt to get user by OAuth account
@@ -420,15 +420,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except exceptions.UserNotExists:
                 try:
                     # Attempt to get user by email
-                    user = await self.get_by_email(account_email)
+                    user = await self.user_db.get_by_email(account_email)
                     if not associate_by_email:
                         raise exceptions.UserAlreadyExists()
 
-                    user = await self.user_db.add_oauth_account(
-                        user, oauth_account_dict
-                    )
+                    # Make sure user is not None before adding OAuth account
+                    if user is not None:
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
+                    else:
+                        # This shouldn't happen since get_by_email would raise UserNotExists
+                        # but adding as a safeguard
+                        raise exceptions.UserNotExists()
 
-                    # If user not found by OAuth account or email, create a new user
                 except exceptions.UserNotExists:
                     password = self.password_helper.generate()
                     user_dict = {
@@ -439,26 +444,36 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
 
-                    # Explicitly set the Postgres schema for this session to ensure
-                    # OAuth account creation happens in the correct tenant schema
-
-                    # Add OAuth account
-                    await self.user_db.add_oauth_account(user, oauth_account_dict)
-                    await self.on_after_register(user, request)
+                    # Add OAuth account only if user creation was successful
+                    if user is not None:
+                        await self.user_db.add_oauth_account(user, oauth_account_dict)
+                        await self.on_after_register(user, request)
+                    else:
+                        raise HTTPException(
+                            status_code=500, detail="Failed to create user account"
+                        )
 
             else:
-                for existing_oauth_account in user.oauth_accounts:
-                    if (
-                        existing_oauth_account.account_id == account_id
-                        and existing_oauth_account.oauth_name == oauth_name
-                    ):
-                        user = await self.user_db.update_oauth_account(
-                            user,
-                            # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
-                            # but the type checker doesn't know that :(
-                            existing_oauth_account,  # type: ignore
-                            oauth_account_dict,
-                        )
+                # User exists, update OAuth account if needed
+                if user is not None:  # Add explicit check
+                    for existing_oauth_account in user.oauth_accounts:
+                        if (
+                            existing_oauth_account.account_id == account_id
+                            and existing_oauth_account.oauth_name == oauth_name
+                        ):
+                            user = await self.user_db.update_oauth_account(
+                                user,
+                                # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
+                                # but the type checker doesn't know that :(
+                                existing_oauth_account,  # type: ignore
+                                oauth_account_dict,
+                            )
+
+            # Ensure user is not None before proceeding
+            if user is None:
+                raise HTTPException(
+                    status_code=500, detail="Failed to authenticate or create user"
+                )
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
@@ -508,6 +523,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
+            logger.debug(f"Current tenant user count: {user_count}")
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 if user_count == 1:
@@ -529,7 +545,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-        logger.notice(f"User {user.id} has registered.")
+        logger.debug(f"User {user.id} has registered.")
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
             data={"action": "create"},
@@ -553,7 +569,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             async_return_default_schema,
         )(email=user.email)
 
-        send_forgot_password_email(user.email, token, tenant_id=tenant_id)
+        send_forgot_password_email(user.email, tenant_id=tenant_id, token=token)
 
     async def on_after_request_verify(
         self, user: User, token: str, request: Optional[Request] = None
@@ -571,14 +587,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> Optional[User]:
         email = credentials.username
 
-        # Get tenant_id from mapping table
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(
-            email=email,
-        )
+        tenant_id: str | None = None
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.provisioning",
+                "get_tenant_id_for_email",
+                None,
+            )(
+                email=email,
+            )
+        except Exception as e:
+            logger.warning(
+                f"User attempted to login with invalid credentials: {str(e)}"
+            )
+
         if not tenant_id:
             # User not found in mapping
             self.password_helper.hash(credentials.password)

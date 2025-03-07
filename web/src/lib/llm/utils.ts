@@ -1,11 +1,11 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 
 export function getFinalLLM(
   llmProviders: LLMProviderDescriptor[],
   persona: Persona | null,
-  llmOverride: LlmOverride | null
+  currentLlm: LlmDescriptor | null
 ): [string, string] {
   const defaultProvider = llmProviders.find(
     (llmProvider) => llmProvider.is_default_provider
@@ -26,9 +26,9 @@ export function getFinalLLM(
     model = persona.llm_model_version_override || model;
   }
 
-  if (llmOverride) {
-    provider = llmOverride.provider || provider;
-    model = llmOverride.modelName || model;
+  if (currentLlm) {
+    provider = currentLlm.provider || provider;
+    model = currentLlm.modelName || model;
   }
 
   return [provider, model];
@@ -37,7 +37,7 @@ export function getFinalLLM(
 export function getLLMProviderOverrideForPersona(
   liveAssistant: Persona,
   llmProviders: LLMProviderDescriptor[]
-): LlmOverride | null {
+): LlmDescriptor | null {
   const overrideProvider = liveAssistant.llm_model_provider_override;
   const overrideModel = liveAssistant.llm_model_version_override;
 
@@ -71,6 +71,7 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   // standard claude names
   "claude-3-5-sonnet-20240620",
   "claude-3-5-sonnet-20241022",
+  "claude-3-7-sonnet-20250219",
   "claude-3-opus-20240229",
   "claude-3-sonnet-20240229",
   "claude-3-haiku-20240307",
@@ -88,6 +89,9 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "anthropic.claude-3-haiku-20240307-v1:0",
   "anthropic.claude-3-5-sonnet-20240620-v1:0",
   "anthropic.claude-3-5-sonnet-20241022-v2:0",
+  "anthropic.claude-3-7-sonnet-20250219-v1:0",
+  "claude-3.7-sonnet@202502019",
+  "claude-3-7-sonnet-202502019",
   // google gemini model names
   "gemini-1.5-pro",
   "gemini-1.5-flash",
@@ -96,6 +100,8 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "gemini-1.5-pro-002",
   "gemini-1.5-flash-002",
   "gemini-2.0-flash-exp",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-pro-exp-02-05",
   // amazon models
   "amazon.nova-lite@v1",
   "amazon.nova-pro@v1",
@@ -135,7 +141,7 @@ export const structureValue = (
   return `${name}__${provider}__${modelName}`;
 };
 
-export const destructureValue = (value: string): LlmOverride => {
+export const destructureValue = (value: string): LlmDescriptor => {
   const [displayName, provider, modelName] = value.split("__");
   return {
     name: displayName,

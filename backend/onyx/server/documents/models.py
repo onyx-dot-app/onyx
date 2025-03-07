@@ -83,7 +83,9 @@ class ConnectorSnapshot(ConnectorBase):
     source: DocumentSource
 
     @classmethod
-    def from_connector_db_model(cls, connector: Connector) -> "ConnectorSnapshot":
+    def from_connector_db_model(
+        cls, connector: Connector, credential_ids: list[int] | None = None
+    ) -> "ConnectorSnapshot":
         return ConnectorSnapshot(
             id=connector.id,
             name=connector.name,
@@ -92,9 +94,10 @@ class ConnectorSnapshot(ConnectorBase):
             connector_specific_config=connector.connector_specific_config,
             refresh_freq=connector.refresh_freq,
             prune_freq=connector.prune_freq,
-            credential_ids=[
-                association.credential.id for association in connector.credentials
-            ],
+            credential_ids=(
+                credential_ids
+                or [association.credential.id for association in connector.credentials]
+            ),
             indexing_start=connector.indexing_start,
             time_created=connector.time_created,
             time_updated=connector.time_updated,

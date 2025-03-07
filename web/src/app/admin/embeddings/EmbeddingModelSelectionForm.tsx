@@ -103,42 +103,6 @@ export function EmbeddingModelSelection({
     { refreshInterval: 5000 } // 5 seconds
   );
 
-  const { data: connectors } = useSWR<Connector<any>[]>(
-    "/api/manage/connector",
-    errorHandlingFetcher,
-    { refreshInterval: 5000 } // 5 seconds
-  );
-
-  const onConfirmSelection = async (model: EmbeddingModelDescriptor) => {
-    const response = await fetch(
-      "/api/search-settings/set-new-search-settings",
-      {
-        method: "POST",
-        body: JSON.stringify({ ...model, index_name: null }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
-    if (response.ok) {
-      setShowTentativeModel(null);
-      mutate("/api/search-settings/get-secondary-search-settings");
-      if (!connectors || !connectors.length) {
-        setShowAddConnectorPopup(true);
-      }
-    } else {
-      alert(`Failed to update embedding model - ${await response.text()}`);
-    }
-  };
-
-  const onSelectOpenSource = async (model: HostedEmbeddingModel) => {
-    if (selectedProvider?.model_name === INVALID_OLD_MODEL) {
-      await onConfirmSelection(model);
-    } else {
-      setShowTentativeOpenProvider(model);
-    }
-  };
-
   return (
     <div className="p-2">
       {alreadySelectedModel && (
@@ -270,7 +234,9 @@ export function EmbeddingModelSelection({
       {modelTab == "open" && (
         <OpenEmbeddingPage
           selectedProvider={selectedProvider}
-          onSelectOpenSource={onSelectOpenSource}
+          onSelectOpenSource={(model: HostedEmbeddingModel) => {
+            setShowTentativeOpenProvider(model);
+          }}
         />
       )}
 
