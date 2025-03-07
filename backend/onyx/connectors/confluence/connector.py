@@ -302,7 +302,9 @@ class ConfluenceConnector(
 
             # Create the document
             return Document(
-                id=build_confluence_document_id(self.wiki_base, page["_links"]["webui"], self.is_cloud),
+                id=build_confluence_document_id(
+                    self.wiki_base, page["_links"]["webui"], self.is_cloud
+                ),
                 sections=sections,
                 source=DocumentSource.CONFLUENCE,
                 semantic_identifier=page_title,
