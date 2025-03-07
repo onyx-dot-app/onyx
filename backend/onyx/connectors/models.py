@@ -37,11 +37,12 @@ class Section(BaseModel):
 
 
 class TextSection(BaseModel):
+    text: str
     link: str | None = None
 
 
 class ImageSection(BaseModel):
-    text: str
+    link: str | None = None
     image_file_name: str
 
 
@@ -112,7 +113,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection]
+    sections: list[TextSection | ImageSection | Section]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     metadata: dict[str, str | list[str]]

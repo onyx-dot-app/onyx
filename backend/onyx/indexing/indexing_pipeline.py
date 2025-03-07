@@ -18,7 +18,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import TextSection
+from onyx.connectors.models import Section
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
@@ -330,23 +330,35 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
     # Get the vision LLM
     llm = get_default_llm_with_vision()
     if not llm:
+        print("No vision-capable LLM available. Image sections will not be processed.")
         logger.warning(
             "No vision-capable LLM available. Image sections will not be processed."
         )
         return documents
 
     for document in documents:
-        processed_sections: list[TextSection] = []
+        processed_sections: list[Section] = []
+        print(f"Processing document ID: {document.id}, Title: {document.title}")
+        print(f"Document has {len(document.sections)} sections to process")
 
         for section in document.sections:
             # If it's not an ImageSection or doesn't have an image_file_name, keep as is
             if not isinstance(section, ImageSection) or not section.image_file_name:
-                processed_sections.append(section)
+                processed_sections.append(Section(text=section.text, link=section.link))
+                print(
+                    f"Skipping non-image section or section without image_file_name: {type(section)}"
+                )
                 continue
 
+            print(
+                f"Processing ImageSection with image_file_name: {section.image_file_name}"
+            )
             # Get the image data from PGFileStore
             try:
                 with get_session_with_current_tenant() as db_session:
+                    print(
+                        f"Looking up image file in PGFileStore: {section.image_file_name}"
+                    )
                     pgfilestore = get_pgfilestore_by_file_name(
                         file_name=section.image_file_name, db_session=db_session
                     )
@@ -354,9 +366,12 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
                         logger.warning(
                             f"Image file {section.image_file_name} not found in PGFileStore"
                         )
+                        print(
+                            f"WARNING: Image file {section.image_file_name} not found in PGFileStore"
+                        )
                         # Keep the original section but without image processing
                         processed_sections.append(
-                            TextSection(
+                            Section(
                                 text="[Image could not be processed]",
                                 link=section.link,
                                 image_file_name=section.image_file_name,
@@ -365,20 +380,32 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
                         continue
 
                     # Get the image data
+                    print(
+                        f"Found pgfilestore with lobj_oid: {pgfilestore.lobj_oid}, display_name: {pgfilestore.display_name}"
+                    )
                     pgfilestore_data = read_lobj(
                         pgfilestore.lobj_oid, db_session
                     ).read()
+                    print(f"Read image data, size: {len(pgfilestore_data)} bytes")
 
                     # Summarize the image
+                    print(
+                        f"Attempting to summarize image with LLM: {type(llm).__name__}"
+                    )
                     summary = summarize_image_with_error_handling(
                         llm=llm,
                         image_data=pgfilestore_data,
                         context_name=pgfilestore.display_name or "Image",
                     )
+                    print(f"Image summary result: {'Success' if summary else 'Failed'}")
+                    if summary:
+                        print(f"Summary length: {len(summary)} chars")
+                    else:
+                        print("No summary was generated")
 
                     # Create a TextSection with the summary
                     processed_sections.append(
-                        TextSection(
+                        Section(
                             text=summary or "[Image could not be summarized]",
                             link=section.link,
                             image_file_name=section.image_file_name,
@@ -386,8 +413,13 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
                     )
             except Exception as e:
                 logger.error(f"Error processing image section: {e}")
+                print(f"ERROR processing image section: {e}")
+                print(f"Exception type: {type(e).__name__}")
+                import traceback
+
+                print(f"Traceback: {traceback.format_exc()}")
                 processed_sections.append(
-                    TextSection(
+                    Section(
                         text="[Error processing image]",
                         link=section.link,
                         image_file_name=section.image_file_name,
@@ -396,6 +428,9 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
 
         # Replace the document's sections with the processed ones
         document.sections = processed_sections
+        print(
+            f"Finished processing document ID: {document.id}, processed {len(processed_sections)} sections"
+        )
 
     return documents
 
@@ -465,6 +500,11 @@ def index_doc_batch(
 
     # Process any ImageSection objects before chunking
     logger.debug("Processing image sections")
+    print(f"Processing image sections for {len(ctx.updatable_docs)} documents")
+    # new_docs  = process_image_sections(ctx.updatable_docs)
+    # for doc in new_docs:
+    #     print(type(doc.sections[0]))
+
     ctx.updatable_docs = process_image_sections(ctx.updatable_docs)
 
     logger.debug("Starting chunking")

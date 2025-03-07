@@ -230,6 +230,7 @@ class ConfluenceConnector(
         Includes the page content, comments, and attachments.
         """
         try:
+            print("converting page to document")
             # Extract basic page information
             page_id = page["id"]
             page_title = page["title"]
@@ -257,14 +258,20 @@ class ConfluenceConnector(
                 )
 
                 for attachment in attachments.get("results", []):
+                    print("zattachment", attachment)
                     # Process each attachment
-                    result = process_attachment(
-                        self.confluence_client,
-                        attachment,
-                        page_title,
-                    )
+                    try:
+                        result = process_attachment(
+                            self.confluence_client,
+                            attachment,
+                            page_title,
+                        )
+                    except Exception as e:
+                        print("error", e)
+                    print("result", result)
 
                     if result.text:
+                        print("result.text", result.text)
                         # Create a section for the attachment text
                         attachment_section = TextSection(
                             text=result.text,
@@ -272,6 +279,7 @@ class ConfluenceConnector(
                         )
                         sections.append(attachment_section)
                     elif result.file_name:
+                        print("result.file_name", result.file_name)
                         # Create an ImageSection for image attachments
                         image_section = ImageSection(
                             text="",
@@ -283,6 +291,8 @@ class ConfluenceConnector(
                         logger.warning(
                             f"Error processing attachment '{attachment.get('title')}': {result.error}"
                         )
+
+                    print("sections", sections)
 
             # Extract metadata
             metadata = {}
@@ -372,19 +382,29 @@ class ConfluenceConnector(
                         attachment=attachment,
                         page_context=confluence_xml,
                     )
+                    print("response", response)
                     if response is None:
+                        print("response is None")
                         continue
 
                     content_text, file_storage_name = response
-
+                    print("content_text", content_text)
                     object_url = build_confluence_document_id(
                         self.wiki_base, attachment["_links"]["webui"], self.is_cloud
                     )
-
+                    print("object_url", object_url)
+                    print("file_storage_name", file_storage_name)
                     if content_text:
                         doc.sections.append(
                             TextSection(
                                 text=content_text,
+                                link=object_url,
+                            )
+                        )
+                    elif file_storage_name:
+                        print("file_storage_name", file_storage_name)
+                        doc.sections.append(
+                            ImageSection(
                                 link=object_url,
                                 image_file_name=file_storage_name,
                             )
