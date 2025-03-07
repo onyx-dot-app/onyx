@@ -37,6 +37,7 @@ _TENANT_PROVISIONING_TIME_LIMIT = 60 * 10  # 10 minutes
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_AVAILABLE_TENANTS,
+    queue=OnyxCeleryQueues.MONITORING,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     trail=False,
@@ -90,12 +91,15 @@ def check_available_tenants(self: Task) -> None:
 
         # Trigger pre-provisioning tasks for each tenant needed
         for _ in range(tenants_to_provision):
-            pre_provision_tenant.apply_async(
+            from celery import current_app
+
+            current_app.send_task(
+                OnyxCeleryTask.PRE_PROVISION_TENANT,
                 priority=OnyxCeleryPriority.LOW,
             )
 
-    except Exception as e:
-        task_logger.exception(f"Error in check_available_tenants task: {e}")
+    except Exception:
+        task_logger.exception("Error in check_available_tenants task")
 
     finally:
         lock_check.release()
@@ -106,7 +110,7 @@ def check_available_tenants(self: Task) -> None:
     ignore_result=True,
     soft_time_limit=_TENANT_PROVISIONING_SOFT_TIME_LIMIT,
     time_limit=_TENANT_PROVISIONING_TIME_LIMIT,
-    queue=OnyxCeleryQueues.PRIMARY,
+    queue=OnyxCeleryQueues.MONITORING,
     bind=True,
 )
 def pre_provision_tenant(self: Task) -> None:
@@ -116,11 +120,9 @@ def pre_provision_tenant(self: Task) -> None:
     so it's ready to be assigned to a user immediately.
     """
     task_logger.info("STARTING PRE_PROVISION_TENANT")
-    if not MULTI_TENANT:
-        task_logger.info(
-            "Multi-tenancy is not enabled, skipping tenant pre-provisioning"
-        )
-        return
+    # The MULTI_TENANT check is now done at the caller level (check_available_tenants)
+    # rather than inside this function
+
     r = get_redis_client()
     lock_provision: RedisLock = r.lock(
         OnyxRedisLocks.PRE_PROVISION_TENANT_LOCK,
@@ -160,17 +162,25 @@ def pre_provision_tenant(self: Task) -> None:
         # Store the pre-provisioned tenant in the database
         task_logger.info(f"Storing pre-provisioned tenant '{tenant_id}' in database")
         with Session(get_sqlalchemy_engine()) as db_session:
-            new_tenant = AvailableTenant(
-                tenant_id=tenant_id,
-                alembic_version=alembic_version,
-                date_created=datetime.datetime.now(),
-            )
-            db_session.add(new_tenant)
-            db_session.commit()
+            # Use a transaction to ensure atomicity
+            db_session.begin()
+            try:
+                new_tenant = AvailableTenant(
+                    tenant_id=tenant_id,
+                    alembic_version=alembic_version,
+                    date_created=datetime.datetime.now(),
+                )
+                db_session.add(new_tenant)
+                db_session.commit()
+                task_logger.info(f"Successfully pre-provisioned tenant {tenant_id}")
+            except Exception:
+                db_session.rollback()
+                task_logger.exception(
+                    f"Failed to store pre-provisioned tenant {tenant_id}"
+                )
+                raise
 
-        task_logger.info(f"Successfully pre-provisioned tenant {tenant_id}")
-
-    except Exception as e:
-        task_logger.exception(f"Error in pre_provision_tenant task: {e}")
+    except Exception:
+        task_logger.exception("Error in pre_provision_tenant task")
     finally:
         lock_provision.release()

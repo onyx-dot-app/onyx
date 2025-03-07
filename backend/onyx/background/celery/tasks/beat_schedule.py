@@ -20,7 +20,7 @@ BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 # hack to slow down task dispatch in the cloud until
 # we have a better implementation (backpressure, etc)
 # Note that DynamicTenantScheduler can adjust the runtime value for this via Redis
-CLOUD_BEAT_MULTIPLIER_DEFAULT = 8
+CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0
 
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = []

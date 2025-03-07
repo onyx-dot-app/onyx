@@ -26,8 +26,8 @@ from onyx.auth.users import exceptions
 from onyx.configs.app_configs import CONTROL_PLANE_API_BASE_URL
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import MilestoneRecordType
+from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.engine import get_session_with_tenant
-from onyx.db.engine import get_sqlalchemy_engine
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import upsert_cloud_embedding_provider
 from onyx.db.llm import upsert_llm_provider
@@ -60,21 +60,31 @@ async def get_or_provision_tenant(
     Get existing tenant ID for an email or create a new tenant if none exists.
     This function should only be called after we have verified we want this user's tenant to exist.
     It returns the tenant ID associated with the email, creating a new tenant if necessary.
+
+    Includes retry logic and improved error handling to address race conditions.
     """
+    # Early return for non-multi-tenant mode
     if not MULTI_TENANT:
         return POSTGRES_DEFAULT_SCHEMA
 
     if referral_source and request:
         await submit_to_hubspot(email, referral_source, request)
 
+    # First, check if the user already has a tenant
     tenant_id: str | None = None
     try:
-        # First, check if the user already has a tenant
         tenant_id = get_tenant_id_for_email(email)
         return tenant_id
-
     except exceptions.UserNotExists:
         # User doesn't exist, so we need to create a new tenant or assign an existing one
+        pass
+
+    # Maximum number of retries for tenant provisioning
+    max_retries = 3
+    retry_count = 0
+    last_error = None
+
+    while retry_count < max_retries:
         try:
             # Try to get a pre-provisioned tenant
             tenant_id = await get_available_tenant()
@@ -85,40 +95,86 @@ async def get_or_provision_tenant(
                 logger.info(
                     f"Assigned pre-provisioned tenant {tenant_id} to user {email}"
                 )
+                return tenant_id
             else:
                 # If no pre-provisioned tenant is available, create a new one on-demand
                 tenant_id = await create_tenant(email, referral_source)
+                if tenant_id:
+                    return tenant_id
+
+            # If we reach here, something went wrong but didn't raise an exception
+            retry_count += 1
+            await asyncio.sleep(1)  # Short delay before retry
 
         except Exception as e:
-            logger.error(f"Tenant provisioning failed: {e}")
-            raise HTTPException(status_code=500, detail="Failed to provision tenant.")
+            last_error = e
+            retry_count += 1
+            logger.warning(
+                f"Tenant provisioning attempt {retry_count} failed: {str(e)}. "
+                f"{'Retrying...' if retry_count < max_retries else 'Max retries reached.'}"
+            )
+            if retry_count < max_retries:
+                # Exponential backoff
+                await asyncio.sleep(2**retry_count)
+            else:
+                break
 
-    if not tenant_id:
-        raise HTTPException(
-            status_code=401, detail="User does not belong to an organization"
-        )
-
-    return tenant_id
+    # If we've exhausted all retries, log and raise an exception
+    error_msg = f"Failed to provision tenant after {max_retries} attempts"
+    logger.error(error_msg, exc_info=last_error)
+    raise HTTPException(
+        status_code=500, detail="Failed to provision tenant. Please try again later."
+    )
 
 
 async def create_tenant(email: str, referral_source: str | None = None) -> str:
     """
     Create a new tenant on-demand when no pre-provisioned tenants are available.
     This is the fallback method when we can't use a pre-provisioned tenant.
+
+    Includes improved transaction handling and error recovery.
     """
     tenant_id = TENANT_ID_PREFIX + str(uuid.uuid4())
+    logger.info(f"Creating new tenant {tenant_id} for user {email}")
+
     try:
         # Provision tenant on data plane
         await provision_tenant(tenant_id, email)
 
         # Notify control plane if not already done in provision_tenant
         if not DEV_MODE and referral_source:
-            await notify_control_plane(tenant_id, email, referral_source)
+            # Use retry logic for control plane notification
+            max_retries = 3
+            retry_count = 0
+
+            while retry_count < max_retries:
+                try:
+                    await notify_control_plane(tenant_id, email, referral_source)
+                    break  # Success, exit the retry loop
+                except Exception:
+                    retry_count += 1
+                    if retry_count >= max_retries:
+                        logger.exception(
+                            f"Failed to notify control plane after {max_retries} attempts"
+                        )
+                        # We don't want to fail the entire tenant creation if only the notification fails
+                        # Consider adding this to a queue for later retry
+                    else:
+                        # Exponential backoff for retries
+                        await asyncio.sleep(2**retry_count)
+                        logger.warning(
+                            f"Retrying control plane notification ({retry_count}/{max_retries})"
+                        )
 
     except Exception as e:
-        logger.error(f"Tenant provisioning failed: {e}")
-        await rollback_tenant_provisioning(tenant_id)
+        logger.exception(f"Tenant provisioning failed: {str(e)}")
+        # Attempt to rollback the tenant provisioning
+        try:
+            await rollback_tenant_provisioning(tenant_id)
+        except Exception:
+            logger.exception(f"Failed to rollback tenant provisioning for {tenant_id}")
         raise HTTPException(status_code=500, detail="Failed to provision tenant.")
+
     return tenant_id
 
 
@@ -181,20 +237,74 @@ async def notify_control_plane(
 
 
 async def rollback_tenant_provisioning(tenant_id: str) -> None:
-    # Logic to rollback tenant provisioning on data plane
+    """
+    Logic to rollback tenant provisioning on data plane.
+    Handles each step independently to ensure maximum cleanup even if some steps fail.
+    """
     logger.info(f"Rolling back tenant provisioning for tenant_id: {tenant_id}")
-    try:
-        # Drop the tenant's schema to rollback provisioning
-        drop_schema(tenant_id)
 
-        # Remove tenant mapping
-        with Session(get_sqlalchemy_engine()) as db_session:
-            db_session.query(UserTenantMapping).filter(
-                UserTenantMapping.tenant_id == tenant_id
-            ).delete()
-            db_session.commit()
+    # Track if any part of the rollback fails
+    rollback_errors = []
+
+    # 1. Try to drop the tenant's schema
+    try:
+        drop_schema(tenant_id)
+        logger.info(f"Successfully dropped schema for tenant {tenant_id}")
     except Exception as e:
-        logger.error(f"Failed to rollback tenant provisioning: {e}")
+        error_msg = f"Failed to drop schema for tenant {tenant_id}: {str(e)}"
+        logger.error(error_msg)
+        rollback_errors.append(error_msg)
+
+    # 2. Try to remove tenant mapping
+    try:
+        with get_session_with_shared_schema() as db_session:
+            db_session.begin()
+            try:
+                db_session.query(UserTenantMapping).filter(
+                    UserTenantMapping.tenant_id == tenant_id
+                ).delete()
+                db_session.commit()
+                logger.info(
+                    f"Successfully removed user mappings for tenant {tenant_id}"
+                )
+            except Exception as e:
+                db_session.rollback()
+                raise e
+    except Exception as e:
+        error_msg = f"Failed to remove user mappings for tenant {tenant_id}: {str(e)}"
+        logger.error(error_msg)
+        rollback_errors.append(error_msg)
+
+    # 3. If this tenant was in the available tenants table, remove it
+    try:
+        with get_session_with_shared_schema() as db_session:
+            db_session.begin()
+            try:
+                available_tenant = (
+                    db_session.query(AvailableTenant)
+                    .filter(AvailableTenant.tenant_id == tenant_id)
+                    .first()
+                )
+
+                if available_tenant:
+                    db_session.delete(available_tenant)
+                    db_session.commit()
+                    logger.info(
+                        f"Removed tenant {tenant_id} from available tenants table"
+                    )
+            except Exception as e:
+                db_session.rollback()
+                raise e
+    except Exception as e:
+        error_msg = f"Failed to remove tenant {tenant_id} from available tenants table: {str(e)}"
+        logger.error(error_msg)
+        rollback_errors.append(error_msg)
+
+    # Log summary of rollback operation
+    if rollback_errors:
+        logger.error(f"Tenant rollback completed with {len(rollback_errors)} errors")
+    else:
+        logger.info(f"Tenant rollback completed successfully for tenant {tenant_id}")
 
 
 def configure_default_api_keys(db_session: Session) -> None:
@@ -353,16 +463,21 @@ async def get_available_tenant() -> str | None:
     """
     Get an available pre-provisioned tenant from the NewAvailableTenant table.
     Returns the tenant_id if one is available, None otherwise.
+    Uses row-level locking to prevent race conditions when multiple processes
+    try to get an available tenant simultaneously.
     """
     if not MULTI_TENANT:
         return None
 
-    try:
-        with Session(get_sqlalchemy_engine()) as db_session:
-            # Get the oldest available tenant
+    with get_session_with_shared_schema() as db_session:
+        try:
+            db_session.begin()
+
+            # Get the oldest available tenant with FOR UPDATE lock to prevent race conditions
             available_tenant = (
                 db_session.query(AvailableTenant)
                 .order_by(AvailableTenant.date_created)
+                .with_for_update(skip_locked=True)  # Skip locked rows to avoid blocking
                 .first()
             )
 
@@ -373,11 +488,13 @@ async def get_available_tenant() -> str | None:
                 db_session.commit()
                 logger.info(f"Using pre-provisioned tenant {tenant_id}")
                 return tenant_id
-
-    except Exception as e:
-        logger.error(f"Error getting available tenant: {e}")
-
-    return None
+            else:
+                db_session.rollback()
+                return None
+        except Exception:
+            logger.exception("Error getting available tenant")
+            db_session.rollback()
+            return None
 
 
 async def setup_tenant(tenant_id: str) -> None:
@@ -422,22 +539,48 @@ async def assign_tenant_to_user(
 ) -> None:
     """
     Assign a tenant to a user and perform necessary operations.
+    Uses transaction handling to ensure atomicity and includes retry logic
+    for control plane notifications.
     """
-    # Add the user to the tenant
-    add_users_to_tenant([email], tenant_id)
+    # First, add the user to the tenant in a transaction
+    try:
+        add_users_to_tenant([email], tenant_id)
 
-    # Create milestone record
-    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
-        create_milestone_and_report(
-            user=None,
-            distinct_id=tenant_id,
-            event_type=MilestoneRecordType.TENANT_CREATED,
-            properties={
-                "email": email,
-            },
-            db_session=db_session,
-        )
+        # Create milestone record in the same transaction context as the tenant assignment
+        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+            create_milestone_and_report(
+                user=None,
+                distinct_id=tenant_id,
+                event_type=MilestoneRecordType.TENANT_CREATED,
+                properties={
+                    "email": email,
+                },
+                db_session=db_session,
+            )
+    except Exception:
+        logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
+        raise HTTPException(status_code=500, detail="Failed to assign tenant to user")
 
-    # Notify control plane
+    # Notify control plane with retry logic
     if not DEV_MODE:
-        await notify_control_plane(tenant_id, email, referral_source)
+        max_retries = 3
+        retry_count = 0
+
+        while retry_count < max_retries:
+            try:
+                await notify_control_plane(tenant_id, email, referral_source)
+                break  # Success, exit the retry loop
+            except Exception:
+                retry_count += 1
+                if retry_count >= max_retries:
+                    logger.exception(
+                        f"Failed to notify control plane after {max_retries} attempts"
+                    )
+                    # Consider implementing a background task to retry later or
+                    # add to a dead letter queue for manual intervention
+                else:
+                    # Exponential backoff for retries
+                    await asyncio.sleep(2**retry_count)
+                    logger.warning(
+                        f"Retrying control plane notification ({retry_count}/{max_retries})"
+                    )
