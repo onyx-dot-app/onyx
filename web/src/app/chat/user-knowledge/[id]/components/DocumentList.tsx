@@ -98,11 +98,46 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       clearInterval(refreshInterval);
     }
 
+    // Add a timestamp to track when we started refreshing
+    const startTime = Date.now();
+    const MAX_REFRESH_TIME = 30000; // 30 seconds max for any upload to complete
+
     const interval = setInterval(() => {
+      // Check if we've been waiting too long, if so, clear uploading state
+      if (Date.now() - startTime > MAX_REFRESH_TIME) {
+        setUploadingFiles([]);
+        clearInterval(interval);
+        setRefreshInterval(null);
+        return;
+      }
+
       const allFilesUploaded = uploadingFiles.every((uploadingFile) => {
         if (uploadingFile.startsWith("http")) {
-          return files.length > 0;
+          // For URL uploads, extract the domain and check for files containing it
+          try {
+            // Get the hostname (domain) from the URL
+            const url = new URL(uploadingFile);
+            const hostname = url.hostname;
+
+            // Look for recently added files that might match this URL
+            // Check if any file has this hostname in its name
+            return files.some(
+              (file) =>
+                // Check for hostname in filename (URLs typically become domain-based filenames)
+                file.name.toLowerCase().includes(hostname.toLowerCase()) ||
+                // Also check for files that might have been created in the last minute
+                // This is a fallback if hostname matching doesn't work
+                (file.lastModified &&
+                  new Date(file.lastModified).getTime() > startTime - 60000)
+            );
+          } catch (e) {
+            // If URL parsing fails, fall back to checking if any new files exist
+            console.error("Failed to parse URL:", e);
+            return false; // Force continued checking
+          }
         }
+
+        // For regular file uploads, check if filename exists in the files list
         return files.some((file) => file.name === uploadingFile);
       });
 
@@ -115,6 +150,42 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
     setRefreshInterval(interval);
   };
+
+  useEffect(() => {
+    if (uploadingFiles.length > 0 && files.length > 0) {
+      // Filter out any uploading files that now exist in the files list
+      const remainingUploadingFiles = uploadingFiles.filter((uploadingFile) => {
+        if (uploadingFile.startsWith("http")) {
+          try {
+            // For URLs, check if any file contains the hostname
+            const url = new URL(uploadingFile);
+            const hostname = url.hostname;
+
+            return !files.some((file) =>
+              file.name.toLowerCase().includes(hostname.toLowerCase())
+            );
+          } catch (e) {
+            console.error("Failed to parse URL:", e);
+            return true; // Keep in the list if we can't parse
+          }
+        } else {
+          // For regular files, check if the filename exists
+          return !files.some((file) => file.name === uploadingFile);
+        }
+      });
+
+      // Update the uploading files list if there's a change
+      if (remainingUploadingFiles.length !== uploadingFiles.length) {
+        setUploadingFiles(remainingUploadingFiles);
+
+        // If all files are uploaded, clear the refresh interval
+        if (remainingUploadingFiles.length === 0 && refreshInterval) {
+          clearInterval(refreshInterval);
+          setRefreshInterval(null);
+        }
+      }
+    }
+  }, [files, uploadingFiles, refreshInterval]);
 
   useEffect(() => {
     return () => {

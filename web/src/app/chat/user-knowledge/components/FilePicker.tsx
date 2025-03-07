@@ -269,6 +269,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
   const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
 
+  // Add a new state for tracking uploads
+  const [uploadStartTime, setUploadStartTime] = useState<number | null>(null);
+  const MAX_UPLOAD_TIME = 30000; // 30 seconds max for any upload
+
   useEffect(() => {
     if (isOpen) {
       // Initialize selected file IDs
@@ -303,6 +307,35 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       setCurrentFolder(null);
     }
   }, [searchQuery]);
+
+  // Add a useEffect to check for timed-out uploads
+  useEffect(() => {
+    if (isUploadingFile || isCreatingFileFromLink) {
+      if (!uploadStartTime) {
+        setUploadStartTime(Date.now());
+      }
+
+      const timer = setTimeout(() => {
+        // If uploads have been going on for too long, reset the state
+        if (uploadStartTime && Date.now() - uploadStartTime > MAX_UPLOAD_TIME) {
+          setIsUploadingFile(false);
+          setIsCreatingFileFromLink(false);
+          setUploadStartTime(null);
+          refreshFolders(); // Make sure we have the latest files
+        }
+      }, MAX_UPLOAD_TIME + 1000); // Check just after the max time
+
+      return () => clearTimeout(timer);
+    } else {
+      // Reset when not uploading
+      setUploadStartTime(null);
+    }
+  }, [
+    isUploadingFile,
+    isCreatingFileFromLink,
+    uploadStartTime,
+    refreshFolders,
+  ]);
 
   const handleFolderClick = (folderId: number) => {
     setCurrentFolder(folderId);
@@ -895,17 +928,23 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                     disabled={isUploadingFile || isCreatingFileFromLink}
                     onUpload={(files: File[]) => {
                       setIsUploadingFile(true);
-                      // Convert File[] to FileList for addUploadedFileToContext
-                      const dataTransfer = new DataTransfer();
-                      files.forEach((file) => dataTransfer.items.add(file));
-                      const fileList = dataTransfer.files;
+                      setUploadStartTime(Date.now()); // Record start time
 
-                      addUploadedFileToContext(fileList)
+                      // Convert File[] to FileList for addUploadedFileToContext
+                      const fileListArray = Array.from(files);
+                      const fileList = new DataTransfer();
+                      fileListArray.forEach((file) => fileList.items.add(file));
+
+                      addUploadedFileToContext(fileList.files)
                         .then(() => refreshFolders())
-                        .finally(() => setIsUploadingFile(false));
+                        .finally(() => {
+                          setIsUploadingFile(false);
+                        });
                     }}
                     onUrlUpload={async (url: string) => {
                       setIsCreatingFileFromLink(true);
+                      setUploadStartTime(Date.now()); // Record start time
+
                       try {
                         const response: FileUploadResponse =
                           await createFileFromLink(url, currentFolder);
@@ -914,9 +953,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                           response.file_paths &&
                           response.file_paths.length > 0
                         ) {
+                          // Extract domain from URL to help with detection
+                          const urlObj = new URL(url);
+                          const hostname = urlObj.hostname;
+
                           const createdFile: FileResponse = {
                             id: Date.now(),
-                            name: new URL(url).hostname,
+                            name: hostname, // Use hostname directly for better detection
                             document_id: response.file_paths[0],
                             folder_id: currentFolder || null,
                             size: 0,
@@ -928,8 +971,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                         }
 
                         await refreshFolders();
-                      } catch (error) {
-                        console.error("Error creating file from link:", error);
+                      } catch (e) {
+                        console.error("Error creating file from link:", e);
                       } finally {
                         setIsCreatingFileFromLink(false);
                       }

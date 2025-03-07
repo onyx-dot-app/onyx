@@ -33,6 +33,7 @@ export type FileResponse = {
   token_count?: number;
   assistant_ids?: number[];
   indexed?: boolean;
+  created_at?: string;
 };
 
 export interface FileUploadResponse {

@@ -122,7 +122,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
         </div>
 
         <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
-          {file.lastModified && getTimeAgoString(new Date(file.lastModified))}
+          {file.created_at && getTimeAgoString(new Date(file.created_at))}
         </div>
 
         <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
