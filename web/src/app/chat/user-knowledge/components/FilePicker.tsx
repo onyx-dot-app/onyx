@@ -49,6 +49,8 @@ import {
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { getTimeAgoString } from "@/lib/dateUtils";
+import { FileOptionIcon } from "@/components/icons/icons";
+import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
 
 const DraggableItem: React.FC<{
   id: string;
@@ -103,8 +105,8 @@ const DraggableItem: React.FC<{
       onClick={onClick}
     >
       <div className="flex items-center flex-1 min-w-0">
-        <div className="flex items-center gap-3 w-[60%] min-w-0">
-          <FileIcon className="h-4 w-4 text-blue-400 dark:text-blue-300 shrink-0" />
+        <div className="flex text-sm items-center gap-3 w-[80%] mr-2 min-w-0">
+          <FileOptionIcon className="h-4 w-4 text-orange-400 dark:text-blue-300 shrink-0" />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -119,7 +121,7 @@ const DraggableItem: React.FC<{
           </TooltipProvider>
         </div>
 
-        <div className="w-[40%] text-sm text-text-400 dark:text-neutral-400">
+        <div className="w-[20%] text-sm text-text-400 dark:text-neutral-400">
           {file.lastModified && getTimeAgoString(new Date(file.lastModified))}
         </div>
       </div>
@@ -145,8 +147,8 @@ const FilePickerFolderItem: React.FC<{
       onClick={onClick}
     >
       <div className="flex items-center flex-1 min-w-0">
-        <div className="flex items-center gap-3 w-[60%] min-w-0">
-          <FolderIcon className="h-4 w-4 text-blue-400 dark:text-blue-300 shrink-0" />
+        <div className="flex  text-sm items-center gap-3 w-[60%] min-w-0">
+          <FolderIcon className="h-5 w-5 text-orange-400 dark:text-orange-300 shrink-0 fill-orange-400 dark:fill-orange-300" />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -767,11 +769,11 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             {filteredFolders.length + currentFolderFiles.length > 0 ? (
               <div className="flex-grow pr-4">
                 <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-3 text-sm font-medium text-text-400 dark:text-neutral-400">
-                  <div className="flex items-center gap-3 w-[60%] min-w-0">
+                  <div className="flex items-center gap-3 w-[80%]  min-w-0">
                     <span>Name</span>
                   </div>
-                  <div className="w-[40%] ">
-                    {currentFolder === null ? "Files" : "Last Modified"}
+                  <div className="w-[20%] ">
+                    {currentFolder === null ? "Files" : "Created"}
                   </div>
                 </div>
 
@@ -790,7 +792,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                     ]}
                     strategy={verticalListSortingStrategy}
                   >
-                    <div className="overflow-y-auto space-y-3">
+                    <div className="overflow-y-auto ">
                       {currentFolder === null
                         ? filteredFolders.map((folder) => (
                             <FilePickerFolderItem
@@ -886,82 +888,96 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               </div>
 
               <div className="flex flex-col space-y-3">
-                <div className="p-4 flex-none border rounded-lg bg-neutral-50 hover:bg-neutral-100 transition-colors duration-150 dark:bg-neutral-800 dark:hover:bg-neutral-750 dark:border-neutral-700">
-                  <label
-                    htmlFor="file-upload"
-                    className="cursor-pointer flex items-center justify-center space-x-2"
-                  >
-                    <UploadIcon className="w-4 h-4 text-neutral-600 dark:text-neutral-300" />
-                    <span className="text-sm font-medium text-neutral-700 dark:text-neutral-200">
-                      {isUploadingFile ? "Uploading..." : "Upload files"}
-                    </span>
-                  </label>
-                  <input
-                    id="file-upload"
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={handleFileUpload}
-                    disabled={isUploadingFile}
-                  />
-                </div>
-
                 <Separator className="dark:bg-neutral-700" />
 
                 <div className="flex flex-col space-y-2">
-                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
-                    Add links to the context
-                  </p>
-                  <form
-                    className="flex mt-1"
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      handleCreateFileFromLink();
+                  <FileUploadSection
+                    disabled={isUploadingFile || isCreatingFileFromLink}
+                    onUpload={(files: File[]) => {
+                      setIsUploadingFile(true);
+                      // Convert File[] to FileList for addUploadedFileToContext
+                      const dataTransfer = new DataTransfer();
+                      files.forEach((file) => dataTransfer.items.add(file));
+                      const fileList = dataTransfer.files;
+
+                      addUploadedFileToContext(fileList)
+                        .then(() => refreshFolders())
+                        .finally(() => setIsUploadingFile(false));
                     }}
-                  >
-                    <div className="w-full flex items-center space-x-2">
-                      <input
-                        type="text"
-                        value={linkUrl}
-                        onChange={(e) => setLinkUrl(e.target.value)}
-                        placeholder="Enter URL"
-                        className="flex-grow text-sm px-3 py-1.5 border border-neutral-300 rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-400 dark:border-neutral-600 dark:bg-neutral-800 dark:text-neutral-100 dark:focus:ring-neutral-500"
-                      />
-                      <Button
-                        variant="default"
-                        className="text-sm h-8"
-                        size="sm"
-                        onClick={handleCreateFileFromLink}
-                        disabled={isCreatingFileFromLink || !linkUrl}
-                      >
-                        {isCreatingFileFromLink ? "Creating..." : "Create"}
-                      </Button>
-                    </div>
-                  </form>
+                    onUrlUpload={async (url: string) => {
+                      setIsCreatingFileFromLink(true);
+                      try {
+                        const response: FileUploadResponse =
+                          await createFileFromLink(url, currentFolder);
+
+                        if (
+                          response.file_paths &&
+                          response.file_paths.length > 0
+                        ) {
+                          const createdFile: FileResponse = {
+                            id: Date.now(),
+                            name: new URL(url).hostname,
+                            document_id: response.file_paths[0],
+                            folder_id: currentFolder || null,
+                            size: 0,
+                            type: "link",
+                            lastModified: new Date().toISOString(),
+                            token_count: 0,
+                          };
+                          addSelectedFile(createdFile);
+                        }
+
+                        await refreshFolders();
+                      } catch (error) {
+                        console.error("Error creating file from link:", error);
+                      } finally {
+                        setIsCreatingFileFromLink(false);
+                      }
+                    }}
+                    isUploading={isUploadingFile || isCreatingFileFromLink}
+                  />
                 </div>
               </div>
             </div>
           </div>
         </div>
-
         <div className="px-5 py-4 border-t border-neutral-200 dark:border-neutral-700">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col items-center justify-center space-y-4">
             <div className="flex items-center gap-3">
               <span className="text-sm text-neutral-600 dark:text-neutral-400">
                 Selected context:
               </span>
-              <ContextUsage
-                totalTokens={selectedItems.totalTokens}
-                maxTokens={selectedModel.maxTokens}
-                modelName={selectedModel.modelName}
-                compact={true}
-              />
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-lg shadow-sm">
+                <div className="h-2 w-20 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full transition-all duration-300 ${
+                      (selectedItems.totalTokens / selectedModel.maxTokens) *
+                        100 >
+                      75
+                        ? "bg-red-500"
+                        : (selectedItems.totalTokens /
+                              selectedModel.maxTokens) *
+                              100 >
+                            50
+                          ? "bg-amber-500"
+                          : "bg-emerald-500"
+                    }`}
+                    style={{
+                      width: `${Math.min(
+                        (selectedItems.totalTokens / selectedModel.maxTokens) *
+                          100,
+                        100
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
+                  {selectedItems.totalTokens.toLocaleString()} /{" "}
+                  {selectedModel.maxTokens.toLocaleString()} tokens
+                </span>
+              </div>
             </div>
-            <Button
-              onClick={onSave}
-              disabled={selectedItems.totalTokens === 0}
-              className="px-6"
-            >
+            <Button onClick={onSave} className="px-8 py-2 w-48">
               Set Context
             </Button>
           </div>

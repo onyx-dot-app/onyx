@@ -140,13 +140,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         />
       )}
 
-      <div className="flex justify-between items-center">
-        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
-          Documents in this Folder
-        </h2>
-      </div>
-
-      <div className="mb-6">
+      <div className="mb-6 -mt-2">
         <FileUploadSection
           disabled={disabled}
           disabledMessage={
@@ -161,25 +155,33 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         />
       </div>
 
+      <div className="flex justify-between items-center">
+        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
+          Documents in this Folder
+        </h2>
+      </div>
       <div className="flex items-center gap-6 my-2 border-neutral-200 dark:border-neutral-700 pb-4">
         {/* Context Limit */}
         <div className="flex items-center gap-3">
           <div className="flex flex-col">
             <span className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
-              Context usage for {getDisplayNameForModel(selectedModelName)}
+              Context usage for{" "}
+              {selectedModelName
+                ? getDisplayNameForModel(selectedModelName)
+                : "Model"}
             </span>
 
             <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-lg shadow-sm">
               <div className="h-2 w-16 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                 <div
                   className={`h-full transition-all duration-300 ${
-                    tokenPercentage > 75
+                    tokenPercentage && tokenPercentage > 75
                       ? "bg-red-500"
-                      : tokenPercentage > 50
+                      : tokenPercentage && tokenPercentage > 50
                         ? "bg-amber-500"
                         : "bg-emerald-500"
                   }`}
-                  style={{ width: `${Math.min(tokenPercentage, 100)}%` }}
+                  style={{ width: `${Math.min(tokenPercentage || 0, 100)}%` }}
                 />
               </div>
               <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
