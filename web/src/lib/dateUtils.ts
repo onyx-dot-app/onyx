@@ -118,12 +118,13 @@ export const getDateRangeString = (from: Date | null, to: Date | null) => {
 export const getTimeAgoString = (date: Date | null) => {
   if (!date) return null;
 
-  const diffMs = new Date().getTime() - date.getTime();
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   const diffWeeks = Math.floor(diffDays / 7);
   const diffMonths = Math.floor(diffDays / 30);
 
-  if (buildDateString(date).includes("Today")) return "Today";
+  if (now.toDateString() === date.toDateString()) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays}d ago`;
   if (diffDays < 30) return `${diffWeeks}w ago`;

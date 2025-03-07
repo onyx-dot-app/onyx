@@ -3,7 +3,7 @@ services:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
     build:
       context: ../../backend
-      dockerfile: Dockerfile
+      is dockerfile: Dockerfile
     command: >
       /bin/sh -c "
       alembic upgrade head &&

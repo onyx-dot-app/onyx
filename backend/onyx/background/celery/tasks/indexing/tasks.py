@@ -1123,6 +1123,9 @@ def connector_indexing_proxy_task(
     if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
         try:
             with get_session_with_current_tenant() as db_session:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to termination signal"
+                )
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session,

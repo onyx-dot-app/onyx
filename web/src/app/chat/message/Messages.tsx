@@ -6,6 +6,7 @@ import {
   FiChevronLeft,
   FiTool,
   FiGlobe,
+  FiFile,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
@@ -18,7 +19,11 @@ import React, {
 } from "react";
 import { unified } from "unified";
 import ReactMarkdown from "react-markdown";
-import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
+import {
+  OnyxDocument,
+  FilteredOnyxDocument,
+  MinimalOnyxDocument,
+} from "@/lib/search/interfaces";
 import { SearchSummary } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
@@ -48,7 +53,6 @@ import {
   CustomTooltip,
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
-import { ValidSources } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -71,6 +75,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { copyAll, handleCopy } from "./copyingUtils";
+import { SourceChip } from "../input/ChatInputBar";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -81,27 +86,32 @@ const TOOLS_WITH_CUSTOM_HANDLING = [
 function FileDisplay({
   files,
   alignBubble,
+  setPresentingDocument,
 }: {
   files: FileDescriptor[];
   alignBubble?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) {
   const [close, setClose] = useState(true);
+  const [expandedKnowledge, setExpandedKnowledge] = useState(false);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const nonImgFiles = files.filter(
-    (file) => file.type !== ChatFileType.IMAGE && file.type !== ChatFileType.CSV
+  const textFiles = files.filter(
+    (file) => file.type == ChatFileType.PLAIN_TEXT
   );
-
+  const userKnowledgeFiles = files.filter(
+    (file) => file.type == ChatFileType.USER_KNOWLEDGE
+  );
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
     <>
-      {nonImgFiles && nonImgFiles.length > 0 && (
+      {textFiles && textFiles.length > 0 && (
         <div
           id="onyx-file"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
-            {nonImgFiles.map((file) => {
+            {textFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
                   <DocumentPreview
@@ -111,6 +121,51 @@ function FileDisplay({
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+      {userKnowledgeFiles && userKnowledgeFiles.length > 0 && (
+        <div className="ml-auto my-2 w-full flex justify-end">
+          <div className="min-h-[28px]">
+            {" "}
+            {/* Fixed height container to prevent shifting */}
+            {!expandedKnowledge ? (
+              <div
+                className="flex items-center gap-1 text-xs text-neutral-500 cursor-pointer hover:text-neutral-700 transition-colors"
+                onClick={() => setExpandedKnowledge(true)}
+              >
+                <span className="bg-neutral-100 px-2 py-1 rounded-full text-xs font-medium">
+                  {userKnowledgeFiles.length} knowledge source
+                  {userKnowledgeFiles.length > 1 ? "s" : ""}
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <div
+                  className="text-xs text-neutral-500 dark:text-neutral-400 cursor-pointer hover:text-neutral-700 mb-1 text-right"
+                  onClick={() => setExpandedKnowledge(false)}
+                >
+                  Hide knowledge source
+                  {userKnowledgeFiles.length > 1 ? "s" : ""}
+                </div>
+                <div className="flex  justify-end w-full flex-wrap gap-2">
+                  {userKnowledgeFiles.map((file) => (
+                    <div key={file.id} className="w-fit">
+                      <SourceChip
+                        onClick={() => {
+                          setPresentingDocument({
+                            semantic_identifier: file.id,
+                            document_id: file.id,
+                          });
+                        }}
+                        title={file.name || file.id}
+                        icon={<FiFile size={12} />}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -127,7 +182,6 @@ function FileDisplay({
           </div>
         </div>
       )}
-
       {csvImgFiles && csvImgFiles.length > 0 && (
         <div className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}>
           <div className="flex flex-col gap-2">
@@ -216,7 +270,7 @@ export const AIMessage = ({
   retrievalDisabled?: boolean;
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
-  setPresentingDocument: (document: OnyxDocument) => void;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
   removePadding?: boolean;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
@@ -420,9 +474,10 @@ export const AIMessage = ({
               <div className="max-w-message-max break-words">
                 <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
+                    {/* {JSON.stringify(toolCall)} */}
                     {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                       <>
-                        {query !== undefined && !retrievalDisabled && (
+                        {query !== undefined && (
                           <div className="mb-1">
                             <SearchSummary
                               index={index || 0}
@@ -431,9 +486,11 @@ export const AIMessage = ({
                               handleSearchQueryEdit={handleSearchQueryEdit}
                               docs={docs || []}
                               toggleDocumentSelection={toggleDocumentSelection!}
+                              userFileSearch={retrievalDisabled ?? false}
                             />
                           </div>
                         )}
+
                         {handleForceSearch &&
                           content &&
                           query === undefined &&
@@ -522,7 +579,10 @@ export const AIMessage = ({
 
                     {content || files ? (
                       <>
-                        <FileDisplay files={files || []} />
+                        <FileDisplay
+                          setPresentingDocument={setPresentingDocument}
+                          files={files || []}
+                        />
 
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">
@@ -801,6 +861,7 @@ export const HumanMessage = ({
   shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
+  setPresentingDocument,
 }: {
   shared?: boolean;
   content: string;
@@ -811,6 +872,7 @@ export const HumanMessage = ({
   onMessageSelection?: (messageId: number) => void;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -858,7 +920,11 @@ export const HumanMessage = ({
       >
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
+            <FileDisplay
+              alignBubble
+              setPresentingDocument={setPresentingDocument}
+              files={files || []}
+            />
 
             <div className="flex justify-end">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">

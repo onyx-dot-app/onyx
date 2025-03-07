@@ -89,6 +89,10 @@ class StreamStopInfo(SubQuestionIdentifier):
         return data
 
 
+class UserKnowledgeFilePacket(BaseModel):
+    user_files: list[FileDescriptor]
+
+
 class LLMRelevanceFilterResponse(BaseModel):
     llm_selected_doc_indices: list[int]
 

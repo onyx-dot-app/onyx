@@ -1,0 +1,381 @@
+import React, { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, MessageSquare } from "lucide-react";
+import { useDocumentsContext } from "../DocumentsContext";
+import { useAssistants } from "@/components/context/AssistantsContext";
+import { useChatContext } from "@/components/context/ChatContext";
+import { Button } from "@/components/ui/button";
+import { DocumentList } from "./components/DocumentList";
+import { usePopup } from "@/components/admin/connectors/Popup";
+import { usePopupFromQuery } from "@/components/popup/PopupFromQuery";
+import { Input } from "@/components/ui/input";
+import { DeleteEntityModal } from "@/components/DeleteEntityModal";
+import { MoveFolderModal } from "@/components/MoveFolderModal";
+import { FolderResponse } from "../DocumentsContext";
+import { getDisplayNameForModel } from "@/lib/hooks";
+
+export default function UserFolderContent({ folderId }: { folderId: number }) {
+  const router = useRouter();
+  const { llmProviders } = useChatContext();
+  const { popup, setPopup } = usePopup();
+  const {
+    folderDetails,
+    getFolderDetails,
+    downloadItem,
+    renameItem,
+    deleteItem,
+    createFileFromLink,
+    handleUpload,
+    refreshFolderDetails,
+    getFolders,
+    moveItem,
+    updateFolderDetails,
+  } = useDocumentsContext();
+
+  const [isCapacityOpen, setIsCapacityOpen] = useState(false);
+  const [isSharedOpen, setIsSharedOpen] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<number | null>(null);
+  const [newItemName, setNewItemName] = useState("");
+  const [editingDescription, setEditingDescription] = useState(false);
+  const [newDescription, setNewDescription] = useState("");
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
+  const [deleteItemType, setDeleteItemType] = useState<"file" | "folder">(
+    "file"
+  );
+  const [deleteItemName, setDeleteItemName] = useState("");
+  const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
+  const [folders, setFolders] = useState<FolderResponse[]>([]);
+
+  const modelDescriptors = llmProviders.flatMap((provider) =>
+    Object.entries(provider.model_token_limits ?? {}).map(
+      ([modelName, maxTokens]) => ({
+        modelName,
+        provider: provider.provider,
+        maxTokens,
+      })
+    )
+  );
+
+  const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
+
+  const { popup: folderCreatedPopup } = usePopupFromQuery({
+    "folder-created": {
+      message: `Folder created successfully`,
+      type: "success",
+    },
+  });
+
+  useEffect(() => {
+    if (!folderDetails) {
+      getFolderDetails(folderId);
+    }
+  }, [folderId, folderDetails, getFolderDetails]);
+
+  useEffect(() => {
+    const fetchFolders = async () => {
+      try {
+        const fetchedFolders = await getFolders();
+        setFolders(fetchedFolders);
+      } catch (error) {
+        console.error("Error fetching folders:", error);
+      }
+    };
+
+    fetchFolders();
+  }, []);
+
+  const handleBack = () => {
+    router.push("/chat/user-knowledge");
+  };
+  if (!folderDetails) {
+    return (
+      <div className="min-h-full w-full min-w-0 flex-1 mx-auto max-w-5xl px-4 pb-20 md:pl-8 mt-6 md:pr-8 2xl:pr-14">
+        <div className="text-left space-y-4">
+          <h2 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
+            No Folder Found
+          </h2>
+          <p className="text-neutral-600">
+            The requested folder does not exist or you dont have permission to
+            view it.
+          </p>
+          <Button onClick={handleBack} variant="outline" className="mt-2">
+            Back to My Documents
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const totalTokens = folderDetails.files.reduce(
+    (acc, file) => acc + (file.token_count || 0),
+    0
+  );
+  const maxTokens = selectedModel.maxTokens;
+  const tokenPercentage = (totalTokens / maxTokens) * 100;
+
+  const handleStartChat = () => {
+    router.push(`/chat?userFolderId=${folderId}`);
+  };
+
+  const handleCreateFileFromLink = async (url: string) => {
+    await createFileFromLink(url, folderId);
+  };
+
+  const handleRenameItem = async (
+    itemId: number,
+    currentName: string,
+    isFolder: boolean
+  ) => {
+    setEditingItemId(itemId);
+    setNewItemName(currentName);
+  };
+
+  const handleSaveRename = async (itemId: number, isFolder: boolean) => {
+    if (newItemName && newItemName !== folderDetails.name) {
+      try {
+        await renameItem(itemId, newItemName, isFolder);
+        setPopup({
+          message: `${isFolder ? "Folder" : "File"} renamed successfully`,
+          type: "success",
+        });
+        await refreshFolderDetails();
+      } catch (error) {
+        console.error("Error renaming item:", error);
+        setPopup({
+          message: `Failed to rename ${isFolder ? "folder" : "file"}`,
+          type: "error",
+        });
+      }
+    }
+    setEditingItemId(null);
+  };
+
+  const handleCancelRename = () => {
+    setEditingItemId(null);
+    setNewItemName("");
+  };
+
+  // const handleEditDescription = () => {
+  //   if (folderDetails) {
+  //     setEditingDescription(true);
+  //     setNewDescription(folderDetails.description);
+  //   }
+  // };
+
+  const handleSaveDescription = async () => {
+    if (folderDetails && newDescription !== folderDetails.description) {
+      try {
+        alert(
+          JSON.stringify({
+            id: folderDetails.id,
+            name: folderDetails.name,
+            newDescription,
+          })
+        );
+        await updateFolderDetails(
+          folderDetails.id,
+          folderDetails.name,
+          newDescription
+        );
+        setPopup({
+          message: "Folder description updated successfully",
+          type: "success",
+        });
+        await refreshFolderDetails();
+      } catch (error) {
+        console.error("Error updating folder description:", error);
+        setPopup({
+          message: "Failed to update folder description",
+          type: "error",
+        });
+      }
+    }
+    setEditingDescription(false);
+  };
+
+  const handleCancelDescription = () => {
+    setEditingDescription(false);
+    setNewDescription("");
+  };
+
+  const handleDeleteItem = (
+    itemId: number,
+    isFolder: boolean,
+    itemName: string
+  ) => {
+    setDeleteItemId(itemId);
+    setDeleteItemType(isFolder ? "folder" : "file");
+    setDeleteItemName(itemName);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteItemId !== null) {
+      try {
+        await deleteItem(deleteItemId, deleteItemType === "folder");
+        setPopup({
+          message: `${deleteItemType} deleted successfully`,
+          type: "success",
+        });
+        await refreshFolderDetails();
+      } catch (error) {
+        console.error("Error deleting item:", error);
+        setPopup({
+          message: `Failed to delete ${deleteItemType}`,
+          type: "error",
+        });
+      }
+    }
+    setIsDeleteModalOpen(false);
+  };
+
+  const handleMoveFolder = () => {
+    setIsMoveModalOpen(true);
+  };
+
+  const confirmMove = async (targetFolderId: number) => {
+    try {
+      await moveItem(folderId, targetFolderId, true);
+      setPopup({
+        message: "Folder moved successfully",
+        type: "success",
+      });
+      router.push(`/chat/user-knowledge/${targetFolderId}`);
+    } catch (error) {
+      console.error("Error moving folder:", error);
+      setPopup({
+        message: "Failed to move folder",
+        type: "error",
+      });
+    }
+    setIsMoveModalOpen(false);
+  };
+
+  const handleMoveFile = async (fileId: number, targetFolderId: number) => {
+    try {
+      await moveItem(fileId, targetFolderId, false);
+      setPopup({
+        message: "File moved successfully",
+        type: "success",
+      });
+      await refreshFolderDetails();
+    } catch (error) {
+      console.error("Error moving file:", error);
+      setPopup({
+        message: "Failed to move file",
+        type: "error",
+      });
+    }
+  };
+
+  return (
+    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-6 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-7 md:pr-8 2xl:pr-14 relative">
+      {popup}
+      {folderCreatedPopup}
+      <DeleteEntityModal
+        isOpen={isDeleteModalOpen}
+        onClose={() => setIsDeleteModalOpen(false)}
+        onConfirm={confirmDelete}
+        entityType={deleteItemType}
+        entityName={deleteItemName}
+      />
+      <MoveFolderModal
+        isOpen={isMoveModalOpen}
+        onClose={() => setIsMoveModalOpen(false)}
+        onMove={confirmMove}
+        folders={folders}
+        currentFolderId={folderId}
+      />
+
+      <div className="flex flex-col w-full">
+        <div className="flex items-center mb-4">
+          <nav className="flex text-lg items-center">
+            <span
+              className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
+              onClick={handleBack}
+            >
+              My Documents
+            </span>
+            <span className="mx-2 text-neutral-500">/</span>
+            {editingItemId === folderDetails.id ? (
+              <div className="flex  -my-1 items-center">
+                <Input
+                  value={newItemName}
+                  onChange={(e) => setNewItemName(e.target.value)}
+                  className="mr-2 h-8"
+                />
+                <Button
+                  onClick={() => handleSaveRename(folderDetails.id, true)}
+                  className="mr-2 h-8 py-0"
+                  size="sm"
+                >
+                  Save
+                </Button>
+                <Button
+                  onClick={handleCancelRename}
+                  variant="outline"
+                  className="h-8 py-0"
+                  size="sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <h1
+                className="text-neutral-900 dark:text-neutral-100 font-medium cursor-pointer "
+                onClick={() =>
+                  handleRenameItem(folderDetails.id, folderDetails.name, true)
+                }
+              >
+                {folderDetails.name}
+              </h1>
+            )}
+          </nav>
+        </div>
+
+        {/* Status Bar */}
+
+        {/* Upload Section */}
+        {/* Document List */}
+        <DocumentList
+          folderId={folderId}
+          isLoading={false}
+          files={folderDetails.files}
+          onRename={handleRenameItem}
+          onDelete={handleDeleteItem}
+          onDownload={async (documentId: string) => {
+            const blob = await downloadItem(documentId);
+            const url = URL.createObjectURL(blob);
+            window.open(url, "_blank");
+          }}
+          onUpload={handleUpload}
+          onMove={handleMoveFile}
+          folders={folders}
+          disabled={folderDetails.id === -1}
+          editingItemId={editingItemId}
+          onSaveRename={handleSaveRename}
+          onCancelRename={handleCancelRename}
+          newItemName={newItemName}
+          setNewItemName={setNewItemName}
+          tokenPercentage={tokenPercentage}
+          totalTokens={totalTokens}
+          maxTokens={maxTokens}
+          selectedModelName={getDisplayNameForModel(selectedModel.modelName)}
+        />
+
+        {/* Chat Button (Fixed to bottom right) */}
+        <div className="fixed bottom-8 right-8">
+          <Button
+            size="lg"
+            onClick={handleStartChat}
+            className="shadow-lg rounded-full hover:shadow-xl transition-shadow"
+          >
+            <MessageSquare className="w-5 h-5" />
+            Chat with this Folder
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

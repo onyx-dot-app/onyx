@@ -119,7 +119,12 @@ def _build_content(
     text_files = [
         file
         for file in files
-        if file.file_type in (ChatFileType.PLAIN_TEXT, ChatFileType.CSV)
+        if file.file_type
+        in (
+            ChatFileType.PLAIN_TEXT,
+            ChatFileType.CSV,
+            ChatFileType.USER_KNOWLEDGE,
+        )
     ]
 
     if not text_files:
@@ -155,7 +160,6 @@ def build_content_with_imgs(
 
     img_urls = img_urls or []
     b64_imgs = b64_imgs or []
-
     message_main_content = _build_content(message, files)
 
     if exclude_images or (not img_files and not img_urls):
