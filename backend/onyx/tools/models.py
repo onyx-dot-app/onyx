@@ -70,6 +70,8 @@ class SearchToolOverrideKwargs(BaseModel):
     precomputed_query_embedding: Embedding | None = None
     precomputed_is_keyword: bool | None = None
     precomputed_keywords: list[str] | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
     class Config:
         arbitrary_types_allowed = True

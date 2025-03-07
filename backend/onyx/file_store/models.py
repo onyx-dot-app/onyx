@@ -14,6 +14,7 @@ class ChatFileType(str, Enum):
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
     CSV = "csv"
+    USER_KNOWLEDGE = "user_knowledge"
 
 
 class FileDescriptor(TypedDict):

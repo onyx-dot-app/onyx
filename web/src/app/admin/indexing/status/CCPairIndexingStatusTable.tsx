@@ -221,6 +221,7 @@ border border-border dark:border-neutral-700
       <TableCell>
         {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
       </TableCell>
+
       <TableCell>{getActivityBadge()}</TableCell>
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
@@ -251,12 +252,19 @@ border border-border dark:border-neutral-700
       </TableCell>
       <TableCell>
         {isEditable && (
-          <CustomTooltip content="Manage Connector">
-            <FiSettings
-              className="cursor-pointer"
-              onClick={handleManageClick}
-            />
-          </CustomTooltip>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <FiSettings
+                  className="cursor-pointer"
+                  onClick={handleManageClick}
+                />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Manage Connector</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )}
       </TableCell>
     </TableRow>

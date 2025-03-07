@@ -5,17 +5,19 @@ Usage:
   python vespa_debug_tool.py --action <action> [options]
 
 Actions:
-  config      : Print Vespa configuration
-  connect     : Check Vespa connectivity
-  list_docs   : List documents
-  search      : Search documents
-  update      : Update a document
-  delete      : Delete a document
-  get_acls    : Get document ACLs
+  config          : Print Vespa configuration
+  connect         : Check Vespa connectivity
+  list_docs       : List documents
+  list_connector  : List documents for a specific connector-credential pair
+  search          : Search documents
+  update          : Update a document
+  delete          : Delete a document
+  get_acls        : Get document ACLs
 
 Options:
   --tenant-id     : Tenant ID
   --connector-id  : Connector ID
+  --cc-pair-id    : Connector-Credential Pair ID
   --n             : Number of documents (default 10)
   --query         : Search query
   --doc-id        : Document ID
@@ -23,6 +25,7 @@ Options:
 
 Example:
   python vespa_debug_tool.py --action list_docs --tenant-id my_tenant --connector-id 1 --n 5
+  python vespa_debug_tool.py --action list_connector --tenant-id my_tenant --cc-pair-id 1 --n 5
 """
 import argparse
 import json
@@ -269,8 +272,8 @@ def search_for_document(
     if document_id is not None:
         conditions.append(f'document_id contains "{document_id}"')
 
-    if tenant_id is not None:
-        conditions.append(f'tenant_id contains "{tenant_id}"')
+    # if tenant_id is not None:
+    #     conditions.append(f'tenant_id contains "{tenant_id}"')
 
     if conditions:
         yql_query += " where " + " and ".join(conditions)
@@ -444,12 +447,15 @@ def get_document_acls(
         response = vespa_client.get(document_url)
         if response.status_code == 200:
             fields = response.json().get("fields", {})
+
             document_id = fields.get("document_id") or fields.get(
                 "documentid", "Unknown"
             )
             acls = fields.get("access_control_list", {})
             title = fields.get("title", "")
             source_type = fields.get("source_type", "")
+            doc_sets = fields.get("document_sets", [])
+            user_file = fields.get("user_file", None)
             source_links_raw = fields.get("source_links", "{}")
             try:
                 source_links = json.loads(source_links_raw)
@@ -462,6 +468,8 @@ def get_document_acls(
             print(f"Source Links: {source_links}")
             print(f"Title: {title}")
             print(f"Source Type: {source_type}")
+            print(f"Document Sets: {doc_sets}")
+            print(f"User File: {user_file}")
             if MULTI_TENANT:
                 print(f"Tenant ID: {fields.get('tenant_id', 'N/A')}")
             print("-" * 80)
@@ -575,6 +583,90 @@ class VespaDebugging:
     def list_documents(self, n: int = 10) -> None:
         # List documents for a tenant.
         list_documents(n, self.tenant_id)
+
+    def list_connector(self, cc_pair_id: int, n: int = 10) -> None:
+        # List documents for a specific connector-credential pair in the tenant
+        logger.info(
+            f"Listing documents for tenant={self.tenant_id}, cc_pair_id={cc_pair_id}"
+        )
+
+        # Get document IDs for this connector-credential pair
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            # First get the connector_id from the cc_pair_id
+            cc_pair = (
+                session.query(ConnectorCredentialPair)
+                .filter(ConnectorCredentialPair.id == cc_pair_id)
+                .first()
+            )
+
+            if not cc_pair:
+                print(f"No connector-credential pair found with ID {cc_pair_id}")
+                return
+
+            connector_id = cc_pair.connector_id
+
+            # Now get document IDs for this connector
+            doc_ids_data = (
+                session.query(DocumentByConnectorCredentialPair.id)
+                .filter(DocumentByConnectorCredentialPair.connector_id == connector_id)
+                .distinct()
+                .all()
+            )
+
+            doc_ids = [doc_id[0] for doc_id in doc_ids_data]
+
+        if not doc_ids:
+            print(f"No documents found for connector-credential pair ID {cc_pair_id}")
+            return
+
+        print(
+            f"Found {len(doc_ids)} documents for connector-credential pair ID {cc_pair_id}"
+        )
+
+        # Limit to the first n document IDs
+        target_doc_ids = doc_ids[:n]
+        print(f"Retrieving details for first {len(target_doc_ids)} documents")
+        # Search for each document in Vespa
+        for doc_id in target_doc_ids:
+            docs = search_for_document(self.index_name, doc_id, self.tenant_id)
+            if not docs:
+                print(f"No chunks found in Vespa for document ID: {doc_id}")
+                continue
+
+            print(f"Document ID: {doc_id}")
+            print(f"Found {len(docs)} chunks in Vespa")
+
+            # Print each chunk with all fields except embeddings
+            for i, doc in enumerate(docs):
+                print(f"  Chunk {i+1}:")
+                fields = doc.get("fields", {})
+
+                # Print all fields except embeddings
+                for field_name, field_value in sorted(fields.items()):
+                    # Skip embedding fields
+                    if "embedding" in field_name:
+                        continue
+
+                    # Format the output based on field type
+                    if isinstance(field_value, dict) or isinstance(field_value, list):
+                        # Truncate dictionaries and lists
+                        truncated = (
+                            str(field_value)[:50] + "..."
+                            if len(str(field_value)) > 50
+                            else str(field_value)
+                        )
+                        print(f"    {field_name}: {truncated}")
+                    else:
+                        # Truncate strings and other values
+                        str_value = str(field_value)
+                        truncated = (
+                            str_value[:50] + "..." if len(str_value) > 50 else str_value
+                        )
+                        print(f"    {field_name}: {truncated}")
+
+                print("-" * 40)  # Separator between chunks
+
+            print("=" * 80)  # Separator between documents
 
     def compare_chunk_count(self, document_id: str) -> tuple[int, int]:
         docs = search_for_document(self.index_name, document_id, max_hits=None)
@@ -770,6 +862,7 @@ def main() -> None:
             "config",
             "connect",
             "list_docs",
+            "list_connector",
             "search",
             "update",
             "delete",
@@ -781,6 +874,7 @@ def main() -> None:
     )
     parser.add_argument("--tenant-id", help="Tenant ID")
     parser.add_argument("--connector-id", type=int, help="Connector ID")
+    parser.add_argument("--cc-pair-id", type=int, help="Connector-Credential Pair ID")
     parser.add_argument(
         "--n", type=int, default=10, help="Number of documents to retrieve"
     )
@@ -809,6 +903,10 @@ def main() -> None:
         vespa_debug.check_connectivity()
     elif args.action == "list_docs":
         vespa_debug.list_documents(args.n)
+    elif args.action == "list_connector":
+        if args.cc_pair_id is None:
+            parser.error("--cc-pair-id is required for list_connector action")
+        vespa_debug.list_connector(args.cc_pair_id, args.n)
     elif args.action == "search":
         if not args.query or args.connector_id is None:
             parser.error("--query and --connector-id are required for search action")
@@ -825,9 +923,9 @@ def main() -> None:
             parser.error("--doc-id and --connector-id are required for delete action")
         vespa_debug.delete_document(args.connector_id, args.doc_id)
     elif args.action == "get_acls":
-        if args.connector_id is None:
-            parser.error("--connector-id is required for get_acls action")
-        vespa_debug.acls(args.connector_id, args.n)
+        if args.cc_pair_id is None:
+            parser.error("--cc-pair-id is required for get_acls action")
+        vespa_debug.acls(args.cc_pair_id, args.n)
 
 
 if __name__ == "__main__":

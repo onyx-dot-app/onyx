@@ -82,6 +82,7 @@ def generate_dummy_chunk(
     user_groups: set[str] = set()
     external_user_emails: set[str] = set()
     external_user_group_ids: set[str] = set()
+
     for i in range(number_of_acl_entries):
         user_emails.add(f"user_{i}@example.com")
         user_groups.add(f"group_{i}")
@@ -90,6 +91,8 @@ def generate_dummy_chunk(
 
     return DocMetadataAwareIndexChunk.from_index_chunk(
         index_chunk=chunk,
+        user_file=None,
+        user_folder=None,
         access=DocumentAccess(
             user_emails=user_emails,
             user_groups=user_groups,

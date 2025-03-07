@@ -274,7 +274,7 @@ def get_document_counts_for_cc_pairs_parallel(
 def get_access_info_for_document(
     db_session: Session,
     document_id: str,
-) -> tuple[str, list[str | None], bool] | None:
+) -> tuple[str, list[str | None], bool, list[int], list[int]] | None:
     """Gets access info for a single document by calling the get_access_info_for_documents function
     and passing a list with a single document ID.
     Args:
@@ -294,7 +294,7 @@ def get_access_info_for_document(
 def get_access_info_for_documents(
     db_session: Session,
     document_ids: list[str],
-) -> Sequence[tuple[str, list[str | None], bool]]:
+) -> Sequence[tuple[str, list[str | None], bool, list[int], list[int]]]:
     """Gets back all relevant access info for the given documents. This includes
     the user_ids for cc pairs that the document is associated with + whether any
     of the associated cc pairs are intending to make the document globally public.
