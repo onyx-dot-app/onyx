@@ -30,13 +30,19 @@ class ConnectorMissingCredentialError(PermissionError):
 #     text: str
 #     link: str | None = None
 #     image_file_name: str | None = None
+class Section(BaseModel):
+    text: str
+    link: str | None = None
+    image_file_name: str | None = None
+
 
 class TextSection(BaseModel):
     text: str
     link: str | None = None
+    image_file_name: str | None = None
+
 
 class ImageSection(TextSection):
-    link: str | None = None
     image_file_name: str
 
 

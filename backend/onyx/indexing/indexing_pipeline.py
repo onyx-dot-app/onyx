@@ -16,7 +16,9 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.connectors.models import TextSection
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
@@ -27,7 +29,10 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
+from onyx.db.pg_file_store import get_pgfilestore_by_file_name
+from onyx.db.pg_file_store import read_lobj
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
@@ -37,6 +42,7 @@ from onyx.document_index.document_index_utils import (
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
+from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
@@ -44,6 +50,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.factory import get_default_llm_with_vision
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -308,6 +315,91 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
     return documents
 
 
+def process_image_sections(documents: list[Document]) -> list[Document]:
+    """
+    Process all ImageSection objects in the documents by generating text summaries
+    using a vision-capable LLM.
+
+    Args:
+        documents: List of documents that may contain ImageSection objects
+
+    Returns:
+        The same documents with ImageSection objects converted to TextSection objects
+        with summarized text.
+    """
+    # Get the vision LLM
+    llm = get_default_llm_with_vision()
+    if not llm:
+        logger.warning(
+            "No vision-capable LLM available. Image sections will not be processed."
+        )
+        return documents
+
+    for document in documents:
+        processed_sections: list[TextSection] = []
+
+        for section in document.sections:
+            # If it's not an ImageSection or doesn't have an image_file_name, keep as is
+            if not isinstance(section, ImageSection) or not section.image_file_name:
+                processed_sections.append(section)
+                continue
+
+            # Get the image data from PGFileStore
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    pgfilestore = get_pgfilestore_by_file_name(
+                        file_name=section.image_file_name, db_session=db_session
+                    )
+                    if not pgfilestore:
+                        logger.warning(
+                            f"Image file {section.image_file_name} not found in PGFileStore"
+                        )
+                        # Keep the original section but without image processing
+                        processed_sections.append(
+                            TextSection(
+                                text="[Image could not be processed]",
+                                link=section.link,
+                                image_file_name=section.image_file_name,
+                            )
+                        )
+                        continue
+
+                    # Get the image data
+                    pgfilestore_data = read_lobj(
+                        pgfilestore.lobj_oid, db_session
+                    ).read()
+
+                    # Summarize the image
+                    summary = summarize_image_with_error_handling(
+                        llm=llm,
+                        image_data=pgfilestore_data,
+                        context_name=pgfilestore.display_name or "Image",
+                    )
+
+                    # Create a TextSection with the summary
+                    processed_sections.append(
+                        TextSection(
+                            text=summary or "[Image could not be summarized]",
+                            link=section.link,
+                            image_file_name=section.image_file_name,
+                        )
+                    )
+            except Exception as e:
+                logger.error(f"Error processing image section: {e}")
+                processed_sections.append(
+                    TextSection(
+                        text="[Error processing image]",
+                        link=section.link,
+                        image_file_name=section.image_file_name,
+                    )
+                )
+
+        # Replace the document's sections with the processed ones
+        document.sections = processed_sections
+
+    return documents
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -370,6 +462,10 @@ def index_doc_batch(
         for doc in ctx.updatable_docs
     ]
     logger.debug(f"Starting indexing process for documents: {doc_descriptors}")
+
+    # Process any ImageSection objects before chunking
+    logger.debug("Processing image sections")
+    ctx.updatable_docs = process_image_sections(ctx.updatable_docs)
 
     logger.debug("Starting chunking")
     # NOTE: no special handling for failures here, since the chunker is not
