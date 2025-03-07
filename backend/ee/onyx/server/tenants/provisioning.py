@@ -89,8 +89,7 @@ async def get_or_provision_tenant(
         else:
             # If no pre-provisioned tenant is available, create a new one on-demand
             tenant_id = await create_tenant(email, referral_source)
-            if tenant_id:
-                return tenant_id
+            return tenant_id
 
     except Exception as e:
         # If we've encountered an error, log and raise an exception
