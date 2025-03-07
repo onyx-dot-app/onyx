@@ -8,8 +8,8 @@ metadata:
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
     cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
-    nginx.org/proxy-read-timeout: "120s"
-    nginx.org/proxy-send-timeout: "120s"
+    nginx.org/proxy-read-timeout: "1200s"
+    nginx.org/proxy-send-timeout: "1200s"
 spec:
   rules:
     - host: {{ .Values.ingress.api.host }}

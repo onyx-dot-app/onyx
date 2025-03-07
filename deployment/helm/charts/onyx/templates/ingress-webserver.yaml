@@ -7,8 +7,8 @@ metadata:
     kubernetes.io/ingress.class: nginx
     cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
     kubernetes.io/tls-acme: "true"
-    nginx.org/proxy-read-timeout: "120s"
-    nginx.org/proxy-send-timeout: "120s"
+    nginx.org/proxy-read-timeout: "1200s"
+    nginx.org/proxy-send-timeout: "1200s"
 spec:
   rules:
     - host: {{ .Values.ingress.webserver.host }}
