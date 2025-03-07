@@ -643,3 +643,6 @@ MOCK_LLM_RESPONSE = (
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
+
+# Number of pre-provisioned tenants to maintain
+TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))

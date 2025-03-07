@@ -2310,6 +2310,17 @@ class UserTenantMapping(Base):
         return value.lower() if value else value
 
 
+class AvailableTenant(Base):
+    __tablename__ = "available_tenant"
+    """
+    These entries will only exist ephemerally and are meant to be picked up by new users on registration.
+    """
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    alembic_version: Mapped[str] = mapped_column(String, nullable=False)
+    date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
+
+
 # This is a mapping from tenant IDs to anonymous user paths
 class TenantAnonymousUserPath(Base):
     __tablename__ = "tenant_anonymous_user_path"

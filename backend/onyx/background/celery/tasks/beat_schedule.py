@@ -167,6 +167,16 @@ beat_cloud_tasks: list[dict] = [
             "expires": BEAT_EXPIRES_DEFAULT,
         },
     },
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants",
+        "task": OnyxCeleryTask.CHECK_AVAILABLE_TENANTS,
+        "schedule": timedelta(minutes=10),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.HIGH,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
 ]
 
 # tasks that only run self hosted

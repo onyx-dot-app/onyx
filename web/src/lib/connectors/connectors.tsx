@@ -1259,21 +1259,18 @@ export function createConnectorInitialValues(
     name: "",
     groups: [],
     access_type: "public",
-    ...configuration.values.reduce(
-      (acc, field) => {
-        if (field.type === "select") {
-          acc[field.name] = null;
-        } else if (field.type === "list") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "checkbox") {
-          acc[field.name] = field.default || false;
-        } else if (field.default !== undefined) {
-          acc[field.name] = field.default;
-        }
-        return acc;
-      },
-      {} as { [record: string]: any }
-    ),
+    ...configuration.values.reduce((acc, field) => {
+      if (field.type === "select") {
+        acc[field.name] = null;
+      } else if (field.type === "list") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "checkbox") {
+        acc[field.name] = field.default || false;
+      } else if (field.default !== undefined) {
+        acc[field.name] = field.default;
+      }
+      return acc;
+    }, {} as { [record: string]: any }),
   };
 }
 
@@ -1285,28 +1282,25 @@ export function createConnectorValidationSchema(
   return Yup.object().shape({
     access_type: Yup.string().required("Access Type is required"),
     name: Yup.string().required("Connector Name is required"),
-    ...configuration.values.reduce(
-      (acc, field) => {
-        let schema: any =
-          field.type === "select"
-            ? Yup.string()
-            : field.type === "list"
-              ? Yup.array().of(Yup.string())
-              : field.type === "checkbox"
-                ? Yup.boolean()
-                : field.type === "file"
-                  ? Yup.mixed()
-                  : Yup.string();
+    ...configuration.values.reduce((acc, field) => {
+      let schema: any =
+        field.type === "select"
+          ? Yup.string()
+          : field.type === "list"
+          ? Yup.array().of(Yup.string())
+          : field.type === "checkbox"
+          ? Yup.boolean()
+          : field.type === "file"
+          ? Yup.mixed()
+          : Yup.string();
 
-        if (!field.optional) {
-          schema = schema.required(`${field.label} is required`);
-        }
+      if (!field.optional) {
+        schema = schema.required(`${field.label} is required`);
+      }
 
-        acc[field.name] = schema;
-        return acc;
-      },
-      {} as Record<string, any>
-    ),
+      acc[field.name] = schema;
+      return acc;
+    }, {} as Record<string, any>),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
     pruneFreq: Yup.number().min(0, "Prune frequency must be non-negative"),
