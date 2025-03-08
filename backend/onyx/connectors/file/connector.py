@@ -65,6 +65,7 @@ def _create_image_section(
     db_session: Session,
     parent_file_name: str,
     display_name: str,
+    link: str | None = None,
     idx: int = 0,
 ) -> tuple[ImageSection, str | None]:
     """
@@ -91,6 +92,7 @@ def _create_image_section(
             image_data=image_data,
             file_name=file_name,
             display_name=display_name,
+            link=link,
             file_origin=FileOrigin.CONNECTOR,
         )
         return section, stored_file_name

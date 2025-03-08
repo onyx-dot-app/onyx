@@ -138,6 +138,7 @@ def _extract_sections_basic(
                         display_name=file_name,
                         media_type=mime_type,
                         file_origin=FileOrigin.CONNECTOR,
+                        link=link,
                     )
                     sections.append(section)
             except Exception as e:

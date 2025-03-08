@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from typing import Any
+from typing import cast
 
 import requests
 
@@ -17,8 +18,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import TextSection
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.retry_wrapper import retry_builder
@@ -169,7 +170,7 @@ def _article_to_document(
         id=f"article:{article['id']}",
         sections=[
             TextSection(
-                link=article.get("html_url"),
+                link=cast(str, article.get("html_url")),
                 text=parse_html_page_basic(article["body"]),
             )
         ],

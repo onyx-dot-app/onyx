@@ -26,10 +26,6 @@ class ConnectorMissingCredentialError(PermissionError):
         )
 
 
-# class TextSection(BaseModel):
-#     text: str
-#     link: str | None = None
-#     image_file_name: str | None = None
 class Section(BaseModel):
     """Base section class with common attributes"""
 

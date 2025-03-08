@@ -2,7 +2,6 @@ from typing import Tuple
 
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.models import ImageSection
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
@@ -16,6 +15,7 @@ def store_image_and_create_section(
     image_data: bytes,
     file_name: str,
     display_name: str,
+    link: str | None = None,
     media_type: str = "image/unknown",
     file_origin: FileOrigin = FileOrigin.OTHER,
 ) -> Tuple[ImageSection, str | None]:
@@ -49,12 +49,10 @@ def store_image_and_create_section(
         stored_file_name = pgfilestore.file_name
     except Exception as e:
         logger.error(f"Failed to store image: {e}")
-        if not CONTINUE_ON_CONNECTOR_FAILURE:
-            raise
-        return ImageSection(image_file_name=""), None
+        raise e
 
     # Create an ImageSection with empty text (will be filled by LLM later in the pipeline)
     return (
-        ImageSection(image_file_name=stored_file_name),
+        ImageSection(image_file_name=stored_file_name, link=link),
         stored_file_name,
     )
