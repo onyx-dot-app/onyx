@@ -182,6 +182,8 @@ def _process_image_attachment(
                 media_type=media_type,
                 file_origin=FileOrigin.CONNECTOR,
             )
+            print(f"Stored image attachment with file name: {file_name}")
+            logger.info(f"Stored image attachment with file name: {file_name}")
 
             # Return empty text but include the file_name for later processing
             return AttachmentProcessingResult(text="", file_name=file_name, error=None)

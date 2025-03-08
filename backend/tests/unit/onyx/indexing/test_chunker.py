@@ -5,6 +5,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import DefaultIndexingEmbedder
+from onyx.indexing.indexing_pipeline import process_image_sections
 from tests.unit.onyx.indexing.conftest import MockHeartbeat
 
 
@@ -42,12 +43,13 @@ def test_chunk_document(embedder: DefaultIndexingEmbedder) -> None:
             TextSection(text=short_section_4, link="link5"),
         ],
     )
+    indexing_documents = process_image_sections([document])
 
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=False,
     )
-    chunks = chunker.chunk([document])
+    chunks = chunker.chunk(indexing_documents)
 
     assert len(chunks) == 5
     assert short_section_1 in chunks[0].content
@@ -70,6 +72,7 @@ def test_chunker_heartbeat(
             TextSection(text="This is a short section.", link="link1"),
         ],
     )
+    indexing_documents = process_image_sections([document])
 
     chunker = Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
@@ -77,7 +80,7 @@ def test_chunker_heartbeat(
         callback=mock_heartbeat,
     )
 
-    chunks = chunker.chunk([document])
+    chunks = chunker.chunk(indexing_documents)
 
     assert mock_heartbeat.call_count == 1
     assert len(chunks) > 0

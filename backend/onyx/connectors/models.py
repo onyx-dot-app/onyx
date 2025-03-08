@@ -42,14 +42,14 @@ class TextSection(Section):
     """Section containing text content"""
 
     text: str
-    image_file_name: None = None
+    link: str | None = None
 
 
 class ImageSection(Section):
     """Section containing an image reference"""
 
     image_file_name: str
-    text: None = None
+    link: str | None = None
 
 
 class BasicExpertInfo(BaseModel):
@@ -169,7 +169,9 @@ class DocumentBase(BaseModel):
 
 
 class Document(DocumentBase):
-    id: str  # This must be unique or during indexing/reindexing, chunks will be overwritten
+    """Used for Onyx ingestion api, the ID is required"""
+
+    id: str
     source: DocumentSource
 
     def get_total_char_length(self) -> int:
@@ -205,6 +207,32 @@ class Document(DocumentBase):
             title=base.title,
             from_ingestion_api=base.from_ingestion_api,
         )
+
+
+class IndexingDocument(Document):
+    """Document with processed sections for indexing"""
+
+    processed_sections: list[Section] = []
+
+    def get_total_char_length(self) -> int:
+        """Get the total character length of the document including processed sections"""
+        title_len = len(self.title or self.semantic_identifier)
+
+        # Use processed_sections if available, otherwise fall back to original sections
+        if self.processed_sections:
+            section_len = sum(
+                len(section.text) if section.text is not None else 0
+                for section in self.processed_sections
+            )
+        else:
+            section_len = sum(
+                len(section.text)
+                if isinstance(section, TextSection) and section.text is not None
+                else 0
+                for section in self.sections
+            )
+
+        return title_len + section_len
 
 
 class SlimDocument(BaseModel):
