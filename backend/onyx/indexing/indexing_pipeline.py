@@ -1,3 +1,4 @@
+import traceback
 from collections.abc import Callable
 from functools import partial
 from typing import Protocol
@@ -18,7 +19,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
@@ -272,7 +273,12 @@ def index_doc_batch_prepare(
 def filter_documents(document_batch: list[Document]) -> list[Document]:
     documents: list[Document] = []
     for document in document_batch:
-        empty_contents = not any(section.text.strip() for section in document.sections)
+        empty_contents = not any(
+            isinstance(section, TextSection)
+            and section.text is not None
+            and section.text.strip()
+            for section in document.sections
+        )
         if (
             (not document.title or not document.title.strip())
             and not document.semantic_identifier.strip()
@@ -295,7 +301,12 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
             )
             continue
 
-        section_chars = sum(len(section.text) for section in document.sections)
+        section_chars = sum(
+            len(section.text)
+            if isinstance(section, TextSection) and section.text is not None
+            else 0
+            for section in document.sections
+        )
         if (
             MAX_DOCUMENT_CHARS
             and len(document.title or document.semantic_identifier) + section_chars
@@ -337,17 +348,15 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
         return documents
 
     for document in documents:
-        processed_sections: list[Section] = []
+        processed_sections: list[TextSection | ImageSection] = []
         print(f"Processing document ID: {document.id}, Title: {document.title}")
         print(f"Document has {len(document.sections)} sections to process")
 
         for section in document.sections:
             # If it's not an ImageSection or doesn't have an image_file_name, keep as is
-            if not isinstance(section, ImageSection) or not section.image_file_name:
-                processed_sections.append(Section(text=section.text, link=section.link))
-                print(
-                    f"Skipping non-image section or section without image_file_name: {type(section)}"
-                )
+            if not isinstance(section, ImageSection):
+                processed_sections.append(section)
+                print(f"Skipping non-image section: {type(section)}")
                 continue
 
             print(
@@ -371,10 +380,9 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
                         )
                         # Keep the original section but without image processing
                         processed_sections.append(
-                            Section(
+                            TextSection(
                                 text="[Image could not be processed]",
                                 link=section.link,
-                                image_file_name=section.image_file_name,
                             )
                         )
                         continue
@@ -405,24 +413,20 @@ def process_image_sections(documents: list[Document]) -> list[Document]:
 
                     # Create a TextSection with the summary
                     processed_sections.append(
-                        Section(
+                        TextSection(
                             text=summary or "[Image could not be summarized]",
                             link=section.link,
-                            image_file_name=section.image_file_name,
                         )
                     )
             except Exception as e:
                 logger.error(f"Error processing image section: {e}")
                 print(f"ERROR processing image section: {e}")
                 print(f"Exception type: {type(e).__name__}")
-                import traceback
-
                 print(f"Traceback: {traceback.format_exc()}")
                 processed_sections.append(
-                    Section(
+                    TextSection(
                         text="[Error processing image]",
                         link=section.link,
-                        image_file_name=section.image_file_name,
                     )
                 )
 

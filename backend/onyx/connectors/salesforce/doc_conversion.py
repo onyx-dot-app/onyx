@@ -175,7 +175,7 @@ def convert_sf_object_to_doc(
 
     doc = Document(
         id=onyx_salesforce_id,
-        sections=sections,
+        sections=sections,  # type: ignore # TextSection is a subclass of Section
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,

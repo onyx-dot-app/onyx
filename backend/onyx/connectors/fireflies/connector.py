@@ -94,7 +94,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
 
     return Document(
         id=fireflies_id,
-        sections=sections,
+        sections=sections,  # type: ignore # TextSection is a subclass of Section
         source=DocumentSource.FIREFLIES,
         semantic_identifier=meeting_title,
         metadata={},

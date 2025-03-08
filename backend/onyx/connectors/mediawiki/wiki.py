@@ -79,7 +79,7 @@ def get_doc_from_page(
         doc_updated_at=pywikibot_timestamp_to_utc_datetime(
             page.latest_revision.timestamp
         ),
-        sections=sections,
+        sections=sections,  # type: ignore # TextSection is a subclass of Section
         semantic_identifier=page.title(),
         metadata={"categories": [category.title() for category in page.categories()]},
         id=f"MEDIAWIKI_{page.pageid}_{page.full_url()}",

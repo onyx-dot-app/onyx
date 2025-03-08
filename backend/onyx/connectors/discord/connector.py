@@ -78,7 +78,7 @@ def _convert_message_to_document(
         semantic_identifier=semantic_identifier,
         doc_updated_at=message.edited_at,
         title=title,
-        sections=sections,
+        sections=sections,  # type: ignore # TextSection is a subclass of Section
         metadata=metadata,
     )
 

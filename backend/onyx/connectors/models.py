@@ -31,19 +31,25 @@ class ConnectorMissingCredentialError(PermissionError):
 #     link: str | None = None
 #     image_file_name: str | None = None
 class Section(BaseModel):
-    text: str
+    """Base section class with common attributes"""
+
     link: str | None = None
+    text: str | None = None
     image_file_name: str | None = None
 
 
-class TextSection(BaseModel):
+class TextSection(Section):
+    """Section containing text content"""
+
     text: str
-    link: str | None = None
+    image_file_name: None = None
 
 
-class ImageSection(BaseModel):
-    link: str | None = None
+class ImageSection(Section):
+    """Section containing an image reference"""
+
     image_file_name: str
+    text: None = None
 
 
 class BasicExpertInfo(BaseModel):
@@ -113,7 +119,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[TextSection | ImageSection | Section]
+    sections: list[TextSection | ImageSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     metadata: dict[str, str | list[str]]
@@ -168,7 +174,10 @@ class Document(DocumentBase):
 
     def get_total_char_length(self) -> int:
         """Calculate the total character length of the document including sections, metadata, and identifiers."""
-        section_length = sum(len(section.text) for section in self.sections)
+        section_length = sum(
+            len(section.text) if isinstance(section, TextSection) else 0
+            for section in self.sections
+        )
         identifier_length = len(self.semantic_identifier) + len(self.title or "")
         metadata_length = sum(
             len(k) + len(v) if isinstance(v, str) else len(k) + sum(len(x) for x in v)

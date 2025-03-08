@@ -122,7 +122,7 @@ def create_test_document(
 
     return Document(
         id=f"airtable__{id}",
-        sections=sections,
+        sections=sections,  # type: ignore # TextSection is a subclass of Section
         source=DocumentSource.AIRTABLE,
         semantic_identifier=f"{os.environ.get('AIRTABLE_TEST_TABLE_NAME', '')}: {title}",
         metadata=metadata,

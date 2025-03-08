@@ -32,6 +32,7 @@ def test_web_connector_scroll(web_connector: WebConnector) -> None:
 
     assert len(all_docs) == 1
     doc = all_docs[0]
+    assert doc.sections[0].text is not None
     assert EXPECTED_QUOTE in doc.sections[0].text
 
 
@@ -45,4 +46,5 @@ def test_web_connector_no_scroll(web_connector: WebConnector) -> None:
 
     assert len(all_docs) == 1
     doc = all_docs[0]
+    assert doc.sections[0].text is not None
     assert EXPECTED_QUOTE not in doc.sections[0].text

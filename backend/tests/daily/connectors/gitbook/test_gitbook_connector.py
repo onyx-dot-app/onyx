@@ -46,6 +46,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
 
     # Content specific checks
     content = section.text
+    assert content is not None, "Section text should not be None"
 
     # Check for specific content elements
     assert "* Fruit Shopping List:" in content

@@ -384,7 +384,7 @@ class AirtableConnector(LoadConnector):
 
         return Document(
             id=f"airtable__{record_id}",
-            sections=sections,
+            sections=sections,  # type: ignore # TextSection is a subclass of Section
             source=DocumentSource.AIRTABLE,
             semantic_identifier=semantic_id,
             metadata=metadata,

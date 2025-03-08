@@ -19,7 +19,7 @@ def create_test_document(
         id=doc_id,
         title=title,
         semantic_identifier=semantic_id,
-        sections=sections,
+        sections=sections,  # type: ignore # TextSection is a subclass of Section
         source=DocumentSource.FILE,
         metadata={},
     )
@@ -62,7 +62,8 @@ def test_filter_documents_exceeding_max_chars() -> None:
 
 def test_filter_documents_valid_document() -> None:
     doc = create_test_document(
-        title="Valid Title", sections=[TextSection(text="Valid content", link="test_link")]
+        title="Valid Title",
+        sections=[TextSection(text="Valid content", link="test_link")],
     )
     result = filter_documents([doc])
     assert len(result) == 1
@@ -72,7 +73,9 @@ def test_filter_documents_valid_document() -> None:
 
 def test_filter_documents_whitespace_only() -> None:
     doc = create_test_document(
-        title="   ", semantic_id="  ", sections=[TextSection(text="   ", link="test_link")]
+        title="   ",
+        semantic_id="  ",
+        sections=[TextSection(text="   ", link="test_link")],
     )
     result = filter_documents([doc])
     assert len(result) == 0

@@ -51,10 +51,10 @@ def store_image_and_create_section(
         logger.error(f"Failed to store image: {e}")
         if not CONTINUE_ON_CONNECTOR_FAILURE:
             raise
-        return ImageSection(text="", image_file_name=""), None
+        return ImageSection(image_file_name=""), None
 
     # Create an ImageSection with empty text (will be filled by LLM later in the pipeline)
     return (
-        ImageSection(text="", image_file_name=stored_file_name),
+        ImageSection(image_file_name=stored_file_name),
         stored_file_name,
     )

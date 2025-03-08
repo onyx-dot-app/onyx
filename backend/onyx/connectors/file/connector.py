@@ -97,7 +97,7 @@ def _create_image_section(
     except Exception as e:
         logger.error(f"Failed to store image {display_name}: {e}")
         # Return an empty section with no file name
-        return ImageSection(text="", image_file_name=""), None
+        return ImageSection(image_file_name=""), None
 
 
 def _process_file(
@@ -232,7 +232,7 @@ def _process_file(
     )
 
     # Build sections: first the text as a single Section
-    sections = []
+    sections: list[TextSection | ImageSection] = []
     link_in_meta = metadata.get("link")
     if text_content.strip():
         sections.append(TextSection(link=link_in_meta, text=text_content.strip()))

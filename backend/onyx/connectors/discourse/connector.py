@@ -129,7 +129,7 @@ class DiscourseConnector(PollConnector):
 
         doc = Document(
             id="_".join([DocumentSource.DISCOURSE.value, str(topic["id"])]),
-            sections=sections,
+            sections=sections,  # type: ignore # TextSection is a subclass of Section
             source=DocumentSource.DISCOURSE,
             semantic_identifier=topic["title"],
             doc_updated_at=time_str_to_utc(topic["last_posted_at"]),

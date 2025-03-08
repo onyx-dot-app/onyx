@@ -1,18 +1,10 @@
 import io
 from datetime import datetime
-from datetime import timezone
-from tempfile import NamedTemporaryFile
 
-import openpyxl
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
-
-from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
-from onyx.connectors.google_drive.constants import UNSUPPORTED_FILE_TYPE_CONTENT
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
@@ -24,17 +16,24 @@ from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
+from onyx.file_processing.extract_file_text import xlsx_to_text
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_processing.image_utils import store_image_and_create_section
-from onyx.file_processing.unstructured import get_unstructured_api_key
-from onyx.file_processing.unstructured import unstructured_to_text
 from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# Mapping of Google Drive mime types to export formats
+GOOGLE_MIME_TYPES_TO_EXPORT = {
+    GDriveMimeType.DOC.value: "text/plain",
+    GDriveMimeType.SPREADSHEET.value: "text/csv",
+    GDriveMimeType.PPT.value: "text/plain",
+}
 
 # Define Google MIME types mapping
 GOOGLE_MIME_TYPES = {
@@ -75,242 +74,110 @@ def _extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
 ) -> list[TextSection | ImageSection]:
-    """
-    Extract sections from a Google Drive file using the basic approach.
-    For images, creates ImageSection objects instead of summarizing them.
-    """
-    mime_type = file.get("mimeType", "")
-    file_id = file.get("id", "")
-    file_name = file.get("name", "")
+    """Extract text and images from a Google Drive file."""
+    file_id = file["id"]
+    file_name = file["name"]
+    mime_type = file["mimeType"]
     link = file.get("webViewLink", "")
-    supported_file_types = set(item.value for item in GDriveMimeType)
-
-    # Handle images - store them but don't summarize
-    if is_gdrive_image_mime_type(mime_type):
-        try:
-            # Download the image
-            image_data = service.files().get_media(fileId=file_id).execute()
-
-            # Store the image in PGFileStore
-            with get_session_with_current_tenant() as db_session:
-                section, stored_file_name = store_image_and_create_section(
-                    db_session=db_session,
-                    image_data=image_data,
-                    file_name=f"gdrive_{file_id}",
-                    display_name=file_name,
-                    media_type=mime_type,
-                    file_origin=FileOrigin.CONNECTOR,
-                )
-                return [section]
-        except Exception as e:
-            logger.error(f"Failed to process image '{file_name}': {e}")
-            return [
-                TextSection(link=link, text=f"[Failed to process image: {file_name}]")
-            ]
-
-    if mime_type not in supported_file_types:
-        # Unsupported file types can still have a title, finding this way is still useful
-        return [TextSection(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
 
     try:
-        # ---------------------------
-        # Google Sheets extraction
-        if mime_type == GDriveMimeType.SPREADSHEET.value:
-            try:
-                sheets_service = build(
-                    "sheets", "v4", credentials=service._http.credentials
-                )
-                spreadsheet = (
-                    sheets_service.spreadsheets().get(spreadsheetId=file_id).execute()
-                )
+        # For Google Docs, Sheets, and Slides, export as plain text
+        if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
+            export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
+            response = service.export_file(file_id, export_mime_type)
+            if not response:
+                logger.warning(f"Failed to export {file_name} as {export_mime_type}")
+                return []
 
-                sections = []
-                for sheet in spreadsheet["sheets"]:
-                    sheet_name = sheet["properties"]["title"]
-                    sheet_id = sheet["properties"]["sheetId"]
-
-                    # Get sheet dimensions
-                    grid_properties = sheet["properties"].get("gridProperties", {})
-                    row_count = grid_properties.get("rowCount", 1000)
-                    column_count = grid_properties.get("columnCount", 26)
-
-                    # Convert column count to letter (e.g., 26 -> Z, 27 -> AA)
-                    end_column = ""
-                    while column_count:
-                        column_count, remainder = divmod(column_count - 1, 26)
-                        end_column = chr(65 + remainder) + end_column
-
-                    range_name = f"'{sheet_name}'!A1:{end_column}{row_count}"
-
-                    try:
-                        result = (
-                            sheets_service.spreadsheets()
-                            .values()
-                            .get(spreadsheetId=file_id, range=range_name)
-                            .execute()
-                        )
-                        values = result.get("values", [])
-
-                        if values:
-                            text = f"Sheet: {sheet_name}\n"
-                            for row in values:
-                                text += "\t".join(str(cell) for cell in row) + "\n"
-                            sections.append(
-                                TextSection(
-                                    link=f"{link}#gid={sheet_id}",
-                                    text=text,
-                                )
-                            )
-                    except HttpError as e:
-                        logger.warning(
-                            f"Error fetching data for sheet '{sheet_name}': {e}"
-                        )
-                        continue
-                return sections
-
-            except Exception as e:
-                logger.warning(
-                    f"Ran into exception '{e}' when pulling data from Google Sheet '{file_name}'."
-                    " Falling back to basic extraction."
-                )
-        # ---------------------------
-        # Microsoft Excel (.xlsx or .xls) extraction branch
-        elif mime_type in [
-            GDriveMimeType.SPREADSHEET_OPEN_FORMAT.value,
-            GDriveMimeType.SPREADSHEET_MS_EXCEL.value,
-        ]:
-            try:
-                response = service.files().get_media(fileId=file_id).execute()
-
-                with NamedTemporaryFile(suffix=".xlsx", delete=True) as tmp:
-                    tmp.write(response)
-                    tmp_path = tmp.name
-
-                    section_separator = "\n\n"
-                    workbook = openpyxl.load_workbook(tmp_path, read_only=True)
-
-                    # Work similarly to the xlsx_to_text function used for file connector
-                    # but returns Sections instead of a string
-                    sections = [
-                        TextSection(
-                            link=link,
-                            text=(
-                                f"Sheet: {sheet.title}\n\n"
-                                + section_separator.join(
-                                    ",".join(map(str, row))
-                                    for row in sheet.iter_rows(
-                                        min_row=1, values_only=True
-                                    )
-                                    if row
-                                )
-                            ),
-                        )
-                        for sheet in workbook.worksheets
-                    ]
-
-                return sections
-
-            except Exception as e:
-                logger.warning(
-                    f"Error extracting data from Excel file '{file_name}': {e}"
-                )
-                return [
-                    TextSection(link=link, text="Error extracting data from Excel file")
-                ]
-
-        # ---------------------------
-        # Export for Google Docs, PPT, and fallback for spreadsheets
-        if mime_type in [
-            GDriveMimeType.DOC.value,
-            GDriveMimeType.PPT.value,
-            GDriveMimeType.SPREADSHEET.value,
-        ]:
-            export_mime_type = (
-                "text/plain"
-                if mime_type != GDriveMimeType.SPREADSHEET.value
-                else "text/csv"
-            )
-            text = (
-                service.files()
-                .export(fileId=file_id, mimeType=export_mime_type)
-                .execute()
-                .decode("utf-8")
-            )
+            text = response.decode("utf-8")
             return [TextSection(link=link, text=text)]
 
-        # ---------------------------
-        # Plain text and Markdown files
-        elif mime_type in [
-            GDriveMimeType.PLAIN_TEXT.value,
-            GDriveMimeType.MARKDOWN.value,
-        ]:
-            text_data = (
-                service.files().get_media(fileId=file_id).execute().decode("utf-8")
-            )
-            return [TextSection(link=link, text=text_data)]
+        # For other file types, download the file
+        response = service.download_file(file_id)
+        if not response:
+            logger.warning(f"Failed to download {file_name}")
+            return []
 
-        # ---------------------------
-        # Word, PowerPoint, PDF files
-        elif mime_type in [
-            GDriveMimeType.WORD_DOC.value,
-            GDriveMimeType.POWERPOINT.value,
-            GDriveMimeType.PDF.value,
-        ]:
-            response_bytes = service.files().get_media(fileId=file_id).execute()
+        response_bytes = response
 
-            # Optionally use Unstructured
-            if get_unstructured_api_key():
-                text = unstructured_to_text(
-                    file=io.BytesIO(response_bytes),
-                    file_name=file_name,
-                )
-                return [TextSection(link=link, text=text)]
+        # Process based on mime type
+        if mime_type == "text/plain":
+            text = response_bytes.decode("utf-8")
+            return [TextSection(link=link, text=text)]
 
-            if mime_type == GDriveMimeType.WORD_DOC.value:
-                # Use docx_to_text_and_images to get text plus embedded images
-                text, embedded_images = docx_to_text_and_images(
-                    file=io.BytesIO(response_bytes),
-                )
-                sections = []
-                if text.strip():
-                    sections.append(TextSection(link=link, text=text.strip()))
+        elif (
+            mime_type
+            == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ):
+            text, _ = docx_to_text_and_images(io.BytesIO(response_bytes))
+            return [TextSection(link=link, text=text)]
 
-                # Process each embedded image using the standardized function
+        elif (
+            mime_type
+            == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ):
+            text = xlsx_to_text(io.BytesIO(response_bytes))
+            return [TextSection(link=link, text=text)]
+
+        elif (
+            mime_type
+            == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        ):
+            text = pptx_to_text(io.BytesIO(response_bytes))
+            return [TextSection(link=link, text=text)]
+
+        elif is_gdrive_image_mime_type(mime_type):
+            # For images, store them for later processing
+            sections: list[TextSection | ImageSection] = []
+            try:
                 with get_session_with_current_tenant() as db_session:
-                    for idx, (img_data, img_name) in enumerate(
-                        embedded_images, start=1
-                    ):
-                        # Create a unique identifier for the embedded image
-                        embedded_id = f"{file_id}_embedded_{idx}"
+                    section, embedded_id = store_image_and_create_section(
+                        db_session=db_session,
+                        image_data=response_bytes,
+                        file_name=file_id,
+                        display_name=file_name,
+                        media_type=mime_type,
+                        file_origin=FileOrigin.CONNECTOR,
+                    )
+                    sections.append(section)
+            except Exception as e:
+                logger.error(f"Failed to process image {file_name}: {e}")
+            return sections
 
-                        # Store image without summarizing
-                        section, _ = store_image_and_create_section(
+        elif mime_type == "application/pdf":
+            text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_bytes))
+            pdf_sections: list[TextSection | ImageSection] = [
+                TextSection(link=link, text=text)
+            ]
+
+            # Process embedded images in the PDF
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    for idx, (img_data, img_name) in enumerate(images):
+                        section, embedded_id = store_image_and_create_section(
                             db_session=db_session,
                             image_data=img_data,
-                            file_name=embedded_id,
+                            file_name=f"{file_id}_img_{idx}",
                             display_name=img_name or f"{file_name} - image {idx}",
                             file_origin=FileOrigin.CONNECTOR,
                         )
-                        sections.append(section)
-                return sections
+                        pdf_sections.append(section)
+            except Exception as e:
+                logger.error(f"Failed to process PDF images in {file_name}: {e}")
+            return pdf_sections
 
-            elif mime_type == GDriveMimeType.PDF.value:
-                text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_bytes))
+        else:
+            # For unsupported file types, try to extract text
+            try:
+                text = extract_file_text(io.BytesIO(response_bytes), file_name)
                 return [TextSection(link=link, text=text)]
-
-            elif mime_type == GDriveMimeType.POWERPOINT.value:
-                text_data = pptx_to_text(io.BytesIO(response_bytes))
-                return [TextSection(link=link, text=text_data)]
-
-        # Catch-all case, should not happen since there should be specific handling
-        # for each of the supported file types
-        error_message = f"Unsupported file type: {mime_type}"
-        logger.error(error_message)
-        raise ValueError(error_message)
+            except Exception as e:
+                logger.warning(f"Failed to extract text from {file_name}: {e}")
+                return []
 
     except Exception as e:
-        logger.exception(f"Error extracting sections from file: {e}")
-        return [TextSection(link=link, text=UNSUPPORTED_FILE_TYPE_CONTENT)]
+        logger.error(f"Error processing file {file_name}: {e}")
+        return []
 
 
 def convert_drive_item_to_document(
@@ -329,43 +196,52 @@ def convert_drive_item_to_document(
 
         # If it's a Google Doc, we might do advanced parsing
         sections: list[TextSection | ImageSection] = []
+
+        # Try to get sections using the advanced method first
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
-                # get_document_sections is the advanced approach for Google Docs
-                sections = get_document_sections(docs_service, file["id"])
+                doc_sections = get_document_sections(
+                    docs_service=docs_service, doc_id=file.get("id", "")
+                )
+                if doc_sections:
+                    sections = doc_sections  # type: ignore # TextSection is a subclass of Section
             except Exception as e:
                 logger.warning(
-                    f"Failed to pull google doc sections from '{file['name']}': {e}. "
-                    "Falling back to basic extraction."
+                    f"Error in advanced parsing: {e}. Falling back to basic extraction."
                 )
 
-        # If not a doc, or if we failed above, do our 'basic' approach
+        # If we don't have sections yet, use the basic extraction method
         if not sections:
             sections = _extract_sections_basic(file, drive_service)
 
+        # If we still don't have any sections, skip this file
         if not sections:
+            logger.warning(f"No content extracted from {file.get('name')}. Skipping.")
             return None
 
-        doc_id = file["webViewLink"]
-        updated_time = datetime.fromisoformat(file["modifiedTime"]).astimezone(
-            timezone.utc
-        )
-
+        # Create the document
         return Document(
-            id=doc_id,
+            id=f"gdrive-{file.get('id')}",
             sections=sections,
             source=DocumentSource.GOOGLE_DRIVE,
-            semantic_identifier=file["name"],
-            doc_updated_at=updated_time,
-            metadata={},  # or any metadata from 'file'
-            additional_info=file.get("id"),
+            semantic_identifier=file.get("name", ""),
+            metadata={
+                "file_id": file.get("id", ""),
+                "mime_type": file.get("mimeType", ""),
+                "web_link": file.get("webViewLink", ""),
+                "created_time": file.get("createdTime", ""),
+                "modified_time": file.get("modifiedTime", ""),
+                "owner_names": ", ".join(
+                    owner.get("displayName", "") for owner in file.get("owners", [])
+                ),
+            },
+            doc_updated_at=datetime.fromisoformat(
+                file.get("modifiedTime", "").replace("Z", "+00:00")
+            ),
         )
-
     except Exception as e:
-        logger.exception(f"Error converting file '{file.get('name')}' to Document: {e}")
-        if not CONTINUE_ON_CONNECTOR_FAILURE:
-            raise
-    return None
+        logger.error(f"Error converting file {file.get('name')}: {e}")
+        return None
 
 
 def build_slim_document(file: GoogleDriveFileType) -> SlimDocument | None:

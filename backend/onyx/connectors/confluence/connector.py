@@ -242,7 +242,9 @@ class ConfluenceConnector(
             )
 
             # Create the main section for the page content
-            sections = [TextSection(text=page_content, link=page_url)]
+            sections: list[TextSection | ImageSection] = [
+                TextSection(text=page_content, link=page_url)
+            ]
 
             # Process comments if available
             comment_text = self._get_comment_string_for_page_id(page_id)
@@ -260,6 +262,7 @@ class ConfluenceConnector(
                 for attachment in attachments.get("results", []):
                     print("zattachment", attachment)
                     # Process each attachment
+                    result = None
                     try:
                         result = process_attachment(
                             self.confluence_client,
@@ -270,7 +273,7 @@ class ConfluenceConnector(
                         print("error", e)
                     print("result", result)
 
-                    if result.text:
+                    if result and result.text:
                         print("result.text", result.text)
                         # Create a section for the attachment text
                         attachment_section = TextSection(
@@ -278,16 +281,15 @@ class ConfluenceConnector(
                             link=f"{page_url}#attachment-{attachment['id']}",
                         )
                         sections.append(attachment_section)
-                    elif result.file_name:
+                    elif result and result.file_name:
                         print("result.file_name", result.file_name)
                         # Create an ImageSection for image attachments
                         image_section = ImageSection(
-                            text="",
                             link=f"{page_url}#attachment-{attachment['id']}",
                             image_file_name=result.file_name,
                         )
                         sections.append(image_section)
-                    elif result.error:
+                    elif result and result.error:
                         logger.warning(
                             f"Error processing attachment '{attachment.get('title')}': {result.error}"
                         )
