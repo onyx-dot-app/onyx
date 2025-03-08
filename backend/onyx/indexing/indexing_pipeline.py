@@ -493,20 +493,20 @@ def index_doc_batch(
             failures=[],
         )
 
+    # Convert documents to IndexingDocument objects with processed sections
+    ctx.indexable_docs = process_image_sections(ctx.updatable_docs)
+
     doc_descriptors = [
         {
             "doc_id": doc.id,
             "doc_length": doc.get_total_char_length(),
         }
-        for doc in ctx.updatable_docs
+        for doc in ctx.indexable_docs
     ]
     logger.debug(f"Starting indexing process for documents: {doc_descriptors}")
 
     # Process any ImageSection objects before chunking
     logger.debug("Processing image sections")
-
-    # Convert documents to IndexingDocument objects with processed sections
-    ctx.indexable_docs = process_image_sections(ctx.updatable_docs)
 
     logger.debug("Starting chunking")
     # NOTE: no special handling for failures here, since the chunker is not

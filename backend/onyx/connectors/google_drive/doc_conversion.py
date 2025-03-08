@@ -2,7 +2,7 @@ import io
 from datetime import datetime
 from typing import cast
 
-from googleapiclient.http import MediaIoBaseDownload
+from googleapiclient.http import MediaIoBaseDownload  # type: ignore
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
