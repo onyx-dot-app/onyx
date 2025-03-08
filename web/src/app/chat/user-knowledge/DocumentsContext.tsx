@@ -58,7 +58,7 @@ export interface DocumentsContextType {
   setSelectedFiles: (files: FileResponse[]) => void;
   setSelectedFolders: (folders: FolderResponse[]) => void;
   refreshFolders: () => Promise<void>;
-  createFolder: (name: string, description: string) => Promise<FolderResponse>;
+  createFolder: (name: string) => Promise<FolderResponse>;
   deleteItem: (itemId: number, isFolder: boolean) => Promise<void>;
   moveItem: (
     itemId: number,
@@ -196,12 +196,9 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
   );
 
   const createFolder = useCallback(
-    async (name: string, description: string) => {
+    async (name: string) => {
       try {
-        const newFolder = await documentsService.createNewFolder(
-          name,
-          description
-        );
+        const newFolder = await documentsService.createNewFolder(name, " ");
         await refreshFolders();
         return newFolder;
       } catch (error) {

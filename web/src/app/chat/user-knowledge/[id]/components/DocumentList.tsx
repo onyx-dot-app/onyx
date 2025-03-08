@@ -200,167 +200,136 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   return (
-    <div className="w-full">
-      {presentingDocument && (
-        <TextView
-          presentingDocument={{
-            semantic_identifier: presentingDocument.name,
-            document_id: presentingDocument.document_id,
-          }}
-          onClose={() => setPresentingDocument(null)}
-        />
-      )}
+    <>
+      <div className="flex flex-col h-full">
+        <div className="relative h-[550px]  w-full overflow-hidden">
+          {presentingDocument && (
+            <TextView
+              presentingDocument={{
+                semantic_identifier: presentingDocument.name,
+                document_id: presentingDocument.document_id,
+              }}
+              onClose={() => setPresentingDocument(null)}
+            />
+          )}
 
-      <div className="mb-6 -mt-2">
-        <FileUploadSection
-          disabled={disabled}
-          disabledMessage={
-            disabled
-              ? "This folder cannot be edited. It contains your recent documents."
-              : undefined
-          }
-          onUpload={handleFileUpload}
-          onUrlUpload={handleCreateFileFromLink}
-          isUploading={uploadingFiles.length > 0}
-          onUploadComplete={handleUploadComplete}
-        />
-      </div>
-
-      <div className="flex justify-between items-center">
-        <h2 className="text-sm font-semibold text-neutral-800 dark:text-neutral-200">
-          Documents in this Folder
-        </h2>
-      </div>
-      <div className="flex items-center gap-6 my-2 border-neutral-200 dark:border-neutral-700 pb-4">
-        {/* Context Limit */}
-        <div className="flex items-center gap-3">
-          <div className="flex flex-col">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
-              Context usage for{" "}
-              {selectedModelName
-                ? getDisplayNameForModel(selectedModelName)
-                : "Model"}
-            </span>
-
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-lg shadow-sm">
-              <div className="h-2 w-16 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
+          <div className="space-y-0 overflow-y-auto h-[calc(100%)]">
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, index) => (
                 <div
-                  className={`h-full transition-all duration-300 ${
-                    tokenPercentage && tokenPercentage > 75
-                      ? "bg-red-500"
-                      : tokenPercentage && tokenPercentage > 50
-                        ? "bg-amber-500"
-                        : "bg-emerald-500"
-                  }`}
-                  style={{ width: `${Math.min(tokenPercentage || 0, 100)}%` }}
-                />
-              </div>
-              <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                {totalTokens?.toLocaleString() || "0"} /{" "}
-                {maxTokens?.toLocaleString() || "0"} tokens
-              </span>
-            </div>
+                  key={`skeleton-${index}`}
+                  className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700 animate-pulse"
+                >
+                  <div className="w-5 h-5 bg-neutral-200 dark:bg-neutral-700 rounded mr-3"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/3 mb-2"></div>
+                    <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-1/4"></div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <>
+                <div className="flex mr-8 items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
+                  <div className="w-[40%]">Name</div>
+                  <div className="w-[30%]">Created</div>
+                  <div className="w-[30%]">LLM Tokens</div>
+                </div>
+
+                {files.map((file) => (
+                  <div key={file.id}>
+                    {editingItemId === file.id ? (
+                      <div className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                        <div className="flex-1 flex items-center gap-3">
+                          <Input
+                            value={newItemName}
+                            onChange={(e) => setNewItemName(e.target.value)}
+                            className="mr-2"
+                            autoFocus
+                          />
+                          <Button
+                            onClick={() => onSaveRename(file.id, false)}
+                            className="mr-2"
+                            size="sm"
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            onClick={onCancelRename}
+                            variant="outline"
+                            size="sm"
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <FileListItem
+                        file={file}
+                        view="list"
+                        onRename={onRename}
+                        onDelete={onDelete}
+                        onDownload={onDownload}
+                        onMove={onMove}
+                        folders={folders}
+                        onSelect={() => setPresentingDocument(file)}
+                        isIndexed={file.indexed || false}
+                      />
+                    )}
+                  </div>
+                ))}
+                {uploadingFiles.map((fileName, index) => (
+                  <div
+                    key={`uploading-${index}`}
+                    className="group relative mr-8 flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-4 px-4 transition-all ease-in-out"
+                  >
+                    <div className="flex items-center flex-1 min-w-0">
+                      <div className="flex items-center gap-3 w-[40%] min-w-0">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-500 dark:text-blue-400 shrink-0" />
+                        <span className="truncate text-sm text-text-dark dark:text-text-dark">
+                          {fileName.startsWith("http")
+                            ? `Processing URL: ${fileName.substring(0, 30)}${
+                                fileName.length > 30 ? "..." : ""
+                              }`
+                            : fileName}
+                        </span>
+                      </div>
+                      <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
+                        -
+                      </div>
+                      <div className="w-[30%] text-sm text-blue-500 dark:text-blue-400">
+                        Uploading...
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {files.length === 0 && uploadingFiles.length === 0 && (
+                  <div className="text-center py-8 text-neutral-500 dark:text-neutral-400">
+                    No documents in this folder yet. Upload files or add from
+                    URL to get started.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+        <div className="w-full flex justify-center z-10 py-4   dark:border-neutral-800">
+          <div className="w-full max-w-[90rem] mx-auto px-4 md:px-8 2xl:px-14 flex justify-center">
+            <FileUploadSection
+              disabled={disabled}
+              disabledMessage={
+                disabled
+                  ? "This folder cannot be edited. It contains your recent documents."
+                  : undefined
+              }
+              onUpload={handleFileUpload}
+              onUrlUpload={handleCreateFileFromLink}
+              isUploading={uploadingFiles.length > 0}
+              onUploadComplete={handleUploadComplete}
+            />
           </div>
         </div>
       </div>
-
-      <div className="space-y-2">
-        {isLoading ? (
-          Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={`skeleton-${index}`}
-              className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700 animate-pulse"
-            >
-              <div className="w-5 h-5 bg-neutral-200 dark:bg-neutral-700 rounded mr-3"></div>
-              <div className="flex-1">
-                <div className="h-4 bg-neutral-200 dark:bg-neutral-700 rounded w-1/3 mb-2"></div>
-                <div className="h-3 bg-neutral-200 dark:bg-neutral-700 rounded w-1/4"></div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <>
-            {uploadingFiles.map((fileName, index) => (
-              <div
-                key={`uploading-${index}`}
-                className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700"
-              >
-                <div className="w-5 h-5 mr-3 text-blue-500 dark:text-blue-400 animate-spin">
-                  <Loader2 className="w-5 h-5" />
-                </div>
-                <div className="flex-1">
-                  <div className="text-sm font-medium text-neutral-800 dark:text-neutral-200">
-                    {fileName.startsWith("http")
-                      ? `Processing URL: ${fileName.substring(0, 30)}${
-                          fileName.length > 30 ? "..." : ""
-                        }`
-                      : fileName}
-                  </div>
-                  <div className="text-xs text-blue-500 dark:text-blue-400">
-                    Uploading...
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            <div className="flex mr-8 items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
-              <div className="w-[40%]">Name</div>
-              <div className="w-[30%]">Created</div>
-              <div className="w-[30%]">Total Tokens</div>
-            </div>
-
-            {files.map((file) => (
-              <div key={file.id}>
-                {editingItemId === file.id ? (
-                  <div className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <div className="flex-1 flex items-center gap-3">
-                      <Input
-                        value={newItemName}
-                        onChange={(e) => setNewItemName(e.target.value)}
-                        className="mr-2"
-                        autoFocus
-                      />
-                      <Button
-                        onClick={() => onSaveRename(file.id, false)}
-                        className="mr-2"
-                        size="sm"
-                      >
-                        Save
-                      </Button>
-                      <Button
-                        onClick={onCancelRename}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <FileListItem
-                    file={file}
-                    view="list"
-                    onRename={onRename}
-                    onDelete={onDelete}
-                    onDownload={onDownload}
-                    onMove={onMove}
-                    folders={folders}
-                    onSelect={() => setPresentingDocument(file)}
-                    isIndexed={file.indexed || false}
-                  />
-                )}
-              </div>
-            ))}
-
-            {files.length === 0 && uploadingFiles.length === 0 && (
-              <div className="text-center py-8 text-neutral-500 dark:text-neutral-400">
-                No documents in this folder yet. Upload files or add from URL to
-                get started.
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </div>
+    </>
   );
 };

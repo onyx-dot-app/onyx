@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 interface CreateEntityModalProps {
   title: string;
   entityName: string;
-  onSubmit: (name: string, description: string) => void;
+  onSubmit: (name: string) => void;
   trigger: React.ReactNode;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -28,12 +28,11 @@ export default function CreateEntityModal({
   setOpen,
 }: CreateEntityModalProps) {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (name.trim()) {
-      onSubmit(name.trim(), description.trim());
+      onSubmit(name.trim());
     }
   };
 
@@ -56,17 +55,6 @@ export default function CreateEntityModal({
               onChange={(e) => setName(e.target.value)}
               placeholder={`Enter ${entityName.toLowerCase()} name`}
               required
-              className="w-full"
-            />
-          </div>
-          <div className="space-y-2 w-full">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              type="textarea"
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={`Enter ${entityName.toLowerCase()} description`}
               className="w-full"
             />
           </div>

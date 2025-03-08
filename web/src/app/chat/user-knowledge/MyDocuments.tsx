@@ -2,7 +2,15 @@
 
 import React, { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Plus, FolderOpen, Loader2, MessageSquare } from "lucide-react";
+import {
+  Search,
+  Plus,
+  FolderOpen,
+  Loader2,
+  MessageSquare,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { PageSelector } from "@/components/PageSelector";
@@ -15,52 +23,13 @@ import TextView from "@/components/chat/TextView";
 enum SortType {
   TimeCreated = "Time Created",
   Alphabetical = "Alphabetical",
+  Tokens = "Tokens",
 }
 
-interface SortSelectorProps {
-  onSortChange: (sortType: SortType) => void;
+enum SortDirection {
+  Ascending = "asc",
+  Descending = "desc",
 }
-
-const SortSelector: React.FC<SortSelectorProps> = ({ onSortChange }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [currentSort, setCurrentSort] = useState<SortType>(
-    SortType.TimeCreated
-  );
-
-  const handleSortChange = (sortType: SortType) => {
-    setCurrentSort(sortType);
-    onSortChange(sortType);
-    setIsOpen(false);
-  };
-
-  return (
-    <div className="relative h-fit">
-      {isOpen && (
-        <div className="absolute right-0 top-full w-48 bg-white dark:bg-neutral-800 rounded-md shadow-lg z-10">
-          <div className="py-1">
-            {Object.values(SortType).map((sortType) => (
-              <button
-                key={sortType}
-                onClick={() => handleSortChange(sortType)}
-                className="block w-full text-left px-4 py-2 text-sm text-neutral-700 dark:text-neutral-200 hover:bg-neutral-100 dark:hover:bg-neutral-700 focus:outline-none"
-              >
-                {sortType}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center space-x-2 text-sm text-neutral-600 dark:text-neutral-300 hover:text-neutral-800 dark:hover:text-neutral-100 focus:outline-none"
-      >
-        <span>{currentSort}</span>
-        <SortIcon className="w-4 h-4" />
-      </button>
-    </div>
-  );
-};
 
 const SkeletonLoader = () => (
   <div className="flex justify-center items-center w-full h-64">
@@ -98,15 +67,32 @@ export default function MyDocuments() {
   } = useDocumentsContext();
 
   const [sortType, setSortType] = useState<SortType>(SortType.TimeCreated);
-  const handleSortChange = (sortType: SortType) => {
-    setSortType(sortType);
-  };
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    SortDirection.Descending
+  );
   const pageLimit = 10;
   const searchParams = useSearchParams();
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  const handleSortChange = (newSortType: SortType) => {
+    if (sortType === newSortType) {
+      setSortDirection(
+        sortDirection === SortDirection.Ascending
+          ? SortDirection.Descending
+          : SortDirection.Ascending
+      );
+    } else {
+      setSortType(newSortType);
+      setSortDirection(
+        newSortType === SortType.Alphabetical
+          ? SortDirection.Ascending
+          : SortDirection.Descending
+      );
+    }
+  };
 
   const handleFolderClick = (id: number) => {
     startTransition(() => {
@@ -116,9 +102,9 @@ export default function MyDocuments() {
     });
   };
 
-  const handleCreateFolder = async (name: string, description: string) => {
+  const handleCreateFolder = async (name: string) => {
     try {
-      const folderResponse = await createFolder(name, description);
+      const folderResponse = await createFolder(name);
       startTransition(() => {
         router.push(
           `/chat/user-knowledge/${folderResponse.id}?message=folder-created`
@@ -257,16 +243,40 @@ export default function MyDocuments() {
           folder.description.toLowerCase().includes(searchQuery.toLowerCase())
       )
       .sort((a, b) => {
+        let comparison = 0;
+
         if (sortType === SortType.TimeCreated) {
-          return (
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          );
+          comparison =
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
         } else if (sortType === SortType.Alphabetical) {
-          return a.name.localeCompare(b.name);
+          comparison = a.name.localeCompare(b.name);
+        } else if (sortType === SortType.Tokens) {
+          const aTokens = a.files.reduce(
+            (acc, file) => acc + (file.token_count || 0),
+            0
+          );
+          const bTokens = b.files.reduce(
+            (acc, file) => acc + (file.token_count || 0),
+            0
+          );
+          comparison = bTokens - aTokens;
         }
-        return 0;
+
+        return sortDirection === SortDirection.Ascending
+          ? -comparison
+          : comparison;
       });
-  }, [folders, searchQuery, sortType]);
+  }, [folders, searchQuery, sortType, sortDirection]);
+
+  const renderSortIndicator = (columnType: SortType) => {
+    if (sortType !== columnType) return null;
+
+    return sortDirection === SortDirection.Ascending ? (
+      <ArrowUp className="ml-1 h-3 w-3 inline" />
+    ) : (
+      <ArrowDown className="ml-1 h-3 w-3 inline" />
+    );
+  };
 
   return (
     <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14">
@@ -305,7 +315,6 @@ export default function MyDocuments() {
                 className="w-full placeholder:text-text-500 dark:placeholder:text-neutral-400 m-0 bg-transparent p-0 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
               />
             </div>
-            <SortSelector onSortChange={handleSortChange} />
           </div>
         </div>
 
@@ -327,9 +336,24 @@ export default function MyDocuments() {
           ) : filteredFolders.length > 0 ? (
             <div className="mt-6">
               <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
-                <div className="w-[40%]">Name</div>
-                <div className="w-[30%]">Last Modified</div>
-                <div className="w-[30%]">Total Tokens</div>
+                <button
+                  onClick={() => handleSortChange(SortType.Alphabetical)}
+                  className="w-[40%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                >
+                  Name {renderSortIndicator(SortType.Alphabetical)}
+                </button>
+                <button
+                  onClick={() => handleSortChange(SortType.TimeCreated)}
+                  className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                >
+                  Last Modified {renderSortIndicator(SortType.TimeCreated)}
+                </button>
+                <button
+                  onClick={() => handleSortChange(SortType.Tokens)}
+                  className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                >
+                  LLM Tokens {renderSortIndicator(SortType.Tokens)}
+                </button>
               </div>
               <div className="flex flex-col">
                 {filteredFolders.map((folder) => (

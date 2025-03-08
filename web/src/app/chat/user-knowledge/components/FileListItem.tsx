@@ -236,5 +236,3 @@ export const SkeletonFileListItem: React.FC<{ view: "grid" | "list" }> = () => {
     </div>
   );
 };
-
-//

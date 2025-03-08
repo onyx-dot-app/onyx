@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, MessageSquare } from "lucide-react";
+import { ChevronRight, MessageSquare } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
-import { useAssistants } from "@/components/context/AssistantsContext";
 import { useChatContext } from "@/components/context/ChatContext";
 import { Button } from "@/components/ui/button";
 import { DocumentList } from "./components/DocumentList";
@@ -297,7 +296,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             >
               My Documents
             </span>
-            <span className="mx-2 text-neutral-500">/</span>
+            <span className="text-neutral-800 flex items-center">
+              <ChevronRight className="h-4 w-4" />
+            </span>
             {editingItemId === folderDetails.id ? (
               <div className="flex  -my-1 items-center">
                 <Input
@@ -334,9 +335,51 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           </nav>
         </div>
 
-        {/* Status Bar */}
+        {/* Search Bar */}
+        <div className="mb-6">
+          <div className="relative w-full max-w-md">
+            <input
+              type="text"
+              placeholder="Search documents..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 15 15"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-4 h-4 text-gray-400"
+              >
+                <path
+                  d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.30884 10.0159C8.53901 10.6318 7.56251 11 6.5 11C4.01472 11 2 8.98528 2 6.5C2 4.01472 4.01472 2 6.5 2C8.98528 2 11 4.01472 11 6.5C11 7.56251 10.6318 8.53901 10.0159 9.30884L12.8536 12.1464C13.0488 12.3417 13.0488 12.6583 12.8536 12.8536C12.6583 13.0488 12.3417 13.0488 12.1464 12.8536L9.30884 10.0159Z"
+                  fill="currentColor"
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                ></path>
+              </svg>
+            </div>
+          </div>
+        </div>
 
-        {/* Upload Section */}
+        {/* Status Bar & Chat Button */}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-2">
+            <Button
+              onClick={handleStartChat}
+              className="flex items-center gap-2 bg-black text-white hover:bg-gray-800"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Chat with this folder
+            </Button>
+            <div className="text-sm text-gray-500">
+              {totalTokens.toLocaleString()} / {maxTokens.toLocaleString()}{" "}
+              tokens
+            </div>
+          </div>
+        </div>
+
         {/* Document List */}
         <DocumentList
           folderId={folderId}
@@ -364,17 +407,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           selectedModelName={getDisplayNameForModel(selectedModel.modelName)}
         />
 
-        {/* Chat Button (Fixed to bottom right) */}
-        <div className="fixed bottom-8 right-8">
-          <Button
-            size="lg"
-            onClick={handleStartChat}
-            className="shadow-lg rounded-full hover:shadow-xl transition-shadow"
-          >
-            <MessageSquare className="w-5 h-5" />
-            Chat with this Folder
-          </Button>
-        </div>
+        {/* File Upload Section */}
       </div>
     </div>
   );
