@@ -1,4 +1,3 @@
-import traceback
 from collections.abc import Callable
 from functools import partial
 from typing import Protocol
@@ -349,7 +348,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         logger.warning(
             "No vision-capable LLM available. Image sections will not be processed."
         )
-        print("No vision-capable LLM available. Image sections will not be processed.")
 
         # Even without LLM, we still convert to IndexingDocument with base Sections
         return [
@@ -373,16 +371,10 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
 
     for document in documents:
         processed_sections: list[Section] = []
-        print(f"Processing document ID: {document.id}, Title: {document.title}")
-        print(f"Document has {len(document.sections)} sections to process")
 
         for section in document.sections:
             # For ImageSection, process and create base Section with both text and image_file_name
             if isinstance(section, ImageSection):
-                print(
-                    f"Processing ImageSection with image_file_name: {section.image_file_name}"
-                )
-
                 # Default section with image path preserved
                 processed_section = Section(
                     link=section.link,
@@ -393,9 +385,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 # Try to get image summary
                 try:
                     with get_session_with_current_tenant() as db_session:
-                        print(
-                            f"Looking up image file in PGFileStore: {section.image_file_name}"
-                        )
                         pgfilestore = get_pgfilestore_by_file_name(
                             file_name=section.image_file_name, db_session=db_session
                         )
@@ -404,9 +393,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                             logger.warning(
                                 f"Image file {section.image_file_name} not found in PGFileStore"
                             )
-                            print(
-                                f"WARNING: Image file {section.image_file_name} not found in PGFileStore"
-                            )
+
                             processed_section.text = "[Image could not be processed]"
                         else:
                             # Get the image data
@@ -414,43 +401,26 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                                 pgfilestore.lobj_oid, db_session, mode="rb"
                             )
                             pgfilestore_data = image_data_io.read()
-                            print(
-                                f"Read image data, size: {len(pgfilestore_data)} bytes"
-                            )
-
-                            # Summarize the image
-                            print(
-                                f"Attempting to summarize image with LLM: {type(llm).__name__}"
-                            )
                             summary = summarize_image_with_error_handling(
                                 llm=llm,
                                 image_data=pgfilestore_data,
                                 context_name=pgfilestore.display_name or "Image",
                             )
 
-                            print(
-                                f"Image summary result: {'Success' if summary else 'Failed'}"
-                            )
                             if summary:
-                                print(f"Summary length: {len(summary)} chars")
                                 processed_section.text = summary
                             else:
-                                print("No summary was generated")
                                 processed_section.text = (
                                     "[Image could not be summarized]"
                                 )
                 except Exception as e:
                     logger.error(f"Error processing image section: {e}")
-                    print(f"ERROR processing image section: {e}")
-                    print(f"Exception type: {type(e).__name__}")
-                    print(f"Traceback: {traceback.format_exc()}")
                     processed_section.text = "[Error processing image]"
 
                 processed_sections.append(processed_section)
 
             # For TextSection, create a base Section with text and link
             elif isinstance(section, TextSection):
-                print("Processing TextSection")
                 processed_section = Section(
                     text=section.text, link=section.link, image_file_name=None
                 )
@@ -465,10 +435,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             **document.dict(), processed_sections=processed_sections
         )
         indexed_documents.append(indexed_document)
-
-        print(
-            f"Finished processing document ID: {document.id}, processed {len(processed_sections)} sections"
-        )
 
     return indexed_documents
 
@@ -538,7 +504,6 @@ def index_doc_batch(
 
     # Process any ImageSection objects before chunking
     logger.debug("Processing image sections")
-    print(f"Processing image sections for {len(ctx.updatable_docs)} documents")
 
     # Convert documents to IndexingDocument objects with processed sections
     ctx.indexable_docs = process_image_sections(ctx.updatable_docs)
