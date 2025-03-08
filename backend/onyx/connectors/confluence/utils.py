@@ -108,10 +108,8 @@ def process_attachment(
     or if it's an image, stores it for later analysis. Returns a structured result.
     """
     try:
-        print("attachment", attachment)
         # Get the media type from the attachment metadata
         media_type = attachment.get("metadata", {}).get("mediaType", "")
-        print("media_type", media_type)
         # Validate the attachment type
         if not validate_attachment_filetype(attachment):
             return AttachmentProcessingResult(
@@ -135,16 +133,13 @@ def process_attachment(
 
         # Process document attachments
         try:
-            print("Processing document attachment:", attachment["title"])
             text = extract_file_text(
                 file=BytesIO(raw_bytes),
                 file_name=attachment["title"],
             )
-            print(f"Extracted {len(text)} characters from attachment")
 
             # Skip if the text is too long
             if len(text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
-                print(f"Attachment text exceeds threshold: {len(text)} chars")
                 return AttachmentProcessingResult(
                     text=None,
                     file_name=None,
@@ -169,7 +164,6 @@ def _process_image_attachment(
     raw_bytes: bytes,
     media_type: str,
 ) -> AttachmentProcessingResult:
-    print("processing image attachment")
     """Process an image attachment by saving it without generating a summary."""
     try:
         # Use the standardized image storage and section creation
@@ -182,7 +176,6 @@ def _process_image_attachment(
                 media_type=media_type,
                 file_origin=FileOrigin.CONNECTOR,
             )
-            print(f"Stored image attachment with file name: {file_name}")
             logger.info(f"Stored image attachment with file name: {file_name}")
 
             # Return empty text but include the file_name for later processing
