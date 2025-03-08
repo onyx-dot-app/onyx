@@ -2,6 +2,8 @@ import io
 from datetime import datetime
 from typing import cast
 
+from googleapiclient.http import MediaIoBaseDownload
+
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
@@ -85,7 +87,17 @@ def _extract_sections_basic(
         # For Google Docs, Sheets, and Slides, export as plain text
         if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
             export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
-            response = service.export_file(file_id, export_mime_type)
+            # Use the correct API call for exporting files
+            request = service.files().export_media(
+                fileId=file_id, mimeType=export_mime_type
+            )
+            response_bytes = io.BytesIO()
+            downloader = MediaIoBaseDownload(response_bytes, request)
+            done = False
+            while not done:
+                _, done = downloader.next_chunk()
+
+            response = response_bytes.getvalue()
             if not response:
                 logger.warning(f"Failed to export {file_name} as {export_mime_type}")
                 return []
@@ -94,37 +106,43 @@ def _extract_sections_basic(
             return [TextSection(link=link, text=text)]
 
         # For other file types, download the file
-        response = service.download_file(file_id)
+        # Use the correct API call for downloading files
+        request = service.files().get_media(fileId=file_id)
+        response_bytes = io.BytesIO()
+        downloader = MediaIoBaseDownload(response_bytes, request)
+        done = False
+        while not done:
+            _, done = downloader.next_chunk()
+
+        response = response_bytes.getvalue()
         if not response:
             logger.warning(f"Failed to download {file_name}")
             return []
 
-        response_bytes = response
-
         # Process based on mime type
         if mime_type == "text/plain":
-            text = response_bytes.decode("utf-8")
+            text = response.decode("utf-8")
             return [TextSection(link=link, text=text)]
 
         elif (
             mime_type
             == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         ):
-            text, _ = docx_to_text_and_images(io.BytesIO(response_bytes))
+            text, _ = docx_to_text_and_images(io.BytesIO(response))
             return [TextSection(link=link, text=text)]
 
         elif (
             mime_type
             == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         ):
-            text = xlsx_to_text(io.BytesIO(response_bytes))
+            text = xlsx_to_text(io.BytesIO(response))
             return [TextSection(link=link, text=text)]
 
         elif (
             mime_type
             == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
         ):
-            text = pptx_to_text(io.BytesIO(response_bytes))
+            text = pptx_to_text(io.BytesIO(response))
             return [TextSection(link=link, text=text)]
 
         elif is_gdrive_image_mime_type(mime_type):
@@ -134,7 +152,7 @@ def _extract_sections_basic(
                 with get_session_with_current_tenant() as db_session:
                     section, embedded_id = store_image_and_create_section(
                         db_session=db_session,
-                        image_data=response_bytes,
+                        image_data=response,
                         file_name=file_id,
                         display_name=file_name,
                         media_type=mime_type,
@@ -147,7 +165,7 @@ def _extract_sections_basic(
             return sections
 
         elif mime_type == "application/pdf":
-            text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_bytes))
+            text, _pdf_meta, images = read_pdf_file(io.BytesIO(response))
             pdf_sections: list[TextSection | ImageSection] = [
                 TextSection(link=link, text=text)
             ]
@@ -171,7 +189,7 @@ def _extract_sections_basic(
         else:
             # For unsupported file types, try to extract text
             try:
-                text = extract_file_text(io.BytesIO(response_bytes), file_name)
+                text = extract_file_text(io.BytesIO(response), file_name)
                 return [TextSection(link=link, text=text)]
             except Exception as e:
                 logger.warning(f"Failed to extract text from {file_name}: {e}")
