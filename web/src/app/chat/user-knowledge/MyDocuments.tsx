@@ -309,7 +309,7 @@ export default function MyDocuments() {
               </div>
               <input
                 type="text"
-                placeholder="Search documents..."
+                placeholder="Search documllents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full placeholder:text-text-500 dark:placeholder:text-neutral-400 m-0 bg-transparent p-0 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"

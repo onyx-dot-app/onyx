@@ -41,6 +41,7 @@ interface DocumentListProps {
   totalTokens?: number;
   maxTokens?: number;
   selectedModelName?: string;
+  searchQuery?: string;
 }
 
 export const DocumentList: React.FC<DocumentListProps> = ({
@@ -63,6 +64,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   totalTokens,
   maxTokens,
   selectedModelName,
+  searchQuery = "",
 }) => {
   const [presentingDocument, setPresentingDocument] =
     useState<FileResponse | null>(null);
@@ -92,6 +94,13 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
     startRefreshInterval();
   };
+
+  // Filter files based on search query
+  const filteredFiles = searchQuery
+    ? files.filter((file) =>
+        file.name.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : files;
 
   const startRefreshInterval = () => {
     if (refreshInterval) {
@@ -235,7 +244,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                   <div className="w-[30%]">LLM Tokens</div>
                 </div>
 
-                {files.map((file) => (
+                {filteredFiles.map((file) => (
                   <div key={file.id}>
                     {editingItemId === file.id ? (
                       <div className="flex items-center p-3 rounded-lg border border-neutral-200 dark:border-neutral-700">
@@ -303,10 +312,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                   </div>
                 ))}
 
-                {files.length === 0 && uploadingFiles.length === 0 && (
+                {filteredFiles.length === 0 && uploadingFiles.length === 0 && (
                   <div className="text-center py-8 text-neutral-500 dark:text-neutral-400">
-                    No documents in this folder yet. Upload files or add from
-                    URL to get started.
+                    {searchQuery
+                      ? "No documents match your search."
+                      : "No documents in this folder yet. Upload files or add from URL to get started."}
                   </div>
                 )}
               </>
