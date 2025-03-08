@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 
 from discord import Client
 from discord.channel import TextChannel
@@ -20,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -78,7 +80,7 @@ def _convert_message_to_document(
         semantic_identifier=semantic_identifier,
         doc_updated_at=message.edited_at,
         title=title,
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=(cast(list[TextSection | ImageSection], sections)),
         metadata=metadata,
     )
 

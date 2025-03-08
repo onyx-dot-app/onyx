@@ -1,9 +1,11 @@
 import re
+from typing import cast
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.connectors.salesforce.sqlite_functions import get_child_ids
 from onyx.connectors.salesforce.sqlite_functions import get_record
@@ -175,7 +177,7 @@ def convert_sf_object_to_doc(
 
     doc = Document(
         id=onyx_salesforce_id,
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,

@@ -6,6 +6,7 @@ import tempfile
 from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
+from typing import cast
 from typing import ClassVar
 
 import pywikibot.time  # type: ignore[import-untyped]
@@ -20,6 +21,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.mediawiki.family import family_class_dispatch
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -79,7 +81,7 @@ def get_doc_from_page(
         doc_updated_at=pywikibot_timestamp_to_utc_datetime(
             page.latest_revision.timestamp
         ),
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=cast(list[TextSection | ImageSection], sections),
         semantic_identifier=page.title(),
         metadata={"categories": [category.title() for category in page.categories()]},
         id=f"MEDIAWIKI_{page.pageid}_{page.full_url()}",

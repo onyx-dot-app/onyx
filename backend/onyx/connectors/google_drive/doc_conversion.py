@@ -1,5 +1,6 @@
 import io
 from datetime import datetime
+from typing import cast
 
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
@@ -205,7 +206,7 @@ def convert_drive_item_to_document(
                     docs_service=docs_service, doc_id=file.get("id", "")
                 )
                 if doc_sections:
-                    sections = doc_sections  # type: ignore # TextSection is a subclass of Section
+                    sections = cast(list[TextSection | ImageSection], doc_sections)
             except Exception as e:
                 logger.warning(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."

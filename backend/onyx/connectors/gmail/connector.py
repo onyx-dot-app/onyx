@@ -1,5 +1,6 @@
 from base64 import urlsafe_b64decode
 from typing import Any
+from typing import cast
 from typing import Dict
 
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
@@ -28,6 +29,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -192,7 +194,7 @@ def thread_to_document(full_thread: Dict[str, Any]) -> Document | None:
     return Document(
         id=id,
         semantic_identifier=semantic_identifier,
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.GMAIL,
         # This is used to perform permission sync
         primary_owners=primary_owners,

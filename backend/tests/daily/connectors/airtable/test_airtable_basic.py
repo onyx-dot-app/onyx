@@ -1,4 +1,5 @@
 import os
+from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,6 +8,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 
 BASE_VIEW_ID = "viwVUEJjWPd8XYjh8"
@@ -122,7 +124,7 @@ def create_test_document(
 
     return Document(
         id=f"airtable__{id}",
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.AIRTABLE,
         semantic_identifier=f"{os.environ.get('AIRTABLE_TEST_TABLE_NAME', '')}: {title}",
         metadata=metadata,

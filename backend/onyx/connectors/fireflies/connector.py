@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from typing import cast
 from typing import List
 
 import requests
@@ -14,6 +15,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -94,7 +96,7 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
 
     return Document(
         id=fireflies_id,
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.FIREFLIES,
         semantic_identifier=meeting_title,
         metadata={},

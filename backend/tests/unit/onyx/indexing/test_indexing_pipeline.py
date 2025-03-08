@@ -1,8 +1,10 @@
+from typing import cast
 from typing import List
 
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_pipeline import filter_documents
 
@@ -19,7 +21,7 @@ def create_test_document(
         id=doc_id,
         title=title,
         semantic_identifier=semantic_id,
-        sections=sections,  # type: ignore # TextSection is a subclass of Section
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.FILE,
         metadata={},
     )
