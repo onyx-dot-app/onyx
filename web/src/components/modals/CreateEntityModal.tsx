@@ -17,6 +17,7 @@ interface CreateEntityModalProps {
   trigger: React.ReactNode;
   open: boolean;
   setOpen: (open: boolean) => void;
+  hideLabel?: boolean;
 }
 
 export default function CreateEntityModal({
@@ -26,6 +27,7 @@ export default function CreateEntityModal({
   trigger,
   open,
   setOpen,
+  hideLabel = false,
 }: CreateEntityModalProps) {
   const [name, setName] = useState("");
 
@@ -48,7 +50,7 @@ export default function CreateEntityModal({
           className="flex flex-col justify-stretch space-y-2 w-full"
         >
           <div className="space-y-2 w-full">
-            <Label htmlFor="name">{entityName} Name</Label>
+            {!hideLabel && <Label htmlFor="name">{entityName} Name</Label>}
             <Input
               id="name"
               value={name}

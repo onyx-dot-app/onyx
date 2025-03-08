@@ -286,8 +286,8 @@ export default function MyDocuments() {
         </h1>
         <div className="flex items-center gap-2">
           <CreateEntityModal
-            title="Create New Folder"
-            entityName="Folder"
+            title="New Folder"
+            entityName=""
             open={isCreateFolderOpen}
             setOpen={setIsCreateFolderOpen}
             onSubmit={handleCreateFolder}
@@ -297,6 +297,7 @@ export default function MyDocuments() {
                 New Folder
               </Button>
             }
+            hideLabel
           />
         </div>
       </header>
