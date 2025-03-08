@@ -72,7 +72,6 @@ from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
-from onyx.utils.logger import is_running_in_container
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -1031,7 +1030,7 @@ def connector_indexing_proxy_task(
 
             # log the memory usage for tracking down memory leaks / connector-specific memory issues
             pid = job.process.pid
-            if pid is not None and is_running_in_container():
+            if pid is not None:
                 # Only emit memory info once per minute (60 seconds)
                 current_time = time.monotonic()
                 if current_time - last_memory_emit_time >= 60.0:
