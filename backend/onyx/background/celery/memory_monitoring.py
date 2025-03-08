@@ -1,6 +1,7 @@
 # backend/onyx/background/celery/memory_monitoring.py
 import logging
 import os
+import tempfile
 from logging.handlers import RotatingFileHandler
 
 import psutil
