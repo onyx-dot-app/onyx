@@ -4,6 +4,7 @@ from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Any
+from typing import cast
 
 import requests
 from pyairtable import Api as AirtableApi
@@ -16,6 +17,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
@@ -384,7 +386,7 @@ class AirtableConnector(LoadConnector):
 
         return Document(
             id=f"airtable__{record_id}",
-            sections=sections,
+            sections=(cast(list[TextSection | ImageSection], sections)),
             source=DocumentSource.AIRTABLE,
             semantic_identifier=semantic_id,
             metadata=metadata,

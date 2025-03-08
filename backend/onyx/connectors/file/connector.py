@@ -98,8 +98,7 @@ def _create_image_section(
         return section, stored_file_name
     except Exception as e:
         logger.error(f"Failed to store image {display_name}: {e}")
-        # Return an empty section with no file name
-        return ImageSection(image_file_name=""), None
+        raise e
 
 
 def _process_file(

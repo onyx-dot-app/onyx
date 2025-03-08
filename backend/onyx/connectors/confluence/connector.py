@@ -373,6 +373,8 @@ class ConfluenceConnector(
                         attachment=attachment,
                         page_context=confluence_xml,
                     )
+                    if response is None:
+                        continue
 
                     content_text, file_storage_name = response
                     object_url = build_confluence_document_id(
