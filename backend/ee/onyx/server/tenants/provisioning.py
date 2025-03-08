@@ -69,7 +69,7 @@ async def get_or_provision_tenant(
     try:
         tenant_id = get_tenant_id_for_email(email)
     except exceptions.UserNotExists:
-        # If tenant does not exist and in Multi tenant mode, provision a new tenant
+        # If tenant does not exist and in muti-tenant mode, provision a new tenant
         try:
             tenant_id = await create_tenant(email, referral_source)
         except Exception as e:

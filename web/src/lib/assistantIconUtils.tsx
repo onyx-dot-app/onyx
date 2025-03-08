@@ -165,5 +165,7 @@ export const constructMiniFiedPersona = (
     is_default_persona: false,
     users: [],
     groups: [],
+    user_file_ids: [],
+    user_folder_ids: [],
   };
 };

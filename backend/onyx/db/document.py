@@ -294,7 +294,7 @@ def get_access_info_for_document(
 def get_access_info_for_documents(
     db_session: Session,
     document_ids: list[str],
-) -> Sequence[tuple[str, list[str | None], bool, list[int], list[int]]]:
+) -> Sequence[tuple[str, list[str | None], bool]]:
     """Gets back all relevant access info for the given documents. This includes
     the user_ids for cc pairs that the document is associated with + whether any
     of the associated cc pairs are intending to make the document globally public.
