@@ -11,6 +11,7 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -344,7 +345,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     """
     # Get the vision LLM
     llm = get_default_llm_with_vision()
-    if not llm:
+    if not llm or not get_image_extraction_and_analysis_enabled():
         logger.warning(
             "No vision-capable LLM available. Image sections will not be processed."
         )
