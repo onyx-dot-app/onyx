@@ -445,12 +445,12 @@ export default function MyDocuments() {
             <SkeletonLoader />
           ) : filteredFolders.length > 0 ? (
             <div className="mt-6">
-              <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
+              <div className="flex pr-12 items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
                 <button
                   onClick={() => handleSortChange(SortType.Alphabetical)}
                   onMouseEnter={() => setHoveredColumn(SortType.Alphabetical)}
                   onMouseLeave={() => setHoveredColumn(null)}
-                  className="w-[40%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                  className="w-[40%] flex items-center cursor-pointer transition-colors"
                 >
                   Name {renderSortIndicator(SortType.Alphabetical)}
                   {renderHoverIndicator(SortType.Alphabetical)}
@@ -459,7 +459,7 @@ export default function MyDocuments() {
                   onClick={() => handleSortChange(SortType.TimeCreated)}
                   onMouseEnter={() => setHoveredColumn(SortType.TimeCreated)}
                   onMouseLeave={() => setHoveredColumn(null)}
-                  className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                  className="w-[30%] flex items-center cursor-pointer transition-colors"
                 >
                   Last Modified {renderSortIndicator(SortType.TimeCreated)}
                   {renderHoverIndicator(SortType.TimeCreated)}
@@ -468,7 +468,7 @@ export default function MyDocuments() {
                   onClick={() => handleSortChange(SortType.Tokens)}
                   onMouseEnter={() => setHoveredColumn(SortType.Tokens)}
                   onMouseLeave={() => setHoveredColumn(null)}
-                  className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
+                  className="w-[30%] flex items-center cursor-pointer transition-colors"
                 >
                   LLM Tokens {renderSortIndicator(SortType.Tokens)}
                   {renderHoverIndicator(SortType.Tokens)}

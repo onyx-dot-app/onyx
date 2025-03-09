@@ -27,6 +27,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import CreateEntityModal from "@/components/modals/CreateEntityModal";
+import { CleanupModal, CleanupPeriod } from "@/components/CleanupModal";
+import { bulkCleanupFiles } from "../api";
 
 // Define enums outside the component and export them
 export enum SortType {
@@ -100,6 +102,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
 
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+  const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
 
   useEffect(() => {
     if (!folderDetails) {
@@ -408,6 +411,51 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     setUploadingFiles(newUploadingFiles);
   };
 
+  const handleCleanup = () => {
+    setIsCleanupModalOpen(true);
+  };
+
+  const confirmCleanup = async (period: CleanupPeriod, value: number) => {
+    try {
+      let daysOlderThan: number | null = null;
+
+      // Convert the selected period and value to days
+      if (period === CleanupPeriod.Day) {
+        daysOlderThan = 1;
+      } else if (period === CleanupPeriod.Week) {
+        daysOlderThan = 7;
+      } else if (period === CleanupPeriod.Month) {
+        daysOlderThan = 30;
+      } else if (period === CleanupPeriod.All) {
+        // All documents, don't set a date filter
+        daysOlderThan = null;
+      }
+
+      const result = await bulkCleanupFiles({
+        folder_id: folderId,
+        days_older_than: daysOlderThan,
+      });
+
+      setPopup({
+        message: result.message,
+        type: "success",
+      });
+
+      // Refresh folder details to update the UI
+      await refreshFolderDetails();
+
+      // Close the modal after successful completion
+      setIsCleanupModalOpen(false);
+    } catch (error) {
+      console.error("Error during cleanup:", error);
+      setPopup({
+        message: "Failed to cleanup files",
+        type: "error",
+      });
+      // Modal will remain open, user can try again or cancel
+    }
+  };
+
   return (
     <div
       className={`h-screen pt-20 w-full min-w-0 flex-1 mx-auto w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 md:pr-8 2xl:pr-14 relative ${
@@ -460,6 +508,12 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         currentFolderId={folderId}
       />
 
+      <CleanupModal
+        isOpen={isCleanupModalOpen}
+        onClose={() => setIsCleanupModalOpen(false)}
+        onConfirm={confirmCleanup}
+      />
+
       <div className="flex  -mt-[1px] flex-col w-full">
         <div className="flex items-center mb-3">
           <nav className="flex text-lg gap-x-1 items-center">
@@ -507,11 +561,16 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             )}
           </nav>
           <Button
-            className={`ml-auto inline-flex items-center justify-center relative shrink-0 h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap pl-2 pr-3 gap-1 ${
+            className={`ml-auto inline-flex items-center justify-center relative shrink-0 h-9 px-4 py-2 rounded-lg active:scale-[0.985] whitespace-nowrap pl-3 pr-4 gap-1.5 ${
               folderId != -1 && "invisible pointer-events-none"
+            } ${
+              folderId == -1
+                ? "bg-neutral-100 hover:bg-neutral-200 text-neutral-700 border border-neutral-300 dark:bg-neutral-800 dark:hover:bg-neutral-700 dark:text-neutral-300 dark:border-neutral-700"
+                : ""
             }`}
+            onClick={handleCleanup}
           >
-            <Trash className="h-5 w-5" />
+            <Trash className="h-4 w-4" />
             Cleanup
           </Button>
           {/* <CreateEntityModal

@@ -28,6 +28,7 @@ import {
 import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 import { AnimatedDots } from "../[id]/components/DocumentList";
+import { FolderMoveIcon } from "@/components/icons/icons";
 
 interface FileListItemProps {
   file: FileResponse;
@@ -150,7 +151,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             {!showMoveOptions ? (
               <div className="space-y-0">
                 <Button variant="menu" onClick={() => setShowMoveOptions(true)}>
-                  <FiArrowDown className="h-4 w-4" />
+                  <FolderMoveIcon size={20} className="h-4 w-4" />
                   Move
                 </Button>
                 <Button

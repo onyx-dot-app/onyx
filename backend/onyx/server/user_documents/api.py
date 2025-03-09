@@ -1,5 +1,7 @@
 import io
 import time
+from datetime import datetime
+from datetime import timedelta
 from typing import List
 
 import requests
@@ -436,3 +438,62 @@ def get_files_token_estimate(
     """Get token estimate for files and folders"""
     total_tokens = calculate_user_files_token_count(file_ids, folder_ids, db_session)
     return {"total_tokens": total_tokens}
+
+
+class BulkCleanupRequest(BaseModel):
+    folder_id: int
+    days_older_than: int | None = None
+
+
+@router.post("/user/file/bulk-cleanup")
+def bulk_cleanup_files(
+    request: BulkCleanupRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> MessageResponse:
+    """Bulk delete files older than specified days in a folder"""
+    user_id = user.id if user else None
+
+    logger.info(
+        f"Bulk cleanup request: folder_id={request.folder_id}, days_older_than={request.days_older_than}"
+    )
+
+    # Check if folder exists
+    if request.folder_id != RECENT_DOCS_FOLDER_ID:
+        folder = (
+            db_session.query(UserFolder)
+            .filter(UserFolder.id == request.folder_id, UserFolder.user_id == user_id)
+            .first()
+        )
+        if not folder:
+            raise HTTPException(status_code=404, detail="Folder not found")
+
+    filter_criteria = [UserFile.user_id == user_id]
+
+    # Filter by folder
+    if request.folder_id != -2:  # -2 means all folders
+        filter_criteria.append(UserFile.folder_id == request.folder_id)
+
+    # Filter by date if days_older_than is provided
+    if request.days_older_than is not None:
+        cutoff_date = datetime.utcnow() - timedelta(days=request.days_older_than)
+        logger.info(f"Filtering files older than {cutoff_date} (UTC)")
+        filter_criteria.append(UserFile.created_at < cutoff_date)
+
+    # Get all files matching the criteria
+    files_to_delete = db_session.query(UserFile).filter(*filter_criteria).all()
+
+    logger.info(f"Found {len(files_to_delete)} files to delete")
+
+    # Delete files
+    delete_count = 0
+    for file in files_to_delete:
+        logger.debug(
+            f"Deleting file: id={file.id}, name={file.name}, created_at={file.created_at}"
+        )
+        db_session.delete(file)
+        delete_count += 1
+
+    db_session.commit()
+
+    return MessageResponse(message=f"Successfully deleted {delete_count} files")
