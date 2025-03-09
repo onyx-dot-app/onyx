@@ -230,6 +230,26 @@ def get_answer_with_citation(
         raise HTTPException(status_code=500, detail="An internal server error occurred")
 
 
+@basic_router.post("/search")
+def get_search_response(
+    request: OneShotQARequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> StreamingResponse:
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for packet in get_answer_stream(request, user, db_session):
+                print("packet is")
+                print(packet.__dict__)
+                serialized = get_json_line(packet.model_dump())
+                yield serialized
+        except Exception as e:
+            logger.exception("Error in answer streaming")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="application/json")
+
+
 @basic_router.post("/stream-answer-with-citation")
 def stream_answer_with_citation(
     request: OneShotQARequest,

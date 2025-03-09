@@ -33,6 +33,8 @@ def gather_stream_for_answer_api(
         elif isinstance(packet, AllCitations):
             response.citations = packet.citations
         elif isinstance(packet, OnyxContexts):
+            print("packet is")
+            print(packet.__dict__)
             response.contexts = packet
 
     if answer:
