@@ -67,3 +67,19 @@ class ProductGatingResponse(BaseModel):
 
 class SubscriptionSessionResponse(BaseModel):
     sessionId: str
+
+
+class TenantByDomainResponse(BaseModel):
+    tenant_id: str
+    status: str
+    is_complete: bool
+
+
+class ApproveUserRequest(BaseModel):
+    email: str
+    tenant_id: str
+
+
+class RequestInviteRequest(BaseModel):
+    email: str
+    tenant_id: str

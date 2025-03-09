@@ -49,6 +49,47 @@ def run_alembic_migrations(schema_name: str) -> None:
         raise
 
 
+def run_essential_alembic_migrations(schema_name: str) -> None:
+    """
+    Run only the essential Alembic migrations up to the 465f78d9b7f9 revision.
+    This is used for the auth flow to complete quickly, with the rest of the migrations
+    and setup being deferred to run asynchronously.
+    """
+    logger.info(f"Starting essential Alembic migrations for schema: {schema_name}")
+
+    try:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        root_dir = os.path.abspath(os.path.join(current_dir, "..", "..", "..", ".."))
+        alembic_ini_path = os.path.join(root_dir, "alembic.ini")
+
+        # Configure Alembic
+        alembic_cfg = Config(alembic_ini_path)
+        alembic_cfg.set_main_option("sqlalchemy.url", build_connection_string())
+        alembic_cfg.set_main_option(
+            "script_location", os.path.join(root_dir, "alembic")
+        )
+
+        # Ensure that logging isn't broken
+        alembic_cfg.attributes["configure_logger"] = False
+
+        # Mimic command-line options by adding 'cmd_opts' to the config
+        alembic_cfg.cmd_opts = SimpleNamespace()  # type: ignore
+        alembic_cfg.cmd_opts.x = [f"schema={schema_name}"]  # type: ignore
+
+        # Run migrations programmatically up to the specified revision
+        command.upgrade(alembic_cfg, "465f78d9b7f9")
+
+        logger.info(
+            f"Essential Alembic migrations completed successfully for schema: {schema_name}"
+        )
+
+    except Exception as e:
+        logger.exception(
+            f"Essential Alembic migration failed for schema {schema_name}: {str(e)}"
+        )
+        raise
+
+
 def create_schema_if_not_exists(tenant_id: str) -> bool:
     with Session(get_sqlalchemy_engine()) as db_session:
         with db_session.begin():
