@@ -159,6 +159,7 @@ def fetch_jira_issues_batch(
 class JiraConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
+        jira_jql_query_base: str = "",
         jira_base_url: str,
         project_key: str | None = None,
         comment_email_blacklist: list[str] | None = None,
@@ -238,6 +239,9 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
         jql = (
             f"{base_jql} AND " if base_jql else ""
         ) + f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
+
+        if self.jira_jql_query_base:
+            jql = f" {self.jira_jql_query_base} AND " + jql
 
         document_batch = []
         for doc in fetch_jira_issues_batch(
