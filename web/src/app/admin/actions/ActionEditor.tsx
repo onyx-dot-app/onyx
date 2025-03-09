@@ -2,14 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Formik,
-  Form,
-  Field,
-  ErrorMessage,
-  FieldArray,
-  ArrayHelpers,
-} from "formik";
+import { Formik, Form, Field, ErrorMessage, FieldArray } from "formik";
 import * as Yup from "yup";
 import { MethodSpec, ToolSnapshot } from "@/lib/tools/interfaces";
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -49,7 +42,7 @@ function prettifyDefinition(definition: any) {
   return JSON.stringify(definition, null, 2);
 }
 
-function ToolForm({
+function ActionForm({
   existingTool,
   values,
   setFieldValue,
@@ -185,7 +178,7 @@ function ToolForm({
               clipRule="evenodd"
             />
           </svg>
-          Learn more about tool calling in our documentation
+          Learn more about actions in our documentation
         </Link>
       </div>
 
@@ -229,7 +222,7 @@ function ToolForm({
             Custom Headers
           </h3>
           <p className="text-sm mb-6 text-text-600 italic">
-            Specify custom headers for each request to this tool&apos;s API.
+            Specify custom headers for each request to this action&apos;s API.
           </p>
           <FieldArray
             name="customHeaders"
@@ -360,7 +353,7 @@ function ToolForm({
           type="submit"
           disabled={isSubmitting || !!definitionError}
         >
-          {existingTool ? "Update Tool" : "Create Tool"}
+          {existingTool ? "Update Action" : "Create Action"}
         </Button>
       </div>
     </Form>
@@ -386,7 +379,7 @@ const ToolSchema = Yup.object().shape({
   passthrough_auth: Yup.boolean().default(false),
 });
 
-export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
+export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [definitionError, setDefinitionError] = useState<string | null>(null);
@@ -432,7 +425,7 @@ export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
           try {
             definition = parseJsonWithTrailingCommas(values.definition);
           } catch (error) {
-            setDefinitionError("Invalid JSON in tool definition");
+            setDefinitionError("Invalid JSON in action definition");
             return;
           }
 
@@ -453,17 +446,17 @@ export function ToolEditor({ tool }: { tool?: ToolSnapshot }) {
           }
           if (response.error) {
             setPopup({
-              message: "Failed to create tool - " + response.error,
+              message: "Failed to create action - " + response.error,
               type: "error",
             });
             return;
           }
-          router.push(`/admin/tools?u=${Date.now()}`);
+          router.push(`/admin/actions?u=${Date.now()}`);
         }}
       >
         {({ isSubmitting, values, setFieldValue }) => {
           return (
-            <ToolForm
+            <ActionForm
               existingTool={tool}
               values={values}
               setFieldValue={setFieldValue}

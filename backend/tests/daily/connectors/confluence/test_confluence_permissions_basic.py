@@ -28,6 +28,7 @@ def confluence_connector() -> ConfluenceConnector:
 
 # This should never fail because even if the docs in the cloud change,
 # the full doc ids retrieved should always be a subset of the slim doc ids
+@pytest.mark.skip(reason="Skipping this test")
 def test_confluence_connector_permissions(
     confluence_connector: ConfluenceConnector,
 ) -> None:

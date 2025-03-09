@@ -4,6 +4,7 @@ import uuid
 
 import aiohttp  # Async HTTP client
 import httpx
+import requests
 from fastapi import HTTPException
 from fastapi import Request
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from ee.onyx.configs.app_configs import COHERE_DEFAULT_API_KEY
 from ee.onyx.configs.app_configs import HUBSPOT_TRACKING_URL
 from ee.onyx.configs.app_configs import OPENAI_DEFAULT_API_KEY
 from ee.onyx.server.tenants.access import generate_data_plane_token
+from ee.onyx.server.tenants.models import TenantByDomainResponse
 from ee.onyx.server.tenants.models import TenantCreationPayload
 from ee.onyx.server.tenants.models import TenantDeletionPayload
 from ee.onyx.server.tenants.schema_management import create_schema_if_not_exists
@@ -353,3 +355,47 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
                 raise Exception(
                     f"Failed to delete tenant on control plane: {error_text}"
                 )
+
+
+def get_tenant_by_domain_from_control_plane(
+    domain: str,
+    tenant_id: str,
+) -> TenantByDomainResponse | None:
+    """
+    Fetches tenant information from the control plane based on the email domain.
+
+    Args:
+        domain: The email domain to search for (e.g., "example.com")
+
+    Returns:
+        A dictionary containing tenant information if found, None otherwise
+    """
+    token = generate_data_plane_token()
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        response = requests.get(
+            f"{CONTROL_PLANE_API_BASE_URL}/tenant-by-domain",
+            headers=headers,
+            json={"domain": domain, "tenant_id": tenant_id},
+        )
+
+        if response.status_code != 200:
+            logger.error(f"Control plane tenant lookup failed: {response.text}")
+            return None
+
+        response_data = response.json()
+        if not response_data:
+            return None
+
+        return TenantByDomainResponse(
+            tenant_id=response_data.get("tenant_id"),
+            number_of_users=response_data.get("number_of_users"),
+            creator_email=response_data.get("creator_email"),
+        )
+    except Exception as e:
+        logger.error(f"Error fetching tenant by domain: {str(e)}")
+        return None

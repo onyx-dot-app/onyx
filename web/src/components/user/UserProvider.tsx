@@ -76,8 +76,8 @@ export function UserProvider({
       const identifyData: Record<string, any> = {
         email: user.email,
       };
-      if (user.organization_name) {
-        identifyData.organization_name = user.organization_name;
+      if (user.team_name) {
+        identifyData.team_name = user.team_name;
       }
       posthog.identify(user.id, identifyData);
     } else {

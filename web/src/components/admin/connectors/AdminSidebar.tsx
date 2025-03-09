@@ -2,19 +2,8 @@
 "use client";
 import React, { useContext } from "react";
 import Link from "next/link";
-import { Logo } from "@/components/logo/Logo";
-import { NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED } from "@/lib/constants";
-import { HeaderTitle } from "@/components/header/HeaderTitle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { WarningCircle, WarningDiamond } from "@phosphor-icons/react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { CgArrowsExpandUpLeft } from "react-icons/cg";
-import LogoWithText from "@/components/header/LogoWithText";
 import { LogoComponent } from "@/components/logo/FixedLogo";
 
 interface Item {

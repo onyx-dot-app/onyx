@@ -2295,15 +2295,14 @@ class PublicBase(DeclarativeBase):
     __abstract__ = True
 
 
+# Strictly keeps track of the tenant that a given user will authenticate to.
 class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
-    __table_args__ = (
-        UniqueConstraint("email", "tenant_id", name="uq_user_tenant"),
-        {"schema": "public"},
-    )
+    __table_args__ = ({"schema": "public"},)
 
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:

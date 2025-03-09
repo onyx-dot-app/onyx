@@ -57,7 +57,7 @@ export interface User {
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
   is_cloud_superuser?: boolean;
-  organization_name: string | null;
+  team_name: string | null;
   is_anonymous_user?: boolean;
   // If user does not have a configured password
   // (i.e.) they are using an oauth flow
@@ -65,6 +65,17 @@ export interface User {
   // we don't want to show them things like the reset password
   // functionality
   password_configured?: boolean;
+  tenant_info?: TenantInfo | null;
+}
+
+export interface TenantInfo {
+  new_tenant?: NewTenantInfo | null;
+  invitation?: NewTenantInfo | null;
+}
+
+export interface NewTenantInfo {
+  tenant_id: string;
+  number_of_users: number;
 }
 
 export interface AllUsersResponse {

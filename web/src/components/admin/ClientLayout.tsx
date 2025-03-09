@@ -202,10 +202,10 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Tools</div>
+                              <div className="ml-1">Actions</div>
                             </div>
                           ),
-                          link: "/admin/tools",
+                          link: "/admin/actions",
                         },
                       ]
                     : []),

@@ -1,6 +1,6 @@
 "use client";
 
-import { ToolEditor } from "@/app/admin/tools/ToolEditor";
+import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
@@ -17,7 +17,7 @@ export default function NewToolPage() {
       />
 
       <CardSection>
-        <ToolEditor />
+        <ActionEditor />
       </CardSection>
     </div>
   );

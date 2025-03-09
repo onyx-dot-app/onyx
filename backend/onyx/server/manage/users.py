@@ -12,13 +12,11 @@ from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Request
-from psycopg2.errors import UniqueViolation
 from pydantic import BaseModel
 from sqlalchemy import Column
 from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy import update
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ee.onyx.configs.app_configs import SUPER_USERS
@@ -55,6 +53,8 @@ from onyx.key_value_store.factory import get_kv_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.manage.models import AllUsersResponse
 from onyx.server.manage.models import AutoScrollRequest
+from onyx.server.manage.models import TenantInfo
+from onyx.server.manage.models import TenantSnapshot
 from onyx.server.manage.models import UserByEmail
 from onyx.server.manage.models import UserInfo
 from onyx.server.manage.models import UserPreferences
@@ -296,13 +296,6 @@ def bulk_invite_users(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
             )(new_invited_emails, tenant_id)
 
-        except IntegrityError as e:
-            if isinstance(e.orig, UniqueViolation):
-                raise HTTPException(
-                    status_code=400,
-                    detail="User has already been invited to a Onyx organization",
-                )
-            raise
         except Exception as e:
             logger.error(f"Failed to add users to tenant {tenant_id}: {str(e)}")
 
@@ -425,6 +418,10 @@ async def delete_user(
     db_session.expunge(user_to_delete)
 
     try:
+        tenant_id = get_current_tenant_id()
+        fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+        )([user_email.user_email], tenant_id)
         delete_user_from_db(user_to_delete, db_session)
         logger.info(f"Deleted user {user_to_delete.email}")
 
@@ -553,8 +550,8 @@ def verify_user_logged_in(
         if anonymous_user_enabled(tenant_id=tenant_id):
             store = get_kv_store()
             return fetch_no_auth_user(store, anonymous_user_enabled=True)
-
         raise BasicAuthenticationError(detail="User Not Authenticated")
+
     if user.oidc_expiry and user.oidc_expiry < datetime.now(timezone.utc):
         raise BasicAuthenticationError(
             detail="Access denied. User's OIDC token has expired.",
@@ -563,16 +560,35 @@ def verify_user_logged_in(
     token_created_at = (
         None if MULTI_TENANT else get_current_token_creation(user, db_session)
     )
-    organization_name = fetch_ee_implementation_or_noop(
+
+    team_name = fetch_ee_implementation_or_noop(
         "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
     )(user.email)
+
+    new_tenant: TenantSnapshot | None = None
+    tenant_invitation: TenantSnapshot | None = None
+
+    if MULTI_TENANT:
+        if team_name != get_current_tenant_id():
+            user_count = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_count", None
+            )(team_name)
+            new_tenant = TenantSnapshot(tenant_id=team_name, number_of_users=user_count)
+
+        tenant_invitation = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
+        )(user.email)
 
     user_info = UserInfo.from_model(
         user,
         current_token_created_at=token_created_at,
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
         is_cloud_superuser=user.email in SUPER_USERS,
-        organization_name=organization_name,
+        team_name=team_name,
+        tenant_info=TenantInfo(
+            new_tenant=new_tenant,
+            invitation=tenant_invitation,
+        ),
     )
 
     return user_info

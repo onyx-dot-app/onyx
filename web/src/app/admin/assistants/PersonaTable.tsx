@@ -177,6 +177,11 @@ export function PersonasTable() {
           entityName={personaToToggleDefault.name}
           onClose={closeDefaultModal}
           onSubmit={handleToggleDefault}
+          actionText={
+            personaToToggleDefault.is_default_persona
+              ? "remove the featured status of"
+              : "set as featured"
+          }
           actionButtonText={
             personaToToggleDefault.is_default_persona
               ? "Remove Featured"
