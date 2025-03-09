@@ -1,5 +1,13 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Upload, Link, ArrowRight, X, Loader2, FileIcon } from "lucide-react";
+import {
+  Upload,
+  Link,
+  ArrowRight,
+  X,
+  Loader2,
+  FileIcon,
+  Plus,
+} from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -151,100 +159,115 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       {/* Main upload area */}
       <TooltipProvider>
         <Tooltip delayDuration={0}>
-          <TooltipTrigger className="w-full">
+          <TooltipTrigger
+            className={`w-full ${uploadType === "url" ? "cursor-default" : ""}`}
+          >
             <div
-              className={`border border-neutral-200 dark:border-neutral-700 bg-transparent rounded-lg p-4 shadow-sm ${
-                !isDisabled &&
-                uploadType === "file" &&
-                "hover:bg-neutral-50 dark:hover:bg-neutral-800"
-              } transition-colors duration-200 ${
-                isDisabled ? "cursor-not-allowed" : "cursor-pointer"
-              } h-[160px] flex items-center justify-center`}
+              className={`border border-neutral-200 dark:border-neutral-700 bg-transparent rounded-lg p-4 shadow-sm 
+                ${
+                  !isDisabled &&
+                  uploadType === "file" &&
+                  "hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                } transition-colors duration-200 
+                ${
+                  isDisabled
+                    ? "cursor-not-allowed"
+                    : uploadType === "file"
+                      ? "cursor-pointer"
+                      : "cursor-default"
+                }
+                 h-[160px] flex items-center justify-center`}
             >
               {/* Common layout structure for both modes */}
               <div className="w-full h-full flex flex-col items-center">
-                {/* Icon container - fixed position for both modes */}
-                <div className="h-[40px] flex items-center justify-center mt-6">
-                  {uploadType === "file" ? (
-                    <Upload
-                      className={`w-6 h-6 ${
-                        isDragging
-                          ? "text-blue-500 dark:text-blue-400"
-                          : "text-neutral-400 dark:text-neutral-500"
-                      }`}
-                    />
-                  ) : (
-                    <Link className="w-6 h-6 text-neutral-400 dark:text-neutral-500" />
-                  )}
-                </div>
-
-                {/* Content area - different for each mode but with consistent spacing */}
-                <div className="flex-1 w-full flex items-start justify-center mt-2">
-                  {uploadType === "file" ? (
-                    <label
-                      ref={dropAreaRef}
-                      htmlFor="file-upload"
-                      className={`w-full h-full flex flex-col items-center ${
-                        isDisabled ? "pointer-events-none" : ""
-                      } ${
-                        isDragging
-                          ? "border-2 border-dashed border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-md"
-                          : ""
-                      } transition-all duration-150 ease-in-out`}
-                      onDragEnter={handleDragEnter}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                    >
+                {uploadType === "file" ? (
+                  <label
+                    ref={dropAreaRef}
+                    htmlFor="file-upload"
+                    className={`w-full h-full flex flex-col items-center justify-center ${
+                      isDisabled ? "pointer-events-none" : ""
+                    } ${
+                      isDragging
+                        ? "border-2 border-dashed border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-md"
+                        : ""
+                    } transition-all duration-150 ease-in-out`}
+                    onDragEnter={handleDragEnter}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    {/* Icon container - fixed position for both modes */}
+                    <div className="h-[40px] flex items-center justify-center">
+                      <Upload
+                        className={`w-6 h-6 ${
+                          isDragging
+                            ? "text-blue-500 dark:text-blue-400"
+                            : "text-neutral-400 dark:text-neutral-500"
+                        }`}
+                      />
+                    </div>
+                    <div className="mt-2">
                       <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">
                         {isDragging
                           ? "Drop files here..."
                           : "Drag & drop or click to upload files"}
                       </p>
-                      <input
-                        disabled={isDisabled}
-                        id="file-upload"
-                        type="file"
-                        multiple
-                        className="hidden"
-                        onChange={handleChange}
-                      />
-                    </label>
-                  ) : (
-                    <div className="flex items-center gap-2 w-full max-w-md">
-                      <input
-                        ref={urlInputRef}
-                        type="text"
-                        placeholder="Enter website URL..."
-                        className="w-full text-sm py-2 px-3 border border-neutral-200 dark:border-neutral-700 rounded-md bg-transparent focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-neutral-600"
-                        value={fileUrl}
-                        onChange={handleUrlChange}
-                        onKeyDown={handleKeyDown}
-                        disabled={isDisabled}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleUrlSubmit}
-                        disabled={!fileUrl || isDisabled}
-                        className={`p-2 rounded-md ${
-                          !fileUrl || isDisabled
-                            ? "text-neutral-400 cursor-not-allowed"
-                            : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-                        }`}
-                      >
-                        {isUploading || isProcessing ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ArrowRight className="w-4 h-4" />
-                        )}
-                      </button>
                     </div>
-                  )}
-                </div>
+                    <input
+                      disabled={isDisabled}
+                      id="file-upload"
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleChange}
+                    />
+                  </label>
+                ) : (
+                  <>
+                    {/* Icon container - fixed position for both modes */}
+                    <div className="h-[40px] flex items-center justify-center mt-6">
+                      <Link className="w-6 h-6 text-neutral-400 dark:text-neutral-500" />
+                    </div>
+
+                    {/* Content area - different for each mode but with consistent spacing */}
+                    <div className="flex-1 w-full flex items-start justify-center mt-2">
+                      <div className="flex items-center gap-2 w-full max-w-md">
+                        <input
+                          ref={urlInputRef}
+                          type="text"
+                          placeholder="Enter website URL..."
+                          className="w-full text-sm py-2 px-3 border border-neutral-200 dark:border-neutral-700 rounded-md bg-transparent focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-neutral-600"
+                          value={fileUrl}
+                          onChange={handleUrlChange}
+                          onKeyDown={handleKeyDown}
+                          disabled={isDisabled}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleUrlSubmit}
+                          disabled={!fileUrl || isDisabled}
+                          className={`p-2 rounded-md ${
+                            !fileUrl || isDisabled
+                              ? "text-neutral-400 cursor-not-allowed"
+                              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                          }`}
+                        >
+                          {isUploading || isProcessing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           </TooltipTrigger>
-          {disabled ? <TooltipContent>{disabledMessage}</TooltipContent> : null}
+          {disabled ? (
+            <TooltipContent side="bottom">{disabledMessage}</TooltipContent>
+          ) : null}
         </Tooltip>
       </TooltipProvider>
       <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mt-2 w-fit mx-auto">

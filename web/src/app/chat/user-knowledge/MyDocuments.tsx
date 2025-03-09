@@ -19,12 +19,15 @@ import CreateEntityModal from "@/components/modals/CreateEntityModal";
 import { useDocumentsContext } from "./DocumentsContext";
 import { SortIcon } from "@/components/icons/icons";
 import TextView from "@/components/chat/TextView";
+import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useLlmManager } from "@/lib/hooks";
+import { useChatContext } from "@/components/context/ChatContext";
 
 enum SortType {
   TimeCreated = "Time Created",
@@ -109,10 +112,12 @@ export default function MyDocuments() {
     try {
       const folderResponse = await createFolder(name);
       startTransition(() => {
-        router.push(
-          `/chat/user-knowledge/${folderResponse.id}?message=folder-created`
-        );
+        // router.push(
+        //   `/chat/user-knowledge/${folderResponse.id}?message=folder-created`
+        // );
         setPage(1);
+        setIsCreateFolderOpen(false);
+        console.log("folderResponse", folderResponse);
         setCurrentFolder(folderResponse.id);
       });
     } catch (error) {
@@ -128,27 +133,30 @@ export default function MyDocuments() {
   };
 
   const handleDeleteItem = async (itemId: number, isFolder: boolean) => {
-    const itemType = isFolder ? "Knowledge Group" : "File";
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete this ${itemType}?`
-    );
+    if (!isFolder) {
+      // For files, keep the old confirmation
+      const confirmDelete = window.confirm(
+        `Are you sure you want to delete this file?`
+      );
 
-    if (confirmDelete) {
-      try {
-        await deleteItem(itemId, isFolder);
-        setPopup({
-          message: `${itemType} deleted successfully`,
-          type: "success",
-        });
-        await refreshFolders();
-      } catch (error) {
-        console.error("Error deleting item:", error);
-        setPopup({
-          message: `Failed to delete ${itemType}`,
-          type: "error",
-        });
+      if (confirmDelete) {
+        try {
+          await deleteItem(itemId, isFolder);
+          setPopup({
+            message: `File deleted successfully`,
+            type: "success",
+          });
+          await refreshFolders();
+        } catch (error) {
+          console.error("Error deleting item:", error);
+          setPopup({
+            message: `Failed to delete file`,
+            type: "error",
+          });
+        }
       }
     }
+    // If it's a folder, the SharedFolderItem component will handle it
   };
 
   const handleMoveItem = async (
@@ -287,6 +295,33 @@ export default function MyDocuments() {
     return <ArrowDown className="ml-1 h-3 w-3 inline opacity-70" />;
   };
 
+  const handleStartChat = () => {
+    router.push(`/chat/user-knowledge/${currentFolder}`);
+  };
+
+  const totalTokens = folders.reduce(
+    (acc, folder) =>
+      acc +
+      (folder.files.reduce((acc, file) => acc + (file.token_count || 0), 0) ||
+        0),
+    0
+  );
+  const { llmProviders } = useChatContext();
+
+  const modelDescriptors = llmProviders.flatMap((provider) =>
+    Object.entries(provider.model_token_limits ?? {}).map(
+      ([modelName, maxTokens]) => ({
+        modelName,
+        provider: provider.provider,
+        maxTokens,
+      })
+    )
+  );
+
+  const selectedModel = modelDescriptors[0];
+  const maxTokens = selectedModel.maxTokens;
+  const tokenPercentage = (totalTokens / maxTokens) * 100;
+
   return (
     <div className="min-h-full pt-20 w-full min-w-0 flex-1 mx-auto  w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8  md:pr-8 2xl:pr-14">
       <header className="flex w-full items-center justify-between gap-4 -translate-y-px">
@@ -313,7 +348,7 @@ export default function MyDocuments() {
       </header>
       <main className="w-full pt-3 -mt-[1px]">
         <div className="mb-6">
-          <div className="relative w-full max-w-md">
+          <div className="relative w-full max-w-xl">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
               <svg
                 width="15"
@@ -334,18 +369,13 @@ export default function MyDocuments() {
             <input
               type="text"
               placeholder="Search documents..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
         </div>
 
-        {isPending && (
-          <div className="flex fixed left-20 top-1/3 justify-center items-center mt-4">
-            <Loader2 className="h-6 w-6 animate-spin text-primary dark:text-neutral-300" />
-          </div>
-        )}
         {presentingDocument && (
           <TextView
             presentingDocument={presentingDocument}
@@ -356,36 +386,36 @@ export default function MyDocuments() {
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-2">
             <Button
-              // onClick={handleStartChat}
-              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-gray-800"
+              onClick={handleStartChat}
+              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-neutral-800"
             >
               <MessageSquare className="w-3 h-3" />
-              Chat with My Documents
+              Chat with My Docs
             </Button>
-            {/* <div className="flex items-center">
+            <div className="flex items-center">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center space-x-3 bg-gray-100 rounded-full px-4 py-1.5">
-                      <div className="relative w-36 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="flex items-center space-x-3 bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-1.5">
+                      <div className="relative w-36 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                         <div
                           className={`absolute top-0 left-0 h-full rounded-full ${
                             tokenPercentage >= 100
-                              ? "bg-yellow-500"
-                              : "bg-green-500"
+                              ? "bg-yellow-500 dark:bg-yellow-600"
+                              : "bg-green-500 dark:bg-green-600"
                           }`}
                           style={{
                             width: `${Math.min(tokenPercentage, 100)}%`,
                           }}
                         ></div>
                       </div>
-                      <div className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                      <div className="text-xs text-neutral-600 dark:text-neutral-300 font-medium whitespace-nowrap">
                         {totalTokens.toLocaleString()} /{" "}
                         {maxTokens.toLocaleString()} LLM tokens
                       </div>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>
+                  <TooltipContent side="bottom" className="max-w-sm">
                     <p className="text-xs max-w-xs">
                       Maximum tokens for default model{" "}
                       {getDisplayNameForModel(selectedModel.modelName)}, if
@@ -395,9 +425,20 @@ export default function MyDocuments() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-            </div> */}
+            </div>
           </div>
         </div>
+        {/* <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-2">
+            <Button
+              // onClick={handleStartChat}
+              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-gray-800"
+            >
+              <MessageSquare className="w-3 h-3" />
+              Chat with My Documents
+            </Button>
+          </div>
+        </div> */}
 
         <div className="flex-grow">
           {isLoading ? (

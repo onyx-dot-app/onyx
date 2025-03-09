@@ -61,7 +61,7 @@ export default function CreateEntityModal({
                 placeholder || `Enter ${entityName.toLowerCase()} name`
               }
               required
-              className="w-full"
+              className="w-full focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"
             />
           </div>
           <Button type="submit" className="w-full">

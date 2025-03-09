@@ -24,6 +24,7 @@ const TooltipContent = React.forwardRef<
     backgroundColor?: string;
     showTick?: boolean;
     tickSide?: "top" | "bottom" | "left" | "right";
+    side?: "top" | "bottom" | "left" | "right";
   }
 >(
   (
@@ -34,6 +35,7 @@ const TooltipContent = React.forwardRef<
       backgroundColor,
       showTick = false,
       tickSide = "bottom",
+      side = "top",
       ...props
     },
     ref
@@ -41,6 +43,7 @@ const TooltipContent = React.forwardRef<
     <TooltipPrimitive.Content
       ref={ref}
       sideOffset={sideOffset}
+      side={side}
       className={cn(
         `z-[100] overflow-hidden rounded-md text-neutral-50 ${
           backgroundColor ||

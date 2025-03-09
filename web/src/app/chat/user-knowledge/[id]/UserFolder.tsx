@@ -2,6 +2,7 @@
 
 import SidebarWrapper from "@/app/assistants/SidebarWrapper";
 import UserFolderContent from "./UserFolderContent";
+import { BackButton } from "@/components/BackButton";
 
 export default function WrappedUserFolders({
   userFileId,
@@ -9,10 +10,11 @@ export default function WrappedUserFolders({
   userFileId: string;
 }) {
   return (
-    <SidebarWrapper size="lg">
-      <div className="mx-auto w-full">
-        <UserFolderContent folderId={Number(userFileId)} />
+    <div className="mx-auto w-full">
+      <div className="absolute top-4 left-4">
+        <BackButton />
       </div>
-    </SidebarWrapper>
+      <UserFolderContent folderId={Number(userFileId)} />
+    </div>
   );
 }

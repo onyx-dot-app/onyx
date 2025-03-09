@@ -18,7 +18,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FiArrowDown, FiDownload, FiEdit, FiTrash } from "react-icons/fi";
+import {
+  FiArrowDown,
+  FiArrowLeft,
+  FiDownload,
+  FiEdit,
+  FiTrash,
+} from "react-icons/fi";
 import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 import { AnimatedDots } from "../[id]/components/DocumentList";
@@ -174,9 +180,9 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                     onClick={() => setShowMoveOptions(false)}
                     className="h-8 w-8 p-0"
                   >
-                    <FiArrowDown className="h-4 w-4" />
+                    <FiArrowLeft className="h-4 w-4" />
                   </Button>
-                  <h3 className="text-sm font-medium">Move to folder</h3>
+                  <h3 className="text-sm font-medium">Move to </h3>
                 </div>
                 <div className="max-h-60 default-scrollbar overflow-y-auto pr-2">
                   <div className="space-y-1">

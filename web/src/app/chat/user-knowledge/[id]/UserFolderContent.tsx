@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronRight,
@@ -7,6 +7,7 @@ import {
   ArrowDown,
   Plus,
   Trash,
+  Upload,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
@@ -77,6 +78,8 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     SortDirection.Descending
   );
   const [hoveredColumn, setHoveredColumn] = useState<SortType | null>(null);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const pageContainerRef = useRef<HTMLDivElement>(null);
 
   const modelDescriptors = llmProviders.flatMap((provider) =>
     Object.entries(provider.model_token_limits ?? {}).map(
@@ -88,14 +91,15 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     )
   );
 
-  const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
-
   const { popup: folderCreatedPopup } = usePopupFromQuery({
     "folder-created": {
       message: `Folder created successfully`,
       type: "success",
     },
   });
+  const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
+
+  const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
 
   useEffect(() => {
     if (!folderDetails) {
@@ -331,10 +335,116 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     }
   };
 
+  // Add new drag and drop handlers
+  const handlePageDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (folderDetails?.id !== -1) {
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handlePageDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    // Keep the isDraggingOver state true while dragging over
+    if (folderDetails?.id !== -1 && !isDraggingOver) {
+      setIsDraggingOver(true);
+    }
+  };
+
+  const handlePageDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Only set isDraggingOver to false if we're leaving the container itself
+    if (
+      pageContainerRef.current &&
+      !pageContainerRef.current.contains(e.relatedTarget as Node)
+    ) {
+      setIsDraggingOver(false);
+    }
+  };
+
+  const handlePageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+
+    if (
+      folderDetails?.id !== -1 &&
+      e.dataTransfer.files &&
+      e.dataTransfer.files.length > 0
+    ) {
+      const files = Array.from(e.dataTransfer.files);
+
+      // Track uploading files
+      const fileNames = files.map((file) => file.name);
+      setUploadingFiles((prev) => [...prev, ...fileNames]);
+
+      try {
+        await handleUpload(files);
+        setPopup({
+          message: `${files.length} file${
+            files.length > 1 ? "s" : ""
+          } uploaded successfully`,
+          type: "success",
+        });
+      } catch (error) {
+        console.error("Error uploading files:", error);
+        setPopup({
+          message: "Failed to upload files",
+          type: "error",
+        });
+      }
+
+      // We don't immediately clear uploadingFiles because we want the UI to show them
+      // They will be removed by DocumentList when file processing is complete
+    }
+  };
+
+  // Function to update uploading files that can be called from DocumentList
+  const updateUploadingFiles = (newUploadingFiles: string[]) => {
+    setUploadingFiles(newUploadingFiles);
+  };
+
   return (
-    <div className="h-screen pt-20  w-full min-w-0 flex-1 mx-auto w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8  md:pr-8 2xl:pr-14 relative">
+    <div
+      className={`h-screen pt-20 w-full min-w-0 flex-1 mx-auto w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 md:pr-8 2xl:pr-14 relative ${
+        isDraggingOver ? "drag-overlay" : ""
+      }`}
+      onDragEnter={handlePageDragEnter}
+      onDragOver={handlePageDragOver}
+      onDragLeave={handlePageDragLeave}
+      onDrop={handlePageDrop}
+      ref={pageContainerRef}
+    >
       {popup}
       {folderCreatedPopup}
+
+      {/* Add a visual overlay when dragging files */}
+      {isDraggingOver && (
+        <div className="fixed inset-0 bg-neutral-950/10 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center transition-all duration-200 ease-in-out">
+          <div className="bg-white dark:bg-neutral-900 rounded-lg p-8 shadow-lg text-center border border-neutral-200 dark:border-neutral-800 max-w-md mx-auto">
+            <div className="bg-neutral-100 dark:bg-neutral-800 p-4 rounded-full w-20 h-20 mx-auto mb-5 flex items-center justify-center">
+              <Upload
+                className="w-10 h-10 text-neutral-600 dark:text-neutral-300"
+                strokeWidth={1.5}
+              />
+            </div>
+            <h3 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-50">
+              Drop files to upload
+            </h3>
+            <p className="text-neutral-500 dark:text-neutral-400 text-sm">
+              Files will be uploaded to{" "}
+              <span className="font-medium text-neutral-900 dark:text-neutral-200">
+                {folderDetails?.name || "this folder"}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
       <DeleteEntityModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
@@ -352,26 +462,26 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
       <div className="flex  -mt-[1px] flex-col w-full">
         <div className="flex items-center mb-3">
-          <nav className="flex text-lg  gap-x-1 items-center">
+          <nav className="flex text-lg gap-x-1 items-center">
             <span
-              className="font-medium  leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
+              className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
               onClick={handleBack}
             >
               My Documents
             </span>
-            <span className="text-neutral-800 flex items-center">
-              <ChevronRight className="h-5 w-5" />
+            <span className="text-neutral-800 dark:text-neutral-700 flex items-center">
+              <ChevronRight className="h-5 w-5 text-neutral-600 dark:text-neutral-300" />
             </span>
             {editingItemId === folderDetails.id ? (
-              <div className="flex  -my-1 items-center">
+              <div className="flex -my-1 items-center">
                 <Input
                   value={newItemName}
                   onChange={(e) => setNewItemName(e.target.value)}
-                  className="mr-2 h-8"
+                  className="mr-2 h-8 dark:bg-neutral-800 dark:border-neutral-700"
                 />
                 <Button
                   onClick={() => handleSaveRename(folderDetails.id, true)}
-                  className="mr-2 h-8 py-0"
+                  className="mr-2 h-8 py-0 dark:bg-neutral-700 dark:hover:bg-neutral-600"
                   size="sm"
                 >
                   Save
@@ -379,7 +489,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
                 <Button
                   onClick={handleCancelRename}
                   variant="outline"
-                  className="h-8 py-0"
+                  className="h-8 py-0 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   size="sm"
                 >
                   Cancel
@@ -387,7 +497,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               </div>
             ) : (
               <h1
-                className="text-neutral-900 dark:text-neutral-100 font-medium cursor-pointer "
+                className="text-neutral-900 dark:text-neutral-100 font-medium cursor-pointer hover:text-neutral-700 dark:hover:text-neutral-200"
                 onClick={() =>
                   handleRenameItem(folderDetails.id, folderDetails.name, true)
                 }
@@ -419,7 +529,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         </div>
 
         <div className="mb-6">
-          <div className="relative w-full max-w-md">
+          <div className="relative w-full max-w-xl">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
               <svg
                 width="15"
@@ -427,7 +537,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
                 viewBox="0 0 15 15"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
-                className="w-4 h-4 text-gray-400"
+                className="w-4 h-4 text-neutral-400"
               >
                 <path
                   d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.30884 10.0159C8.53901 10.6318 7.56251 11 6.5 11C4.01472 11 2 8.98528 2 6.5C2 4.01472 4.01472 2 6.5 2C8.98528 2 11 4.01472 11 6.5C11 7.56251 10.6318 8.53901 10.0159 9.30884L12.8536 12.1464C13.0488 12.3417 13.0488 12.6583 12.8536 12.8536C12.6583 13.0488 12.3417 13.0488 12.1464 12.8536L9.30884 10.0159Z"
@@ -440,7 +550,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             <input
               type="text"
               placeholder="Search documents..."
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-md focus:outline-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -451,7 +561,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           <div className="flex items-center space-x-2">
             <Button
               onClick={handleStartChat}
-              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-gray-800"
+              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-neutral-800"
             >
               <MessageSquare className="w-3 h-3" />
               Chat with this folder
@@ -460,26 +570,26 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <div className="flex items-center space-x-3 bg-gray-100 rounded-full px-4 py-1.5">
-                      <div className="relative w-36 h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="flex items-center space-x-3 bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-1.5">
+                      <div className="relative w-36 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
                         <div
                           className={`absolute top-0 left-0 h-full rounded-full ${
                             tokenPercentage >= 100
-                              ? "bg-yellow-500"
-                              : "bg-green-500"
+                              ? "bg-yellow-500 dark:bg-yellow-600"
+                              : "bg-green-500 dark:bg-green-600"
                           }`}
                           style={{
                             width: `${Math.min(tokenPercentage, 100)}%`,
                           }}
                         ></div>
                       </div>
-                      <div className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                      <div className="text-xs text-neutral-600 dark:text-neutral-300 font-medium whitespace-nowrap">
                         {totalTokens.toLocaleString()} /{" "}
                         {maxTokens.toLocaleString()} LLM tokens
                       </div>
                     </div>
                   </TooltipTrigger>
-                  <TooltipContent>
+                  <TooltipContent side="bottom" className="max-w-sm">
                     <p className="text-xs max-w-xs">
                       Maximum tokens for default model{" "}
                       {getDisplayNameForModel(selectedModel.modelName)}, if
@@ -525,6 +635,8 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           setHoveredColumn={setHoveredColumn}
           renderSortIndicator={renderSortIndicator}
           renderHoverIndicator={renderHoverIndicator}
+          externalUploadingFiles={uploadingFiles}
+          updateUploadingFiles={updateUploadingFiles}
         />
       </div>
     </div>

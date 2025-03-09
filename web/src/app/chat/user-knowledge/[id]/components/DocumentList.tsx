@@ -50,6 +50,8 @@ interface DocumentListProps {
   setHoveredColumn?: React.Dispatch<React.SetStateAction<SortType | null>>;
   renderSortIndicator?: (columnType: SortType) => JSX.Element | null;
   renderHoverIndicator?: (columnType: SortType) => JSX.Element | null;
+  externalUploadingFiles?: string[];
+  updateUploadingFiles?: (newUploadingFiles: string[]) => void;
 }
 
 // Animated dots component for the indexing status
@@ -94,6 +96,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   setHoveredColumn,
   renderSortIndicator,
   renderHoverIndicator,
+  externalUploadingFiles = [],
+  updateUploadingFiles,
 }) => {
   const [presentingDocument, setPresentingDocument] =
     useState<FileResponse | null>(null);
@@ -101,6 +105,18 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(
     null
   );
+
+  // Merge external uploading files with local ones
+  useEffect(() => {
+    if (externalUploadingFiles.length > 0) {
+      setUploadingFiles((prev) => {
+        const combinedFiles = [...prev, ...externalUploadingFiles];
+        // Remove duplicates using Array.from and Set
+        return Array.from(new Set(combinedFiles));
+      });
+      startRefreshInterval();
+    }
+  }, [externalUploadingFiles]);
 
   const { createFileFromLink } = useDocumentsContext();
 
@@ -166,6 +182,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       // Check if we've been waiting too long, if so, clear uploading state
       if (Date.now() - startTime > MAX_REFRESH_TIME) {
         setUploadingFiles([]);
+        if (updateUploadingFiles) {
+          updateUploadingFiles([]);
+        }
         clearInterval(interval);
         setRefreshInterval(null);
         return;
@@ -203,6 +222,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
       if (allFilesUploaded && uploadingFiles.length > 0) {
         setUploadingFiles([]);
+        if (updateUploadingFiles) {
+          updateUploadingFiles([]);
+        }
         clearInterval(interval);
         setRefreshInterval(null);
       }
@@ -238,6 +260,11 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       if (remainingUploadingFiles.length !== uploadingFiles.length) {
         setUploadingFiles(remainingUploadingFiles);
 
+        // Also update parent component's state if the function is provided
+        if (updateUploadingFiles) {
+          updateUploadingFiles(remainingUploadingFiles);
+        }
+
         // If all files are uploaded, clear the refresh interval
         if (remainingUploadingFiles.length === 0 && refreshInterval) {
           clearInterval(refreshInterval);
@@ -245,7 +272,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         }
       }
     }
-  }, [files, uploadingFiles, refreshInterval]);
+  }, [files, uploadingFiles, refreshInterval, updateUploadingFiles]);
 
   useEffect(() => {
     return () => {
@@ -289,48 +316,50 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               ))
             ) : (
               <>
-                <div className="flex mr-8 items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
-                  {onSortChange && setHoveredColumn ? (
-                    <>
-                      <button
-                        onClick={() => onSortChange(SortType.Alphabetical)}
-                        onMouseEnter={() =>
-                          setHoveredColumn(SortType.Alphabetical)
-                        }
-                        onMouseLeave={() => setHoveredColumn(null)}
-                        className="w-[40%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-                      >
-                        Name {renderSortIndicator?.(SortType.Alphabetical)}
-                        {renderHoverIndicator?.(SortType.Alphabetical)}
-                      </button>
-                      <button
-                        onClick={() => onSortChange(SortType.TimeCreated)}
-                        onMouseEnter={() =>
-                          setHoveredColumn(SortType.TimeCreated)
-                        }
-                        onMouseLeave={() => setHoveredColumn(null)}
-                        className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-                      >
-                        Created {renderSortIndicator?.(SortType.TimeCreated)}
-                        {renderHoverIndicator?.(SortType.TimeCreated)}
-                      </button>
-                      <button
-                        onClick={() => onSortChange(SortType.Tokens)}
-                        onMouseEnter={() => setHoveredColumn(SortType.Tokens)}
-                        onMouseLeave={() => setHoveredColumn(null)}
-                        className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
-                      >
-                        LLM Tokens {renderSortIndicator?.(SortType.Tokens)}
-                        {renderHoverIndicator?.(SortType.Tokens)}
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <div className="w-[40%]">Name</div>
-                      <div className="w-[30%]">Created</div>
-                      <div className="w-[30%]">LLM Tokens</div>
-                    </>
-                  )}
+                <div className="flex w-full pr-8 border-b border-border dark:border-border-200">
+                  <div className="items-center flex w-full py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
+                    {onSortChange && setHoveredColumn ? (
+                      <>
+                        <button
+                          onClick={() => onSortChange(SortType.Alphabetical)}
+                          onMouseEnter={() =>
+                            setHoveredColumn(SortType.Alphabetical)
+                          }
+                          onMouseLeave={() => setHoveredColumn(null)}
+                          className="w-[40%] flex items-center cursor-pointer transition-colors"
+                        >
+                          Name {renderSortIndicator?.(SortType.Alphabetical)}
+                          {renderHoverIndicator?.(SortType.Alphabetical)}
+                        </button>
+                        <button
+                          onClick={() => onSortChange(SortType.TimeCreated)}
+                          onMouseEnter={() =>
+                            setHoveredColumn(SortType.TimeCreated)
+                          }
+                          onMouseLeave={() => setHoveredColumn(null)}
+                          className="w-[30%] flex items-center cursor-pointer transition-colors"
+                        >
+                          Created {renderSortIndicator?.(SortType.TimeCreated)}
+                          {renderHoverIndicator?.(SortType.TimeCreated)}
+                        </button>
+                        <button
+                          onClick={() => onSortChange(SortType.Tokens)}
+                          onMouseEnter={() => setHoveredColumn(SortType.Tokens)}
+                          onMouseLeave={() => setHoveredColumn(null)}
+                          className="w-[30%] flex items-center cursor-pointer transition-colors"
+                        >
+                          LLM Tokens {renderSortIndicator?.(SortType.Tokens)}
+                          {renderHoverIndicator?.(SortType.Tokens)}
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="w-[40%]">Name</div>
+                        <div className="w-[30%]">Created</div>
+                        <div className="w-[30%]">LLM Tokens</div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {sortedFiles.map((file) => (
@@ -396,9 +425,6 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                       </div>
                       <div className="w-[30%] flex items-center text-text-400 dark:text-neutral-400 text-sm">
                         -
-                        <p className="text-xs ml-auto text-blue-500 dark:text-blue-400">
-                          Uploading
-                        </p>
                       </div>
                     </div>
                   </div>
