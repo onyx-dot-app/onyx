@@ -173,7 +173,7 @@ class BackstageConnector(PollConnector, LoadConnector):
             datetime.now() + timedelta(minutes=1) >= self.token_expiry):
             self._refresh_access_token()
 
-    def get_entities_by_kind(self, kind: str) -> List[Dict[str, Any]]:
+    def _get_entities_by_kind(self, kind: str) -> List[Dict[str, Any]]:
         """
         Fetch entities of a specific kind from Backstage.
         
@@ -278,38 +278,78 @@ class BackstageConnector(PollConnector, LoadConnector):
         return response.json()
 
     def _process_entity(self, entity: Dict[str, Any]) -> Document:
-        """
-        Process a Backstage entity into a document.
-        
-        Args:
-            entity: The entity data from Backstage
-            
-        Returns:
-            A Document object
-        """
-        # Generate a unique ID
         entity_id = generate_entity_id(entity)
-        
-        # Get entity link in the Backstage UI
         entity_link = get_entity_link(self.base_url, entity)
         
-        # Format entity data as readable text
-        entity_text = format_entity_text(entity)
+        # Create multiple sections for better organization
+        sections = []
         
-        # Extract metadata
+        # Overview section with most important entity details
         metadata = extract_entity_metadata(entity)
+        overview_text = (
+            f"# {metadata.get('name', 'Unnamed Entity')}\n\n"
+            f"**Kind**: {metadata.get('kind', 'Unknown')}\n"
+            f"**Description**: {metadata.get('description', 'No description provided')}\n\n"
+        )
+        sections.append(Section(link=entity_link, text=overview_text))
         
-        # Create document
+        # Technical details section with more verbose content
+        tech_details = format_entity_text(entity)
+        if tech_details:
+            sections.append(Section(link=entity_link, text=tech_details))
+        
+        # Relations section if available
+        if "relations" in entity:
+            relations_text = self._format_relations(entity.get("relations", []))
+            if relations_text:
+                sections.append(Section(link=entity_link, text=relations_text))
+        
+        # Create document with enriched metadata
         document = Document(
             id=entity_id,
-            sections=[Section(link=entity_link, text=entity_text)],
+            sections=sections,
             source=DocumentSource.BACKSTAGE,
             semantic_identifier=f"{metadata['kind']}/{metadata['name']}",
-            metadata=metadata,
-            doc_updated_at=datetime.now(),  # Backstage doesn't provide an updated_at field
+            metadata=self._enrich_metadata(metadata, entity),
+            doc_updated_at=datetime.now(),
         )
         
         return document
+    
+    def _format_relations(self, relations: List[Dict[str, Any]]) -> str:
+        """Format entity relations into searchable text"""
+        if not relations:
+            return ""
+            
+        text = "## Relations\n\n"
+        for relation in relations:
+            target = relation.get("target", {})
+            text += (f"- **{relation.get('type', 'Related to')}**: "
+                    f"{target.get('kind', '')} {target.get('name', 'Unknown')}\n")
+        return text
+    
+    def _enrich_metadata(self, metadata: Dict[str, Any], entity: Dict[str, Any]) -> Dict[str, Any]:
+        """Add additional searchable metadata fields"""
+        enriched = metadata.copy()
+        
+        # Add owner information if available
+        if "spec" in entity and "owner" in entity["spec"]:
+            enriched["owner"] = entity["spec"]["owner"]
+        
+        # Add lifecycle information
+        if "spec" in entity and "lifecycle" in entity["spec"]:
+            enriched["lifecycle"] = entity["spec"]["lifecycle"]
+        
+        # Extract tags for filtering
+        if "metadata" in entity and "tags" in entity["metadata"]:
+            enriched["tags"] = entity["metadata"]["tags"]
+            
+        # Extract links for reference
+        if "metadata" in entity and "links" in entity["metadata"]:
+            enriched["links"] = [link.get("url") for link in entity["metadata"]["links"] 
+                                if "url" in link]
+        
+        return enriched
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """
