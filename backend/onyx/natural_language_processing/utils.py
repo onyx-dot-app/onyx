@@ -11,6 +11,8 @@ from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
 from shared_configs.enums import EmbeddingProvider
 
+TRIM_SEP_PAT = "\n... {n} tokens removed...\n"
+
 logger = setup_logger()
 transformer_logging.set_verbosity_error()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -159,9 +161,26 @@ def tokenizer_trim_content(
     content: str, desired_length: int, tokenizer: BaseTokenizer
 ) -> str:
     tokens = tokenizer.encode(content)
-    if len(tokens) > desired_length:
-        content = tokenizer.decode(tokens[:desired_length])
-    return content
+    if len(tokens) <= desired_length:
+        return content
+
+    return tokenizer.decode(tokens[:desired_length])
+
+
+def tokenizer_trim_middle(
+    tokens: list[int], desired_length: int, tokenizer: BaseTokenizer
+) -> str:
+    if len(tokens) <= desired_length:
+        return tokenizer.decode(tokens)
+    sep_str = TRIM_SEP_PAT.format(n=len(tokens) - desired_length)
+    sep_tokens = tokenizer.encode(sep_str)
+    slice_size = (desired_length - len(sep_tokens)) // 2
+    assert slice_size > 0, "Slice size is not positive, desired length is too short"
+    return (
+        tokenizer.decode(tokens[:slice_size])
+        + sep_str
+        + tokenizer.decode(tokens[-slice_size:])
+    )
 
 
 def tokenizer_trim_chunks(

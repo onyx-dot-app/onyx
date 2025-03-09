@@ -26,10 +26,17 @@ export enum EmbeddingPrecision {
   BFLOAT16 = "bfloat16",
 }
 
+export interface LLMContextualCost {
+  provider: string;
+  model_name: string;
+  cost: number;
+}
+
 export interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
   enable_contextual_rag: boolean;
+  contextual_rag_llm: string | null;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
   api_url: string | null;

@@ -237,8 +237,12 @@ Please give a short succinct context to situate this chunk within the overall do
 for the purposes of improving search retrieval of the chunk. Answer only with the succinct
 context and nothing else. """
 
+CONTEXTUAL_RAG_TOKEN_ESTIMATE = 64  # 19 + 45
+
 DOCUMENT_SUMMARY_PROMPT = """<document>
 {document}
 </document>
 Please give a short succinct summary of the entire document. Answer only with the succinct
 summary and nothing else. """
+
+DOCUMENT_SUMMARY_TOKEN_ESTIMATE = 29

@@ -558,8 +558,7 @@ def build_indexing_pipeline(
         if search_settings
         else ENABLE_CONTEXTUAL_RAG
     )
-    llm = get_default_llms()[1] if enable_contextual_rag else None
-
+    fast_llm = get_default_llms()[1] if enable_contextual_rag else None
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
@@ -568,7 +567,7 @@ def build_indexing_pipeline(
         enable_contextual_rag=enable_contextual_rag,
         # after every doc, update status in case there are a bunch of really long docs
         callback=callback,
-        llm=llm
+        llm=fast_llm,
     )
 
     return partial(

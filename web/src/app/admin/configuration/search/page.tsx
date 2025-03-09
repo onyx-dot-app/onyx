@@ -142,10 +142,10 @@ function Main() {
                           : "Disabled"}
                       </Text>
                     </div>
-                    
+
                     <div>
                       <Text className="font-semibold">Contextual RAG</Text>
-                      <Text className="text-gray-700">
+                      <Text className="text-text-700">
                         {searchSettings.enable_contextual_rag
                           ? "Enabled"
                           : "Disabled"}

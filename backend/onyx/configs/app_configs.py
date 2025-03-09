@@ -511,17 +511,15 @@ MAX_FILE_SIZE_BYTES = int(
 )  # 2GB in bytes
 
 # Use document summary for contextual rag
-USE_DOCUMENT_SUMMARY = (
-    os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
-)
+USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
 # Use chunk summary for contextual rag
-USE_CHUNK_SUMMARY = (
-    os.environ.get("USE_CHUNK_SUMMARY", "false").lower() == "true"
-)
+USE_CHUNK_SUMMARY = os.environ.get("USE_CHUNK_SUMMARY", "true").lower() == "true"
 # Average summary embeddings for contextual rag (not yet implemented)
 AVERAGE_SUMMARY_EMBEDDINGS = (
     os.environ.get("AVERAGE_SUMMARY_EMBEDDINGS", "false").lower() == "true"
 )
+
+MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
 #####
 # Miscellaneous

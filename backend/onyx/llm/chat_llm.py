@@ -431,7 +431,6 @@ class DefaultMultiLLM(LLM):
                 # model params
                 temperature=0,
                 timeout=timeout_override or self._timeout,
-                max_tokens=max_tokens,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error

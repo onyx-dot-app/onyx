@@ -673,6 +673,7 @@ interface SelectorFormFieldProps {
   includeReset?: boolean;
   fontSize?: "sm" | "md" | "lg";
   small?: boolean;
+  disabled?: boolean;
 }
 
 export function SelectorFormField({
@@ -688,6 +689,7 @@ export function SelectorFormField({
   includeReset = false,
   fontSize = "md",
   small = false,
+  disabled = false,
 }: SelectorFormFieldProps) {
   const [field] = useField<string>(name);
   const { setFieldValue } = useFormikContext();
@@ -739,8 +741,9 @@ export function SelectorFormField({
                 : setFieldValue(name, selected))
           }
           defaultValue={defaultValue}
+          disabled={disabled}
         >
-          <SelectTrigger className={sizeClass.input}>
+          <SelectTrigger className={sizeClass.input} disabled={disabled}>
             <SelectValue placeholder="Select...">
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
