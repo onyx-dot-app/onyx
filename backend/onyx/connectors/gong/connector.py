@@ -18,7 +18,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 
@@ -243,7 +243,7 @@ class GongConnector(LoadConnector, PollConnector):
                     Document(
                         id=call_id,
                         sections=[
-                            Section(link=call_metadata["url"], text=transcript_text)
+                            TextSection(link=call_metadata["url"], text=transcript_text)
                         ],
                         source=DocumentSource.GONG,
                         # Should not ever be Untitled as a call cannot be made without a Title

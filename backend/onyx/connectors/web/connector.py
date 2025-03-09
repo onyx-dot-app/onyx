@@ -32,7 +32,7 @@ from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
@@ -341,7 +341,7 @@ class WebConnector(LoadConnector):
                     doc_batch.append(
                         Document(
                             id=initial_url,
-                            sections=[Section(link=initial_url, text=page_text)],
+                            sections=[TextSection(link=initial_url, text=page_text)],
                             source=DocumentSource.WEB,
                             semantic_identifier=initial_url.split("/")[-1],
                             metadata=metadata,
@@ -443,7 +443,7 @@ class WebConnector(LoadConnector):
                     Document(
                         id=initial_url,
                         sections=[
-                            Section(link=initial_url, text=parsed_html.cleaned_text)
+                            TextSection(link=initial_url, text=parsed_html.cleaned_text)
                         ],
                         source=DocumentSource.WEB,
                         semantic_identifier=parsed_html.title or initial_url,

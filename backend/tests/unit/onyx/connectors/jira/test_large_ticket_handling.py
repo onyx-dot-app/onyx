@@ -83,6 +83,7 @@ def test_fetch_jira_issues_batch_small_ticket(
 
     assert len(docs) == 1
     assert docs[0].id.endswith("/SMALL-1")
+    assert docs[0].sections[0].text is not None
     assert "Small description" in docs[0].sections[0].text
     assert "Small comment 1" in docs[0].sections[0].text
     assert "Small comment 2" in docs[0].sections[0].text

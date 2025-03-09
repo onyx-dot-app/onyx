@@ -34,7 +34,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import get_message_link
@@ -211,7 +211,7 @@ def thread_to_doc(
     return Document(
         id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
         sections=[
-            Section(
+            TextSection(
                 link=get_message_link(event=m, client=client, channel_id=channel_id),
                 text=slack_cleaner.index_clean(cast(str, m["text"])),
             )

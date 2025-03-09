@@ -63,6 +63,7 @@ def test_slab_connector_basic(slab_connector: SlabConnector) -> None:
     assert len(target_test_doc.sections) == 1
     section = target_test_doc.sections[0]
     # Need to replace the weird apostrophe with a normal one
+    assert section.text is not None
     assert section.text.replace("\u2019", "'") == desired_test_data["section_text"]
     assert section.link == desired_test_data["link"]
 

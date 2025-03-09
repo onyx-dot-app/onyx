@@ -43,9 +43,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
-from onyx.connectors.vision_enabled_connector import VisionEnabledConnector
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -68,7 +66,6 @@ def _convert_single_file(
     creds: Any,
     primary_admin_email: str,
     file: dict[str, Any],
-    image_analysis_llm: LLM | None,
 ) -> Any:
     user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
     user_drive_service = get_drive_service(creds, user_email=user_email)
@@ -77,7 +74,6 @@ def _convert_single_file(
         file=file,
         drive_service=user_drive_service,
         docs_service=docs_service,
-        image_analysis_llm=image_analysis_llm,  # pass the LLM so doc_conversion can summarize images
     )
 
 
@@ -116,9 +112,7 @@ def _clean_requested_drive_ids(
     return valid_requested_drive_ids, filtered_folder_ids
 
 
-class GoogleDriveConnector(
-    LoadConnector, PollConnector, SlimConnector, VisionEnabledConnector
-):
+class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
     def __init__(
         self,
         include_shared_drives: bool = False,
@@ -150,9 +144,6 @@ class GoogleDriveConnector(
             logger.warning("The 'only_org_public' parameter is deprecated.")
         if continue_on_failure is not None:
             logger.warning("The 'continue_on_failure' parameter is deprecated.")
-
-        # Initialize vision LLM using the mixin
-        self.initialize_vision_llm()
 
         if (
             not include_shared_drives
@@ -539,7 +530,6 @@ class GoogleDriveConnector(
                 _convert_single_file,
                 self.creds,
                 self.primary_admin_email,
-                image_analysis_llm=self.image_analysis_llm,  # Use the mixin's LLM
             )
 
             # Fetch files in batches
