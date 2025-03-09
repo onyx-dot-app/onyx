@@ -14,6 +14,7 @@ interface CreateEntityModalProps {
   title: string;
   entityName: string;
   onSubmit: (name: string) => void;
+  placeholder?: string;
   trigger: React.ReactNode;
   open: boolean;
   setOpen: (open: boolean) => void;
@@ -25,6 +26,7 @@ export default function CreateEntityModal({
   entityName,
   onSubmit,
   trigger,
+  placeholder,
   open,
   setOpen,
   hideLabel = false,
@@ -55,7 +57,9 @@ export default function CreateEntityModal({
               id="name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={`Enter ${entityName.toLowerCase()} name`}
+              placeholder={
+                placeholder || `Enter ${entityName.toLowerCase()} name`
+              }
               required
               className="w-full"
             />

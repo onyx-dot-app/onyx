@@ -19,8 +19,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { FiArrowDown, FiDownload, FiEdit, FiTrash } from "react-icons/fi";
-import { getTimeAgoString } from "@/lib/dateUtils";
-import { FileOptionIcon } from "@/components/icons/icons";
+import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
+import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { AnimatedDots } from "../[id]/components/DocumentList";
 
 interface FileListItemProps {
   file: FileResponse;
@@ -93,7 +94,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           {isSelected !== undefined && (
             <Checkbox checked={isSelected} className="mr-2 shrink-0" />
           )}
-          <FileOptionIcon className="h-4 w-4 text-orange-400 dark:text-blue-300 shrink-0" />
+          {getFileIconFromFileName(file.name)}
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -106,29 +107,24 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          {indexingStatus === false && (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger>
-                  <Loader className="h-4 w-4 animate-spin text-amber-500 shrink-0" />
-                </TooltipTrigger>
-                <TooltipContent>
-                  File is being indexed. Search might not include all content
-                  yet.
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+        </div>
+
+        <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
+          {file.created_at &&
+            getFormattedDateTime(
+              new Date(new Date(file.created_at).getTime() - 8 * 60 * 60 * 1000)
+            )}
+        </div>
+
+        <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
+          {indexingStatus == false ? (
+            <>
+              N/A, indexing
+              <AnimatedDots />
+            </>
+          ) : (
+            `File has ${file.token_count?.toLocaleString()} tokens`
           )}
-        </div>
-
-        <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
-          {file.created_at && getTimeAgoString(new Date(file.created_at))}
-        </div>
-
-        <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
-          {file.token_count
-            ? `${file.token_count.toLocaleString()} tokens`
-            : "-"}
         </div>
       </div>
 

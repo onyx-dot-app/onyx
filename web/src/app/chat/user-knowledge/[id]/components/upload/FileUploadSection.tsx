@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Upload, Link, ArrowRight, X, Loader2, FileIcon } from "lucide-react";
 import {
   Tooltip,
@@ -30,6 +30,16 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const dropAreaRef = useRef<HTMLLabelElement>(null);
+  const urlInputRef = useRef<HTMLInputElement>(null);
+
+  const isDisabled = disabled || isUploading || isProcessing;
+
+  // Focus URL input when switching to URL mode
+  useEffect(() => {
+    if (uploadType === "url" && urlInputRef.current && !isDisabled) {
+      urlInputRef.current.focus();
+    }
+  }, [uploadType, isDisabled]);
 
   const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
@@ -134,66 +144,9 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     }
   };
 
-  const isDisabled = disabled || isUploading || isProcessing;
-
-  // // If uploading or processing, show the file list item style uploading state
-  // if (isUploading || isProcessing) {
-  //   return (
-  //     <div className="mt-4 max-w-xl w-full">
-  //       <div className="flex items-center p-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20">
-  //         <div className="w-5 h-5 mr-3 text-blue-500 dark:text-blue-400">
-  //           <Loader2 className="w-5 h-5 animate-spin" />
-  //         </div>
-  //         <div className="flex-1">
-  //           <div className="text-sm font-medium text-blue-700 dark:text-blue-300">
-  //             {uploadType === "url" && fileUrl
-  //               ? `Processing URL: ${fileUrl.substring(0, 30)}${
-  //                   fileUrl.length > 30 ? "..." : ""
-  //                 }`
-  //               : selectedFiles.length > 0
-  //               ? selectedFiles[0].name
-  //               : "Processing file..."}
-  //           </div>
-  //           <div className="text-xs text-blue-500 dark:text-blue-400">
-  //             Uploading...
-  //           </div>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // }
-
   return (
     <div className="mt-4 max-w-xl w-full">
       {/* Toggle Buttons - Now outside the main container */}
-      <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mb-2 w-fit mx-auto">
-        <button
-          type="button"
-          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
-            uploadType === "file"
-              ? "bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shadow-sm font-medium"
-              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-          }`}
-          onClick={() => setUploadType("file")}
-          disabled={isDisabled}
-        >
-          <Upload className="w-3.5 h-3.5" />
-          <span>File</span>
-        </button>
-        <button
-          type="button"
-          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
-            uploadType === "url"
-              ? "bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shadow-sm font-medium"
-              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-          }`}
-          onClick={() => setUploadType("url")}
-          disabled={isDisabled}
-        >
-          <Link className="w-3.5 h-3.5" />
-          <span>URL</span>
-        </button>
-      </div>
 
       {/* Main upload area */}
       <TooltipProvider>
@@ -201,7 +154,9 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           <TooltipTrigger className="w-full">
             <div
               className={`border border-neutral-200 dark:border-neutral-700 bg-transparent rounded-lg p-4 shadow-sm ${
-                !isDisabled && "hover:bg-neutral-50 dark:hover:bg-neutral-800"
+                !isDisabled &&
+                uploadType === "file" &&
+                "hover:bg-neutral-50 dark:hover:bg-neutral-800"
               } transition-colors duration-200 ${
                 isDisabled ? "cursor-not-allowed" : "cursor-pointer"
               } h-[160px] flex items-center justify-center`}
@@ -258,6 +213,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                   ) : (
                     <div className="flex items-center gap-2 w-full max-w-md">
                       <input
+                        ref={urlInputRef}
                         type="text"
                         placeholder="Enter website URL..."
                         className="w-full text-sm py-2 px-3 border border-neutral-200 dark:border-neutral-700 rounded-md bg-transparent focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-neutral-600"
@@ -291,6 +247,34 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           {disabled ? <TooltipContent>{disabledMessage}</TooltipContent> : null}
         </Tooltip>
       </TooltipProvider>
+      <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mt-2 w-fit mx-auto">
+        <button
+          type="button"
+          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
+            uploadType === "file"
+              ? "bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shadow-sm font-medium"
+              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+          }`}
+          onClick={() => setUploadType("file")}
+          disabled={isDisabled}
+        >
+          <Upload className="w-3.5 h-3.5" />
+          <span>File</span>
+        </button>
+        <button
+          type="button"
+          className={`px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 text-xs transition-all ${
+            uploadType === "url"
+              ? "bg-white dark:bg-neutral-700 text-neutral-800 dark:text-neutral-200 shadow-sm font-medium"
+              : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+          }`}
+          onClick={() => setUploadType("url")}
+          disabled={isDisabled}
+        >
+          <Link className="w-3.5 h-3.5" />
+          <span>URL</span>
+        </button>
+      </div>
     </div>
   );
 };

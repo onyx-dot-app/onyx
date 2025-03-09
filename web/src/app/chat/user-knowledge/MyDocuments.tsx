@@ -19,6 +19,12 @@ import CreateEntityModal from "@/components/modals/CreateEntityModal";
 import { useDocumentsContext } from "./DocumentsContext";
 import { SortIcon } from "@/components/icons/icons";
 import TextView from "@/components/chat/TextView";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 enum SortType {
   TimeCreated = "Time Created",
@@ -76,6 +82,7 @@ export default function MyDocuments() {
   const { popup, setPopup } = usePopup();
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
+  const [hoveredColumn, setHoveredColumn] = useState<SortType | null>(null);
 
   const handleSortChange = (newSortType: SortType) => {
     if (sortType === newSortType) {
@@ -86,11 +93,7 @@ export default function MyDocuments() {
       );
     } else {
       setSortType(newSortType);
-      setSortDirection(
-        newSortType === SortType.Alphabetical
-          ? SortDirection.Ascending
-          : SortDirection.Descending
-      );
+      setSortDirection(SortDirection.Descending);
     }
   };
 
@@ -278,8 +281,14 @@ export default function MyDocuments() {
     );
   };
 
+  const renderHoverIndicator = (columnType: SortType) => {
+    if (sortType === columnType || hoveredColumn !== columnType) return null;
+
+    return <ArrowDown className="ml-1 h-3 w-3 inline opacity-70" />;
+  };
+
   return (
-    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-4 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-6 md:pr-8 2xl:pr-14">
+    <div className="min-h-full pt-20 w-full min-w-0 flex-1 mx-auto  w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8  md:pr-8 2xl:pr-14">
       <header className="flex w-full items-center justify-between gap-4 -translate-y-px">
         <h1 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
           My Documents
@@ -289,6 +298,7 @@ export default function MyDocuments() {
             title="New Folder"
             entityName=""
             open={isCreateFolderOpen}
+            placeholder="Untitled folder"
             setOpen={setIsCreateFolderOpen}
             onSubmit={handleCreateFolder}
             trigger={
@@ -301,21 +311,33 @@ export default function MyDocuments() {
           />
         </div>
       </header>
-      <main className="w-full mt-4">
-        <div className="top-3 w-full z-[5] flex gap-4 bg-gradient-to-b via-50% max-lg:flex-col lg:sticky lg:items-center">
-          <div className="flex justify-between w-full">
-            <div className="bg-background-000 dark:bg-neutral-800 border md:max-w-96 border-border-200 dark:border-neutral-700 hover:border-border-100 dark:hover:border-neutral-600 transition-colors placeholder:text-text-500 dark:placeholder:text-neutral-400 focus:border-accent-secondary-100 focus-within:!border-accent-secondary-100 focus:ring-0 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 h-11 px-3 rounded-[0.6rem] w-full inline-flex cursor-text items-stretch gap-2">
-              <div className="flex items-center">
-                <Search className="h-4 w-4 text-text-400 dark:text-neutral-400" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search documllents..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full placeholder:text-text-500 dark:placeholder:text-neutral-400 m-0 bg-transparent p-0 focus:outline-none focus:ring-0 disabled:cursor-not-allowed disabled:opacity-50"
-              />
+      <main className="w-full pt-3 -mt-[1px]">
+        <div className="mb-6">
+          <div className="relative w-full max-w-md">
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 15 15"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+                className="w-4 h-4 text-gray-400"
+              >
+                <path
+                  d="M10 6.5C10 8.433 8.433 10 6.5 10C4.567 10 3 8.433 3 6.5C3 4.567 4.567 3 6.5 3C8.433 3 10 4.567 10 6.5ZM9.30884 10.0159C8.53901 10.6318 7.56251 11 6.5 11C4.01472 11 2 8.98528 2 6.5C2 4.01472 4.01472 2 6.5 2C8.98528 2 11 4.01472 11 6.5C11 7.56251 10.6318 8.53901 10.0159 9.30884L12.8536 12.1464C13.0488 12.3417 13.0488 12.6583 12.8536 12.8536C12.6583 13.0488 12.3417 13.0488 12.1464 12.8536L9.30884 10.0159Z"
+                  fill="currentColor"
+                  fillRule="evenodd"
+                  clipRule="evenodd"
+                ></path>
+              </svg>
             </div>
+            <input
+              type="text"
+              placeholder="Search documents..."
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
         </div>
 
@@ -331,6 +353,52 @@ export default function MyDocuments() {
           />
         )}
         {popup}
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center space-x-2">
+            <Button
+              // onClick={handleStartChat}
+              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-gray-800"
+            >
+              <MessageSquare className="w-3 h-3" />
+              Chat with My Documents
+            </Button>
+            {/* <div className="flex items-center">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center space-x-3 bg-gray-100 rounded-full px-4 py-1.5">
+                      <div className="relative w-36 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`absolute top-0 left-0 h-full rounded-full ${
+                            tokenPercentage >= 100
+                              ? "bg-yellow-500"
+                              : "bg-green-500"
+                          }`}
+                          style={{
+                            width: `${Math.min(tokenPercentage, 100)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                        {totalTokens.toLocaleString()} /{" "}
+                        {maxTokens.toLocaleString()} LLM tokens
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs max-w-xs">
+                      Maximum tokens for default model{" "}
+                      {getDisplayNameForModel(selectedModel.modelName)}, if
+                      exceeded, chat will run a search over the documents rather
+                      than including all of the contents.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div> */}
+          </div>
+        </div>
+
         <div className="flex-grow">
           {isLoading ? (
             <SkeletonLoader />
@@ -339,21 +407,30 @@ export default function MyDocuments() {
               <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
                 <button
                   onClick={() => handleSortChange(SortType.Alphabetical)}
+                  onMouseEnter={() => setHoveredColumn(SortType.Alphabetical)}
+                  onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[40%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
                 >
                   Name {renderSortIndicator(SortType.Alphabetical)}
+                  {renderHoverIndicator(SortType.Alphabetical)}
                 </button>
                 <button
                   onClick={() => handleSortChange(SortType.TimeCreated)}
+                  onMouseEnter={() => setHoveredColumn(SortType.TimeCreated)}
+                  onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
                 >
                   Last Modified {renderSortIndicator(SortType.TimeCreated)}
+                  {renderHoverIndicator(SortType.TimeCreated)}
                 </button>
                 <button
                   onClick={() => handleSortChange(SortType.Tokens)}
+                  onMouseEnter={() => setHoveredColumn(SortType.Tokens)}
+                  onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[30%] flex items-center hover:text-text-600 dark:hover:text-neutral-200 cursor-pointer transition-colors"
                 >
                   LLM Tokens {renderSortIndicator(SortType.Tokens)}
+                  {renderHoverIndicator(SortType.Tokens)}
                 </button>
               </div>
               <div className="flex flex-col">
@@ -392,16 +469,6 @@ export default function MyDocuments() {
           )}
         </div>
       </main>
-      {/* Chat Button (Fixed to bottom right) */}
-      <div className="fixed bottom-8 right-8">
-        <Button
-          size="lg"
-          className="shadow-lg rounded-full hover:shadow-xl transition-shadow"
-        >
-          <MessageSquare className="w-5 h-5" />
-          Chat with all My Documents
-        </Button>
-      </div>
     </div>
   );
 }

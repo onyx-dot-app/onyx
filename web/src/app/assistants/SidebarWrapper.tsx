@@ -133,6 +133,7 @@ export default function SidebarWrapper<T extends object>({
 
       <div className="absolute px-2 left-0 w-full top-0">
         <FunctionalHeader
+          removeHeight={true}
           toggleUserSettings={() => setUserSettingsToggled(true)}
           sidebarToggled={sidebarVisible}
           toggleSidebar={toggleSidebar}
@@ -152,7 +153,7 @@ export default function SidebarWrapper<T extends object>({
                       ${sidebarVisible ? "w-[250px]" : "w-[0px]"}`}
           />
 
-          <div className={`mt-4 w-full mx-auto`}>{children}</div>
+          <div className={` w-full mx-auto`}>{children}</div>
         </div>
       </div>
       <FixedLogo backgroundToggled={sidebarVisible || showDocSidebar} />

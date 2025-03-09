@@ -34,6 +34,7 @@ export type FileResponse = {
   assistant_ids?: number[];
   indexed?: boolean;
   created_at?: string;
+  file_type?: string;
 };
 
 export interface FileUploadResponse {

@@ -1,6 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, MessageSquare } from "lucide-react";
+import {
+  ChevronRight,
+  MessageSquare,
+  ArrowUp,
+  ArrowDown,
+  Plus,
+  Trash,
+} from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
 import { Button } from "@/components/ui/button";
@@ -12,6 +19,25 @@ import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { MoveFolderModal } from "@/components/MoveFolderModal";
 import { FolderResponse } from "../DocumentsContext";
 import { getDisplayNameForModel } from "@/lib/hooks";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import CreateEntityModal from "@/components/modals/CreateEntityModal";
+
+// Define enums outside the component and export them
+export enum SortType {
+  TimeCreated = "Time Created",
+  Alphabetical = "Alphabetical",
+  Tokens = "Tokens",
+}
+
+export enum SortDirection {
+  Ascending = "asc",
+  Descending = "desc",
+}
 
 export default function UserFolderContent({ folderId }: { folderId: number }) {
   const router = useRouter();
@@ -46,6 +72,11 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const [isMoveModalOpen, setIsMoveModalOpen] = useState(false);
   const [folders, setFolders] = useState<FolderResponse[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortType, setSortType] = useState<SortType>(SortType.TimeCreated);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    SortDirection.Descending
+  );
+  const [hoveredColumn, setHoveredColumn] = useState<SortType | null>(null);
 
   const modelDescriptors = llmProviders.flatMap((provider) =>
     Object.entries(provider.model_token_limits ?? {}).map(
@@ -156,13 +187,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     setNewItemName("");
   };
 
-  // const handleEditDescription = () => {
-  //   if (folderDetails) {
-  //     setEditingDescription(true);
-  //     setNewDescription(folderDetails.description);
-  //   }
-  // };
-
   const handleSaveDescription = async () => {
     if (folderDetails && newDescription !== folderDetails.description) {
       try {
@@ -269,8 +293,46 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     }
   };
 
+  const handleSortChange = (newSortType: SortType) => {
+    if (sortType === newSortType) {
+      setSortDirection(
+        sortDirection === SortDirection.Ascending
+          ? SortDirection.Descending
+          : SortDirection.Ascending
+      );
+    } else {
+      setSortType(newSortType);
+      setSortDirection(SortDirection.Descending);
+    }
+  };
+
+  const renderSortIndicator = (columnType: SortType) => {
+    if (sortType !== columnType) return null;
+
+    return sortDirection === SortDirection.Ascending ? (
+      <ArrowUp className="ml-1 h-3 w-3 inline" />
+    ) : (
+      <ArrowDown className="ml-1 h-3 w-3 inline" />
+    );
+  };
+
+  const renderHoverIndicator = (columnType: SortType) => {
+    if (sortType === columnType || hoveredColumn !== columnType) return null;
+
+    return <ArrowDown className="ml-1 h-3 w-3 inline opacity-70" />;
+  };
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+
+  const handleCreateFolder = async (name: string) => {
+    try {
+      // await createFolder(name, folderId);
+    } catch (error) {
+      console.error("Error creating folder:", error);
+    }
+  };
+
   return (
-    <div className="min-h-full w-full min-w-0 flex-1 mx-auto mt-6 w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8 lg:mt-7 md:pr-8 2xl:pr-14 relative">
+    <div className="h-screen pt-20  w-full min-w-0 flex-1 mx-auto w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8  md:pr-8 2xl:pr-14 relative">
       {popup}
       {folderCreatedPopup}
       <DeleteEntityModal
@@ -288,17 +350,17 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         currentFolderId={folderId}
       />
 
-      <div className="flex flex-col w-full">
-        <div className="flex items-center mb-4">
-          <nav className="flex text-lg items-center">
+      <div className="flex  -mt-[1px] flex-col w-full">
+        <div className="flex items-center mb-3">
+          <nav className="flex text-lg  gap-x-1 items-center">
             <span
-              className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
+              className="font-medium  leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
               onClick={handleBack}
             >
               My Documents
             </span>
             <span className="text-neutral-800 flex items-center">
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-5 w-5" />
             </span>
             {editingItemId === folderDetails.id ? (
               <div className="flex  -my-1 items-center">
@@ -334,9 +396,28 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               </h1>
             )}
           </nav>
+          <Button
+            className={`ml-auto inline-flex items-center justify-center relative shrink-0 h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap pl-2 pr-3 gap-1 ${
+              folderId != -1 && "invisible pointer-events-none"
+            }`}
+          >
+            <Trash className="h-5 w-5" />
+            Cleanup
+          </Button>
+          {/* <CreateEntityModal
+            title="New Folder"
+            entityName=""
+            open={isCreateFolderOpen}
+            placeholder="Untitled folder"
+            setOpen={setIsCreateFolderOpen}
+            onSubmit={handleCreateFolder}
+            trigger={
+             
+            }
+            hideLabel
+          /> */}
         </div>
 
-        {/* Search Bar */}
         <div className="mb-6">
           <div className="relative w-full max-w-md">
             <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
@@ -366,24 +447,52 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           </div>
         </div>
 
-        {/* Status Bar & Chat Button */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center space-x-2">
             <Button
               onClick={handleStartChat}
-              className="flex items-center gap-2 bg-black text-white hover:bg-gray-800"
+              className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-gray-800"
             >
-              <MessageSquare className="w-4 h-4" />
+              <MessageSquare className="w-3 h-3" />
               Chat with this folder
             </Button>
-            <div className="text-sm text-gray-500">
-              {totalTokens.toLocaleString()} / {maxTokens.toLocaleString()}{" "}
-              tokens
+            <div className="flex items-center">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center space-x-3 bg-gray-100 rounded-full px-4 py-1.5">
+                      <div className="relative w-36 h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div
+                          className={`absolute top-0 left-0 h-full rounded-full ${
+                            tokenPercentage >= 100
+                              ? "bg-yellow-500"
+                              : "bg-green-500"
+                          }`}
+                          style={{
+                            width: `${Math.min(tokenPercentage, 100)}%`,
+                          }}
+                        ></div>
+                      </div>
+                      <div className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                        {totalTokens.toLocaleString()} /{" "}
+                        {maxTokens.toLocaleString()} LLM tokens
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs max-w-xs">
+                      Maximum tokens for default model{" "}
+                      {getDisplayNameForModel(selectedModel.modelName)}, if
+                      exceeded, chat will run a search over the documents rather
+                      than including all of the contents.
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </div>
           </div>
         </div>
 
-        {/* Document List */}
         <DocumentList
           folderId={folderId}
           isLoading={false}
@@ -409,9 +518,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           maxTokens={maxTokens}
           selectedModelName={getDisplayNameForModel(selectedModel.modelName)}
           searchQuery={searchQuery}
+          sortType={sortType}
+          sortDirection={sortDirection}
+          onSortChange={handleSortChange}
+          hoveredColumn={hoveredColumn}
+          setHoveredColumn={setHoveredColumn}
+          renderSortIndicator={renderSortIndicator}
+          renderHoverIndicator={renderHoverIndicator}
         />
-
-        {/* File Upload Section */}
       </div>
     </div>
   );

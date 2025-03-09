@@ -130,3 +130,26 @@ export const getTimeAgoString = (date: Date | null) => {
   if (diffDays < 30) return `${diffWeeks}w ago`;
   return `${diffMonths}mo ago`;
 };
+
+export const getFormattedDateTime = (date: Date | null) => {
+  if (!date) return null;
+
+  const now = new Date();
+  const isToday = now.toDateString() === date.toDateString();
+
+  if (isToday) {
+    // If it's today, return the time in format like "3:45 PM"
+    return date.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+  } else {
+    // Otherwise return the date in format like "Jan 15, 2023"
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+};

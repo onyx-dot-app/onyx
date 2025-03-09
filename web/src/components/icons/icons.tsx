@@ -1,5 +1,13 @@
 "use client";
 
+import Icon from "@mdi/react";
+import {
+  mdiFilePdfBox,
+  mdiFilePngBox,
+  mdiFileWordBox,
+  mdiFileXmlBox,
+} from "@mdi/js";
+
 import {
   Notebook,
   Key,
@@ -3334,5 +3342,114 @@ export const FileOptionIcon = ({
         fill="currentColor"
       />
     </svg>
+  );
+};
+export const PDFIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <Icon
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-red-500 w-[${size}px] h-[${size}px] ` + className}
+      path={mdiFilePdfBox}
+    />
+  );
+};
+
+export const TXTIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-blue-600 w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      fill="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM9.998 14.768H8.895v3.274h-.917v-3.274H6.893V14h3.105v.768zm2.725 3.274-.365-.731c-.15-.282-.246-.492-.359-.726h-.013c-.083.233-.185.443-.312.726l-.335.731h-1.045l1.171-2.045L10.336 14h1.05l.354.738c.121.245.21.443.306.671h.013c.096-.258.174-.438.276-.671l.341-.738h1.043l-1.139 1.973 1.198 2.069h-1.055zm4.384-3.274h-1.104v3.274h-.917v-3.274h-1.085V14h3.105v.768zM14 9h-1V4l5 5h-4z"></path>
+    </svg>
+  );
+};
+
+export const DOCIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <Icon
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-blue-600 w-[${size}px] h-[${size}px] ` + className}
+      path={mdiFileWordBox}
+    />
+  );
+};
+
+export const HTMLIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-orange-600 w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+    >
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 2 5 5h-5V4zM8.531 18h-.76v-1.411H6.515V18h-.767v-3.373h.767v1.296h1.257v-1.296h.76V18zm3-2.732h-.921V18h-.766v-2.732h-.905v-.641h2.592v.641zM14.818 18l-.05-1.291c-.017-.405-.03-.896-.03-1.387h-.016c-.104.431-.245.911-.375 1.307l-.41 1.316h-.597l-.359-1.307a15.154 15.154 0 0 1-.306-1.316h-.011c-.021.456-.034.976-.059 1.396L12.545 18h-.705l.216-3.373h1.015l.331 1.126c.104.391.21.811.284 1.206h.017c.095-.391.209-.836.32-1.211l.359-1.121h.996L15.563 18h-.745zm3.434 0h-2.108v-3.373h.767v2.732h1.342V18z"></path>
+    </svg>
+  );
+};
+
+export const JSONIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <svg
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-yellow-500 w-[${size}px] h-[${size}px] ` + className}
+      xmlns="http://www.w3.org/2000/svg"
+      width="200"
+      height="200"
+      viewBox="0 0 24 24"
+    >
+      <path
+        fill="currentColor"
+        d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2m3.25 8a1.25 1.25 0 1 0-2.5 0v2a1.25 1.25 0 1 0 2.5 0v-2m4.25-1.25a1.25 1.25 0 0 0-1.25 1.25v2a1.25 1.25 0 1 0 2.5 0v-2a1.25 1.25 0 0 0-1.25-1.25m4.25 1.25a1.25 1.25 0 1 0-2.5 0v2a1.25 1.25 0 1 0 2.5 0v-2z"
+      />
+    </svg>
+  );
+};
+
+export const ImagesIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <Icon
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-blue-600 w-[${size}px] h-[${size}px] ` + className}
+      path={mdiFilePngBox}
+    />
+  );
+};
+
+export const XMLIcon = ({
+  size = 24,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <Icon
+      style={{ width: `${size}px`, height: `${size}px` }}
+      className={`text-teal-500 w-[${size}px] h-[${size}px] ` + className}
+      path={mdiFileXmlBox}
+    />
   );
 };

@@ -6,7 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getTimeAgoString } from "@/lib/dateUtils";
+import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
 
 interface SharedFolderItemProps {
   folder: {
@@ -41,7 +41,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
     >
       <div className="flex items-center flex-1 min-w-0">
         <div className="flex items-center gap-3 w-[40%]">
-          <FolderIcon className="h-5 w-5 text-orange-400 dark:text-orange-300 shrink-0 fill-orange-400 dark:fill-orange-300" />
+          <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -60,7 +60,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
         </div>
 
         <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
-          {lastUpdated && getTimeAgoString(new Date(lastUpdated))}
+          {lastUpdated && getFormattedDateTime(new Date(lastUpdated))}
         </div>
 
         <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
