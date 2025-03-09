@@ -1249,6 +1249,62 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  highspot: {
+    description: "Configure HighSpot connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the HighSpot key",
+        label: "Key",
+        name: "key",
+        optional: false,
+      },
+      {
+        type: "text",
+        query: "Enter the HighSpot secret",
+        label: "Secret",
+        name: "secret",
+        optional: false,
+      },
+      {
+        type: "tab",
+        name: "highspot_mode",
+        label: "What should we index from HighSpot?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repository",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the spot name(s):",
+                label: "Spot Name(s)",
+                name: "spots",
+                optional: false,
+                description:
+                  "For multiple spots, enter comma-separated names (e.g., spot1, spot2, spot3)",
+              },
+            ],
+          },
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all spots the provided credentials have access to!",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
@@ -1521,6 +1577,12 @@ export interface AsanaConfig {
   asana_workspace_id: string;
   asana_project_ids?: string;
   asana_team_id?: string;
+}
+
+export interface HighSpotConfig {
+  key: string;
+  secret: string;
+  spots?: string[];
 }
 
 export interface FreshdeskConfig {}
