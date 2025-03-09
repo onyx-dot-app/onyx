@@ -153,7 +153,8 @@ def send_email(
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
-    msg["From"] = mail_from
+    if mail_from:
+        msg["From"] = mail_from
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="onyx.app")
 
