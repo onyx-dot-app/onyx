@@ -228,9 +228,14 @@ class GitbookConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("GitBook")
 
         try:
-            content = self.client.get(f"/spaces/{self.space_id}/content")
+            content = self.client.get(f"/spaces/{self.space_id}/content/pages")
             pages: list[dict[str, Any]] = content.get("pages", [])
             current_batch: list[Document] = []
+
+            logger.info(f"Found {len(pages)} root pages.")
+            logger.info(
+                f"First 20 Page Ids: {[page.get('id', 'Unknown') for page in pages[:20]]}"
+            )
 
             while pages:
                 page = pages.pop(0)
