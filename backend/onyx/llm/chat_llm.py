@@ -425,6 +425,7 @@ class DefaultMultiLLM(LLM):
                 messages=processed_prompt,
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
+                max_tokens=max_tokens,
                 # streaming choice
                 stream=stream,
                 # model params
@@ -531,6 +532,7 @@ class DefaultMultiLLM(LLM):
                 tool_choice,
                 structured_response_format,
                 timeout_override,
+                max_tokens,
             )
             return
 
