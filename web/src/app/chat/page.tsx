@@ -1,4 +1,4 @@
-import { DocumentsProvider } from "./user-knowledge/DocumentsContext";
+import { DocumentsProvider } from "./my-documents/DocumentsContext";
 import { SEARCH_PARAMS } from "@/lib/extension/constants";
 import WrappedChat from "./WrappedChat";
 

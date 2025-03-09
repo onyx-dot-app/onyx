@@ -102,7 +102,7 @@ export default function MyDocuments() {
 
   const handleFolderClick = (id: number) => {
     startTransition(() => {
-      router.push(`/chat/user-knowledge/${id}`);
+      router.push(`/chat/my-documents/${id}`);
       setPage(1);
       setCurrentFolder(id);
     });
@@ -113,7 +113,7 @@ export default function MyDocuments() {
       const folderResponse = await createFolder(name);
       startTransition(() => {
         // router.push(
-        //   `/chat/user-knowledge/${folderResponse.id}?message=folder-created`
+        //   `/chat/my-documents/${folderResponse.id}?message=folder-created`
         // );
         setPage(1);
         setIsCreateFolderOpen(false);

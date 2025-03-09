@@ -129,7 +129,6 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
         }}
         entityType="folder"
         entityName={folder.name}
-        additionalWarning={" This action will delete all files in this folder."}
       />
     </>
   );

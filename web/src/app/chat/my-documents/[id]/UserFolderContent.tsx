@@ -8,6 +8,7 @@ import {
   Plus,
   Trash,
   Upload,
+  AlertCircle,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
@@ -29,6 +30,91 @@ import {
 import CreateEntityModal from "@/components/modals/CreateEntityModal";
 import { CleanupModal, CleanupPeriod } from "@/components/CleanupModal";
 import { bulkCleanupFiles } from "../api";
+
+// Define allowed file extensions
+const ALLOWED_FILE_TYPES = [
+  // Documents
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".txt",
+  ".rtf",
+  ".odt",
+  // Spreadsheets
+  ".csv",
+  ".xls",
+  ".xlsx",
+  ".ods",
+  // Presentations
+  ".ppt",
+  ".pptx",
+  ".odp",
+  // Images
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".bmp",
+  ".svg",
+  ".webp",
+  // Web
+  ".html",
+  ".htm",
+  ".xml",
+  ".json",
+  ".md",
+  ".markdown",
+  // Archives (if supported by your system)
+  ".zip",
+  ".rar",
+  ".7z",
+  ".tar",
+  ".gz",
+  // Code
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".py",
+  ".java",
+  ".c",
+  ".cpp",
+  ".cs",
+  ".php",
+  ".rb",
+  ".go",
+  ".swift",
+  ".html",
+  ".css",
+  ".scss",
+  ".sass",
+  ".less",
+];
+
+// Function to check if a file type is allowed
+const isFileTypeAllowed = (file: File): boolean => {
+  const fileName = file.name.toLowerCase();
+  const fileExtension = fileName.substring(fileName.lastIndexOf("."));
+  return ALLOWED_FILE_TYPES.includes(fileExtension);
+};
+
+// Filter files to only include allowed types
+const filterAllowedFiles = (
+  files: File[]
+): { allowed: File[]; rejected: string[] } => {
+  const allowed: File[] = [];
+  const rejected: string[] = [];
+
+  files.forEach((file) => {
+    if (isFileTypeAllowed(file)) {
+      allowed.push(file);
+    } else {
+      rejected.push(file.name);
+    }
+  });
+
+  return { allowed, rejected };
+};
 
 // Define enums outside the component and export them
 export enum SortType {
@@ -110,6 +196,8 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
+  const [invalidFiles, setInvalidFiles] = useState<string[]>([]);
+  const [showInvalidFileMessage, setShowInvalidFileMessage] = useState(false);
 
   useEffect(() => {
     if (!folderDetails) {
@@ -130,8 +218,18 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     fetchFolders();
   }, []);
 
+  // Hide invalid file message after 5 seconds
+  useEffect(() => {
+    if (showInvalidFileMessage) {
+      const timer = setTimeout(() => {
+        setShowInvalidFileMessage(false);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showInvalidFileMessage]);
+
   const handleBack = () => {
-    router.push("/chat/user-knowledge");
+    router.push("/chat/my-documents");
   };
   if (!folderDetails) {
     return (
@@ -279,7 +377,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         message: "Folder moved successfully",
         type: "success",
       });
-      router.push(`/chat/user-knowledge/${targetFolderId}`);
+      router.push(`/chat/my-documents/${targetFolderId}`);
     } catch (error) {
       console.error("Error moving folder:", error);
       setPopup({
@@ -405,23 +503,35 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     ) {
       const files = Array.from(e.dataTransfer.files);
 
-      // Track uploading files
-      const fileNames = files.map((file) => file.name);
-      setUploadingFiles((prev) => [...prev, ...fileNames]);
+      // Filter out invalid file types
+      const { allowed, rejected } = filterAllowedFiles(files);
 
-      // Initialize progress for each file
-      fileNames.forEach((fileName) => {
-        handleUploadProgress(fileName, 0);
-      });
+      // Show error message if there are invalid files
+      if (rejected.length > 0) {
+        setInvalidFiles(rejected);
+        setShowInvalidFileMessage(true);
+      }
 
-      try {
-        await handleUpload(files);
-      } catch (error) {
-        console.error("Error uploading files:", error);
-        setPopup({
-          message: "Failed to upload files",
-          type: "error",
+      // Only proceed if there are valid files
+      if (allowed.length > 0) {
+        // Track uploading files
+        const fileNames = allowed.map((file) => file.name);
+        setUploadingFiles((prev) => [...prev, ...fileNames]);
+
+        // Initialize progress for each file
+        fileNames.forEach((fileName) => {
+          handleUploadProgress(fileName, 0);
         });
+
+        try {
+          await handleUpload(allowed);
+        } catch (error) {
+          console.error("Error uploading files:", error);
+          setPopup({
+            message: "Failed to upload files",
+            type: "error",
+          });
+        }
       }
     }
   };
@@ -490,6 +600,34 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       {popup}
       {folderCreatedPopup}
 
+      {/* Invalid file message */}
+      {showInvalidFileMessage && invalidFiles.length > 0 && (
+        <div className="fixed top-24 right-4 z-50 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-800 dark:text-yellow-200 text-sm shadow-md max-w-md flex items-start">
+          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">
+              Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
+            </p>
+            <p className="mt-1">
+              {invalidFiles.length > 1
+                ? `The following files cannot be uploaded: ${invalidFiles
+                    .slice(0, 3)
+                    .join(", ")}${
+                    invalidFiles.length > 3
+                      ? ` and ${invalidFiles.length - 3} more`
+                      : ""
+                  }`
+                : `The file "${invalidFiles[0]}" cannot be uploaded.`}
+            </p>
+            <p className="mt-1 text-xs">
+              Allowed file types: documents (.pdf, .doc, .docx, .txt),
+              spreadsheets (.csv, .xls, .xlsx), images (.jpg, .png, .gif), and
+              more.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Add a visual overlay when dragging files */}
       {isDraggingOver && (
         <div className="fixed inset-0 bg-neutral-950/10 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center transition-all duration-200 ease-in-out">
@@ -519,11 +657,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         onConfirm={confirmDelete}
         entityType={deleteItemType}
         entityName={deleteItemName}
-        additionalWarning={
-          deleteItemType === "folder"
-            ? "This action will delete all within this folder."
-            : undefined
-        }
       />
       <MoveFolderModal
         isOpen={isMoveModalOpen}

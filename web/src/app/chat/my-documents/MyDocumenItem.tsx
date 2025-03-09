@@ -93,7 +93,7 @@ export function FolderItem({
       onDrop={(e) => onDrop(e, folder.id)}
     >
       <div className="flex items-center">
-        <FolderIcon className="mr-2" />
+        <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
         {isEditing ? (
           <div className="flex items-center">
             <input

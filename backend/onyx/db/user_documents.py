@@ -25,7 +25,7 @@ from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
-from onyx.file_processing.extract_file_text import read_text_file
+from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
@@ -49,14 +49,34 @@ def create_user_files(
     context_files = _read_files_and_metadata(
         file_name=str(upload_response.file_paths[0]), db_session=db_session
     )
+    file_name, file_obj = next(context_files)[0:2]
 
-    content, _ = read_text_file(next(context_files)[1])
+    content, _ = extract_text_and_images(file_obj, file_name)
     llm, _ = get_default_llms()
 
     llm_tokenizer = get_tokenizer(
         model_name=llm.config.model_name,
         provider_type=llm.config.model_provider,
     )
+    print("ENCODING THE CONTENT")
+    # Save content to a text file for debugging or analysis
+    import os
+    from datetime import datetime
+
+    # Create a directory for saving user file content if it doesn't exist
+    save_dir = os.path.join(os.getcwd(), "user_file_content")
+    os.makedirs(save_dir, exist_ok=True)
+
+    # Generate a unique filename with timestamp
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"user_file_{timestamp}.txt"
+    file_path = os.path.join(save_dir, filename)
+
+    # Write the content to the file
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    print(f"Content saved to {file_path}")
     token_count = len(llm_tokenizer.encode(content))
 
     for file_path, file in zip(upload_response.file_paths, files):

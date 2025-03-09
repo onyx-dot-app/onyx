@@ -1,7 +1,7 @@
 import React from "react";
-import { cn } from "@/lib/utils";
+import { cn, truncateString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { X, Folder, File } from "lucide-react";
+import { X, Folder, File, FolderIcon } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -11,12 +11,15 @@ import {
   useDocumentsContext,
 } from "../DocumentsContext";
 import { useDocumentSelection } from "../../useDocumentSelection";
+import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 
 interface SelectedItemsListProps {
   folders: FolderResponse[];
   files: FileResponse[];
   onRemoveFile: (file: FileResponse) => void;
   onRemoveFolder: (folder: FolderResponse) => void;
+  setPresentingDocument: (onyxDocument: MinimalOnyxDocument) => void;
 }
 
 export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
@@ -24,8 +27,15 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
   files,
   onRemoveFile,
   onRemoveFolder,
+  setPresentingDocument,
 }) => {
   const hasItems = folders.length > 0 || files.length > 0;
+  const openFile = (file: FileResponse) => {
+    setPresentingDocument({
+      semantic_identifier: file.name,
+      document_id: file.document_id,
+    });
+  };
 
   return (
     <div className="h-full w-full flex flex-col">
@@ -35,37 +45,37 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
         </h3>
       </div>
 
-      <Separator className="mb-3 dark:bg-neutral-700" />
-
       <ScrollArea className="flex-grow pr-1">
         <div className="space-y-2.5">
           {folders.length > 0 && (
             <div className="space-y-2.5">
               {folders.map((folder: FolderResponse) => (
-                <div
-                  key={folder.id}
-                  className={cn(
-                    "group flex items-center justify-between rounded-md border p-2.5",
-                    "bg-neutral-100/80 border-neutral-200 hover:bg-neutral-200/60",
-                    "dark:bg-neutral-800/80 dark:border-neutral-700 dark:hover:bg-neutral-750",
-                    "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
-                    "dark:active:bg-neutral-700 dark:active:border-neutral-600",
-                    "transition-colors duration-150"
-                  )}
-                >
-                  <div className="flex items-center min-w-0 flex-1">
-                    <Folder className="h-4 w-4 mr-2.5 flex-shrink-0 text-neutral-600 dark:text-neutral-300" />
-                    <span className="text-sm font-medium truncate text-neutral-800 dark:text-neutral-100">
-                      {folder.name}
-                    </span>
+                <div key={folder.id} className="flex items-center gap-2">
+                  <div
+                    className={cn(
+                      "group flex-1 flex items-center rounded-md border p-2.5",
+                      "bg-neutral-100/80 border-neutral-200 hover:bg-neutral-200/60",
+                      "dark:bg-neutral-800/80 dark:border-neutral-700 dark:hover:bg-neutral-750",
+                      "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
+                      "dark:active:bg-neutral-700 dark:active:border-neutral-600",
+                      "transition-colors duration-150"
+                    )}
+                  >
+                    <div className="flex items-center min-w-0 flex-1">
+                      <FolderIcon className="h-5 w-5 mr-2 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
+
+                      <span className="text-sm font-medium truncate text-neutral-800 dark:text-neutral-100">
+                        {truncateString(folder.name, 34)}
+                      </span>
+                    </div>
                   </div>
+
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onRemoveFolder(folder)}
                     className={cn(
-                      "h-6 w-6 p-0 ml-1.5 rounded-full",
-                      "opacity-0 group-hover:opacity-100",
+                      "h-6 w-6 p-0 rounded-full shrink-0",
                       "bg-neutral-200/70 hover:bg-neutral-300 hover:text-neutral-700",
                       "dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-300 dark:hover:text-neutral-100",
                       "dark:focus:ring-1 dark:focus:ring-neutral-500",
@@ -84,30 +94,33 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
           {files.length > 0 && (
             <div className="space-y-2.5">
               {files.map((file: FileResponse) => (
-                <div
-                  key={file.id}
-                  className={cn(
-                    "group flex items-center justify-between rounded-md border p-2.5",
-                    "bg-neutral-50 border-neutral-200 hover:bg-neutral-100",
-                    "dark:bg-neutral-800/70 dark:border-neutral-700 dark:hover:bg-neutral-750",
-                    "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
-                    "dark:active:bg-neutral-700 dark:active:border-neutral-600",
-                    "transition-colors duration-150"
-                  )}
-                >
-                  <div className="flex items-center min-w-0 flex-1">
-                    <File className="h-4 w-4 mr-2.5 flex-shrink-0 text-neutral-500 dark:text-neutral-300" />
-                    <span className="text-sm truncate text-neutral-700 dark:text-neutral-200">
-                      {file.name}
-                    </span>
+                <div key={file.id} className="flex items-center gap-2">
+                  <div
+                    className={cn(
+                      "group flex-1 flex items-center rounded-md border p-2.5",
+                      "bg-neutral-50 border-neutral-200 hover:bg-neutral-100",
+                      "dark:bg-neutral-800/70 dark:border-neutral-700 dark:hover:bg-neutral-750",
+                      "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
+                      "dark:active:bg-neutral-700 dark:active:border-neutral-600",
+                      "transition-colors duration-150",
+                      "cursor-pointer"
+                    )}
+                    onClick={() => openFile(file)}
+                  >
+                    <div className="flex items-center min-w-0 flex-1">
+                      {getFileIconFromFileName(file.name)}
+                      <span className="text-sm truncate text-neutral-700 dark:text-neutral-200 ml-2.5">
+                        {truncateString(file.name, 34)}
+                      </span>
+                    </div>
                   </div>
+
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => onRemoveFile(file)}
                     className={cn(
-                      "h-6 w-6 p-0 ml-1.5 rounded-full",
-                      "opacity-0 group-hover:opacity-100",
+                      "h-6 w-6 p-0 rounded-full shrink-0",
                       "bg-neutral-200/70 hover:bg-neutral-300 hover:text-neutral-700",
                       "dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-300 dark:hover:text-neutral-100",
                       "dark:focus:ring-1 dark:focus:ring-neutral-500",

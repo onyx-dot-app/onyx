@@ -151,7 +151,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             {!showMoveOptions ? (
               <div className="space-y-0">
                 <Button variant="menu" onClick={() => setShowMoveOptions(true)}>
-                  <FolderMoveIcon size={20} className="h-4 w-4" />
+                  <FolderMoveIcon size={16} className="h-4 w-4" />
                   Move
                 </Button>
                 <Button

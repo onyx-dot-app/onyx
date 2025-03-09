@@ -56,6 +56,7 @@ export default function CreateEntityModal({
           <div className="space-y-2 w-full">
             {!hideLabel && <Label htmlFor="name">{entityName} Name</Label>}
             <Input
+              autoComplete="off"
               id="name"
               type={type}
               value={name}

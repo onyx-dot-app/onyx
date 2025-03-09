@@ -7,6 +7,7 @@ import {
   Loader2,
   FileIcon,
   Plus,
+  AlertCircle,
 } from "lucide-react";
 import {
   Tooltip,
@@ -14,6 +15,66 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+// Define allowed file extensions
+const ALLOWED_FILE_TYPES = [
+  // Documents
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".txt",
+  ".rtf",
+  ".odt",
+  // Spreadsheets
+  ".csv",
+  ".xls",
+  ".xlsx",
+  ".ods",
+  // Presentations
+  ".ppt",
+  ".pptx",
+  ".odp",
+  // Images
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".gif",
+  ".bmp",
+  ".svg",
+  ".webp",
+  // Web
+  ".html",
+  ".htm",
+  ".xml",
+  ".json",
+  ".md",
+  ".markdown",
+  // Archives (if supported by your system)
+  ".zip",
+  ".rar",
+  ".7z",
+  ".tar",
+  ".gz",
+  // Code
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".py",
+  ".java",
+  ".c",
+  ".cpp",
+  ".cs",
+  ".php",
+  ".rb",
+  ".go",
+  ".swift",
+  ".html",
+  ".css",
+  ".scss",
+  ".sass",
+  ".less",
+];
 
 interface FileUploadSectionProps {
   onUpload: (files: File[]) => void;
@@ -39,18 +100,54 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [invalidFiles, setInvalidFiles] = useState<string[]>([]);
+  const [showInvalidFileMessage, setShowInvalidFileMessage] = useState(false);
   const dropAreaRef = useRef<HTMLLabelElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const isDisabled = disabled || isUploading || isProcessing;
-
   // Focus URL input when switching to URL mode
   useEffect(() => {
-    if (uploadType === "url" && urlInputRef.current && !isDisabled) {
+    if (uploadType === "url" && urlInputRef.current) {
       urlInputRef.current.focus();
     }
-  }, [uploadType, isDisabled]);
+  }, [uploadType]);
+
+  // Hide invalid file message after 5 seconds
+  useEffect(() => {
+    if (showInvalidFileMessage) {
+      const timer = setTimeout(() => {
+        setShowInvalidFileMessage(false);
+        setInvalidFiles([]);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [showInvalidFileMessage]);
+
+  // Function to check if a file type is allowed
+  const isFileTypeAllowed = (file: File): boolean => {
+    const fileName = file.name.toLowerCase();
+    const fileExtension = fileName.substring(fileName.lastIndexOf("."));
+    return ALLOWED_FILE_TYPES.includes(fileExtension);
+  };
+
+  // Filter files to only include allowed types
+  const filterAllowedFiles = (
+    files: File[]
+  ): { allowed: File[]; rejected: string[] } => {
+    const allowed: File[] = [];
+    const rejected: string[] = [];
+
+    files.forEach((file) => {
+      if (isFileTypeAllowed(file)) {
+        allowed.push(file);
+      } else {
+        rejected.push(file.name);
+      }
+    });
+
+    return { allowed, rejected };
+  };
 
   const simulateFileUploadProgress = (file: File) => {
     let progress = 0;
@@ -166,23 +263,34 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     e.preventDefault();
     if (e.target.files && e.target.files.length > 0) {
       const newFiles = Array.from(e.target.files);
-      setSelectedFiles(newFiles);
-      setIsProcessing(true);
+      const { allowed, rejected } = filterAllowedFiles(newFiles);
+      setSelectedFiles(allowed);
 
-      try {
-        // Start progress tracking for each file
-        newFiles.forEach((file) => {
-          simulateFileUploadProgress(file);
-        });
+      // Show error message if there are invalid files
+      if (rejected.length > 0) {
+        setInvalidFiles(rejected);
+        setShowInvalidFileMessage(true);
+      }
 
-        onUpload(newFiles);
+      // Only proceed if there are valid files
+      if (allowed.length > 0) {
+        setIsProcessing(true);
 
-        // Wait a bit to show loading state
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } finally {
-        setIsProcessing(false);
-        if (onUploadComplete) {
-          onUploadComplete();
+        try {
+          // Start progress tracking for each file
+          allowed.forEach((file) => {
+            simulateFileUploadProgress(file);
+          });
+
+          onUpload(allowed);
+
+          // Wait a bit to show loading state
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } finally {
+          setIsProcessing(false);
+          if (onUploadComplete) {
+            onUploadComplete();
+          }
         }
       }
 
@@ -274,23 +382,34 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
     if (!disabled && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       const newFiles = Array.from(e.dataTransfer.files);
-      setSelectedFiles(newFiles);
-      setIsProcessing(true);
+      const { allowed, rejected } = filterAllowedFiles(newFiles);
+      setSelectedFiles(allowed);
 
-      try {
-        // Start progress tracking for each file
-        newFiles.forEach((file) => {
-          simulateFileUploadProgress(file);
-        });
+      // Show error message if there are invalid files
+      if (rejected.length > 0) {
+        setInvalidFiles(rejected);
+        setShowInvalidFileMessage(true);
+      }
 
-        onUpload(newFiles);
+      // Only proceed if there are valid files
+      if (allowed.length > 0) {
+        setIsProcessing(true);
 
-        // Wait a bit to show loading state
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } finally {
-        setIsProcessing(false);
-        if (onUploadComplete) {
-          onUploadComplete();
+        try {
+          // Start progress tracking for each file
+          allowed.forEach((file) => {
+            simulateFileUploadProgress(file);
+          });
+
+          onUpload(allowed);
+
+          // Wait a bit to show loading state
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        } finally {
+          setIsProcessing(false);
+          if (onUploadComplete) {
+            onUploadComplete();
+          }
         }
       }
     }
@@ -298,6 +417,34 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
   return (
     <div className="mt-4 max-w-xl w-full">
+      {/* Invalid file message */}
+      {showInvalidFileMessage && invalidFiles.length > 0 && (
+        <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-800 dark:text-yellow-200 text-sm flex items-start">
+          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">
+              Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
+            </p>
+            <p className="mt-1">
+              {invalidFiles.length > 1
+                ? `The following files cannot be uploaded: ${invalidFiles
+                    .slice(0, 3)
+                    .join(", ")}${
+                    invalidFiles.length > 3
+                      ? ` and ${invalidFiles.length - 3} more`
+                      : ""
+                  }`
+                : `The file "${invalidFiles[0]}" cannot be uploaded.`}
+            </p>
+            <p className="mt-1 text-xs">
+              Allowed file types: documents (.pdf, .doc, .docx, .txt),
+              spreadsheets (.csv, .xls, .xlsx), images (.jpg, .png, .gif), and
+              more.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Toggle Buttons - Now outside the main container */}
 
       {/* Main upload area */}
@@ -307,19 +454,12 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             className={`w-full ${uploadType === "url" ? "cursor-default" : ""}`}
           >
             <div
-              className={`border border-neutral-200 dark:border-neutral-700 bg-transparent rounded-lg p-4 shadow-sm 
+              className={`border  bg-transparent border-neutral-200 dark:border-neutral-700 bg- rounded-lg  shadow-sm 
                 ${
-                  !isDisabled &&
                   uploadType === "file" &&
                   "hover:bg-neutral-50 dark:hover:bg-neutral-800"
                 } transition-colors duration-200 
-                ${
-                  isDisabled
-                    ? "cursor-not-allowed"
-                    : uploadType === "file"
-                      ? "cursor-pointer"
-                      : "cursor-default"
-                }
+                ${uploadType === "file" ? "cursor-pointer" : "cursor-default"}
                  h-[160px] flex items-center justify-center`}
             >
               {/* Common layout structure for both modes */}
@@ -328,9 +468,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                   <label
                     ref={dropAreaRef}
                     htmlFor="file-upload"
-                    className={`w-full h-full cursor-pointer flex flex-col items-center justify-center ${
-                      isDisabled ? "pointer-events-none" : ""
-                    } ${
+                    className={`w-full p-4  h-full cursor-pointer flex flex-col items-center justify-center ${
                       isDragging
                         ? "border-2 border-dashed border-blue-400 dark:border-blue-500 bg-blue-50 dark:bg-blue-900/20 rounded-md"
                         : ""
@@ -358,7 +496,6 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                       </p>
                     </div>
                     <input
-                      disabled={isDisabled}
                       id="file-upload"
                       type="file"
                       multiple
@@ -375,7 +512,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
                     {/* Content area - different for each mode but with consistent spacing */}
                     <div className="flex-1 w-full flex items-start justify-center mt-2">
-                      <div className="flex items-center gap-2 w-full max-w-md">
+                      <div className="flex items-center gap-2 w-full mx-4 max-w-md">
                         <input
                           ref={urlInputRef}
                           type="text"
@@ -384,23 +521,17 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                           value={fileUrl}
                           onChange={handleUrlChange}
                           onKeyDown={handleKeyDown}
-                          disabled={isDisabled}
                         />
                         <button
                           type="button"
                           onClick={handleUrlSubmit}
-                          disabled={!fileUrl || isDisabled}
                           className={`p-2 rounded-md ${
-                            !fileUrl || isDisabled
+                            !fileUrl
                               ? "text-neutral-400 cursor-not-allowed"
                               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
                           }`}
                         >
-                          {isUploading || isProcessing ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Plus className="w-4 h-4" />
-                          )}
+                          <Plus className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -409,9 +540,6 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               </div>
             </div>
           </TooltipTrigger>
-          {disabled ? (
-            <TooltipContent side="bottom">{disabledMessage}</TooltipContent>
-          ) : null}
         </Tooltip>
       </TooltipProvider>
       <div className="flex bg-neutral-100 dark:bg-neutral-800 p-1 rounded-lg self-center mt-2 w-fit mx-auto">
@@ -423,7 +551,6 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
           }`}
           onClick={() => setUploadType("file")}
-          disabled={isDisabled}
         >
           <Upload className="w-3.5 h-3.5" />
           <span>File</span>
@@ -436,7 +563,6 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
           }`}
           onClick={() => setUploadType("url")}
-          disabled={isDisabled}
         >
           <Link className="w-3.5 h-3.5" />
           <span>URL</span>

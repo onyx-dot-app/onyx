@@ -51,14 +51,18 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { getTimeAgoString } from "@/lib/dateUtils";
 import { FileOptionIcon } from "@/components/icons/icons";
 import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
+import { truncateString } from "@/lib/utils";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 
 const DraggableItem: React.FC<{
   id: string;
   type: "folder" | "file";
   item: FolderResponse | FileResponse;
   onClick?: () => void;
+  onSelect?: (e: React.MouseEvent<HTMLDivElement>) => void;
   isSelected: boolean;
-}> = ({ id, type, item, onClick, isSelected }) => {
+}> = ({ id, type, item, onClick, onSelect, isSelected }) => {
   const {
     attributes,
     listeners,
@@ -86,7 +90,7 @@ const DraggableItem: React.FC<{
         <FilePickerFolderItem
           folder={item as FolderResponse}
           onClick={onClick || (() => {})}
-          onSelect={() => {}}
+          onSelect={onSelect || (() => {})}
           isSelected={isSelected}
           allFilesSelected={false}
         />
@@ -101,22 +105,25 @@ const DraggableItem: React.FC<{
       style={style}
       {...attributes}
       {...listeners}
-      className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
+      className="flex group w-full items-center"
     >
+      {/* // className="flex group items-center" */}
+
       <div className="w-6 flex items-center justify-center shrink-0">
         <div
           className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
           onClick={(e) => {
             e.stopPropagation();
-            onClick && onClick();
+            e.preventDefault();
+            onSelect && onSelect(e);
           }}
         >
           <div
             className={`w-4 h-4 border rounded ${
               isSelected
-                ? "bg-blue-500 border-blue-500"
-                : "border-neutral-400 dark:border-neutral-600"
-            } flex items-center justify-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30`}
+                ? "bg-black border-black"
+                : "border-neutral-400 hover:bg-neutral-100 dark:border-neutral-600"
+            } flex items-center justify-center cursor-pointer hover:border-neutral-500 dark:hover:border-neutral-500  dark:hover:bg-neutral-800`}
           >
             {isSelected && (
               <svg
@@ -138,25 +145,29 @@ const DraggableItem: React.FC<{
           </div>
         </div>
       </div>
-      <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
-        <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
-          <FileOptionIcon className="h-4 w-4 text-orange-400 dark:text-blue-300 shrink-0" />
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="truncate text-text-dark dark:text-text-dark">
-                  {file.name}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{file.name}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+      <div
+        className={`group w-full relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
+      >
+        <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
+          <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
+            {getFileIconFromFileName(file.name)}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate text-text-dark dark:text-text-dark">
+                    {truncateString(file.name, 34)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{file.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
 
-        <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
-          {file.lastModified && getTimeAgoString(new Date(file.lastModified))}
+          <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
+            {file.created_at && getTimeAgoString(new Date(file.created_at))}
+          </div>
         </div>
       </div>
     </div>
@@ -166,7 +177,7 @@ const DraggableItem: React.FC<{
 const FilePickerFolderItem: React.FC<{
   folder: FolderResponse;
   onClick: () => void;
-  onSelect: () => void;
+  onSelect: (e: React.MouseEvent<HTMLDivElement>) => void;
   isSelected: boolean;
   allFilesSelected: boolean;
 }> = ({ folder, onClick, onSelect, isSelected, allFilesSelected }) => {
@@ -179,26 +190,23 @@ const FilePickerFolderItem: React.FC<{
   const isEmpty = folder.files.length === 0;
 
   return (
-    <div
-      className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${
-        !isEmpty ? selectedClassName : ""
-      } py-2 px-3 transition-all ease-in-out`}
-    >
+    <div className="flex group w-full items-center">
       <div className="w-6 flex items-center justify-center shrink-0">
         {!isEmpty && (
           <div
             className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
             onClick={(e) => {
+              e.preventDefault();
               e.stopPropagation();
-              onSelect();
+              onSelect(e);
             }}
           >
             <div
               className={`w-4 h-4 border rounded ${
                 isSelected || allFilesSelected
-                  ? "bg-blue-500 border-blue-500"
+                  ? "bg-black border-black"
                   : "border-neutral-400 dark:border-neutral-600"
-              } flex items-center justify-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-400 `}
+              } flex items-center justify-center cursor-pointer hover:border-neutral-500 dark:hover:border-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800`}
             >
               {(isSelected || allFilesSelected) && (
                 <svg
@@ -221,25 +229,32 @@ const FilePickerFolderItem: React.FC<{
           </div>
         )}
       </div>
-      <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
-        <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
-          <FolderIcon className="h-5 w-5 text-orange-400 dark:text-orange-300 shrink-0 fill-orange-400 dark:fill-orange-300" />
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="truncate text-text-dark dark:text-text-dark">
-                  {folder.name}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{folder.name}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
+      <div
+        className={`group w-full relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${
+          !isEmpty ? selectedClassName : ""
+        } py-2 px-3 transition-all ease-in-out`}
+      >
+        <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
+          <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
+            <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
 
-        <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
-          {folder.files.length} {folder.files.length === 1 ? "file" : "files"}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate text-text-dark dark:text-text-dark">
+                    {folder.name}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{folder.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
+            {folder.files.length} {folder.files.length === 1 ? "file" : "files"}
+          </div>
         </div>
       </div>
     </div>
@@ -252,6 +267,7 @@ export interface FilePickerModalProps {
   onSave: () => void;
   title: string;
   buttonContent: string;
+  setPresentingDocument: (onyxDocument: MinimalOnyxDocument) => void;
 }
 
 // Define a model descriptor interface
@@ -264,6 +280,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  setPresentingDocument,
   title,
   buttonContent,
 }) => {
@@ -405,8 +422,18 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       setCurrentFolderFiles([]);
     }
   };
+  const handleFileClick = (file: FileResponse) => {
+    setPresentingDocument({
+      document_id: file.document_id,
+      semantic_identifier: file.name,
+    });
+  };
 
-  const handleFileSelect = (file: FileResponse) => {
+  const handleFileSelect = (
+    e: React.MouseEvent<HTMLDivElement>,
+    file: FileResponse
+  ) => {
+    e.stopPropagation();
     setSelectedFileIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(file.id)) {
@@ -418,7 +445,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       }
       return newSet;
     });
-
     // Check if the file's folder should be unselected
     if (file.folder_id) {
       setSelectedFolderIds((prev) => {
@@ -679,7 +705,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               d="M15 19l-7-7 7-7"
             />
           </svg>
-          Back to Folders
+          Back to My Documents
         </div>
       );
     }
@@ -821,15 +847,17 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
   return (
     <Modal
+      noPadding
       hideDividerForTitle
       onOutsideClick={onClose}
-      className="max-w-4xl flex flex-col w-full !overflow-hidden h-[70vh]"
+      increasedPadding
+      className="max-w-4xl py-6 flex flex-col w-full !overflow-visible h-[70vh]"
       title={title}
     >
-      <div className="flex flex-col h-full">
-        <div className="grid flex-1 overflow-y-hidden w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
-          <div className="w-full h-full pb-4 overflow-y-auto">
-            <div className="sticky flex flex-col gap-y-2  bg-background dark:bg-transparent z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
+      <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col h-full">
+        <div className="grid overflow-x-visible overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
+          <div className="w-full h-full pb-4 overflow-hidden ">
+            <div className="px-6 sticky flex flex-col gap-y-2 z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
               <div className="w-full relative">
                 <input
                   type="text"
@@ -859,13 +887,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             </div>
 
             {filteredFolders.length + currentFolderFiles.length > 0 ? (
-              <div className="flex-grow pr-4">
-                <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-3 text-sm font-medium text-text-400 dark:text-neutral-400">
-                  <div className="w-6 shrink-0">
-                    {/* Empty space for checkbox column */}
-                  </div>
-                  <div className="flex items-center gap-3 w-[65%] min-w-0">
-                    <span className="pl-1">Name</span>
+              <div className="pl-2 flex-grow  overflow-y-auto max-h-full default-scrollbar pr-4">
+                <div className="flex ml-6 items-center border-b border-border dark:border-border-200 py-2 pr-3 text-sm font-medium text-text-400 dark:text-neutral-400">
+                  <div className="flex pl-2 items-center gap-3 w-[65%] min-w-0">
+                    <span className="px-1">Name</span>
                   </div>
                   <div className="w-[35%] text-right pr-4">
                     {currentFolder === null ? "Files" : "Created"}
@@ -907,7 +932,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                               id={`file-${file.id}`}
                               type="file"
                               item={file}
-                              onClick={() => handleFileSelect(file)}
+                              onClick={() => handleFileClick(file)}
+                              onSelect={(e: React.MouseEvent<HTMLDivElement>) =>
+                                handleFileSelect(e, file)
+                              }
                               isSelected={selectedFileIds.has(file.id)}
                             />
                           ))}
@@ -956,7 +984,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                   No groups found
                 </p>
                 <a
-                  href="/chat/user-knowledge"
+                  href="/chat/my-documents"
                   className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
                 >
                   <FolderIcon className="mr-2 h-4 w-4" />
@@ -973,8 +1001,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             onDragLeave={() => setIsHoveringRight(false)}
           >
             <div className="px-5 pb-5 flex-1 flex flex-col">
-              <div className="shrink flex h-full overflow-y-auto mb-3">
+              <div className="shrink default-scrollbar flex h-full overflow-y-auto mb-3">
                 <SelectedItemsList
+                  setPresentingDocument={setPresentingDocument}
                   folders={selectedItems.folders}
                   files={selectedItems.files}
                   onRemoveFile={handleRemoveFile}
@@ -983,8 +1012,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               </div>
 
               <div className="flex flex-col space-y-3">
-                <Separator className="dark:bg-neutral-700" />
-
                 <div className="flex flex-col space-y-2">
                   <FileUploadSection
                     disabled={isUploadingFile || isCreatingFileFromLink}

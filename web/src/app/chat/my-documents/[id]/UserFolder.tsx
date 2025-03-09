@@ -15,7 +15,7 @@ export default function WrappedUserFolders({
       <div className="absolute top-4 left-4">
         <BackButton
           behaviorOverride={() => {
-            router.push("/chat/user-knowledge");
+            router.push("/chat/my-documents");
           }}
         />
       </div>

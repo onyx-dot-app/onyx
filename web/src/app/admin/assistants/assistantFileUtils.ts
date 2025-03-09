@@ -1,7 +1,7 @@
 import {
   FileResponse,
   FolderResponse,
-} from "@/app/chat/user-knowledge/DocumentsContext";
+} from "@/app/chat/my-documents/DocumentsContext";
 
 export interface AssistantFileChanges {
   filesToShare: number[];

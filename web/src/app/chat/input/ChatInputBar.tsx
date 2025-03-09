@@ -35,12 +35,13 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { useDocumentsContext } from "../user-knowledge/DocumentsContext";
+import { useDocumentSelection } from "../useDocumentSelection";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
 import { FidgetSpinner } from "react-loader-spinner";
 import { LoadingAnimation } from "@/components/Loading";
+import { useDocumentsContext } from "../my-documents/DocumentsContext";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({

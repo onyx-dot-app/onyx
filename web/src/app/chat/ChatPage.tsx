@@ -135,7 +135,7 @@ import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
-import { FilePickerModal } from "./user-knowledge/components/FilePicker";
+import { FilePickerModal } from "./my-documents/components/FilePicker";
 
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
@@ -144,8 +144,7 @@ import {
   FileResponse,
   FolderResponse,
   useDocumentsContext,
-} from "./user-knowledge/DocumentsContext";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
+} from "./my-documents/DocumentsContext";
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 
@@ -2279,8 +2278,9 @@ export function ChatPage({
 
       {toggleDocSelection && (
         <FilePickerModal
+          setPresentingDocument={setPresentingDocument}
           buttonContent="Set as Context"
-          title="User Documents"
+          title="My Documents"
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {
