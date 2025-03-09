@@ -149,11 +149,10 @@ def delete_document_tags_for_documents__no_commit(
     stmt = delete(Document__Tag).where(Document__Tag.document_id.in_(document_ids))
     db_session.execute(stmt)
 
-    orphan_tags_query = (
-        select(Tag.id)
-        .outerjoin(Document__Tag, Tag.id == Document__Tag.tag_id)
-        .group_by(Tag.id)
-        .having(func.count(Document__Tag.document_id) == 0)
+    orphan_tags_query = select(Tag.id).where(
+        ~db_session.query(Document__Tag.tag_id)
+        .filter(Document__Tag.tag_id == Tag.id)
+        .exists()
     )
 
     orphan_tags = db_session.execute(orphan_tags_query).scalars().all()
