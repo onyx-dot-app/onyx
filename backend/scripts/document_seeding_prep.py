@@ -161,17 +161,21 @@ overview_doc = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/overview",
     title=overview_title,
     content=overview,
-    title_embedding=model.encode(f"search_document: {overview_title}"),
-    content_embedding=model.encode(f"search_document: {overview_title}\n{overview}"),
+    title_embedding=list(model.encode(f"search_document: {overview_title}")),
+    content_embedding=list(
+        model.encode(f"search_document: {overview_title}\n{overview}")
+    ),
 )
 
 enterprise_search_doc = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/enterprise_search",
     title=enterprise_search_title,
     content=enterprise_search_1,
-    title_embedding=model.encode(f"search_document: {enterprise_search_title}"),
-    content_embedding=model.encode(
-        f"search_document: {enterprise_search_title}\n{enterprise_search_1}"
+    title_embedding=list(model.encode(f"search_document: {enterprise_search_title}")),
+    content_embedding=list(
+        model.encode(
+            f"search_document: {enterprise_search_title}\n{enterprise_search_1}"
+        )
     ),
 )
 
@@ -179,9 +183,11 @@ enterprise_search_doc_2 = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/enterprise_search",
     title=enterprise_search_title,
     content=enterprise_search_2,
-    title_embedding=model.encode(f"search_document: {enterprise_search_title}"),
-    content_embedding=model.encode(
-        f"search_document: {enterprise_search_title}\n{enterprise_search_2}"
+    title_embedding=list(model.encode(f"search_document: {enterprise_search_title}")),
+    content_embedding=list(
+        model.encode(
+            f"search_document: {enterprise_search_title}\n{enterprise_search_2}"
+        )
     ),
     chunk_ind=1,
 )
@@ -190,9 +196,9 @@ ai_platform_doc = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/ai_platform",
     title=ai_platform_title,
     content=ai_platform,
-    title_embedding=model.encode(f"search_document: {ai_platform_title}"),
-    content_embedding=model.encode(
-        f"search_document: {ai_platform_title}\n{ai_platform}"
+    title_embedding=list(model.encode(f"search_document: {ai_platform_title}")),
+    content_embedding=list(
+        model.encode(f"search_document: {ai_platform_title}\n{ai_platform}")
     ),
 )
 
@@ -200,9 +206,9 @@ customer_support_doc = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/support",
     title=customer_support_title,
     content=customer_support,
-    title_embedding=model.encode(f"search_document: {customer_support_title}"),
-    content_embedding=model.encode(
-        f"search_document: {customer_support_title}\n{customer_support}"
+    title_embedding=list(model.encode(f"search_document: {customer_support_title}")),
+    content_embedding=list(
+        model.encode(f"search_document: {customer_support_title}\n{customer_support}")
     ),
 )
 
@@ -210,17 +216,17 @@ sales_doc = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/sales",
     title=sales_title,
     content=sales,
-    title_embedding=model.encode(f"search_document: {sales_title}"),
-    content_embedding=model.encode(f"search_document: {sales_title}\n{sales}"),
+    title_embedding=list(model.encode(f"search_document: {sales_title}")),
+    content_embedding=list(model.encode(f"search_document: {sales_title}\n{sales}")),
 )
 
 operations_doc = SeedPresaveDocument(
     url="https://docs.onyx.app/more/use_cases/operations",
     title=operations_title,
     content=operations,
-    title_embedding=model.encode(f"search_document: {operations_title}"),
-    content_embedding=model.encode(
-        f"search_document: {operations_title}\n{operations}"
+    title_embedding=list(model.encode(f"search_document: {operations_title}")),
+    content_embedding=list(
+        model.encode(f"search_document: {operations_title}\n{operations}")
     ),
 )
 

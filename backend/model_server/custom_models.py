@@ -1,11 +1,14 @@
+import numpy as np
 import torch
 import torch.nn.functional as F
 from fastapi import APIRouter
 from huggingface_hub import snapshot_download  # type: ignore
+from setfit import SetFitModel  # type: ignore[import]
 from transformers import AutoTokenizer  # type: ignore
 from transformers import BatchEncoding  # type: ignore
 from transformers import PreTrainedTokenizer  # type: ignore
 
+from model_server.constants import INFORMATION_CONTENT_MODEL_WARM_UP_STRING
 from model_server.constants import MODEL_WARM_UP_STRING
 from model_server.onyx_torch_model import ConnectorClassifier
 from model_server.onyx_torch_model import HybridClassifier
@@ -13,11 +16,19 @@ from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
+from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE,
+)
 from shared_configs.configs import INDEXING_ONLY
+from shared_configs.configs import INFORMATION_CONTENT_MODEL_TAG
+from shared_configs.configs import INFORMATION_CONTENT_MODEL_VERSION
 from shared_configs.configs import INTENT_MODEL_TAG
 from shared_configs.configs import INTENT_MODEL_VERSION
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
+from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 
@@ -30,6 +41,24 @@ _CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
 
 _INTENT_TOKENIZER: AutoTokenizer | None = None
 _INTENT_MODEL: HybridClassifier | None = None
+
+_INFORMATION_CONTENT_MODEL: SetFitModel | None = None
+
+_INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = ""  # spec to model version!
+
+
+def _create_local_path(
+    model_name_or_path: str, tag: str | None, local_files_only: bool
+) -> str:
+    if tag is None:
+        local_path = snapshot_download(
+            repo_id=model_name_or_path, local_files_only=local_files_only
+        )
+    else:
+        local_path = snapshot_download(
+            repo_id=model_name_or_path, revision=tag, local_files_only=local_files_only
+        )
+    return local_path
 
 
 def get_connector_classifier_tokenizer() -> AutoTokenizer:
@@ -85,7 +114,7 @@ def get_intent_model_tokenizer() -> AutoTokenizer:
 
 def get_local_intent_model(
     model_name_or_path: str = INTENT_MODEL_VERSION,
-    tag: str = INTENT_MODEL_TAG,
+    tag: str | None = INTENT_MODEL_TAG,
 ) -> HybridClassifier:
     global _INTENT_MODEL
     if _INTENT_MODEL is None:
@@ -102,7 +131,9 @@ def get_local_intent_model(
             try:
                 # Attempt to download the model snapshot
                 logger.notice(f"Downloading model snapshot for {model_name_or_path}")
-                local_path = snapshot_download(repo_id=model_name_or_path, revision=tag)
+                local_path = snapshot_download(
+                    repo_id=model_name_or_path, revision=tag, local_files_only=False
+                )
                 _INTENT_MODEL = HybridClassifier.from_pretrained(local_path)
             except Exception as e:
                 logger.error(
@@ -110,6 +141,44 @@ def get_local_intent_model(
                 )
                 raise
     return _INTENT_MODEL
+
+
+def get_local_information_content_model(
+    model_name_or_path: str = INFORMATION_CONTENT_MODEL_VERSION,
+    tag: str | None = INFORMATION_CONTENT_MODEL_TAG,
+) -> SetFitModel:
+    global _INFORMATION_CONTENT_MODEL
+    if _INFORMATION_CONTENT_MODEL is None:
+        try:
+            # Calculate where the cache should be, then load from local if available
+            logger.notice(
+                f"Loading content information model from local cache: {model_name_or_path}"
+            )
+            local_path = snapshot_download(
+                repo_id=model_name_or_path, revision=tag, local_files_only=True
+            )
+            _INFORMATION_CONTENT_MODEL = SetFitModel.from_pretrained(local_path)
+            logger.notice(
+                f"Loaded content information model from local cache: {local_path}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load content information model directly: {e}")
+            try:
+                # Attempt to download the model snapshot
+                logger.notice(
+                    f"Downloading content information model snapshot for {model_name_or_path}"
+                )
+                local_path = snapshot_download(
+                    repo_id=model_name_or_path, revision=tag, local_files_only=False
+                )
+                _INFORMATION_CONTENT_MODEL = SetFitModel.from_pretrained(local_path)
+            except Exception as e:
+                logger.error(
+                    f"Failed to load content information model even after attempted snapshot download: {e}"
+                )
+                raise
+
+    return _INFORMATION_CONTENT_MODEL
 
 
 def tokenize_connector_classification_query(
@@ -195,6 +264,13 @@ def warm_up_intent_model() -> None:
     )
 
 
+def warm_up_information_content_model() -> None:
+    logger.notice("Warming up Content Model")  # TODO: add version if needed
+
+    information_content_model = get_local_information_content_model()
+    information_content_model(INFORMATION_CONTENT_MODEL_WARM_UP_STRING)
+
+
 @simple_log_function_time()
 def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
     intent_model = get_local_intent_model()
@@ -216,6 +292,56 @@ def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
     token_positive_probs = token_probabilities[:, 1].tolist()
 
     return intent_probabilities.tolist(), token_positive_probs
+
+
+@simple_log_function_time()
+def run_content_classification_inference(
+    text_inputs: list[str],
+) -> list[ContentClassificationPrediction]:
+    def _prob_to_score(prob: float) -> float:
+        if prob < 0.25:
+            raw_score = 0.0
+        elif prob < 0.75:
+            raw_score = (prob - 0.25) / 0.5
+        else:
+            raw_score = 1.0
+        return (
+            INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+            + (
+                INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
+                - INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
+            )
+            * raw_score
+        )
+
+    content_model = get_local_information_content_model()
+
+    output_classes = list([x.numpy() for x in content_model(text_inputs)])
+    base_output_probabilities = list(
+        [x[1].numpy() for x in content_model.predict_proba(text_inputs)]
+    )
+    logits = [np.log(p / (1 - p)) for p in base_output_probabilities]
+    scaled_logits = [
+        logit / INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE
+        for logit in logits
+    ]
+    output_probabilities_with_temp = [
+        np.exp(scaled_logit) / (1 + np.exp(scaled_logit))
+        for scaled_logit in scaled_logits
+    ]
+
+    prediction_scores = [
+        _prob_to_score(p_temp) for p_temp in output_probabilities_with_temp
+    ]
+
+    content_classification_predictions = [
+        ContentClassificationPrediction(
+            predicted_label=predicted_label, content_boost_factor=output_score
+        )
+        for predicted_label, output_score in zip(output_classes, prediction_scores)
+    ]
+
+    return content_classification_predictions
 
 
 def map_keywords(
@@ -362,3 +488,15 @@ async def process_analysis_request(
 
     is_keyword, keywords = run_analysis(intent_request)
     return IntentResponse(is_keyword=is_keyword, keywords=keywords)
+
+
+@router.post("/content-classification")
+async def process_content_classification_request(
+    content_classification_requests: list[str],
+) -> list[ContentClassificationPrediction]:
+    return run_content_classification_inference(
+        [
+            _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX + req
+            for req in content_classification_requests
+        ]
+    )
