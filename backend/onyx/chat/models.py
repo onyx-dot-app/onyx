@@ -56,30 +56,33 @@ class SubQuestionIdentifier(BaseModel):
 
     @staticmethod
     def make_dict_by_level(
-        original_dict: Mapping[tuple[int | None, int | None], "SubQuestionIdentifier"]
-    ) -> dict[int | None, list["SubQuestionIdentifier"]]:
+        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"]
+    ) -> dict[int, list["SubQuestionIdentifier"]]:
         """returns a dict of level to object list (sorted by level_question_num)
         Ordering is asc for readability.
         """
-        # In this function, when we sort int | None, we deliberately push None to the end
 
         # organize by level, then sort ascending by question_index
-        level_dict: dict[int | None, list[SubQuestionIdentifier]] = {}
+        level_dict: dict[int, list[SubQuestionIdentifier]] = {}
+
+        # group by level
         for k, obj in original_dict.items():
             level = k[0]
             if level not in level_dict:
                 level_dict[level] = []
             level_dict[level].append(obj)
 
+        # for each level, sort the group
         for k2, value2 in level_dict.items():
+            # we need to handle the none case due to SubQuestionIdentifier typing
+            # level_question_num as int | None, even though it should never be None here.
             level_dict[k2] = sorted(
                 value2,
-                key=lambda x: (x is None, x),
+                key=lambda x: (x.level_question_num is None, x.level_question_num),
             )
 
-        sorted_dict = OrderedDict(
-            sorted(level_dict.items(), key=lambda x: (x is None, x))
-        )
+        # sort by level
+        sorted_dict = OrderedDict(sorted(level_dict.items()))
         return sorted_dict
 
 

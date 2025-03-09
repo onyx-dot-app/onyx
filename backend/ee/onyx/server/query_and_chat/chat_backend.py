@@ -101,9 +101,9 @@ def _convert_packet_stream_to_response(
     answer = ""
 
     # accumulate stream data with these dicts
-    agent_sub_questions: dict[tuple[int | None, int | None], AgentSubQuestion] = {}
-    agent_answers: dict[tuple[int | None, int | None], AgentAnswer] = {}
-    agent_sub_queries: dict[tuple[int | None, int | None, int], AgentSubQuery] = {}
+    agent_sub_questions: dict[tuple[int, int], AgentSubQuestion] = {}
+    agent_answers: dict[tuple[int, int], AgentAnswer] = {}
+    agent_sub_queries: dict[tuple[int, int, int], AgentSubQuery] = {}
 
     for packet in packets:
         if isinstance(packet, OnyxAnswerPiece) and packet.answer_piece:
@@ -115,12 +115,13 @@ def _convert_packet_stream_to_response(
             response.simple_search_docs = _translate_doc_response_to_simple_doc(packet)
 
             # This is a no-op if agent_sub_questions hasn't already been filled
-            id = (packet.level, packet.level_question_num)
-            if id in agent_sub_questions:
-                agent_sub_questions[id].document_ids = [
-                    saved_search_doc.document_id
-                    for saved_search_doc in packet.top_documents
-                ]
+            if packet.level is not None and packet.level_question_num is not None:
+                id = (packet.level, packet.level_question_num)
+                if id in agent_sub_questions:
+                    agent_sub_questions[id].document_ids = [
+                        saved_search_doc.document_id
+                        for saved_search_doc in packet.top_documents
+                    ]
         elif isinstance(packet, StreamingError):
             response.error_msg = packet.error
         elif isinstance(packet, ChatMessageDetail):
@@ -139,45 +140,46 @@ def _convert_packet_stream_to_response(
             }
         # agentic packets
         elif isinstance(packet, SubQuestionPiece):
-            level = packet.level
-            level_question_num = packet.level_question_num
-            id = (level, level_question_num)
-            if agent_sub_questions.get(id) is None:
-                agent_sub_questions[id] = AgentSubQuestion(
-                    level=level,
-                    level_question_num=level_question_num,
-                    sub_question=packet.sub_question,
-                    document_ids=[],
-                )
-            else:
-                agent_sub_questions[id].sub_question += packet.sub_question
+            if packet.level is not None and packet.level_question_num is not None:
+                id = (packet.level, packet.level_question_num)
+                if agent_sub_questions.get(id) is None:
+                    agent_sub_questions[id] = AgentSubQuestion(
+                        level=packet.level,
+                        level_question_num=packet.level_question_num,
+                        sub_question=packet.sub_question,
+                        document_ids=[],
+                    )
+                else:
+                    agent_sub_questions[id].sub_question += packet.sub_question
 
         elif isinstance(packet, AgentAnswerPiece):
-            level = packet.level
-            level_question_num = packet.level_question_num
-            id = (level, level_question_num)
-            if agent_answers.get(id) is None:
-                agent_answers[id] = AgentAnswer(
-                    level=level,
-                    level_question_num=level_question_num,
-                    answer=packet.answer_piece,
-                    answer_type=packet.answer_type,
-                )
-            else:
-                agent_answers[id].answer += packet.answer_piece
+            if packet.level is not None and packet.level_question_num is not None:
+                id = (packet.level, packet.level_question_num)
+                if agent_answers.get(id) is None:
+                    agent_answers[id] = AgentAnswer(
+                        level=packet.level,
+                        level_question_num=packet.level_question_num,
+                        answer=packet.answer_piece,
+                        answer_type=packet.answer_type,
+                    )
+                else:
+                    agent_answers[id].answer += packet.answer_piece
         elif isinstance(packet, SubQueryPiece):
-            level = packet.level
-            level_question_num = packet.level_question_num
-            sub_query_id = (level, level_question_num, packet.query_id)
-            if agent_sub_queries.get(sub_query_id) is None:
-                agent_sub_queries[sub_query_id] = AgentSubQuery(
-                    level=level,
-                    level_question_num=level_question_num,
-                    sub_query=packet.sub_query.strip(),
-                    query_id=packet.query_id,
+            if packet.level is not None and packet.level_question_num is not None:
+                sub_query_id = (
+                    packet.level,
+                    packet.level_question_num,
+                    packet.query_id,
                 )
-            else:
-                agent_sub_queries[sub_query_id].sub_query += packet.sub_query
+                if agent_sub_queries.get(sub_query_id) is None:
+                    agent_sub_queries[sub_query_id] = AgentSubQuery(
+                        level=packet.level,
+                        level_question_num=packet.level_question_num,
+                        sub_query=packet.sub_query,
+                        query_id=packet.query_id,
+                    )
+                else:
+                    agent_sub_queries[sub_query_id].sub_query += packet.sub_query
         elif isinstance(packet, ExtendedToolResponse):
             # we shouldn't get this ... it gets intercepted and translated to QADocsResponse
             logger.warning(
@@ -189,7 +191,7 @@ def _convert_packet_stream_to_response(
             )
         else:
             logger.warning(
-                "_convert_packet_stream_to_response: Unrecognized chat packet type!"
+                f"_convert_packet_stream_to_response - Unrecognized chat packet: type={type(packet)}"
             )
 
     response.final_context_doc_indices = _get_final_context_doc_indices(
@@ -199,7 +201,7 @@ def _convert_packet_stream_to_response(
     # organize / sort agent metadata for output
     if len(agent_sub_questions) > 0:
         response.agent_sub_questions = cast(
-            dict[int | None, list[AgentSubQuestion]],
+            dict[int, list[AgentSubQuestion]],
             SubQuestionIdentifier.make_dict_by_level(agent_sub_questions),
         )
 
@@ -207,7 +209,7 @@ def _convert_packet_stream_to_response(
         # return the agent_level_answer from the first level or the last one depending
         # on agent_refined_answer_improvement
         response.agent_answers = cast(
-            dict[int | None, list[AgentAnswer]],
+            dict[int, list[AgentAnswer]],
             SubQuestionIdentifier.make_dict_by_level(agent_answers),
         )
         if response.agent_answers:
@@ -225,6 +227,11 @@ def _convert_packet_stream_to_response(
                 break
 
     if len(agent_sub_queries) > 0:
+        # subqueries are often emitted with trailing whitespace ... clean it up here
+        # perhaps fix at the source?
+        for v in agent_sub_queries.values():
+            v.sub_query = v.sub_query.strip()
+
         response.agent_sub_queries = (
             AgentSubQuery.make_dict_by_level_and_question_index(agent_sub_queries)
         )

@@ -107,8 +107,8 @@ class AgentSubQuery(SubQuestionIdentifier):
 
     @staticmethod
     def make_dict_by_level_and_question_index(
-        original_dict: dict[tuple[int | None, int | None, int], "AgentSubQuery"]
-    ) -> dict[int | None, dict[int | None, list["AgentSubQuery"]]]:
+        original_dict: dict[tuple[int, int, int], "AgentSubQuery"]
+    ) -> dict[int, dict[int, list["AgentSubQuery"]]]:
         """Takes a dict of tuple(level, question num, query_id) to sub queries.
 
         returns a dict of level to dict[question num to list of query_id's]
@@ -117,9 +117,7 @@ class AgentSubQuery(SubQuestionIdentifier):
         # In this function, when we sort int | None, we deliberately push None to the end
 
         # map entries to the level_question_dict
-        level_question_dict: dict[
-            int | None, dict[int | None, list["AgentSubQuery"]]
-        ] = {}
+        level_question_dict: dict[int, dict[int, list["AgentSubQuery"]]] = {}
         for k1, obj in original_dict.items():
             level = k1[0]
             question = k1[1]
@@ -171,11 +169,9 @@ class ChatBasicResponse(BaseModel):
     llm_chunks_indices: list[int] | None = None
 
     # agentic fields
-    agent_sub_questions: dict[int | None, list[AgentSubQuestion]] | None = None
-    agent_answers: dict[int | None, list[AgentAnswer]] | None = None
-    agent_sub_queries: dict[
-        int | None, dict[int | None, list[AgentSubQuery]]
-    ] | None = None
+    agent_sub_questions: dict[int, list[AgentSubQuestion]] | None = None
+    agent_answers: dict[int, list[AgentAnswer]] | None = None
+    agent_sub_queries: dict[int, dict[int, list[AgentSubQuery]]] | None = None
     agent_refined_answer_improvement: bool | None = None
 
 
