@@ -96,10 +96,15 @@ def create_user_file_with_indexing(
     if trigger_index:
         tenant_id = get_current_tenant_id()
         for user_file in user_files:
-            # Use the existing trigger_indexing_for_cc_pair function but with high priority
+            # Use the existing trigger_indexing_for_cc_pair function but with highest priority
             if user_file.cc_pair_id:
                 trigger_indexing_for_cc_pair(
-                    [], user_file.cc_pair.connector_id, False, tenant_id, db_session
+                    [],
+                    user_file.cc_pair.connector_id,
+                    False,
+                    tenant_id,
+                    db_session,
+                    is_user_file=True,
                 )
 
     return user_files

@@ -1247,6 +1247,7 @@ def trigger_indexing_for_cc_pair(
     from_beginning: bool,
     tenant_id: str,
     db_session: Session,
+    is_user_file: bool = False,
 ) -> int:
     try:
         possible_credential_ids = get_connector_credential_ids(connector_id, db_session)
@@ -1311,9 +1312,10 @@ def trigger_indexing_for_cc_pair(
             )
 
     # run the beat task to pick up the triggers immediately
+    priority = OnyxCeleryPriority.HIGHEST if is_user_file else OnyxCeleryPriority.HIGH
     primary_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
-        priority=OnyxCeleryPriority.HIGH,
+        priority=priority,
         kwargs={"tenant_id": tenant_id},
     )
 

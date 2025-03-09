@@ -37,6 +37,7 @@ from onyx.db.user_documents import share_folder_with_assistant
 from onyx.db.user_documents import unshare_file_with_assistant
 from onyx.db.user_documents import unshare_folder_with_assistant
 from onyx.file_processing.html_utils import web_html_cleanup
+from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
 from onyx.server.documents.models import FileUploadResponse
@@ -44,6 +45,7 @@ from onyx.server.user_documents.models import MessageResponse
 from onyx.server.user_documents.models import UserFileSnapshot
 from onyx.server.user_documents.models import UserFolderSnapshot
 from onyx.setup import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -409,6 +411,12 @@ def create_file_from_link(
             )
             user_file.cc_pair_id = cc_pair.data
             db_session.commit()
+
+            # Trigger immediate indexing with highest priority
+            tenant_id = get_current_tenant_id()
+            trigger_indexing_for_cc_pair(
+                [], connector.id, False, tenant_id, db_session, is_user_file=True
+            )
 
         db_session.commit()
         return FileUploadResponse(
