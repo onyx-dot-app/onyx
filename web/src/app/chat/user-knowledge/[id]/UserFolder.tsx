@@ -3,16 +3,21 @@
 import SidebarWrapper from "@/app/assistants/SidebarWrapper";
 import UserFolderContent from "./UserFolderContent";
 import { BackButton } from "@/components/BackButton";
-
+import { useRouter } from "next/navigation";
 export default function WrappedUserFolders({
   userFileId,
 }: {
   userFileId: string;
 }) {
+  const router = useRouter();
   return (
     <div className="mx-auto w-full">
       <div className="absolute top-4 left-4">
-        <BackButton />
+        <BackButton
+          behaviorOverride={() => {
+            router.push("/chat/user-knowledge");
+          }}
+        />
       </div>
       <UserFolderContent folderId={Number(userFileId)} />
     </div>

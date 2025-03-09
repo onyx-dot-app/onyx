@@ -588,6 +588,10 @@ export function ChatPage({
 
   useEffect(() => {
     const userFolderId = searchParams.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID);
+    const allMyDocuments = searchParams.get(
+      SEARCH_PARAM_NAMES.ALL_MY_DOCUMENTS
+    );
+
     if (userFolderId) {
       const userFolder = userFolders.find(
         (folder) => folder.id === parseInt(userFolderId)
@@ -595,8 +599,22 @@ export function ChatPage({
       if (userFolder) {
         addSelectedFolder(userFolder);
       }
+    } else if (allMyDocuments === "true" || allMyDocuments === "1") {
+      // Clear any previously selected folders
+      clearSelectedItems();
+
+      // Add all user folders to the current context
+      userFolders.forEach((folder) => {
+        addSelectedFolder(folder);
+      });
     }
-  }, [userFolders, searchParams.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID)]);
+  }, [
+    userFolders,
+    searchParams.get(SEARCH_PARAM_NAMES.USER_FOLDER_ID),
+    searchParams.get(SEARCH_PARAM_NAMES.ALL_MY_DOCUMENTS),
+    addSelectedFolder,
+    clearSelectedItems,
+  ]);
 
   const [message, setMessage] = useState(
     searchParams.get(SEARCH_PARAM_NAMES.USER_PROMPT) || ""

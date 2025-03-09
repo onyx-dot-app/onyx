@@ -33,16 +33,6 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
         <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
           Selected Items
         </h3>
-        {hasItems && (
-          <Badge
-            variant="outline"
-            size="xs"
-            className="ml-2 dark:border-neutral-600 dark:text-neutral-200 dark:bg-neutral-800/50"
-          >
-            {folders.length + files.length} item
-            {folders.length + files.length !== 1 ? "s" : ""}
-          </Badge>
-        )}
       </div>
 
       <Separator className="mb-3 dark:bg-neutral-700" />

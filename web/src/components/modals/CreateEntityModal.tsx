@@ -19,6 +19,7 @@ interface CreateEntityModalProps {
   open: boolean;
   setOpen: (open: boolean) => void;
   hideLabel?: boolean;
+  type?: string;
 }
 
 export default function CreateEntityModal({
@@ -30,6 +31,7 @@ export default function CreateEntityModal({
   open,
   setOpen,
   hideLabel = false,
+  type = "text",
 }: CreateEntityModalProps) {
   const [name, setName] = useState("");
 
@@ -55,13 +57,14 @@ export default function CreateEntityModal({
             {!hideLabel && <Label htmlFor="name">{entityName} Name</Label>}
             <Input
               id="name"
+              type={type}
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={
                 placeholder || `Enter ${entityName.toLowerCase()} name`
               }
               required
-              className="w-full focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"
+              className="w-full  focus-visible:border focus-visible:border-neutral-200 focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"
             />
           </div>
           <Button type="submit" className="w-full">

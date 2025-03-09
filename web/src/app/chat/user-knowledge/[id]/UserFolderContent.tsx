@@ -42,6 +42,12 @@ export enum SortDirection {
   Descending = "desc",
 }
 
+// Define a type for tracking file upload progress
+interface UploadProgress {
+  fileName: string;
+  progress: number;
+}
+
 export default function UserFolderContent({ folderId }: { folderId: number }) {
   const router = useRouter();
   const { llmProviders } = useChatContext();
@@ -102,6 +108,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
 
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
 
   useEffect(() => {
@@ -369,6 +376,23 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     }
   };
 
+  // Handle file upload progress tracking
+  const handleUploadProgress = (fileName: string, progress: number) => {
+    setUploadProgress((prev) => {
+      const existing = prev.findIndex((p) => p.fileName === fileName);
+      if (existing >= 0) {
+        // Update existing progress
+        const updated = [...prev];
+        updated[existing] = { fileName, progress };
+        return updated;
+      } else {
+        // Add new file progress
+        return [...prev, { fileName, progress }];
+      }
+    });
+  };
+
+  // Add drag-drop upload progress tracking
   const handlePageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -385,14 +409,13 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       const fileNames = files.map((file) => file.name);
       setUploadingFiles((prev) => [...prev, ...fileNames]);
 
+      // Initialize progress for each file
+      fileNames.forEach((fileName) => {
+        handleUploadProgress(fileName, 0);
+      });
+
       try {
         await handleUpload(files);
-        setPopup({
-          message: `${files.length} file${
-            files.length > 1 ? "s" : ""
-          } uploaded successfully`,
-          type: "success",
-        });
       } catch (error) {
         console.error("Error uploading files:", error);
         setPopup({
@@ -400,9 +423,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           type: "error",
         });
       }
-
-      // We don't immediately clear uploadingFiles because we want the UI to show them
-      // They will be removed by DocumentList when file processing is complete
     }
   };
 
@@ -499,6 +519,11 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         onConfirm={confirmDelete}
         entityType={deleteItemType}
         entityName={deleteItemName}
+        additionalWarning={
+          deleteItemType === "folder"
+            ? "This action will delete all within this folder."
+            : undefined
+        }
       />
       <MoveFolderModal
         isOpen={isMoveModalOpen}
@@ -696,6 +721,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           renderHoverIndicator={renderHoverIndicator}
           externalUploadingFiles={uploadingFiles}
           updateUploadingFiles={updateUploadingFiles}
+          onUploadProgress={handleUploadProgress}
         />
       </div>
     </div>

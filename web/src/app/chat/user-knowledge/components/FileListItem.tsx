@@ -18,14 +18,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  FiArrowDown,
-  FiArrowLeft,
-  FiDownload,
-  FiEdit,
-  FiTrash,
-} from "react-icons/fi";
-import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
+import { FiDownload, FiEdit, FiTrash } from "react-icons/fi";
+import { getFormattedDateTime } from "@/lib/dateUtils";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 import { AnimatedDots } from "../[id]/components/DocumentList";
 import { FolderMoveIcon } from "@/components/icons/icons";
@@ -136,7 +130,13 @@ export const FileListItem: React.FC<FileListItemProps> = ({
       </div>
 
       <div className="action-menu" onClick={(e) => e.stopPropagation()}>
-        <Popover>
+        <Popover
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowMoveOptions(false);
+            }
+          }}
+        >
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
@@ -176,14 +176,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             ) : (
               <div className="p-2 text-text-dark space-y-2">
                 <div className="flex items-center space-x-2 mb-4">
-                  <Button
-                    variant="ghost"
-                    onClick={() => setShowMoveOptions(false)}
-                    className="h-8 w-8 p-0"
-                  >
-                    <FiArrowLeft className="h-4 w-4" />
-                  </Button>
-                  <h3 className="text-sm font-medium">Move to </h3>
+                  <h3 className="text-sm  px-2 font-semibold">Move to </h3>
                 </div>
                 <div className="max-h-60 default-scrollbar overflow-y-auto pr-2">
                   <div className="space-y-1">

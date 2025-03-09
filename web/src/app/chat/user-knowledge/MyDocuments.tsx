@@ -156,6 +156,7 @@ export default function MyDocuments() {
         }
       }
     }
+
     // If it's a folder, the SharedFolderItem component will handle it
   };
 
@@ -296,7 +297,7 @@ export default function MyDocuments() {
   };
 
   const handleStartChat = () => {
-    router.push(`/chat/user-knowledge/${currentFolder}`);
+    router.push(`/chat?allMyDocuments=true`);
   };
 
   const totalTokens = folders.reduce(
@@ -390,7 +391,7 @@ export default function MyDocuments() {
               className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-neutral-800"
             >
               <MessageSquare className="w-3 h-3" />
-              Chat with My Docs
+              Chat with My Documents
             </Button>
             <div className="flex items-center">
               <TooltipProvider>
@@ -445,7 +446,7 @@ export default function MyDocuments() {
             <SkeletonLoader />
           ) : filteredFolders.length > 0 ? (
             <div className="mt-6">
-              <div className="flex pr-12 items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
+              <div className="flex pr-12 items-center border-b border-border dark:border-border-200 py-2 px-4 text-sm font-medium text-text-600 dark:text-neutral-400">
                 <button
                   onClick={() => handleSortChange(SortType.Alphabetical)}
                   onMouseEnter={() => setHoveredColumn(SortType.Alphabetical)}

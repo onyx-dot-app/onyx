@@ -1,5 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/Modal";
 
 interface DeleteEntityModalProps {
   isOpen: boolean;
@@ -7,6 +8,7 @@ interface DeleteEntityModalProps {
   onConfirm: () => void;
   entityType: "file" | "folder";
   entityName: string;
+  additionalWarning?: string;
 }
 
 export const DeleteEntityModal: React.FC<DeleteEntityModalProps> = ({
@@ -15,26 +17,35 @@ export const DeleteEntityModal: React.FC<DeleteEntityModalProps> = ({
   onConfirm,
   entityType,
   entityName,
+  additionalWarning,
 }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed z-[10000] inset-0 bg-[#fff] bg-opacity-50 flex items-center justify-center">
-      <div className="max-w-md w-full bg-white p-6 rounded-lg shadow-lg">
-        <h2 className="text-xl font-bold mb-4">Delete {entityType}</h2>
-        <p className="mb-6  line-wrap break-all">
-          Are you sure you want to delete the {entityType} &quot;{entityName}
-          &quot;? This action cannot be undone.
-        </p>
-        <div className="flex justify-end space-x-4">
-          <Button onClick={onClose} variant="outline">
-            Cancel
-          </Button>
-          <Button onClick={onConfirm} variant="destructive">
-            Delete
-          </Button>
+    <Modal
+      onOutsideClick={onClose}
+      width="max-w-md w-full"
+      hideDividerForTitle
+      noPadding
+    >
+      <>
+        <div className="p-6">
+          <h2 className="text-xl font-bold mb-4">Delete {entityType}</h2>
+          <p className="mb-6 line-wrap break-words">
+            Are you sure you want to delete the {entityType} &quot;{entityName}
+            &quot;? This action cannot be undone.
+            {additionalWarning}
+          </p>
+          <div className="flex justify-end space-x-4">
+            <Button onClick={onClose} variant="outline">
+              Cancel
+            </Button>
+            <Button onClick={onConfirm} variant="destructive">
+              Delete
+            </Button>
+          </div>
         </div>
-      </div>
-    </div>
+      </>
+    </Modal>
   );
 };

@@ -17,6 +17,13 @@ import { FileUploadSection } from "./upload/FileUploadSection";
 import { useDocumentSelection } from "@/app/chat/useDocumentSelection";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import { SortType, SortDirection } from "../UserFolderContent";
+import { CircularProgress } from "./upload/CircularProgress";
+
+// Define a type for uploading files that includes progress
+interface UploadingFile {
+  name: string;
+  progress: number;
+}
 
 interface DocumentListProps {
   files: FileResponse[];
@@ -52,6 +59,7 @@ interface DocumentListProps {
   renderHoverIndicator?: (columnType: SortType) => JSX.Element | null;
   externalUploadingFiles?: string[];
   updateUploadingFiles?: (newUploadingFiles: string[]) => void;
+  onUploadProgress?: (fileName: string, progress: number) => void;
 }
 
 // Animated dots component for the indexing status
@@ -98,10 +106,12 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   renderHoverIndicator,
   externalUploadingFiles = [],
   updateUploadingFiles,
+  onUploadProgress,
 }) => {
   const [presentingDocument, setPresentingDocument] =
     useState<FileResponse | null>(null);
-  const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const [completedFiles, setCompletedFiles] = useState<string[]>([]);
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(
     null
   );
@@ -110,18 +120,25 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   useEffect(() => {
     if (externalUploadingFiles.length > 0) {
       setUploadingFiles((prev) => {
-        const combinedFiles = [...prev, ...externalUploadingFiles];
-        // Remove duplicates using Array.from and Set
-        return Array.from(new Set(combinedFiles));
+        // Convert string filenames to UploadingFile objects with 0 progress
+        const newFiles = externalUploadingFiles
+          .filter(
+            (name) =>
+              !prev.some((file) => file.name === name) &&
+              !completedFiles.includes(name)
+          )
+          .map((name) => ({ name, progress: 0 }));
+
+        return [...prev, ...newFiles];
       });
       startRefreshInterval();
     }
-  }, [externalUploadingFiles]);
+  }, [externalUploadingFiles, completedFiles]);
 
   const { createFileFromLink } = useDocumentsContext();
 
   const handleCreateFileFromLink = async (url: string) => {
-    setUploadingFiles((prev) => [...prev, url]);
+    setUploadingFiles((prev) => [...prev, { name: url, progress: 0 }]);
 
     try {
       await createFileFromLink(url, folderId);
@@ -132,12 +149,28 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   };
 
   const handleFileUpload = (files: File[]) => {
-    const fileNames = files.map((file) => file.name);
-    setUploadingFiles((prev) => [...prev, ...fileNames]);
+    const fileObjects = files.map((file) => ({
+      name: file.name,
+      progress: 0,
+    }));
 
+    setUploadingFiles((prev) => [...prev, ...fileObjects]);
     onUpload(files);
-
     startRefreshInterval();
+  };
+
+  // Add a function to update progress for a specific file
+  const updateFileProgress = (fileName: string, progress: number) => {
+    setUploadingFiles((prev) =>
+      prev.map((file) =>
+        file.name === fileName ? { ...file, progress } : file
+      )
+    );
+
+    // If provided, call the onUploadProgress callback
+    if (onUploadProgress) {
+      onUploadProgress(fileName, progress);
+    }
   };
 
   // Filter files based on search query
@@ -169,6 +202,31 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         })
       : filteredFiles;
 
+  // Add a function to mark a file as complete
+  const markFileComplete = (fileName: string) => {
+    // Update progress to 100%
+    setUploadingFiles((prev) =>
+      prev.map((file) =>
+        file.name === fileName ? { ...file, progress: 100 } : file
+      )
+    );
+
+    // Add to completed files
+    setCompletedFiles((prev) => [...prev, fileName]);
+
+    // Remove from uploading files after showing 100% for a moment
+    setTimeout(() => {
+      setUploadingFiles((prev) =>
+        prev.filter((file) => file.name !== fileName)
+      );
+    }, 2000); // Show complete state for 2 seconds
+
+    // Remove from completed files after a longer delay
+    setTimeout(() => {
+      setCompletedFiles((prev) => prev.filter((name) => name !== fileName));
+    }, 3000);
+  };
+
   const startRefreshInterval = () => {
     if (refreshInterval) {
       clearInterval(refreshInterval);
@@ -182,6 +240,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
       // Check if we've been waiting too long, if so, clear uploading state
       if (Date.now() - startTime > MAX_REFRESH_TIME) {
         setUploadingFiles([]);
+        setCompletedFiles([]);
         if (updateUploadingFiles) {
           updateUploadingFiles([]);
         }
@@ -190,45 +249,94 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         return;
       }
 
+      // Simulate progress for files that don't have real progress tracking yet
+      setUploadingFiles((prev) =>
+        prev.map((file) => {
+          // Don't update files that are already complete
+          if (completedFiles.includes(file.name) || file.progress >= 100) {
+            return file;
+          }
+
+          // Slow down progress as it approaches completion for more realistic feel
+          let increment;
+          if (file.progress < 70) {
+            // Normal increment for first 70%
+            increment = Math.floor(Math.random() * 10) + 5;
+          } else if (file.progress < 90) {
+            // Slower increment between 70-90%
+            increment = Math.floor(Math.random() * 5) + 2;
+          } else {
+            // Very slow for final 10%
+            increment = Math.floor(Math.random() * 2) + 1;
+          }
+
+          const newProgress = Math.min(file.progress + increment, 99); // Cap at 99% until confirmed
+          return { ...file, progress: newProgress };
+        })
+      );
+
       const allFilesUploaded = uploadingFiles.every((uploadingFile) => {
-        if (uploadingFile.startsWith("http")) {
+        // Skip files already marked as complete
+        if (completedFiles.includes(uploadingFile.name)) {
+          return true;
+        }
+
+        if (uploadingFile.name.startsWith("http")) {
           // For URL uploads, extract the domain and check for files containing it
           try {
             // Get the hostname (domain) from the URL
-            const url = new URL(uploadingFile);
+            const url = new URL(uploadingFile.name);
             const hostname = url.hostname;
 
             // Look for recently added files that might match this URL
-            // Check if any file has this hostname in its name
-            return files.some(
+            const isUploaded = files.some(
               (file) =>
-                // Check for hostname in filename (URLs typically become domain-based filenames)
+                // Check for hostname in filename
                 file.name.toLowerCase().includes(hostname.toLowerCase()) ||
-                // Also check for files that might have been created in the last minute
-                // This is a fallback if hostname matching doesn't work
+                // Check for recently created files
                 (file.lastModified &&
                   new Date(file.lastModified).getTime() > startTime - 60000)
             );
+
+            if (isUploaded) {
+              // Mark as complete if found in files list
+              markFileComplete(uploadingFile.name);
+            }
+            return isUploaded;
           } catch (e) {
-            // If URL parsing fails, fall back to checking if any new files exist
             console.error("Failed to parse URL:", e);
             return false; // Force continued checking
           }
         }
 
         // For regular file uploads, check if filename exists in the files list
-        return files.some((file) => file.name === uploadingFile);
+        const isUploaded = files.some(
+          (file) => file.name === uploadingFile.name
+        );
+        if (isUploaded) {
+          // Mark as complete if found in files list
+          markFileComplete(uploadingFile.name);
+        }
+        return isUploaded;
       });
 
-      if (allFilesUploaded && uploadingFiles.length > 0) {
-        setUploadingFiles([]);
-        if (updateUploadingFiles) {
-          updateUploadingFiles([]);
-        }
-        clearInterval(interval);
-        setRefreshInterval(null);
+      if (
+        allFilesUploaded &&
+        uploadingFiles.length > 0 &&
+        completedFiles.length === uploadingFiles.length
+      ) {
+        // If all files are marked complete and no new uploads are happening, clean up
+        setTimeout(() => {
+          setUploadingFiles([]);
+          setCompletedFiles([]);
+          if (updateUploadingFiles) {
+            updateUploadingFiles([]);
+          }
+          clearInterval(interval);
+          setRefreshInterval(null);
+        }, 2000);
       }
-    }, 2000);
+    }, 1000); // Update every second for smoother animation
 
     setRefreshInterval(interval);
   };
@@ -237,10 +345,10 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     if (uploadingFiles.length > 0 && files.length > 0) {
       // Filter out any uploading files that now exist in the files list
       const remainingUploadingFiles = uploadingFiles.filter((uploadingFile) => {
-        if (uploadingFile.startsWith("http")) {
+        if (uploadingFile.name.startsWith("http")) {
           try {
             // For URLs, check if any file contains the hostname
-            const url = new URL(uploadingFile);
+            const url = new URL(uploadingFile.name);
             const hostname = url.hostname;
 
             return !files.some((file) =>
@@ -252,7 +360,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
           }
         } else {
           // For regular files, check if the filename exists
-          return !files.some((file) => file.name === uploadingFile);
+          return !files.some((file) => file.name === uploadingFile.name);
         }
       });
 
@@ -262,7 +370,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 
         // Also update parent component's state if the function is provided
         if (updateUploadingFiles) {
-          updateUploadingFiles(remainingUploadingFiles);
+          const fileNames = remainingUploadingFiles.map((file) => file.name);
+          updateUploadingFiles(fileNames);
         }
 
         // If all files are uploaded, clear the refresh interval
@@ -300,7 +409,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             />
           )}
 
-          <div className="space-y-0 overflow-y-auto h-[calc(100%)]">
+          <div className="default-scrollbar space-y-0 overflow-y-auto h-[calc(100%)]">
             {isLoading ? (
               Array.from({ length: 3 }).map((_, index) => (
                 <div
@@ -317,7 +426,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             ) : (
               <>
                 <div className="flex w-full pr-8 border-b border-border dark:border-border-200">
-                  <div className="items-center flex w-full py-2 px-4 text-sm font-medium text-text-400 dark:text-neutral-400">
+                  <div className="items-center flex w-full py-2 px-4 text-sm font-medium text-text-600 dark:text-neutral-400">
                     {onSortChange && setHoveredColumn ? (
                       <>
                         <button
@@ -404,20 +513,32 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                     )}
                   </div>
                 ))}
-                {uploadingFiles.map((fileName, index) => (
+                {uploadingFiles.map((uploadingFile, index) => (
                   <div
                     key={`uploading-${index}`}
-                    className="group relative mr-8 flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-4 px-4 transition-all ease-in-out"
+                    className={`group relative mr-8 flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-4 px-4 transition-all ease-in-out ${
+                      completedFiles.includes(uploadingFile.name)
+                        ? "bg-green-50/30 dark:bg-green-900/10"
+                        : ""
+                    }`}
                   >
                     <div className="flex items-center flex-1 min-w-0">
                       <div className="flex items-center gap-3 w-[40%] min-w-0">
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-500 shrink-0" />
+                        {uploadingFile.name.startsWith("http") ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                        ) : (
+                          <CircularProgress
+                            progress={uploadingFile.progress}
+                            size={18}
+                            showPercentage={false}
+                          />
+                        )}
                         <span className="truncate text-sm text-text-dark dark:text-text-dark">
-                          {fileName.startsWith("http")
-                            ? `Processing URL: ${fileName.substring(0, 30)}${
-                                fileName.length > 30 ? "..." : ""
+                          {uploadingFile.name.startsWith("http")
+                            ? `${uploadingFile.name.substring(0, 30)}${
+                                uploadingFile.name.length > 30 ? "..." : ""
                               }`
-                            : fileName}
+                            : uploadingFile.name}
                         </span>
                       </div>
                       <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">

@@ -102,10 +102,44 @@ const DraggableItem: React.FC<{
       {...attributes}
       {...listeners}
       className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
-      onClick={onClick}
     >
-      <div className="flex items-center flex-1 min-w-0">
-        <div className="flex text-sm items-center gap-3 w-[80%] mr-2 min-w-0">
+      <div className="w-6 flex items-center justify-center shrink-0">
+        <div
+          className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick && onClick();
+          }}
+        >
+          <div
+            className={`w-4 h-4 border rounded ${
+              isSelected
+                ? "bg-blue-500 border-blue-500"
+                : "border-neutral-400 dark:border-neutral-600"
+            } flex items-center justify-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30`}
+          >
+            {isSelected && (
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  d="M20 6L9 17L4 12"
+                  stroke="white"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
+        <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
           <FileOptionIcon className="h-4 w-4 text-orange-400 dark:text-blue-300 shrink-0" />
           <TooltipProvider>
             <Tooltip>
@@ -121,7 +155,7 @@ const DraggableItem: React.FC<{
           </TooltipProvider>
         </div>
 
-        <div className="w-[20%] text-sm text-text-400 dark:text-neutral-400">
+        <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
           {file.lastModified && getTimeAgoString(new Date(file.lastModified))}
         </div>
       </div>
@@ -141,13 +175,54 @@ const FilePickerFolderItem: React.FC<{
       ? "bg-[#f2f0e8]/50 dark:bg-[#1a1a1a]/50"
       : "hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50";
 
+  // Determine if the folder is empty
+  const isEmpty = folder.files.length === 0;
+
   return (
     <div
-      className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${selectedClassName} py-2 px-3 transition-all ease-in-out`}
-      onClick={onClick}
+      className={`group relative flex cursor-pointer items-center border-b border-border dark:border-border-200 ${
+        !isEmpty ? selectedClassName : ""
+      } py-2 px-3 transition-all ease-in-out`}
     >
-      <div className="flex items-center flex-1 min-w-0">
-        <div className="flex  text-sm items-center gap-3 w-[60%] min-w-0">
+      <div className="w-6 flex items-center justify-center shrink-0">
+        {!isEmpty && (
+          <div
+            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelect();
+            }}
+          >
+            <div
+              className={`w-4 h-4 border rounded ${
+                isSelected || allFilesSelected
+                  ? "bg-blue-500 border-blue-500"
+                  : "border-neutral-400 dark:border-neutral-600"
+              } flex items-center justify-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-400 `}
+            >
+              {(isSelected || allFilesSelected) && (
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <path
+                    d="M20 6L9 17L4 12"
+                    stroke="white"
+                    strokeWidth="3"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
+        <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
           <FolderIcon className="h-5 w-5 text-orange-400 dark:text-orange-300 shrink-0 fill-orange-400 dark:fill-orange-300" />
           <TooltipProvider>
             <Tooltip>
@@ -163,26 +238,10 @@ const FilePickerFolderItem: React.FC<{
           </TooltipProvider>
         </div>
 
-        <div className="w-[40%] pl-3 text-sm text-text-400 dark:text-neutral-400">
+        <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
           {folder.files.length} {folder.files.length === 1 ? "file" : "files"}
         </div>
       </div>
-
-      <Button
-        variant="ghost"
-        size="sm"
-        className="ml-2 h-6 w-6 p-0 rounded-full opacity-80 hover:opacity-100 text-neutral-500 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
-        onClick={(e) => {
-          e.stopPropagation();
-          onSelect();
-        }}
-      >
-        {isSelected || allFilesSelected ? (
-          <X size={14} />
-        ) : (
-          <PlusIcon size={14} />
-        )}
-      </Button>
     </div>
   );
 };
@@ -802,10 +861,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             {filteredFolders.length + currentFolderFiles.length > 0 ? (
               <div className="flex-grow pr-4">
                 <div className="flex items-center border-b border-border dark:border-border-200 py-2 px-3 text-sm font-medium text-text-400 dark:text-neutral-400">
-                  <div className="flex items-center gap-3 w-[80%]  min-w-0">
-                    <span>Name</span>
+                  <div className="w-6 shrink-0">
+                    {/* Empty space for checkbox column */}
                   </div>
-                  <div className="w-[20%] ">
+                  <div className="flex items-center gap-3 w-[65%] min-w-0">
+                    <span className="pl-1">Name</span>
+                  </div>
+                  <div className="w-[35%] text-right pr-4">
                     {currentFolder === null ? "Files" : "Created"}
                   </div>
                 </div>

@@ -22,6 +22,7 @@ interface FileUploadSectionProps {
   disabled?: boolean;
   isUploading?: boolean;
   onUploadComplete?: () => void;
+  onUploadProgress?: (fileName: string, progress: number) => void;
 }
 
 export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
@@ -31,6 +32,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   disabled,
   isUploading = false,
   onUploadComplete,
+  onUploadProgress,
 }) => {
   const [uploadType, setUploadType] = useState<"file" | "url">("file");
   const [fileUrl, setFileUrl] = useState("");
@@ -39,6 +41,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const dropAreaRef = useRef<HTMLLabelElement>(null);
   const urlInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isDisabled = disabled || isUploading || isProcessing;
 
@@ -49,6 +52,116 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     }
   }, [uploadType, isDisabled]);
 
+  const simulateFileUploadProgress = (file: File) => {
+    let progress = 0;
+    const fileSize = file.size;
+
+    // Calculate simulation parameters based on file size
+    const getUploadParameters = (size: number) => {
+      // For very small files, upload is faster
+      if (size < 100 * 1024) {
+        // < 100KB
+        return {
+          initialJump: 40, // Quick initial progress jump
+          steadyRate: 10, // Steady upload rate (percentage points per second)
+          finalSlowdown: 0.5, // Slower rate near completion
+          totalTime: 2000, // Total upload time in ms
+        };
+      }
+      // For medium files
+      else if (size < 1024 * 1024) {
+        // < 1MB
+        return {
+          initialJump: 30,
+          steadyRate: 7,
+          finalSlowdown: 0.3,
+          totalTime: 4000,
+        };
+      }
+      // For larger files
+      else if (size < 10 * 1024 * 1024) {
+        // < 10MB
+        return {
+          initialJump: 20,
+          steadyRate: 5,
+          finalSlowdown: 0.2,
+          totalTime: 8000,
+        };
+      }
+      // For very large files
+      else {
+        return {
+          initialJump: 10,
+          steadyRate: 3,
+          finalSlowdown: 0.1,
+          totalTime: 15000,
+        };
+      }
+    };
+
+    const params = getUploadParameters(fileSize);
+
+    // Initial jump to show immediate progress
+    setTimeout(() => {
+      progress = params.initialJump;
+      if (onUploadProgress) {
+        onUploadProgress(file.name, progress);
+      }
+    }, 100);
+
+    // Middle section - steady progress
+    const steadyUpdateInterval = 300; // ms between updates
+    const steadyIncrement = params.steadyRate * (steadyUpdateInterval / 1000);
+    const steadySteps = Math.floor((90 - params.initialJump) / steadyIncrement);
+
+    // Start steady updates after initial jump
+    let steadyTimer = setTimeout(() => {
+      let step = 0;
+      const intervalId = setInterval(() => {
+        step++;
+        progress = Math.min(params.initialJump + step * steadyIncrement, 90);
+
+        if (onUploadProgress) {
+          onUploadProgress(file.name, Math.round(progress));
+        }
+
+        if (step >= steadySteps) {
+          clearInterval(intervalId);
+
+          // Final slowdown phase - more gradual progress to 99%
+          const finalUpdateInterval = 400;
+          const finalIncrement = params.finalSlowdown;
+          let finalProgress = progress;
+
+          const finalIntervalId = setInterval(() => {
+            finalProgress += finalIncrement;
+            if (finalProgress >= 99) {
+              finalProgress = 99;
+              clearInterval(finalIntervalId);
+            }
+
+            if (onUploadProgress) {
+              onUploadProgress(file.name, Math.round(finalProgress));
+            }
+          }, finalUpdateInterval);
+        }
+      }, steadyUpdateInterval);
+    }, 300);
+
+    // Ensure we eventually reach 100% after the expected total time
+    setTimeout(() => {
+      if (onUploadProgress) {
+        // Send 99% if we haven't reached it yet
+        onUploadProgress(file.name, 99);
+
+        // After a short pause, mark as complete
+        setTimeout(() => {
+          onUploadProgress(file.name, 100);
+        }, 500);
+      }
+    }, params.totalTime);
+  };
+
   const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files.length > 0) {
@@ -57,7 +170,13 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       setIsProcessing(true);
 
       try {
+        // Start progress tracking for each file
+        newFiles.forEach((file) => {
+          simulateFileUploadProgress(file);
+        });
+
         onUpload(newFiles);
+
         // Wait a bit to show loading state
         await new Promise((resolve) => setTimeout(resolve, 500));
       } finally {
@@ -80,7 +199,26 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       setIsProcessing(true);
 
       try {
+        // Simulate progress for URL uploads
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+          progress += 10;
+          if (progress >= 95) {
+            clearInterval(progressInterval);
+          }
+          if (onUploadProgress) {
+            onUploadProgress(fileUrl, progress);
+          }
+        }, 300);
+
         await onUrlUpload(fileUrl);
+
+        // Set to 100% when complete
+        if (onUploadProgress) {
+          onUploadProgress(fileUrl, 100);
+        }
+
+        clearInterval(progressInterval);
         setFileUrl("");
       } finally {
         setIsProcessing(false);
@@ -140,7 +278,13 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       setIsProcessing(true);
 
       try {
+        // Start progress tracking for each file
+        newFiles.forEach((file) => {
+          simulateFileUploadProgress(file);
+        });
+
         onUpload(newFiles);
+
         // Wait a bit to show loading state
         await new Promise((resolve) => setTimeout(resolve, 500));
       } finally {
@@ -184,7 +328,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                   <label
                     ref={dropAreaRef}
                     htmlFor="file-upload"
-                    className={`w-full h-full flex flex-col items-center justify-center ${
+                    className={`w-full h-full cursor-pointer flex flex-col items-center justify-center ${
                       isDisabled ? "pointer-events-none" : ""
                     } ${
                       isDragging
