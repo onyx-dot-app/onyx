@@ -233,6 +233,13 @@ export interface HighspotCredentialJson {
   highspot_secret: string;
 }
 
+export interface BackstageCredentialJson {
+  backstage_client_id: string;
+  backstage_client_secret: string;
+  backstage_token_endpoint: string;
+}
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -353,6 +360,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
   not_applicable: null,
   ingestion_api: null,
   discord: { discord_bot_token: "" } as DiscordCredentialJson,
+  backstage: {
+    backstage_client_id : "",
+    backstage_client_secret: "",
+    backstage_token_endpoint: "",
+  } as BackstageCredentialJson,
 
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
@@ -365,6 +377,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     highspot_key: "",
     highspot_secret: "",
   } as HighspotCredentialJson,
+  backstage: {
+    backstage_client_id: "",
+    backstage_client_secret: "",
+    backstage_token_endpoint: "",
+  } as BackstageCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -505,6 +522,11 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  //Backstage
+  backstage_client_id: "Backstage Client ID",
+  backstage_client_secret: "Backstage Client Secret",
+  backstage_token_endpoint: "Backstage Token Endpoint",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

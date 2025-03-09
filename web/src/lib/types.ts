@@ -392,6 +392,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  Backstage = "backstage",
 }
 
 export const validAutoSyncSources = [
