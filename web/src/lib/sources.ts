@@ -44,6 +44,7 @@ import {
   GlobeIcon2,
   FileIcon2,
   GitbookIcon,
+  BackstageIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import {
@@ -328,6 +329,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "GitBook",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/gitbook",
+  },
+  backstage: {
+    icon: BackstageIcon,
+    displayName: "Backstage",
+    category: SourceCategory.Wiki,
+    docs: "https://docs.onyx.app/connectors/backstage",
   },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used

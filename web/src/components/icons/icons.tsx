@@ -89,6 +89,7 @@ import cohereIcon from "../../../public/Cohere.svg";
 import voyageIcon from "../../../public/Voyage.png";
 import googleIcon from "../../../public/Google.webp";
 import xenforoIcon from "../../../public/Xenforo.svg";
+import backstageIcon from "../../../public/backstage.png";
 import { FaGithub, FaRobot } from "react-icons/fa";
 
 import { cn } from "@/lib/utils";
@@ -1490,6 +1491,13 @@ export const FirefliesIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <LogoIcon size={size} className={className} src={firefliesIcon} />
+);
+
+export const BackstageIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={backstageIcon} />
 );
 
 /* 
