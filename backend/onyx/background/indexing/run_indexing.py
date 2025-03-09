@@ -59,8 +59,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -354,9 +352,7 @@ def _run_indexing(
             callback=callback,
         )
 
-    information_content_classification_model = InformationContentClassificationModel(
-        model_server_host=MODEL_SERVER_HOST, model_server_port=MODEL_SERVER_PORT
-    )
+    information_content_classification_model = InformationContentClassificationModel()
 
     document_index = get_default_document_index(
         index_attempt_start.search_settings,

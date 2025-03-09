@@ -16,6 +16,9 @@ from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_REPO
 from shared_configs.configs import CONNECTOR_CLASSIFIER_MODEL_TAG
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
+)
 from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX
 from shared_configs.configs import INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN
 from shared_configs.configs import (
@@ -45,20 +48,6 @@ _INTENT_MODEL: HybridClassifier | None = None
 _INFORMATION_CONTENT_MODEL: SetFitModel | None = None
 
 _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = ""  # spec to model version!
-
-
-def _create_local_path(
-    model_name_or_path: str, tag: str | None, local_files_only: bool
-) -> str:
-    if tag is None:
-        local_path = snapshot_download(
-            repo_id=model_name_or_path, local_files_only=local_files_only
-        )
-    else:
-        local_path = snapshot_download(
-            repo_id=model_name_or_path, revision=tag, local_files_only=local_files_only
-        )
-    return local_path
 
 
 def get_connector_classifier_tokenizer() -> AutoTokenizer:
@@ -298,11 +287,23 @@ def run_inference(tokens: BatchEncoding) -> tuple[list[float], list[float]]:
 def run_content_classification_inference(
     text_inputs: list[str],
 ) -> list[ContentClassificationPrediction]:
+    """
+    Assign a score to the segments in question. The model stored in get_local_information_content_model()
+    creates the 'model score' based on its training, and the scores are then converted to a 0.0-1.0 scale.
+    In the code outside of the model/inference model servers that score will be converted into the actual
+    boost factor.
+    """
+
     def _prob_to_score(prob: float) -> float:
-        if prob < 0.25:
+        """
+        Conversion of base score to 0.0 - 1.0 score. Note that the min/max values depend on the model!
+        """
+        _MIN_BASE_SCORE = 0.25
+        _MAX_BASE_SCORE = 0.75
+        if prob < _MIN_BASE_SCORE:
             raw_score = 0.0
-        elif prob < 0.75:
-            raw_score = (prob - 0.25) / 0.5
+        elif prob < _MAX_BASE_SCORE:
+            raw_score = (prob - _MIN_BASE_SCORE) / (_MAX_BASE_SCORE - _MIN_BASE_SCORE)
         else:
             raw_score = 1.0
         return (
@@ -314,13 +315,62 @@ def run_content_classification_inference(
             * raw_score
         )
 
+    _BATCH_SIZE = 32
     content_model = get_local_information_content_model()
 
-    output_classes = list([x.numpy() for x in content_model(text_inputs)])
-    base_output_probabilities = list(
-        [x[1].numpy() for x in content_model.predict_proba(text_inputs)]
-    )
-    logits = [np.log(p / (1 - p)) for p in base_output_probabilities]
+    # Process inputs in batches
+    all_output_classes: list[int] = []
+    all_base_output_probabilities: list[float] = []
+
+    for i in range(0, len(text_inputs), _BATCH_SIZE):
+        batch = text_inputs[i : i + _BATCH_SIZE]
+        batch_with_prefix = []
+        batch_indices = []
+
+        # Pre-allocate results for this batch
+        batch_output_classes: list[np.ndarray] = [np.array(1)] * len(batch)
+        batch_probabilities: list[np.ndarray] = [np.array(1.0)] * len(batch)
+
+        # Pre-process batch to handle long input exceptions
+        for j, text in enumerate(batch):
+            if len(text) == 0:
+                # if no input, treat as non-informative from the model's perspective
+                batch_output_classes[j] = np.array(0)
+                batch_probabilities[j] = np.array(0.0)
+                logger.warning("Input for Content Information Model is empty")
+
+            elif (
+                len(text.split())
+                <= INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH
+            ):
+                # if input is short, use the model
+                batch_with_prefix.append(
+                    _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX + text
+                )
+                batch_indices.append(j)
+            else:
+                # if longer than cutoff, treat as informative (stay with default), but issue warning
+                logger.warning("Input for Content Information Model too long")
+
+        if batch_with_prefix:  # Only run model if we have valid inputs
+            # Get predictions for the batch
+            model_output_classes = content_model(batch_with_prefix)
+            model_output_probabilities = content_model.predict_proba(batch_with_prefix)
+
+            # Place results in the correct positions
+            for idx, batch_idx in enumerate(batch_indices):
+                batch_output_classes[batch_idx] = model_output_classes[idx].numpy()
+                batch_probabilities[batch_idx] = model_output_probabilities[idx][
+                    1
+                ].numpy()  # x[1] is prob of the positive class
+
+        all_output_classes.extend([int(x) for x in batch_output_classes])
+        all_base_output_probabilities.extend([float(x) for x in batch_probabilities])
+
+    logits = [
+        np.log(p / (1 - p)) if p != 0.0 and p != 1.0 else (100 if p == 1.0 else -100)
+        for p in all_base_output_probabilities
+    ]
     scaled_logits = [
         logit / INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE
         for logit in logits
@@ -338,7 +388,7 @@ def run_content_classification_inference(
         ContentClassificationPrediction(
             predicted_label=predicted_label, content_boost_factor=output_score
         )
-        for predicted_label, output_score in zip(output_classes, prediction_scores)
+        for predicted_label, output_score in zip(all_output_classes, prediction_scores)
     ]
 
     return content_classification_predictions
@@ -494,9 +544,4 @@ async def process_analysis_request(
 async def process_content_classification_request(
     content_classification_requests: list[str],
 ) -> list[ContentClassificationPrediction]:
-    return run_content_classification_inference(
-        [
-            _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX + req
-            for req in content_classification_requests
-        ]
-    )
+    return run_content_classification_inference(content_classification_requests)

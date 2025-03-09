@@ -563,6 +563,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                     access=doc_access,
                     boost=doc.boost,
                     hidden=doc.hidden,
+                    # aggregated_boost_factor=doc.aggregated_boost_factor,
                 )
 
                 # update Vespa. OK if doc doesn't exist. Raises exception otherwise.

@@ -29,6 +29,8 @@ from onyx.natural_language_processing.exceptions import (
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
+from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider
@@ -382,8 +384,8 @@ class QueryAnalysisModel:
 class InformationContentClassificationModel:
     def __init__(
         self,
-        model_server_host: str = MODEL_SERVER_HOST,
-        model_server_port: int = MODEL_SERVER_PORT,
+        model_server_host: str = INDEXING_MODEL_SERVER_HOST,
+        model_server_port: int = INDEXING_MODEL_SERVER_PORT,
     ) -> None:
         model_server_url = build_model_server_url(model_server_host, model_server_port)
         self.content_server_endpoint = (
@@ -397,11 +399,11 @@ class InformationContentClassificationModel:
         response = requests.post(self.content_server_endpoint, json=queries)
         response.raise_for_status()
 
-        response_model = InformationContentClassificationResponses(
+        model_responses = InformationContentClassificationResponses(
             information_content_classifications=response.json()
         )
 
-        return response_model.information_content_classifications
+        return model_responses.information_content_classifications
 
 
 class ConnectorClassificationModel:

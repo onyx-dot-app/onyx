@@ -139,8 +139,3 @@ if _LITELLM_EXTRA_BODY_RAW:
 USE_INFORMATION_CONTENT_CLASSIFICATION = (
     os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION", "false").lower() == "true"
 )
-
-# Cutoff below which we start using the information content classification model
-INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = float(
-    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
-)

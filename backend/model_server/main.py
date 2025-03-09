@@ -75,11 +75,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     logger.notice(f"Torch Threads: {torch.get_num_threads()}")
 
     if not INDEXING_ONLY:
+        logger.notice(
+            "The intent model should run on the model server. The information content model should not run here."
+        )
         warm_up_intent_model()
     else:
-        logger.notice("This model server should only run document indexing.")
-
-    warm_up_information_content_model()
+        logger.notice(
+            "The content information model should run on the indexing model server. The intent model should not run here."
+        )
+        warm_up_information_content_model()
 
     yield
 

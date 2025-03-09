@@ -291,3 +291,8 @@ INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
 INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
     os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE") or 4.0
 )
+# Cutoff below which we start using the information content classification model
+# (cutoff length number itself is still considered 'short'))
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
+)

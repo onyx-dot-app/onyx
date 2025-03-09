@@ -10,9 +10,6 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
-from onyx.configs.model_configs import (
-    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
-)
 from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
@@ -54,6 +51,9 @@ from onyx.natural_language_processing.search_nlp_models import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
+)
 
 logger = setup_logger()
 
@@ -136,7 +136,7 @@ def _upsert_documents_in_db(
 def _get_aggregated_boost_factor(
     chunks: list[IndexChunk],
     information_content_classification_model: InformationContentClassificationModel,
-) -> tuple[list[IndexChunk], list[float], list[ConnectorFailure]]:
+) -> list[float]:
     """Calculates the aggregated boost factor for a chunk based on its content."""
 
     short_chunk_content_dict = {
@@ -160,7 +160,7 @@ def _get_aggregated_boost_factor(
         # Default to 1.0 for longer chunks, use predicted score for short chunks
         chunk_content_scores = [score_map.get(i, 1.0) for i in range(len(chunks))]
 
-        return chunks, chunk_content_scores, []
+        return chunk_content_scores
 
     except Exception as e:
         logger.exception(
@@ -169,7 +169,6 @@ def _get_aggregated_boost_factor(
 
         chunks_with_scores: list[IndexChunk] = []
         chunk_content_scores = []
-        failures: list[ConnectorFailure] = []
 
         for chunk in chunks:
             if (
@@ -189,25 +188,15 @@ def _get_aggregated_boost_factor(
                 chunks_with_scores.append(chunk)
             except Exception as e:
                 logger.exception(
-                    f"Error predicting content classification for chunk: {e}. Adding to missed content classifications."
+                    f"Error predicting content classification for chunk: {e}."
                 )
 
-                failures.append(
-                    ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=chunk.source_document.id,
-                            document_link=(
-                                chunk.source_document.sections[0].link
-                                if chunk.source_document.sections
-                                else None
-                            ),
-                        ),
-                        failure_message=str(e),
-                        exception=e,
-                    )
-                )
+                raise Exception(
+                    f"Failed to predict content classification for chunk {chunk.chunk_id} "
+                    f"from document {chunk.source_document.id}"
+                ) from e
 
-        return chunks_with_scores, chunk_content_scores, failures
+        return chunk_content_scores
 
 
 def get_doc_ids_to_update(
@@ -479,11 +468,13 @@ def index_doc_batch(
         chunk_content_scores,
         chunk_content_classification_failures,
     ) = (
+        chunks_with_embeddings,
         _get_aggregated_boost_factor(
             chunks_with_embeddings, information_content_classification_model
         )
         if USE_INFORMATION_CONTENT_CLASSIFICATION
-        else (chunks_with_embeddings, [1.0] * len(chunks_with_embeddings), [])
+        else [1.0] * len(chunks_with_embeddings),
+        embedding_failures,
     )
 
     updatable_ids = [doc.id for doc in ctx.updatable_docs]

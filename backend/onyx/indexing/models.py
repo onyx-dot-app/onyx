@@ -85,14 +85,14 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     boost: influences the ranking of this chunk at query time. Positive -> ranked higher,
            negative -> ranked lower. Not included in aggregated boost calculation
            for legacy reasons.
-    aggregated_boost_factor: represents non-user-specific aggregated boost calculation
+    aggregated_boost_factor: represents the content information boost calculation
     """
 
     tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
     boost: int
-    aggregated_boost_factor: float = 1.0
+    aggregated_boost_factor: float
 
     @classmethod
     def from_index_chunk(

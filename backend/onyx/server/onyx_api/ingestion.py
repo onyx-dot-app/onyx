@@ -26,8 +26,6 @@ from onyx.server.onyx_api.models import DocMinimalInfo
 from onyx.server.onyx_api.models import IngestionDocument
 from onyx.server.onyx_api.models import IngestionResult
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -107,9 +105,7 @@ def upsert_ingestion_doc(
         search_settings=search_settings
     )
 
-    information_content_classification_model = InformationContentClassificationModel(
-        model_server_host=MODEL_SERVER_HOST, model_server_port=MODEL_SERVER_PORT
-    )
+    information_content_classification_model = InformationContentClassificationModel()
 
     indexing_pipeline = build_indexing_pipeline(
         embedder=index_embedding_model,
