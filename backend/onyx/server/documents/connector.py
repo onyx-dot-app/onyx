@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accesssible_user
+from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
 from onyx.background.celery.versioned_apps.primary import app as primary_app
@@ -1247,7 +1247,7 @@ class BasicCCPairInfo(BaseModel):
 
 @router.get("/connector-status")
 def get_basic_connector_indexing_status(
-    user: User = Depends(current_chat_accesssible_user),
+    user: User = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[BasicCCPairInfo]:
     cc_pairs = get_connector_credential_pairs_for_user(

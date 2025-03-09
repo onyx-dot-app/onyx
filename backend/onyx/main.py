@@ -234,6 +234,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
+    SqlEngine.reset_engine()
+
     if AUTH_RATE_LIMITING_ENABLED:
         await close_auth_limiter()
 

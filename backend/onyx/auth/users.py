@@ -895,7 +895,7 @@ async def current_limited_user(
     return await double_check_user(user)
 
 
-async def current_chat_accesssible_user(
+async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
 ) -> User | None:
     tenant_id = get_current_tenant_id()

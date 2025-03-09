@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_admin_user
-from onyx.auth.users import current_chat_accesssible_user
+from onyx.auth.users import current_chat_accessible_user
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_limited_user
 from onyx.auth.users import current_user
@@ -390,7 +390,7 @@ def get_image_generation_tool(
 
 @basic_router.get("")
 def list_personas(
-    user: User | None = Depends(current_chat_accesssible_user),
+    user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
     include_deleted: bool = False,
     persona_ids: list[int] = Query(None),
