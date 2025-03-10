@@ -26,7 +26,25 @@ def upgrade() -> None:
             server_default="false",
         ),
     )
+    op.add_column(
+        "search_settings",
+        sa.Column(
+            "contextual_rag_llm_name",
+            sa.String(),
+            nullable=True,
+        ),
+    )
+    op.add_column(
+        "search_settings",
+        sa.Column(
+            "contextual_rag_llm_provider",
+            sa.String(),
+            nullable=True,
+        ),
+    )
 
 
 def downgrade() -> None:
     op.drop_column("search_settings", "enable_contextual_rag")
+    op.drop_column("search_settings", "contextual_rag_llm_name")
+    op.drop_column("search_settings", "contextual_rag_llm_provider")

@@ -155,6 +155,8 @@ class IndexingSetting(EmbeddingModelDetail):
 
     background_reindex_enabled: bool = True
     enable_contextual_rag: bool
+    contextual_rag_llm_name: str | None = None
+    contextual_rag_llm_provider: str | None = None
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}

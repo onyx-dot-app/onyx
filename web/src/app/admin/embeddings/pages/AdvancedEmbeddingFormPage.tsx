@@ -17,9 +17,8 @@ import {
 import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/NumberInput";
 import { StringOrNumberOption } from "@/components/Dropdown";
 import useSWR from "swr";
-import { LLM_PROVIDERS_ADMIN_URL } from "../../configuration/llm/constants";
+import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
 import { getDisplayNameForModel } from "@/lib/hooks";
-import { LLMProviderDescriptor } from "../../configuration/llm/interfaces";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 // Number of tokens to show cost calculation for
@@ -57,42 +56,21 @@ const AdvancedEmbeddingFormPage = forwardRef<
     },
     ref
   ) => {
-    // Fetch available LLM providers
-    const { data: llmProviders, error: llmError } = useSWR<
-      LLMProviderDescriptor[]
-    >(LLM_PROVIDERS_ADMIN_URL, errorHandlingFetcher);
-
     // Fetch contextual costs
     const { data: contextualCosts, error: costError } = useSWR<
       LLMContextualCost[]
-    >("/api/admin/llm/provider-contextual-cost", errorHandlingFetcher);
+    >(LLM_CONTEXTUAL_COST_ADMIN_URL, errorHandlingFetcher);
 
-    console.log(contextualCosts);
-
-    // Create options array from available models, removing duplicates
-    const llmOptions: StringOrNumberOption[] = React.useMemo(() => {
-      if (!llmProviders) return [];
-
-      const seenModels = new Set<string>();
-      const options: StringOrNumberOption[] = [];
-
-      llmProviders.forEach((provider) => {
-        (provider.display_model_names || provider.model_names).forEach(
-          (modelName) => {
-            const displayName = getDisplayNameForModel(modelName);
-            if (!seenModels.has(displayName)) {
-              seenModels.add(displayName);
-              options.push({
-                name: displayName,
-                value: modelName,
-              });
-            }
-          }
-        );
-      });
-
-      return options;
-    }, [llmProviders]);
+    const llmOptions: StringOrNumberOption[] = React.useMemo(
+      () =>
+        (contextualCosts || []).map((cost) => {
+          return {
+            name: getDisplayNameForModel(cost.model_name),
+            value: cost.model_name,
+          };
+        }),
+      [contextualCosts]
+    );
 
     // Helper function to format cost as USD
     const formatCost = (cost: number) => {
@@ -108,11 +86,20 @@ const AdvancedEmbeddingFormPage = forwardRef<
       return contextualCosts.find((cost) => cost.model_name === modelName);
     };
 
+    // Get the current value for the selector based on the parent state
+    const getCurrentLLMValue = React.useMemo(() => {
+      if (!advancedEmbeddingDetails.contextual_rag_llm_name) return null;
+      return advancedEmbeddingDetails.contextual_rag_llm_name;
+    }, [advancedEmbeddingDetails.contextual_rag_llm_name]);
+
     return (
       <div className="py-4 rounded-lg max-w-4xl px-4 mx-auto">
         <Formik
           innerRef={ref}
-          initialValues={advancedEmbeddingDetails}
+          initialValues={{
+            ...advancedEmbeddingDetails,
+            contextual_rag_llm: getCurrentLLMValue,
+          }}
           validationSchema={Yup.object().shape({
             multilingual_expansion: Yup.array().of(Yup.string()),
             multipass_indexing: Yup.boolean(),
@@ -144,10 +131,26 @@ const AdvancedEmbeddingFormPage = forwardRef<
           validate={(values) => {
             // Call updateAdvancedEmbeddingDetails for each changed field
             Object.entries(values).forEach(([key, value]) => {
-              updateAdvancedEmbeddingDetails(
-                key as keyof AdvancedSearchConfiguration,
-                value
-              );
+              if (key === "contextual_rag_llm") {
+                const selectedModel = (contextualCosts || []).find(
+                  (cost) => cost.model_name === value
+                );
+                if (selectedModel) {
+                  updateAdvancedEmbeddingDetails(
+                    "contextual_rag_llm_provider",
+                    selectedModel.provider
+                  );
+                  updateAdvancedEmbeddingDetails(
+                    "contextual_rag_llm_name",
+                    selectedModel.model_name
+                  );
+                }
+              } else {
+                updateAdvancedEmbeddingDetails(
+                  key as keyof AdvancedSearchConfiguration,
+                  value
+                );
+              }
             });
 
             // Run validation and report errors
@@ -266,9 +269,9 @@ const AdvancedEmbeddingFormPage = forwardRef<
                   name="contextual_rag_llm"
                   label="Contextual RAG LLM"
                   subtext={
-                    llmError
+                    costError
                       ? "Error loading LLM models. Please try again later."
-                      : !llmProviders
+                      : !contextualCosts
                         ? "Loading available LLM models..."
                         : values.enable_contextual_rag
                           ? "Select the LLM model to use for contextual RAG processing."
@@ -276,7 +279,9 @@ const AdvancedEmbeddingFormPage = forwardRef<
                   }
                   options={llmOptions}
                   disabled={
-                    !values.enable_contextual_rag || !llmProviders || !!llmError
+                    !values.enable_contextual_rag ||
+                    !contextualCosts ||
+                    !!costError
                   }
                 />
                 {values.enable_contextual_rag &&

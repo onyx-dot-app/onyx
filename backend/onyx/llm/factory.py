@@ -150,6 +150,21 @@ def llm_from_provider(
     )
 
 
+def get_llm_for_contextual_rag(
+    model_name: str | None, model_provider: str | None
+) -> LLM | None:
+    if not model_name or not model_provider:
+        return None
+    with get_session_context_manager() as db_session:
+        llm_provider = fetch_provider(db_session, model_provider)
+    if not llm_provider:
+        raise ValueError("No LLM provider with name {} found".format(model_provider))
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=llm_provider,
+    )
+
+
 def get_default_llms(
     timeout: int | None = None,
     temperature: float | None = None,

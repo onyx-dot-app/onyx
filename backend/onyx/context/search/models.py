@@ -81,6 +81,8 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             # Whether switching to this model requires re-indexing
             background_reindex_enabled=search_settings.background_reindex_enabled,
             enable_contextual_rag=search_settings.enable_contextual_rag,
+            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
+            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
             # Reranking Details
             rerank_model_name=search_settings.rerank_model_name,
             rerank_provider_type=search_settings.rerank_provider_type,
