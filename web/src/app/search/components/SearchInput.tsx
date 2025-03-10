@@ -33,7 +33,7 @@ export function SearchInput({
   };
 
   return (
-    <div className="flex items-center w-full max-w-3xl relative">
+    <div className="flex items-center w-full max-w-4xl relative">
       <div className="absolute left-3 text-gray-400">
         <FiSearch size={16} />
       </div>

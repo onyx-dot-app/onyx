@@ -71,14 +71,6 @@ import {
 } from "@/app/chat/searchParams";
 import { LlmDescriptor, useFilters, useLlmManager } from "@/lib/hooks";
 import { ChatState, FeedbackType, RegenerationState } from "@/app/chat/types";
-import { DocumentResults } from "@/app/chat/documentSidebar/DocumentResults";
-import { OnyxInitializingLoader } from "@/components/OnyxInitializingLoader";
-import { FeedbackModal } from "@/app/chat/modal/FeedbackModal";
-import { ShareChatSessionModal } from "@/app/chat/modal/ShareChatSessionModal";
-import { FiArrowDown } from "react-icons/fi";
-import { ChatIntro } from "@/app/chat/ChatIntro";
-import { AIMessage, HumanMessage } from "@/app/chat/message/Messages";
-import { StarterMessages } from "@/components/assistants/StarterMessage";
 import {
   AnswerPiecePacket,
   OnyxDocument,
@@ -148,6 +140,7 @@ import { SearchResults } from "./components/SearchResults";
 import { SearchAnswer } from "./components/SearchAnswer";
 import { SourceIcon } from "@/components/SourceIcon";
 import { streamSearchWithCitation } from "./searchUtils";
+import { UserDropdown } from "@/components/UserDropdown";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -184,6 +177,8 @@ export default function SearchPage({
     ? parseInt(defaultAssistantIdRaw)
     : undefined;
 
+  const [hideUserDropdown, setHideUserDropdown] = useState(false);
+  const [showUserSettingsModal, setShowUserSettingsModal] = useState(false);
   // Function declarations need to be outside of blocks in strict mode
   function useScreenSize() {
     const [screenSize, setScreenSize] = useState({
@@ -430,13 +425,6 @@ export default function SearchPage({
     existingChatSessionId !== null
   );
 
-  const [isReady, setIsReady] = useState(false);
-
-  useEffect(() => {
-    Prism.highlightAll();
-    setIsReady(true);
-  }, []);
-
   useEffect(() => {
     const priorChatSessionId = chatSessionIdRef.current;
     const loadedSessionId = loadedIdSessionRef.current;
@@ -449,7 +437,6 @@ export default function SearchPage({
     const isChatSessionSwitch = existingChatSessionId !== priorChatSessionId;
     if (isChatSessionSwitch) {
       // de-select documents
-      clearSelectedDocuments();
 
       // reset all filters
       filterManager.setSelectedDocumentSets([]);
@@ -486,7 +473,6 @@ export default function SearchPage({
         return;
       }
 
-      clearSelectedDocuments();
       setIsFetchingChatMessages(true);
       const response = await fetch(
         `/api/chat/get-chat-session/${existingChatSessionId}`
@@ -1954,66 +1940,11 @@ export default function SearchPage({
     }
   }, [retrievalEnabled]);
 
-  const [stackTraceModalContent, setStackTraceModalContent] = useState<
-    string | null
-  >(null);
-
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
-  const [settingsToggled, setSettingsToggled] = useState(false);
 
   const [selectedDocuments, setSelectedDocuments] = useState<OnyxDocument[]>(
     []
   );
-  const [selectedDocumentTokens, setSelectedDocumentTokens] = useState(0);
-
-  const currentPersona = alternativeAssistant || liveAssistant;
-
-  const HORIZON_DISTANCE = 800;
-  const handleScroll = useCallback(() => {
-    const scrollDistance =
-      endDivRef?.current?.getBoundingClientRect()?.top! -
-      inputRef?.current?.getBoundingClientRect()?.top!;
-    scrollDist.current = scrollDistance;
-    setAboveHorizon(scrollDist.current > HORIZON_DISTANCE);
-  }, []);
-
-  useEffect(() => {
-    const handleSlackChatRedirect = async () => {
-      if (!slackChatId) return;
-
-      // Set isReady to false before starting retrieval to display loading text
-      setIsReady(false);
-
-      try {
-        const response = await fetch("/api/chat/seed-chat-session-from-slack", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            chat_session_id: slackChatId,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to seed chat from Slack");
-        }
-
-        const data = await response.json();
-
-        router.push(data.redirect_url);
-      } catch (error) {
-        console.error("Error seeding chat from Slack:", error);
-        setPopup({
-          message: "Failed to load chat from Slack",
-          type: "error",
-        });
-      }
-    };
-
-    handleSlackChatRedirect();
-  }, [searchParams, router]);
-
   useEffect(() => {
     llmManager.updateImageFilesPresent(imageFileInMessageHistory);
   }, [imageFileInMessageHistory]);
@@ -2099,24 +2030,10 @@ export default function SearchPage({
       </>
     );
 
-  const clearSelectedDocuments = () => {
-    setSelectedDocuments([]);
-    setSelectedDocumentTokens(0);
-  };
-
-  const toggleDocumentSelection = (document: OnyxDocument) => {
-    setSelectedDocuments((prev) =>
-      prev.some((d) => d.document_id === document.document_id)
-        ? prev.filter((d) => d.document_id !== document.document_id)
-        : [...prev, document]
-    );
-  };
-
   // New state for search UI
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<OnyxDocument[]>([]);
-  const [searchAnswer, setSearchAnswer] = useState<string | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState("all");
   const [sourceResults, setSourceResults] = useState<Record<string, number>>(
@@ -2129,7 +2046,7 @@ export default function SearchPage({
 
     setSearchQuery(query);
     setIsSearching(true);
-    setSearchAnswer(null);
+
     setSearchError(null);
     setSearchResults([]);
     setSourceResults({});
@@ -2145,10 +2062,6 @@ export default function SearchPage({
       })) {
         if (response.error) {
           setSearchError(response.error);
-        }
-
-        if (response.answer) {
-          setSearchAnswer(response.answer);
         }
 
         if (response.documents.length > 0) {
@@ -2284,7 +2197,7 @@ export default function SearchPage({
               {/* Main content area */}
               <div className="flex-grow overflow-auto">
                 {searchQuery ? (
-                  <div className="max-w-4xl flex relative mx-auto w-full px-4">
+                  <div className="max-w-4xl flex relative mx-auto w-full">
                     {/* Answer */}
                     {/* This is temporary */}
                     {/* <SearchAnswer
@@ -2357,28 +2270,28 @@ export default function SearchPage({
             </div>
           </div>
           <FixedLogo backgroundToggled={sidebarVisible || showHistorySidebar} />
+          {showUserSettingsModal && (
+            <UserSettingsModal
+              setPopup={setPopup}
+              setCurrentLlm={(newLlm) => llmManager.updateCurrentLlm(newLlm)}
+              defaultModel={user?.preferences.default_model!}
+              llmProviders={llmProviders}
+              onClose={() => {
+                setShowUserSettingsModal(false);
+              }}
+            />
+          )}
+
+          <div className="fixed right-4 top-4">
+            <UserDropdown
+              toggleUserSettings={() => {
+                setShowUserSettingsModal(true);
+              }}
+              hideUserDropdown={hideUserDropdown}
+            />
+          </div>
         </div>
       </div>
-
-      {/* Document sidebar */}
-      {documentSidebarVisible && presentingDocument && (
-        <div className="fixed right-0 top-0 h-full w-[400px] border-l border-background-200 bg-white z-10">
-          <DocumentResults
-            agenticMessage={false}
-            closeSidebar={() => setDocumentSidebarVisible(false)}
-            selectedMessage={null}
-            selectedDocuments={[presentingDocument as OnyxDocument]}
-            toggleDocumentSelection={() => {}}
-            clearSelectedDocuments={clearSelectedDocuments}
-            selectedDocumentTokens={0}
-            maxTokens={0}
-            initialWidth={documentSidebarInitialWidth || 400}
-            isOpen={documentSidebarVisible}
-            modal={false}
-            setPresentingDocument={setPresentingDocument}
-          />
-        </div>
-      )}
     </>
   );
 }

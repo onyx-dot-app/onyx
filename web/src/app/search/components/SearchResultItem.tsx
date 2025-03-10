@@ -2,7 +2,7 @@ import React from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { getTimeAgoString } from "@/lib/dateUtils";
-import { FiThumbsUp, FiUser, FiClock } from "react-icons/fi";
+import { FiThumbsUp, FiUser, FiClock, FiCalendar } from "react-icons/fi";
 import {
   Tooltip,
   TooltipContent,
@@ -21,20 +21,13 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
     onClick(document);
   };
 
-  // Format the date if available
-  const formattedDate = document.updated_at
-    ? getTimeAgoString(new Date(document.updated_at))
-    : "";
-
-  const lastUpdated = document.updated_at
+  // Format the update date if available
+  const updatedAtFormatted = document.updated_at
     ? getTimeAgoString(new Date(document.updated_at))
     : "";
 
   return (
-    <div
-      className="border-b border-gray-200 py-4 hover:bg-gray-50 px-4 cursor-pointer"
-      onClick={handleClick}
-    >
+    <div className="border-b border-neutral-200/50 py-4 px-4">
       <div className="flex items-start gap-3">
         <div className="flex-shrink-0 mt-1">
           <ResultIcon doc={document} size={20} />
@@ -42,7 +35,10 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
 
         <div className="flex-grow">
           <div className="flex items-center gap-2">
-            <h3 className="text-base font-medium text-gray-900 line-clamp-1">
+            <h3
+              className="text-base font-medium text-gray-900 line-clamp-1 hover:underline cursor-pointer"
+              onClick={handleClick}
+            >
               {document.semantic_identifier || "Untitled Document"}
             </h3>
           </div>
@@ -52,38 +48,32 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
                 Matched
               </span>
             )}
-            {document.primary_owners && document.primary_owners.length > 0 && (
-              <>
-                {/* // <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500 flex items-center gap-1"> */}
-                <FiUser size={12} />
-                {document.primary_owners.length === 1 ? (
-                  document.primary_owners[0]
-                ) : (
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger className="cursor-help">
-                        {document.primary_owners.length} Owners
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {document.primary_owners.join(", ")}
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
+            <span className="text-xs flex items-center gap-1">
+              {document.primary_owners &&
+                document.primary_owners.length > 0 && (
+                  <>
+                    <FiUser size={12} />
+                    {document.primary_owners.length === 1 ? (
+                      document.primary_owners[0]
+                    ) : (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger className="cursor-help">
+                            {document.primary_owners.length} Owners
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {document.primary_owners.join(", ")}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </>
                 )}
-                {/* </span> */}
-              </>
-            )}
-
-            {lastUpdated && (
+            </span>
+            {updatedAtFormatted && (
               <span className="flex items-center gap-1">
                 <FiClock size={12} />
-                {lastUpdated}
-              </span>
-            )}
-            {formattedDate && (
-              <span className="flex items-center gap-1">
-                <FiClock size={12} />
-                {formattedDate}
+                <span>Updated {updatedAtFormatted}</span>
               </span>
             )}
             {document.metadata?.helpful && (
