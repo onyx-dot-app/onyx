@@ -6,7 +6,6 @@ import {
   FiChevronLeft,
   FiTool,
   FiGlobe,
-  FiFile,
 } from "react-icons/fi";
 import { FeedbackType } from "../types";
 import React, {
@@ -17,20 +16,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { unified } from "unified";
 import ReactMarkdown from "react-markdown";
 import {
   OnyxDocument,
   FilteredOnyxDocument,
   MinimalOnyxDocument,
 } from "@/lib/search/interfaces";
-import { SearchSummary } from "./SearchSummary";
+import { SearchSummary, UserKnowledgeFiles } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
-import rehypeSanitize from "rehype-sanitize";
-import rehypeStringify from "rehype-stringify";
 import { CopyButton } from "@/components/CopyButton";
 import { ChatFileType, FileDescriptor, ToolCallMetadata } from "../interfaces";
 import {
@@ -69,13 +63,15 @@ import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
-import { SeeMoreBlock } from "@/components/chat/sources/SourceCard";
-import { SourceCard } from "./SourcesDisplay";
+import {
+  FilesSeeMoreBlock,
+  SeeMoreBlock,
+} from "@/components/chat/sources/SourceCard";
+import { FileSourceCard, SourceCard } from "./SourcesDisplay";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { copyAll, handleCopy } from "./copyingUtils";
-import { SourceChip } from "../input/ChatInputBar";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -98,9 +94,7 @@ function FileDisplay({
   const textFiles = files.filter(
     (file) => file.type == ChatFileType.PLAIN_TEXT
   );
-  const userKnowledgeFiles = files.filter(
-    (file) => file.type == ChatFileType.USER_KNOWLEDGE
-  );
+
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
@@ -121,51 +115,6 @@ function FileDisplay({
                 </div>
               );
             })}
-          </div>
-        </div>
-      )}
-      {userKnowledgeFiles && userKnowledgeFiles.length > 0 && (
-        <div className="ml-auto my-2 w-full flex justify-end">
-          <div className="min-h-[28px]">
-            {" "}
-            {/* Fixed height container to prevent shifting */}
-            {!expandedKnowledge ? (
-              <div
-                className="flex items-center gap-1 text-xs text-neutral-500 cursor-pointer hover:text-neutral-700 transition-colors"
-                onClick={() => setExpandedKnowledge(true)}
-              >
-                <span className="bg-neutral-100 px-2 py-1 rounded-full text-xs font-medium">
-                  {userKnowledgeFiles.length} knowledge source
-                  {userKnowledgeFiles.length > 1 ? "s" : ""}
-                </span>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div
-                  className="text-xs text-neutral-500 dark:text-neutral-400 cursor-pointer hover:text-neutral-700 mb-1 text-right"
-                  onClick={() => setExpandedKnowledge(false)}
-                >
-                  Hide knowledge source
-                  {userKnowledgeFiles.length > 1 ? "s" : ""}
-                </div>
-                <div className="flex  justify-end w-full flex-wrap gap-2">
-                  {userKnowledgeFiles.map((file) => (
-                    <div key={file.id} className="w-fit">
-                      <SourceChip
-                        onClick={() => {
-                          setPresentingDocument({
-                            semantic_identifier: file.id,
-                            document_id: file.id,
-                          });
-                        }}
-                        title={file.name || file.id}
-                        icon={<FiFile size={12} />}
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -215,6 +164,7 @@ function FileDisplay({
 }
 
 export const AIMessage = ({
+  userKnowledgeFiles,
   regenerate,
   overriddenModel,
   continueGenerating,
@@ -244,6 +194,7 @@ export const AIMessage = ({
   documentSidebarVisible,
   removePadding,
 }: {
+  userKnowledgeFiles?: FileDescriptor[];
   index?: number;
   shared?: boolean;
   isActive?: boolean;
@@ -490,8 +441,14 @@ export const AIMessage = ({
                             />
                           </div>
                         )}
+                        {userKnowledgeFiles && (
+                          <UserKnowledgeFiles
+                            userKnowledgeFiles={userKnowledgeFiles}
+                          />
+                        )}
 
                         {handleForceSearch &&
+                          !userKnowledgeFiles &&
                           content &&
                           query === undefined &&
                           !hasDocs &&
@@ -504,7 +461,6 @@ export const AIMessage = ({
                           )}
                       </>
                     ) : null}
-
                     {toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
@@ -521,12 +477,10 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result || !content}
                         />
                       )}
-
                     {toolCall &&
                       (!files || files.length == 0) &&
                       toolCall.tool_name === IMAGE_GENERATION_TOOL_NAME &&
                       !toolCall.tool_result && <GeneratingImageDisplay />}
-
                     {toolCall &&
                       toolCall.tool_name === INTERNET_SEARCH_TOOL_NAME && (
                         <ToolRunDisplay
@@ -541,7 +495,6 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
-
                     {docs && docs.length > 0 && (
                       <div
                         className={`mobile:hidden ${
@@ -576,14 +529,50 @@ export const AIMessage = ({
                         </div>
                       </div>
                     )}
-
-                    {content || files ? (
+                    {userKnowledgeFiles && userKnowledgeFiles.length > 0 && (
+                      <div
+                        key={10}
+                        className={`mobile:hidden ${
+                          (query ||
+                            toolCall?.tool_name ===
+                              INTERNET_SEARCH_TOOL_NAME) &&
+                          "mt-2"
+                        }  -mx-8 w-full mb-4 flex relative`}
+                      >
+                        <div className="w-full">
+                          <div className="px-8 flex gap-x-2">
+                            {!settings?.isMobile &&
+                              userKnowledgeFiles.length > 0 &&
+                              userKnowledgeFiles
+                                .slice(0, 2)
+                                .map((file: FileDescriptor, ind: number) => (
+                                  <FileSourceCard
+                                    key={ind}
+                                    document={file}
+                                    setPresentingDocument={
+                                      setPresentingDocument
+                                    }
+                                  />
+                                ))}
+                            {userKnowledgeFiles.length > 2 && (
+                              <FilesSeeMoreBlock
+                                toggled={documentSidebarVisible!}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                files={userKnowledgeFiles}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {content || userKnowledgeFiles || files ? (
                       <>
                         <FileDisplay
                           setPresentingDocument={setPresentingDocument}
-                          files={files || []}
+                          files={userKnowledgeFiles || files || []}
                         />
-
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">
                             <div

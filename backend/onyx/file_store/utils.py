@@ -44,6 +44,7 @@ def store_user_file_plaintext(
     """
     # Skip empty content
     if not plaintext_content:
+        print("NOM NOM NOM PLAIN TEXT CONTENT IS EMPTY")
         return False
 
     # Get plaintext file name
@@ -53,12 +54,14 @@ def store_user_file_plaintext(
     file_store = get_default_file_store(db_session)
     file_content = BytesIO(plaintext_content.encode("utf-8"))
     try:
+        print("NOM NOM NOM PLAIN TEXT FILE NAME  ", plaintext_file_name)
         file_store.save_file(
             file_name=plaintext_file_name,
             content=file_content,
             display_name=f"Plaintext for user file {user_file_id}",
             file_origin=FileOrigin.PLAINTEXT_CACHE,
             file_type="text/plain",
+            commit=False,
         )
         return True
     except Exception as e:
@@ -119,7 +122,6 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
     plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
 
     try:
-        # Try to read the plaintext file
         file_io = file_store.read_file(plaintext_file_name, mode="b")
         return InMemoryChatFile(
             file_id=str(user_file.file_id),
@@ -127,7 +129,10 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
             file_type=ChatFileType.USER_KNOWLEDGE,
             filename=user_file.name,
         )
-    except Exception:
+    except Exception as e:
+        logger.warning(
+            f"Failed to load plaintext file {plaintext_file_name}, defaulting to original file: {e}"
+        )
         # Fall back to original file if plaintext not available
         file_io = file_store.read_file(user_file.file_id, mode="b")
         return InMemoryChatFile(
@@ -174,6 +179,7 @@ def save_file_from_url(url: str) -> str:
             display_name="GeneratedImage",
             file_origin=FileOrigin.CHAT_IMAGE_GEN,
             file_type="image/png;base64",
+            commit=True,
         )
         return unique_id
 
@@ -188,6 +194,7 @@ def save_file_from_base64(base64_string: str) -> str:
             display_name="GeneratedImage",
             file_origin=FileOrigin.CHAT_IMAGE_GEN,
             file_type=get_image_type(base64_string),
+            commit=True,
         )
         return unique_id
 

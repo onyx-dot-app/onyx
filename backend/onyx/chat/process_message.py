@@ -771,6 +771,7 @@ def stream_chat_message_objects(
             prompt_config=prompt_config,
             db_session=db_session,
             user=user,
+            user_knowledge_present=user_files or user_folder_ids,
             llm=llm,
             fast_llm=fast_llm,
             use_file_search=new_msg_req.force_user_file_search,

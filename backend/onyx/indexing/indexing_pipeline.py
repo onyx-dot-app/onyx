@@ -469,15 +469,6 @@ def index_doc_batch(
                 else:
                     user_file_id_to_token_count[user_file_id] = None
 
-        # Store the plaintext in the file store for faster retrieval
-        for user_file_id, raw_text in user_file_id_to_raw_text.items():
-            # Use the dedicated function to store plaintext
-            store_user_file_plaintext(
-                user_file_id=user_file_id,
-                plaintext_content=raw_text,
-                db_session=db_session,
-            )
-
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.
         # we still write data here for the immediate and most likely correct sync, but
@@ -590,6 +581,15 @@ def index_doc_batch(
             document_ids=[doc.id for doc in filtered_documents],
             db_session=db_session,
         )
+        # Store the plaintext in the file store for faster retrieval
+        for user_file_id, raw_text in user_file_id_to_raw_text.items():
+            print(f"Storing plaintext for user file {user_file_id}")
+            # Use the dedicated function to store plaintext
+            store_user_file_plaintext(
+                user_file_id=user_file_id,
+                plaintext_content=raw_text,
+                db_session=db_session,
+            )
 
         db_session.commit()
 

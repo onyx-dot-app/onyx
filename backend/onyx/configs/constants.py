@@ -305,6 +305,7 @@ class OnyxCeleryQueues:
 
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"
+    USER_FILES_INDEXING = "user_files_indexing"
 
     # Monitoring queue
     MONITORING = "monitoring"

@@ -143,6 +143,7 @@ def construct_tools(
     internet_search_tool_config: InternetSearchToolConfig | None = None,
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
+    user_knowledge_present: bool = False,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
@@ -159,7 +160,7 @@ def construct_tools(
             )
 
             # Handle Search Tool
-            if tool_cls.__name__ == SearchTool.__name__:
+            if tool_cls.__name__ == SearchTool.__name__ and not user_knowledge_present:
                 if not search_tool_config:
                     search_tool_config = SearchToolConfig()
 

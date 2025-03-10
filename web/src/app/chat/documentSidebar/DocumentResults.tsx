@@ -1,7 +1,7 @@
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { Message } from "../interfaces";
+import { ChatFileType, Message } from "../interfaces";
 import {
   Dispatch,
   ForwardedRef,
@@ -11,9 +11,13 @@ import {
   useState,
 } from "react";
 import { XIcon } from "@/components/icons/icons";
-
+import {
+  FileSourceCard,
+  FileSourceCardInResults,
+} from "../message/SourcesDisplay";
 interface DocumentResultsProps {
   agenticMessage: boolean;
+  humanMessage: Message | null;
   closeSidebar: () => void;
   selectedMessage: Message | null;
   selectedDocuments: OnyxDocument[] | null;
@@ -33,6 +37,7 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
   (
     {
       agenticMessage,
+      humanMessage,
       closeSidebar,
       modal,
       selectedMessage,
@@ -63,6 +68,9 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
       return () => clearTimeout(timer);
     }, [selectedDocuments]);
 
+    const userFiles = humanMessage?.files.filter(
+      (file) => file.type == ChatFileType.USER_KNOWLEDGE
+    );
     const selectedDocumentIds =
       selectedDocuments?.map((document) => document.document_id) || [];
 
@@ -140,9 +148,16 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                       />
                     </div>
                   ))
-                ) : (
-                  <div className="mx-3" />
-                )}
+                ) : userFiles && userFiles.length > 0 ? (
+                  <div className=" gap-y-2 flex flex-col pt-2 mx-3">
+                    {userFiles?.map((file) => (
+                      <FileSourceCardInResults
+                        document={file}
+                        setPresentingDocument={setPresentingDocument}
+                      />
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

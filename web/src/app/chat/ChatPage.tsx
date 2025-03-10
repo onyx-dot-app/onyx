@@ -864,12 +864,12 @@ export function ChatPage({
   const [selectedMessageForDocDisplay, setSelectedMessageForDocDisplay] =
     useState<number | null>(null);
 
-  const { aiMessage } = selectedMessageForDocDisplay
+  const { aiMessage, humanMessage } = selectedMessageForDocDisplay
     ? getHumanAndAIMessageFromMessageNumber(
         messageHistory,
         selectedMessageForDocDisplay
       )
-    : { aiMessage: null };
+    : { aiMessage: null, humanMessage: null };
 
   const [chatSessionSharedStatus, setChatSessionSharedStatus] =
     useState<ChatSessionSharedStatus>(ChatSessionSharedStatus.Private);
@@ -2167,6 +2167,7 @@ export function ChatPage({
       });
       return;
     }
+
     // We call onSubmit, passing a `messageOverride`
     onSubmit({
       messageIdToResend: lastUserMsg.messageId,
@@ -2309,6 +2310,7 @@ export function ChatPage({
                   ? true
                   : false
               }
+              humanMessage={humanMessage}
               setPresentingDocument={setPresentingDocument}
               modal={true}
               ref={innerSidebarElementRef}
@@ -2489,6 +2491,7 @@ export function ChatPage({
             `}
           >
             <DocumentResults
+              humanMessage={humanMessage}
               agenticMessage={
                 aiMessage?.sub_questions?.length! > 0 ||
                 messageHistory.find(
@@ -2772,6 +2775,11 @@ export function ChatPage({
                                     ? messageHistory[i + 1]
                                     : undefined;
 
+                                const userFiles = previousMessage?.files.filter(
+                                  (file) =>
+                                    file.type == ChatFileType.USER_KNOWLEDGE
+                                );
+
                                 return (
                                   <div
                                     className="text-text"
@@ -2960,6 +2968,7 @@ export function ChatPage({
                                       />
                                     ) : (
                                       <AIMessage
+                                        userKnowledgeFiles={userFiles}
                                         docs={
                                           message?.documents &&
                                           message?.documents.length > 0

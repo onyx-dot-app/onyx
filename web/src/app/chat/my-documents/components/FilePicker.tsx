@@ -49,13 +49,11 @@ import {
 } from "@/components/ui/tooltip";
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
-import { FileOptionIcon } from "@/components/icons/icons";
+import { getFormattedDateTime } from "@/lib/dateUtils";
 import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
 import { truncateString } from "@/lib/utils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
-import { CircularProgress } from "../[id]/components/upload/CircularProgress";
 import { TokenDisplay } from "@/components/TokenDisplay";
 
 // Define a type for uploading files that includes progress
@@ -322,7 +320,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   } = useDocumentsContext();
 
   const router = useRouter();
-  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [linkUrl, setLinkUrl] = useState("");
   const [isCreatingFileFromLink, setIsCreatingFileFromLink] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
@@ -334,7 +331,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     null
   );
 
-  const [view, setView] = useState<"grid" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentFolderFiles, setCurrentFolderFiles] = useState<FileResponse[]>(
     []
