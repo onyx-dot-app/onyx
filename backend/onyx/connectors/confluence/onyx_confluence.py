@@ -1,4 +1,3 @@
-import io
 import json
 import time
 from collections.abc import Callable
@@ -19,17 +18,11 @@ from requests import HTTPError
 
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
-from onyx.configs.app_configs import (
-    CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
-)
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url
 from onyx.connectors.confluence.utils import update_param_in_path
-from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.interfaces import CredentialsProviderInterface
-from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
@@ -806,65 +799,6 @@ def _get_user(confluence_client: OnyxConfluence, user_id: str) -> str:
         _USER_ID_TO_DISPLAY_NAME_CACHE[user_id] = found_display_name
 
     return _USER_ID_TO_DISPLAY_NAME_CACHE.get(user_id) or _USER_NOT_FOUND
-
-
-def attachment_to_content(
-    confluence_client: OnyxConfluence,
-    attachment: dict[str, Any],
-    parent_content_id: str | None = None,
-) -> str | None:
-    """If it returns None, assume that we should skip this attachment."""
-    if not validate_attachment_filetype(attachment):
-        return None
-
-    if "api.atlassian.com" in confluence_client.url:
-        # https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/#api-wiki-rest-api-content-id-child-attachment-attachmentid-download-get
-        if not parent_content_id:
-            logger.warning(
-                "parent_content_id is required to download attachments from Confluence Cloud!"
-            )
-            return None
-
-        download_link = (
-            confluence_client.url
-            + f"/rest/api/content/{parent_content_id}/child/attachment/{attachment['id']}/download"
-        )
-    else:
-        download_link = confluence_client.url + attachment["_links"]["download"]
-
-    attachment_size = attachment["extensions"]["fileSize"]
-    if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
-        logger.warning(
-            f"Skipping {download_link} due to size. "
-            f"size={attachment_size} "
-            f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
-        )
-        return None
-
-    logger.info(f"_attachment_to_content - _session.get: link={download_link}")
-
-    # why are we using session.get here? we probably won't retry these ... is that ok?
-    response = confluence_client._session.get(download_link)
-    if response.status_code != 200:
-        logger.warning(
-            f"Failed to fetch {download_link} with invalid status code {response.status_code}"
-        )
-        return None
-
-    extracted_text = extract_file_text(
-        io.BytesIO(response.content),
-        file_name=attachment["title"],
-        break_on_unprocessable=False,
-    )
-    if len(extracted_text) > CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD:
-        logger.warning(
-            f"Skipping {download_link} due to char count. "
-            f"char count={len(extracted_text)} "
-            f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD}"
-        )
-        return None
-
-    return extracted_text
 
 
 def extract_text_from_confluence_html(
