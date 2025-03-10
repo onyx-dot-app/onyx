@@ -62,7 +62,7 @@ def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
 
 
 def _extract_ids_from_urls(urls: list[str]) -> list[str]:
-    return [urlparse(url).path.split("/")[-1].split("?")[0] for url in urls]
+    return [urlparse(url).path.split("/")[-1] for url in urls]
 
 
 def _convert_single_file(
