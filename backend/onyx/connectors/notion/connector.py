@@ -1,4 +1,3 @@
-import time
 from collections.abc import Generator
 from dataclasses import dataclass
 from dataclasses import fields
@@ -32,6 +31,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_NOTION_PAGE_SIZE = 100
 _NOTION_CALL_TIMEOUT = 30  # 30 seconds
 
 
@@ -537,9 +537,9 @@ class NotionConnector(LoadConnector, PollConnector):
         """
         filtered_pages: list[NotionPage] = []
         for page in pages:
-            compare_time = time.mktime(
-                time.strptime(page[filter_field], "%Y-%m-%dT%H:%M:%S.000Z")
-            )
+            # Parse ISO 8601 timestamp and convert to UTC epoch time
+            timestamp = page[filter_field].replace(".000Z", "+00:00")
+            compare_time = datetime.fromisoformat(timestamp).timestamp()
             if compare_time > start and compare_time <= end:
                 filtered_pages += [NotionPage(**page)]
         return filtered_pages
@@ -578,7 +578,7 @@ class NotionConnector(LoadConnector, PollConnector):
 
         query_dict = {
             "filter": {"property": "object", "value": "page"},
-            "page_size": self.batch_size,
+            "page_size": _NOTION_PAGE_SIZE,
         }
         while True:
             db_res = self._search_notion(query_dict)
@@ -604,7 +604,7 @@ class NotionConnector(LoadConnector, PollConnector):
             return
 
         query_dict = {
-            "page_size": self.batch_size,
+            "page_size": _NOTION_PAGE_SIZE,
             "sort": {"timestamp": "last_edited_time", "direction": "descending"},
             "filter": {"property": "object", "value": "page"},
         }
