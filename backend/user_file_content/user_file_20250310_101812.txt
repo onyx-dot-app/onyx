@@ -1,8 +1,0 @@
-This document contains details necessary for debugging the Multi-Tenant cloud.
-
-Impersonate a user
-Steps to impersonate a user:
-Log in with your Danswer email account. (only a specific set of email addresses will have access to super user mode)
-Navigate to https://beta.danswer.ai/auth/impersonate 
-Enter the email of the user you wish to impersonate as well as the Super User API key (ask a team member to supply you with an API key if you have not previously done so).
-You will now be logged in as that user! All the actions you perform will persist, so be careful.

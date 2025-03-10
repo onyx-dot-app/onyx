@@ -181,7 +181,9 @@ const DraggableItem: React.FC<{
           </div>
 
           <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
-            {file.created_at && getFormattedDateTime(new Date(file.created_at))}
+            {file.created_at
+              ? getFormattedDateTime(new Date(file.created_at))
+              : "–"}
           </div>
         </div>
       </div>
@@ -395,12 +397,25 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
   useEffect(() => {
     if (currentFolder) {
-      const folder = folders.find((f) => f.id === currentFolder);
-      setCurrentFolderFiles(folder?.files || []);
+      if (currentFolder === -1) {
+        // For the special "Recent" folder (id: -1), include files not in any folder that are selected
+        const folder = folders.find((f) => f.id === currentFolder);
+        const filesInFolder = folder?.files || [];
+
+        // Get selected files that are not in any folder
+        const selectedFilesNotInFolders = selectedFiles.filter(
+          (file) => !folders.some((f) => f.id === file.folder_id)
+        );
+
+        setCurrentFolderFiles([...filesInFolder, ...selectedFilesNotInFolders]);
+      } else {
+        const folder = folders.find((f) => f.id === currentFolder);
+        setCurrentFolderFiles(folder?.files || []);
+      }
     } else {
       setCurrentFolderFiles([]);
     }
-  }, [currentFolder, folders]);
+  }, [currentFolder, folders, selectedFiles]);
 
   useEffect(() => {
     if (searchQuery) {
@@ -1273,8 +1288,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             </div>
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-neutral-200 dark:border-neutral-700">
-          <div className="flex flex-col items-center justify-center space-y-4">
+        <div className="px-5 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+          <div className="flex flex-col items-center justify-center py-2 space-y-4">
             <div className="flex items-center gap-3">
               <span className="text-sm text-neutral-600 dark:text-neutral-400">
                 Selected context:

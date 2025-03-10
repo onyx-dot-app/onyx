@@ -49,50 +49,55 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
         </h3>
       </div>
 
-      <ScrollArea className="flex-grow pr-1">
+      <ScrollArea className="h-[200px] flex-grow pr-1">
         <div className="space-y-2.5">
           {folders.length > 0 && (
             <div className="space-y-2.5">
-              {folders.map((folder: FolderResponse) => (
-                <div key={folder.id} className="group flex items-center gap-2">
+              {[...folders, ...folders, ...folders, ...folders].map(
+                (folder: FolderResponse) => (
                   <div
-                    className={cn(
-                      "group flex-1 flex items-center rounded-md border p-2.5",
-                      "bg-neutral-100/80 border-neutral-200 hover:bg-neutral-200/60",
-                      "dark:bg-neutral-800/80 dark:border-neutral-700 dark:hover:bg-neutral-750",
-                      "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
-                      "dark:active:bg-neutral-700 dark:active:border-neutral-600",
-                      "transition-colors duration-150"
-                    )}
+                    key={folder.id}
+                    className="group flex items-center gap-2"
                   >
-                    <div className="flex items-center min-w-0 flex-1">
-                      <FolderIcon className="h-5 w-5 mr-2 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
+                    <div
+                      className={cn(
+                        "group flex-1 flex items-center rounded-md border p-2.5",
+                        "bg-neutral-100/80 border-neutral-200 hover:bg-neutral-200/60",
+                        "dark:bg-neutral-800/80 dark:border-neutral-700 dark:hover:bg-neutral-750",
+                        "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
+                        "dark:active:bg-neutral-700 dark:active:border-neutral-600",
+                        "transition-colors duration-150"
+                      )}
+                    >
+                      <div className="flex items-center min-w-0 flex-1">
+                        <FolderIcon className="h-5 w-5 mr-2 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
 
-                      <span className="text-sm font-medium truncate text-neutral-800 dark:text-neutral-100">
-                        {truncateString(folder.name, 34)}
-                      </span>
+                        <span className="text-sm font-medium truncate text-neutral-800 dark:text-neutral-100">
+                          {truncateString(folder.name, 34)}
+                        </span>
+                      </div>
                     </div>
-                  </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => onRemoveFolder(folder)}
-                    className={cn(
-                      "bg-transparent hover:bg-transparent opacity-0 group-hover:opacity-100",
-                      "h-6 w-6 p-0 rounded-full shrink-0",
-                      "hover:text-neutral-700",
-                      "dark:text-neutral-300 dark:hover:text-neutral-100",
-                      "dark:focus:ring-1 dark:focus:ring-neutral-500",
-                      "dark:active:bg-neutral-500 dark:active:text-white",
-                      "transition-all duration-150 ease-in-out"
-                    )}
-                    aria-label={`Remove folder ${folder.name}`}
-                  >
-                    <X className="h-3 w-3 dark:text-neutral-200" />
-                  </Button>
-                </div>
-              ))}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRemoveFolder(folder)}
+                      className={cn(
+                        "bg-transparent hover:bg-transparent opacity-0 group-hover:opacity-100",
+                        "h-6 w-6 p-0 rounded-full shrink-0",
+                        "hover:text-neutral-700",
+                        "dark:text-neutral-300 dark:hover:text-neutral-100",
+                        "dark:focus:ring-1 dark:focus:ring-neutral-500",
+                        "dark:active:bg-neutral-500 dark:active:text-white",
+                        "transition-all duration-150 ease-in-out"
+                      )}
+                      aria-label={`Remove folder ${folder.name}`}
+                    >
+                      <X className="h-3 w-3 dark:text-neutral-200" />
+                    </Button>
+                  </div>
+                )
+              )}
             </div>
           )}
 
