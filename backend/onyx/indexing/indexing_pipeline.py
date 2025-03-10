@@ -133,7 +133,7 @@ def _upsert_documents_in_db(
             )
 
 
-def _get_aggregated_boost_factor(
+def _get_aggregated_chunk_boost_factor(
     chunks: list[IndexChunk],
     information_content_classification_model: InformationContentClassificationModel,
 ) -> list[float]:
@@ -463,18 +463,12 @@ def index_doc_batch(
         else ([], [])
     )
 
-    (
-        chunks_with_embeddings_scores,
-        chunk_content_scores,
-        chunk_content_classification_failures,
-    ) = (
-        chunks_with_embeddings,
-        _get_aggregated_boost_factor(
+    chunk_content_scores = (
+        _get_aggregated_chunk_boost_factor(
             chunks_with_embeddings, information_content_classification_model
         )
         if USE_INFORMATION_CONTENT_CLASSIFICATION
-        else [1.0] * len(chunks_with_embeddings),
-        embedding_failures,
+        else [1.0] * len(chunks_with_embeddings)
     )
 
     updatable_ids = [doc.id for doc in ctx.updatable_docs]
@@ -505,7 +499,7 @@ def index_doc_batch(
             document_id: len(
                 [
                     chunk
-                    for chunk in chunks_with_embeddings_scores
+                    for chunk in chunks_with_embeddings
                     if chunk.source_document.id == document_id
                 ]
             )
@@ -530,9 +524,9 @@ def index_doc_batch(
                     else DEFAULT_BOOST
                 ),
                 tenant_id=tenant_id,
-                aggregated_boost_factor=chunk_content_scores[chunk_num],
+                aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
             )
-            for chunk_num, chunk in enumerate(chunks_with_embeddings_scores)
+            for chunk_num, chunk in enumerate(chunks_with_embeddings)
         ]
 
         logger.debug(
@@ -623,9 +617,7 @@ def index_doc_batch(
         new_docs=len([r for r in insertion_records if r.already_existed is False]),
         total_docs=len(filtered_documents),
         total_chunks=len(access_aware_chunks),
-        failures=vector_db_write_failures
-        + embedding_failures
-        + chunk_content_classification_failures,
+        failures=vector_db_write_failures + embedding_failures,
     )
 
     return result

@@ -85,14 +85,14 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     boost: influences the ranking of this chunk at query time. Positive -> ranked higher,
            negative -> ranked lower. Not included in aggregated boost calculation
            for legacy reasons.
-    aggregated_boost_factor: represents the content information boost calculation
+    aggregated_chunk_boost_factor: represents the aggregated chunk-level boost (currently: information content)
     """
 
     tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
     boost: int
-    aggregated_boost_factor: float
+    aggregated_chunk_boost_factor: float
 
     @classmethod
     def from_index_chunk(
@@ -101,7 +101,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         access: "DocumentAccess",
         document_sets: set[str],
         boost: int,
-        aggregated_boost_factor: float,
+        aggregated_chunk_boost_factor: float,
         tenant_id: str,
     ) -> "DocMetadataAwareIndexChunk":
         index_chunk_data = index_chunk.model_dump()
@@ -110,7 +110,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             access=access,
             document_sets=document_sets,
             boost=boost,
-            aggregated_boost_factor=aggregated_boost_factor,
+            aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
         )
 

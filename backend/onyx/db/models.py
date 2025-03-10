@@ -591,6 +591,54 @@ class Document(Base):
     )
 
 
+class ChunkStats(Base):
+    __tablename__ = "chunk_stats"
+    # NOTE: if more sensitive data is added here for display, make sure to add user/group permission
+
+    # this should correspond to the ID of the document
+    # (as is passed around in Onyx)
+    id: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        default=lambda context: (
+            f"{context.get_current_parameters()['document_id']}"
+            f"__{context.get_current_parameters()['chunk_in_doc_id']}"
+        ),
+        index=True,
+    )
+
+    # Reference to parent document
+    document_id: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=False, index=True
+    )
+
+    chunk_in_doc_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    # 0 for neutral, positive for mostly endorse, negative for mostly reject
+    boost_components: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB())
+
+    last_modified: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True, default=func.now()
+    )
+    last_synced: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_chunk_sync_status",
+            last_modified,
+            last_synced,
+        ),
+        UniqueConstraint(
+            "document_id", "chunk_in_doc_id", name="uq_chunk_stats_doc_chunk"
+        ),
+    )
+
+
 class Tag(Base):
     __tablename__ = "tag"
 

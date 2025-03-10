@@ -7,7 +7,7 @@ from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import Section
-from onyx.indexing.indexing_pipeline import _get_aggregated_boost_factor
+from onyx.indexing.indexing_pipeline import _get_aggregated_chunk_boost_factor
 from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import IndexChunk
@@ -182,7 +182,7 @@ def test_get_aggregated_boost_factor() -> None:
     ]
 
     # Execute the function
-    boost_scores = _get_aggregated_boost_factor(
+    boost_scores = _get_aggregated_chunk_boost_factor(
         chunks=chunks, information_content_classification_model=mock_model
     )
 
@@ -218,7 +218,7 @@ def test_get_aggregated_boost_factorilure() -> None:
     ]
 
     # Execute
-    boost_scores = _get_aggregated_boost_factor(
+    boost_scores = _get_aggregated_chunk_boost_factor(
         chunks=chunks, information_content_classification_model=mock_model
     )
 
@@ -239,7 +239,7 @@ def test_get_aggregated_boost_factor_individual_failure() -> None:
 
     # Execute and verify it raises an exception
     with pytest.raises(Exception) as exc_info:
-        _get_aggregated_boost_factor(
+        _get_aggregated_chunk_boost_factor(
             chunks=chunks, information_content_classification_model=mock_model
         )
 

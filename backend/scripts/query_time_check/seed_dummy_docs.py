@@ -99,7 +99,7 @@ def generate_dummy_chunk(
         ),
         document_sets={document_set for document_set in document_set_names},
         boost=random.randint(-1, 1),
-        aggregated_boost_factor=random.random(),
+        aggregated_chunk_boost_factor=random.random(),
         tenant_id=POSTGRES_DEFAULT_SCHEMA,
     )
 
