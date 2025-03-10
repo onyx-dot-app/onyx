@@ -264,6 +264,7 @@ class FileOrigin(str, Enum):
     CONNECTOR = "connector"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
+    PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
 
 

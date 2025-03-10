@@ -17,7 +17,53 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.utils.b64 import get_image_type
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+
+logger = setup_logger()
+
+
+def user_file_id_to_plaintext_file_name(user_file_id: int) -> str:
+    """Generate a consistent file name for storing plaintext content of a user file."""
+    return f"plaintext_{user_file_id}"
+
+
+def store_user_file_plaintext(
+    user_file_id: int, plaintext_content: str, db_session: Session
+) -> bool:
+    """
+    Store plaintext content for a user file in the file store.
+
+    Args:
+        user_file_id: The ID of the user file
+        plaintext_content: The plaintext content to store
+        db_session: The database session
+
+    Returns:
+        bool: True if storage was successful, False otherwise
+    """
+    # Skip empty content
+    if not plaintext_content:
+        return False
+
+    # Get plaintext file name
+    plaintext_file_name = user_file_id_to_plaintext_file_name(user_file_id)
+
+    # Store the plaintext in the file store
+    file_store = get_default_file_store(db_session)
+    file_content = BytesIO(plaintext_content.encode("utf-8"))
+    try:
+        file_store.save_file(
+            file_name=plaintext_file_name,
+            content=file_content,
+            display_name=f"Plaintext for user file {user_file_id}",
+            file_origin=FileOrigin.PLAINTEXT_CACHE,
+            file_type="text/plain",
+        )
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to store plaintext for user file {user_file_id}: {e}")
+        return False
 
 
 def load_chat_file(
@@ -68,13 +114,28 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
     if not user_file:
         raise ValueError(f"User file with id {file_id} not found")
 
-    file_io = get_default_file_store(db_session).read_file(user_file.file_id, mode="b")
-    return InMemoryChatFile(
-        file_id=str(user_file.file_id),
-        content=file_io.read(),
-        file_type=ChatFileType.USER_KNOWLEDGE,
-        filename=user_file.name,
-    )
+    # Try to load plaintext version first
+    file_store = get_default_file_store(db_session)
+    plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
+
+    try:
+        # Try to read the plaintext file
+        file_io = file_store.read_file(plaintext_file_name, mode="b")
+        return InMemoryChatFile(
+            file_id=str(user_file.file_id),
+            content=file_io.read(),
+            file_type=ChatFileType.USER_KNOWLEDGE,
+            filename=user_file.name,
+        )
+    except Exception:
+        # Fall back to original file if plaintext not available
+        file_io = file_store.read_file(user_file.file_id, mode="b")
+        return InMemoryChatFile(
+            file_id=str(user_file.file_id),
+            content=file_io.read(),
+            file_type=ChatFileType.USER_KNOWLEDGE,
+            filename=user_file.name,
+        )
 
 
 def load_all_user_files(

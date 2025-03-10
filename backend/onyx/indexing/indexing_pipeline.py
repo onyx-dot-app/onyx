@@ -9,7 +9,9 @@ from sqlalchemy.orm import Session
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
-from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.constants import (
+    DEFAULT_BOOST,
+)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -40,6 +42,7 @@ from onyx.document_index.document_index_utils import (
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
+from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
@@ -443,6 +446,7 @@ def index_doc_batch(
         )
         # Calculate token counts for each document by combining all its chunks' content
         user_file_id_to_token_count: dict[int, int | None] = {}
+        user_file_id_to_raw_text: dict[int, str] = {}
         for document_id in updatable_ids:
             # Only calculate token counts for documents that have a user file ID
             if (
@@ -461,8 +465,18 @@ def index_doc_batch(
                     )
                     token_count = len(llm_tokenizer.encode(combined_content))
                     user_file_id_to_token_count[user_file_id] = token_count
+                    user_file_id_to_raw_text[user_file_id] = combined_content
                 else:
                     user_file_id_to_token_count[user_file_id] = None
+
+        # Store the plaintext in the file store for faster retrieval
+        for user_file_id, raw_text in user_file_id_to_raw_text.items():
+            # Use the dedicated function to store plaintext
+            store_user_file_plaintext(
+                user_file_id=user_file_id,
+                plaintext_content=raw_text,
+                db_session=db_session,
+            )
 
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.

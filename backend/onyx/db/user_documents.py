@@ -458,3 +458,13 @@ def update_user_file_token_count__no_commit(
         db_session.query(UserFile).filter(UserFile.id == user_file_id).update(
             {UserFile.token_count: token_count}
         )
+
+
+def update_user_file_raw_text__no_commit(
+    user_file_id_to_raw_text: dict[int, str],
+    db_session: Session,
+) -> None:
+    for user_file_id, raw_text in user_file_id_to_raw_text.items():
+        db_session.query(UserFile).filter(UserFile.id == user_file_id).update(
+            {UserFile.raw_text: raw_text}
+        )
