@@ -3,6 +3,8 @@ import socket
 from enum import auto
 from enum import Enum
 
+ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
+
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed

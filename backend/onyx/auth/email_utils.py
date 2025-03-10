@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from email.utils import make_msgid
 
+from ee.onyx.server.enterprise_settings.store import load_runtime_settings
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.app_configs import EMAIL_FROM
 from onyx.configs.app_configs import SMTP_PASS
@@ -98,7 +99,7 @@ HTML_EMAIL_TEMPLATE = """\
         <img
           style="background-color: #ffffff; border-radius: 8px;"
           src="https://www.onyx.app/logos/customer/onyx.png"
-          alt="Onyx Logo"
+          alt="{application_name} Logo"
         >
       </td>
     </tr>
@@ -113,7 +114,7 @@ HTML_EMAIL_TEMPLATE = """\
     </tr>
     <tr>
       <td class="footer">
-        © {year} Onyx. All rights reserved.
+        © {year} {application_name}. All rights reserved.
         <br>
         Have questions? Join our Slack community <a href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA">here</a>.
       </td>
@@ -125,13 +126,18 @@ HTML_EMAIL_TEMPLATE = """\
 
 
 def build_html_email(
-    heading: str, message: str, cta_text: str | None = None, cta_link: str | None = None
+    application_name: str,
+    heading: str,
+    message: str,
+    cta_text: str | None = None,
+    cta_link: str | None = None,
 ) -> str:
     if cta_text and cta_link:
         cta_block = f'<a class="cta-button" href="{cta_link}">{cta_text}</a>'
     else:
         cta_block = ""
     return HTML_EMAIL_TEMPLATE.format(
+        application_name=application_name,
         title=heading,
         heading=heading,
         message=message,
@@ -175,7 +181,9 @@ def send_email(
 
 def send_subscription_cancellation_email(user_email: str) -> None:
     # Example usage of the reusable HTML
-    subject = "Your Onyx Subscription Has Been Canceled"
+    settings = load_runtime_settings()
+
+    subject = f"Your {settings.application_name} Subscription Has Been Canceled"
     heading = "Subscription Canceled"
     message = (
         "<p>We're sorry to see you go.</p>"
@@ -184,7 +192,9 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     )
     cta_text = "Renew Subscription"
     cta_link = "https://www.onyx.app/pricing"
-    html_content = build_html_email(heading, message, cta_text, cta_link)
+    html_content = build_html_email(
+        settings.application_name, heading, message, cta_text, cta_link
+    )
     text_content = (
         "We're sorry to see you go.\n"
         "Your subscription has been canceled and will end on your next billing date.\n"
@@ -196,11 +206,13 @@ def send_subscription_cancellation_email(user_email: str) -> None:
 def send_user_email_invite(
     user_email: str, current_user: User, auth_type: AuthType
 ) -> None:
-    subject = "Invitation to Join Onyx Organization"
+    settings = load_runtime_settings()
+
+    subject = f"Invitation to Join {settings.application_name} Organization"
     heading = "You've Been Invited!"
 
     # the exact action taken by the user, and thus the message, depends on the auth type
-    message = f"<p>You have been invited by {current_user.email} to join an organization on Onyx.</p>"
+    message = f"<p>You have been invited by {current_user.email} to join an organization on {settings.application_name} .</p>"
     if auth_type == AuthType.CLOUD:
         message += (
             "<p>To join the organization, please click the button below to set a password "
@@ -231,7 +243,7 @@ def send_user_email_invite(
     # text content is the fallback for clients that don't support HTML
     # not as critical, so not having special cases for each auth type
     text_content = (
-        f"You have been invited by {current_user.email} to join an organization on Onyx.\n"
+        f"You have been invited by {current_user.email} to join an organization on {settings.application_name}.\n"
         "To join the organization, please visit the following link:\n"
         f"{WEB_DOMAIN}/auth/signup?email={user_email}\n"
     )
@@ -248,12 +260,16 @@ def send_forgot_password_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a forgot password email with or without fancy HTML
-    subject = "Onyx Forgot Password"
+    settings = load_runtime_settings()
+
+    subject = f"{settings.application_name} Forgot Password"
     link = f"{WEB_DOMAIN}/auth/reset-password?token={token}"
     if MULTI_TENANT:
         link += f"&{TENANT_ID_COOKIE_NAME}={tenant_id}"
     message = f"<p>Click the following link to reset your password:</p><p>{link}</p>"
-    html_content = build_html_email("Reset Your Password", message)
+    html_content = build_html_email(
+        settings.application_name, "Reset Your Password", message
+    )
     text_content = f"Click the following link to reset your password: {link}"
     send_email(user_email, subject, html_content, text_content, mail_from)
 
@@ -264,11 +280,15 @@ def send_user_verification_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a verification email
-    subject = "Onyx Email Verification"
+    settings = load_runtime_settings()
+
+    subject = f"{settings.application_name} Email Verification"
     link = f"{WEB_DOMAIN}/auth/verify-email?token={token}"
     message = (
         f"<p>Click the following link to verify your email address:</p><p>{link}</p>"
     )
-    html_content = build_html_email("Verify Your Email", message)
+    html_content = build_html_email(
+        settings.application_name, "Verify Your Email", message
+    )
     text_content = f"Click the following link to verify your email address: {link}"
     send_email(user_email, subject, html_content, text_content, mail_from)
