@@ -33,6 +33,7 @@ from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
 from onyx.db.user_documents import fetch_user_files_for_documents
 from onyx.db.user_documents import fetch_user_folders_for_documents
+from onyx.db.user_documents import update_user_file_token_count__no_commit
 from onyx.document_index.document_index_utils import (
     get_multipass_config,
 )
@@ -46,6 +47,8 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.factory import get_default_llms
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -432,6 +435,35 @@ def index_doc_batch(
             for document_id in updatable_ids
         }
 
+        llm, _ = get_default_llms()
+
+        llm_tokenizer = get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        )
+        # Calculate token counts for each document by combining all its chunks' content
+        user_file_id_to_token_count: dict[int, int | None] = {}
+        for document_id in updatable_ids:
+            # Only calculate token counts for documents that have a user file ID
+            if (
+                document_id in doc_id_to_user_file_id
+                and doc_id_to_user_file_id[document_id] is not None
+            ):
+                user_file_id = doc_id_to_user_file_id[document_id]
+                document_chunks = [
+                    chunk
+                    for chunk in chunks_with_embeddings
+                    if chunk.source_document.id == document_id
+                ]
+                if document_chunks:
+                    combined_content = " ".join(
+                        [chunk.content for chunk in document_chunks]
+                    )
+                    token_count = len(llm_tokenizer.encode(combined_content))
+                    user_file_id_to_token_count[user_file_id] = token_count
+                else:
+                    user_file_id_to_token_count[user_file_id] = None
+
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.
         # we still write data here for the immediate and most likely correct sync, but
@@ -525,6 +557,11 @@ def index_doc_batch(
         update_docs_chunk_count__no_commit(
             document_ids=updatable_ids,
             doc_id_to_chunk_count=doc_id_to_new_chunk_cnt,
+            db_session=db_session,
+        )
+
+        update_user_file_token_count__no_commit(
+            user_file_id_to_token_count=user_file_id_to_token_count,
             db_session=db_session,
         )
 

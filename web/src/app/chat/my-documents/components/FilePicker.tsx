@@ -397,21 +397,21 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
   useEffect(() => {
     if (currentFolder) {
-      if (currentFolder === -1) {
-        // For the special "Recent" folder (id: -1), include files not in any folder that are selected
-        const folder = folders.find((f) => f.id === currentFolder);
-        const filesInFolder = folder?.files || [];
+      // if (currentFolder === -1) {
+      //   // For the special "Recent" folder (id: -1), include files not in any folder that are selected
+      //   const folder = folders.find((f) => f.id === currentFolder);
+      //   const filesInFolder = folder?.files || [];
 
-        // Get selected files that are not in any folder
-        const selectedFilesNotInFolders = selectedFiles.filter(
-          (file) => !folders.some((f) => f.id === file.folder_id)
-        );
+      //   // Get selected files that are not in any folder
+      //   const selectedFilesNotInFolders = selectedFiles.filter(
+      //     (file) => !folders.some((f) => f.id === file.folder_id)
+      //   );
 
-        setCurrentFolderFiles([...filesInFolder, ...selectedFilesNotInFolders]);
-      } else {
-        const folder = folders.find((f) => f.id === currentFolder);
-        setCurrentFolderFiles(folder?.files || []);
-      }
+      //   setCurrentFolderFiles([...filesInFolder, ...selectedFilesNotInFolders]);
+      // } else {
+      const folder = folders.find((f) => f.id === currentFolder);
+      setCurrentFolderFiles(folder?.files || []);
+      // }
     } else {
       setCurrentFolderFiles([]);
     }
@@ -898,7 +898,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               d="M15 19l-7-7 7-7"
             />
           </svg>
-          Back to My Documents
+          Back to My Documents {currentFolder}
         </div>
       );
     }

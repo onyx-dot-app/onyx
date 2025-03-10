@@ -130,8 +130,10 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               N/A, indexing
               <AnimatedDots />
             </>
+          ) : file.token_count ? (
+            `${file.token_count?.toLocaleString()} tokens`
           ) : (
-            `File has ${file.token_count?.toLocaleString()} tokens`
+            "N/A"
           )}
         </div>
       </div>

@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_current_tenant_id
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.file.connector import _read_files_and_metadata
 from onyx.connectors.models import InputType
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
@@ -25,9 +24,6 @@ from onyx.db.models import Persona__UserFile
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.llm.factory import get_default_llms
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.connector import upload_files
 from onyx.server.documents.models import ConnectorBase
@@ -46,39 +42,6 @@ def create_user_files(
     upload_response = upload_files(files, db_session)
     user_files = []
 
-    context_files = _read_files_and_metadata(
-        file_name=str(upload_response.file_paths[0]), db_session=db_session
-    )
-    file_name, file_obj = next(context_files)[0:2]
-
-    content, _ = extract_text_and_images(file_obj, file_name)
-    llm, _ = get_default_llms()
-
-    llm_tokenizer = get_tokenizer(
-        model_name=llm.config.model_name,
-        provider_type=llm.config.model_provider,
-    )
-    print("ENCODING THE CONTENT")
-    # Save content to a text file for debugging or analysis
-    import os
-    from datetime import datetime
-
-    # Create a directory for saving user file content if it doesn't exist
-    save_dir = os.path.join(os.getcwd(), "user_file_content")
-    os.makedirs(save_dir, exist_ok=True)
-
-    # Generate a unique filename with timestamp
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"user_file_{timestamp}.txt"
-    file_path = os.path.join(save_dir, filename)
-
-    # Write the content to the file
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(content)
-
-    print(f"Content saved to {file_path}")
-    token_count = len(llm_tokenizer.encode(content))
-
     for file_path, file in zip(upload_response.file_paths, files):
         new_file = UserFile(
             user_id=user.id if user else None,
@@ -86,7 +49,7 @@ def create_user_files(
             file_id=file_path,
             document_id="USER_FILE_CONNECTOR__" + file_path,
             name=file.filename,
-            token_count=token_count,
+            token_count=None,
         )
         db_session.add(new_file)
         user_files.append(new_file)
@@ -485,3 +448,13 @@ def upsert_user_folder(
 
 def get_user_folder_by_name(db_session: Session, name: str) -> UserFolder | None:
     return db_session.query(UserFolder).filter(UserFolder.name == name).first()
+
+
+def update_user_file_token_count__no_commit(
+    user_file_id_to_token_count: dict[int, int | None],
+    db_session: Session,
+) -> None:
+    for user_file_id, token_count in user_file_id_to_token_count.items():
+        db_session.query(UserFile).filter(UserFile.id == user_file_id).update(
+            {UserFile.token_count: token_count}
+        )
