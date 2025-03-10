@@ -31,11 +31,11 @@ upstream api_server {
 
     # for a TCP configuration
     # TODO: use gunicorn to manage multiple processes
-    server api_server:8080 fail_timeout=0;
+    server ${ONYX_BACKEND_API_HOST}:8080 fail_timeout=0;
 }
 
 upstream web_server {
-    server web_server:3000 fail_timeout=0;
+    server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
 }
 
 server {
