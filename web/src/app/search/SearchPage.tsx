@@ -141,6 +141,8 @@ import { SearchAnswer } from "./components/SearchAnswer";
 import { SourceIcon } from "@/components/SourceIcon";
 import { streamSearchWithCitation } from "./searchUtils";
 import { UserDropdown } from "@/components/UserDropdown";
+import { FiBook, FiTag } from "react-icons/fi";
+import { PageSelector } from "@/components/PageSelector";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -2042,6 +2044,7 @@ export default function SearchPage({
 
   // Function to handle search using our new streamSearchWithCitation function
   const handleSearch = async (query: string) => {
+    setFirstSearch(false);
     if (!query.trim() || !liveAssistant) return;
 
     setSearchQuery(query);
@@ -2085,6 +2088,7 @@ export default function SearchPage({
       setIsSearching(false);
     }
   };
+  const [firstSearch, setFirstSearch] = useState(true);
 
   // Filter documents based on selected filter
   const filteredDocuments = useMemo(() => {
@@ -2098,6 +2102,28 @@ export default function SearchPage({
   const handleDocumentClick = (document: OnyxDocument) => {
     setPresentingDocument(document);
     setDocumentSidebarVisible(true);
+  };
+
+  // Add state for pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const resultsPerPage = 10;
+
+  // Get paginated results
+  const paginatedResults = useMemo(() => {
+    const startIndex = (currentPage - 1) * resultsPerPage;
+    return filteredDocuments.slice(startIndex, startIndex + resultsPerPage);
+  }, [filteredDocuments, currentPage]);
+
+  // Calculate total pages
+  const totalPages = useMemo(() => {
+    return Math.max(1, Math.ceil(filteredDocuments.length / resultsPerPage));
+  }, [filteredDocuments]);
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    // Scroll to top of results
+    document.querySelector(".search-results-container")?.scrollTo(0, 0);
   };
 
   return (
@@ -2188,6 +2214,7 @@ export default function SearchPage({
               {/* Header with search input */}
               <div className="flex-none  flex justify-center p-4 border-b border-background-200">
                 <SearchInput
+                  hide={firstSearch}
                   onSearch={handleSearch}
                   initialQuery={searchQuery}
                   placeholder="Find knowledge at your enterprise..."
@@ -2203,15 +2230,27 @@ export default function SearchPage({
                     <div className="flex w-full h-screen relative">
                       {/* Results - scrollable and with max width */}
                       <div className="w-full h-full overflow-y-auto max-w-3xl pr-4">
-                        <SearchResults
-                          documents={[
-                            ...filteredDocuments,
-                            ...filteredDocuments,
-                            ...filteredDocuments,
-                          ]}
-                          onDocumentClick={handleDocumentClick}
-                          isLoading={isSearching && searchResults.length === 0}
-                        />
+                        <div className="search-results-container">
+                          <SearchResults
+                            documents={paginatedResults}
+                            onDocumentClick={handleDocumentClick}
+                            isLoading={
+                              isSearching && searchResults.length === 0
+                            }
+                          />
+                        </div>
+
+                        {/* Pagination */}
+                        {filteredDocuments.length > 0 && (
+                          <div className="flex justify-center py-8 border-t border-gray-100 mt-6">
+                            <PageSelector
+                              currentPage={currentPage}
+                              totalPages={totalPages}
+                              onPageChange={handlePageChange}
+                              shouldScroll={true}
+                            />
+                          </div>
+                        )}
                       </div>
 
                       {/* Filters - sticky on scroll */}
@@ -2231,31 +2270,89 @@ export default function SearchPage({
                   </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full">
-                    <div className="text-center max-w-md">
-                      <h2 className="text-2xl font-semibold mb-2">
-                        Search your knowledge
+                    <div className="text-center max-w-2xl w-full px-4">
+                      <h2 className="text-3xl font-semibold mb-4">
+                        Find knowledge across your enterprise
                       </h2>
-                      <p className="text-text-500 mb-6">
-                        Find information across all your connected sources.
+                      <p className="text-text-500 mb-8 text-lg">
+                        Search across all your connected sources to find the
+                        information you need.
                       </p>
-                      {sources.length > 0 && (
-                        <div className="flex flex-wrap justify-center gap-2 mt-4">
+
+                      <div className="mb-8 w-full max-w-xl mx-auto">
+                        <SearchInput
+                          onSearch={handleSearch}
+                          initialQuery={searchQuery}
+                          placeholder="Search for anything..."
+                        />
+                      </div>
+
+                      {/* Basic filters */}
+                      <div className="mt-6 flex flex-col gap-4 max-w-lg mx-auto">
+                        <h3 className="text-lg font-medium text-text-600">
+                          Popular filters
+                        </h3>
+                        <div className="flex flex-wrap gap-2 justify-center">
                           {sources.slice(0, 5).map((source) => (
                             <div
                               key={source.internalName}
-                              className="flex items-center gap-1 bg-background-100 px-3 py-1 rounded-full"
+                              className="flex items-center gap-2 bg-background-100 px-4 py-2 rounded-full cursor-pointer hover:bg-background-200 transition-colors"
+                              onClick={() => {
+                                filterManager.setSelectedSources([source]);
+                                setSelectedFilter(source.internalName);
+                                if (searchQuery) {
+                                  handleSearch(searchQuery);
+                                }
+                              }}
                             >
                               <SourceIcon
                                 sourceType={source.internalName}
-                                iconSize={16}
+                                iconSize={18}
                               />
-                              <span className="text-sm">
-                                {source.displayName}
-                              </span>
+                              <span>{source.displayName}</span>
                             </div>
                           ))}
+
+                          {documentSets.length > 0 && (
+                            <div
+                              className="flex items-center gap-2 bg-background-100 px-4 py-2 rounded-full cursor-pointer hover:bg-background-200 transition-colors"
+                              onClick={() => {
+                                setIsChatSearchModalOpen(true);
+                              }}
+                            >
+                              <FiBook size={18} />
+                              <span>Document Sets</span>
+                            </div>
+                          )}
                         </div>
-                      )}
+
+                        {tags.length > 0 && (
+                          <div className="mt-4">
+                            <h3 className="text-lg font-medium text-text-600 mb-2">
+                              Tags
+                            </h3>
+                            <div className="flex flex-wrap gap-2 justify-center">
+                              {tags.slice(0, 5).map((tag) => (
+                                <div
+                                  key={`${tag.tag_key}-${tag.tag_value}`}
+                                  className="flex items-center gap-1 bg-background-100 px-3 py-1 rounded-full cursor-pointer hover:bg-background-200 transition-colors"
+                                  onClick={() => {
+                                    filterManager.setSelectedTags([tag]);
+                                    if (searchQuery) {
+                                      handleSearch(searchQuery);
+                                    }
+                                  }}
+                                >
+                                  <FiTag size={14} />
+                                  <span className="text-sm">
+                                    {tag.tag_key}: {tag.tag_value}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -2284,6 +2381,24 @@ export default function SearchPage({
             />
           </div>
         </div>
+      </div>
+      <div className="flex justify-center mt-4">
+        <nav className="inline-flex rounded-md shadow">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+            className="px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm leading-5 font-medium text-gray-500 hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+            className="px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm leading-5 font-medium text-gray-500 hover:bg-gray-50 focus:z-10 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          >
+            Next
+          </button>
+        </nav>
       </div>
     </>
   );

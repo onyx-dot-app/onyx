@@ -1,0 +1,6 @@
+
+Things to implement are below. I will check the box once the task is done and focus on each in sequence.
+- [x] Before we do a search (i.e. on first load), the page should have a single search bar in the center with some basic filters below it. It should look inviting, beautiful and on search it will transition to the screen we have now.
+- [ ] Make sure that the filters work well. They should apply to results that have already been streamed (i.e. if I filter by confluence data source, existing search results should be filtered by whether or not they are from confluence, etc.)
+- [ ] The filter popup should be improved upon and not contain sources since those are already displayed.
+- [ ] Add pagination at the bottom, we can use the existing PageSelector component

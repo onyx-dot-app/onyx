@@ -31,7 +31,6 @@ interface MoreFiltersPopupProps {
 
 export enum FilterCategories {
   date = "date",
-  sources = "sources",
   documentSets = "documentSets",
   tags = "tags",
 }
@@ -236,13 +235,6 @@ export function MoreFiltersPopup({
                 icon={<FiCalendar className="w-4 h-4" />}
                 label="Date"
               />
-              {availableSources.length > 0 && (
-                <FilterOption
-                  category={FilterCategories.sources}
-                  icon={<FiDatabase className="w-4 h-4" />}
-                  label="Sources"
-                />
-              )}
               {availableDocumentSets.length > 0 && (
                 <FilterOption
                   category={FilterCategories.documentSets}
@@ -259,103 +251,8 @@ export function MoreFiltersPopup({
               )}
             </ul>
           </div>
-          <div className="w-2/3 overflow-y-auto">
-            {selectedFilter === FilterCategories.date && (
-              <div className="p-4">
-                {renderCalendar()}
-                {filterManager.timeRange ? (
-                  <div className="mt-2 text-xs text-gray-600">
-                    Selected:{" "}
-                    {filterManager.timeRange.from.toLocaleDateString()} -{" "}
-                    {filterManager.timeRange.to.toLocaleDateString()}
-                  </div>
-                ) : (
-                  <div className="mt-2 text-xs text-gray-600">
-                    No time restriction selected
-                  </div>
-                )}
-
-                {filterManager.timeRange && (
-                  <button
-                    onClick={() => {
-                      filterManager.setTimeRange(null);
-                    }}
-                    className="mt-2 text-xs text-blue-600 hover:text-blue-800 transition-colors duration-200"
-                  >
-                    Reset Date Filter
-                  </button>
-                )}
-              </div>
-            )}
-
-            {selectedFilter === FilterCategories.sources && (
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold">Sources</h3>
-                  <div className="flex gap-x-2 items-center">
-                    <p className="text-xs text-gray-600">Select all</p>
-                    <Checkbox
-                      id="select-all-sources"
-                      checked={
-                        filterManager.selectedSources.length ===
-                        availableSources.length
-                      }
-                      onCheckedChange={() => {
-                        if (
-                          filterManager.selectedSources.length ===
-                          availableSources.length
-                        ) {
-                          filterManager.setSelectedSources([]);
-                        } else {
-                          filterManager.setSelectedSources([
-                            ...availableSources,
-                          ]);
-                        }
-                      }}
-                    />
-                  </div>
-                </div>
-                <ul className="space-y-1 overflow-y-auto max-h-64">
-                  {availableSources.map((source) => (
-                    <div
-                      key={source.internalName}
-                      className="p-2 flex gap-x-2 items-center rounded cursor-pointer transition-colors duration-200 hover:bg-gray-100"
-                      onClick={() => {
-                        const isSelected = filterManager.selectedSources.some(
-                          (s) => s.internalName === source.internalName
-                        );
-                        if (isSelected) {
-                          filterManager.setSelectedSources(
-                            filterManager.selectedSources.filter(
-                              (s) => s.internalName !== source.internalName
-                            )
-                          );
-                        } else {
-                          filterManager.setSelectedSources([
-                            ...filterManager.selectedSources,
-                            source,
-                          ]);
-                        }
-                      }}
-                    >
-                      <Checkbox
-                        checked={filterManager.selectedSources.some(
-                          (s) => s.internalName === source.internalName
-                        )}
-                      />
-                      <div className="flex items-center gap-2">
-                        <SourceIcon
-                          sourceType={source.internalName}
-                          iconSize={14}
-                        />
-                        <span className="text-sm">{source.displayName}</span>
-                      </div>
-                    </div>
-                  ))}
-                </ul>
-              </div>
-            )}
-
+          <div className="w-2/3 p-4 overflow-auto">
+            {selectedFilter === FilterCategories.date && renderCalendar()}
             {selectedFilter === FilterCategories.documentSets && (
               <div className="pt-4 h-full flex flex-col w-full">
                 <div className="flex pb-2 px-4">
@@ -394,7 +291,6 @@ export function MoreFiltersPopup({
                 </div>
               </div>
             )}
-
             {selectedFilter === FilterCategories.tags && (
               <div className="pt-4 h-full flex flex-col w-full">
                 <div className="flex pb-2 px-4">
@@ -451,7 +347,6 @@ export function MoreFiltersPopup({
             size="sm"
             onClick={() => {
               filterManager.setTimeRange(null);
-              filterManager.setSelectedSources([]);
               filterManager.setSelectedDocumentSets([]);
               filterManager.setSelectedTags([]);
             }}
@@ -460,11 +355,6 @@ export function MoreFiltersPopup({
             Clear Filters
           </Button>
           <div className="text-xs text-gray-500 flex items-center space-x-1">
-            {filterManager.selectedSources.length > 0 && (
-              <span className="bg-gray-100 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedSources.length} sources
-              </span>
-            )}
             {filterManager.selectedDocumentSets.length > 0 && (
               <span className="bg-gray-100 px-1.5 py-0.5 rounded-full">
                 {filterManager.selectedDocumentSets.length} sets

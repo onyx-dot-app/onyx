@@ -48,28 +48,25 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
                 Matched
               </span>
             )}
-            <span className="text-xs flex items-center gap-1">
-              {document.primary_owners &&
-                document.primary_owners.length > 0 && (
-                  <>
-                    <FiUser size={12} />
-                    {document.primary_owners.length === 1 ? (
-                      document.primary_owners[0]
-                    ) : (
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger className="cursor-help">
-                            {document.primary_owners.length} Owners
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            {document.primary_owners.join(", ")}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    )}
-                  </>
+            {document.primary_owners && document.primary_owners.length > 0 && (
+              <span className="text-xs flex items-center gap-1">
+                <FiUser size={12} />
+                {document.primary_owners.length === 1 ? (
+                  document.primary_owners[0]
+                ) : (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="cursor-help">
+                        {document.primary_owners.length} Owners
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {document.primary_owners.join(", ")}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
-            </span>
+              </span>
+            )}
             {updatedAtFormatted && (
               <span className="flex items-center gap-1">
                 <FiClock size={12} />

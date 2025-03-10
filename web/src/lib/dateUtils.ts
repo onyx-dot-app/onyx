@@ -123,7 +123,7 @@ export const getTimeAgoString = (date: Date | null) => {
   const diffWeeks = Math.floor(diffDays / 7);
   const diffMonths = Math.floor(diffDays / 30);
 
-  if (buildDateString(date).includes("Today")) return "Today";
+  if (diffMs < 24 * 60 * 60 * 1000) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return `${diffDays}d ago`;
   if (diffDays < 30) return `${diffWeeks}w ago`;
