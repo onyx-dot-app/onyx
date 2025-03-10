@@ -618,7 +618,7 @@ class ChunkStats(Base):
     )
 
     # 0 for neutral, positive for mostly endorse, negative for mostly reject
-    boost_components: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB())
+    chunk_boost_components: Mapped[dict[str, Any]] = mapped_column(postgresql.JSONB())
 
     last_modified: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=False, index=True, default=func.now()

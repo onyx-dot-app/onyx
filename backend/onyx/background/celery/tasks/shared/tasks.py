@@ -19,6 +19,7 @@ from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisLocks
+from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.document import delete_document_by_connector_credential_pair__no_commit
 from onyx.db.document import delete_documents_complete__no_commit
 from onyx.db.document import fetch_chunk_count_for_document
@@ -125,6 +126,11 @@ def document_by_cc_pair_cleanup_task(
                     document_id,
                     tenant_id=tenant_id,
                     chunk_count=chunk_count,
+                )
+
+                delete_chunk_stats_by_connector_credential_pair__no_commit(
+                    db_session=db_session,
+                    document_ids=[document_id],
                 )
 
                 delete_documents_complete__no_commit(
