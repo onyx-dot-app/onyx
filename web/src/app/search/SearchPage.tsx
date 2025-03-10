@@ -2277,7 +2277,7 @@ export default function SearchPage({
                 <SearchInput
                   onSearch={handleSearch}
                   initialQuery={searchQuery}
-                  placeholder="Search for documents, people, and more..."
+                  placeholder="Find knowledge at your enterprise..."
                 />
               </div>
 
@@ -2330,8 +2330,7 @@ export default function SearchPage({
                         Search your knowledge
                       </h2>
                       <p className="text-text-500 mb-6">
-                        Find documents, answers, and information across all your
-                        connected sources.
+                        Find information across all your connected sources.
                       </p>
                       {sources.length > 0 && (
                         <div className="flex flex-wrap justify-center gap-2 mt-4">
