@@ -966,15 +966,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
         )
-        if user_files:
-            yield UserKnowledgeFilePacket(
-                user_files=[
-                    FileDescriptor(
-                        id=str(file.file_id), type=ChatFileType.USER_KNOWLEDGE
-                    )
-                    for file in user_files
-                ]
-            )
+
         # reference_db_search_docs = None
         # qa_docs_response = None
         # # any files to associate with the AI message e.g. dall-e generated images
@@ -1132,6 +1124,15 @@ def stream_chat_message_objects(
                     info.tool_result = packet
                 yield cast(ChatPacket, packet)
         logger.debug("Reached end of stream")
+        if user_files:
+            yield UserKnowledgeFilePacket(
+                user_files=[
+                    FileDescriptor(
+                        id=str(file.file_id), type=ChatFileType.USER_KNOWLEDGE
+                    )
+                    for file in user_files
+                ]
+            )
     except ValueError as e:
         logger.exception("Failed to process chat message.")
 
