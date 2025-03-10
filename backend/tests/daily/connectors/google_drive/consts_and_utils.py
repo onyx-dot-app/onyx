@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 from onyx.connectors.models import Document
+from onyx.connectors.models import TextSection
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))
@@ -177,7 +178,13 @@ def assert_retrieved_docs_match_expected(
     )
     valid_retrieved_texts = set(
         [
-            " - ".join([section.text for section in doc.sections])
+            " - ".join(
+                [
+                    section.text
+                    for section in doc.sections
+                    if isinstance(section, TextSection) and section.text is not None
+                ]
+            )
             for doc in valid_retrieved_docs
         ]
     )

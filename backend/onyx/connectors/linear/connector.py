@@ -21,7 +21,8 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
 
@@ -237,22 +238,30 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
             documents: list[Document] = []
             for edge in edges:
                 node = edge["node"]
+                # Create sections for description and comments
+                sections = [
+                    TextSection(
+                        link=node["url"],
+                        text=node["description"] or "",
+                    )
+                ]
+
+                # Add comment sections
+                for comment in node["comments"]["nodes"]:
+                    sections.append(
+                        TextSection(
+                            link=node["url"],
+                            text=comment["body"] or "",
+                        )
+                    )
+
+                # Cast the sections list to the expected type
+                typed_sections = cast(list[TextSection | ImageSection], sections)
+
                 documents.append(
                     Document(
                         id=node["id"],
-                        sections=[
-                            Section(
-                                link=node["url"],
-                                text=node["description"] or "",
-                            )
-                        ]
-                        + [
-                            Section(
-                                link=node["url"],
-                                text=comment["body"] or "",
-                            )
-                            for comment in node["comments"]["nodes"]
-                        ],
+                        sections=typed_sections,
                         source=DocumentSource.LINEAR,
                         semantic_identifier=f"[{node['identifier']}] {node['title']}",
                         title=node["title"],

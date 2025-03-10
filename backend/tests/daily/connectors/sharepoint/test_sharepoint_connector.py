@@ -60,6 +60,7 @@ def verify_document_content(doc: Document, expected: ExpectedDocument) -> None:
     """Verify a document matches its expected content."""
     assert doc.semantic_identifier == expected.semantic_identifier
     assert len(doc.sections) == 1
+    assert doc.sections[0].text is not None
     assert expected.content in doc.sections[0].text
     verify_document_metadata(doc)
 

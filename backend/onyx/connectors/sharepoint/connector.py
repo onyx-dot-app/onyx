@@ -19,7 +19,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
@@ -55,7 +55,7 @@ def _convert_driveitem_to_document(
 
     doc = Document(
         id=driveitem.id,
-        sections=[Section(link=driveitem.web_url, text=file_text)],
+        sections=[TextSection(link=driveitem.web_url, text=file_text)],
         source=DocumentSource.SHAREPOINT,
         semantic_identifier=driveitem.name,
         doc_updated_at=driveitem.last_modified_datetime.replace(tzinfo=timezone.utc),

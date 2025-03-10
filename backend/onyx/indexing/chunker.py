@@ -9,7 +9,8 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_metadata_keys_to_ignore,
 )
-from onyx.connectors.models import Document
+from onyx.connectors.models import IndexingDocument
+from onyx.connectors.models import Section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.natural_language_processing.utils import BaseTokenizer
@@ -64,7 +65,7 @@ def _get_metadata_suffix_for_document_index(
 
 def _combine_chunks(chunks: list[DocAwareChunk], large_chunk_id: int) -> DocAwareChunk:
     """
-    Combines multiple DocAwareChunks into one large chunk (for “multipass” mode),
+    Combines multiple DocAwareChunks into one large chunk (for "multipass" mode),
     appending the content and adjusting source_links accordingly.
     """
     merged_chunk = DocAwareChunk(
@@ -98,7 +99,7 @@ def _combine_chunks(chunks: list[DocAwareChunk], large_chunk_id: int) -> DocAwar
 
 def generate_large_chunks(chunks: list[DocAwareChunk]) -> list[DocAwareChunk]:
     """
-    Generates larger “grouped” chunks by combining sets of smaller chunks.
+    Generates larger "grouped" chunks by combining sets of smaller chunks.
     """
     large_chunks = []
     for idx, i in enumerate(range(0, len(chunks), LARGE_CHUNK_RATIO)):
@@ -185,7 +186,7 @@ class Chunker:
 
     def _get_mini_chunk_texts(self, chunk_text: str) -> list[str] | None:
         """
-        For “multipass” mode: additional sub-chunks (mini-chunks) for use in certain embeddings.
+        For "multipass" mode: additional sub-chunks (mini-chunks) for use in certain embeddings.
         """
         if self.mini_chunk_splitter and chunk_text.strip():
             return self.mini_chunk_splitter.split_text(chunk_text)
@@ -194,7 +195,7 @@ class Chunker:
     # ADDED: extra param image_url to store in the chunk
     def _create_chunk(
         self,
-        document: Document,
+        document: IndexingDocument,
         chunks_list: list[DocAwareChunk],
         text: str,
         links: dict[int, str],
@@ -225,7 +226,29 @@ class Chunker:
 
     def _chunk_document(
         self,
-        document: Document,
+        document: IndexingDocument,
+        title_prefix: str,
+        metadata_suffix_semantic: str,
+        metadata_suffix_keyword: str,
+        content_token_limit: int,
+    ) -> list[DocAwareChunk]:
+        """
+        Legacy method for backward compatibility.
+        Calls _chunk_document_with_sections with document.sections.
+        """
+        return self._chunk_document_with_sections(
+            document,
+            document.processed_sections,
+            title_prefix,
+            metadata_suffix_semantic,
+            metadata_suffix_keyword,
+            content_token_limit,
+        )
+
+    def _chunk_document_with_sections(
+        self,
+        document: IndexingDocument,
+        sections: list[Section],
         title_prefix: str,
         metadata_suffix_semantic: str,
         metadata_suffix_keyword: str,
@@ -233,17 +256,16 @@ class Chunker:
     ) -> list[DocAwareChunk]:
         """
         Loops through sections of the document, converting them into one or more chunks.
-        If a section has an image_link, we treat it as a dedicated chunk.
+        Works with processed sections that are base Section objects.
         """
-
         chunks: list[DocAwareChunk] = []
         link_offsets: dict[int, str] = {}
         chunk_text = ""
 
-        for section_idx, section in enumerate(document.sections):
-            section_text = clean_text(section.text)
+        for section_idx, section in enumerate(sections):
+            # Get section text and other attributes
+            section_text = clean_text(section.text or "")
             section_link_text = section.link or ""
-            # ADDED: if the Section has an image link
             image_url = section.image_file_name
 
             # If there is no useful content, skip
@@ -254,7 +276,7 @@ class Chunker:
                 )
                 continue
 
-            # CASE 1: If this is an image section, force a separate chunk
+            # CASE 1: If this section has an image, force a separate chunk
             if image_url:
                 # First, if we have any partially built text chunk, finalize it
                 if chunk_text.strip():
@@ -271,15 +293,13 @@ class Chunker:
                     chunk_text = ""
                     link_offsets = {}
 
-                # Create a chunk specifically for this image
-                # (If the section has text describing the image, use that as content)
+                # Create a chunk specifically for this image section
+                # (Using the text summary that was generated during processing)
                 self._create_chunk(
                     document,
                     chunks,
                     section_text,
-                    links={0: section_link_text}
-                    if section_link_text
-                    else {},  # No text offsets needed for images
+                    links={0: section_link_text} if section_link_text else {},
                     image_file_name=image_url,
                     title_prefix=title_prefix,
                     metadata_suffix_semantic=metadata_suffix_semantic,
@@ -384,7 +404,9 @@ class Chunker:
             )
         return chunks
 
-    def _handle_single_document(self, document: Document) -> list[DocAwareChunk]:
+    def _handle_single_document(
+        self, document: IndexingDocument
+    ) -> list[DocAwareChunk]:
         # Specifically for reproducing an issue with gmail
         if document.source == DocumentSource.GMAIL:
             logger.debug(f"Chunking {document.semantic_identifier}")
@@ -420,26 +442,31 @@ class Chunker:
             title_prefix = ""
             metadata_suffix_semantic = ""
 
-        # Chunk the document
-        normal_chunks = self._chunk_document(
+        # Use processed_sections if available (IndexingDocument), otherwise use original sections
+        sections_to_chunk = document.processed_sections
+
+        normal_chunks = self._chunk_document_with_sections(
             document,
+            sections_to_chunk,
             title_prefix,
             metadata_suffix_semantic,
             metadata_suffix_keyword,
             content_token_limit,
         )
 
-        # Optional “multipass” large chunk creation
+        # Optional "multipass" large chunk creation
         if self.enable_multipass and self.enable_large_chunks:
             large_chunks = generate_large_chunks(normal_chunks)
             normal_chunks.extend(large_chunks)
 
         return normal_chunks
 
-    def chunk(self, documents: list[Document]) -> list[DocAwareChunk]:
+    def chunk(self, documents: list[IndexingDocument]) -> list[DocAwareChunk]:
         """
         Takes in a list of documents and chunks them into smaller chunks for indexing
         while persisting the document metadata.
+
+        Works with both standard Document objects and IndexingDocument objects with processed_sections.
         """
         final_chunks: list[DocAwareChunk] = []
         for document in documents:

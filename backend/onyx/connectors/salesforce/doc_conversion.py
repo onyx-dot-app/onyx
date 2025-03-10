@@ -1,10 +1,12 @@
 import re
+from typing import cast
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.connectors.salesforce.sqlite_functions import get_child_ids
 from onyx.connectors.salesforce.sqlite_functions import get_record
 from onyx.connectors.salesforce.utils import SalesforceObject
@@ -114,8 +116,8 @@ def _extract_dict_text(raw_dict: dict) -> str:
     return natural_language_for_dict
 
 
-def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> Section:
-    return Section(
+def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> TextSection:
+    return TextSection(
         text=_extract_dict_text(salesforce_object.data),
         link=f"{base_url}/{salesforce_object.id}",
     )
@@ -175,7 +177,7 @@ def convert_sf_object_to_doc(
 
     doc = Document(
         id=onyx_salesforce_id,
-        sections=sections,
+        sections=cast(list[TextSection | ImageSection], sections),
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,
