@@ -150,6 +150,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
   const refreshFolders = useCallback(async () => {
     try {
       const data = await documentsService.fetchFolders();
+
       setFolders(data);
     } catch (error) {
       console.error("Failed to fetch folders:", error);
