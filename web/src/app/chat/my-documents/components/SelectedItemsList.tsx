@@ -1,7 +1,7 @@
 import React from "react";
 import { cn, truncateString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { X, Folder, File, FolderIcon } from "lucide-react";
+import { X, Folder, File, FolderIcon, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
@@ -13,10 +13,13 @@ import {
 import { useDocumentSelection } from "../../useDocumentSelection";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { UploadingFile } from "./FilePicker";
+import { CircularProgress } from "../[id]/components/upload/CircularProgress";
 
 interface SelectedItemsListProps {
   folders: FolderResponse[];
   files: FileResponse[];
+  uploadingFiles: UploadingFile[];
   onRemoveFile: (file: FileResponse) => void;
   onRemoveFolder: (folder: FolderResponse) => void;
   setPresentingDocument: (onyxDocument: MinimalOnyxDocument) => void;
@@ -25,6 +28,7 @@ interface SelectedItemsListProps {
 export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
   folders,
   files,
+  uploadingFiles,
   onRemoveFile,
   onRemoveFolder,
   setPresentingDocument,
@@ -50,7 +54,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
           {folders.length > 0 && (
             <div className="space-y-2.5">
               {folders.map((folder: FolderResponse) => (
-                <div key={folder.id} className="flex items-center gap-2">
+                <div key={folder.id} className="group flex items-center gap-2">
                   <div
                     className={cn(
                       "group flex-1 flex items-center rounded-md border p-2.5",
@@ -75,9 +79,10 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                     size="sm"
                     onClick={() => onRemoveFolder(folder)}
                     className={cn(
+                      "bg-transparent hover:bg-transparent opacity-0 group-hover:opacity-100",
                       "h-6 w-6 p-0 rounded-full shrink-0",
-                      "bg-neutral-200/70 hover:bg-neutral-300 hover:text-neutral-700",
-                      "dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-300 dark:hover:text-neutral-100",
+                      "hover:text-neutral-700",
+                      "dark:text-neutral-300 dark:hover:text-neutral-100",
                       "dark:focus:ring-1 dark:focus:ring-neutral-500",
                       "dark:active:bg-neutral-500 dark:active:text-white",
                       "transition-all duration-150 ease-in-out"
@@ -94,7 +99,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
           {files.length > 0 && (
             <div className="space-y-2.5">
               {files.map((file: FileResponse) => (
-                <div key={file.id} className="flex items-center gap-2">
+                <div key={file.id} className="group flex items-center gap-2">
                   <div
                     className={cn(
                       "group flex-1 flex items-center rounded-md border p-2.5",
@@ -120,9 +125,10 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                     size="sm"
                     onClick={() => onRemoveFile(file)}
                     className={cn(
+                      "bg-transparent hover:bg-transparent opacity-0 group-hover:opacity-100",
                       "h-6 w-6 p-0 rounded-full shrink-0",
-                      "bg-neutral-200/70 hover:bg-neutral-300 hover:text-neutral-700",
-                      "dark:bg-neutral-700 dark:hover:bg-neutral-600 dark:text-neutral-300 dark:hover:text-neutral-100",
+                      "hover:text-neutral-700",
+                      "dark:text-neutral-300 dark:hover:text-neutral-100",
                       "dark:focus:ring-1 dark:focus:ring-neutral-500",
                       "dark:active:bg-neutral-500 dark:active:text-white",
                       "transition-all duration-150 ease-in-out"
@@ -136,6 +142,49 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
             </div>
           )}
 
+          {uploadingFiles
+            .filter(
+              (uploadingFile) =>
+                !files.map((file) => file.name).includes(uploadingFile.name)
+            )
+            .map((uploadingFile, index) => (
+              <div
+                key={`uploading-${index}`}
+                className={cn(
+                  "group flex-1 flex items-center rounded-md border p-2.5",
+                  "bg-neutral-50 border-neutral-200 hover:bg-neutral-100",
+                  "dark:bg-neutral-800/70 dark:border-neutral-700 dark:hover:bg-neutral-750",
+                  "dark:focus:ring-1 dark:focus:ring-neutral-500 dark:focus:border-neutral-600",
+                  "dark:active:bg-neutral-700 dark:active:border-neutral-600",
+                  "transition-colors duration-150",
+                  "cursor-pointer"
+                )}
+              >
+                <div className="flex items-center min-w-0 flex-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {uploadingFile.name.startsWith("http") ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                    ) : (
+                      <CircularProgress
+                        progress={uploadingFile.progress}
+                        size={18}
+                        showPercentage={false}
+                      />
+                    )}
+                    <span className="truncate text-sm text-text-dark dark:text-text-dark">
+                      {uploadingFile.name.startsWith("http")
+                        ? `${uploadingFile.name.substring(0, 30)}${
+                            uploadingFile.name.length > 30 ? "..." : ""
+                          }`
+                        : uploadingFile.name}
+                    </span>
+                  </div>
+                  <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400">
+                    -
+                  </div>
+                </div>
+              </div>
+            ))}
           {!hasItems && (
             <div className="flex items-center justify-center h-24 text-sm text-neutral-500 dark:text-neutral-400 italic bg-neutral-50/50 dark:bg-neutral-800/30 rounded-md border border-neutral-200/50 dark:border-neutral-700/50">
               No items selected

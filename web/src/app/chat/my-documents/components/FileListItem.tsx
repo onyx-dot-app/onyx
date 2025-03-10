@@ -23,6 +23,7 @@ import { getFormattedDateTime } from "@/lib/dateUtils";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 import { AnimatedDots } from "../[id]/components/DocumentList";
 import { FolderMoveIcon } from "@/components/icons/icons";
+import { truncateString } from "@/lib/utils";
 
 interface FileListItemProps {
   file: FileResponse;
@@ -96,18 +97,24 @@ export const FileListItem: React.FC<FileListItemProps> = ({
             <Checkbox checked={isSelected} className="mr-2 shrink-0" />
           )}
           {getFileIconFromFileName(file.name)}
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="truncate text-sm text-text-dark dark:text-text-dark">
-                  {file.name}
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>{file.name}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          {file.name.length > 50 ? (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span className="truncate text-sm text-text-dark dark:text-text-dark">
+                    {truncateString(file.name, 50)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{file.name}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          ) : (
+            <span className="truncate text-sm text-text-dark dark:text-text-dark">
+              {file.name}
+            </span>
+          )}
         </div>
 
         <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">

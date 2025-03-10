@@ -97,6 +97,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 }) => {
   const [uploadType, setUploadType] = useState<"file" | "url">("file");
   const [fileUrl, setFileUrl] = useState("");
+  const [urlError, setUrlError] = useState<string | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -116,11 +117,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
   // Hide invalid file message after 5 seconds
   useEffect(() => {
     if (showInvalidFileMessage) {
-      const timer = setTimeout(() => {
-        setShowInvalidFileMessage(false);
-        setInvalidFiles([]);
-      }, 5000);
-      return () => clearTimeout(timer);
+      // Remove the auto-hide timer
+      return () => {};
     }
   }, [showInvalidFileMessage]);
 
@@ -298,12 +296,36 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     }
   };
 
+  const validateUrl = (url: string): boolean => {
+    try {
+      // Check if URL is valid format
+      const urlObj = new URL(url);
+      // Make sure it has http or https protocol
+      return urlObj.protocol === "http:" || urlObj.protocol === "https:";
+    } catch (e) {
+      return false;
+    }
+  };
+
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFileUrl(e.target.value);
+    const url = e.target.value;
+    setFileUrl(url);
+
+    // Clear error when input changes
+    if (urlError) {
+      setUrlError(null);
+    }
   };
 
   const handleUrlSubmit = async () => {
-    if (fileUrl && onUrlUpload) {
+    if (!fileUrl) return;
+
+    if (!validateUrl(fileUrl)) {
+      setUrlError("Please enter a valid URL (e.g., https://example.com)");
+      return;
+    }
+
+    if (onUrlUpload) {
       setIsProcessing(true);
 
       try {
@@ -421,7 +443,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
       {showInvalidFileMessage && invalidFiles.length > 0 && (
         <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-800 dark:text-yellow-200 text-sm flex items-start">
           <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-          <div>
+          <div className="flex-1">
             <p className="font-medium">
               Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
             </p>
@@ -436,11 +458,13 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                   }`
                 : `The file "${invalidFiles[0]}" cannot be uploaded.`}
             </p>
-            <p className="mt-1 text-xs">
-              Allowed file types: documents (.pdf, .doc, .docx, .txt),
-              spreadsheets (.csv, .xls, .xlsx), images (.jpg, .png)
-            </p>
           </div>
+          <button
+            onClick={() => setShowInvalidFileMessage(false)}
+            className="flex-shrink-0 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
       )}
 
@@ -510,13 +534,18 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                     </div>
 
                     {/* Content area - different for each mode but with consistent spacing */}
-                    <div className="flex-1 w-full flex items-start justify-center mt-2">
+                    <div className="flex-1 w-full flex flex-col items-center justify-center mt-2">
                       <div className="flex items-center gap-2 w-full mx-4 max-w-md">
                         <input
                           ref={urlInputRef}
                           type="text"
                           placeholder="Enter website URL..."
-                          className="w-full text-sm py-2 px-3 border border-neutral-200 dark:border-neutral-700 rounded-md bg-transparent focus:outline-none focus:ring-1 focus:ring-neutral-300 dark:focus:ring-neutral-600"
+                          className={`w-full text-sm py-2 px-3 border rounded-md bg-transparent focus:outline-none focus:ring-1 
+                            ${
+                              urlError
+                                ? "border-red-400 dark:border-red-600 focus:ring-red-400 dark:focus:ring-red-600"
+                                : "border-neutral-200 dark:border-neutral-700 focus:ring-neutral-300 dark:focus:ring-neutral-600"
+                            }`}
                           value={fileUrl}
                           onChange={handleUrlChange}
                           onKeyDown={handleKeyDown}
@@ -524,15 +553,25 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                         <button
                           type="button"
                           onClick={handleUrlSubmit}
+                          disabled={!fileUrl || isProcessing}
                           className={`p-2 rounded-md ${
-                            !fileUrl
+                            !fileUrl || isProcessing
                               ? "text-neutral-400 cursor-not-allowed"
                               : "text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
                           }`}
                         >
-                          <Plus className="w-4 h-4" />
+                          {isProcessing ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Plus className="w-4 h-4" />
+                          )}
                         </button>
                       </div>
+                      {urlError && (
+                        <p className="text-red-500 dark:text-red-400 text-xs mt-1 max-w-md px-1">
+                          {urlError}
+                        </p>
+                      )}
                     </div>
                   </>
                 )}

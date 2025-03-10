@@ -9,7 +9,7 @@ import {
   SkeletonFileListItem,
 } from "../../components/FileListItem";
 import { Button } from "@/components/ui/button";
-import { Loader2, ArrowUp, ArrowDown } from "lucide-react";
+import { Loader2, ArrowUp, ArrowDown, AlertCircle, X } from "lucide-react";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import TextView from "@/components/chat/TextView";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,9 @@ interface DocumentListProps {
   externalUploadingFiles?: string[];
   updateUploadingFiles?: (newUploadingFiles: string[]) => void;
   onUploadProgress?: (fileName: string, progress: number) => void;
+  invalidFiles?: string[];
+  showInvalidFileMessage?: boolean;
+  setShowInvalidFileMessage?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 // Animated dots component for the indexing status
@@ -107,6 +110,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
   externalUploadingFiles = [],
   updateUploadingFiles,
   onUploadProgress,
+  invalidFiles = [],
+  showInvalidFileMessage = false,
+  setShowInvalidFileMessage,
 }) => {
   const [presentingDocument, setPresentingDocument] =
     useState<FileResponse | null>(null);
@@ -562,7 +568,37 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             )}
           </div>
         </div>
-        <div className="w-full flex justify-center z-10 py-4   dark:border-neutral-800">
+
+        <div className="w-full flex justify-center z-10 py-4 dark:border-neutral-800 relative">
+          {showInvalidFileMessage && invalidFiles.length > 0 && (
+            <div className="z-50 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-800 dark:text-yellow-200 text-sm shadow-md max-w-md flex items-start absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2">
+              <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-medium text-xs">
+                  Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
+                </p>
+                <p className="mt-0.5 text-xs">
+                  {invalidFiles.length > 1
+                    ? `The following files cannot be uploaded: ${invalidFiles
+                        .slice(0, 3)
+                        .join(", ")}${
+                        invalidFiles.length > 3
+                          ? ` and ${invalidFiles.length - 3} more`
+                          : ""
+                      }`
+                    : `The file "${invalidFiles[0]}" cannot be uploaded.`}
+                </p>
+              </div>
+              <button
+                onClick={() =>
+                  setShowInvalidFileMessage && setShowInvalidFileMessage(false)
+                }
+                className="flex-shrink-0 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
           <div className="w-full max-w-[90rem] mx-auto px-4 md:px-8 2xl:px-14 flex justify-center">
             <FileUploadSection
               onUpload={handleFileUpload}

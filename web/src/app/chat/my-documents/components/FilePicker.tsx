@@ -49,16 +49,17 @@ import {
 } from "@/components/ui/tooltip";
 import { useRouter } from "next/navigation";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { getTimeAgoString } from "@/lib/dateUtils";
+import { getFormattedDateTime, getTimeAgoString } from "@/lib/dateUtils";
 import { FileOptionIcon } from "@/components/icons/icons";
 import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
 import { truncateString } from "@/lib/utils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 import { CircularProgress } from "../[id]/components/upload/CircularProgress";
+import { TokenDisplay } from "@/components/TokenDisplay";
 
 // Define a type for uploading files that includes progress
-interface UploadingFile {
+export interface UploadingFile {
   name: string;
   progress: number;
 }
@@ -89,8 +90,8 @@ const DraggableItem: React.FC<{
   };
 
   const selectedClassName = isSelected
-    ? "bg-[#f2f0e8]/50 dark:bg-[#1a1a1a]/50"
-    : "hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50";
+    ? "bg-neutral-200/50 dark:bg-neutral-800/50"
+    : "hover:bg-neutral-200/50 dark:hover:bg-neutral-800/50";
 
   if (type === "folder") {
     return (
@@ -159,22 +160,28 @@ const DraggableItem: React.FC<{
         <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
           <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
             {getFileIconFromFileName(file.name)}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="truncate text-text-dark dark:text-text-dark">
-                    {truncateString(file.name, 34)}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{file.name}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {file.name.length > 34 ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="truncate text-text-dark dark:text-text-dark">
+                      {truncateString(file.name, 34)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>{file.name}</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="truncate text-text-dark dark:text-text-dark">
+                {file.name}
+              </span>
+            )}
           </div>
 
           <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
-            {file.created_at && getTimeAgoString(new Date(file.created_at))}
+            {file.created_at && getFormattedDateTime(new Date(file.created_at))}
           </div>
         </div>
       </div>
@@ -191,8 +198,8 @@ const FilePickerFolderItem: React.FC<{
 }> = ({ folder, onClick, onSelect, isSelected, allFilesSelected }) => {
   const selectedClassName =
     isSelected || allFilesSelected
-      ? "bg-[#f2f0e8]/50 dark:bg-[#1a1a1a]/50"
-      : "hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50";
+      ? "bg-neutral-200/50 dark:bg-neutral-800/50"
+      : "hover:bg-neutral-200/50 dark:hover:bg-neutral-800/50";
 
   // Determine if the folder is empty
   const isEmpty = folder.files.length === 0;
@@ -202,7 +209,11 @@ const FilePickerFolderItem: React.FC<{
       <div className="w-6 flex items-center justify-center shrink-0">
         {!isEmpty && (
           <div
-            className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+            className={`transition-opacity duration-150 ${
+              isSelected || allFilesSelected
+                ? "opacity-100"
+                : "opacity-0 group-hover:opacity-100"
+            }`}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -273,7 +284,6 @@ export interface FilePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: () => void;
-  title: string;
   buttonContent: string;
   setPresentingDocument: (onyxDocument: MinimalOnyxDocument) => void;
 }
@@ -289,7 +299,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   onClose,
   onSave,
   setPresentingDocument,
-  title,
   buttonContent,
 }) => {
   const {
@@ -764,7 +773,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       const file = files[i];
       // Add file to uploading files state
       setUploadingFiles((prev) => [...prev, { name: file.name, progress: 0 }]);
-
       const formData = new FormData();
       formData.append("files", file);
       const response: FileUploadResponse = await uploadFile(formData, null);
@@ -1021,8 +1029,12 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       hideDividerForTitle
       onOutsideClick={onClose}
       increasedPadding
-      className="max-w-4xl py-6 flex flex-col w-full !overflow-visible h-[70vh]"
-      title={title}
+      className="max-w-4xl py-6 px-1 flex flex-col w-full !overflow-visible h-[70vh]"
+      title={
+        currentFolder
+          ? folders?.find((folder) => (folder.id = currentFolder))?.name
+          : "My Documents"
+      }
     >
       <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col">
         <div className="grid overflow-x-visible h-full overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
@@ -1111,42 +1123,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                           ))}
 
                       {/* Add uploading files visualization */}
-                      {uploadingFiles.map((uploadingFile, index) => (
-                        <div
-                          key={`uploading-${index}`}
-                          className={`group relative ml-6 flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-2 px-3 transition-all ease-in-out ${
-                            completedFiles.includes(uploadingFile.name)
-                              ? "bg-green-50/30 dark:bg-green-900/10"
-                              : ""
-                          }`}
-                        >
-                          <div className="flex items-center flex-1 min-w-0">
-                            <div className="flex items-center gap-2 w-[65%] min-w-0">
-                              {uploadingFile.name.startsWith("http") ? (
-                                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
-                              ) : (
-                                <CircularProgress
-                                  progress={uploadingFile.progress}
-                                  size={18}
-                                  showPercentage={false}
-                                />
-                              )}
-                              <span className="truncate text-sm text-text-dark dark:text-text-dark">
-                                {uploadingFile.name.startsWith("http")
-                                  ? `${uploadingFile.name.substring(0, 30)}${
-                                      uploadingFile.name.length > 30
-                                        ? "..."
-                                        : ""
-                                    }`
-                                  : uploadingFile.name}
-                              </span>
-                            </div>
-                            <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400">
-                              -
-                            </div>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   </SortableContext>
 
@@ -1211,6 +1187,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             <div className="px-5 pb-5 flex-1 flex flex-col">
               <div className="shrink default-scrollbar flex h-full overflow-y-auto mb-3">
                 <SelectedItemsList
+                  uploadingFiles={uploadingFiles}
                   setPresentingDocument={setPresentingDocument}
                   folders={selectedItems.folders}
                   files={selectedItems.files}
@@ -1228,13 +1205,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                       setUploadStartTime(Date.now()); // Record start time
 
                       // Add files to uploading files state
-                      const filesArray = Array.from(files);
-                      filesArray.forEach((file) => {
-                        setUploadingFiles((prev) => [
-                          ...prev,
-                          { name: file.name, progress: 0 },
-                        ]);
-                      });
 
                       // Start the refresh interval to simulate progress
                       startRefreshInterval();
@@ -1309,35 +1279,14 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               <span className="text-sm text-neutral-600 dark:text-neutral-400">
                 Selected context:
               </span>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-neutral-100 dark:bg-neutral-800 rounded-lg shadow-sm">
-                <div className="h-2 w-20 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      (selectedItems.totalTokens / selectedModel.maxTokens) *
-                        100 >
-                      75
-                        ? "bg-red-500"
-                        : (selectedItems.totalTokens /
-                              selectedModel.maxTokens) *
-                              100 >
-                            50
-                          ? "bg-amber-500"
-                          : "bg-emerald-500"
-                    }`}
-                    style={{
-                      width: `${Math.min(
-                        (selectedItems.totalTokens / selectedModel.maxTokens) *
-                          100,
-                        100
-                      )}%`,
-                    }}
-                  />
-                </div>
-                <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                  {selectedItems.totalTokens.toLocaleString()} /{" "}
-                  {selectedModel.maxTokens.toLocaleString()} tokens
-                </span>
-              </div>
+              <TokenDisplay
+                totalTokens={selectedItems.totalTokens}
+                maxTokens={selectedModel.maxTokens}
+                tokenPercentage={
+                  (selectedItems.totalTokens / selectedModel.maxTokens) * 100
+                }
+                selectedModel={selectedModel}
+              />
             </div>
             <Button onClick={onSave} className="px-8 py-2 w-48">
               Set Context

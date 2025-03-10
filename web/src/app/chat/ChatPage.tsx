@@ -2280,7 +2280,6 @@ export function ChatPage({
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
           buttonContent="Set as Context"
-          title="My Documents"
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {

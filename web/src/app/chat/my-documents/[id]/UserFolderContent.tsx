@@ -9,6 +9,7 @@ import {
   Trash,
   Upload,
   AlertCircle,
+  X,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
@@ -21,6 +22,7 @@ import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { MoveFolderModal } from "@/components/MoveFolderModal";
 import { FolderResponse } from "../DocumentsContext";
 import { getDisplayNameForModel } from "@/lib/hooks";
+import { TokenDisplay } from "@/components/TokenDisplay";
 import {
   Tooltip,
   TooltipContent,
@@ -221,10 +223,8 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   // Hide invalid file message after 5 seconds
   useEffect(() => {
     if (showInvalidFileMessage) {
-      const timer = setTimeout(() => {
-        setShowInvalidFileMessage(false);
-      }, 5000);
-      return () => clearTimeout(timer);
+      // Remove the auto-hide timer
+      return () => {};
     }
   }, [showInvalidFileMessage]);
 
@@ -601,31 +601,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       {folderCreatedPopup}
 
       {/* Invalid file message */}
-      {showInvalidFileMessage && invalidFiles.length > 0 && (
-        <div className="fixed top-24 right-4 z-50 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md text-yellow-800 dark:text-yellow-200 text-sm shadow-md max-w-md flex items-start">
-          <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-medium">
-              Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
-            </p>
-            <p className="mt-1">
-              {invalidFiles.length > 1
-                ? `The following files cannot be uploaded: ${invalidFiles
-                    .slice(0, 3)
-                    .join(", ")}${
-                    invalidFiles.length > 3
-                      ? ` and ${invalidFiles.length - 3} more`
-                      : ""
-                  }`
-                : `The file "${invalidFiles[0]}" cannot be uploaded.`}
-            </p>
-            <p className="mt-1 text-xs">
-              Allowed file types: documents (.pdf, .doc, .docx, .txt),
-              spreadsheets (.csv, .xls, .xlsx), images (.jpg, .png)
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Add a visual overlay when dragging files */}
       {isDraggingOver && (
@@ -782,40 +757,12 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               <MessageSquare className="w-3 h-3" />
               Chat with this folder
             </Button>
-            <div className="flex items-center">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div className="flex items-center space-x-3 bg-neutral-100 dark:bg-neutral-800 rounded-full px-4 py-1.5">
-                      <div className="relative w-36 h-2 bg-neutral-200 dark:bg-neutral-700 rounded-full overflow-hidden">
-                        <div
-                          className={`absolute top-0 left-0 h-full rounded-full ${
-                            tokenPercentage >= 100
-                              ? "bg-yellow-500 dark:bg-yellow-600"
-                              : "bg-green-500 dark:bg-green-600"
-                          }`}
-                          style={{
-                            width: `${Math.min(tokenPercentage, 100)}%`,
-                          }}
-                        ></div>
-                      </div>
-                      <div className="text-xs text-neutral-600 dark:text-neutral-300 font-medium whitespace-nowrap">
-                        {totalTokens.toLocaleString()} /{" "}
-                        {maxTokens.toLocaleString()} LLM tokens
-                      </div>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-sm">
-                    <p className="text-xs max-w-xs">
-                      Maximum tokens for default model{" "}
-                      {getDisplayNameForModel(selectedModel.modelName)}, if
-                      exceeded, chat will run a search over the documents rather
-                      than including all of the contents.
-                    </p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+            <TokenDisplay
+              totalTokens={totalTokens}
+              maxTokens={maxTokens}
+              tokenPercentage={tokenPercentage}
+              selectedModel={selectedModel}
+            />
           </div>
         </div>
 
@@ -854,6 +801,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           externalUploadingFiles={uploadingFiles}
           updateUploadingFiles={updateUploadingFiles}
           onUploadProgress={handleUploadProgress}
+          invalidFiles={invalidFiles}
+          showInvalidFileMessage={showInvalidFileMessage}
+          setShowInvalidFileMessage={setShowInvalidFileMessage}
         />
       </div>
     </div>
