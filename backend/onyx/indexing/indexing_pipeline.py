@@ -10,6 +10,7 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -17,6 +18,7 @@ from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.db.chunk import update_chunk_boost_components__no_commit
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
@@ -43,9 +45,16 @@ from onyx.indexing.embedder import IndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.indexing.models import IndexChunk
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.natural_language_processing.search_nlp_models import (
+    InformationContentClassificationModel,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
+from shared_configs.configs import (
+    INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
+)
 
 logger = setup_logger()
 
@@ -125,6 +134,72 @@ def _upsert_documents_in_db(
             )
 
 
+def _get_aggregated_chunk_boost_factor(
+    chunks: list[IndexChunk],
+    information_content_classification_model: InformationContentClassificationModel,
+) -> list[float]:
+    """Calculates the aggregated boost factor for a chunk based on its content."""
+
+    short_chunk_content_dict = {
+        chunk_num: chunk.content
+        for chunk_num, chunk in enumerate(chunks)
+        if len(chunk.content.split())
+        <= INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH
+    }
+    short_chunk_contents = list(short_chunk_content_dict.values())
+    short_chunk_keys = list(short_chunk_content_dict.keys())
+
+    try:
+        predictions = information_content_classification_model.predict(
+            short_chunk_contents
+        )
+        # Create a mapping of chunk positions to their scores
+        score_map = {
+            short_chunk_keys[i]: prediction.content_boost_factor
+            for i, prediction in enumerate(predictions)
+        }
+        # Default to 1.0 for longer chunks, use predicted score for short chunks
+        chunk_content_scores = [score_map.get(i, 1.0) for i in range(len(chunks))]
+
+        return chunk_content_scores
+
+    except Exception as e:
+        logger.exception(
+            f"Error predicting content classification for chunks: {e}. Falling back to individual examples."
+        )
+
+        chunks_with_scores: list[IndexChunk] = []
+        chunk_content_scores = []
+
+        for chunk in chunks:
+            if (
+                len(chunk.content.split())
+                > INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH
+            ):
+                chunk_content_scores.append(1.0)
+                chunks_with_scores.append(chunk)
+                continue
+
+            try:
+                chunk_content_scores.append(
+                    information_content_classification_model.predict([chunk.content])[
+                        0
+                    ].content_boost_factor
+                )
+                chunks_with_scores.append(chunk)
+            except Exception as e:
+                logger.exception(
+                    f"Error predicting content classification for chunk: {e}."
+                )
+
+                raise Exception(
+                    f"Failed to predict content classification for chunk {chunk.chunk_id} "
+                    f"from document {chunk.source_document.id}"
+                ) from e
+
+        return chunk_content_scores
+
+
 def get_doc_ids_to_update(
     documents: list[Document], db_docs: list[DBDocument]
 ) -> list[Document]:
@@ -154,6 +229,7 @@ def index_doc_batch_with_handler(
     *,
     chunker: Chunker,
     embedder: IndexingEmbedder,
+    information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     document_batch: list[Document],
     index_attempt_metadata: IndexAttemptMetadata,
@@ -165,6 +241,7 @@ def index_doc_batch_with_handler(
         index_pipeline_result = index_doc_batch(
             chunker=chunker,
             embedder=embedder,
+            information_content_classification_model=information_content_classification_model,
             document_index=document_index,
             document_batch=document_batch,
             index_attempt_metadata=index_attempt_metadata,
@@ -314,6 +391,7 @@ def index_doc_batch(
     document_batch: list[Document],
     chunker: Chunker,
     embedder: IndexingEmbedder,
+    information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
@@ -386,7 +464,24 @@ def index_doc_batch(
         else ([], [])
     )
 
+    chunk_content_scores = (
+        _get_aggregated_chunk_boost_factor(
+            chunks_with_embeddings, information_content_classification_model
+        )
+        if USE_INFORMATION_CONTENT_CLASSIFICATION
+        else [1.0] * len(chunks_with_embeddings)
+    )
+
     updatable_ids = [doc.id for doc in ctx.updatable_docs]
+    updatable_chunk_data = [
+        {
+            "chunk_id": chunk.chunk_id,
+            "document_id": chunk.source_document.id,
+            "boost_score": score,
+        }
+        for chunk, score in zip(chunks_with_embeddings, chunk_content_scores)
+        if score != 1.0
+    ]
 
     # Acquires a lock on the documents so that no other process can modify them
     # NOTE: don't need to acquire till here, since this is when the actual race condition
@@ -439,8 +534,9 @@ def index_doc_batch(
                     else DEFAULT_BOOST
                 ),
                 tenant_id=tenant_id,
+                aggregated_chunk_boost_factor=chunk_content_scores[chunk_num],
             )
-            for chunk in chunks_with_embeddings
+            for chunk_num, chunk in enumerate(chunks_with_embeddings)
         ]
 
         logger.debug(
@@ -525,6 +621,10 @@ def index_doc_batch(
             db_session=db_session,
         )
 
+        update_chunk_boost_components__no_commit(
+            chunk_data=updatable_chunk_data, db_session=db_session
+        )
+
         db_session.commit()
 
     result = IndexingPipelineResult(
@@ -540,6 +640,7 @@ def index_doc_batch(
 def build_indexing_pipeline(
     *,
     embedder: IndexingEmbedder,
+    information_content_classification_model: InformationContentClassificationModel,
     document_index: DocumentIndex,
     db_session: Session,
     tenant_id: str,
@@ -563,6 +664,7 @@ def build_indexing_pipeline(
         index_doc_batch_with_handler,
         chunker=chunker,
         embedder=embedder,
+        information_content_classification_model=information_content_classification_model,
         document_index=document_index,
         ignore_time_skip=ignore_time_skip,
         db_session=db_session,

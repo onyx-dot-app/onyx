@@ -98,6 +98,7 @@ def _create_indexable_chunks(
             boost=DEFAULT_BOOST,
             large_chunk_id=None,
             image_file_name=None,
+            aggregated_chunk_boost_factor=1.0,
         )
 
         chunks.append(chunk)

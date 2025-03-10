@@ -80,6 +80,11 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
             rank: filter
         }
+        # Field to indicate whether a short chunk is a low content chunk
+        field aggregated_chunk_boost_factor type float {
+            indexing: attribute
+        }
+
         # Needs to have a separate Attribute list for efficient filtering
         field metadata_list type array<string> {
             indexing: summary | attribute
@@ -142,6 +147,11 @@ schema DANSWER_CHUNK_NAME {
             expression: max(if(isNan(attribute(doc_updated_at)) == 1, 7890000, now() - attribute(doc_updated_at)) / 31536000, 0)
         }
 
+        function inline aggregated_chunk_boost() {
+            # Aggregated boost factor, currently only used for information content classification
+            expression: if(isNan(attribute(aggregated_chunk_boost_factor)) == 1, 1.0, attribute(aggregated_chunk_boost_factor))
+        }
+
         # Document score decays from 1 to 0.75 as age of last updated time increases
         function inline recency_bias() {
             expression: max(1 / (1 + query(decay_factor) * document_age), 0.75)
@@ -199,6 +209,8 @@ schema DANSWER_CHUNK_NAME {
                 * document_boost
                 # Decay factor based on time document was last updated
                 * recency_bias
+                # Boost based on aggregated boost calculation
+                * aggregated_chunk_boost
             }
             rerank-count: 1000
         }
@@ -210,6 +222,7 @@ schema DANSWER_CHUNK_NAME {
             closeness(field, embeddings)
             document_boost
             recency_bias
+            aggregated_chunk_boost
             closest(embeddings)
         }
     }
