@@ -5,6 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { SourceIcon } from "@/components/SourceIcon";
 import { FilterIcon, SearchIcon } from "lucide-react";
+import { FilterManager } from "@/lib/hooks";
+import { DocumentSet, Tag } from "@/lib/types";
+import { MoreFiltersPopup } from "./MoreFiltersPopup";
 
 interface SearchFiltersProps {
   totalResults: number;
@@ -12,6 +15,9 @@ interface SearchFiltersProps {
   setSelectedFilter: (filter: string) => void;
   availableSources: SourceMetadata[];
   sourceResults: Record<string, number>;
+  filterManager: FilterManager;
+  availableDocumentSets: DocumentSet[];
+  availableTags: Tag[];
 }
 
 export function SearchFilters({
@@ -20,6 +26,9 @@ export function SearchFilters({
   setSelectedFilter,
   availableSources,
   sourceResults,
+  filterManager,
+  availableDocumentSets,
+  availableTags,
 }: SearchFiltersProps) {
   return (
     <div className="flex flex-col w-full">
@@ -49,12 +58,33 @@ export function SearchFilters({
             icon={<SourceIcon sourceType={source.internalName} iconSize={16} />}
           />
         ))}
-        <MoreFilters
-          label="More Filters"
-          count={0}
-          isSelected={false}
-          onClick={() => {}}
-          icon={<FilterIcon size={16} />}
+
+        <MoreFiltersPopup
+          filterManager={filterManager}
+          availableSources={availableSources}
+          availableDocumentSets={availableDocumentSets}
+          availableTags={availableTags}
+          trigger={
+            <div
+              className={`flex items-center justify-between px-3 py-2 rounded-md cursor-pointer hover:bg-gray-100`}
+            >
+              <div className="flex items-center gap-2">
+                <FilterIcon size={16} />
+                <span className="text-sm">More Filters</span>
+              </div>
+              <div className="flex items-center space-x-1">
+                {(filterManager.selectedSources.length > 0 ||
+                  filterManager.selectedDocumentSets.length > 0 ||
+                  filterManager.selectedTags.length > 0 ||
+                  filterManager.timeRange) && (
+                  <span className="bg-blue-100 text-blue-800 text-xs px-1.5 py-0.5 rounded-full">
+                    Active
+                  </span>
+                )}
+                <span className="text-sm text-gray-500">0</span>
+              </div>
+            </div>
+          }
         />
       </div>
     </div>
@@ -70,30 +100,6 @@ interface FilterButtonProps {
 }
 
 function FilterButton({
-  label,
-  count,
-  isSelected,
-  onClick,
-  icon,
-}: FilterButtonProps) {
-  return (
-    <div
-      className={`flex items-center justify-between px-3 py-2 rounded-md cursor-pointer ${
-        isSelected
-          ? "bg-blue-50 text-blue-700 font-medium"
-          : "hover:bg-gray-100"
-      }`}
-      onClick={onClick}
-    >
-      <div className="flex items-center gap-2">
-        {icon}
-        <span className="text-sm">{label}</span>
-      </div>
-      <span className="text-sm text-gray-500">{count}</span>
-    </div>
-  );
-}
-function MoreFilters({
   label,
   count,
   isSelected,

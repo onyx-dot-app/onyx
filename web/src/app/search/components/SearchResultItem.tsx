@@ -53,7 +53,8 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
               </span>
             )}
             {document.primary_owners && document.primary_owners.length > 0 && (
-              <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500 flex items-center gap-1">
+              <>
+                {/* // <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500 flex items-center gap-1"> */}
                 <FiUser size={12} />
                 {document.primary_owners.length === 1 ? (
                   document.primary_owners[0]
@@ -69,7 +70,8 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
                     </Tooltip>
                   </TooltipProvider>
                 )}
-              </span>
+                {/* </span> */}
+              </>
             )}
 
             {lastUpdated && (

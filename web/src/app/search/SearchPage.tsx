@@ -2316,6 +2316,9 @@ export default function SearchPage({
                           setSelectedFilter={setSelectedFilter}
                           availableSources={sources}
                           sourceResults={sourceResults}
+                          filterManager={filterManager}
+                          availableDocumentSets={documentSets}
+                          availableTags={tags}
                         />
                       </div>
                     </div>
