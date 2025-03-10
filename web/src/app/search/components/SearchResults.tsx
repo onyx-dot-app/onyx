@@ -15,7 +15,7 @@ export function SearchResults({
 }: SearchResultsProps) {
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full h-full items-center justify-center py-4">
+      <div className="flex flex-col w-full h-full items-center justify-start py-4">
         <div className="animate-pulse w-full flex flex-col  gap-4">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex gap-3 p-4">

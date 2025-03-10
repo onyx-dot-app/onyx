@@ -2184,7 +2184,7 @@ export default function SearchPage({
             className="flex h-full w-full overflow-x-hidden"
           >
             {/* Replace the existing content with our new Glean-like interface */}
-            <div className="flex flex-col h-full w-full">
+            <div className="flex ove flex-col h-full w-full">
               {/* Header with search input */}
               <div className="flex-none  flex justify-center p-4 border-b border-background-200">
                 <SearchInput
@@ -2195,21 +2195,14 @@ export default function SearchPage({
               </div>
 
               {/* Main content area */}
-              <div className="flex-grow overflow-auto">
+              <div className="flex-grow overflow-hidden">
                 {searchQuery ? (
-                  <div className="max-w-4xl flex relative mx-auto w-full">
-                    {/* Answer */}
-                    {/* This is temporary */}
-                    {/* <SearchAnswer
-                      answer={searchAnswer}
-                      isLoading={isSearching}
-                      error={searchError}
-                    /> */}
-
+                  // {true ? (
+                  <div className="overflow-y-auto max-w-4xl flex relative mx-auto w-full">
                     {/* Filters */}
-                    <div className="flex w-full relative">
+                    <div className="flex w-full h-screen relative">
                       {/* Results - scrollable and with max width */}
-                      <div className="w-full overflow-y-auto max-w-3xl pr-4">
+                      <div className="w-full h-full overflow-y-auto max-w-3xl pr-4">
                         <SearchResults
                           documents={[
                             ...filteredDocuments,
