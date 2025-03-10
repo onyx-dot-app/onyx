@@ -4,7 +4,7 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { FiFileText } from "react-icons/fi";
@@ -173,21 +173,35 @@ export function getUniqueFileIcons(files: FileDescriptor[]): JSX.Element[] {
   const uniqueIcons: JSX.Element[] = [];
   const seenExtensions = new Set<string>();
 
+  // Helper function to extract filename from id when name is missing
+  const getFileName = (file: FileDescriptor): string => {
+    if (file.name) return file.name;
+
+    // Extract filename from the id if possible
+    if (file.id) {
+      const idParts = file.id.split("/");
+      if (idParts.length > 1) {
+        return idParts[idParts.length - 1]; // Get the last part after the last slash
+      }
+    }
+
+    return "unknown.txt"; // Fallback filename
+  };
+
   // Helper function to get a styled icon
   const getStyledIcon = (fileName: string, fileId: string) => {
     return React.cloneElement(getFileIconFromFileName(fileName), {
       key: `file-${fileId}`,
-      className: "w-4 h-4 text-blue-600 dark:text-blue-300",
     });
   };
 
   for (const file of files) {
-    if (file.name) {
-      const extension = file.name.split(".").pop()?.toLowerCase() || "";
-      if (!seenExtensions.has(extension)) {
-        seenExtensions.add(extension);
-        uniqueIcons.push(getStyledIcon(file.name, file.id));
-      }
+    const fileName = getFileName(file);
+    const extension = fileName.split(".").pop()?.toLowerCase() || "";
+
+    if (!seenExtensions.has(extension)) {
+      seenExtensions.add(extension);
+      uniqueIcons.push(getStyledIcon(fileName, file.id));
     }
   }
 
@@ -227,7 +241,10 @@ export function FilesSeeMoreBlock({
   toggled: boolean;
   fullWidth?: boolean;
 }) {
-  const iconsToRender = files.length > 2 ? getUniqueFileIcons(files) : [];
+  const [iconsToRender, setIconsToRender] = useState<JSX.Element[]>([]);
+  useEffect(() => {
+    setIconsToRender(files.length > 2 ? getUniqueFileIcons(files) : []);
+  }, [files]);
 
   return (
     <button

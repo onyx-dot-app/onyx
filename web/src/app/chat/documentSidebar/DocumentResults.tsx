@@ -121,7 +121,16 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
               )}
 
               <div className="overflow-y-auto h-fit mb-8 pb-8 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
-                {dedupedDocuments.length > 0 ? (
+                {userFiles && userFiles.length > 0 ? (
+                  <div className=" gap-y-2 flex flex-col pt-2 mx-3">
+                    {userFiles?.map((file) => (
+                      <FileSourceCardInResults
+                        document={file}
+                        setPresentingDocument={setPresentingDocument}
+                      />
+                    ))}
+                  </div>
+                ) : dedupedDocuments.length > 0 ? (
                   dedupedDocuments.map((document, ind) => (
                     <div
                       key={document.document_id}
@@ -148,15 +157,6 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                       />
                     </div>
                   ))
-                ) : userFiles && userFiles.length > 0 ? (
-                  <div className=" gap-y-2 flex flex-col pt-2 mx-3">
-                    {userFiles?.map((file) => (
-                      <FileSourceCardInResults
-                        document={file}
-                        setPresentingDocument={setPresentingDocument}
-                      />
-                    ))}
-                  </div>
                 ) : null}
               </div>
             </div>

@@ -38,7 +38,7 @@ export const SourceCard: React.FC<{
         openDocument(document, () => setPresentingDocument(document))
       }
       className="w-full max-w-[260px] h-[80px] p-3
-             text-left bg-white hover:bg-neutral-50 dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80
+             text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80
              cursor-pointer rounded-lg
              flex flex-col justify-between
              overflow-hidden"
@@ -90,7 +90,7 @@ export const FileSourceCard: React.FC<{
         text-ellipsis
       "
       >
-        {fileName}
+        {truncateString(fileName, 45)}
       </div>
 
       <div className="flex items-center gap-1 mt-1">

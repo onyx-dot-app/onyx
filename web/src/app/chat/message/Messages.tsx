@@ -164,7 +164,7 @@ function FileDisplay({
 }
 
 export const AIMessage = ({
-  userKnowledgeFiles,
+  userKnowledgeFiles = [],
   regenerate,
   overriddenModel,
   continueGenerating,
@@ -426,7 +426,7 @@ export const AIMessage = ({
                 <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
                     {/* {JSON.stringify(toolCall)} */}
-                    {!userKnowledgeFiles &&
+                    {userKnowledgeFiles.length == 0 &&
                       (!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
                         <>
                           {query !== undefined && (
@@ -446,7 +446,6 @@ export const AIMessage = ({
                           )}
 
                           {handleForceSearch &&
-                            !userKnowledgeFiles &&
                             content &&
                             query === undefined &&
                             !hasDocs &&
@@ -499,40 +498,44 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
-                    {!userKnowledgeFiles && docs && docs.length > 0 && (
-                      <div
-                        className={`mobile:hidden ${
-                          (query ||
-                            toolCall?.tool_name ===
-                              INTERNET_SEARCH_TOOL_NAME) &&
-                          "mt-2"
-                        }  -mx-8 w-full mb-4 flex relative`}
-                      >
-                        <div className="w-full">
-                          <div className="px-8 flex gap-x-2">
-                            {!settings?.isMobile &&
-                              docs.length > 0 &&
-                              docs
-                                .slice(0, 2)
-                                .map((doc: OnyxDocument, ind: number) => (
-                                  <SourceCard
-                                    document={doc}
-                                    key={ind}
-                                    setPresentingDocument={
-                                      setPresentingDocument
-                                    }
-                                  />
-                                ))}
-                            <SeeMoreBlock
-                              toggled={documentSidebarVisible!}
-                              toggleDocumentSelection={toggleDocumentSelection!}
-                              docs={docs}
-                              webSourceDomains={webSourceDomains}
-                            />
+                    {userKnowledgeFiles.length == 0 &&
+                      docs &&
+                      docs.length > 0 && (
+                        <div
+                          className={`mobile:hidden ${
+                            (query ||
+                              toolCall?.tool_name ===
+                                INTERNET_SEARCH_TOOL_NAME) &&
+                            "mt-2"
+                          }  -mx-8 w-full mb-4 flex relative`}
+                        >
+                          <div className="w-full">
+                            <div className="px-8 flex gap-x-2">
+                              {!settings?.isMobile &&
+                                docs.length > 0 &&
+                                docs
+                                  .slice(0, 2)
+                                  .map((doc: OnyxDocument, ind: number) => (
+                                    <SourceCard
+                                      document={doc}
+                                      key={ind}
+                                      setPresentingDocument={
+                                        setPresentingDocument
+                                      }
+                                    />
+                                  ))}
+                              <SeeMoreBlock
+                                toggled={documentSidebarVisible!}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                docs={docs}
+                                webSourceDomains={webSourceDomains}
+                              />
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                     {userKnowledgeFiles && userKnowledgeFiles.length > 0 && (
                       <div
                         key={10}
@@ -560,6 +563,7 @@ export const AIMessage = ({
                                 ))}
                             {userKnowledgeFiles.length > 2 && (
                               <FilesSeeMoreBlock
+                                key={10}
                                 toggled={documentSidebarVisible!}
                                 toggleDocumentSelection={
                                   toggleDocumentSelection!
