@@ -377,9 +377,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         OnyxRedisLocks.CHECK_INDEXING_BEAT_LOCK,
         timeout=CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
     )
+    task_logger.warning("check_for_indexing - Acquiring lock")
 
     # these tasks should never overlap
     if not lock_beat.acquire(blocking=False):
+        task_logger.info("check_for_indexing - Lock not acquired, skipping")
         return None
 
     try:
@@ -427,12 +429,17 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         lock_beat.reacquire()
         cc_pair_ids: list[int] = []
         with get_session_with_current_tenant() as db_session:
-            cc_pairs = fetch_connector_credential_pairs(db_session)
+            cc_pairs = fetch_connector_credential_pairs(
+                db_session, include_user_files=True
+            )
             for cc_pair_entry in cc_pairs:
                 cc_pair_ids.append(cc_pair_entry.id)
 
         # kick off index attempts
         for cc_pair_id in cc_pair_ids:
+            task_logger.info(
+                f"check_for_indexing - Acquiring lock for cc_pair_id: {cc_pair_id}"
+            )
             lock_beat.reacquire()
 
             redis_connector = RedisConnector(tenant_id, cc_pair_id)
@@ -472,6 +479,10 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
                     ):
+                        task_logger.info(
+                            f"check_for_indexing - Not indexing cc_pair_id: {cc_pair_id} "
+                            f"search_settings={search_settings_instance.id}"
+                        )
                         continue
 
                     reindex = False

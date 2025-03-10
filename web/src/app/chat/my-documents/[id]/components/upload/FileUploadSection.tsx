@@ -438,8 +438,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
             </p>
             <p className="mt-1 text-xs">
               Allowed file types: documents (.pdf, .doc, .docx, .txt),
-              spreadsheets (.csv, .xls, .xlsx), images (.jpg, .png, .gif), and
-              more.
+              spreadsheets (.csv, .xls, .xlsx), images (.jpg, .png)
             </p>
           </div>
         </div>

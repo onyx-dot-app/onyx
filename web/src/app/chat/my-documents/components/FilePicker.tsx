@@ -10,6 +10,7 @@ import {
   PlusIcon,
   Router,
   X,
+  Loader2,
 } from "lucide-react";
 import { ContextUsage } from "./ContextUsage";
 import { SelectedItemsList } from "./SelectedItemsList";
@@ -54,6 +55,13 @@ import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
 import { truncateString } from "@/lib/utils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { CircularProgress } from "../[id]/components/upload/CircularProgress";
+
+// Define a type for uploading files that includes progress
+interface UploadingFile {
+  name: string;
+  progress: number;
+}
 
 const DraggableItem: React.FC<{
   id: string;
@@ -307,6 +315,13 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const [linkUrl, setLinkUrl] = useState("");
   const [isCreatingFileFromLink, setIsCreatingFileFromLink] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
+
+  // Add new state variables for progress tracking
+  const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
+  const [completedFiles, setCompletedFiles] = useState<string[]>([]);
+  const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(
+    null
+  );
 
   const [view, setView] = useState<"grid" | "list">("list");
   const [searchQuery, setSearchQuery] = useState("");
@@ -593,9 +608,163 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     return items;
   }, [folders, selectedFileIds, selectedFolderIds, selectedFiles]);
 
+  // Add these new functions for tracking upload progress
+  const updateFileProgress = (fileName: string, progress: number) => {
+    setUploadingFiles((prev) =>
+      prev.map((file) =>
+        file.name === fileName ? { ...file, progress } : file
+      )
+    );
+  };
+
+  const markFileComplete = (fileName: string) => {
+    // Update progress to 100%
+    setUploadingFiles((prev) =>
+      prev.map((file) =>
+        file.name === fileName ? { ...file, progress: 100 } : file
+      )
+    );
+
+    // Add to completed files
+    setCompletedFiles((prev) => [...prev, fileName]);
+
+    // Remove from uploading files after showing 100% for a moment
+    setTimeout(() => {
+      setUploadingFiles((prev) =>
+        prev.filter((file) => file.name !== fileName)
+      );
+    }, 2000); // Show complete state for 2 seconds
+
+    // Remove from completed files after a longer delay
+    setTimeout(() => {
+      setCompletedFiles((prev) => prev.filter((name) => name !== fileName));
+    }, 3000);
+  };
+
+  const startRefreshInterval = () => {
+    if (refreshInterval) {
+      clearInterval(refreshInterval);
+    }
+
+    // Add a timestamp to track when we started refreshing
+    const startTime = Date.now();
+    const MAX_REFRESH_TIME = 30000; // 30 seconds max for any upload to complete
+
+    const interval = setInterval(() => {
+      // Check if we've been waiting too long, if so, clear uploading state
+      if (Date.now() - startTime > MAX_REFRESH_TIME) {
+        setUploadingFiles([]);
+        setCompletedFiles([]);
+        clearInterval(interval);
+        setRefreshInterval(null);
+        return;
+      }
+
+      // Simulate progress for files that don't have real progress tracking yet
+      setUploadingFiles((prev) =>
+        prev.map((file) => {
+          // Don't update files that are already complete
+          if (completedFiles.includes(file.name) || file.progress >= 100) {
+            return file;
+          }
+
+          // Slow down progress as it approaches completion for more realistic feel
+          let increment;
+          if (file.progress < 70) {
+            // Normal increment for first 70%
+            increment = Math.floor(Math.random() * 10) + 5;
+          } else if (file.progress < 90) {
+            // Slower increment between 70-90%
+            increment = Math.floor(Math.random() * 5) + 2;
+          } else {
+            // Very slow for final 10%
+            increment = Math.floor(Math.random() * 2) + 1;
+          }
+
+          const newProgress = Math.min(file.progress + increment, 99); // Cap at 99% until confirmed
+          return { ...file, progress: newProgress };
+        })
+      );
+
+      const allFilesUploaded = uploadingFiles.every((uploadingFile) => {
+        // Skip files already marked as complete
+        if (completedFiles.includes(uploadingFile.name)) {
+          return true;
+        }
+
+        if (uploadingFile.name.startsWith("http")) {
+          // For URL uploads, extract the domain and check for files containing it
+          try {
+            // Get the hostname (domain) from the URL
+            const url = new URL(uploadingFile.name);
+            const hostname = url.hostname;
+
+            // Look for recently added files that might match this URL
+            const isUploaded = folders.some((folder) =>
+              folder.files.some(
+                (file) =>
+                  file.name.toLowerCase().includes(hostname.toLowerCase()) ||
+                  (file.lastModified &&
+                    new Date(file.lastModified).getTime() > startTime - 60000)
+              )
+            );
+
+            if (isUploaded) {
+              // Mark as complete if found in files list
+              markFileComplete(uploadingFile.name);
+            }
+            return isUploaded;
+          } catch (e) {
+            console.error("Failed to parse URL:", e);
+            return false; // Force continued checking
+          }
+        }
+
+        // For regular file uploads, check if filename exists in the folders
+        const isUploaded = folders.some((folder) =>
+          folder.files.some((file) => file.name === uploadingFile.name)
+        );
+
+        if (isUploaded) {
+          // Mark as complete if found in files list
+          markFileComplete(uploadingFile.name);
+        }
+        return isUploaded;
+      });
+
+      if (
+        allFilesUploaded &&
+        uploadingFiles.length > 0 &&
+        completedFiles.length === uploadingFiles.length
+      ) {
+        // If all files are marked complete and no new uploads are happening, clean up
+        setTimeout(() => {
+          setUploadingFiles([]);
+          setCompletedFiles([]);
+          clearInterval(interval);
+          setRefreshInterval(null);
+        }, 2000);
+      }
+    }, 1000); // Update every second for smoother animation
+
+    setRefreshInterval(interval);
+  };
+
+  // Cleanup interval on component unmount
+  useEffect(() => {
+    return () => {
+      if (refreshInterval) {
+        clearInterval(refreshInterval);
+      }
+    };
+  }, [refreshInterval]);
+
   const addUploadedFileToContext = async (files: FileList) => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      // Add file to uploading files state
+      setUploadingFiles((prev) => [...prev, { name: file.name, progress: 0 }]);
+
       const formData = new FormData();
       formData.append("files", file);
       const response: FileUploadResponse = await uploadFile(formData, null);
@@ -612,6 +781,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           token_count: 0,
         };
         addSelectedFile(uploadedFile);
+        markFileComplete(file.name);
       }
     }
   };
@@ -854,8 +1024,8 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       className="max-w-4xl py-6 flex flex-col w-full !overflow-visible h-[70vh]"
       title={title}
     >
-      <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col h-full">
-        <div className="grid overflow-x-visible overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
+      <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col">
+        <div className="grid overflow-x-visible h-full overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
           <div className="w-full h-full pb-4 overflow-hidden ">
             <div className="px-6 sticky flex flex-col gap-y-2 z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
               <div className="w-full relative">
@@ -887,7 +1057,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             </div>
 
             {filteredFolders.length + currentFolderFiles.length > 0 ? (
-              <div className="pl-2 flex-grow  overflow-y-auto max-h-full default-scrollbar pr-4">
+              <div className="pl-2 h-full flex-grow  overflow-y-auto max-h-full default-scrollbar pr-4">
                 <div className="flex ml-6 items-center border-b border-border dark:border-border-200 py-2 pr-3 text-sm font-medium text-text-400 dark:text-neutral-400">
                   <div className="flex pl-2 items-center gap-3 w-[65%] min-w-0">
                     <span className="px-1">Name</span>
@@ -939,6 +1109,44 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                               isSelected={selectedFileIds.has(file.id)}
                             />
                           ))}
+
+                      {/* Add uploading files visualization */}
+                      {uploadingFiles.map((uploadingFile, index) => (
+                        <div
+                          key={`uploading-${index}`}
+                          className={`group relative ml-6 flex cursor-pointer items-center border-b border-border dark:border-border-200 hover:bg-[#f2f0e8]/50 dark:hover:bg-[#1a1a1a]/50 py-2 px-3 transition-all ease-in-out ${
+                            completedFiles.includes(uploadingFile.name)
+                              ? "bg-green-50/30 dark:bg-green-900/10"
+                              : ""
+                          }`}
+                        >
+                          <div className="flex items-center flex-1 min-w-0">
+                            <div className="flex items-center gap-2 w-[65%] min-w-0">
+                              {uploadingFile.name.startsWith("http") ? (
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                              ) : (
+                                <CircularProgress
+                                  progress={uploadingFile.progress}
+                                  size={18}
+                                  showPercentage={false}
+                                />
+                              )}
+                              <span className="truncate text-sm text-text-dark dark:text-text-dark">
+                                {uploadingFile.name.startsWith("http")
+                                  ? `${uploadingFile.name.substring(0, 30)}${
+                                      uploadingFile.name.length > 30
+                                        ? "..."
+                                        : ""
+                                    }`
+                                  : uploadingFile.name}
+                              </span>
+                            </div>
+                            <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400">
+                              -
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </SortableContext>
 
@@ -1019,6 +1227,18 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                       setIsUploadingFile(true);
                       setUploadStartTime(Date.now()); // Record start time
 
+                      // Add files to uploading files state
+                      const filesArray = Array.from(files);
+                      filesArray.forEach((file) => {
+                        setUploadingFiles((prev) => [
+                          ...prev,
+                          { name: file.name, progress: 0 },
+                        ]);
+                      });
+
+                      // Start the refresh interval to simulate progress
+                      startRefreshInterval();
+
                       // Convert File[] to FileList for addUploadedFileToContext
                       const fileListArray = Array.from(files);
                       const fileList = new DataTransfer();
@@ -1033,6 +1253,15 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                     onUrlUpload={async (url: string) => {
                       setIsCreatingFileFromLink(true);
                       setUploadStartTime(Date.now()); // Record start time
+
+                      // Add URL to uploading files
+                      setUploadingFiles((prev) => [
+                        ...prev,
+                        { name: url, progress: 0 },
+                      ]);
+
+                      // Start the refresh interval to simulate progress
+                      startRefreshInterval();
 
                       try {
                         const response: FileUploadResponse =
@@ -1057,6 +1286,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                             token_count: 0,
                           };
                           addSelectedFile(createdFile);
+                          markFileComplete(url);
                         }
 
                         await refreshFolders();

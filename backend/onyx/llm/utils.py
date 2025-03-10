@@ -1,4 +1,5 @@
 import copy
+import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -33,6 +34,7 @@ from onyx.configs.constants import MessageType
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -132,7 +134,18 @@ def _build_content(
 
     final_message_with_files = "FILES:\n\n"
     for file in text_files:
-        file_content = file.content.decode("utf-8")
+        try:
+            file_content = file.content.decode("utf-8")
+        except UnicodeDecodeError:
+            # Try to decode as binary
+            try:
+                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
+            except Exception:
+                file_content = f"[Binary file content - {file.file_type} format]"
+                logger.exception(
+                    f"Could not decode binary file content for file type: {file.file_type}"
+                )
+                # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
