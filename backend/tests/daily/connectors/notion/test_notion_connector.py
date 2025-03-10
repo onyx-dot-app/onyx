@@ -20,7 +20,10 @@ def notion_connector() -> NotionConnector:
 
 
 def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
-    """Test the NotionConnector with a real Notion page"""
+    """Test the NotionConnector with a real Notion page.
+
+    Uses a Notion workspace under the onyx-test.com domain.
+    """
     doc_batch_generator = notion_connector.poll_source(0, time.time())
 
     # Get first batch of documents
