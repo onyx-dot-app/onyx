@@ -391,6 +391,10 @@ def stream_chat_message_objects(
     llm: LLM
 
     try:
+        # Move these variables inside the try block
+        file_id_to_user_file = {}
+        ordered_user_files = None
+
         user_id = user.id if user is not None else None
 
         chat_session = get_chat_session_by_id(
@@ -584,7 +588,7 @@ def stream_chat_message_objects(
         use_search_for_user_files = False
 
         user_files: list[InMemoryChatFile] | None = None
-
+        search_for_ordering_only = False
         if user_file_ids or user_folder_ids:
             # Load user files
             user_files = load_all_user_files(
@@ -592,6 +596,10 @@ def stream_chat_message_objects(
                 user_folder_ids or [],
                 db_session,
             )
+
+            # Store mapping of file_id to file for later reordering
+            if user_files:
+                file_id_to_user_file = {file.file_id: file for file in user_files}
 
             # Calculate token count for the files
             from onyx.db.user_documents import calculate_user_files_token_count
@@ -616,19 +624,23 @@ def stream_chat_message_objects(
                 f"Total file tokens: {total_tokens}, Available tokens: {available_tokens}"
             )
 
-            # If files are too large for context, use search instead
-            if total_tokens > available_tokens:
-                # We'll set force_use_tool.force_use = True after tools are defined
-                logger.info(
-                    f"User files exceed available token limit ({total_tokens} > {available_tokens}), using search instead"
-                )
-                use_search_for_user_files = True
-            else:
+            # ALWAYS use search for user files, but track if we need it for context or just ordering
+            use_search_for_user_files = True
+            # If files are small enough for context, we'll just use search for ordering
+            search_for_ordering_only = total_tokens <= available_tokens
+
+            if search_for_ordering_only:
+                # Add original user files to context since they fit
                 if user_files:
                     latest_query_files.extend(user_files)
                     logger.info(
-                        f"Using {len(user_files)} user files directly in context ({total_tokens}/{available_tokens} tokens)"
+                        f"Using {len(user_files)} user files directly in context ({total_tokens}/{available_tokens} tokens), "
+                        f"but will run search for ordering"
                     )
+            else:
+                logger.info(
+                    f"User files exceed available token limit ({total_tokens} > {available_tokens}), using search instead"
+                )
 
         if user_message:
             attach_files_to_chat_message(
@@ -898,6 +910,15 @@ def stream_chat_message_objects(
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
+        if not use_search_for_user_files and user_files:
+            yield UserKnowledgeFilePacket(
+                user_files=[
+                    FileDescriptor(
+                        id=str(file.file_id), type=ChatFileType.USER_KNOWLEDGE
+                    )
+                    for file in user_files
+                ]
+            )
 
         search_request = SearchRequest(
             query=final_msg.message,
@@ -1008,6 +1029,46 @@ def stream_chat_message_objects(
                             else False
                         ),
                     )
+
+                    # If we're using search just for ordering user files
+                    if (
+                        search_for_ordering_only
+                        and user_files
+                        and info.qa_docs_response
+                    ):
+                        # Extract document order from search results
+                        doc_order = []
+                        for doc in info.qa_docs_response.top_documents:
+                            doc_id = doc.document_id
+                            if str(doc_id).startswith("USER_FILE_CONNECTOR__"):
+                                file_id = doc_id.replace("USER_FILE_CONNECTOR__", "")
+                                if file_id in file_id_to_user_file:
+                                    doc_order.append(file_id)
+
+                        # Add any files that weren't in search results at the end
+                        missing_files = [
+                            f_id
+                            for f_id in file_id_to_user_file.keys()
+                            if f_id not in doc_order
+                        ]
+                        doc_order.extend(missing_files)
+
+                        # Reorder user files based on search results
+                        ordered_user_files = [
+                            file_id_to_user_file[f_id]
+                            for f_id in doc_order
+                            if f_id in file_id_to_user_file
+                        ]
+                        yield UserKnowledgeFilePacket(
+                            user_files=[
+                                FileDescriptor(
+                                    id=str(file.file_id),
+                                    type=ChatFileType.USER_KNOWLEDGE,
+                                )
+                                for file in ordered_user_files
+                            ]
+                        )
+
                     yield info.qa_docs_response
                 elif packet.id == SECTION_RELEVANCE_LIST_ID:
                     relevance_sections = packet.response
@@ -1123,16 +1184,7 @@ def stream_chat_message_objects(
                     ]
                     info.tool_result = packet
                 yield cast(ChatPacket, packet)
-        logger.debug("Reached end of stream")
-        if user_files:
-            yield UserKnowledgeFilePacket(
-                user_files=[
-                    FileDescriptor(
-                        id=str(file.file_id), type=ChatFileType.USER_KNOWLEDGE
-                    )
-                    for file in user_files
-                ]
-            )
+
     except ValueError as e:
         logger.exception("Failed to process chat message.")
 

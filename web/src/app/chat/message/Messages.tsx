@@ -426,42 +426,46 @@ export const AIMessage = ({
                 <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
                     {/* {JSON.stringify(toolCall)} */}
-                    {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
-                      <>
-                        {query !== undefined && (
-                          <div className="mb-1">
-                            <SearchSummary
-                              index={index || 0}
-                              query={query}
-                              finished={toolCall?.tool_result != undefined}
-                              handleSearchQueryEdit={handleSearchQueryEdit}
-                              docs={docs || []}
-                              toggleDocumentSelection={toggleDocumentSelection!}
-                              userFileSearch={retrievalDisabled ?? false}
-                            />
-                          </div>
-                        )}
-                        {userKnowledgeFiles && (
-                          <UserKnowledgeFiles
-                            userKnowledgeFiles={userKnowledgeFiles}
-                          />
-                        )}
-
-                        {handleForceSearch &&
-                          !userKnowledgeFiles &&
-                          content &&
-                          query === undefined &&
-                          !hasDocs &&
-                          !retrievalDisabled && (
+                    {!userKnowledgeFiles &&
+                      (!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
+                        <>
+                          {query !== undefined && (
                             <div className="mb-1">
-                              <SkippedSearch
-                                handleForceSearch={handleForceSearch}
+                              <SearchSummary
+                                index={index || 0}
+                                query={query}
+                                finished={toolCall?.tool_result != undefined}
+                                handleSearchQueryEdit={handleSearchQueryEdit}
+                                docs={docs || []}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                userFileSearch={retrievalDisabled ?? false}
                               />
                             </div>
                           )}
-                      </>
-                    ) : null}
-                    {toolCall &&
+
+                          {handleForceSearch &&
+                            !userKnowledgeFiles &&
+                            content &&
+                            query === undefined &&
+                            !hasDocs &&
+                            !retrievalDisabled && (
+                              <div className="mb-1">
+                                <SkippedSearch
+                                  handleForceSearch={handleForceSearch}
+                                />
+                              </div>
+                            )}
+                        </>
+                      ) : null)}
+                    {userKnowledgeFiles && (
+                      <UserKnowledgeFiles
+                        userKnowledgeFiles={userKnowledgeFiles}
+                      />
+                    )}
+                    {!userKnowledgeFiles &&
+                      toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
                       ) && (
@@ -495,7 +499,7 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
-                    {docs && docs.length > 0 && (
+                    {!userKnowledgeFiles && docs && docs.length > 0 && (
                       <div
                         className={`mobile:hidden ${
                           (query ||
