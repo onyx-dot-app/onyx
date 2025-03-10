@@ -187,7 +187,7 @@ class VespaIndex(DocumentIndex):
     ) -> None:
         if MULTI_TENANT:
             logger.info(
-                "Skipping Vespa index seup for multitenant (would wipe all indices)"
+                "Skipping Vespa index setup for multitenant (would wipe all indices)"
             )
             return None
 

@@ -148,6 +148,9 @@ class DocumentBase(BaseModel):
                 attributes.append(k + INDEX_SEPARATOR + v)
         return attributes
 
+    def get_content(self) -> str:
+        return " ".join([section.text for section in self.sections])
+
 
 class Document(DocumentBase):
     id: str  # This must be unique or during indexing/reindexing, chunks will be overwritten

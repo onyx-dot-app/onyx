@@ -104,3 +104,9 @@ class FullLLMProvider(LLMProvider):
             groups=[group.id for group in llm_provider_model.groups],
             deployment_name=llm_provider_model.deployment_name,
         )
+
+
+class LLMCost(BaseModel):
+    provider: str
+    model_name: str
+    cost: float
