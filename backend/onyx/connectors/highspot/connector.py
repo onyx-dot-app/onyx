@@ -5,11 +5,8 @@ from typing import Any
 from typing import Dict
 from typing import List
 
-from onyx.background.celery.versioned_apps.primary import app as primary_app
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.highspot.client import HighspotClient
 from onyx.connectors.highspot.client import HighspotClientError
 from onyx.connectors.highspot.utils import scrape_url_content
@@ -404,17 +401,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
-    # spot_names = []
-    # connector = HighspotConnector(spot_names)
-    # credentials = {
-    #     "highspot_key": "aa11f5e9e541f1641aa5",
-    #     "highspot_secret": "65d9a6e7e5bd66a4540faaa787027d207ee7a7126d3078d92d1b7185c0289ee6"
-    # }
-    # connector.load_credentials(credentials=credentials)
-    # for doc in connector.load_from_state():
-    #     print(doc)
-
-    primary_app.send_task(
-        OnyxCeleryTask.CHECK_FOR_INDEXING,
-        priority=OnyxCeleryPriority.HIGH,
-    )
+    spot_names = []
+    connector = HighspotConnector(spot_names)
+    credentials = {"highspot_key": "", "highspot_secret": ""}
+    connector.load_credentials(credentials=credentials)
+    for doc in connector.load_from_state():
+        print(doc)
