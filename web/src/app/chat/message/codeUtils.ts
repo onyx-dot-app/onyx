@@ -59,29 +59,77 @@ export function extractCodeText(
 
   return codeText || "";
 }
-
 // We must preprocess LaTeX in the LLM output to avoid improper formatting
+
 export const preprocessLaTeX = (content: string) => {
-  // 1) Escape dollar signs used outside of LaTeX context
-  const escapedCurrencyContent = content.replace(
+  // First, protect code-like expressions where $ is used for variables
+  const codeProtected = content.replace(
+    /\b(\w+(?:\s*-\w+)*\s*(?:'[^']*')?)\s*\{[^}]*?\$\d+[^}]*?\}/g,
+    (match) => {
+      // Replace $ with a temporary placeholder in code contexts
+      return match.replace(/\$/g, "___DOLLAR_PLACEHOLDER___");
+    }
+  );
+
+  // Also protect common shell variable patterns like $1, $2, etc.
+  const shellProtected = codeProtected.replace(
+    /\b(?:print|echo|awk|sed|grep)\s+.*?\$\d+/g,
+    (match) => match.replace(/\$/g, "___DOLLAR_PLACEHOLDER___")
+  );
+
+  // Process LaTeX expressions now that code is protected
+  // Valid LaTeX should have matching dollar signs with non-space chars surrounding content
+  const processedForLatex = shellProtected.replace(
+    /\$([^\s$][^$]*?[^\s$])\$/g,
+    (_, equation) => `$${equation}$`
+  );
+
+  // Escape currency mentions
+  const escapedCurrency = processedForLatex.replace(
     /\$(\d+(?:\.\d*)?)/g,
     (_, p1) => `\\$${p1}`
   );
 
-  // 2) Replace block-level LaTeX delimiters \[ \] with $$ $$
-  const blockProcessedContent = escapedCurrencyContent.replace(
+  // Replace block-level LaTeX delimiters \[ \] with $$ $$
+  const blockProcessed = escapedCurrency.replace(
     /\\\[([\s\S]*?)\\\]/g,
     (_, equation) => `$$${equation}$$`
   );
 
-  // 3) Replace inline LaTeX delimiters \( \) with $ $
-  const inlineProcessedContent = blockProcessedContent.replace(
+  // Replace inline LaTeX delimiters \( \) with $ $
+  const inlineProcessed = blockProcessed.replace(
     /\\\(([\s\S]*?)\\\)/g,
     (_, equation) => `$${equation}$`
   );
 
-  return inlineProcessedContent;
+  // Restore original dollar signs in code contexts
+  const restored = inlineProcessed.replace(/___DOLLAR_PLACEHOLDER___/g, "$");
+
+  return restored;
 };
+
+// // We must preprocess LaTeX in the LLM output to avoid improper formatting
+// export const preprocessLaTeX = (content: string) => {
+//   // 1) Escape dollar signs used outside of LaTeX context
+//   const escapedCurrencyContent = content.replace(
+//     /\$(\d+(?:\.\d*)?)/g,
+//     (_, p1) => `\\$${p1}`
+//   );
+
+//   // 2) Replace block-level LaTeX delimiters \[ \] with $$ $$
+//   const blockProcessedContent = escapedCurrencyContent.replace(
+//     /\\\[([\s\S]*?)\\\]/g,
+//     (_, equation) => `$$${equation}$$`
+//   );
+
+//   // 3) Replace inline LaTeX delimiters \( \) with $ $
+//   const inlineProcessedContent = blockProcessedContent.replace(
+//     /\\\(([\s\S]*?)\\\)/g,
+//     (_, equation) => `$${equation}$`
+//   );
+
+//   return inlineProcessedContent;
+// };
 
 interface MarkdownSegment {
   type: "text" | "link" | "code" | "bold" | "italic" | "codeblock";
