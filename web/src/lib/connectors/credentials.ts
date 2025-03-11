@@ -225,6 +225,11 @@ export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
+export interface HighSpotCredentialJson {
+  highspot_key: string;
+  highspot_secret: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -351,6 +356,10 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gitbook: {
     gitbook_api_key: "",
   } as GitbookCredentialJson,
+  highspot: {
+    highspot_key: "",
+    highspot_secret: "",
+  } as HighSpotCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -485,6 +494,10 @@ export const credentialDisplayNames: Record<string, string> = {
   // GitBook
   gitbook_space_id: "GitBook Space ID",
   gitbook_api_key: "GitBook API Key",
+
+  //HighSpot
+  highspot_key: "HighSpot Key",
+  highspot_secret: "HighSpot Secret",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

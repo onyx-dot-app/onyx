@@ -1253,37 +1253,22 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     description: "Configure HighSpot connector",
     values: [
       {
-        type: "text",
-        query: "Enter the HighSpot key",
-        label: "Key",
-        name: "key",
-        optional: false,
-      },
-      {
-        type: "text",
-        query: "Enter the HighSpot secret",
-        label: "Secret",
-        name: "secret",
-        optional: false,
-      },
-      {
         type: "tab",
-        name: "highspot_mode",
+        name: "highspot_scope",
         label: "What should we index from HighSpot?",
         optional: true,
         tabs: [
           {
-            value: "repo",
-            label: "Specific Repository",
+            value: "spots",
+            label: "Specific Spots",
             fields: [
               {
-                type: "text",
+                type: "list",
                 query: "Enter the spot name(s):",
                 label: "Spot Name(s)",
-                name: "spots",
+                name: "spot_names",
                 optional: false,
-                description:
-                  "For multiple spots, enter comma-separated names (e.g., spot1, spot2, spot3)",
+                description: "For multiple spots, enter your spot one by one.",
               },
             ],
           },
