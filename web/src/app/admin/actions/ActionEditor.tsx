@@ -111,7 +111,7 @@ function ActionForm({
         <TextFormField
           name="definition"
           label="Definition"
-          subtext="Specify an OpenAPI schema that defines the APIs you want to make available as part of this tool."
+          subtext="Specify an OpenAPI schema that defines the APIs you want to make available as part of this action."
           placeholder="Enter your OpenAPI schema here"
           isTextArea={true}
           defaultHeight="h-96"

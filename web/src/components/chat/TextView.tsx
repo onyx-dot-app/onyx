@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { MinimalMarkdown } from "./MinimalMarkdown";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 interface TextViewProps {
   presentingDocument: OnyxDocument;

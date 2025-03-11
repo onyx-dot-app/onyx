@@ -29,7 +29,7 @@ export default async function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ToolIcon size={32} className="my-auto" />}
-        title="Tools"
+        title="Actions"
       />
 
       <Text className="mb-2">
@@ -40,7 +40,7 @@ export default async function Page() {
         <Separator />
 
         <Title>Create an Action</Title>
-        <CreateButton href="/admin/tools/new" text="New Tool" />
+        <CreateButton href="/admin/actions/new" text="New Action" />
 
         <Separator />
 

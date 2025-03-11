@@ -33,6 +33,8 @@ import Link from "next/link";
 import { CheckboxField } from "@/components/ui/checkbox";
 import { CheckedState } from "@radix-ui/react-checkbox";
 
+import { transformLinkUri } from "@/lib/utils";
+
 export function SectionHeader({
   children,
 }: {
@@ -432,6 +434,7 @@ export const MarkdownFormField = ({
             <ReactMarkdown
               className="prose dark:prose-invert"
               remarkPlugins={[remarkGfm]}
+              urlTransform={transformLinkUri}
             >
               {field.value}
             </ReactMarkdown>

@@ -53,6 +53,7 @@ import { copyAll, handleCopy } from "./copyingUtils";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
 import { ErrorBanner, Resubmit } from "./Resubmit";
+import { transformLinkUri } from "@/lib/utils";
 
 export const AgenticMessage = ({
   isStreamingQuestions,
@@ -336,6 +337,7 @@ export const AgenticMessage = ({
         }}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        urlTransform={transformLinkUri}
       >
         {finalAlternativeContent}
       </ReactMarkdown>
@@ -349,6 +351,7 @@ export const AgenticMessage = ({
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        urlTransform={transformLinkUri}
       >
         {streamedContent +
           (!isComplete && !secondLevelGenerating ? " [*]() " : "")}
