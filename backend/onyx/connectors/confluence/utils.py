@@ -164,7 +164,7 @@ def process_attachment(
         )
 
         # Download the attachment
-        resp = confluence_client._session.get(attachment_link)
+        resp: requests.Response = confluence_client._session.get(attachment_link)
         if resp.status_code != 200:
             logger.warning(
                 f"Failed to fetch {attachment_link} with status code {resp.status_code}"
@@ -176,7 +176,7 @@ def process_attachment(
             )
 
         raw_bytes = resp.content
-        if raw_bytes is None:
+        if not raw_bytes:
             return AttachmentProcessingResult(
                 text=None, file_name=None, error="attachment.content is None"
             )
