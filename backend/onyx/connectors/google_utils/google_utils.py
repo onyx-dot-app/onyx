@@ -4,6 +4,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
+from enum import Enum
 from typing import Any
 
 from googleapiclient.errors import HttpError  # type: ignore
@@ -19,6 +20,20 @@ logger = setup_logger()
 # extended period of time. Trying to combat here by adding a very
 # long retry period (~20 minutes of trying every minute)
 add_retries = retry_builder(tries=50, max_delay=30)
+
+NEXT_PAGE_TOKEN_KEY = "nextPageToken"
+PAGE_TOKEN_KEY = "pageToken"
+ORDER_BY_KEY = "orderBy"
+
+
+# See https://developers.google.com/drive/api/reference/rest/v3/files/list for more
+class GoogleFields(str, Enum):
+    ID = "id"
+    CREATED_TIME = "createdTime"
+    MODIFIED_TIME = "modifiedTime"
+    NAME = "name"
+    SIZE = "size"
+    PARENTS = "parents"
 
 
 def _execute_with_retry(request: Any) -> Any:
@@ -90,11 +105,11 @@ def execute_paginated_retrieval(
         retrieval_function: The specific list function to call (e.g., service.files().list)
         **kwargs: Arguments to pass to the list function
     """
-    next_page_token = ""
+    next_page_token = kwargs.get(PAGE_TOKEN_KEY, "")
     while next_page_token is not None:
         request_kwargs = kwargs.copy()
         if next_page_token:
-            request_kwargs["pageToken"] = next_page_token
+            request_kwargs[PAGE_TOKEN_KEY] = next_page_token
 
         try:
             results = retrieval_function(**request_kwargs).execute()
@@ -117,7 +132,7 @@ def execute_paginated_retrieval(
                 logger.exception("Error executing request:")
                 raise e
 
-        next_page_token = results.get("nextPageToken")
+        next_page_token = results.get(NEXT_PAGE_TOKEN_KEY)
         if list_key:
             for item in results.get(list_key, []):
                 yield item

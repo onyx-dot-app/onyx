@@ -1,11 +1,10 @@
-import time
 from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
+from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FOLDER_URL
 
 
@@ -37,9 +36,7 @@ def test_google_drive_sections(
         my_drive_emails=None,
     )
     for connector in [oauth_connector, service_acct_connector]:
-        retrieved_docs: list[Document] = []
-        for doc_batch in connector.poll_source(0, time.time()):
-            retrieved_docs.extend(doc_batch)
+        retrieved_docs = load_all_docs(connector)
 
         # Verify we got the 1 doc with sections
         assert len(retrieved_docs) == 1
