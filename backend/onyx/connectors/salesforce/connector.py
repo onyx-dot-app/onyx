@@ -48,10 +48,12 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         credentials: dict[str, Any],
     ) -> dict[str, Any] | None:
+        domain = "test" if credentials.get("is_sandbox") else None
         self._sf_client = Salesforce(
             username=credentials["sf_username"],
             password=credentials["sf_password"],
             security_token=credentials["sf_security_token"],
+            domain=domain,
         )
         return None
 

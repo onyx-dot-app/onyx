@@ -109,7 +109,6 @@ import {
 } from "@/components/resizable/constants";
 import FixedLogo from "../../components/logo/FixedLogo";
 
-import { MinimalMarkdown } from "@/components/chat/MinimalMarkdown";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 
 import {
@@ -138,6 +137,7 @@ import { useSidebarShortcut } from "@/lib/browserUtilities";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;

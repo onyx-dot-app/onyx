@@ -674,7 +674,7 @@ class SlackConnector(SlimConnector, CheckpointConnector):
         """
         1. Verify the bot token is valid for the workspace (via auth_test).
         2. Ensure the bot has enough scope to list channels.
-        3. Check that every channel specified in self.channels exists.
+        3. Check that every channel specified in self.channels exists (only when regex is not enabled).
         """
         if self.client is None:
             raise ConnectorMissingCredentialError("Slack credentials not loaded.")
@@ -706,8 +706,8 @@ class SlackConnector(SlimConnector, CheckpointConnector):
                     f"Slack API returned a failure: {error_msg}"
                 )
 
-            # 3) If channels are specified, verify each is accessible
-            if self.channels:
+            # 3) If channels are specified and regex is not enabled, verify each is accessible
+            if self.channels and not self.channel_regex_enabled:
                 accessible_channels = get_channels(
                     client=self.client,
                     exclude_archived=True,

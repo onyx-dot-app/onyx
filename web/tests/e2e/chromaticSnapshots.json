@@ -88,11 +88,11 @@
     }
   },
   {
-    "name": "Custom Assistants - Tools",
-    "path": "tools",
-    "pageTitle": "Tools",
+    "name": "Custom Assistants - Actions",
+    "path": "actions",
+    "pageTitle": "Actions",
     "options": {
-      "paragraphText": "Tools allow assistants to retrieve information or take actions."
+      "paragraphText": "Actions allow assistants to retrieve information or take actions."
     }
   },
   {

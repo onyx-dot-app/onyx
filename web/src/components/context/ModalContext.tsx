@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useCallback } from "react";
 import { NewTeamModal } from "../modals/NewTeamModal";
 import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 type ModalContextType = {
   showNewTeamModal: boolean;
@@ -48,7 +49,7 @@ export const ModalProvider: React.FC<{
 
   // Render all application-wide modals
   const renderModals = () => {
-    if (!user) return null;
+    if (!user || !NEXT_PUBLIC_CLOUD_ENABLED) return null;
 
     return (
       <>

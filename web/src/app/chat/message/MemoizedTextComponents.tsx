@@ -160,8 +160,9 @@ export const MemoizedLink = memo(
 
     const handleMouseDown = () => {
       let url = href || rest.children?.toString();
-      if (url && !url.startsWith("http://") && !url.startsWith("https://")) {
-        // Try to construct a valid URL
+
+      if (url && !url.includes("://")) {
+        // Only add https:// if the URL doesn't already have a protocol
         const httpsUrl = `https://${url}`;
         try {
           new URL(httpsUrl);

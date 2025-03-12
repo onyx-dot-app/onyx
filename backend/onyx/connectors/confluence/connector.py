@@ -263,6 +263,7 @@ class ConfluenceConnector(
                     result = process_attachment(
                         self.confluence_client,
                         attachment,
+                        page_id,
                         page_title,
                         self.image_analysis_llm,
                     )
@@ -366,6 +367,7 @@ class ConfluenceConnector(
                     response = convert_attachment_to_content(
                         confluence_client=self.confluence_client,
                         attachment=attachment,
+                        page_id=page["id"],
                         page_context=confluence_xml,
                         llm=self.image_analysis_llm,
                     )

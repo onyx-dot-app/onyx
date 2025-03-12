@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from onyx.configs.app_configs import (
     CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD,
 )
+from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD
 from onyx.configs.constants import FileOrigin
 
 if TYPE_CHECKING:
@@ -84,25 +85,35 @@ class AttachmentProcessingResult(BaseModel):
     error: str | None = None
 
 
-def _download_attachment(
-    confluence_client: "OnyxConfluence", attachment: dict[str, Any]
-) -> bytes | None:
-    """
-    Retrieves the raw bytes of an attachment from Confluence. Returns None on error.
-    """
-    download_link = confluence_client.url + attachment["_links"]["download"]
-    resp = confluence_client._session.get(download_link)
-    if resp.status_code != 200:
-        logger.warning(
-            f"Failed to fetch {download_link} with status code {resp.status_code}"
+def _make_attachment_link(
+    confluence_client: "OnyxConfluence",
+    attachment: dict[str, Any],
+    parent_content_id: str | None = None,
+) -> str | None:
+    download_link = ""
+
+    if "api.atlassian.com" in confluence_client.url:
+        # https://developer.atlassian.com/cloud/confluence/rest/v1/api-group-content---attachments/#api-wiki-rest-api-content-id-child-attachment-attachmentid-download-get
+        if not parent_content_id:
+            logger.warning(
+                "parent_content_id is required to download attachments from Confluence Cloud!"
+            )
+            return None
+
+        download_link = (
+            confluence_client.url
+            + f"/rest/api/content/{parent_content_id}/child/attachment/{attachment['id']}/download"
         )
-        return None
-    return resp.content
+    else:
+        download_link = confluence_client.url + attachment["_links"]["download"]
+
+    return download_link
 
 
 def process_attachment(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
+    parent_content_id: str | None,
     page_context: str,
     llm: LLM | None,
 ) -> AttachmentProcessingResult:
@@ -122,11 +133,52 @@ def process_attachment(
                 error=f"Unsupported file type: {media_type}",
             )
 
-        # Download the attachment
-        raw_bytes = _download_attachment(confluence_client, attachment)
-        if raw_bytes is None:
+        attachment_link = _make_attachment_link(
+            confluence_client, attachment, parent_content_id
+        )
+        if not attachment_link:
             return AttachmentProcessingResult(
-                text=None, file_name=None, error="Failed to download attachment"
+                text=None, file_name=None, error="Failed to make attachment link"
+            )
+
+        attachment_size = attachment["extensions"]["fileSize"]
+
+        if not media_type.startswith("image/") or not llm:
+            if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
+                logger.warning(
+                    f"Skipping {attachment_link} due to size. "
+                    f"size={attachment_size} "
+                    f"threshold={CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD}"
+                )
+                return AttachmentProcessingResult(
+                    text=None,
+                    file_name=None,
+                    error=f"Attachment text too long: {attachment_size} chars",
+                )
+
+        logger.info(
+            f"Downloading attachment: "
+            f"title={attachment['title']} "
+            f"length={attachment_size} "
+            f"link={attachment_link}"
+        )
+
+        # Download the attachment
+        resp: requests.Response = confluence_client._session.get(attachment_link)
+        if resp.status_code != 200:
+            logger.warning(
+                f"Failed to fetch {attachment_link} with status code {resp.status_code}"
+            )
+            return AttachmentProcessingResult(
+                text=None,
+                file_name=None,
+                error=f"Attachment download status code is {resp.status_code}",
+            )
+
+        raw_bytes = resp.content
+        if not raw_bytes:
+            return AttachmentProcessingResult(
+                text=None, file_name=None, error="attachment.content is None"
             )
 
         # Process image attachments with LLM if available
@@ -249,6 +301,7 @@ def _process_text_attachment(
 def convert_attachment_to_content(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
+    page_id: str,
     page_context: str,
     llm: LLM | None,
 ) -> tuple[str | None, str | None] | None:
@@ -266,7 +319,9 @@ def convert_attachment_to_content(
         )
         return None
 
-    result = process_attachment(confluence_client, attachment, page_context, llm)
+    result = process_attachment(
+        confluence_client, attachment, page_id, page_context, llm
+    )
     if result.error is not None:
         logger.warning(
             f"Attachment {attachment['title']} encountered error: {result.error}"
