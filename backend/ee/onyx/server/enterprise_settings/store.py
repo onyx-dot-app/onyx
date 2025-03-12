@@ -24,11 +24,11 @@ logger = setup_logger()
 
 
 def load_settings() -> EnterpriseSettings:
-    """Loads settings data directly from DB.  This should be used primarily
+    """Loads settings data directly from DB. This should be used primarily
     for checking what is actually in the DB, aka for editing and saving back settings.
 
     Runtime settings actually used by the application should be checked with
-    load_runtime_settings.
+    load_runtime_settings as defaults may be applied at runtime.
     """
 
     dynamic_config_store = get_kv_store()

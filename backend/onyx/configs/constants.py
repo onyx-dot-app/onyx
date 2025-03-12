@@ -4,6 +4,7 @@ from enum import auto
 from enum import Enum
 
 ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
+ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
 
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
