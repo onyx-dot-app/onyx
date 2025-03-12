@@ -29,17 +29,8 @@ def upgrade() -> None:
     op.add_column(
         "llm_provider", sa.Column("default_vision_model", sa.String(), nullable=True)
     )
-    # Add unique constraint for is_default_vision_provider
-    op.create_unique_constraint(
-        "uq_llm_provider_is_default_vision_provider",
-        "llm_provider",
-        ["is_default_vision_provider"],
-    )
 
 
 def downgrade() -> None:
-    op.drop_constraint(
-        "uq_llm_provider_is_default_vision_provider", "llm_provider", type_="unique"
-    )
     op.drop_column("llm_provider", "default_vision_model")
     op.drop_column("llm_provider", "is_default_vision_provider")

@@ -1489,9 +1489,7 @@ class LLMProvider(Base):
 
     # should only be set for a single provider
     is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
-    is_default_vision_provider: Mapped[bool | None] = mapped_column(
-        Boolean, unique=True
-    )
+    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
     default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
