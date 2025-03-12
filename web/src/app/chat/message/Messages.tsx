@@ -449,7 +449,6 @@ export const AIMessage = ({
                           )}
                       </>
                     ) : null}
-
                     {toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
@@ -466,12 +465,10 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result || !content}
                         />
                       )}
-
                     {toolCall &&
                       (!files || files.length == 0) &&
                       toolCall.tool_name === IMAGE_GENERATION_TOOL_NAME &&
                       !toolCall.tool_result && <GeneratingImageDisplay />}
-
                     {toolCall &&
                       toolCall.tool_name === INTERNET_SEARCH_TOOL_NAME && (
                         <ToolRunDisplay
@@ -486,7 +483,6 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
-
                     {docs && docs.length > 0 && (
                       <div
                         className={`mobile:hidden ${
@@ -521,7 +517,7 @@ export const AIMessage = ({
                         </div>
                       </div>
                     )}
-
+                    {/* {finalContent} */}
                     {content || files ? (
                       <>
                         <FileDisplay files={files || []} />
@@ -973,7 +969,7 @@ export const HumanMessage = ({
                   </div>
                 ) : typeof content === "string" ? (
                   <>
-                    <div className="ml-auto flex items-center mr-1 h-fit my-auto">
+                    <div className="ml-auto flex items-center mr-1 mt-2 h-fit mb-auto">
                       {onEdit &&
                       isHovered &&
                       !isEditing &&
