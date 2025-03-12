@@ -1,10 +1,8 @@
-import time
 from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
@@ -23,6 +21,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
+from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
 from tests.daily.connectors.google_drive.consts_and_utils import SECTIONS_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_URL
@@ -52,9 +51,7 @@ def test_include_all(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     # Should get everything
     expected_file_ids = (
@@ -97,9 +94,7 @@ def test_include_shared_drives_only(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     # Should only get shared drives
     expected_file_ids = (
@@ -137,9 +132,7 @@ def test_include_my_drives_only(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     # Should only get everyone's My Drives
     expected_file_ids = (
@@ -174,9 +167,7 @@ def test_drive_one_only(
         shared_drive_urls=",".join([str(url) for url in urls]),
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     # We ignore shared_drive_urls if include_shared_drives is False
     expected_file_ids = (
@@ -211,9 +202,7 @@ def test_folder_and_shared_drive(
         shared_folder_urls=",".join([str(url) for url in folder_urls]),
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     # Should get everything except for the top level files in drive 2
     expected_file_ids = (
@@ -259,9 +248,7 @@ def test_folders_only(
         shared_folder_urls=",".join([str(url) for url in folder_urls]),
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = (
         FOLDER_1_1_FILE_IDS
@@ -298,9 +285,7 @@ def test_specific_emails(
         shared_drive_urls=None,
         my_drive_emails=",".join([str(email) for email in my_drive_emails]),
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = TEST_USER_1_FILE_IDS + TEST_USER_3_FILE_IDS
     assert_retrieved_docs_match_expected(
@@ -330,9 +315,7 @@ def get_specific_folders_in_my_drive(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(0, time.time()):
-        retrieved_docs.extend(doc_batch)
+    retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = ADMIN_FOLDER_3_FILE_IDS
     assert_retrieved_docs_match_expected(
