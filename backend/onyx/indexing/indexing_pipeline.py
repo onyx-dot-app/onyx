@@ -583,10 +583,12 @@ def index_doc_batch(
             for chunk in chunks_with_embeddings
         ]
 
-        logger.debug(
-            "Indexing the following chunks: "
-            f"{[chunk.to_short_descriptor() for chunk in access_aware_chunks]}"
-        )
+        short_descriptor_list = [
+            chunk.to_short_descriptor() for chunk in access_aware_chunks
+        ]
+        short_descriptor_log = str(short_descriptor_list)[:1024]
+        logger.debug(f"Indexing the following chunks: {short_descriptor_log}")
+
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
         # in this set

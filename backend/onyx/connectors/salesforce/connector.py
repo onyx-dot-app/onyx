@@ -1,3 +1,4 @@
+import gc
 import os
 from typing import Any
 
@@ -70,6 +71,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
         init_db()
+
+        gc.collect()
+
         all_object_types: set[str] = set(self.parent_object_list)
 
         logger.info(f"Starting with {len(self.parent_object_list)} parent object types")
@@ -91,8 +95,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         logger.info(f"Found total of {len(all_object_types)} object types to fetch")
         logger.debug(f"All object types: {all_object_types}")
 
+        gc.collect()
+
         # checkpoint - we've found all object types, now time to fetch the data
         logger.info("Starting to fetch CSVs for all object types")
+
         # This takes like 30 minutes first time and <2 minutes for updates
         object_type_to_csv_path = fetch_all_csvs_in_parallel(
             sf_client=self.sf_client,
@@ -100,6 +107,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             start=start,
             end=end,
         )
+
+        gc.collect()
 
         updated_ids: set[str] = set()
         # This takes like 10 seconds
@@ -131,6 +140,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 logger.debug(
                     f"Added {len(new_ids)} new/updated records for {object_type}"
                 )
+
+                gc.collect()
 
         logger.info(f"Found {len(updated_ids)} total updated records")
         logger.info(
@@ -165,6 +176,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 if len(docs_to_yield) >= self.batch_size:
                     yield docs_to_yield
                     docs_to_yield = []
+
+                    gc.collect()
 
         yield docs_to_yield
 
