@@ -1,4 +1,5 @@
 from typing import Optional
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
@@ -11,7 +12,7 @@ logger = setup_logger()
 # Constants
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
 JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
-DEFAULT_TIMEOUT = 30000  # 30 seconds
+DEFAULT_TIMEOUT = 60000  # 60 seconds
 
 
 def scrape_url_content(
@@ -30,8 +31,8 @@ def scrape_url_content(
     """
     playwright = None
     browser = None
-
     try:
+        validate_url(url)
         playwright = sync_playwright().start()
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context()
@@ -101,3 +102,21 @@ def scrape_url_content(
                 playwright.stop()
             except Exception as e:
                 logger.debug(f"Error stopping playwright: {str(e)}")
+
+
+def validate_url(url: str) -> None:
+    """
+    Validates that a URL is properly formatted.
+
+    Args:
+        url: The URL to validate
+
+    Raises:
+        ValueError: If URL is not valid
+    """
+    parse = urlparse(url)
+    if parse.scheme != "http" and parse.scheme != "https":
+        raise ValueError("URL must be of scheme https?://")
+
+    if not parse.hostname:
+        raise ValueError("URL must include a hostname")

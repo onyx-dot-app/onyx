@@ -1250,12 +1250,12 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     overrideDefaultFreq: 60 * 60 * 24,
   },
   highspot: {
-    description: "Configure HighSpot connector",
+    description: "Configure Highspot connector",
     values: [
       {
         type: "tab",
         name: "highspot_scope",
-        label: "What should we index from HighSpot?",
+        label: "What should we index from Highspot?",
         optional: true,
         tabs: [
           {
@@ -1562,12 +1562,6 @@ export interface AsanaConfig {
   asana_workspace_id: string;
   asana_project_ids?: string;
   asana_team_id?: string;
-}
-
-export interface HighSpotConfig {
-  key: string;
-  secret: string;
-  spots?: string[];
 }
 
 export interface FreshdeskConfig {}

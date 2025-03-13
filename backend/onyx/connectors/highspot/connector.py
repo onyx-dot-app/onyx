@@ -1,9 +1,9 @@
-import logging
 from datetime import datetime
 from io import BytesIO
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Optional
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -20,16 +20,12 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
-from onyx.file_processing.extract_file_text import AUDIO_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import extract_text_and_images
-from onyx.file_processing.extract_file_text import IMAGE_FILE_EXTENSIONS
+from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import VALID_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import VIDEO_FILE_EXTENSIONS
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-logger.setLevel(logging.DEBUG)
 _SLIM_BATCH_SIZE = 1000
 
 
@@ -55,23 +51,47 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
         """
         self.spot_names = spot_names
         self.batch_size = batch_size
-        self._client = None
-        self._spot_id_map = {}  # Maps spot names to spot IDs
+        self._client: Optional[HighspotClient] = None
+        self._spot_id_map: Dict[str, str] = {}  # Maps spot names to spot IDs
         self._all_spots_fetched = False
+        self.highspot_url: Optional[str] = None
+        self.key: Optional[str] = None
+        self.secret: Optional[str] = None
 
     @property
-    def client(self):
+    def client(self) -> HighspotClient:
         if self._client is None:
             if not self.key or not self.secret:
                 raise ConnectorMissingCredentialError("Highspot")
-            self._client = HighspotClient(self.key, self.secret)
+            # Ensure highspot_url is a string, use default if None
+            base_url = (
+                self.highspot_url
+                if self.highspot_url is not None
+                else HighspotClient.BASE_URL
+            )
+            self._client = HighspotClient(self.key, self.secret, base_url=base_url)
         return self._client
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         logger.info("Loading Highspot credentials")
+        self.highspot_url = credentials.get("highspot_url")
         self.key = credentials.get("highspot_key")
         self.secret = credentials.get("highspot_secret")
         return None
+
+    def _populate_spot_id_map(self) -> None:
+        """
+        Populate the spot ID map with all available spots.
+        Keys are stored as lowercase for case-insensitive lookups.
+        """
+        spots = self.client.get_spots()
+        for spot in spots:
+            if "title" in spot and "id" in spot:
+                spot_name = spot["title"]
+                self._spot_id_map[spot_name.lower()] = spot["id"]
+
+        self._all_spots_fetched = True
+        logger.info(f"Retrieved {len(self._spot_id_map)} spots from Highspot")
 
     def _get_all_spot_names(self) -> List[str]:
         """
@@ -80,17 +100,10 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
         Returns:
             List of all spot names
         """
-        spot_names = []
-        spots = self.client.get_spots()
-        for spot in spots:
-            if "title" in spot and "id" in spot:
-                spot_name = spot["title"]
-                spot_names.append(spot_name)
-                self._spot_id_map[spot_name] = spot["id"]
+        if not self._all_spots_fetched:
+            self._populate_spot_id_map()
 
-        self._all_spots_fetched = True
-        logger.info(f"Retrieved {len(spot_names)} spots from Highspot")
-        return spot_names
+        return [spot_name for spot_name in self._spot_id_map.keys()]
 
     def _get_spot_id_from_name(self, spot_name: str) -> str:
         """
@@ -105,18 +118,14 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
         Raises:
             ValueError: If spot name is not found
         """
-        if not self._all_spots_fetched and not self._spot_id_map:
-            # Initialize the map if it's empty
-            spots = self.client.get_spots()
-            for spot in spots:
-                if "title" in spot and "id" in spot:
-                    self._spot_id_map[spot["title"]] = spot["id"]
-            self._all_spots_fetched = True
+        if not self._all_spots_fetched:
+            self._populate_spot_id_map()
 
-        if spot_name not in self._spot_id_map:
+        spot_name_lower = spot_name.lower()
+        if spot_name_lower not in self._spot_id_map:
             raise ValueError(f"Spot '{spot_name}' not found")
 
-        return self._spot_id_map[spot_name]
+        return self._spot_id_map[spot_name_lower]
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """
@@ -150,17 +159,22 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
             logger.info(
                 f"No spots specified, using all {len(spot_names_to_process)} available spots"
             )
-        # NOTE: Handle for spots doesn't have access to
+
         for spot_name in spot_names_to_process:
             try:
                 spot_id = self._get_spot_id_from_name(spot_name)
-                page = 0
+                if spot_id is None:
+                    logger.warning(f"Spot ID not found for spot {spot_name}")
+                    continue
+                offset = 0
                 has_more = True
 
                 while has_more:
-                    logger.info(f"Retrieving items from spot {spot_name}, page {page}")
+                    logger.info(
+                        f"Retrieving items from spot {spot_name}, offset {offset}"
+                    )
                     response = self.client.get_spot_items(
-                        spot_id=spot_id, page=page, page_size=self.batch_size
+                        spot_id=spot_id, offset=offset, page_size=self.batch_size
                     )
                     items = response.get("collection", [])
                     logger.info(f"Received Items: {items}")
@@ -176,6 +190,11 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                                 continue
 
                             item_details = self.client.get_item(item_id)
+                            if not item_details:
+                                logger.warning(
+                                    f"Item {item_id} details not found, skipping"
+                                )
+                                continue
                             # Apply time filter if specified
                             if start or end:
                                 updated_at = item_details.get("date_updated")
@@ -206,7 +225,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                                         Section(
                                             link=item_details.get(
                                                 "url",
-                                                f"https://www.highspot.com/{item_id}",
+                                                f"https://www.highspot.com/items/{item_id}",
                                             ),
                                             text=content,
                                         )
@@ -216,8 +235,14 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                                     metadata={
                                         "spot_name": spot_name,
                                         "type": item_details.get("content_type", ""),
-                                        "created_at": item_details.get("date_added"),
-                                        "updated_at": item_details.get("date_updated"),
+                                        "created_at": item_details.get(
+                                            "date_added", ""
+                                        ),
+                                        "author": item_details.get("author", ""),
+                                        "language": item_details.get("language", ""),
+                                        "can_download": str(
+                                            item_details.get("can_download", False)
+                                        ),
                                     },
                                     doc_updated_at=item_details.get("date_updated"),
                                 )
@@ -228,10 +253,11 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                                 doc_batch = []
 
                         except HighspotClientError as e:
+                            item_id = "ID" if not item_id else item_id
                             logger.error(f"Error retrieving item {item_id}: {str(e)}")
 
                     has_more = len(items) >= self.batch_size
-                    page += 1
+                    offset += self.batch_size
 
             except (HighspotClientError, ValueError) as e:
                 logger.error(f"Error processing spot {spot_name}: {str(e)}")
@@ -251,49 +277,67 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
         """
         item_id = item_details.get("id", "")
         content_name = item_details.get("content_name", "")
-        file_extension = (
-            content_name.split(".")[-1].lower()
-            if content_name and "." in content_name
-            else ""
-        )
+        is_valid_format = content_name and "." in content_name
+        file_extension = content_name.split(".")[-1].lower() if is_valid_format else ""
         file_extension = "." + file_extension if file_extension else ""
-        logger.info(f"Processing item {item_id} with extension {file_extension}")
+        can_download = item_details.get("can_download", False)
         content_type = item_details.get("content_type", "")
+
+        # Extract title and description once at the beginning
+        title, description = self._extract_title_and_description(item_details)
+        default_content = f"{title}\n{description}"
+        logger.info(f"Processing item {item_id} with extension {file_extension}")
+
         try:
             if content_type == "WebLink":
                 url = item_details.get("url")
                 if not url:
-                    return ""
+                    return default_content
                 content = scrape_url_content(url, True)
-                return content if content else ""
+                return content if content else default_content
 
             elif (
-                file_extension in VIDEO_FILE_EXTENSIONS
-                or file_extension in AUDIO_FILE_EXTENSIONS
-                or file_extension in IMAGE_FILE_EXTENSIONS
+                is_valid_format
+                and file_extension in VALID_FILE_EXTENSIONS
+                and can_download
             ):
-                # For media files, use the title and description
-                title = item_details.get("title", "")
-                description = item_details.get("description", "")
-                content = f"{title}\n{description}"
-                return content
-
-            elif file_extension in VALID_FILE_EXTENSIONS:
                 # For documents, try to get the text content
+                if not item_id:  # Ensure item_id is defined
+                    return default_content
+
                 content_response = self.client.get_item_content(item_id)
                 # Process and extract text from binary content based on type
                 if content_response:
-                    text_content, _ = extract_text_and_images(
+                    text_content = extract_file_text(
                         BytesIO(content_response), content_name
                     )
                     return text_content
-                return ""
+                return default_content
+
             else:
-                # For other types, use the description or a default message
-                return item_details.get("description", "No text content available")
+                return default_content
+
         except HighspotClientError as e:
-            logger.warning(f"Could not retrieve content for item {item_id}: {str(e)}")
+            # Use item_id safely in the warning message
+            error_context = f"item {item_id}" if item_id else "item"
+            logger.warning(f"Could not retrieve content for {error_context}: {str(e)}")
             return ""
+
+    def _extract_title_and_description(
+        self, item_details: Dict[str, Any]
+    ) -> tuple[str, str]:
+        """
+        Extract the title and description from item details.
+
+        Args:
+            item_details: Item details from the API
+
+        Returns:
+            Tuple of title and description
+        """
+        title = item_details.get("title", "")
+        description = item_details.get("description", "")
+        return title, description
 
     def retrieve_all_slim_documents(
         self,
@@ -326,18 +370,15 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
         for spot_name in spot_names_to_process:
             try:
                 spot_id = self._get_spot_id_from_name(spot_name)
-                page = 1
+                offset = 0
                 has_more = True
 
                 while has_more:
-                    if callback:
-                        callback.heartbeat()
-
                     logger.info(
-                        f"Retrieving slim documents from spot {spot_name}, page {page}"
+                        f"Retrieving slim documents from spot {spot_name}, offset {offset}"
                     )
                     response = self.client.get_spot_items(
-                        spot_id=spot_id, page=page, page_size=self.batch_size
+                        spot_id=spot_id, offset=offset, page_size=self.batch_size
                     )
 
                     items = response.get("collection", [])
@@ -350,25 +391,6 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                         if not item_id:
                             continue
 
-                        # Apply time filter if specified
-                        if start or end:
-                            # Get item details for timestamp checking
-                            try:
-                                item_details = self.client.get_item(item_id)
-                                updated_at = item_details.get("updatedAt")
-                                if updated_at:
-                                    # Convert to datetime for comparison
-                                    updated_time = datetime.fromisoformat(
-                                        updated_at.replace("Z", "+00:00")
-                                    )
-                                    if (start and updated_time.timestamp() < start) or (
-                                        end and updated_time.timestamp() > end
-                                    ):
-                                        continue
-                            except HighspotClientError:
-                                # Skip if we can't get item details
-                                continue
-
                         slim_doc_batch.append(SlimDocument(id=f"HIGHSPOT_{item_id}"))
 
                         if len(slim_doc_batch) >= _SLIM_BATCH_SIZE:
@@ -376,7 +398,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                             slim_doc_batch = []
 
                     has_more = len(items) >= self.batch_size
-                    page += 1
+                    offset += self.batch_size
 
             except (HighspotClientError, ValueError) as e:
                 logger.error(
@@ -401,7 +423,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
 
 
 if __name__ == "__main__":
-    spot_names = []
+    spot_names: List[str] = []
     connector = HighspotConnector(spot_names)
     credentials = {"highspot_key": "", "highspot_secret": ""}
     connector.load_credentials(credentials=credentials)

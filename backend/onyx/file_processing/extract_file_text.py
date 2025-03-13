@@ -69,10 +69,6 @@ IMAGE_MEDIA_TYPES = [
     "image/webp",
 ]
 
-VIDEO_FILE_EXTENSIONS = [".mp4", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv"]
-AUDIO_FILE_EXTENSIONS = [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".wma"]
-IMAGE_FILE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tiff"]
-
 
 def is_text_file_extension(file_name: str) -> bool:
     return any(file_name.endswith(ext) for ext in PLAIN_TEXT_FILE_EXTENSIONS)

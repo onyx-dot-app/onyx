@@ -191,9 +191,12 @@ class HighspotClient:
         Returns:
             List of spots with their names and IDs
         """
-        response = self._make_request("GET", "spots")
+        params = {"right": "view"}
+        response = self._make_request("GET", "spots", params=params)
         logger.info(f"Received {response} spots")
-        if response.get("counts_total") > 0:
+        total_counts = response.get("counts_total")
+        # Fix comparison to handle None value
+        if total_counts is not None and total_counts > 0:
             return response.get("collection", [])
         return []
 
@@ -212,14 +215,14 @@ class HighspotClient:
         return self._make_request("GET", f"spots/{spot_id}")
 
     def get_spot_items(
-        self, spot_id: str, page: int = 0, page_size: int = 100
+        self, spot_id: str, offset: int = 0, page_size: int = 100
     ) -> Dict[str, Any]:
         """
         Get items in a specific spot.
 
         Args:
             spot_id: ID of the spot
-            page: Page number
+            offset: offset number
             page_size: Number of items per page
 
         Returns:
@@ -228,7 +231,7 @@ class HighspotClient:
         if not spot_id:
             raise ValueError("spot_id is required")
 
-        params = {"spot": spot_id, "start": page, "limit": page_size}
+        params = {"spot": spot_id, "start": offset, "limit": page_size}
         return self._make_request("GET", "items", params=params)
 
     def get_item(self, item_id: str) -> Dict[str, Any]:
@@ -262,24 +265,6 @@ class HighspotClient:
         response = self.session.get(url, timeout=self.timeout)
         response.raise_for_status()
         return response.content
-
-    def search(self, query: str, page: int = 1, page_size: int = 100) -> Dict[str, Any]:
-        """
-        Search for content in Highspot.
-
-        Args:
-            query: Search query
-            page: Page number
-            page_size: Number of items per page
-
-        Returns:
-            Search results
-        """
-        if not query:
-            raise ValueError("query is required")
-
-        params = {"query": query, "page": page, "pageSize": page_size}
-        return self._make_request("GET", "search", params=params)
 
     def health_check(self) -> bool:
         """
