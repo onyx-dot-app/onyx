@@ -164,6 +164,9 @@ class DocumentBase(BaseModel):
                 attributes.append(k + INDEX_SEPARATOR + v)
         return attributes
 
+    def get_content(self) -> str:
+        return " ".join([section.text for section in self.sections])
+
 
 class Document(DocumentBase):
     """Used for Onyx ingestion api, the ID is required"""

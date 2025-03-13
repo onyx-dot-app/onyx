@@ -99,6 +99,7 @@ PRESERVED_SEARCH_FIELDS = [
     "api_url",
     "index_name",
     "multipass_indexing",
+    "enable_contextual_rag",
     "model_dim",
     "normalize",
     "passage_prefix",

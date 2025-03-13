@@ -115,3 +115,9 @@ class VisionProviderResponse(FullLLMProvider):
     """Response model for vision providers endpoint, including vision-specific fields."""
 
     vision_models: list[str]
+
+
+class LLMCost(BaseModel):
+    provider: str
+    model_name: str
+    cost: float
