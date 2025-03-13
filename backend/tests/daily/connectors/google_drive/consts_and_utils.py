@@ -135,13 +135,15 @@ def filter_invalid_prefixes(names: set[str]) -> set[str]:
     return {name for name in names if name.startswith(_VALID_PREFIX)}
 
 
-def print_discrepencies(
+def print_discrepancies(
     expected: set[str],
     retrieved: set[str],
 ) -> None:
     if expected != retrieved:
-        print(expected)
-        print(retrieved)
+        expected_list = sorted(list(expected), key=lambda x: int(x.split("_")[-1]))
+        retrieved_list = sorted(list(retrieved), key=lambda x: int(x.split("_")[-1]))
+        print(expected_list)
+        print(retrieved_list)
         print("Extra:")
         print(retrieved - expected)
         print("Missing:")
@@ -165,6 +167,8 @@ def assert_retrieved_docs_match_expected(
     expected_file_texts = {
         _get_expected_file_content(file_id) for file_id in expected_file_ids
     }
+
+    retrieved_docs.sort(key=lambda x: x.semantic_identifier)
 
     for doc in retrieved_docs:
         print(f"doc.semantic_identifier: {doc.semantic_identifier}")
@@ -192,14 +196,14 @@ def assert_retrieved_docs_match_expected(
     )
 
     # Check file names
-    print_discrepencies(
+    print_discrepancies(
         expected=expected_file_names,
         retrieved=valid_retrieved_file_names,
     )
     assert expected_file_names == valid_retrieved_file_names
 
     # Check file texts
-    print_discrepencies(
+    print_discrepancies(
         expected=expected_file_texts,
         retrieved=valid_retrieved_texts,
     )
