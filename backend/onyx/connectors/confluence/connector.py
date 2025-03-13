@@ -72,11 +72,10 @@ _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT = [
     "mp3",
     "wav",
 ]
-_FULL_EXTENSION_FILTER_STRING = "".join(
-    [
-        f" and title!~'*.{extension}'"
-        for extension in _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT
-    ]
+
+_ATTACHMENT_EXTENSION_REGEX_GROUP = "|".join(_ATTACHMENT_EXTENSIONS_TO_FILTER_OUT)
+_FULL_EXTENSION_FILTER_STRING = (
+    f" and title !~ '.*\\.({_ATTACHMENT_EXTENSION_REGEX_GROUP})$'"
 )
 
 
