@@ -69,6 +69,7 @@ def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None
         section = target_test_doc.sections[0]
         assert section.link is not None
         # Only check if content exists, as exact content might change
+        assert section.text is not None
         assert len(section.text) > 0
 
 

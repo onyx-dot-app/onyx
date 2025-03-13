@@ -18,8 +18,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import VALID_FILE_EXTENSIONS
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -222,7 +222,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                                 Document(
                                     id=f"HIGHSPOT_{item_id}",
                                     sections=[
-                                        Section(
+                                        TextSection(
                                             link=item_details.get(
                                                 "url",
                                                 f"https://www.highspot.com/items/{item_id}",
