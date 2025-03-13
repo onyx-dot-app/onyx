@@ -199,7 +199,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     # Example usage of the reusable HTML
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
-            "ee.onyx.server.enterprise_settings.store", "load_runtime_settings"
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
         )
         settings = load_runtime_settings_fn()
         application_name = settings.application_name
@@ -208,7 +208,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
 
     with get_session_with_shared_schema() as db_session:
         get_onyx_file_store_fn = fetch_versioned_implementation(
-            "ee.onyx.file_store.onyx_file_store", "get_onyx_file_store"
+            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
         )
         file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
         onyx_file = file_store.get_logo()
@@ -246,7 +246,7 @@ def send_user_email_invite(
 
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
-            "ee.onyx.server.enterprise_settings.store", "load_runtime_settings"
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
         )
         settings = load_runtime_settings_fn()
         application_name = settings.application_name
@@ -255,7 +255,7 @@ def send_user_email_invite(
 
     with get_session_with_shared_schema() as db_session:
         get_onyx_file_store_fn = fetch_versioned_implementation(
-            "ee.onyx.file_store.onyx_file_store", "get_onyx_file_store"
+            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
         )
         file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
         onyx_file = file_store.get_logo()
@@ -323,7 +323,7 @@ def send_forgot_password_email(
     # Builds a forgot password email with or without fancy HTML
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
-            "ee.onyx.server.enterprise_settings.store", "load_runtime_settings"
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
         )
         settings = load_runtime_settings_fn()
         application_name = settings.application_name
@@ -332,7 +332,7 @@ def send_forgot_password_email(
 
     with get_session_with_shared_schema() as db_session:
         get_onyx_file_store_fn = fetch_versioned_implementation(
-            "ee.onyx.file_store.onyx_file_store", "get_onyx_file_store"
+            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
         )
         file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
         onyx_file = file_store.get_logo()
@@ -361,7 +361,7 @@ def send_user_verification_email(
     # Builds a verification email
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
-            "ee.onyx.server.enterprise_settings.store", "load_runtime_settings"
+            "onyx.server.enterprise_settings.store", "load_runtime_settings"
         )
         settings = load_runtime_settings_fn()
         application_name = settings.application_name
@@ -370,7 +370,7 @@ def send_user_verification_email(
 
     with get_session_with_shared_schema() as db_session:
         get_onyx_file_store_fn = fetch_versioned_implementation(
-            "ee.onyx.file_store.onyx_file_store", "get_onyx_file_store"
+            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
         )
         file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
         onyx_file = file_store.get_logo()
