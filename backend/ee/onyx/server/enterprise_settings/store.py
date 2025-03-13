@@ -22,6 +22,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_LOGO_FILENAME = "__logo__"
+_LOGOTYPE_FILENAME = "__logotype__"
+
 
 def load_settings() -> EnterpriseSettings:
     """Loads settings data directly from DB. This should be used primarily
@@ -83,10 +86,6 @@ def store_analytics_script(analytics_script_upload: AnalyticsScriptUpload) -> No
     get_kv_store().store(KV_CUSTOM_ANALYTICS_SCRIPT_KEY, analytics_script_upload.script)
 
 
-_LOGO_FILENAME = "__logo__"
-_LOGOTYPE_FILENAME = "__logotype__"
-
-
 def is_valid_file_type(filename: str) -> bool:
     valid_extensions = (".png", ".jpg", ".jpeg")
     return filename.endswith(valid_extensions)
@@ -139,3 +138,11 @@ def upload_logo(
         file_type=file_type,
     )
     return True
+
+
+def get_logo_filename() -> str:
+    return _LOGO_FILENAME
+
+
+def get_logotype_filename() -> str:
+    return _LOGOTYPE_FILENAME

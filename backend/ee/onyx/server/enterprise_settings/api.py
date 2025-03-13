@@ -13,9 +13,10 @@ from pydantic import BaseModel
 from pydantic import Field
 from sqlalchemy.orm import Session
 
-from ee.onyx.file_store.onyx_file_store import get_onyx_file_store
 from ee.onyx.server.enterprise_settings.models import AnalyticsScriptUpload
 from ee.onyx.server.enterprise_settings.models import EnterpriseSettings
+from ee.onyx.server.enterprise_settings.store import get_logo_filename
+from ee.onyx.server.enterprise_settings.store import get_logotype_filename
 from ee.onyx.server.enterprise_settings.store import load_analytics_script
 from ee.onyx.server.enterprise_settings.store import load_settings
 from ee.onyx.server.enterprise_settings.store import store_analytics_script
@@ -27,6 +28,7 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine import get_session
 from onyx.db.models import User
+from onyx.file_store.onyx_file_store import OnyxFileStore
 from onyx.utils.logger import setup_logger
 
 admin_router = APIRouter(prefix="/admin/enterprise-settings")
@@ -146,8 +148,8 @@ def put_logo(
 
 def fetch_logo_helper(db_session: Session) -> Response:
     try:
-        file_store = get_onyx_file_store(db_session)
-        onyx_file = file_store.get_logo()
+        file_store = OnyxFileStore(db_session)
+        onyx_file = file_store.get_onyx_file(get_logo_filename())
         if not onyx_file:
             raise
     except Exception:
@@ -161,8 +163,8 @@ def fetch_logo_helper(db_session: Session) -> Response:
 
 def fetch_logotype_helper(db_session: Session) -> Response:
     try:
-        file_store = get_onyx_file_store(db_session)
-        onyx_file = file_store.get_logotype()
+        file_store = OnyxFileStore(db_session)
+        onyx_file = file_store.get_onyx_file(get_logotype_filename())
         if not onyx_file:
             raise
     except Exception:

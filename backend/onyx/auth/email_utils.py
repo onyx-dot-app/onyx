@@ -1,6 +1,6 @@
-import base64
 import smtplib
 from datetime import datetime
+from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
@@ -17,9 +17,8 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_SLACK_URL
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
-from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.models import User
-from onyx.file_store.onyx_file_store import OnyxFileStore
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.file import OnyxFile
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import MULTI_TENANT
@@ -104,7 +103,7 @@ HTML_EMAIL_TEMPLATE = """\
       <td class="header">
         <img
           style="background-color: #ffffff; border-radius: 8px;"
-          src="data:{logo_mimetype};base64,{logo_b64}"
+          src="cid:logo.png"
           alt="{application_name} Logo"
         >
       </td>
@@ -134,13 +133,11 @@ def build_html_email(
     application_name: str | None,
     heading: str,
     message: str,
-    logo: bytes,
-    logo_mimetype: str,
     cta_text: str | None = None,
     cta_link: str | None = None,
 ) -> str:
     slack_fragment = ""
-    if application_name != ONYX_DEFAULT_APPLICATION_NAME:
+    if application_name == ONYX_DEFAULT_APPLICATION_NAME:
         slack_fragment = f'<br>Have questions? Join our Slack community <a href="{ONYX_SLACK_URL}">here</a>.'
 
     if cta_text and cta_link:
@@ -152,8 +149,6 @@ def build_html_email(
         title=heading,
         heading=heading,
         message=message,
-        logo=base64.b64encode(logo),
-        logo_mimetype=logo_mimetype,
         cta_block=cta_block,
         slack_fragment=slack_fragment,
         year=datetime.now().year,
@@ -166,6 +161,7 @@ def send_email(
     html_body: str,
     text_body: str,
     mail_from: str = EMAIL_FROM,
+    inline_png: tuple[str, bytes] | None = None,
 ) -> None:
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
@@ -183,6 +179,12 @@ def send_email(
 
     msg.attach(part_text)
     msg.attach(part_html)
+
+    if inline_png:
+        img = MIMEImage(inline_png[1], _subtype="png")
+        img.add_header("Content-ID", inline_png[0])  # CID reference
+        img.add_header("Content-Disposition", "inline", filename=inline_png[0])
+        msg.attach(img)
 
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
@@ -206,12 +208,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    with get_session_with_shared_schema() as db_session:
-        get_onyx_file_store_fn = fetch_versioned_implementation(
-            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
-        )
-        file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
-        onyx_file = file_store.get_logo()
+    onyx_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"Your {application_name} Subscription Has Been Canceled"
     heading = "Subscription Canceled"
@@ -226,8 +223,6 @@ def send_subscription_cancellation_email(user_email: str) -> None:
         application_name,
         heading,
         message,
-        onyx_file.data,
-        onyx_file.mime_type,
         cta_text,
         cta_link,
     )
@@ -236,7 +231,13 @@ def send_subscription_cancellation_email(user_email: str) -> None:
         "Your subscription has been canceled and will end on your next billing date.\n"
         "If you change your mind, visit https://www.onyx.app/pricing"
     )
-    send_email(user_email, subject, html_content, text_content)
+    send_email(
+        user_email,
+        subject,
+        html_content,
+        text_content,
+        inline_png=("logo.png", onyx_file.data),
+    )
 
 
 def send_user_email_invite(
@@ -253,18 +254,13 @@ def send_user_email_invite(
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    with get_session_with_shared_schema() as db_session:
-        get_onyx_file_store_fn = fetch_versioned_implementation(
-            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
-        )
-        file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
-        onyx_file = file_store.get_logo()
+    onyx_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"Invitation to Join {application_name} Organization"
     heading = "You've Been Invited!"
 
     # the exact action taken by the user, and thus the message, depends on the auth type
-    message = f"<p>You have been invited by {current_user.email} to join an organization on {application_name} .</p>"
+    message = f"<p>You have been invited by {current_user.email} to join an organization on {application_name}.</p>"
     if auth_type == AuthType.CLOUD:
         message += (
             "<p>To join the organization, please click the button below to set a password "
@@ -295,8 +291,6 @@ def send_user_email_invite(
         application_name,
         heading,
         message,
-        onyx_file.data,
-        onyx_file.mime_type,
         cta_text,
         cta_link,
     )
@@ -311,7 +305,13 @@ def send_user_email_invite(
     if auth_type == AuthType.CLOUD:
         text_content += "You'll be asked to set a password or login with Google to complete your registration."
 
-    send_email(user_email, subject, html_content, text_content)
+    send_email(
+        user_email,
+        subject,
+        html_content,
+        text_content,
+        inline_png=("logo.png", onyx_file.data),
+    )
 
 
 def send_forgot_password_email(
@@ -330,12 +330,7 @@ def send_forgot_password_email(
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    with get_session_with_shared_schema() as db_session:
-        get_onyx_file_store_fn = fetch_versioned_implementation(
-            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
-        )
-        file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
-        onyx_file = file_store.get_logo()
+    onyx_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"{application_name} Forgot Password"
     link = f"{WEB_DOMAIN}/auth/reset-password?token={token}"
@@ -346,11 +341,16 @@ def send_forgot_password_email(
         application_name,
         "Reset Your Password",
         message,
-        onyx_file.data,
-        onyx_file.mime_type,
     )
     text_content = f"Click the following link to reset your password: {link}"
-    send_email(user_email, subject, html_content, text_content, mail_from)
+    send_email(
+        user_email,
+        subject,
+        html_content,
+        text_content,
+        mail_from,
+        inline_png=("logo.png", onyx_file.data),
+    )
 
 
 def send_user_verification_email(
@@ -368,12 +368,7 @@ def send_user_verification_email(
     except ModuleNotFoundError:
         application_name = ONYX_DEFAULT_APPLICATION_NAME
 
-    with get_session_with_shared_schema() as db_session:
-        get_onyx_file_store_fn = fetch_versioned_implementation(
-            "onyx.file_store.onyx_file_store", "get_onyx_file_store"
-        )
-        file_store: OnyxFileStore = get_onyx_file_store_fn(db_session)
-        onyx_file = file_store.get_logo()
+    onyx_file = OnyxRuntime.get_emailable_logo()
 
     subject = f"{application_name} Email Verification"
     link = f"{WEB_DOMAIN}/auth/verify-email?token={token}"
@@ -384,8 +379,13 @@ def send_user_verification_email(
         application_name,
         "Verify Your Email",
         message,
-        onyx_file.data,
-        onyx_file.mime_type,
     )
     text_content = f"Click the following link to verify your email address: {link}"
-    send_email(user_email, subject, html_content, text_content, mail_from)
+    send_email(
+        user_email,
+        subject,
+        html_content,
+        text_content,
+        mail_from,
+        inline_png=("logo.png", onyx_file.data),
+    )
