@@ -481,6 +481,8 @@ def _process_message(
 
 
 class SlackConnector(SlimConnector, CheckpointConnector):
+    MAX_WORKERS = 2
+
     def __init__(
         self,
         channels: list[str] | None = None,
@@ -594,7 +596,7 @@ class SlackConnector(SlimConnector, CheckpointConnector):
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
             # Process messages in parallel using ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=8) as executor:
+            with ThreadPoolExecutor(max_workers=SlackConnector.MAX_WORKERS) as executor:
                 futures: list[Future] = []
                 for message in message_batch:
                     # Capture the current context so that the thread gets the current tenant ID
