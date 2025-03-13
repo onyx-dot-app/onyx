@@ -122,7 +122,7 @@ def crawl_folders_for_files(
     This function starts crawling from any folder. It is slower though.
     """
     logger.info("Entered crawl_folders_for_files with parent_id: " + parent_id)
-    if parent_id not in traversed_parent_ids:
+    if True:  # TODO: temporary for debugging
         logger.info("Parent id not in traversed parent ids, getting files")
         found_files = False
         for file in _get_files_in_parent(
