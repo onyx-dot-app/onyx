@@ -140,8 +140,8 @@ def print_discrepancies(
     retrieved: set[str],
 ) -> None:
     if expected != retrieved:
-        expected_list = sorted(list(expected), key=lambda x: int(x.split("_")[-1]))
-        retrieved_list = sorted(list(retrieved), key=lambda x: int(x.split("_")[-1]))
+        expected_list = sorted(expected)
+        retrieved_list = sorted(retrieved)
         print(expected_list)
         print(retrieved_list)
         print("Extra:")
