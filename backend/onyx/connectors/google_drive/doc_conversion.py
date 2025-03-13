@@ -211,6 +211,8 @@ def convert_drive_item_to_document(
     """
     Main entry point for converting a Google Drive file => Document object.
     """
+    doc_id = ""
+    sections: list[TextSection | ImageSection] = []
 
     try:
         # skip shortcuts or folders
@@ -218,7 +220,6 @@ def convert_drive_item_to_document(
             logger.info("Skipping shortcut/folder.")
             return None
 
-        sections: list[TextSection | ImageSection] = []
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
