@@ -8,7 +8,7 @@ Edition features outside of personal development or testing purposes. Please rea
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.8-dev
+ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
