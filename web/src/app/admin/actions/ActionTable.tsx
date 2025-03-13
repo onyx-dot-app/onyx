@@ -15,7 +15,7 @@ import { TrashIcon } from "@/components/icons/icons";
 import { deleteCustomTool } from "@/lib/tools/edit";
 import { TableHeader } from "@/components/ui/table";
 
-export function ToolsTable({ tools }: { tools: ToolSnapshot[] }) {
+export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
   const router = useRouter();
   const { popup, setPopup } = usePopup();
 

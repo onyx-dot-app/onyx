@@ -1,6 +1,6 @@
 "use client";
 
-import { ToolEditor } from "@/app/admin/tools/ToolEditor";
+import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { BackButton } from "@/components/BackButton";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ToolIcon } from "@/components/icons/icons";
@@ -12,12 +12,12 @@ export default function NewToolPage() {
       <BackButton />
 
       <AdminPageTitle
-        title="Create Tool"
+        title="Create Action"
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 
       <CardSection>
-        <ToolEditor />
+        <ActionEditor />
       </CardSection>
     </div>
   );

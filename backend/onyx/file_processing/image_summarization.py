@@ -6,10 +6,10 @@ from langchain_core.messages import HumanMessage
 from langchain_core.messages import SystemMessage
 from PIL import Image
 
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+from onyx.configs.app_configs import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
-from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_SYSTEM_PROMPT
-from onyx.prompts.image_analysis import IMAGE_SUMMARIZATION_USER_PROMPT
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -62,7 +62,7 @@ def summarize_image_with_error_handling(
         image_data: The raw image bytes
         context_name: Name or title of the image for context
         system_prompt: System prompt to use for the LLM
-        user_prompt_template: Template for the user prompt, should contain {title} placeholder
+        user_prompt_template: User prompt to use (without title)
 
     Returns:
         The image summary text, or None if summarization failed or is disabled
@@ -70,7 +70,10 @@ def summarize_image_with_error_handling(
     if llm is None:
         return None
 
-    user_prompt = user_prompt_template.format(title=context_name)
+    # Prepend the image filename to the user prompt
+    user_prompt = (
+        f"The image has the file name '{context_name}'.\n{user_prompt_template}"
+    )
     return summarize_image_pipeline(llm, image_data, user_prompt, system_prompt)
 
 

@@ -1,4 +1,4 @@
-import { ToolsTable } from "./ToolsTable";
+import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { FiPlusSquare } from "react-icons/fi";
 import Link from "next/link";
@@ -29,23 +29,23 @@ export default async function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ToolIcon size={32} className="my-auto" />}
-        title="Tools"
+        title="Actions"
       />
 
       <Text className="mb-2">
-        Tools allow assistants to retrieve information or take actions.
+        Actions allow assistants to retrieve information or take actions.
       </Text>
 
       <div>
         <Separator />
 
-        <Title>Create a Tool</Title>
-        <CreateButton href="/admin/tools/new" text="New Tool" />
+        <Title>Create an Action</Title>
+        <CreateButton href="/admin/actions/new" text="New Action" />
 
         <Separator />
 
-        <Title>Existing Tools</Title>
-        <ToolsTable tools={tools} />
+        <Title>Existing Actions</Title>
+        <ActionsTable tools={tools} />
       </div>
     </div>
   );

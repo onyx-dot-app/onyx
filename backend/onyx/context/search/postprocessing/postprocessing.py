@@ -10,6 +10,7 @@ from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.app_configs import IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.llm_configs import get_search_time_image_analysis_enabled
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
@@ -31,7 +32,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
-from onyx.prompts.image_analysis import IMAGE_ANALYSIS_SYSTEM_PROMPT
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import FunctionCall

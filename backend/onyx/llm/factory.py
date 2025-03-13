@@ -5,7 +5,9 @@ from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.db.engine import get_session_context_manager
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
+from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_provider
 from onyx.db.models import Persona
@@ -14,6 +16,7 @@ from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import model_supports_image_input
+from onyx.server.manage.llm.models import FullLLMProvider
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -94,40 +97,61 @@ def get_default_llm_with_vision(
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM | None:
+    """Get an LLM that supports image input, with the following priority:
+    1. Use the designated default vision provider if it exists and supports image input
+    2. Fall back to the first LLM provider that supports image input
+
+    Returns None if no providers exist or if no provider supports images.
+    """
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
 
-    with get_session_context_manager() as db_session:
-        llm_providers = fetch_existing_llm_providers(db_session)
-
-    if not llm_providers:
-        return None
-
-    for provider in llm_providers:
-        model_name = provider.default_model_name
-        fast_model_name = (
-            provider.fast_default_model_name or provider.default_model_name
+    def create_vision_llm(provider: FullLLMProvider, model: str) -> LLM:
+        """Helper to create an LLM if the provider supports image input."""
+        return get_llm(
+            provider=provider.provider,
+            model=model,
+            deployment_name=provider.deployment_name,
+            api_key=provider.api_key,
+            api_base=provider.api_base,
+            api_version=provider.api_version,
+            custom_config=provider.custom_config,
+            timeout=timeout,
+            temperature=temperature,
+            additional_headers=additional_headers,
+            long_term_logger=long_term_logger,
         )
 
-        if not model_name or not fast_model_name:
-            continue
-
-        if model_supports_image_input(model_name, provider.provider):
-            return get_llm(
-                provider=provider.provider,
-                model=model_name,
-                deployment_name=provider.deployment_name,
-                api_key=provider.api_key,
-                api_base=provider.api_base,
-                api_version=provider.api_version,
-                custom_config=provider.custom_config,
-                timeout=timeout,
-                temperature=temperature,
-                additional_headers=additional_headers,
-                long_term_logger=long_term_logger,
+    with get_session_with_current_tenant() as db_session:
+        # Try the default vision provider first
+        default_provider = fetch_default_vision_provider(db_session)
+        if (
+            default_provider
+            and default_provider.default_vision_model
+            and model_supports_image_input(
+                default_provider.default_vision_model, default_provider.provider
+            )
+        ):
+            return create_vision_llm(
+                default_provider, default_provider.default_vision_model
             )
 
-    raise ValueError("No LLM provider found that supports image input")
+        # Fall back to searching all providers
+        providers = fetch_existing_llm_providers(db_session)
+
+    if not providers:
+        return None
+
+    # Find the first provider that supports image input
+    for provider in providers:
+        if provider.default_vision_model and model_supports_image_input(
+            provider.default_vision_model, provider.provider
+        ):
+            return create_vision_llm(
+                FullLLMProvider.from_model(provider), provider.default_vision_model
+            )
+
+    return None
 
 
 def get_default_llms(

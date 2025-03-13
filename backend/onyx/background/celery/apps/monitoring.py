@@ -92,5 +92,6 @@ def on_setup_logging(
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.monitoring",
+        "onyx.background.celery.tasks.tenant_provisioning",
     ]
 )

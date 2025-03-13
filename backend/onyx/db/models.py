@@ -1489,6 +1489,8 @@ class LLMProvider(Base):
 
     # should only be set for a single provider
     is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
+    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
+    default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     groups: Mapped[list["UserGroup"]] = relationship(
@@ -2295,19 +2297,29 @@ class PublicBase(DeclarativeBase):
     __abstract__ = True
 
 
+# Strictly keeps track of the tenant that a given user will authenticate to.
 class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
-    __table_args__ = (
-        UniqueConstraint("email", "tenant_id", name="uq_user_tenant"),
-        {"schema": "public"},
-    )
+    __table_args__ = ({"schema": "public"},)
 
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
         return value.lower() if value else value
+
+
+class AvailableTenant(Base):
+    __tablename__ = "available_tenant"
+    """
+    These entries will only exist ephemerally and are meant to be picked up by new users on registration.
+    """
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    alembic_version: Mapped[str] = mapped_column(String, nullable=False)
+    date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
 
 
 # This is a mapping from tenant IDs to anonymous user paths

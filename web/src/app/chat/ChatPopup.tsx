@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useContext, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { transformLinkUri } from "@/lib/utils";
 
 const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
   "allUsersInitialPopupFlowCompleted";
@@ -44,23 +45,26 @@ export function ChatPopup() {
   return (
     <Modal width="w-3/6 xl:w-[700px]" title={popupTitle}>
       <>
-        <ReactMarkdown
-          className="prose text-text-800 dark:text-neutral-100 max-w-full"
-          components={{
-            a: ({ node, ...props }) => (
-              <a
-                {...props}
-                className="text-link hover:text-link-hover"
-                target="_blank"
-                rel="noopener noreferrer"
-              />
-            ),
-            p: ({ node, ...props }) => <p {...props} className="text-sm" />,
-          }}
-          remarkPlugins={[remarkGfm]}
-        >
-          {popupContent}
-        </ReactMarkdown>
+        <div className="overflow-y-auto max-h-[90vh] py-8 px-4 text-left">
+          <ReactMarkdown
+            className="prose text-text-800 dark:text-neutral-100 max-w-full"
+            components={{
+              a: ({ node, ...props }) => (
+                <a
+                  {...props}
+                  className="text-link hover:text-link-hover"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                />
+              ),
+              p: ({ node, ...props }) => <p {...props} className="text-sm" />,
+            }}
+            remarkPlugins={[remarkGfm]}
+            urlTransform={transformLinkUri}
+          >
+            {popupContent}
+          </ReactMarkdown>
+        </div>
 
         {showConsentError && (
           <p className="text-red-500 text-sm mt-2">

@@ -13,6 +13,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import FullLLMProvider
@@ -187,6 +188,17 @@ def fetch_default_provider(db_session: Session) -> FullLLMProvider | None:
     return FullLLMProvider.from_model(provider_model)
 
 
+def fetch_default_vision_provider(db_session: Session) -> FullLLMProvider | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel).where(
+            LLMProviderModel.is_default_vision_provider == True  # noqa: E712
+        )
+    )
+    if not provider_model:
+        return None
+    return FullLLMProvider.from_model(provider_model)
+
+
 def fetch_provider(db_session: Session, provider_name: str) -> FullLLMProvider | None:
     provider_model = db_session.scalar(
         select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
@@ -245,4 +257,40 @@ def update_default_provider(provider_id: int, db_session: Session) -> None:
         db_session.flush()
 
     new_default.is_default_provider = True
+    db_session.commit()
+
+
+def update_default_vision_provider(
+    provider_id: int, vision_model: str | None, db_session: Session
+) -> None:
+    new_default = db_session.scalar(
+        select(LLMProviderModel).where(LLMProviderModel.id == provider_id)
+    )
+    if not new_default:
+        raise ValueError(f"LLM Provider with id {provider_id} does not exist")
+
+    # Validate that the specified vision model supports image input
+    model_to_validate = vision_model or new_default.default_model_name
+    if model_to_validate:
+        if not model_supports_image_input(model_to_validate, new_default.provider):
+            raise ValueError(
+                f"Model '{model_to_validate}' for provider '{new_default.provider}' does not support image input"
+            )
+    else:
+        raise ValueError(
+            f"Model '{vision_model}' is not a valid model for provider '{new_default.provider}'"
+        )
+
+    existing_default = db_session.scalar(
+        select(LLMProviderModel).where(
+            LLMProviderModel.is_default_vision_provider == True  # noqa: E712
+        )
+    )
+    if existing_default:
+        existing_default.is_default_vision_provider = None
+        # required to ensure that the below does not cause a unique constraint violation
+        db_session.flush()
+
+    new_default.is_default_vision_provider = True
+    new_default.default_vision_model = vision_model
     db_session.commit()

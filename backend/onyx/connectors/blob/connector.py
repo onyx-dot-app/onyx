@@ -25,7 +25,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
@@ -208,7 +208,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     batch.append(
                         Document(
                             id=f"{self.bucket_type}:{self.bucket_name}:{obj['Key']}",
-                            sections=[Section(link=link, text=text)],
+                            sections=[TextSection(link=link, text=text)],
                             source=DocumentSource(self.bucket_type.value),
                             semantic_identifier=name,
                             doc_updated_at=last_modified,
@@ -341,7 +341,14 @@ if __name__ == "__main__":
                 print("Sections:")
                 for section in doc.sections:
                     print(f"  - Link: {section.link}")
-                    print(f"  - Text: {section.text[:100]}...")
+                    if isinstance(section, TextSection) and section.text is not None:
+                        print(f"  - Text: {section.text[:100]}...")
+                    elif (
+                        hasattr(section, "image_file_name") and section.image_file_name
+                    ):
+                        print(f"  - Image: {section.image_file_name}")
+                    else:
+                        print("Error: Unknown section type")
                 print("---")
             break
 

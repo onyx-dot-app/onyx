@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_utils import httpx_init_vespa_pool
+from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
 from onyx.background.celery.tasks.indexing.utils import should_index
@@ -984,6 +985,9 @@ def connector_indexing_proxy_task(
     redis_connector = RedisConnector(tenant_id, cc_pair_id)
     redis_connector_index = redis_connector.new_index(search_settings_id)
 
+    # Track the last time memory info was emitted
+    last_memory_emit_time = 0.0
+
     try:
         with get_session_with_current_tenant() as db_session:
             index_attempt = get_index_attempt(
@@ -1023,6 +1027,23 @@ def connector_indexing_proxy_task(
                 finally:
                     job.release()
                     break
+
+            # log the memory usage for tracking down memory leaks / connector-specific memory issues
+            pid = job.process.pid
+            if pid is not None:
+                # Only emit memory info once per minute (60 seconds)
+                current_time = time.monotonic()
+                if current_time - last_memory_emit_time >= 60.0:
+                    emit_process_memory(
+                        pid,
+                        "indexing_worker",
+                        {
+                            "cc_pair_id": cc_pair_id,
+                            "search_settings_id": search_settings_id,
+                            "index_attempt_id": index_attempt_id,
+                        },
+                    )
+                    last_memory_emit_time = current_time
 
             # if a termination signal is detected, break (exit point will clean up)
             if self.request.id and redis_connector_index.terminating(self.request.id):

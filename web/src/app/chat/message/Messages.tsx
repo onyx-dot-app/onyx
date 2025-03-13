@@ -71,6 +71,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { copyAll, handleCopy } from "./copyingUtils";
+import { transformLinkUri } from "@/lib/utils";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -242,6 +243,7 @@ export const AIMessage = ({
         return preprocessLaTeX(content);
       }
     }
+    // return content;
 
     return (
       preprocessLaTeX(content) +
@@ -348,7 +350,7 @@ export const AIMessage = ({
       a: anchorCallback,
       p: paragraphCallback,
       b: ({ node, className, children }: any) => {
-        return <span className={className}>||||{children}</span>;
+        return <span className={className}>{children}</span>;
       },
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(
@@ -381,6 +383,7 @@ export const AIMessage = ({
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        urlTransform={transformLinkUri}
       >
         {finalContent}
       </ReactMarkdown>

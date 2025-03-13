@@ -15,7 +15,7 @@ from onyx.configs.model_configs import DEFAULT_DOCUMENT_ENCODER_MODEL
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import InputType
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.db.connector import check_connectors_exist
 from onyx.db.connector import create_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
@@ -55,7 +55,7 @@ def _create_indexable_chunks(
             # The section is not really used past this point since we have already done the other processing
             # for the chunking and embedding.
             sections=[
-                Section(
+                TextSection(
                     text=preprocessed_doc["content"],
                     link=preprocessed_doc["url"],
                     image_file_name=None,

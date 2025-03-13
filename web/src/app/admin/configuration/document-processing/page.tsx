@@ -121,7 +121,7 @@ function Main() {
   );
 }
 
-function Page() {
+export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
@@ -132,5 +132,3 @@ function Page() {
     </div>
   );
 }
-
-export default Page;

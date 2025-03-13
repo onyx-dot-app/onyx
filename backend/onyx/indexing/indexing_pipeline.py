@@ -10,13 +10,18 @@ from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.connectors.models import IndexingDocument
+from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.db.document import fetch_chunk_counts_for_documents
 from onyx.db.document import get_documents_by_ids
 from onyx.db.document import mark_document_as_indexed_for_cc_pair__no_commit
@@ -27,7 +32,10 @@ from onyx.db.document import update_docs_updated_at__no_commit
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
+from onyx.db.pg_file_store import get_pgfilestore_by_file_name
+from onyx.db.pg_file_store import read_lobj
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
@@ -37,6 +45,7 @@ from onyx.document_index.document_index_utils import (
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
+from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
@@ -44,6 +53,7 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.factory import get_default_llm_with_vision
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
@@ -53,6 +63,7 @@ logger = setup_logger()
 class DocumentBatchPrepareContext(BaseModel):
     updatable_docs: list[Document]
     id_to_db_doc_map: dict[str, DBDocument]
+    indexable_docs: list[IndexingDocument] = []
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
@@ -265,7 +276,12 @@ def index_doc_batch_prepare(
 def filter_documents(document_batch: list[Document]) -> list[Document]:
     documents: list[Document] = []
     for document in document_batch:
-        empty_contents = not any(section.text.strip() for section in document.sections)
+        empty_contents = not any(
+            isinstance(section, TextSection)
+            and section.text is not None
+            and section.text.strip()
+            for section in document.sections
+        )
         if (
             (not document.title or not document.title.strip())
             and not document.semantic_identifier.strip()
@@ -288,7 +304,12 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
             )
             continue
 
-        section_chars = sum(len(section.text) for section in document.sections)
+        section_chars = sum(
+            len(section.text)
+            if isinstance(section, TextSection) and section.text is not None
+            else 0
+            for section in document.sections
+        )
         if (
             MAX_DOCUMENT_CHARS
             and len(document.title or document.semantic_identifier) + section_chars
@@ -306,6 +327,121 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
 
         documents.append(document)
     return documents
+
+
+def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
+    """
+    Process all sections in documents by:
+    1. Converting both TextSection and ImageSection objects to base Section objects
+    2. Processing ImageSections to generate text summaries using a vision-capable LLM
+    3. Returning IndexingDocument objects with both original and processed sections
+
+    Args:
+        documents: List of documents with TextSection | ImageSection objects
+
+    Returns:
+        List of IndexingDocument objects with processed_sections as list[Section]
+    """
+    # Check if image extraction and analysis is enabled before trying to get a vision LLM
+    if not get_image_extraction_and_analysis_enabled():
+        llm = None
+    else:
+        # Only get the vision LLM if image processing is enabled
+        llm = get_default_llm_with_vision()
+
+    if not llm:
+        logger.warning(
+            "No vision-capable LLM available. Image sections will not be processed."
+        )
+
+        # Even without LLM, we still convert to IndexingDocument with base Sections
+        return [
+            IndexingDocument(
+                **document.dict(),
+                processed_sections=[
+                    Section(
+                        text=section.text if isinstance(section, TextSection) else None,
+                        link=section.link,
+                        image_file_name=section.image_file_name
+                        if isinstance(section, ImageSection)
+                        else None,
+                    )
+                    for section in document.sections
+                ],
+            )
+            for document in documents
+        ]
+
+    indexed_documents: list[IndexingDocument] = []
+
+    for document in documents:
+        processed_sections: list[Section] = []
+
+        for section in document.sections:
+            # For ImageSection, process and create base Section with both text and image_file_name
+            if isinstance(section, ImageSection):
+                # Default section with image path preserved
+                processed_section = Section(
+                    link=section.link,
+                    image_file_name=section.image_file_name,
+                    text=None,  # Will be populated if summarization succeeds
+                )
+
+                # Try to get image summary
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        pgfilestore = get_pgfilestore_by_file_name(
+                            file_name=section.image_file_name, db_session=db_session
+                        )
+
+                        if not pgfilestore:
+                            logger.warning(
+                                f"Image file {section.image_file_name} not found in PGFileStore"
+                            )
+
+                            processed_section.text = "[Image could not be processed]"
+                        else:
+                            # Get the image data
+                            image_data_io = read_lobj(
+                                pgfilestore.lobj_oid, db_session, mode="rb"
+                            )
+                            pgfilestore_data = image_data_io.read()
+                            summary = summarize_image_with_error_handling(
+                                llm=llm,
+                                image_data=pgfilestore_data,
+                                context_name=pgfilestore.display_name or "Image",
+                            )
+
+                            if summary:
+                                processed_section.text = summary
+                            else:
+                                processed_section.text = (
+                                    "[Image could not be summarized]"
+                                )
+                except Exception as e:
+                    logger.error(f"Error processing image section: {e}")
+                    processed_section.text = "[Error processing image]"
+
+                processed_sections.append(processed_section)
+
+            # For TextSection, create a base Section with text and link
+            elif isinstance(section, TextSection):
+                processed_section = Section(
+                    text=section.text, link=section.link, image_file_name=None
+                )
+                processed_sections.append(processed_section)
+
+            # If it's already a base Section (unlikely), just append it
+            else:
+                processed_sections.append(section)
+
+        # Create IndexingDocument with original sections and processed_sections
+        indexed_document = IndexingDocument(
+            **document.dict(), processed_sections=processed_sections
+        )
+        indexed_documents.append(indexed_document)
+
+    return indexed_documents
 
 
 @log_function_time(debug_only=True)
@@ -362,19 +498,23 @@ def index_doc_batch(
             failures=[],
         )
 
+    # Convert documents to IndexingDocument objects with processed section
+    # logger.debug("Processing image sections")
+    ctx.indexable_docs = process_image_sections(ctx.updatable_docs)
+
     doc_descriptors = [
         {
             "doc_id": doc.id,
             "doc_length": doc.get_total_char_length(),
         }
-        for doc in ctx.updatable_docs
+        for doc in ctx.indexable_docs
     ]
     logger.debug(f"Starting indexing process for documents: {doc_descriptors}")
 
     logger.debug("Starting chunking")
     # NOTE: no special handling for failures here, since the chunker is not
     # a common source of failure for the indexing pipeline
-    chunks: list[DocAwareChunk] = chunker.chunk(ctx.updatable_docs)
+    chunks: list[DocAwareChunk] = chunker.chunk(ctx.indexable_docs)
 
     logger.debug("Starting embedding")
     chunks_with_embeddings, embedding_failures = (

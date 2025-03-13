@@ -49,6 +49,8 @@ export interface LLMProvider {
   groups: number[];
   display_model_names: string[] | null;
   deployment_name: string | null;
+  default_vision_model: string | null;
+  is_default_vision_provider: boolean | null;
 }
 
 export interface FullLLMProvider extends LLMProvider {
@@ -56,6 +58,10 @@ export interface FullLLMProvider extends LLMProvider {
   is_default_provider: boolean | null;
   model_names: string[];
   icon?: React.FC<{ size?: number; className?: string }>;
+}
+
+export interface VisionProvider extends FullLLMProvider {
+  vision_models: string[];
 }
 
 export interface LLMProviderDescriptor {

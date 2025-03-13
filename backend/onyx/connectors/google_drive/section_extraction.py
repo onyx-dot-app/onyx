@@ -3,7 +3,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from onyx.connectors.google_utils.resources import GoogleDocsService
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 
 
 class CurrentHeading(BaseModel):
@@ -37,7 +37,7 @@ def _extract_text_from_paragraph(paragraph: dict[str, Any]) -> str:
 def get_document_sections(
     docs_service: GoogleDocsService,
     doc_id: str,
-) -> list[Section]:
+) -> list[TextSection]:
     """Extracts sections from a Google Doc, including their headings and content"""
     # Fetch the document structure
     doc = docs_service.documents().get(documentId=doc_id).execute()
@@ -45,7 +45,7 @@ def get_document_sections(
     # Get the content
     content = doc.get("body", {}).get("content", [])
 
-    sections: list[Section] = []
+    sections: list[TextSection] = []
     current_section: list[str] = []
     current_heading: CurrentHeading | None = None
 
@@ -70,7 +70,7 @@ def get_document_sections(
                     heading_text = current_heading.text
                     section_text = f"{heading_text}\n" + "\n".join(current_section)
                     sections.append(
-                        Section(
+                        TextSection(
                             text=section_text.strip(),
                             link=_build_gdoc_section_link(doc_id, current_heading.id),
                         )
@@ -96,7 +96,7 @@ def get_document_sections(
     if current_heading is not None and current_section:
         section_text = f"{current_heading.text}\n" + "\n".join(current_section)
         sections.append(
-            Section(
+            TextSection(
                 text=section_text.strip(),
                 link=_build_gdoc_section_link(doc_id, current_heading.id),
             )

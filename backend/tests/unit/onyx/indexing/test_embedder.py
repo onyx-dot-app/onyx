@@ -6,7 +6,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocAwareChunk
@@ -45,7 +45,7 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
         metadata={"tags": ["tag1", "tag2"]},
         doc_updated_at=None,
         sections=[
-            Section(text="This is a short section.", link="link1"),
+            TextSection(text="This is a short section.", link="link1"),
         ],
     )
     chunks: list[DocAwareChunk] = [

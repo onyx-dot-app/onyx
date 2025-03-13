@@ -48,6 +48,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
+    "cookies-next": "^5.1.0",
     "date-fns": "^3.6.0",
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",

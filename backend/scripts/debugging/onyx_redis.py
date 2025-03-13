@@ -54,6 +54,7 @@ class OnyxRedisCommand(Enum):
     purge_vespa_syncing = "purge_vespa_syncing"
     get_user_token = "get_user_token"
     delete_user_token = "delete_user_token"
+    add_invited_user = "add_invited_user"
 
     def __str__(self) -> str:
         return self.value
@@ -163,6 +164,21 @@ def onyx_redis(
             return 0
         else:
             return 2
+    elif command == OnyxRedisCommand.add_invited_user:
+        if not user_email:
+            logger.error("You must specify --user-email with add_invited_user")
+            return 1
+        current_invited_users = get_invited_users()
+        if user_email not in current_invited_users:
+            current_invited_users.append(user_email)
+            if dry_run:
+                logger.info(f"(DRY-RUN) Would add {user_email} to invited users")
+            else:
+                write_invited_users(current_invited_users)
+                logger.info(f"Added {user_email} to invited users")
+        else:
+            logger.info(f"{user_email} is already in the invited users list")
+        return 0
     else:
         pass
 
@@ -440,23 +456,6 @@ if __name__ == "__main__":
 
     if args.tenant_id:
         CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id)
-
-    if args.command == "add_invited_user":
-        if not args.user_email:
-            print("Error: --user-email is required for add_invited_user command")
-            sys.exit(1)
-
-        current_invited_users = get_invited_users()
-        if args.user_email not in current_invited_users:
-            current_invited_users.append(args.user_email)
-            if args.dry_run:
-                print(f"(DRY-RUN) Would add {args.user_email} to invited users")
-            else:
-                write_invited_users(current_invited_users)
-                print(f"Added {args.user_email} to invited users")
-        else:
-            print(f"{args.user_email} is already in the invited users list")
-        sys.exit(0)
 
     exitcode = onyx_redis(
         command=args.command,

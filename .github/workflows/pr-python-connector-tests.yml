@@ -48,6 +48,8 @@ env:
   # Gitbook
   GITBOOK_SPACE_ID: ${{ secrets.GITBOOK_SPACE_ID }}
   GITBOOK_API_KEY: ${{ secrets.GITBOOK_API_KEY }}
+  # Notion
+  NOTION_INTEGRATION_TOKEN: ${{ secrets.NOTION_INTEGRATION_TOKEN }}
 
 jobs:
   connectors-check:
