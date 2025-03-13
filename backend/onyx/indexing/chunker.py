@@ -477,7 +477,7 @@ class Chunker:
         single_chunk_fits = True
         doc_token_count = 0
         if self.enable_contextual_rag:
-            doc_content = document.get_content()
+            doc_content = document.get_text_content()
             tokenized_doc = self.tokenizer.tokenize(doc_content)
             doc_token_count = len(tokenized_doc)
 
