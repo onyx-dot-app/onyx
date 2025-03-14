@@ -105,6 +105,7 @@ from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -593,7 +594,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             tenant_id = fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.provisioning",
                 "get_tenant_id_for_email",
-                None,
+                POSTGRES_DEFAULT_SCHEMA,
             )(
                 email=email,
             )

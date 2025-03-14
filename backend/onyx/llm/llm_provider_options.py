@@ -56,7 +56,9 @@ BEDROCK_PROVIDER_NAME = "bedrock"
 # models
 BEDROCK_MODEL_NAMES = [
     model
-    for model in litellm.bedrock_models
+    # bedrock_converse_models are just extensions of the bedrock_models, not sure why
+    # litellm has split them into two lists :(
+    for model in litellm.bedrock_models + litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
 ][::-1]
 

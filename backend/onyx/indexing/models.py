@@ -83,13 +83,16 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     document_sets: all document sets the source document for this chunk is a part
                    of. This is used for filtering / personas.
     boost: influences the ranking of this chunk at query time. Positive -> ranked higher,
-           negative -> ranked lower.
+           negative -> ranked lower. Not included in aggregated boost calculation
+           for legacy reasons.
+    aggregated_chunk_boost_factor: represents the aggregated chunk-level boost (currently: information content)
     """
 
     tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
     boost: int
+    aggregated_chunk_boost_factor: float
 
     @classmethod
     def from_index_chunk(
@@ -98,6 +101,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         access: "DocumentAccess",
         document_sets: set[str],
         boost: int,
+        aggregated_chunk_boost_factor: float,
         tenant_id: str,
     ) -> "DocMetadataAwareIndexChunk":
         index_chunk_data = index_chunk.model_dump()
@@ -106,6 +110,7 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             access=access,
             document_sets=document_sets,
             boost=boost,
+            aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
         )
 
@@ -179,3 +184,9 @@ class IndexingSetting(EmbeddingModelDetail):
 class MultipassConfig(BaseModel):
     multipass_indexing: bool
     enable_large_chunks: bool
+
+
+class UpdatableChunkData(BaseModel):
+    chunk_id: int
+    document_id: str
+    boost_score: float

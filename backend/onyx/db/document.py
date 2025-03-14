@@ -23,6 +23,7 @@ from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
+from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
@@ -562,6 +563,18 @@ def delete_documents_complete__no_commit(
     db_session: Session, document_ids: list[str]
 ) -> None:
     """This completely deletes the documents from the db, including all foreign key relationships"""
+
+    # Start by deleting the chunk stats for the documents
+    delete_chunk_stats_by_connector_credential_pair__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
+    delete_chunk_stats_by_connector_credential_pair__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
     delete_documents_by_connector_credential_pair__no_commit(db_session, document_ids)
     delete_document_feedback_for_documents__no_commit(
         document_ids=document_ids, db_session=db_session
