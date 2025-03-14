@@ -1,5 +1,6 @@
 import json
 from collections.abc import Generator
+from typing import Optional
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -24,6 +25,9 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.process_message import ChatPacketStream
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.context.search.fast_search import FAST_SEARCH_MAX_HITS
+from onyx.context.search.fast_search import run_fast_search
+from onyx.context.search.models import RetrievalOptions
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
@@ -31,16 +35,19 @@ from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import get_prompt_by_id
-from onyx.db.engine import get_session
+from onyx.db.dependencies import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
+from onyx.llm.factory import AllLLMs
+from onyx.llm.factory import AllModelProviders
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.utils import get_json_line
+from onyx.utils.license import check_user_license_if_ee_feature
 from onyx.utils.logger import setup_logger
 
 
@@ -230,6 +237,26 @@ def get_answer_with_citation(
         raise HTTPException(status_code=500, detail="An internal server error occurred")
 
 
+@basic_router.post("/search")
+def get_search_response(
+    request: OneShotQARequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> StreamingResponse:
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for packet in get_answer_stream(request, user, db_session):
+                print("packet is")
+                print(packet.__dict__)
+                serialized = get_json_line(packet.model_dump())
+                yield serialized
+        except Exception as e:
+            logger.exception("Error in answer streaming")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="application/json")
+
+
 @basic_router.post("/stream-answer-with-citation")
 def stream_answer_with_citation(
     request: OneShotQARequest,
@@ -264,3 +291,96 @@ def get_standard_answer(
     except Exception as e:
         logger.error(f"Error in get_standard_answer: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")
+
+
+class FastSearchRequest(BaseModel):
+    """Request for fast search endpoint that returns raw search results without section merging."""
+
+    query: str
+    retrieval_options: Optional[RetrievalOptions] = None
+    max_results: Optional[
+        int
+    ] = None  # If not provided, defaults to FAST_SEARCH_MAX_HITS
+
+
+class FastSearchResult(BaseModel):
+    """A search result without section expansion or merging."""
+
+    document_id: str
+    chunk_id: int
+    content: str
+    source_links: list[str] = []
+    score: Optional[float] = None
+    metadata: Optional[dict] = None
+
+
+class FastSearchResponse(BaseModel):
+    """Response from the fast search endpoint."""
+
+    results: list[FastSearchResult]
+    total_found: int
+
+
+@basic_router.post("/fast-search")
+def get_fast_search_response(
+    request: FastSearchRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> FastSearchResponse:
+    """Endpoint for fast search that returns up to 300 results without section merging.
+
+    This is optimized for quickly returning a large number of search results without the overhead
+    of section expansion, reranking, relevance evaluation, and merging.
+    """
+    try:
+        # Set up the search request
+        search_request = SearchRequest(
+            query=request.query,
+            retrieval_options=request.retrieval_options,
+        )
+
+        # Set up the LLM instances
+        with AllModelProviders() as all_model_providers:
+            with AllLLMs(
+                model_providers=all_model_providers,
+                persona=Persona(
+                    id="default",
+                    name="Default",
+                    llm_relevance_filter=False,
+                ),
+                db_session=db_session,
+            ) as llm_instances:
+                # Get user's license status
+                check_user_license_if_ee_feature(user, db_session, "fast_search")
+
+                # Run the fast search
+                max_results = request.max_results or FAST_SEARCH_MAX_HITS
+                chunks = run_fast_search(
+                    search_request=search_request,
+                    user=user,
+                    llm=llm_instances.llm,
+                    fast_llm=llm_instances.fast_llm,
+                    db_session=db_session,
+                    max_results=max_results,
+                )
+
+                # Convert chunks to response format
+                results = [
+                    FastSearchResult(
+                        document_id=chunk.document_id,
+                        chunk_id=chunk.chunk_id,
+                        content=chunk.content,
+                        source_links=chunk.source_links,
+                        score=chunk.score,
+                        metadata=chunk.metadata,
+                    )
+                    for chunk in chunks
+                ]
+
+                return FastSearchResponse(
+                    results=results,
+                    total_found=len(results),
+                )
+    except Exception as e:
+        logger.exception("Error in fast search")
+        raise HTTPException(status_code=500, detail=str(e))
