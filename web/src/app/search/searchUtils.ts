@@ -17,6 +17,25 @@ export interface SearchStreamResponse {
   error: string | null;
 }
 
+// Define interface matching FastSearchResult
+interface FastSearchResult {
+  document_id: string;
+  chunk_id: number;
+  content: string;
+  source_links: string[];
+  score?: number;
+  metadata?: {
+    source_type?: string;
+    semantic_identifier?: string;
+    boost?: number;
+    hidden?: boolean;
+    updated_at?: string;
+    primary_owners?: string[];
+    secondary_owners?: string[];
+    [key: string]: any;
+  };
+}
+
 export async function* streamSearchWithCitation({
   query,
   persona,
@@ -34,24 +53,16 @@ export async function* streamSearchWithCitation({
 }): AsyncGenerator<SearchStreamResponse> {
   const filters = buildFilters(sources, documentSets, timeRange, tags);
 
-  const response = await fetch("/api/query/search", {
+  // Use the fast-search endpoint instead
+  const response = await fetch("/api/query/fast-search", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      persona_id: persona.id,
-      messages: [
-        {
-          role: "user",
-          message: query,
-        },
-      ],
-      retrieval_options: {
-        filters: filters,
-        favor_recent: true,
-      },
-      skip_gen_ai_answer_generation: false,
+      query: query,
+      filters: filters,
+      max_results: 300, // Use the default max results for fast search
     }),
   });
 
@@ -65,43 +76,59 @@ export async function* streamSearchWithCitation({
     return;
   }
 
-  let currentAnswer = "";
-  let documents: OnyxDocument[] = [];
-  let error: string | null = null;
+  // Since fast-search is not streaming, we need to process the complete response
+  const searchResults = await response.json();
 
-  for await (const packet of handleSSEStream(response)) {
-    if ("error" in packet && packet.error) {
-      error = (packet as StreamingError).error;
-      yield {
-        answer: currentAnswer,
-        documents,
-        error,
+  // Convert results to OnyxDocument format
+  const documents: OnyxDocument[] = searchResults.results.map(
+    (result: FastSearchResult) => {
+      // Create a blurb from the content (first 200 chars)
+      const blurb =
+        result.content.substring(0, 200) +
+        (result.content.length > 200 ? "..." : "");
+
+      // Get the source link if available
+      const link =
+        result.source_links && result.source_links.length > 0
+          ? result.source_links[0]
+          : null;
+
+      // Convert to OnyxDocument format
+      return {
+        document_id: result.document_id,
+        chunk_ind: result.chunk_id,
+        content: result.content,
+        source_type: result.metadata?.source_type || "unknown",
+        semantic_identifier: result.metadata?.semantic_identifier || "Unknown",
+        score: result.score || 0,
+        metadata: result.metadata || {},
+        match_highlights: [],
+        is_internet: false,
+        link: link,
+        updated_at: result.metadata?.updated_at
+          ? new Date(result.metadata.updated_at).toISOString()
+          : null,
+        blurb: blurb,
+        primary_owners: result.metadata?.primary_owners || [],
+        secondary_owners: result.metadata?.secondary_owners || [],
+        boost: result.metadata?.boost || 0,
+        hidden: result.metadata?.hidden || false,
+        validationState: null,
       };
-      continue;
     }
+  );
 
-    if ("answer_piece" in packet && packet.answer_piece) {
-      currentAnswer += (packet as AnswerPiecePacket).answer_piece;
-      yield {
-        answer: currentAnswer,
-        documents,
-        error,
-      };
-    }
-
-    if ("top_documents" in packet && packet.top_documents) {
-      documents = (packet as DocumentInfoPacket).top_documents;
-      yield {
-        answer: currentAnswer,
-        documents,
-        error,
-      };
-    }
-  }
-
+  // First yield just the documents to maintain similar streaming behavior
   yield {
-    answer: currentAnswer,
+    answer: null,
     documents,
-    error,
+    error: null,
+  };
+
+  // Final yield with completed results
+  yield {
+    answer: null,
+    documents,
+    error: null,
   };
 }

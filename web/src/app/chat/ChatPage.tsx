@@ -317,14 +317,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-      ? availableAssistants.find(
-          (assistant) => assistant.id === defaultAssistantId
-        )
-      : undefined
-  );
-  // Gather default temperature settings
-  const search_param_temperature = searchParams.get(
-    SEARCH_PARAM_NAMES.TEMPERATURE
+        ? availableAssistants.find(
+            (assistant) => assistant.id === defaultAssistantId
+          )
+        : undefined
   );
 
   const setSelectedAssistantFromId = (assistantId: number) => {

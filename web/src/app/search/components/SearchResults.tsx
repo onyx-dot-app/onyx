@@ -43,12 +43,8 @@ export function SearchResults({
 
   return (
     <div className="flex flex-col w-full">
-      {documents.map((doc) => (
-        <SearchResultItem
-          key={doc.document_id}
-          document={doc}
-          onClick={onDocumentClick}
-        />
+      {documents.map((doc, ind) => (
+        <SearchResultItem key={ind} document={doc} onClick={onDocumentClick} />
       ))}
     </div>
   );

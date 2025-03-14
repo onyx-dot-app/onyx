@@ -24,10 +24,10 @@ from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.process_message import ChatPacketStream
 from onyx.chat.process_message import stream_chat_message_objects
+from onyx.configs.app_configs import FAST_SEARCH_MAX_HITS
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
-from onyx.context.search.fast_search import FAST_SEARCH_MAX_HITS
-from onyx.context.search.fast_search import run_fast_search
-from onyx.context.search.models import RetrievalOptions
+from onyx.context.search.enums import LLMEvaluationType
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
@@ -35,19 +35,16 @@ from onyx.context.search.utils import dedupe_documents
 from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import get_prompt_by_id
-from onyx.db.dependencies import get_session
+from onyx.db.engine import get_session
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
-from onyx.llm.factory import AllLLMs
-from onyx.llm.factory import AllModelProviders
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.utils import get_json_line
-from onyx.utils.license import check_user_license_if_ee_feature
 from onyx.utils.logger import setup_logger
 
 
@@ -297,7 +294,9 @@ class FastSearchRequest(BaseModel):
     """Request for fast search endpoint that returns raw search results without section merging."""
 
     query: str
-    retrieval_options: Optional[RetrievalOptions] = None
+    filters: BaseFilters | None = (
+        None  # Direct filter options instead of retrieval_options
+    )
     max_results: Optional[
         int
     ] = None  # If not provided, defaults to FAST_SEARCH_MAX_HITS
@@ -309,7 +308,7 @@ class FastSearchResult(BaseModel):
     document_id: str
     chunk_id: int
     content: str
-    source_links: list[str] = []
+    source_links: dict[int, str] | None = None
     score: Optional[float] = None
     metadata: Optional[dict] = None
 
@@ -333,54 +332,57 @@ def get_fast_search_response(
     of section expansion, reranking, relevance evaluation, and merging.
     """
     try:
-        # Set up the search request
+        # Set up the search request with optimized settings
+        max_results = request.max_results or FAST_SEARCH_MAX_HITS
+
+        # Create a search request with optimized settings
         search_request = SearchRequest(
             query=request.query,
-            retrieval_options=request.retrieval_options,
+            human_selected_filters=request.filters,
+            # Skip section expansion
+            chunks_above=0,
+            chunks_below=0,
+            # Skip LLM evaluation
+            evaluation_type=LLMEvaluationType.SKIP,
+            # Limit the number of results
+            limit=max_results,
         )
 
         # Set up the LLM instances
-        with AllModelProviders() as all_model_providers:
-            with AllLLMs(
-                model_providers=all_model_providers,
-                persona=Persona(
-                    id="default",
-                    name="Default",
-                    llm_relevance_filter=False,
-                ),
-                db_session=db_session,
-            ) as llm_instances:
-                # Get user's license status
-                check_user_license_if_ee_feature(user, db_session, "fast_search")
 
-                # Run the fast search
-                max_results = request.max_results or FAST_SEARCH_MAX_HITS
-                chunks = run_fast_search(
-                    search_request=search_request,
-                    user=user,
-                    llm=llm_instances.llm,
-                    fast_llm=llm_instances.fast_llm,
-                    db_session=db_session,
-                    max_results=max_results,
-                )
+        llm, fast_llm = get_default_llms()
 
-                # Convert chunks to response format
-                results = [
-                    FastSearchResult(
-                        document_id=chunk.document_id,
-                        chunk_id=chunk.chunk_id,
-                        content=chunk.content,
-                        source_links=chunk.source_links,
-                        score=chunk.score,
-                        metadata=chunk.metadata,
-                    )
-                    for chunk in chunks
-                ]
+        # Create the search pipeline with optimized settings
+        search_pipeline = SearchPipeline(
+            search_request=search_request,
+            user=user,
+            llm=llm,
+            fast_llm=fast_llm,
+            skip_query_analysis=True,  # Skip expensive query analysis
+            db_session=db_session,
+            bypass_acl=False,
+        )
 
-                return FastSearchResponse(
-                    results=results,
-                    total_found=len(results),
-                )
+        # Only retrieve chunks without further processing
+        chunks = search_pipeline._get_chunks()
+
+        # Convert chunks to response format
+        results = [
+            FastSearchResult(
+                document_id=chunk.document_id,
+                chunk_id=chunk.chunk_id,
+                content=chunk.content,
+                source_links=chunk.source_links,
+                score=chunk.score,
+                metadata=chunk.metadata,
+            )
+            for chunk in chunks
+        ]
+
+        return FastSearchResponse(
+            results=results,
+            total_found=len(results),
+        )
     except Exception as e:
         logger.exception("Error in fast search")
         raise HTTPException(status_code=500, detail=str(e))
