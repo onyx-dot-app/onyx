@@ -389,7 +389,6 @@ def test_parallel_yield_non_blocking() -> None:
 
     results = list(parallel_yield(gens))
 
-    print(results)
     # Verify no values are missing
     assert len(results) == 300  # Should have all values from 0 to 299
     assert sorted(results) == list(range(300))

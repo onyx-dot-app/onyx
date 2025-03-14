@@ -14,6 +14,7 @@ from googleapiclient.errors import HttpError  # type: ignore
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import MAX_DRIVE_WORKERS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -435,7 +436,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             )
             for email in all_org_emails
         ]
-        yield from parallel_yield(user_retrieval_gens, max_workers=10)
+        yield from parallel_yield(user_retrieval_gens, max_workers=MAX_DRIVE_WORKERS)
 
         remaining_folders = (
             drive_ids_to_retrieve | folder_ids_to_retrieve
