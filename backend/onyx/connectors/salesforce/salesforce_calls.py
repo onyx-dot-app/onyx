@@ -133,15 +133,13 @@ def _build_bulk_query(sf_client: Salesforce, sf_type: str, time_filter: str) -> 
 
 
 def _bulk_retrieve_from_salesforce(
-    sf_client: Salesforce,
-    sf_type: str,
-    time_filter: str,
+    sf_client: Salesforce, sf_type: str, time_filter: str, target_dir: str
 ) -> tuple[str, list[str] | None]:
     if not _check_if_object_type_is_empty(sf_client, sf_type, time_filter):
         return sf_type, None
 
-    if existing_csvs := _check_for_existing_csvs(sf_type):
-        return sf_type, existing_csvs
+    # if existing_csvs := _check_for_existing_csvs(sf_type):
+    #     return sf_type, existing_csvs
 
     query = _build_bulk_query(sf_client, sf_type, time_filter)
 
@@ -165,7 +163,7 @@ def _bulk_retrieve_from_salesforce(
         # This downloads the file to a file in the target path with a random name
         results = bulk_2_type.download(
             query=query,
-            path=get_object_type_path(sf_type),
+            path=target_dir,
             max_records=1000000,
         )
         all_download_paths = [result["file"] for result in results]
@@ -181,6 +179,7 @@ def fetch_all_csvs_in_parallel(
     object_types: set[str],
     start: SecondsSinceUnixEpoch | None,
     end: SecondsSinceUnixEpoch | None,
+    target_dir: str,
 ) -> dict[str, list[str] | None]:
     """
     Fetches all the csvs in parallel for the given object types
@@ -207,6 +206,7 @@ def fetch_all_csvs_in_parallel(
                 sf_client=sf_client,
                 sf_type=object_type,
                 time_filter=time_filter_for_each_object_type[object_type],
+                target_dir=target_dir,
             ),
             object_types,
         )
