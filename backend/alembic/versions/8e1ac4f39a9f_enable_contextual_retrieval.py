@@ -1,7 +1,7 @@
 """enable contextual retrieval
 
 Revision ID: 8e1ac4f39a9f
-Revises: 3934b1bc7b62
+Revises: 3781a5eb12cb
 Create Date: 2024-12-20 13:29:09.918661
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "8e1ac4f39a9f"
-down_revision = "3934b1bc7b62"
+down_revision = "3781a5eb12cb"
 branch_labels = None
 depends_on = None
 
