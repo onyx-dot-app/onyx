@@ -14,11 +14,7 @@ export default function WrappedSearch({
   return (
     <FunctionalWrapper
       content={(sidebarVisible, toggle) => (
-        <SearchPage
-        //   toggle={toggle}
-        //   sidebarVisible={sidebarVisible}
-        //   firstMessage={firstMessage}
-        />
+        <SearchPage toggle={toggle} sidebarVisible={sidebarVisible} />
       )}
     />
   );

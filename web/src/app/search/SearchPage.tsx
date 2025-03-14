@@ -7,23 +7,9 @@ import {
   useSearchParams,
 } from "next/navigation";
 import {
-  BackendChatSession,
-  BackendMessage,
-  BUFFER_COUNT,
   ChatFileType,
-  ChatSession,
   ChatSessionSharedStatus,
-  FileDescriptor,
-  FileChatDisplay,
   Message,
-  MessageResponseIDInfo,
-  RetrievalType,
-  StreamingError,
-  ToolCallMetadata,
-  SubQuestionDetail,
-  constructSubQuestions,
-  DocumentsResponse,
-  AgenticMessageResponseIDInfo,
 } from "@/app/chat/interfaces";
 
 import Prism from "prismjs";
@@ -43,29 +29,20 @@ import {
 import {
   Dispatch,
   SetStateAction,
-  use,
-  useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import {
-  SEARCH_PARAM_NAMES,
-  shouldSubmitOnLoad,
-} from "@/app/chat/searchParams";
-import { LlmDescriptor, useFilters, useLlmManager } from "@/lib/hooks";
+import { SEARCH_PARAM_NAMES } from "@/app/chat/searchParams";
+import { useFilters, useLlmManager } from "@/lib/hooks";
 import { ChatState, FeedbackType, RegenerationState } from "@/app/chat/types";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { ChatInputBar } from "@/app/chat/input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
-import { v4 as uuidv4 } from "uuid";
 import { ChatPopup } from "@/app/chat/ChatPopup";
-import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import {
   PRO_SEARCH_TOGGLED_COOKIE_NAME,
@@ -223,7 +200,7 @@ export default function SearchPage({
       );
       toggle(false);
     }
-  }, [user]);
+  }, [user, sidebarVisible, toggle]);
 
   const chatSessionIdRef = useRef<string | null>(existingChatSessionId);
 
@@ -642,7 +619,7 @@ export default function SearchPage({
         "*"
       );
     }
-  }, [submittedMessage, currentSessionChatState]);
+  }, [submittedMessage, currentSessionChatState, messageHistory.length]);
   // just choose a conservative default, this will be updated in the
   // background on initial load / on persona change
   const [maxTokens, setMaxTokens] = useState<number>(4096);
@@ -985,18 +962,6 @@ export default function SearchPage({
 
   useSidebarShortcut(router, toggleSidebar);
 
-  if (!user) {
-    redirect("/auth/login");
-  }
-
-  if (noAssistants)
-    return (
-      <>
-        <HealthCheckBanner />
-        <NoAssistantModal isAdmin={isAdmin} />
-      </>
-    );
-
   // New state for search UI
   const [searchQuery, setSearchQuery] = useState("");
   const [isSearching, setIsSearching] = useState(false);
@@ -1092,6 +1057,17 @@ export default function SearchPage({
     document.querySelector(".search-results-container")?.scrollTo(0, 0);
   };
 
+  if (!user) {
+    redirect("/auth/login");
+  }
+
+  if (noAssistants)
+    return (
+      <>
+        <HealthCheckBanner />
+        <NoAssistantModal isAdmin={isAdmin} />
+      </>
+    );
   return (
     <>
       <HealthCheckBanner />
