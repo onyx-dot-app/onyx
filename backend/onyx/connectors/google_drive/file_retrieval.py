@@ -298,6 +298,6 @@ def get_root_folder_id(service: Resource) -> str:
     # https://developers.google.com/drive/api/guides/v2-to-v3-reference
     return (
         service.files()
-        .get(fileId="root", fields=GoogleFields.ID)
-        .execute()[GoogleFields.ID]
+        .get(fileId="root", fields=GoogleFields.ID.value)
+        .execute()[GoogleFields.ID.value]
     )
