@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon, SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import { openDocument } from "@/lib/search/utils";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
 import { ValidSources } from "@/lib/types";
+import { FiFileText } from "react-icons/fi";
+import { FileDescriptor } from "../interfaces";
+import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { truncateString } from "@/lib/utils";
 
 interface SourcesDisplayProps {
   documents: OnyxDocument[];
@@ -56,6 +60,82 @@ export const SourceCard: React.FC<{
         <ResultIcon doc={document} size={18} />
         <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0">
           {truncatedIdentifier}
+        </div>
+      </div>
+    </button>
+  );
+};
+
+export const FileSourceCard: React.FC<{
+  document: FileDescriptor;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+}> = ({ document, setPresentingDocument }) => {
+  const fileName = document.name || document.id;
+
+  return (
+    <button
+      onClick={() => setPresentingDocument(document as any)}
+      className="w-full max-w-[260px] h-[80px] p-3
+             text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80
+             cursor-pointer rounded-lg
+             flex flex-col justify-between"
+    >
+      <div
+        className="
+        text-text-900 text-xs
+        font-medium leading-tight
+        whitespace-normal
+        break-all
+        line-clamp-2 
+        text-ellipsis
+      "
+      >
+        {truncateString(fileName, 45)}
+      </div>
+
+      <div className="flex items-center gap-1 mt-1">
+        {getFileIconFromFileName(fileName)}
+
+        <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0">
+          Document
+        </div>
+      </div>
+    </button>
+  );
+};
+
+export const FileSourceCardInResults: React.FC<{
+  document: FileDescriptor;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+}> = ({ document, setPresentingDocument }) => {
+  const fileName = document.name || document.id;
+
+  return (
+    <button
+      onClick={() => setPresentingDocument(document as any)}
+      className="w-full h-[80px] p-4
+             text-left bg-background hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700
+             cursor-pointer rounded-lg
+             flex flex-col justify-between
+             border border-neutral-200 dark:border-neutral-700"
+    >
+      <div
+        className="
+        text-neutral-900 dark:text-neutral-100 text-sm
+        font-medium leading-tight
+        whitespace-normal
+        break-all
+        line-clamp-2 
+        text-ellipsis
+      "
+      >
+        {truncateString(fileName, 45)}
+      </div>
+
+      <div className="flex items-center gap-2 mt-2">
+        <div className="flex-shrink-0">{getFileIconFromFileName(fileName)}</div>
+        <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0 font-medium">
+          Document
         </div>
       </div>
     </button>

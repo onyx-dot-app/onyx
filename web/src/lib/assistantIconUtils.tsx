@@ -1,4 +1,14 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  FileOptionIcon,
+  PDFIcon,
+  TXTIcon,
+  DOCIcon,
+  HTMLIcon,
+  JSONIcon,
+  ImagesIcon,
+  XMLIcon,
+} from "@/components/icons/icons";
 
 export interface GridShape {
   encodedGrid: number;
@@ -165,5 +175,30 @@ export const constructMiniFiedPersona = (
     is_default_persona: false,
     users: [],
     groups: [],
+    user_file_ids: [],
+    user_folder_ids: [],
   };
+};
+
+export const getFileIconFromFileName = (fileName: string) => {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (extension === "pdf") {
+    return <PDFIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "txt") {
+    return <TXTIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "doc" || extension === "docx") {
+    return <DOCIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "html" || extension === "htm") {
+    return <HTMLIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "json") {
+    return <JSONIcon className="h-4 w-4 shrink-0" />;
+  } else if (
+    ["jpg", "jpeg", "png", "gif", "svg", "webp"].includes(extension || "")
+  ) {
+    return <ImagesIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "xml") {
+    return <XMLIcon className="h-4 w-4 shrink-0" />;
+  } else {
+    return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+  }
 };

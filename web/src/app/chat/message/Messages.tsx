@@ -16,16 +16,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { unified } from "unified";
 import ReactMarkdown from "react-markdown";
-import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
-import { SearchSummary } from "./SearchSummary";
+import {
+  OnyxDocument,
+  FilteredOnyxDocument,
+  MinimalOnyxDocument,
+} from "@/lib/search/interfaces";
+import { SearchSummary, UserKnowledgeFiles } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
-import remarkParse from "remark-parse";
-import remarkRehype from "remark-rehype";
-import rehypeSanitize from "rehype-sanitize";
-import rehypeStringify from "rehype-stringify";
 import { CopyButton } from "@/components/CopyButton";
 import { ChatFileType, FileDescriptor, ToolCallMetadata } from "../interfaces";
 import {
@@ -48,7 +47,6 @@ import {
   CustomTooltip,
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
-import { ValidSources } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -65,8 +63,11 @@ import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
-import { SeeMoreBlock } from "@/components/chat/sources/SourceCard";
-import { SourceCard } from "./SourcesDisplay";
+import {
+  FilesSeeMoreBlock,
+  SeeMoreBlock,
+} from "@/components/chat/sources/SourceCard";
+import { FileSourceCard, SourceCard } from "./SourcesDisplay";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
@@ -82,27 +83,30 @@ const TOOLS_WITH_CUSTOM_HANDLING = [
 function FileDisplay({
   files,
   alignBubble,
+  setPresentingDocument,
 }: {
   files: FileDescriptor[];
   alignBubble?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) {
   const [close, setClose] = useState(true);
+  const [expandedKnowledge, setExpandedKnowledge] = useState(false);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const nonImgFiles = files.filter(
-    (file) => file.type !== ChatFileType.IMAGE && file.type !== ChatFileType.CSV
+  const textFiles = files.filter(
+    (file) => file.type == ChatFileType.PLAIN_TEXT
   );
 
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
     <>
-      {nonImgFiles && nonImgFiles.length > 0 && (
+      {textFiles && textFiles.length > 0 && (
         <div
           id="onyx-file"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
-            {nonImgFiles.map((file) => {
+            {textFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
                   <DocumentPreview
@@ -128,7 +132,6 @@ function FileDisplay({
           </div>
         </div>
       )}
-
       {csvImgFiles && csvImgFiles.length > 0 && (
         <div className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}>
           <div className="flex flex-col gap-2">
@@ -162,6 +165,7 @@ function FileDisplay({
 }
 
 export const AIMessage = ({
+  userKnowledgeFiles = [],
   regenerate,
   overriddenModel,
   continueGenerating,
@@ -191,6 +195,7 @@ export const AIMessage = ({
   documentSidebarVisible,
   removePadding,
 }: {
+  userKnowledgeFiles?: FileDescriptor[];
   index?: number;
   shared?: boolean;
   isActive?: boolean;
@@ -217,7 +222,7 @@ export const AIMessage = ({
   retrievalDisabled?: boolean;
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
-  setPresentingDocument: (document: OnyxDocument) => void;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
   removePadding?: boolean;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
@@ -423,35 +428,46 @@ export const AIMessage = ({
               <div className="max-w-message-max break-words">
                 <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
-                    {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
-                      <>
-                        {query !== undefined && !retrievalDisabled && (
-                          <div className="mb-1">
-                            <SearchSummary
-                              index={index || 0}
-                              query={query}
-                              finished={toolCall?.tool_result != undefined}
-                              handleSearchQueryEdit={handleSearchQueryEdit}
-                              docs={docs || []}
-                              toggleDocumentSelection={toggleDocumentSelection!}
-                            />
-                          </div>
-                        )}
-                        {handleForceSearch &&
-                          content &&
-                          query === undefined &&
-                          !hasDocs &&
-                          !retrievalDisabled && (
+                    {/* {JSON.stringify(toolCall)} */}
+                    {userKnowledgeFiles.length == 0 &&
+                      (!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
+                        <>
+                          {query !== undefined && (
                             <div className="mb-1">
-                              <SkippedSearch
-                                handleForceSearch={handleForceSearch}
+                              <SearchSummary
+                                index={index || 0}
+                                query={query}
+                                finished={toolCall?.tool_result != undefined}
+                                handleSearchQueryEdit={handleSearchQueryEdit}
+                                docs={docs || []}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                userFileSearch={retrievalDisabled ?? false}
                               />
                             </div>
                           )}
-                      </>
-                    ) : null}
 
-                    {toolCall &&
+                          {handleForceSearch &&
+                            content &&
+                            query === undefined &&
+                            !hasDocs &&
+                            !retrievalDisabled && (
+                              <div className="mb-1">
+                                <SkippedSearch
+                                  handleForceSearch={handleForceSearch}
+                                />
+                              </div>
+                            )}
+                        </>
+                      ) : null)}
+                    {userKnowledgeFiles && (
+                      <UserKnowledgeFiles
+                        userKnowledgeFiles={userKnowledgeFiles}
+                      />
+                    )}
+                    {!userKnowledgeFiles &&
+                      toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
                       ) && (
@@ -467,12 +483,10 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result || !content}
                         />
                       )}
-
                     {toolCall &&
                       (!files || files.length == 0) &&
                       toolCall.tool_name === IMAGE_GENERATION_TOOL_NAME &&
                       !toolCall.tool_result && <GeneratingImageDisplay />}
-
                     {toolCall &&
                       toolCall.tool_name === INTERNET_SEARCH_TOOL_NAME && (
                         <ToolRunDisplay
@@ -487,9 +501,47 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
-
-                    {docs && docs.length > 0 && (
+                    {userKnowledgeFiles.length == 0 &&
+                      docs &&
+                      docs.length > 0 && (
+                        <div
+                          className={`mobile:hidden ${
+                            (query ||
+                              toolCall?.tool_name ===
+                                INTERNET_SEARCH_TOOL_NAME) &&
+                            "mt-2"
+                          }  -mx-8 w-full mb-4 flex relative`}
+                        >
+                          <div className="w-full">
+                            <div className="px-8 flex gap-x-2">
+                              {!settings?.isMobile &&
+                                docs.length > 0 &&
+                                docs
+                                  .slice(0, 2)
+                                  .map((doc: OnyxDocument, ind: number) => (
+                                    <SourceCard
+                                      document={doc}
+                                      key={ind}
+                                      setPresentingDocument={
+                                        setPresentingDocument
+                                      }
+                                    />
+                                  ))}
+                              <SeeMoreBlock
+                                toggled={documentSidebarVisible!}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                docs={docs}
+                                webSourceDomains={webSourceDomains}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    {userKnowledgeFiles && userKnowledgeFiles.length > 0 && (
                       <div
+                        key={10}
                         className={`mobile:hidden ${
                           (query ||
                             toolCall?.tool_name ===
@@ -500,33 +552,38 @@ export const AIMessage = ({
                         <div className="w-full">
                           <div className="px-8 flex gap-x-2">
                             {!settings?.isMobile &&
-                              docs.length > 0 &&
-                              docs
+                              userKnowledgeFiles.length > 0 &&
+                              userKnowledgeFiles
                                 .slice(0, 2)
-                                .map((doc: OnyxDocument, ind: number) => (
-                                  <SourceCard
-                                    document={doc}
+                                .map((file: FileDescriptor, ind: number) => (
+                                  <FileSourceCard
                                     key={ind}
+                                    document={file}
                                     setPresentingDocument={
                                       setPresentingDocument
                                     }
                                   />
                                 ))}
-                            <SeeMoreBlock
-                              toggled={documentSidebarVisible!}
-                              toggleDocumentSelection={toggleDocumentSelection!}
-                              docs={docs}
-                              webSourceDomains={webSourceDomains}
-                            />
+                            {userKnowledgeFiles.length > 2 && (
+                              <FilesSeeMoreBlock
+                                key={10}
+                                toggled={documentSidebarVisible!}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                files={userKnowledgeFiles}
+                              />
+                            )}
                           </div>
                         </div>
                       </div>
                     )}
-
-                    {content || files ? (
+                    {content || userKnowledgeFiles || files ? (
                       <>
-                        <FileDisplay files={files || []} />
-
+                        <FileDisplay
+                          setPresentingDocument={setPresentingDocument}
+                          files={userKnowledgeFiles || files || []}
+                        />
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">
                             <div
@@ -804,6 +861,7 @@ export const HumanMessage = ({
   shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
+  setPresentingDocument,
 }: {
   shared?: boolean;
   content: string;
@@ -814,6 +872,7 @@ export const HumanMessage = ({
   onMessageSelection?: (messageId: number) => void;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -861,7 +920,11 @@ export const HumanMessage = ({
       >
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
+            <FileDisplay
+              alignBubble
+              setPresentingDocument={setPresentingDocument}
+              files={files || []}
+            />
 
             <div className="flex justify-end">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">

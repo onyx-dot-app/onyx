@@ -4,8 +4,11 @@ import { OnyxDocument } from "@/lib/search/interfaces";
 import { truncateString } from "@/lib/utils";
 import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
+import { FileDescriptor } from "@/app/chat/interfaces";
+import { FiFileText } from "react-icons/fi";
+import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
 
 export const ResultIcon = ({
   doc,
@@ -161,6 +164,99 @@ export function SeeMoreBlock({
       </div>
       <div className="text-text-darker text-xs font-semibold">
         {toggled ? "Hide Results" : "Show All"}
+      </div>
+    </button>
+  );
+}
+
+export function getUniqueFileIcons(files: FileDescriptor[]): JSX.Element[] {
+  const uniqueIcons: JSX.Element[] = [];
+  const seenExtensions = new Set<string>();
+
+  // Helper function to extract filename from id when name is missing
+  const getFileName = (file: FileDescriptor): string => {
+    if (file.name) return file.name;
+
+    // Extract filename from the id if possible
+    if (file.id) {
+      const idParts = file.id.split("/");
+      if (idParts.length > 1) {
+        return idParts[idParts.length - 1]; // Get the last part after the last slash
+      }
+    }
+
+    return "unknown.txt"; // Fallback filename
+  };
+
+  // Helper function to get a styled icon
+  const getStyledIcon = (fileName: string, fileId: string) => {
+    return React.cloneElement(getFileIconFromFileName(fileName), {
+      key: `file-${fileId}`,
+    });
+  };
+
+  for (const file of files) {
+    const fileName = getFileName(file);
+    const extension = fileName.split(".").pop()?.toLowerCase() || "";
+
+    if (!seenExtensions.has(extension)) {
+      seenExtensions.add(extension);
+      uniqueIcons.push(getStyledIcon(fileName, file.id));
+    }
+  }
+
+  // If we have zero icons, use a fallback
+  if (uniqueIcons.length === 0) {
+    return [
+      getFileIconFromFileName("fallback1.txt"),
+      getFileIconFromFileName("fallback2.txt"),
+      getFileIconFromFileName("fallback3.txt"),
+    ];
+  }
+
+  // Duplicate last icon if fewer than 3 icons
+  while (uniqueIcons.length < 3) {
+    // The last icon in the array
+    const lastIcon = uniqueIcons[uniqueIcons.length - 1];
+    // Clone it with a new key
+    uniqueIcons.push(
+      React.cloneElement(lastIcon, {
+        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+      })
+    );
+  }
+
+  // Slice to just the first 3 if there are more than 3
+  return uniqueIcons.slice(0, 3);
+}
+
+export function FilesSeeMoreBlock({
+  toggleDocumentSelection,
+  files,
+  toggled,
+  fullWidth = false,
+}: {
+  toggleDocumentSelection: () => void;
+  files: FileDescriptor[];
+  toggled: boolean;
+  fullWidth?: boolean;
+}) {
+  const [iconsToRender, setIconsToRender] = useState<JSX.Element[]>([]);
+  useEffect(() => {
+    setIconsToRender(files.length > 2 ? getUniqueFileIcons(files) : []);
+  }, [files]);
+
+  return (
+    <button
+      onClick={toggleDocumentSelection}
+      className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light   text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+    >
+      <div className="flex items-center gap-1">
+        {files.length > 2 && iconsToRender.map((icon, index) => icon)}
+      </div>
+      <div className="text-text-darker text-xs font-semibold">
+        {toggled ? "Hide Files" : "Show All Files"}
       </div>
     </button>
   );

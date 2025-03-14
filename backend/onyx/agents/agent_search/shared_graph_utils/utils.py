@@ -321,8 +321,10 @@ def dispatch_separated(
     sep: str = DISPATCH_SEP_CHAR,
 ) -> list[BaseMessage_Content]:
     num = 1
+    accumulated_tokens = ""
     streamed_tokens: list[BaseMessage_Content] = []
     for token in tokens:
+        accumulated_tokens += cast(str, token.content)
         content = cast(str, token.content)
         if sep in content:
             sub_question_parts = content.split(sep)

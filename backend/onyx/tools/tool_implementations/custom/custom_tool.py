@@ -64,7 +64,7 @@ logger = setup_logger()
 CUSTOM_TOOL_RESPONSE_ID = "custom_tool_response"
 
 
-class CustomToolFileResponse(BaseModel):
+class CustomToolUserFileSnapshot(BaseModel):
     file_ids: List[str]  # References to saved images or CSVs
 
 
@@ -131,7 +131,7 @@ class CustomTool(BaseTool):
         response = cast(CustomToolCallSummary, args[0].response)
 
         if response.response_type == "image" or response.response_type == "csv":
-            image_response = cast(CustomToolFileResponse, response.tool_result)
+            image_response = cast(CustomToolUserFileSnapshot, response.tool_result)
             return json.dumps({"file_ids": image_response.file_ids})
 
         # For JSON or other responses, return as-is
@@ -267,14 +267,14 @@ class CustomTool(BaseTool):
             file_ids = self._save_and_get_file_references(
                 response.content, content_type
             )
-            tool_result = CustomToolFileResponse(file_ids=file_ids)
+            tool_result = CustomToolUserFileSnapshot(file_ids=file_ids)
             response_type = "csv"
 
         elif "image/" in content_type:
             file_ids = self._save_and_get_file_references(
                 response.content, content_type
             )
-            tool_result = CustomToolFileResponse(file_ids=file_ids)
+            tool_result = CustomToolUserFileSnapshot(file_ids=file_ids)
             response_type = "image"
 
         else:
@@ -358,7 +358,7 @@ class CustomTool(BaseTool):
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
         response = cast(CustomToolCallSummary, args[0].response)
-        if isinstance(response.tool_result, CustomToolFileResponse):
+        if isinstance(response.tool_result, CustomToolUserFileSnapshot):
             return response.tool_result.model_dump()
         return response.tool_result
 
