@@ -145,9 +145,9 @@ def print_discrepancies(
         print(expected_list)
         print(retrieved_list)
         print("Extra:")
-        print(retrieved - expected)
+        print(sorted(retrieved - expected))
         print("Missing:")
-        print(expected - retrieved)
+        print(sorted(expected - retrieved))
 
 
 def _get_expected_file_content(file_id: int) -> str:

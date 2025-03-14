@@ -84,12 +84,10 @@ def _get_folders_in_parent(
 def _get_files_in_parent(
     service: Resource,
     is_slim: bool,
-    checkpoint: GoogleDriveCheckpoint,
     parent_id: str,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> Iterator[GoogleDriveFileType]:
-    kwargs, start = _get_kwargs_and_start(checkpoint, is_slim, start)
     query = f"mimeType != '{DRIVE_FOLDER_TYPE}' and '{parent_id}' in parents"
     query += " and trashed = false"
     query += _generate_time_range_filter(start, end)
@@ -103,14 +101,12 @@ def _get_files_in_parent(
         includeItemsFromAllDrives=True,
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
         q=query,
-        **kwargs,
     ):
         yield file
 
 
 def crawl_folders_for_files(
     is_slim: bool,
-    checkpoint: GoogleDriveCheckpoint,
     service: Resource,
     parent_id: str,
     traversed_parent_ids: set[str],
@@ -122,18 +118,18 @@ def crawl_folders_for_files(
     This function starts crawling from any folder. It is slower though.
     """
     logger.info("Entered crawl_folders_for_files with parent_id: " + parent_id)
-    if True:  # TODO: temporary for debugging
+    if parent_id not in traversed_parent_ids:
         logger.info("Parent id not in traversed parent ids, getting files")
         found_files = False
         for file in _get_files_in_parent(
             service=service,
             is_slim=is_slim,
-            checkpoint=checkpoint,
             start=start,
             end=end,
             parent_id=parent_id,
         ):
             found_files = True
+            logger.info(f"Found file: {file['name']}")
             yield file
 
         if found_files:
@@ -148,7 +144,6 @@ def crawl_folders_for_files(
         logger.info("Fetching all files in subfolder: " + subfolder["name"])
         yield from crawl_folders_for_files(
             is_slim=is_slim,
-            checkpoint=checkpoint,
             service=service,
             parent_id=subfolder["id"],
             traversed_parent_ids=traversed_parent_ids,

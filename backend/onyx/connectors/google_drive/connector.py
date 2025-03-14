@@ -384,7 +384,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             logger.info(f"Getting files in folder '{folder_id}' as '{user_email}'")
             yield from crawl_folders_for_files(
                 is_slim=is_slim,
-                checkpoint=checkpoint,
                 service=drive_service,
                 parent_id=folder_id,
                 traversed_parent_ids=self._retrieved_ids,
@@ -563,7 +562,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
 
             yield from crawl_folders_for_files(
                 is_slim=is_slim,
-                checkpoint=checkpoint,
                 service=drive_service,
                 parent_id=folder_id,
                 traversed_parent_ids=self._retrieved_ids,
