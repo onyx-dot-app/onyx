@@ -1,7 +1,7 @@
 """add user files
 
 Revision ID: 9aadf32dfeb4
-Revises: 3934b1bc7b62
+Revises: df46c75b714e
 Create Date: 2025-01-26 16:08:21.551022
 
 """
@@ -12,7 +12,7 @@ import datetime
 
 # revision identifiers, used by Alembic.
 revision = "9aadf32dfeb4"
-down_revision = "3934b1bc7b62"
+down_revision = "df46c75b714e"
 branch_labels = None
 depends_on = None
 
