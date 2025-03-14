@@ -1,6 +1,8 @@
 from enum import Enum
 from typing import Any
 
+from pydantic import field_serializer
+
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
@@ -82,7 +84,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     # The latest timestamp of a file that has been retrieved per completion key.
     # See curr_completion_key for more details on completion keys.
-    completion_map: ThreadSafeDict[str, SecondsSinceUnixEpoch] = ThreadSafeDict()
+    completion_map: ThreadSafeDict[str, SecondsSinceUnixEpoch]
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
@@ -91,8 +93,8 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
-    # @field_serializer("completion_map")
-    # def serialize_completion_map(
-    #     self, completion_map: ThreadSafeDict[str, SecondsSinceUnixEpoch], _info: Any
-    # ) -> dict[str, SecondsSinceUnixEpoch]:
-    #     return completion_map._dict
+    @field_serializer("completion_map")
+    def serialize_completion_map(
+        self, completion_map: ThreadSafeDict[str, SecondsSinceUnixEpoch], _info: Any
+    ) -> dict[str, SecondsSinceUnixEpoch]:
+        return completion_map._dict

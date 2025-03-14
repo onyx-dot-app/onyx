@@ -80,7 +80,15 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
     def __get_pydantic_core_schema__(
         cls, source_type: Any, handler: GetCoreSchemaHandler
     ) -> core_schema.CoreSchema:
-        return handler(dict[KT, VT])
+        return core_schema.no_info_after_validator_function(
+            cls.validate, handler(dict[KT, VT])
+        )
+
+    @classmethod
+    def validate(cls, v: Any) -> "ThreadSafeDict[KT, VT]":
+        if isinstance(v, dict):
+            return ThreadSafeDict(v)
+        return v
 
     def __deepcopy__(self, memo: Any) -> "ThreadSafeDict[KT, VT]":
         return ThreadSafeDict(copy.deepcopy(self._dict))
@@ -325,7 +333,6 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
             done, _ = wait(future_to_index, return_when=FIRST_COMPLETED)
             for future in done:
                 ind, result = future.result()
-                print(ind, result)
                 if result is not None:
                     yield result
                     del future_to_index[future]
