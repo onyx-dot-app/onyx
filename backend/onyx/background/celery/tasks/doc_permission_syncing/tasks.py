@@ -453,23 +453,23 @@ def connector_permission_sync_generator_task(
             redis_connector.permissions.set_fence(new_payload)
 
             callback = PermissionSyncCallback(redis_connector, lock, r)
-            document_external_accesses: list[DocExternalAccess] = doc_sync_func(
-                cc_pair, callback
-            )
+            document_external_accesses = doc_sync_func(cc_pair, callback)
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"
             )
-            tasks_generated = redis_connector.permissions.generate_tasks(
-                celery_app=self.app,
-                lock=lock,
-                new_permissions=document_external_accesses,
-                source_string=source_type,
-                connector_id=cc_pair.connector.id,
-                credential_id=cc_pair.credential.id,
-            )
-            if tasks_generated is None:
-                return None
+
+            tasks_generated = 0
+            for doc_external_access in document_external_accesses:
+                redis_connector.permissions.generate_tasks(
+                    celery_app=self.app,
+                    lock=lock,
+                    new_permissions=[doc_external_access],
+                    source_string=source_type,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                )
+                tasks_generated += 1
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks finished. "

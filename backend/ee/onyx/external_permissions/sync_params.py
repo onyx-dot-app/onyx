@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from collections.abc import Generator
 
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
@@ -23,7 +24,7 @@ DocSyncFuncType = Callable[
         ConnectorCredentialPair,
         IndexingHeartbeatInterface | None,
     ],
-    list[DocExternalAccess],
+    Generator[DocExternalAccess, None, None],
 ]
 
 GroupSyncFuncType = Callable[

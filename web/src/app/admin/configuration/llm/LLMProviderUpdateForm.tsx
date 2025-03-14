@@ -284,7 +284,9 @@ export function LLMProviderUpdateForm({
                   subtext="The model to use by default for this provider unless otherwise specified."
                   label="Default Model"
                   options={llmProviderDescriptor.llm_names.map((name) => ({
-                    name: getDisplayNameForModel(name),
+                    // don't clean up names here to give admins descriptive names / handle duplicates
+                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                    name: name,
                     value: name,
                   }))}
                   maxHeight="max-h-56"
@@ -314,7 +316,9 @@ export function LLMProviderUpdateForm({
                 the Default Model configured above.`}
                     label="[Optional] Fast Model"
                     options={llmProviderDescriptor.llm_names.map((name) => ({
-                      name: getDisplayNameForModel(name),
+                      // don't clean up names here to give admins descriptive names / handle duplicates
+                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                      name: name,
                       value: name,
                     }))}
                     includeDefault
@@ -355,7 +359,9 @@ export function LLMProviderUpdateForm({
                         options={llmProviderDescriptor.llm_names.map(
                           (name) => ({
                             value: name,
-                            label: getDisplayNameForModel(name),
+                            // don't clean up names here to give admins descriptive names / handle duplicates
+                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                            label: name,
                           })
                         )}
                         onChange={(selected) =>
