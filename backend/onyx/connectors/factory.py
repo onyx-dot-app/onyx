@@ -30,6 +30,7 @@ from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
+from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointConnector
@@ -117,6 +118,7 @@ def identify_connector_class(
         DocumentSource.FIREFLIES: FirefliesConnector,
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
+        DocumentSource.HIGHSPOT: HighspotConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }

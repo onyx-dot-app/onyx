@@ -390,6 +390,7 @@ export enum ValidSources {
   Egnyte = "egnyte",
   Airtable = "airtable",
   Gitbook = "gitbook",
+  Highspot = "highspot",
 }
 
 export const validAutoSyncSources = [
