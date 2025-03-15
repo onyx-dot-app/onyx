@@ -29,6 +29,7 @@ from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import SavedSearchDocWithContent
+from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.utils import dedupe_documents
@@ -316,7 +317,7 @@ class FastSearchResult(BaseModel):
 class FastSearchResponse(BaseModel):
     """Response from the fast search endpoint."""
 
-    results: list[FastSearchResult]
+    results: list[SearchDoc]
     total_found: int
 
 
@@ -368,13 +369,24 @@ def get_fast_search_response(
 
         # Convert chunks to response format
         results = [
-            FastSearchResult(
+            SearchDoc(
                 document_id=chunk.document_id,
-                chunk_id=chunk.chunk_id,
-                content=chunk.content,
-                source_links=chunk.source_links,
-                score=chunk.score,
+                chunk_ind=chunk.chunk_id,
+                semantic_identifier=chunk.semantic_identifier,
+                link=None,  # Assuming source_links might be used for link
+                blurb=chunk.content,
+                source_type=chunk.source_type,  # Default source type
+                boost=0,  # Default boost value
+                hidden=False,  # Default visibility
                 metadata=chunk.metadata,
+                score=chunk.score,
+                is_relevant=None,
+                relevance_explanation=None,
+                match_highlights=[],
+                updated_at=None,
+                primary_owners=None,
+                secondary_owners=None,
+                is_internet=False,
             )
             for chunk in chunks
         ]

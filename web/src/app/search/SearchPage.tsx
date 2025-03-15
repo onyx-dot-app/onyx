@@ -998,6 +998,7 @@ export default function SearchPage({
         }
 
         if (response.documents.length > 0) {
+          alert(JSON.stringify(response.documents[0]));
           setSearchResults(response.documents);
 
           // Count results by source type
