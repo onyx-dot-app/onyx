@@ -14,7 +14,7 @@ import {
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 import { defaultModelsByProvider, getDisplayNameForModel } from "@/lib/hooks";
-import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
+import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -31,7 +31,7 @@ export function LLMProviderUpdateForm({
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor;
   onClose: () => void;
-  existingLlmProvider?: FullLLMProvider;
+  existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   hideAdvanced?: boolean;
   setPopup?: (popup: PopupSpec) => void;
@@ -73,6 +73,7 @@ export function LLMProviderUpdateForm({
       defaultModelsByProvider[llmProviderDescriptor.name] ||
       [],
     deployment_name: existingLlmProvider?.deployment_name,
+    api_key_changed: false,
   };
 
   // Setup validation schema if required
@@ -113,6 +114,7 @@ export function LLMProviderUpdateForm({
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
     display_model_names: Yup.array().of(Yup.string()),
+    api_key_changed: Yup.boolean(),
   });
 
   return (
@@ -121,6 +123,8 @@ export function LLMProviderUpdateForm({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
+
+        values.api_key_changed = values.api_key !== initialValues.api_key;
 
         // test the configuration
         if (!isEqual(values, initialValues)) {
@@ -180,7 +184,7 @@ export function LLMProviderUpdateForm({
         }
 
         if (shouldMarkAsDefault) {
-          const newLlmProvider = (await response.json()) as FullLLMProvider;
+          const newLlmProvider = (await response.json()) as LLMProviderView;
           const setDefaultResponse = await fetch(
             `${LLM_PROVIDERS_ADMIN_URL}/${newLlmProvider.id}/default`,
             {

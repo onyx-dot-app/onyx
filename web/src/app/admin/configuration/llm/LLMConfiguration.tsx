@@ -9,7 +9,7 @@ import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Button } from "@/components/ui/button";
 import { ThreeDotsLoader } from "@/components/Loading";
-import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
+import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
@@ -25,7 +25,7 @@ function LLMProviderUpdateModal({
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null;
   onClose: () => void;
-  existingLlmProvider?: FullLLMProvider;
+  existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
@@ -99,7 +99,7 @@ function DefaultLLMProviderDisplay({
 function AddCustomLLMProvider({
   existingLlmProviders,
 }: {
-  existingLlmProviders: FullLLMProvider[];
+  existingLlmProviders: LLMProviderView[];
 }) {
   const [formIsVisible, setFormIsVisible] = useState(false);
 
@@ -130,7 +130,7 @@ export function LLMConfiguration() {
   const { data: llmProviderDescriptors } = useSWR<
     WellKnownLLMProviderDescriptor[]
   >("/api/admin/llm/built-in/options", errorHandlingFetcher);
-  const { data: existingLlmProviders } = useSWR<FullLLMProvider[]>(
+  const { data: existingLlmProviders } = useSWR<LLMProviderView[]>(
     LLM_PROVIDERS_ADMIN_URL,
     errorHandlingFetcher
   );

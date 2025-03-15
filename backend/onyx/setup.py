@@ -307,6 +307,7 @@ def setup_postgres(db_session: Session) -> None:
             groups=[],
             display_model_names=OPEN_AI_MODEL_NAMES,
             model_names=OPEN_AI_MODEL_NAMES,
+            api_key_changed=True,
         )
         new_llm_provider = upsert_llm_provider(
             llm_provider=model_req, db_session=db_session

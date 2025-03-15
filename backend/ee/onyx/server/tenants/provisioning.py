@@ -271,6 +271,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             fast_default_model_name="claude-3-5-sonnet-20241022",
             model_names=ANTHROPIC_MODEL_NAMES,
             display_model_names=["claude-3-5-sonnet-20241022"],
+            api_key_changed=True,
         )
         try:
             full_provider = upsert_llm_provider(anthropic_provider, db_session)
@@ -283,7 +284,7 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
     if OPENAI_DEFAULT_API_KEY:
-        open_provider = LLMProviderUpsertRequest(
+        openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
@@ -291,9 +292,10 @@ def configure_default_api_keys(db_session: Session) -> None:
             fast_default_model_name="gpt-4o-mini",
             model_names=OPEN_AI_MODEL_NAMES,
             display_model_names=["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"],
+            api_key_changed=True,
         )
         try:
-            full_provider = upsert_llm_provider(open_provider, db_session)
+            full_provider = upsert_llm_provider(openai_provider, db_session)
             update_default_provider(full_provider.id, db_session)
         except Exception as e:
             logger.error(f"Failed to configure OpenAI provider: {e}")

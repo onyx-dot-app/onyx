@@ -1,5 +1,5 @@
 import {
-  FullLLMProvider,
+  LLMProviderView,
   WellKnownLLMProviderDescriptor,
 } from "@/app/admin/configuration/llm/interfaces";
 import { User } from "@/lib/types";
@@ -36,7 +36,7 @@ export async function checkLlmProvider(user: User | null) {
   const [providerResponse, optionsResponse, defaultCheckResponse] =
     await Promise.all(tasks);
 
-  let providers: FullLLMProvider[] = [];
+  let providers: LLMProviderView[] = [];
   if (providerResponse?.ok) {
     providers = await providerResponse.json();
   }
