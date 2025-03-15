@@ -121,6 +121,53 @@ def _convert_issue_to_document(issue: Issue) -> Document:
         },
     )
 
+def _fetch_all_files(repo: Repository.Repository) -> list[Document]:
+    """
+    Parcourt récursivement l'arborescence d'un repo GitHub
+    et retourne une liste de Documents pour chaque fichier décodable en UTF-8.
+    """
+    documents: list[Document] = []
+
+    def _parse_directory(path: str = ""):
+        contents = repo.get_contents(path)
+        if not isinstance(contents, list):
+            contents = [contents]
+
+        for content_file in contents:
+            if content_file.type == "dir":
+                # C'est un dossier, on l'explore récursivement
+                _parse_directory(content_file.path)
+            else:
+                try:
+                    # Tenter de décoder en UTF-8
+                    file_content = content_file.decoded_content.decode("utf-8")
+
+                    # Construire le Document
+                    documents.append(
+                        Document(
+                            id=content_file.html_url,
+                            sections=[
+                                Section(
+                                    link=content_file.html_url, 
+                                    text=file_content
+                                )
+                            ],
+                            source=DocumentSource.GITHUB,
+                            semantic_identifier=content_file.path,
+                            doc_updated_at=datetime.utcnow().replace(tzinfo=timezone.utc),
+                            metadata={
+                                "path": content_file.path,
+                                "size": str(content_file.size),
+                            },
+                        )
+                    )
+
+                except UnicodeDecodeError:
+                    # Fichier binaire ou non UTF-8 => on l'ignore
+                    continue
+
+    _parse_directory("")
+    return documents
 
 class GithubConnector(LoadConnector, PollConnector):
     def __init__(
@@ -276,6 +323,14 @@ class GithubConnector(LoadConnector, PollConnector):
                             continue
                         doc_batch.append(_convert_issue_to_document(issue))
                     yield doc_batch
+
+            # --- AJOUT DU NOUVEAU BLOC POUR LES FICHIERS .py ---
+            logger.info(f"Fetching .py files for repo: {repo.name}")
+            py_documents = _fetch_py_files(repo)
+
+            # Éviter de renvoyer des listes trop grosses en un seul bloc
+            for mini_batch in batch_generator(py_documents, batch_size=self.batch_size):
+                yield mini_batch
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         return self._fetch_from_github()
