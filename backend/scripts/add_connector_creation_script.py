@@ -119,6 +119,7 @@ def main() -> None:
         connector_specific_config={
             "repo_owner": "example-owner",
             "repo_name": "example-repo",
+            "include_code": True,
             "include_prs": True,
             "include_issues": True,
         },

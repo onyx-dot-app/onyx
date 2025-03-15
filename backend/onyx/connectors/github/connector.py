@@ -13,6 +13,7 @@ from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PaginatedList import PaginatedList
 from github.PullRequest import PullRequest
+from github.ContentFile import ContentFile
 
 from onyx.configs.app_configs import GITHUB_CONNECTOR_BASE_URL
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -103,6 +104,22 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
     )
 
 
+def _convert_code_file_to_document(
+    file_content: ContentFile, repo_name: str
+) -> Document:
+    """Converts a GitHub ContentFile (code file) to a Document."""
+
+    file_url = f"https://github.com/{repo_name}/blob/{file_content.sha}/{file_content.path}"
+    return Document(
+        id=file_url,  # Or use file_content.download_url if available
+        sections=[TextSection(link=file_url, text=file_content.decoded_content.decode() or "")],
+        source=DocumentSource.GITHUB,
+        semantic_identifier=file_content.path,  # Use the file path as the identifier
+        doc_updated_at=datetime.now(tz=timezone.utc),  # Or try file_content.updated_at if available
+        metadata={"file_size": str(file_content.size)},  # Add file size metadata
+    )
+
+
 def _fetch_issue_comments(issue: Issue) -> str:
     comments = issue.get_comments()
     return "\nComment: ".join(comment.body for comment in comments)
@@ -129,6 +146,7 @@ class GithubConnector(LoadConnector, PollConnector):
         repositories: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         state_filter: str = "all",
+        include_code: bool = True,
         include_prs: bool = True,
         include_issues: bool = False,
     ) -> None:
@@ -138,6 +156,7 @@ class GithubConnector(LoadConnector, PollConnector):
         self.state_filter = state_filter
         self.include_prs = include_prs
         self.include_issues = include_issues
+        self.include_code = include_code
         self.github_client: Github | None = None
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -216,6 +235,46 @@ class GithubConnector(LoadConnector, PollConnector):
             _sleep_after_rate_limit_exception(github_client)
             return self._get_all_repos(github_client, attempt_num + 1)
 
+    def _fetch_repo_code_files(self, repo: Repository.Repository) -> Iterator[list[Document]]:
+        """Fetches all files from a repository, handling rate limits."""
+
+        def _get_files_recursively(
+            directory: str
+        ) -> Iterator[ContentFile]:  # Helper function for recursion
+            attempt_num = 0
+            while attempt_num < _MAX_NUM_RATE_LIMIT_RETRIES:
+                try:
+                    contents = repo.get_contents(directory)
+                    for content in contents:
+                        if content.type == "dir":
+                            yield from _get_files_recursively(content.path)  # Recursive call
+                        else:
+                            yield content
+                    return  # Successfully fetched contents, exit retry loop
+                except RateLimitExceededException:
+                    _sleep_after_rate_limit_exception(self.github_client)
+                    attempt_num += 1
+                except GithubException as e:
+                    logger.warning(f"Error fetching contents for {directory} in {repo.name}: {e}")
+                    return  # Exit if it's not a rate limit error
+            else:
+                logger.error(f"Rate limit exceeded too many times while fetching contents for {directory} in {repo.name}")
+                return  # Exit after too many retries
+
+        code_files = _get_files_recursively("")  # Start from the root directory
+        doc_batch: list[Document] = []
+        for file in code_files:
+            try:
+                doc = _convert_code_file_to_document(file, repo.full_name)
+                doc_batch.append(doc)
+                if len(doc_batch) >= self.batch_size:
+                    yield doc_batch
+                    doc_batch = []
+            except Exception as e:
+                logger.warning(f"Error processing file {file.path} in {repo.name}: {e}")
+        if doc_batch:  # Yield any remaining documents
+            yield doc_batch
+
     def _fetch_from_github(
         self, start: datetime | None = None, end: datetime | None = None
     ) -> GenerateDocumentsOutput:
@@ -235,6 +294,10 @@ class GithubConnector(LoadConnector, PollConnector):
             repos = self._get_all_repos(self.github_client)
 
         for repo in repos:
+            if self.include_code:
+                logger.info(f"Fetching code files for repo: {repo.name}")
+                yield from self._fetch_repo_code_files(repo)
+
             if self.include_prs:
                 logger.info(f"Fetching PRs for repo: {repo.name}")
                 pull_requests = repo.get_pulls(

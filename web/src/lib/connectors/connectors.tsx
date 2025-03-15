@@ -216,6 +216,14 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
+        query: "Include code?",
+        label: "Include code?",
+        description: "Index code from repositories",
+        name: "include_code",
+        optional: true,
+      },
+      {
+        type: "checkbox",
         query: "Include pull requests?",
         label: "Include pull requests?",
         description: "Index pull requests from repositories",
@@ -1361,6 +1369,7 @@ export interface WebConfig {
 export interface GithubConfig {
   repo_owner: string;
   repositories: string; // Comma-separated list of repository names
+  include_code: boolean;
   include_prs: boolean;
   include_issues: boolean;
 }
