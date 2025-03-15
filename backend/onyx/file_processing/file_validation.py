@@ -15,6 +15,7 @@ EXCLUDED_IMAGE_TYPES = [
     "image/tiff",
     "image/gif",
     "image/svg+xml",
+    "image/avif",
 ]
 
 
