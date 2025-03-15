@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
 from io import BytesIO
@@ -71,6 +72,7 @@ def get_latest_valid_checkpoint(
     search_settings_id: int,
     window_start: datetime,
     window_end: datetime,
+    build_dummy_checkpoint: Callable[[], ConnectorCheckpoint],
 ) -> ConnectorCheckpoint:
     """Get the latest valid checkpoint for a given connector credential pair"""
     checkpoint_candidates = get_recent_completed_attempts_for_cc_pair(
@@ -105,7 +107,7 @@ def get_latest_valid_checkpoint(
             f"for cc_pair={cc_pair_id}. Ignoring checkpoint to let the run start "
             "from scratch."
         )
-        return ConnectorCheckpoint.build_dummy_checkpoint()
+        return build_dummy_checkpoint()
 
     # assumes latest checkpoint is the furthest along. This only isn't true
     # if something else has gone wrong.
@@ -113,7 +115,7 @@ def get_latest_valid_checkpoint(
         checkpoint_candidates[0] if checkpoint_candidates else None
     )
 
-    checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
+    checkpoint = build_dummy_checkpoint()
     if latest_valid_checkpoint_candidate:
         try:
             previous_checkpoint = load_checkpoint(
@@ -193,7 +195,7 @@ def cleanup_checkpoint(db_session: Session, index_attempt_id: int) -> None:
 
 def check_checkpoint_size(checkpoint: ConnectorCheckpoint) -> None:
     """Check if the checkpoint content size exceeds the limit (200MB)"""
-    content_size = deep_getsizeof(checkpoint.checkpoint_content)
+    content_size = deep_getsizeof(checkpoint.model_dump())
     if content_size > 200_000_000:  # 200MB in bytes
         raise ValueError(
             f"Checkpoint content size ({content_size} bytes) exceeds 200MB limit"

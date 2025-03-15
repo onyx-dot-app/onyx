@@ -1,4 +1,3 @@
-import json
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -232,21 +231,16 @@ class IndexAttemptMetadata(BaseModel):
 
 class ConnectorCheckpoint(BaseModel):
     # TODO: maybe move this to something disk-based to handle extremely large checkpoints?
-    checkpoint_content: dict
     has_more: bool
-
-    @classmethod
-    def build_dummy_checkpoint(cls) -> "ConnectorCheckpoint":
-        return ConnectorCheckpoint(checkpoint_content={}, has_more=True)
 
     def __str__(self) -> str:
         """String representation of the checkpoint, with truncation for large checkpoint content."""
         MAX_CHECKPOINT_CONTENT_CHARS = 1000
 
-        content_str = json.dumps(self.checkpoint_content)
+        content_str = self.model_dump_json()
         if len(content_str) > MAX_CHECKPOINT_CONTENT_CHARS:
             content_str = content_str[: MAX_CHECKPOINT_CONTENT_CHARS - 3] + "..."
-        return f"ConnectorCheckpoint(checkpoint_content={content_str}, has_more={self.has_more})"
+        return content_str
 
 
 class DocumentFailure(BaseModel):

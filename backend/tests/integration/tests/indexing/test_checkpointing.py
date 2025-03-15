@@ -54,9 +54,9 @@ def test_mock_connector_basic_flow(
         json=[
             {
                 "documents": [test_doc.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=False
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                    mode="json"
+                ),
                 "failures": [],
             }
         ],
@@ -128,9 +128,9 @@ def test_mock_connector_with_failures(
         json=[
             {
                 "documents": [doc1.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=False
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                    mode="json"
+                ),
                 "failures": [doc2_failure.model_dump(mode="json")],
             }
         ],
@@ -208,9 +208,9 @@ def test_mock_connector_failure_recovery(
         json=[
             {
                 "documents": [doc1.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=False
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                    mode="json"
+                ),
                 "failures": [
                     doc2_failure.model_dump(mode="json"),
                     ConnectorFailure(
@@ -292,9 +292,9 @@ def test_mock_connector_failure_recovery(
                     doc1.model_dump(mode="json"),
                     doc2.model_dump(mode="json"),
                 ],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=False
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                    mode="json"
+                ),
                 "failures": [],
             }
         ],
@@ -372,24 +372,24 @@ def test_mock_connector_checkpoint_recovery(
         json=[
             {
                 "documents": [doc.model_dump(mode="json") for doc in docs_batch_1],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=True
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=True).model_dump(
+                    mode="json"
+                ),
                 "failures": [],
             },
             {
                 "documents": [doc2.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=True
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=True).model_dump(
+                    mode="json"
+                ),
                 "failures": [],
             },
             {
                 "documents": [],
                 # should never hit this, unhandled exception happens first
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=False
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                    mode="json"
+                ),
                 "failures": [],
                 "unhandled_exception": "Simulated unhandled error",
             },
@@ -463,9 +463,9 @@ def test_mock_connector_checkpoint_recovery(
         json=[
             {
                 "documents": [doc3.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(
-                    checkpoint_content={}, has_more=False
-                ).model_dump(mode="json"),
+                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                    mode="json"
+                ),
                 "failures": [],
             }
         ],

@@ -1,5 +1,7 @@
+import time
 from collections.abc import Sequence
 
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 
@@ -133,17 +135,19 @@ def filter_invalid_prefixes(names: set[str]) -> set[str]:
     return {name for name in names if name.startswith(_VALID_PREFIX)}
 
 
-def print_discrepencies(
+def print_discrepancies(
     expected: set[str],
     retrieved: set[str],
 ) -> None:
     if expected != retrieved:
-        print(expected)
-        print(retrieved)
+        expected_list = sorted(expected)
+        retrieved_list = sorted(retrieved)
+        print(expected_list)
+        print(retrieved_list)
         print("Extra:")
-        print(retrieved - expected)
+        print(sorted(retrieved - expected))
         print("Missing:")
-        print(expected - retrieved)
+        print(sorted(expected - retrieved))
 
 
 def _get_expected_file_content(file_id: int) -> str:
@@ -163,6 +167,8 @@ def assert_retrieved_docs_match_expected(
     expected_file_texts = {
         _get_expected_file_content(file_id) for file_id in expected_file_ids
     }
+
+    retrieved_docs.sort(key=lambda x: x.semantic_identifier)
 
     for doc in retrieved_docs:
         print(f"doc.semantic_identifier: {doc.semantic_identifier}")
@@ -190,15 +196,25 @@ def assert_retrieved_docs_match_expected(
     )
 
     # Check file names
-    print_discrepencies(
+    print_discrepancies(
         expected=expected_file_names,
         retrieved=valid_retrieved_file_names,
     )
     assert expected_file_names == valid_retrieved_file_names
 
     # Check file texts
-    print_discrepencies(
+    print_discrepancies(
         expected=expected_file_texts,
         retrieved=valid_retrieved_texts,
     )
     assert expected_file_texts == valid_retrieved_texts
+
+
+def load_all_docs(connector: GoogleDriveConnector) -> list[Document]:
+    retrieved_docs: list[Document] = []
+    for doc in connector.load_from_checkpoint(
+        0, time.time(), connector.build_dummy_checkpoint()
+    ):
+        assert isinstance(doc, Document), f"Should not fail with {type(doc)} {doc}"
+        retrieved_docs.append(doc)
+    return retrieved_docs

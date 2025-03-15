@@ -132,7 +132,7 @@ class ConnectorRunner:
                 )
 
             else:
-                finished_checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
+                finished_checkpoint = self.connector.build_dummy_checkpoint()
                 finished_checkpoint.has_more = False
 
                 if isinstance(self.connector, PollConnector):
