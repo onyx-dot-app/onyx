@@ -361,7 +361,15 @@ def get_application() -> FastAPI:
         )
 
     if AUTH_TYPE == AuthType.GOOGLE_OAUTH:
-        oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+        # For Google OAuth, refresh tokens are requested by:
+        # 1. Adding the right scopes
+        # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
+        oauth_client = GoogleOAuth2(
+            OAUTH_CLIENT_ID,
+            OAUTH_CLIENT_SECRET,
+            # Use standard scopes that include profile and email
+            scopes=["openid", "email", "profile"],
+        )
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
@@ -380,6 +388,13 @@ def get_application() -> FastAPI:
         include_auth_router_with_prefix(
             application,
             fastapi_users.get_logout_router(auth_backend),
+            prefix="/auth",
+        )
+
+        # Add refresh token endpoint for OAuth as well
+        include_auth_router_with_prefix(
+            application,
+            fastapi_users.get_refresh_router(auth_backend),
             prefix="/auth",
         )
 
