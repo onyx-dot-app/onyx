@@ -328,121 +328,172 @@ def query_vespa(
 ) -> list[InferenceChunkUncleaned]:
     if "query" in query_params and not cast(str, query_params["query"]).strip():
         raise ValueError("No/empty query received")
+    elif cast(str, query_params["query"]).strip() == "test":
+        date_time_start = datetime.now()
 
-    date_time_start = datetime.now()
+        ranking_stats: list[tuple[float, str, str, str, float]] = []
 
-    ranking_stats: list[tuple[float, str, str, str, float]] = []
+        queries = [
+            "big bang vs steady state theory",
+            "astronomy",
+            "trace energy momentum tensor conformal field theory",
+            "evidence Big Bang",
+            "Neil Armstrong play tennis moon",
+            "current temperature Hawaii New York Munich",
+            "win quadradoodle",
+            "best practices coding Java",
+            "classes related software engineering",
+            "current temperature Munich",
+            "what is the most important concept in biology",
+            "subfields of finance",
+            "what is the overlap between finance and economics",
+            "effects taking vitamin c pills vs eating veggies health outcomes",
+            "professions people good math",
+            "biomedical engineers design cutting-edge medical equipment important skill set",
+            "How do biomedical engineers design cutting-edge medical equipment? And what is the most important skill set?",
+            "average power output US nuclear power plant",
+            "typical power range small modular reactors",
+            "SMRs power industry",
+            "best use case Onyx AI company",
+            "techniques calculate square root",
+            "daily vitamin C requirement adult women",
+            "boil ocean",
+            "best soccer player ever",
+        ]
 
-    queries = [
-        "big bang vs steady state theory",
-        "astronomy",
-        "trace energy momentum tensor conformal field theory",
-        "evidence Big Bang",
-        "Neil Armstrong play tennis moon",
-        "current temperature Hawaii New York Munich",
-        "win quadradoodle",
-        "best practices coding Java",
-        "classes related software engineering",
-        "current temperature Munich",
-        "what is the most important concept in biology",
-        "subfields of finance",
-        "what is the overlap between finance and economics",
-        "effects taking vitamin c pills vs eating veggies health outcomes",
-        "professions people good math",
-        "biomedical engineers design cutting-edge medical equipment important skill set",
-        "How do biomedical engineers design cutting-edge medical equipment? And what is the most important skill set?",
-        "average power output US nuclear power plant",
-        "typical power range small modular reactors",
-        "SMRs power industry",
-        "best use case Onyx AI company",
-        "techniques calculate square root",
-        "daily vitamin C requirement adult women",
-        "boil ocean",
-        "best soccer player ever",
-    ]
+        for query_alpha in [0.4, 0.8, 1.0]:
+            for query in queries:
+                # Create a mutable copy of the query_params
+                mutable_params = dict(query_params)
+                # Now we can modify it without mypy errors
+                mutable_params["query"] = query
+                mutable_params["input.query(alpha)"] = query_alpha
 
-    for query_alpha in [0.4, 0.8, 1.0]:
-        for query in queries:
-            # Create a mutable copy of the query_params
-            mutable_params = dict(query_params)
-            # Now we can modify it without mypy errors
-            mutable_params["query"] = query
-            mutable_params["input.query(alpha)"] = query_alpha
+                params = dict(
+                    **mutable_params,
+                    **{
+                        "presentation.timing": True,
+                    }
+                    if LOG_VESPA_TIMING_INFORMATION
+                    else {},
+                )
 
-            params = dict(
-                **mutable_params,
-                **{
-                    "presentation.timing": True,
-                }
-                if LOG_VESPA_TIMING_INFORMATION
-                else {},
+                try:
+                    with get_vespa_http_client() as http_client:
+                        response = http_client.post(SEARCH_ENDPOINT, json=params)
+                        response.raise_for_status()
+                except httpx.HTTPError as e:
+                    error_base = "Failed to query Vespa"
+                    logger.error(
+                        f"{error_base}:\n"
+                        f"Request URL: {e.request.url}\n"
+                        f"Request Headers: {e.request.headers}\n"
+                        f"Request Payload: {params}\n"
+                        f"Exception: {str(e)}"
+                        + (
+                            f"\nResponse: {e.response.text}"
+                            if isinstance(e, httpx.HTTPStatusError)
+                            else ""
+                        )
+                    )
+                    raise httpx.HTTPError(error_base) from e
+
+                response_json: dict[str, Any] = response.json()
+
+                if LOG_VESPA_TIMING_INFORMATION:
+                    logger.debug("Vespa timing info: %s", response_json.get("timing"))
+                hits = response_json["root"].get("children", [])
+
+                if not hits:
+                    logger.warning(
+                        f"No hits found for YQL Query: {query_params.get('yql', 'No YQL Query')}"
+                    )
+                    logger.debug(f"Vespa Response: {response.text}")
+
+                for hit in hits:
+                    if hit["fields"].get(CONTENT) is None:
+                        identifier = hit["fields"].get("documentid") or hit["id"]
+                        logger.error(
+                            f"Vespa Index with Vespa ID {identifier} has no contents. "
+                            f"This is invalid because the vector is not meaningful and keywordsearch cannot "
+                            f"fetch this document"
+                        )
+
+                for hit_pos, hit in enumerate(hits):
+                    ranking_stats.append(
+                        (
+                            query_alpha,
+                            query,
+                            str(hit_pos),
+                            hit["fields"].get("document_id", "")
+                            + "__"
+                            + str(hit["fields"].get("chunk_id", "")),
+                            hit.get("relevance", 0),
+                        )
+                    )
+
+            date_time_end = datetime.now()
+            print(f"Time taken: {date_time_end - date_time_start}")
+
+            ranking_stats.append(
+                (0.0, "Time", str(date_time_end - date_time_start), "", 0.0)
             )
 
-            try:
-                with get_vespa_http_client() as http_client:
-                    response = http_client.post(SEARCH_ENDPOINT, json=params)
-                    response.raise_for_status()
-            except httpx.HTTPError as e:
-                error_base = "Failed to query Vespa"
-                logger.error(
-                    f"{error_base}:\n"
-                    f"Request URL: {e.request.url}\n"
-                    f"Request Headers: {e.request.headers}\n"
-                    f"Request Payload: {params}\n"
-                    f"Exception: {str(e)}"
-                    + (
-                        f"\nResponse: {e.response.text}"
-                        if isinstance(e, httpx.HTTPStatusError)
-                        else ""
-                    )
-                )
-                raise httpx.HTTPError(error_base) from e
+        if ranking_stats:
+            _append_ranking_stats_to_csv(ranking_stats)
 
-            response_json: dict[str, Any] = response.json()
+        raise ValueError("test")
 
-            if LOG_VESPA_TIMING_INFORMATION:
-                logger.debug("Vespa timing info: %s", response_json.get("timing"))
-            hits = response_json["root"].get("children", [])
-
-            if not hits:
-                logger.warning(
-                    f"No hits found for YQL Query: {query_params.get('yql', 'No YQL Query')}"
-                )
-                logger.debug(f"Vespa Response: {response.text}")
-
-            for hit in hits:
-                if hit["fields"].get(CONTENT) is None:
-                    identifier = hit["fields"].get("documentid") or hit["id"]
-                    logger.error(
-                        f"Vespa Index with Vespa ID {identifier} has no contents. "
-                        f"This is invalid because the vector is not meaningful and keywordsearch cannot "
-                        f"fetch this document"
-                    )
-
-            for hit_pos, hit in enumerate(hits):
-                ranking_stats.append(
-                    (
-                        query_alpha,
-                        query,
-                        str(hit_pos),
-                        hit["fields"].get("document_id", "")
-                        + "__"
-                        + str(hit["fields"].get("chunk_id", "")),
-                        hit.get("relevance", 0),
-                    )
-                )
-
-        date_time_end = datetime.now()
-        print(f"Time taken: {date_time_end - date_time_start}")
-
-        ranking_stats.append(
-            (0.0, "Time", str(date_time_end - date_time_start), "", 0.0)
+    else:
+        params = dict(
+            **query_params,
+            **{
+                "presentation.timing": True,
+            }
+            if LOG_VESPA_TIMING_INFORMATION
+            else {},
         )
 
-    if ranking_stats:
-        _append_ranking_stats_to_csv(ranking_stats)
+        try:
+            with get_vespa_http_client() as http_client:
+                response = http_client.post(SEARCH_ENDPOINT, json=params)
+                response.raise_for_status()
+        except httpx.HTTPError as e:
+            error_base = "Failed to query Vespa"
+            logger.error(
+                f"{error_base}:\n"
+                f"Request URL: {e.request.url}\n"
+                f"Request Headers: {e.request.headers}\n"
+                f"Request Payload: {params}\n"
+                f"Exception: {str(e)}"
+                + (
+                    f"\nResponse: {e.response.text}"
+                    if isinstance(e, httpx.HTTPStatusError)
+                    else ""
+                )
+            )
+            raise httpx.HTTPError(error_base) from e
 
-    raise ValueError("test")
+        response_json: dict[str, Any] = response.json()
+
+        if LOG_VESPA_TIMING_INFORMATION:
+            logger.debug("Vespa timing info: %s", response_json.get("timing"))
+        hits = response_json["root"].get("children", [])
+
+        if not hits:
+            logger.warning(
+                f"No hits found for YQL Query: {query_params.get('yql', 'No YQL Query')}"
+            )
+            logger.debug(f"Vespa Response: {response.text}")
+
+        for hit in hits:
+            if hit["fields"].get(CONTENT) is None:
+                identifier = hit["fields"].get("documentid") or hit["id"]
+                logger.error(
+                    f"Vespa Index with Vespa ID {identifier} has no contents. "
+                    f"This is invalid because the vector is not meaningful and keywordsearch cannot "
+                    f"fetch this document"
+                )
 
     filtered_hits = [hit for hit in hits if hit["fields"].get(CONTENT) is not None]
 
