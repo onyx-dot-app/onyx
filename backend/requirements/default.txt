@@ -52,6 +52,7 @@ openpyxl==3.1.2
 playwright==1.41.2
 psutil==5.9.5
 psycopg2-binary==2.9.9
+puremagic==1.28
 pyairtable==3.0.1
 pycryptodome==3.19.1
 pydantic==2.8.2

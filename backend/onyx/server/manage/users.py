@@ -351,9 +351,11 @@ def remove_invited_user(
     user_emails = get_invited_users()
     remaining_users = [user for user in user_emails if user != user_email.user_email]
 
-    fetch_ee_implementation_or_noop(
-        "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
-    )([user_email.user_email], tenant_id)
+    if MULTI_TENANT:
+        fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+        )([user_email.user_email], tenant_id)
+
     number_of_invited_users = write_invited_users(remaining_users)
 
     try:

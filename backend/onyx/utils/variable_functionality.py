@@ -108,6 +108,25 @@ def fetch_versioned_implementation_with_fallback(
         return fallback
 
 
+def fetch_ee_implementation_or_none(module: str, attribute: str) -> T | None:
+    """
+    Attempts to fetch a versioned implementation of a specified attribute from a given module.
+    If the attempt fails (e.g., due to an import error or missing attribute), the function
+    returns None
+
+    Args:
+        module (str): The name of the module from which to fetch the attribute.
+        attribute (str): The name of the attribute to fetch from the module.
+
+    Returns:
+        T: The fetched implementation if successful, otherwise None.
+    """
+    try:
+        return fetch_versioned_implementation(module, attribute)
+    except Exception:
+        return None
+
+
 def noop_fallback(*args: Any, **kwargs: Any) -> None:
     """
     A no-op (no operation) fallback function that accepts any arguments but does nothing.
