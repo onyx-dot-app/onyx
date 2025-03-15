@@ -165,20 +165,6 @@ export const DocumentList: React.FC<DocumentListProps> = ({
     startRefreshInterval();
   };
 
-  // Add a function to update progress for a specific file
-  const updateFileProgress = (fileName: string, progress: number) => {
-    setUploadingFiles((prev) =>
-      prev.map((file) =>
-        file.name === fileName ? { ...file, progress } : file
-      )
-    );
-
-    // If provided, call the onUploadProgress callback
-    if (onUploadProgress) {
-      onUploadProgress(fileName, progress);
-    }
-  };
-
   // Filter files based on search query
   const filteredFiles = searchQuery
     ? files.filter((file) =>

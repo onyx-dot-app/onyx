@@ -55,7 +55,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
 }) => {
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [indexingStatus, setIndexingStatus] = useState<boolean | null>(null);
-  const { getFilesIndexingStatus } = useDocumentsContext();
+  const { getFilesIndexingStatus, refreshFolders } = useDocumentsContext();
 
   useEffect(() => {
     const checkStatus = async () => {
@@ -65,6 +65,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
 
     checkStatus();
     const interval = setInterval(() => {
+      refreshFolders();
       if (indexingStatus === false) {
         checkStatus();
       }

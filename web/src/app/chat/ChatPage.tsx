@@ -36,7 +36,6 @@ import {
   buildChatUrl,
   buildLatestMessageChain,
   createChatSession,
-  deleteAllChatSessions,
   getCitedDocumentsFromMessage,
   getHumanAndAIMessageFromMessageNumber,
   getLastSuccessfulMessageId,
@@ -157,11 +156,15 @@ export function ChatPage({
   documentSidebarInitialWidth,
   sidebarVisible,
   firstMessage,
+  initialFolders,
+  initialFiles,
 }: {
   toggle: (toggled?: boolean) => void;
   documentSidebarInitialWidth?: number;
   sidebarVisible: boolean;
   firstMessage?: string;
+  initialFolders?: any;
+  initialFiles?: any;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();

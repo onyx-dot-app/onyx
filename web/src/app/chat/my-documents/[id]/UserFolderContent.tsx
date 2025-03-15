@@ -702,18 +702,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             <Trash className="h-4 w-4" />
             Cleanup
           </Button>
-          {/* <CreateEntityModal
-            title="New Folder"
-            entityName=""
-            open={isCreateFolderOpen}
-            placeholder="Untitled folder"
-            setOpen={setIsCreateFolderOpen}
-            onSubmit={handleCreateFolder}
-            trigger={
-             
-            }
-            hideLabel
-          /> */}
         </div>
 
         <div className="mb-6">
