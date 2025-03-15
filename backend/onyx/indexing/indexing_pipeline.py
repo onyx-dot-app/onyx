@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -58,6 +59,7 @@ from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.llm.factory import get_default_llm_with_vision
+from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
@@ -794,12 +796,24 @@ def build_indexing_pipeline(
     search_settings = get_current_search_settings(db_session)
     multipass_config = get_multipass_config(search_settings)
 
+    enable_contextual_rag = (
+        search_settings.enable_contextual_rag
+        if search_settings
+        else ENABLE_CONTEXTUAL_RAG
+    )
+    llm = get_llm_for_contextual_rag(
+        search_settings.contextual_rag_llm_name,
+        search_settings.contextual_rag_llm_provider,
+    )
+
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=multipass_config.multipass_indexing,
         enable_large_chunks=multipass_config.enable_large_chunks,
+        enable_contextual_rag=enable_contextual_rag,
         # after every doc, update status in case there are a bunch of really long docs
         callback=callback,
+        llm=llm,
     )
 
     return partial(
