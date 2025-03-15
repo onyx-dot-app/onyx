@@ -130,7 +130,7 @@ def _convert_message_to_dict(message: BaseMessage) -> dict:
                     "id": tool_call.get("id"),
                     "function": {
                         "name": tool_call["name"],
-                        "arguments": json.dumps(tool_call["args"]),
+                        "arguments": json.dumps(tool_call["args"], ensure_ascii=False)
                     },
                     "type": "function",
                     "index": tool_call.get("index", 0),
