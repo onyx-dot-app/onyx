@@ -5,6 +5,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.onyx_jira.connector import JiraConnector
+from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
 @pytest.fixture
@@ -24,15 +25,13 @@ def jira_connector() -> JiraConnector:
 
 
 def test_jira_connector_basic(jira_connector: JiraConnector) -> None:
-    doc_batch_generator = jira_connector.poll_source(0, time.time())
-
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
-
-    assert len(doc_batch) == 1
-
-    doc = doc_batch[0]
+    docs = load_all_docs_from_checkpoint_connector(
+        connector=jira_connector,
+        start=0,
+        end=time.time(),
+    )
+    assert len(docs) == 1
+    doc = docs[0]
 
     assert doc.id == "https://danswerai.atlassian.net/browse/AS-2"
     assert doc.semantic_identifier == "AS-2: test123small"
