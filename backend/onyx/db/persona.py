@@ -585,8 +585,6 @@ def upsert_persona(
             existing_persona.user_folders.clear()
             existing_persona.user_folders = user_folders or []
 
-        print("user_folder_ids", user_folder_ids)
-        print("user_folders", user_folders)
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
             existing_persona.display_priority = display_priority
