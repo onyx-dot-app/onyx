@@ -567,7 +567,17 @@ export const connectorConfigs: Record<
         optional: true,
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        query: "Enter the JQL query (optional):",
+        label: "JQL Query",
+        name: "jira_jql_query_base",
+        description:
+          "This string will be pre-pended to the connectors JQL query, for more information on JQL queries see https://confluence.atlassian.com/jirasoftwarecloud/advanced-searching-764478330.html",
+        optional: true,
+      },
+    ],
   },
   salesforce: {
     description: "Configure Salesforce connector",
