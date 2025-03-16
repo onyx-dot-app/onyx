@@ -243,6 +243,7 @@ export const AIMessage = ({
         return preprocessLaTeX(content);
       }
     }
+    // return content;
 
     return (
       preprocessLaTeX(content) +

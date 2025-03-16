@@ -33,9 +33,9 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
-from onyx.connectors.vision_enabled_connector import VisionEnabledConnector
+from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -85,7 +85,6 @@ class ConfluenceConnector(
     PollConnector,
     SlimConnector,
     CredentialsConnector,
-    VisionEnabledConnector,
 ):
     def __init__(
         self,
@@ -115,9 +114,6 @@ class ConfluenceConnector(
         self.timezone_offset = timezone_offset
         self._confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
-
-        # Initialize vision LLM using the mixin
-        self.initialize_vision_llm()
 
         # Remove trailing slash from wiki_base if present
         self.wiki_base = wiki_base.rstrip("/")
@@ -245,12 +241,16 @@ class ConfluenceConnector(
             )
 
             # Create the main section for the page content
-            sections = [Section(text=page_content, link=page_url)]
+            sections: list[TextSection | ImageSection] = [
+                TextSection(text=page_content, link=page_url)
+            ]
 
             # Process comments if available
             comment_text = self._get_comment_string_for_page_id(page_id)
             if comment_text:
-                sections.append(Section(text=comment_text, link=f"{page_url}#comments"))
+                sections.append(
+                    TextSection(text=comment_text, link=f"{page_url}#comments")
+                )
 
             # Process attachments
             if "children" in page and "attachment" in page["children"]:
@@ -264,21 +264,26 @@ class ConfluenceConnector(
                         self.confluence_client,
                         attachment,
                         page_id,
-                        page_title,
-                        self.image_analysis_llm,
                     )
 
-                    if result.text:
+                    if result and result.text:
                         # Create a section for the attachment text
-                        attachment_section = Section(
+                        attachment_section = TextSection(
                             text=result.text,
+                            link=f"{page_url}#attachment-{attachment['id']}",
+                        )
+                        sections.append(attachment_section)
+                    elif result and result.file_name:
+                        # Create an ImageSection for image attachments
+                        image_section = ImageSection(
                             link=f"{page_url}#attachment-{attachment['id']}",
                             image_file_name=result.file_name,
                         )
-                        sections.append(attachment_section)
-                    elif result.error:
+                        sections.append(image_section)
+                    else:
                         logger.warning(
-                            f"Error processing attachment '{attachment.get('title')}': {result.error}"
+                            f"Error processing attachment '{attachment.get('title')}':",
+                            f"{result.error if result else 'Unknown error'}",
                         )
 
             # Extract metadata
@@ -349,7 +354,7 @@ class ConfluenceConnector(
             # Now get attachments for that page:
             attachment_query = self._construct_attachment_query(page["id"])
             # We'll use the page's XML to provide context if we summarize an image
-            confluence_xml = page.get("body", {}).get("storage", {}).get("value", "")
+            page.get("body", {}).get("storage", {}).get("value", "")
 
             for attachment in self.confluence_client.paginated_cql_retrieval(
                 cql=attachment_query,
@@ -357,7 +362,7 @@ class ConfluenceConnector(
             ):
                 attachment["metadata"].get("mediaType", "")
                 if not validate_attachment_filetype(
-                    attachment, self.image_analysis_llm
+                    attachment,
                 ):
                     continue
 
@@ -368,22 +373,24 @@ class ConfluenceConnector(
                         confluence_client=self.confluence_client,
                         attachment=attachment,
                         page_id=page["id"],
-                        page_context=confluence_xml,
-                        llm=self.image_analysis_llm,
                     )
                     if response is None:
                         continue
 
                     content_text, file_storage_name = response
-
                     object_url = build_confluence_document_id(
                         self.wiki_base, attachment["_links"]["webui"], self.is_cloud
                     )
-
                     if content_text:
                         doc.sections.append(
-                            Section(
+                            TextSection(
                                 text=content_text,
+                                link=object_url,
+                            )
+                        )
+                    elif file_storage_name:
+                        doc.sections.append(
+                            ImageSection(
                                 link=object_url,
                                 image_file_name=file_storage_name,
                             )
@@ -464,7 +471,7 @@ class ConfluenceConnector(
                 # If you skip images, you'll skip them in the permission sync
                 attachment["metadata"].get("mediaType", "")
                 if not validate_attachment_filetype(
-                    attachment, self.image_analysis_llm
+                    attachment,
                 ):
                     continue
 

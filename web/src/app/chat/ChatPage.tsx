@@ -134,7 +134,6 @@ import { UserSettingsModal } from "./modal/UserSettingsModal";
 import { AgenticMessage } from "./message/AgenticMessage";
 import AssistantModal from "../assistants/mine/AssistantModal";
 import { useSidebarShortcut } from "@/lib/browserUtilities";
-import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { ChatSearchModal } from "./chat_search/ChatSearchModal";
 import { ErrorBanner } from "./message/Resubmit";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";

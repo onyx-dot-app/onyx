@@ -67,6 +67,9 @@ def read_lobj(
     use_tempfile: bool = False,
 ) -> IO:
     pg_conn = get_pg_conn_from_session(db_session)
+    # Ensure we're using binary mode by default for large objects
+    if mode is None:
+        mode = "rb"
     large_object = (
         pg_conn.lobject(lobj_oid, mode=mode) if mode else pg_conn.lobject(lobj_oid)
     )
@@ -81,6 +84,7 @@ def read_lobj(
         temp_file.seek(0)
         return temp_file
     else:
+        # Ensure we're getting raw bytes without text decoding
         return BytesIO(large_object.read())
 
 

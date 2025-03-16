@@ -16,8 +16,8 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
-from onyx.connectors.vision_enabled_connector import VisionEnabledConnector
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.file_processing.extract_file_text import extract_text_and_images
@@ -26,7 +26,6 @@ from onyx.file_processing.extract_file_text import is_valid_file_ext
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
-from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -59,32 +58,44 @@ def _read_files_and_metadata(
 
 
 def _create_image_section(
-    llm: LLM | None,
     image_data: bytes,
     db_session: Session,
     parent_file_name: str,
     display_name: str,
+    link: str | None = None,
     idx: int = 0,
-) -> tuple[Section, str | None]:
+) -> tuple[ImageSection, str | None]:
     """
-    Create a Section object for a single image and store the image in PGFileStore.
-    If summarization is enabled and we have an LLM, summarize the image.
+    Creates an ImageSection for an image file or embedded image.
+    Stores the image in PGFileStore but does not generate a summary.
+
+    Args:
+        image_data: Raw image bytes
+        db_session: Database session
+        parent_file_name: Name of the parent file (for embedded images)
+        display_name: Display name for the image
+        idx: Index for embedded images
 
     Returns:
-        tuple: (Section object, file_name in PGFileStore or None if storage failed)
+        Tuple of (ImageSection, stored_file_name or None)
     """
-    # Create a unique file name for the embedded image
-    file_name = f"{parent_file_name}_embedded_{idx}"
+    # Create a unique identifier for the image
+    file_name = f"{parent_file_name}_embedded_{idx}" if idx > 0 else parent_file_name
 
-    # Use the standardized utility to store the image and create a section
-    return store_image_and_create_section(
-        db_session=db_session,
-        image_data=image_data,
-        file_name=file_name,
-        display_name=display_name,
-        llm=llm,
-        file_origin=FileOrigin.OTHER,
-    )
+    # Store the image and create a section
+    try:
+        section, stored_file_name = store_image_and_create_section(
+            db_session=db_session,
+            image_data=image_data,
+            file_name=file_name,
+            display_name=display_name,
+            link=link,
+            file_origin=FileOrigin.CONNECTOR,
+        )
+        return section, stored_file_name
+    except Exception as e:
+        logger.error(f"Failed to store image {display_name}: {e}")
+        raise e
 
 
 def _process_file(
@@ -93,12 +104,16 @@ def _process_file(
     metadata: dict[str, Any] | None,
     pdf_pass: str | None,
     db_session: Session,
-    llm: LLM | None,
 ) -> list[Document]:
     """
-    Processes a single file, returning a list of Documents (typically one).
-    Also handles embedded images if 'EMBEDDED_IMAGE_EXTRACTION_ENABLED' is true.
+    Process a file and return a list of Documents.
+    For images, creates ImageSection objects without summarization.
+    For documents with embedded images, extracts and stores the images.
     """
+    if metadata is None:
+        metadata = {}
+
+    # Get file extension and determine file type
     extension = get_file_ext(file_name)
 
     # Fetch the DB record so we know the ID for internal URL
@@ -114,8 +129,6 @@ def _process_file(
         return []
 
     # Prepare doc metadata
-    if metadata is None:
-        metadata = {}
     file_display_name = metadata.get("file_display_name") or os.path.basename(file_name)
 
     # Timestamps
@@ -158,6 +171,7 @@ def _process_file(
             "title",
             "connector_type",
             "pdf_password",
+            "mime_type",
         ]
     }
 
@@ -170,33 +184,45 @@ def _process_file(
     title = metadata.get("title") or file_display_name
 
     # 1) If the file itself is an image, handle that scenario quickly
-    IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
-    if extension in IMAGE_EXTENSIONS:
-        # Summarize or produce empty doc
+    if extension in LoadConnector.IMAGE_EXTENSIONS:
+        # Read the image data
         image_data = file.read()
-        image_section, _ = _create_image_section(
-            llm, image_data, db_session, pg_record.file_name, title
-        )
-        return [
-            Document(
-                id=doc_id,
-                sections=[image_section],
-                source=source_type,
-                semantic_identifier=file_display_name,
-                title=title,
-                doc_updated_at=final_time_updated,
-                primary_owners=p_owners,
-                secondary_owners=s_owners,
-                metadata=metadata_tags,
-            )
-        ]
+        if not image_data:
+            logger.warning(f"Empty image file: {file_name}")
+            return []
 
-    # 2) Otherwise: text-based approach. Possibly with embedded images if enabled.
-    #    (For example .docx with inline images).
+        # Create an ImageSection for the image
+        try:
+            section, _ = _create_image_section(
+                image_data=image_data,
+                db_session=db_session,
+                parent_file_name=pg_record.file_name,
+                display_name=title,
+            )
+
+            return [
+                Document(
+                    id=doc_id,
+                    sections=[section],
+                    source=source_type,
+                    semantic_identifier=file_display_name,
+                    title=title,
+                    doc_updated_at=final_time_updated,
+                    primary_owners=p_owners,
+                    secondary_owners=s_owners,
+                    metadata=metadata_tags,
+                )
+            ]
+        except Exception as e:
+            logger.error(f"Failed to process image file {file_name}: {e}")
+            return []
+
+    # 2) Otherwise: text-based approach. Possibly with embedded images.
     file.seek(0)
     text_content = ""
     embedded_images: list[tuple[bytes, str]] = []
 
+    # Extract text and images from the file
     text_content, embedded_images = extract_text_and_images(
         file=file,
         file_name=file_name,
@@ -204,24 +230,29 @@ def _process_file(
     )
 
     # Build sections: first the text as a single Section
-    sections = []
+    sections: list[TextSection | ImageSection] = []
     link_in_meta = metadata.get("link")
     if text_content.strip():
-        sections.append(Section(link=link_in_meta, text=text_content.strip()))
+        sections.append(TextSection(link=link_in_meta, text=text_content.strip()))
 
     # Then any extracted images from docx, etc.
     for idx, (img_data, img_name) in enumerate(embedded_images, start=1):
         # Store each embedded image as a separate file in PGFileStore
-        # and create a section with the image summary
-        image_section, _ = _create_image_section(
-            llm,
-            img_data,
-            db_session,
-            pg_record.file_name,
-            f"{title} - image {idx}",
-            idx,
-        )
-        sections.append(image_section)
+        # and create a section with the image reference
+        try:
+            image_section, _ = _create_image_section(
+                image_data=img_data,
+                db_session=db_session,
+                parent_file_name=pg_record.file_name,
+                display_name=f"{title} - image {idx}",
+                idx=idx,
+            )
+            sections.append(image_section)
+        except Exception as e:
+            logger.warning(
+                f"Failed to process embedded image {idx} in {file_name}: {e}"
+            )
+
     return [
         Document(
             id=doc_id,
@@ -237,10 +268,10 @@ def _process_file(
     ]
 
 
-class LocalFileConnector(LoadConnector, VisionEnabledConnector):
+class LocalFileConnector(LoadConnector):
     """
     Connector that reads files from Postgres and yields Documents, including
-    optional embedded image extraction.
+    embedded image extraction without summarization.
     """
 
     def __init__(
@@ -251,9 +282,6 @@ class LocalFileConnector(LoadConnector, VisionEnabledConnector):
         self.file_locations = [str(loc) for loc in file_locations]
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
-
-        # Initialize vision LLM using the mixin
-        self.initialize_vision_llm()
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.pdf_pass = credentials.get("pdf_password")
@@ -286,7 +314,6 @@ class LocalFileConnector(LoadConnector, VisionEnabledConnector):
                         metadata=metadata,
                         pdf_pass=self.pdf_pass,
                         db_session=db_session,
-                        llm=self.image_analysis_llm,
                     )
                     documents.extend(new_docs)
 

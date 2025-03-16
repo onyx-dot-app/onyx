@@ -14,6 +14,7 @@ from onyx.db.llm import fetch_existing_llm_providers_for_user
 from onyx.db.llm import fetch_provider
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
+from onyx.db.llm import update_default_vision_provider
 from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
@@ -21,11 +22,13 @@ from onyx.llm.factory import get_llm
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import litellm_exception_to_error_msg
+from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
 from onyx.server.manage.llm.models import FullLLMProvider
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import TestLLMRequest
+from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -184,6 +187,62 @@ def set_provider_as_default(
     db_session: Session = Depends(get_session),
 ) -> None:
     update_default_provider(provider_id=provider_id, db_session=db_session)
+
+
+@admin_router.post("/provider/{provider_id}/default-vision")
+def set_provider_as_default_vision(
+    provider_id: int,
+    vision_model: str
+    | None = Query(None, description="The default vision model to use"),
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> None:
+    update_default_vision_provider(
+        provider_id=provider_id, vision_model=vision_model, db_session=db_session
+    )
+
+
+@admin_router.get("/vision-providers")
+def get_vision_capable_providers(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[VisionProviderResponse]:
+    """Return a list of LLM providers and their models that support image input"""
+
+    providers = fetch_existing_llm_providers(db_session)
+    vision_providers = []
+
+    logger.info("Fetching vision-capable providers")
+
+    for provider in providers:
+        vision_models = []
+
+        # Check model names in priority order
+        model_names_to_check = []
+        if provider.model_names:
+            model_names_to_check = provider.model_names
+        elif provider.display_model_names:
+            model_names_to_check = provider.display_model_names
+        elif provider.default_model_name:
+            model_names_to_check = [provider.default_model_name]
+
+        # Check each model for vision capability
+        for model_name in model_names_to_check:
+            if model_supports_image_input(model_name, provider.provider):
+                vision_models.append(model_name)
+                logger.debug(f"Vision model found: {provider.provider}/{model_name}")
+
+        # Only include providers with at least one vision-capable model
+        if vision_models:
+            provider_dict = FullLLMProvider.from_model(provider).model_dump()
+            provider_dict["vision_models"] = vision_models
+            logger.info(
+                f"Vision provider: {provider.provider} with models: {vision_models}"
+            )
+            vision_providers.append(VisionProviderResponse(**provider_dict))
+
+    logger.info(f"Found {len(vision_providers)} vision-capable providers")
+    return vision_providers
 
 
 """Endpoints for all"""

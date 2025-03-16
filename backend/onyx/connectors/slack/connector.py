@@ -34,8 +34,8 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
-from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
@@ -211,7 +211,7 @@ def thread_to_doc(
     return Document(
         id=_build_doc_id(channel_id=channel_id, thread_ts=thread[0]["ts"]),
         sections=[
-            Section(
+            TextSection(
                 link=get_message_link(event=m, client=client, channel_id=channel_id),
                 text=slack_cleaner.index_clean(cast(str, m["text"])),
             )
@@ -220,7 +220,6 @@ def thread_to_doc(
         source=DocumentSource.SLACK,
         semantic_identifier=doc_sem_id,
         doc_updated_at=get_latest_message_time(thread),
-        title="",  # slack docs don't really have a "title"
         primary_owners=valid_experts,
         metadata={"Channel": channel["name"]},
     )
@@ -413,8 +412,8 @@ def _get_all_doc_ids(
             callback=callback,
         )
 
-        message_ts_set: set[str] = set()
         for message_batch in channel_message_batches:
+            slim_doc_batch: list[SlimDocument] = []
             for message in message_batch:
                 if msg_filter_func(message):
                     continue
@@ -422,18 +421,17 @@ def _get_all_doc_ids(
                 # The document id is the channel id and the ts of the first message in the thread
                 # Since we already have the first message of the thread, we dont have to
                 # fetch the thread for id retrieval, saving time and API calls
-                message_ts_set.add(message["ts"])
 
-        channel_metadata_list: list[SlimDocument] = []
-        for message_ts in message_ts_set:
-            channel_metadata_list.append(
-                SlimDocument(
-                    id=_build_doc_id(channel_id=channel_id, thread_ts=message_ts),
-                    perm_sync_data={"channel_id": channel_id},
+                slim_doc_batch.append(
+                    SlimDocument(
+                        id=_build_doc_id(
+                            channel_id=channel_id, thread_ts=message["ts"]
+                        ),
+                        perm_sync_data={"channel_id": channel_id},
+                    )
                 )
-            )
 
-        yield channel_metadata_list
+            yield slim_doc_batch
 
 
 def _process_message(
@@ -481,6 +479,8 @@ def _process_message(
 
 
 class SlackConnector(SlimConnector, CheckpointConnector):
+    MAX_WORKERS = 2
+
     def __init__(
         self,
         channels: list[str] | None = None,
@@ -594,7 +594,7 @@ class SlackConnector(SlimConnector, CheckpointConnector):
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
             # Process messages in parallel using ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=8) as executor:
+            with ThreadPoolExecutor(max_workers=SlackConnector.MAX_WORKERS) as executor:
                 futures: list[Future] = []
                 for message in message_batch:
                     # Capture the current context so that the thread gets the current tenant ID

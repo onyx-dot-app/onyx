@@ -7,7 +7,6 @@ import { AssistantsProvider } from "./AssistantsContext";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { User } from "@/lib/types";
 import { ModalProvider } from "./ModalContext";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 
 interface AppProviderProps {
   children: React.ReactNode;
@@ -17,8 +16,6 @@ interface AppProviderProps {
   hasAnyConnectors: boolean;
   hasImageCompatibleModel: boolean;
 }
-
-//
 
 export const AppProvider = ({
   children,

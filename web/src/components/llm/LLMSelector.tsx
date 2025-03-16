@@ -103,7 +103,6 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
               </SelectItem>
             );
           }
-          return null;
         })}
       </SelectContent>
     </Select>

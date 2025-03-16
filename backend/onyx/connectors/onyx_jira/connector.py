@@ -23,8 +23,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.connectors.onyx_jira.utils import best_effort_basic_expert_info
 from onyx.connectors.onyx_jira.utils import best_effort_get_field_from_issue
 from onyx.connectors.onyx_jira.utils import build_jira_client
@@ -145,7 +145,7 @@ def fetch_jira_issues_batch(
 
         yield Document(
             id=page_url,
-            sections=[Section(link=page_url, text=ticket_content)],
+            sections=[TextSection(link=page_url, text=ticket_content)],
             source=DocumentSource.JIRA,
             semantic_identifier=f"{issue.key}: {issue.fields.summary}",
             title=f"{issue.key} {issue.fields.summary}",

@@ -27,7 +27,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 
@@ -87,7 +87,9 @@ def _batch_github_objects(
 def _convert_pr_to_document(pull_request: PullRequest) -> Document:
     return Document(
         id=pull_request.html_url,
-        sections=[Section(link=pull_request.html_url, text=pull_request.body or "")],
+        sections=[
+            TextSection(link=pull_request.html_url, text=pull_request.body or "")
+        ],
         source=DocumentSource.GITHUB,
         semantic_identifier=pull_request.title,
         # updated_at is UTC time but is timezone unaware, explicitly add UTC
@@ -109,7 +111,7 @@ def _fetch_issue_comments(issue: Issue) -> str:
 def _convert_issue_to_document(issue: Issue) -> Document:
     return Document(
         id=issue.html_url,
-        sections=[Section(link=issue.html_url, text=issue.body or "")],
+        sections=[TextSection(link=issue.html_url, text=issue.body or "")],
         source=DocumentSource.GITHUB,
         semantic_identifier=issue.title,
         # updated_at is UTC time but is timezone unaware

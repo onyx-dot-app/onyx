@@ -97,6 +97,7 @@ def test_notion_connector_basic(notion_connector: NotionConnector) -> None:
     assert child2_section.link.startswith("https://www.notion.so/")
 
     # Database section checks for child2
+    assert child2_db_section.text is not None
     assert child2_db_section.text.strip() != ""  # Should contain some database content
     assert child2_db_section.link is not None
     assert child2_db_section.link.startswith("https://www.notion.so/")

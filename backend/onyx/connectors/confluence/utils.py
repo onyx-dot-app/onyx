@@ -36,7 +36,6 @@ from onyx.db.pg_file_store import upsert_pgfilestore
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
-from onyx.llm.interfaces import LLM
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -54,17 +53,16 @@ class TokenResponse(BaseModel):
 
 
 def validate_attachment_filetype(
-    attachment: dict[str, Any], llm: LLM | None = None
+    attachment: dict[str, Any],
 ) -> bool:
     """
     Validates if the attachment is a supported file type.
-    If LLM is provided, also checks if it's an image that can be processed.
     """
     attachment.get("metadata", {})
     media_type = attachment.get("metadata", {}).get("mediaType", "")
 
     if media_type.startswith("image/"):
-        return llm is not None and is_valid_image_type(media_type)
+        return is_valid_image_type(media_type)
 
     # For non-image files, check if we support the extension
     title = attachment.get("title", "")
@@ -114,19 +112,16 @@ def process_attachment(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
     parent_content_id: str | None,
-    page_context: str,
-    llm: LLM | None,
 ) -> AttachmentProcessingResult:
     """
     Processes a Confluence attachment. If it's a document, extracts text,
-    or if it's an image and an LLM is available, summarizes it. Returns a structured result.
+    or if it's an image, stores it for later analysis. Returns a structured result.
     """
     try:
         # Get the media type from the attachment metadata
         media_type = attachment.get("metadata", {}).get("mediaType", "")
-
         # Validate the attachment type
-        if not validate_attachment_filetype(attachment, llm):
+        if not validate_attachment_filetype(attachment):
             return AttachmentProcessingResult(
                 text=None,
                 file_name=None,
@@ -143,7 +138,7 @@ def process_attachment(
 
         attachment_size = attachment["extensions"]["fileSize"]
 
-        if not media_type.startswith("image/") or not llm:
+        if not media_type.startswith("image/"):
             if attachment_size > CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
                 logger.warning(
                     f"Skipping {attachment_link} due to size. "
@@ -181,10 +176,10 @@ def process_attachment(
                 text=None, file_name=None, error="attachment.content is None"
             )
 
-        # Process image attachments with LLM if available
-        if media_type.startswith("image/") and llm:
+        # Process image attachments
+        if media_type.startswith("image/"):
             return _process_image_attachment(
-                confluence_client, attachment, page_context, llm, raw_bytes, media_type
+                confluence_client, attachment, raw_bytes, media_type
             )
 
         # Process document attachments
@@ -217,12 +212,10 @@ def process_attachment(
 def _process_image_attachment(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
-    page_context: str,
-    llm: LLM,
     raw_bytes: bytes,
     media_type: str,
 ) -> AttachmentProcessingResult:
-    """Process an image attachment by saving it and generating a summary."""
+    """Process an image attachment by saving it without generating a summary."""
     try:
         # Use the standardized image storage and section creation
         with get_session_with_current_tenant() as db_session:
@@ -232,15 +225,14 @@ def _process_image_attachment(
                 file_name=Path(attachment["id"]).name,
                 display_name=attachment["title"],
                 media_type=media_type,
-                llm=llm,
                 file_origin=FileOrigin.CONNECTOR,
             )
+            logger.info(f"Stored image attachment with file name: {file_name}")
 
-            return AttachmentProcessingResult(
-                text=section.text, file_name=file_name, error=None
-            )
+            # Return empty text but include the file_name for later processing
+            return AttachmentProcessingResult(text="", file_name=file_name, error=None)
     except Exception as e:
-        msg = f"Image summarization failed for {attachment['title']}: {e}"
+        msg = f"Image storage failed for {attachment['title']}: {e}"
         logger.error(msg, exc_info=e)
         return AttachmentProcessingResult(text=None, file_name=None, error=msg)
 
@@ -302,16 +294,14 @@ def convert_attachment_to_content(
     confluence_client: "OnyxConfluence",
     attachment: dict[str, Any],
     page_id: str,
-    page_context: str,
-    llm: LLM | None,
 ) -> tuple[str | None, str | None] | None:
     """
     Facade function which:
       1. Validates attachment type
-      2. Extracts or summarizes content
+      2. Extracts content or stores image for later processing
       3. Returns (content_text, stored_file_name) or None if we should skip it
     """
-    media_type = attachment["metadata"]["mediaType"]
+    media_type = attachment.get("metadata", {}).get("mediaType", "")
     # Quick check for unsupported types:
     if media_type.startswith("video/") or media_type == "application/gliffy+json":
         logger.warning(
@@ -319,9 +309,7 @@ def convert_attachment_to_content(
         )
         return None
 
-    result = process_attachment(
-        confluence_client, attachment, page_id, page_context, llm
-    )
+    result = process_attachment(confluence_client, attachment, page_id)
     if result.error is not None:
         logger.warning(
             f"Attachment {attachment['title']} encountered error: {result.error}"
@@ -534,6 +522,10 @@ def attachment_to_file_record(
         download_link, absolute=True, not_json_response=True
     )
 
+    file_type = attachment.get("metadata", {}).get(
+        "mediaType", "application/octet-stream"
+    )
+
     # Save image to file store
     file_name = f"confluence_attachment_{attachment['id']}"
     lobj_oid = create_populate_lobj(BytesIO(image_data), db_session)
@@ -541,7 +533,7 @@ def attachment_to_file_record(
         file_name=file_name,
         display_name=attachment["title"],
         file_origin=FileOrigin.OTHER,
-        file_type=attachment["metadata"]["mediaType"],
+        file_type=file_type,
         lobj_oid=lobj_oid,
         db_session=db_session,
         commit=True,

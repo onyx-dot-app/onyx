@@ -20,7 +20,7 @@ class ExternalAccess:
 class DocExternalAccess:
     """
     This is just a class to wrap the external access and the document ID
-    together. It's used for syncing document permissions to Redis.
+    together. It's used for syncing document permissions to Vespa.
     """
 
     external_access: ExternalAccess

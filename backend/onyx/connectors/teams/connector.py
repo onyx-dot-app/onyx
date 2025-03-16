@@ -24,7 +24,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 
@@ -165,7 +165,7 @@ def _convert_thread_to_document(
 
     doc = Document(
         id=post_id,
-        sections=[Section(link=web_url, text=thread_text)],
+        sections=[TextSection(link=web_url, text=thread_text)],
         source=DocumentSource.TEAMS,
         semantic_identifier=semantic_string,
         title="",  # teams threads don't really have a "title"

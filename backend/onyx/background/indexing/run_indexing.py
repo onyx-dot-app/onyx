@@ -28,6 +28,7 @@ from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_time
 from onyx.db.connector_credential_pair import update_connector_credential_pair
@@ -52,6 +53,9 @@ from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline
+from onyx.natural_language_processing.search_nlp_models import (
+    InformationContentClassificationModel,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
@@ -154,14 +158,12 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
             )
 
         for section in cleaned_doc.sections:
-            if section.link and "\x00" in section.link:
-                logger.warning(
-                    f"NUL characters found in document link for document: {cleaned_doc.id}"
-                )
+            if section.link is not None:
                 section.link = section.link.replace("\x00", "")
 
             # since text can be longer, just replace to avoid double scan
-            section.text = section.text.replace("\x00", "")
+            if isinstance(section, TextSection) and section.text is not None:
+                section.text = section.text.replace("\x00", "")
 
         cleaned_batch.append(cleaned_doc)
 
@@ -349,6 +351,8 @@ def _run_indexing(
             callback=callback,
         )
 
+    information_content_classification_model = InformationContentClassificationModel()
+
     document_index = get_default_document_index(
         index_attempt_start.search_settings,
         None,
@@ -357,6 +361,7 @@ def _run_indexing(
 
     indexing_pipeline = build_indexing_pipeline(
         embedder=embedding_model,
+        information_content_classification_model=information_content_classification_model,
         document_index=document_index,
         ignore_time_skip=(
             ctx.from_beginning
@@ -479,7 +484,11 @@ def _run_indexing(
 
                     doc_size = 0
                     for section in doc.sections:
-                        doc_size += len(section.text)
+                        if (
+                            isinstance(section, TextSection)
+                            and section.text is not None
+                        ):
+                            doc_size += len(section.text)
 
                     if doc_size > INDEXING_SIZE_WARNING_THRESHOLD:
                         logger.warning(

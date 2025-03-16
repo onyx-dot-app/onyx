@@ -49,6 +49,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
 
     # Content specific checks
     content = section.text
+    assert content is not None, "Section text should not be None"
 
     # Check for specific content elements
     assert "* Fruit Shopping List:" in content
@@ -82,6 +83,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
     assert nested1.semantic_identifier == "Nested1"
     assert len(nested1.sections) == 1
     # extra newlines at the end, remove them to make test easier
+    assert nested1.sections[0].text is not None
     assert nested1.sections[0].text.strip() == "nested1"
     assert nested1.source == DocumentSource.GITBOOK
 
@@ -89,6 +91,7 @@ def test_gitbook_connector_basic(gitbook_connector: GitbookConnector) -> None:
     assert nested2.id.startswith("gitbook-")
     assert nested2.semantic_identifier == "Nested2"
     assert len(nested2.sections) == 1
+    assert nested2.sections[0].text is not None
     assert nested2.sections[0].text.strip() == "nested2"
     assert nested2.source == DocumentSource.GITBOOK
 

@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 
@@ -34,7 +35,7 @@ def _get_slim_doc_generator(
 def gmail_doc_sync(
     cc_pair: ConnectorCredentialPair,
     callback: IndexingHeartbeatInterface | None,
-) -> list[DocExternalAccess]:
+) -> Generator[DocExternalAccess, None, None]:
     """
     Adds the external permissions to the documents in postgres
     if the document doesn't already exists in postgres, we create
@@ -48,7 +49,6 @@ def gmail_doc_sync(
         cc_pair, gmail_connector, callback=callback
     )
 
-    document_external_access: list[DocExternalAccess] = []
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
             if callback:
@@ -60,17 +60,14 @@ def gmail_doc_sync(
             if slim_doc.perm_sync_data is None:
                 logger.warning(f"No permissions found for document {slim_doc.id}")
                 continue
+
             if user_email := slim_doc.perm_sync_data.get("user_email"):
                 ext_access = ExternalAccess(
                     external_user_emails=set([user_email]),
                     external_user_group_ids=set(),
                     is_public=False,
                 )
-                document_external_access.append(
-                    DocExternalAccess(
-                        doc_id=slim_doc.id,
-                        external_access=ext_access,
-                    )
+                yield DocExternalAccess(
+                    doc_id=slim_doc.id,
+                    external_access=ext_access,
                 )
-
-    return document_external_access

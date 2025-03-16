@@ -591,6 +591,55 @@ class Document(Base):
     )
 
 
+class ChunkStats(Base):
+    __tablename__ = "chunk_stats"
+    # NOTE: if more sensitive data is added here for display, make sure to add user/group permission
+
+    # this should correspond to the ID of the document
+    # (as is passed around in Onyx)
+    id: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        default=lambda context: (
+            f"{context.get_current_parameters()['document_id']}"
+            f"__{context.get_current_parameters()['chunk_in_doc_id']}"
+        ),
+        index=True,
+    )
+
+    # Reference to parent document
+    document_id: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=False, index=True
+    )
+
+    chunk_in_doc_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    information_content_boost: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+
+    last_modified: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True, default=func.now()
+    )
+    last_synced: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_chunk_sync_status",
+            last_modified,
+            last_synced,
+        ),
+        UniqueConstraint(
+            "document_id", "chunk_in_doc_id", name="uq_chunk_stats_doc_chunk"
+        ),
+    )
+
+
 class Tag(Base):
     __tablename__ = "tag"
 
@@ -1489,6 +1538,8 @@ class LLMProvider(Base):
 
     # should only be set for a single provider
     is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
+    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
+    default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     groups: Mapped[list["UserGroup"]] = relationship(
@@ -2307,6 +2358,17 @@ class UserTenantMapping(Base):
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
         return value.lower() if value else value
+
+
+class AvailableTenant(Base):
+    __tablename__ = "available_tenant"
+    """
+    These entries will only exist ephemerally and are meant to be picked up by new users on registration.
+    """
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    alembic_version: Mapped[str] = mapped_column(String, nullable=False)
+    date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
 
 
 # This is a mapping from tenant IDs to anonymous user paths

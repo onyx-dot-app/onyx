@@ -8,6 +8,9 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import DocumentIndexType
 from onyx.configs.constants import QueryHistoryType
 from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
+from onyx.prompts.image_analysis import DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT
+from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT
+from onyx.prompts.image_analysis import DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT
 
 #####
 # App Configs
@@ -643,3 +646,24 @@ MOCK_LLM_RESPONSE = (
 
 
 DEFAULT_IMAGE_ANALYSIS_MAX_SIZE_MB = 20
+
+# Number of pre-provisioned tenants to maintain
+TARGET_AVAILABLE_TENANTS = int(os.environ.get("TARGET_AVAILABLE_TENANTS", "5"))
+
+
+# Image summarization configuration
+IMAGE_SUMMARIZATION_SYSTEM_PROMPT = os.environ.get(
+    "IMAGE_SUMMARIZATION_SYSTEM_PROMPT",
+    DEFAULT_IMAGE_SUMMARIZATION_SYSTEM_PROMPT,
+)
+
+# The user prompt for image summarization - the image filename will be automatically prepended
+IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
+    "IMAGE_SUMMARIZATION_USER_PROMPT",
+    DEFAULT_IMAGE_SUMMARIZATION_USER_PROMPT,
+)
+
+IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
+    "IMAGE_ANALYSIS_SYSTEM_PROMPT",
+    DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT,
+)
