@@ -50,6 +50,9 @@ env:
   GITBOOK_API_KEY: ${{ secrets.GITBOOK_API_KEY }}
   # Notion
   NOTION_INTEGRATION_TOKEN: ${{ secrets.NOTION_INTEGRATION_TOKEN }}
+  # Highspot
+  HIGHSPOT_KEY: ${{ secrets.HIGHSPOT_KEY }}
+  HIGHSPOT_SECRET: ${{ secrets.HIGHSPOT_SECRET }}
 
 jobs:
   connectors-check:

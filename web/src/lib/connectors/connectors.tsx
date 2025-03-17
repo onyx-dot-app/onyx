@@ -1249,6 +1249,47 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
+  highspot: {
+    description: "Configure Highspot connector",
+    values: [
+      {
+        type: "tab",
+        name: "highspot_scope",
+        label: "What should we index from Highspot?",
+        optional: true,
+        tabs: [
+          {
+            value: "spots",
+            label: "Specific Spots",
+            fields: [
+              {
+                type: "list",
+                query: "Enter the spot name(s):",
+                label: "Spot Name(s)",
+                name: "spot_names",
+                optional: false,
+                description: "For multiple spots, enter your spot one by one.",
+              },
+            ],
+          },
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all spots the provided credentials have access to!",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources
