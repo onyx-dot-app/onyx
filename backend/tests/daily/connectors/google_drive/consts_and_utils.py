@@ -23,6 +23,7 @@ FOLDER_2_FILE_IDS = list(range(45, 50))
 FOLDER_2_1_FILE_IDS = list(range(50, 55))
 FOLDER_2_2_FILE_IDS = list(range(55, 60))
 SECTIONS_FILE_IDS = [61]
+FOLDER_3_FILE_IDS = list(range(62, 65))
 
 PUBLIC_FOLDER_RANGE = FOLDER_1_2_FILE_IDS
 PUBLIC_FILE_IDS = list(range(55, 57))
@@ -55,6 +56,8 @@ FOLDER_3_URL = (
 SECTIONS_FOLDER_URL = (
     "https://drive.google.com/drive/u/5/folders/1loe6XJ-pJxu9YYPv7cF3Hmz296VNzA33"
 )
+
+SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
 
 ADMIN_EMAIL = "admin@onyx-test.com"
 TEST_USER_1_EMAIL = "test_user_1@onyx-test.com"

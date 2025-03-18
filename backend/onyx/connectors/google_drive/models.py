@@ -1,7 +1,10 @@
 from enum import Enum
 from typing import Any
 
+from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import field_serializer
+from pydantic import field_validator
 
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -62,29 +65,75 @@ class DriveRetrievalStage(str, Enum):
     FOLDER_FILES = "folder_files"
 
 
-class GoogleDriveCheckpoint(ConnectorCheckpoint):
-    # The doc ids that were completed in the previous run
-    prev_run_doc_ids: list[str]
+class StageCompletion(BaseModel):
+    """
+    Describes the point in the retrieval+indexing process that the
+    connector is at. completed_until is the timestamp of the latest
+    file that has been retrieved or error that has been yielded.
+    Optional fields are used for retrieval stages that need more information
+    for resuming than just the timestamp of the latest file.
+    """
 
+    stage: DriveRetrievalStage
+    completed_until: SecondsSinceUnixEpoch
+    completed_until_parent_id: str | None = None
+
+    # only used for shared drives
+    processed_drive_ids: set[str] = set()
+
+    def update(
+        self,
+        stage: DriveRetrievalStage,
+        completed_until: SecondsSinceUnixEpoch,
+        completed_until_parent_id: str | None = None,
+    ) -> None:
+        self.stage = stage
+        self.completed_until = completed_until
+        self.completed_until_parent_id = completed_until_parent_id
+
+
+class RetrievedDriveFile(BaseModel):
+    """
+    Describes a file that has been retrieved from google drive.
+    user_email is the email of the user that the file was retrieved
+    by impersonating. If an error worthy of being reported is encountered,
+    error should be set and later propagated as a ConnectorFailure.
+    """
+
+    # The stage at which this file was retrieved
+    completion_stage: DriveRetrievalStage
+
+    # The file that was retrieved
+    drive_file: GoogleDriveFileType
+
+    # The email of the user that the file was retrieved by impersonating
+    user_email: str
+
+    # The id of the parent folder or drive of the file
+    parent_id: str | None = None
+
+    # Any unexpected error that occurred while retrieving the file.
+    # In particular, this is not used for 403/404 errors, which are expected
+    # in the context of impersonating all the users to try to retrieve all
+    # files from all their Drives and Folders.
+    error: Exception | None = None
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # Checkpoint version of _retrieved_ids
-    retrieved_ids: list[str]
+    retrieved_folder_and_drive_ids: set[str]
 
     # Describes the point in the retrieval+indexing process that the
     # checkpoint is at. when this is set to a given stage, the connector
-    # will have already yielded at least 1 file or error from that stage.
-    # The Done stage is used to signal that has_more should become False.
+    # has finished yielding all values from the previous stage.
     completion_stage: DriveRetrievalStage
 
-    # The key into completion_map that is currently being processed.
-    # For stages that directly make a big (paginated) api call, this
-    # will be the stage itself. For stages with multiple sub-stages,
-    # this will be the id of the sub-stage. For example, when processing
-    # shared drives, it will be the id of the shared drive.
-    curr_completion_key: str
-
-    # The latest timestamp of a file that has been retrieved per completion key.
-    # See curr_completion_key for more details on completion keys.
-    completion_map: ThreadSafeDict[str, SecondsSinceUnixEpoch]
+    # The latest timestamp of a file that has been retrieved per user email.
+    # StageCompletion is used to track the completion of each stage, but the
+    # timestamp part is not used for folder crawling.
+    completion_map: ThreadSafeDict[str, StageCompletion]
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
@@ -95,6 +144,13 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     @field_serializer("completion_map")
     def serialize_completion_map(
-        self, completion_map: ThreadSafeDict[str, SecondsSinceUnixEpoch], _info: Any
-    ) -> dict[str, SecondsSinceUnixEpoch]:
+        self, completion_map: ThreadSafeDict[str, StageCompletion], _info: Any
+    ) -> dict[str, StageCompletion]:
         return completion_map._dict
+
+    @field_validator("completion_map", mode="before")
+    def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
+        assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
+        return ThreadSafeDict(
+            {k: StageCompletion.model_validate(v) for k, v in v.items()}
+        )

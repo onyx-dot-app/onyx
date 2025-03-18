@@ -335,10 +335,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    del future_to_index[future]
                     future_to_index[
                         executor.submit(_next_or_none, ind, gens[ind])
                     ] = next_ind
                     next_ind += 1
-                else:
-                    del future_to_index[future]
+                del future_to_index[future]
