@@ -4,32 +4,39 @@ from PIL import Image
 
 from onyx.configs.constants import ONYX_EMAILABLE_LOGO_MAX_DIM
 from onyx.db.engine import get_session_with_shared_schema
-from onyx.file_store.onyx_file_store import OnyxFileStore
-from onyx.utils.file import OnyxFile
+from onyx.file_store.file_store import PostgresBackedFileStore
+from onyx.utils.file import FileWithMimeType
 from onyx.utils.file import OnyxStaticFileManager
 from onyx.utils.variable_functionality import (
-    fetch_ee_implementation_or_none,
+    fetch_ee_implementation_or_noop,
 )
 
 
 class OnyxRuntime:
+    """Used by the application to get the final runtime value of a setting.
+
+    Rationale: Settings and overrides may be persisted in multiple places, including the
+    DB, Redis, env vars, and default constants, etc. The logic to present a final
+    setting to the application should be centralized and in one place.
+
+    Example: To get the logo for the application, one must check the DB for an override,
+    use the override if present, fall back to the filesystem if not present, and worry
+    about enterprise or not enterprise.
+    """
+
     @staticmethod
     def _get_with_static_fallback(
         db_filename: str | None, static_filename: str
-    ) -> OnyxFile:
-        onyx_file: OnyxFile | None = None
+    ) -> FileWithMimeType:
+        onyx_file: FileWithMimeType | None = None
 
-        while True:
-            if db_filename:
-                with get_session_with_shared_schema() as db_session:
-                    file_store: OnyxFileStore = OnyxFileStore(db_session)
-                    onyx_file = file_store.get_onyx_file(db_filename)
+        if db_filename:
+            with get_session_with_shared_schema() as db_session:
+                file_store = PostgresBackedFileStore(db_session)
+                onyx_file = file_store.get_file_with_mime_type(db_filename)
 
-            if onyx_file:
-                break
-
+        if not onyx_file:
             onyx_file = OnyxStaticFileManager.get_static(static_filename)
-            break
 
         if not onyx_file:
             raise RuntimeError(
@@ -39,30 +46,18 @@ class OnyxRuntime:
         return onyx_file
 
     @staticmethod
-    def get_logo() -> OnyxFile:
+    def get_logo() -> FileWithMimeType:
         STATIC_FILENAME = "static/images/logo.png"
 
-        db_filename: str | None = None
-        get_logo_filename_fn = fetch_ee_implementation_or_none(
-            "onyx.server.enterprise_settings.store", "get_logo_filename"
+        db_filename: str | None = fetch_ee_implementation_or_noop(
+            "onyx.server.enterprise_settings.store", "get_logo_filename", None
         )
-        if get_logo_filename_fn:
-            db_filename = get_logo_filename_fn()
 
         return OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)
 
     @staticmethod
-    def get_emailable_logo() -> OnyxFile:
-        STATIC_FILENAME = "static/images/logo.png"
-
-        db_filename: str | None = None
-        get_logo_filename_fn = fetch_ee_implementation_or_none(
-            "onyx.server.enterprise_settings.store", "get_logo_filename"
-        )
-        if get_logo_filename_fn:
-            db_filename = get_logo_filename_fn()
-
-        onyx_file = OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)
+    def get_emailable_logo() -> FileWithMimeType:
+        onyx_file = OnyxRuntime.get_logo()
 
         # check dimensions and resize downwards if necessary or if not PNG
         image = Image.open(io.BytesIO(onyx_file.data))
@@ -77,19 +72,18 @@ class OnyxRuntime:
             )  # maintains aspect ratio
             output_buffer = io.BytesIO()
             image.save(output_buffer, format="PNG")
-            onyx_file = OnyxFile(data=output_buffer.getvalue(), mime_type="image/png")
+            onyx_file = FileWithMimeType(
+                data=output_buffer.getvalue(), mime_type="image/png"
+            )
 
         return onyx_file
 
     @staticmethod
-    def get_logotype() -> OnyxFile:
+    def get_logotype() -> FileWithMimeType:
         STATIC_FILENAME = "static/images/logotype.png"
 
-        db_filename: str | None = None
-        get_logotype_filename_fn = fetch_ee_implementation_or_none(
-            "onyx.server.enterprise_settings.store", "get_logotype_filename"
+        db_filename: str | None = fetch_ee_implementation_or_noop(
+            "onyx.server.enterprise_settings.store", "get_logotype_filename", None
         )
-        if get_logotype_filename_fn:
-            db_filename = get_logotype_filename_fn()
 
         return OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)

@@ -19,7 +19,7 @@ from onyx.configs.constants import ONYX_SLACK_URL
 from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
-from onyx.utils.file import OnyxFile
+from onyx.utils.file import FileWithMimeType
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import MULTI_TENANT
 
@@ -243,7 +243,7 @@ def send_subscription_cancellation_email(user_email: str) -> None:
 def send_user_email_invite(
     user_email: str, current_user: User, auth_type: AuthType
 ) -> None:
-    onyx_file: OnyxFile | None = None
+    onyx_file: FileWithMimeType | None = None
 
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(

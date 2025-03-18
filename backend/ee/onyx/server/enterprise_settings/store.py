@@ -47,7 +47,7 @@ def load_settings() -> EnterpriseSettings:
 
 
 def store_settings(settings: EnterpriseSettings) -> None:
-    """Stores settings directoy to the kv store / db."""
+    """Stores settings directly to the kv store / db."""
 
     get_kv_store().store(KV_ENTERPRISE_SETTINGS_KEY, settings.model_dump())
 

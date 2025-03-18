@@ -28,7 +28,7 @@ from onyx.auth.users import get_user_manager
 from onyx.auth.users import UserManager
 from onyx.db.engine import get_session
 from onyx.db.models import User
-from onyx.file_store.onyx_file_store import OnyxFileStore
+from onyx.file_store.file_store import PostgresBackedFileStore
 from onyx.utils.logger import setup_logger
 
 admin_router = APIRouter(prefix="/admin/enterprise-settings")
@@ -131,27 +131,12 @@ def put_logo(
     upload_logo(file=file, db_session=db_session, is_logotype=is_logotype)
 
 
-# def fetch_logo_or_logotype(is_logotype: bool, db_session: Session) -> Response:
-#     try:
-#         file_store = get_default_file_store(db_session)
-#         filename = _LOGOTYPE_FILENAME if is_logotype else _LOGO_FILENAME
-#         file_io = file_store.read_file(filename, mode="b")
-#         # NOTE: specifying "image/jpeg" here, but it still works for pngs
-#         # TODO: do this properly
-#         return Response(content=file_io.read(), media_type="image/jpeg")
-#     except Exception:
-#         raise HTTPException(
-#             status_code=404,
-#             detail=f"No {'logotype' if is_logotype else 'logo'} file found",
-#         )
-
-
 def fetch_logo_helper(db_session: Session) -> Response:
     try:
-        file_store = OnyxFileStore(db_session)
-        onyx_file = file_store.get_onyx_file(get_logo_filename())
+        file_store = PostgresBackedFileStore(db_session)
+        onyx_file = file_store.get_file_with_mime_type(get_logo_filename())
         if not onyx_file:
-            raise
+            raise ValueError("get_onyx_file returned None!")
     except Exception:
         raise HTTPException(
             status_code=404,
@@ -163,10 +148,10 @@ def fetch_logo_helper(db_session: Session) -> Response:
 
 def fetch_logotype_helper(db_session: Session) -> Response:
     try:
-        file_store = OnyxFileStore(db_session)
-        onyx_file = file_store.get_onyx_file(get_logotype_filename())
+        file_store = PostgresBackedFileStore(db_session)
+        onyx_file = file_store.get_file_with_mime_type(get_logotype_filename())
         if not onyx_file:
-            raise
+            raise ValueError("get_onyx_file returned None!")
     except Exception:
         raise HTTPException(
             status_code=404,
