@@ -798,7 +798,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         if is_slim:
             return drive_files
 
-        all_indexed: list[RetrievedDriveFile] = []
         for file in drive_files:
             if file.error is not None:
                 checkpoint.completion_map[file.user_email].update(
@@ -807,15 +806,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                     completed_until_parent_id=file.parent_id,
                 )
             yield file
-            all_indexed.append(file)
-        for file in all_indexed:
-            print(
-                file.user_email,
-                file.drive_file["name"],
-                file.drive_file["modifiedTime"],
-            )
-
-        print("done")
 
     def _manage_oauth_retrieval(
         self,
@@ -1010,7 +1000,20 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                             if doc is not None:
                                 documents.append(doc)
                         except Exception as e:
-                            logger.error(f"Error converting file: {e}")
+                            error_str = f"Error converting file: {e}"
+                            logger.error(error_str)
+                            yield [
+                                ConnectorFailure(
+                                    failed_document=DocumentFailure(
+                                        document_id=retrieved_file.drive_file["id"],
+                                        document_link=retrieved_file.drive_file[
+                                            "webViewLink"
+                                        ],
+                                    ),
+                                    failure_message=error_str,
+                                    exception=e,
+                                )
+                            ]
 
                     if documents:
                         yield documents

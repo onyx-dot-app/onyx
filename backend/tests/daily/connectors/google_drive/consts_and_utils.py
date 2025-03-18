@@ -1,6 +1,8 @@
 import time
 from collections.abc import Sequence
 
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
+from onyx.connectors.google_drive.connector import GoogleDriveCheckpoint
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
@@ -215,9 +217,15 @@ def assert_retrieved_docs_match_expected(
 
 def load_all_docs(connector: GoogleDriveConnector) -> list[Document]:
     retrieved_docs: list[Document] = []
-    for doc in connector.load_from_checkpoint(
-        0, time.time(), connector.build_dummy_checkpoint()
-    ):
-        assert isinstance(doc, Document), f"Should not fail with {type(doc)} {doc}"
-        retrieved_docs.append(doc)
+    checkpoint = connector.build_dummy_checkpoint()
+    while checkpoint.has_more:
+        for doc, failure, next_checkpoint in CheckpointOutputWrapper()(
+            connector.load_from_checkpoint(0, time.time(), checkpoint)
+        ):
+            assert failure is None
+            assert isinstance(doc, Document), f"Should not fail with {type(doc)} {doc}"
+            retrieved_docs.append(doc)
+            if next_checkpoint is not None:
+                assert isinstance(next_checkpoint, GoogleDriveCheckpoint)
+                checkpoint = next_checkpoint
     return retrieved_docs
