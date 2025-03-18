@@ -1,6 +1,8 @@
 import gc
 import os
+import sys
 import tempfile
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +26,12 @@ from onyx.connectors.salesforce.salesforce_calls import get_all_children_of_sf_t
 from onyx.connectors.salesforce.sqlite_functions import get_affected_parent_ids_by_type
 from onyx.connectors.salesforce.sqlite_functions import get_record
 from onyx.connectors.salesforce.sqlite_functions import init_db
+from onyx.connectors.salesforce.sqlite_functions import sqlite_log_stats
 from onyx.connectors.salesforce.sqlite_functions import update_sf_db_with_csv
+from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -67,25 +72,44 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             raise ConnectorMissingCredentialError("Salesforce")
         return self._sf_client
 
-    def _fetch_from_salesforce(
-        self,
+    @staticmethod
+    def reconstruct_object_types(directory: str) -> dict[str, list[str] | None]:
+        """
+        Scans the given directory for all CSV files and reconstructs the available object types.
+        Assumes filenames are formatted as "ObjectType_filename.csv" or "ObjectType.csv".
+
+        Args:
+            directory (str): The path to the directory containing CSV files.
+
+        Returns:
+            dict[str, list[str]]: A dictionary mapping object types to lists of file paths.
+        """
+        object_types = defaultdict(list)
+
+        for filename in os.listdir(directory):
+            if filename.endswith(".csv"):
+                parts = filename.split(".", 1)  # Split on the first underscore
+                object_type = parts[0]  # Take the first part as the object type
+                object_types[object_type].append(os.path.join(directory, filename))
+
+        return dict(object_types)
+
+    @staticmethod
+    def _download_object_csvs(
+        directory: str,
+        parent_object_list: list[str],
+        sf_client: Salesforce,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> GenerateDocumentsOutput:
-        init_db()
+    ) -> None:
+        all_object_types: set[str] = set(parent_object_list)
 
-        gc.collect()
-
-        all_object_types: set[str] = set(self.parent_object_list)
-
-        logger.info(f"Starting with {len(self.parent_object_list)} parent object types")
-        logger.debug(f"Parent object types: {self.parent_object_list}")
+        logger.info(f"Starting with {len(parent_object_list)} parent object types")
+        logger.debug(f"Parent object types: {parent_object_list}")
 
         # This takes like 20 seconds
-        for parent_object_type in self.parent_object_list:
-            child_types = get_all_children_of_sf_type(
-                self.sf_client, parent_object_type
-            )
+        for parent_object_type in parent_object_list:
+            child_types = get_all_children_of_sf_type(sf_client, parent_object_type)
             all_object_types.update(child_types)
             logger.debug(
                 f"Found {len(child_types)} child types for {parent_object_type}"
@@ -97,126 +121,179 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         logger.info(f"Found total of {len(all_object_types)} object types to fetch")
         logger.debug(f"All object types: {all_object_types}")
 
-        gc.collect()
+        # gc.collect()
 
         # checkpoint - we've found all object types, now time to fetch the data
         logger.info("Starting to fetch CSVs for all object types")
 
         # This takes like 30 minutes first time and <2 minutes for updates
-        with tempfile.TemporaryDirectory() as temp_dir:
-            object_type_to_csv_path = fetch_all_csvs_in_parallel(
-                sf_client=self.sf_client,
-                object_types=all_object_types,
-                start=start,
-                end=end,
-                target_dir=temp_dir,
-            )
+        object_type_to_csv_path = fetch_all_csvs_in_parallel(
+            sf_client=sf_client,
+            object_types=all_object_types,
+            start=start,
+            end=end,
+            target_dir=directory,
+        )
 
-            # print useful information
-            num_csvs = 0
-            num_bytes = 0
-            for object_type, csv_paths in object_type_to_csv_path.items():
-                if not csv_paths:
+        # print useful information
+        num_csvs = 0
+        num_bytes = 0
+        for object_type, csv_paths in object_type_to_csv_path.items():
+            if not csv_paths:
+                continue
+
+            for csv_path in csv_paths:
+                if not csv_path:
                     continue
 
-                for csv_path in csv_paths:
-                    if not csv_path:
-                        continue
+                file_path = Path(csv_path)
+                file_size = file_path.stat().st_size
+                num_csvs += 1
+                num_bytes += file_size
+                logger.info(
+                    f"CSV info: object_type={object_type} path={csv_path} bytes={file_size}"
+                )
 
-                    file_path = Path(csv_path)
-                    file_size = file_path.stat().st_size
-                    num_csvs += 1
-                    num_bytes += file_size
-                    logger.info(
-                        f"CSV info: object_type={object_type} path={csv_path} bytes={file_size}"
-                    )
+        logger.info(f"CSV info total: total_csvs={num_csvs} total_bytes={num_bytes}")
 
-            logger.info(
-                f"CSV info total: total_csvs={num_csvs} total_bytes={num_bytes}"
-            )
+    @staticmethod
+    def _load_csvs_to_db(csv_directory: str, db_directory: str) -> set[str]:
+        updated_ids: set[str] = set()
 
-            gc.collect()
+        object_type_to_csv_path = SalesforceConnector.reconstruct_object_types(
+            csv_directory
+        )
 
-            updated_ids: set[str] = set()
-            # This takes like 10 seconds
-            # This is for testing the rest of the functionality if data has
-            # already been fetched and put in sqlite
-            # from import onyx.connectors.salesforce.sf_db.sqlite_functions find_ids_by_type
-            # for object_type in self.parent_object_list:
-            #     updated_ids.update(list(find_ids_by_type(object_type)))
+        # This takes like 10 seconds
+        # This is for testing the rest of the functionality if data has
+        # already been fetched and put in sqlite
+        # from import onyx.connectors.salesforce.sf_db.sqlite_functions find_ids_by_type
+        # for object_type in self.parent_object_list:
+        #     updated_ids.update(list(find_ids_by_type(object_type)))
 
-            # This takes 10-70 minutes first time (idk why the range is so big)
-            total_types = len(object_type_to_csv_path)
-            logger.info(f"Starting to process {total_types} object types")
+        # This takes 10-70 minutes first time (idk why the range is so big)
+        total_types = len(object_type_to_csv_path)
+        logger.info(f"Starting to process {total_types} object types")
 
-            for i, (object_type, csv_paths) in enumerate(
-                object_type_to_csv_path.items(), 1
-            ):
-                logger.info(f"Processing object type {object_type} ({i}/{total_types})")
-                # If path is None, it means it failed to fetch the csv
-                if csv_paths is None:
-                    continue
-                # Go through each csv path and use it to update the db
-                for csv_path in csv_paths:
-                    logger.debug(f"Updating {object_type} with {csv_path}")
-                    new_ids = update_sf_db_with_csv(
-                        object_type=object_type,
-                        csv_download_path=csv_path,
-                    )
-                    updated_ids.update(new_ids)
-                    logger.debug(
-                        f"Added {len(new_ids)} new/updated records for {object_type}"
-                    )
+        for i, (object_type, csv_paths) in enumerate(
+            object_type_to_csv_path.items(), 1
+        ):
+            logger.info(f"Processing object type {object_type} ({i}/{total_types})")
+            # If path is None, it means it failed to fetch the csv
+            if csv_paths is None:
+                continue
 
-                    gc.collect()
+            # Go through each csv path and use it to update the db
+            for csv_path in csv_paths:
+                logger.debug(
+                    f"Processing CSV: object_type={object_type} "
+                    f"csv={csv_path} "
+                    f"len={Path(csv_path).stat().st_size}"
+                )
+                new_ids = update_sf_db_with_csv(
+                    db_directory,
+                    object_type=object_type,
+                    csv_download_path=csv_path,
+                )
+                updated_ids.update(new_ids)
+                logger.debug(
+                    f"Added {len(new_ids)} new/updated records for {object_type}"
+                )
+
+                os.remove(csv_path)
+
+        return updated_ids
+
+    def _fetch_from_salesforce(
+        self,
+        temp_dir: str,
+        start: SecondsSinceUnixEpoch | None = None,
+        end: SecondsSinceUnixEpoch | None = None,
+    ) -> GenerateDocumentsOutput:
+        logger.info("_fetch_from_salesforce starting.")
+        if not self._sf_client:
+            raise RuntimeError("self._sf_client is None!")
+
+        init_db(temp_dir)
+
+        sqlite_log_stats(temp_dir)
+
+        # Step 1 - download
+        SalesforceConnector._download_object_csvs(
+            temp_dir, self.parent_object_list, self._sf_client, start, end
+        )
+        gc.collect()
+
+        # Step 2 - load CSV's to sqlite
+        updated_ids = SalesforceConnector._load_csvs_to_db(temp_dir, temp_dir)
+        # csv_directory = "/Users/rkuo/Downloads/frc_salesforce"
+        # updated_ids = SalesforceConnector._load_csvs_to_db(csv_directory, temp_dir)
+        gc.collect()
 
         logger.info(f"Found {len(updated_ids)} total updated records")
         logger.info(
             f"Starting to process parent objects of types: {self.parent_object_list}"
         )
 
-        num_object_batches = 0
-        docs_to_yield: list[Document] = []
+        # Step 3 - extract and index docs
+        batches_processed = 0
         docs_processed = 0
+        docs_to_yield: list[Document] = []
+
         # Takes 15-20 seconds per batch
         for parent_type, parent_id_batch in get_affected_parent_ids_by_type(
+            temp_dir,
             updated_ids=list(updated_ids),
             parent_types=self.parent_object_list,
         ):
-            num_object_batches += 1
+            batches_processed += 1
             logger.info(
-                f"Processing batch: index={num_object_batches} object_type={parent_type} len={len(parent_id_batch)}"
+                f"Processing batch: index={batches_processed} "
+                f"object_type={parent_type} "
+                f"len={len(parent_id_batch)} "
+                f"processed={docs_processed} "
+                f"remaining={len(updated_ids) - docs_processed}"
             )
             for parent_id in parent_id_batch:
-                if not (parent_object := get_record(parent_id, parent_type)):
+                if not (parent_object := get_record(temp_dir, parent_id, parent_type)):
                     logger.warning(
                         f"Failed to get parent object {parent_id} for {parent_type}"
                     )
                     continue
 
-                docs_to_yield.append(
-                    convert_sf_object_to_doc(
-                        sf_object=parent_object,
-                        sf_instance=self.sf_client.sf_instance,
-                    )
+                doc = convert_sf_object_to_doc(
+                    temp_dir,
+                    sf_object=parent_object,
+                    sf_instance=self.sf_client.sf_instance,
                 )
+                logger.info(f"Appending doc: doc_id={doc.id} size={sys.getsizeof(doc)}")
+                docs_to_yield.append(doc)
                 docs_processed += 1
 
                 if len(docs_to_yield) >= self.batch_size:
                     yield docs_to_yield
                     docs_to_yield = []
 
-                    gc.collect()
+                    # observed a memory leak / size issue with the account table if we don't gc.collect here.
+                    # gc.collect()
 
         yield docs_to_yield
 
     def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._fetch_from_salesforce()
+        if MULTI_TENANT:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                return self._fetch_from_salesforce(temp_dir)
+
+        return self._fetch_from_salesforce(BASE_DATA_PATH)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        return self._fetch_from_salesforce(start=start, end=end)
+        if MULTI_TENANT:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                return self._fetch_from_salesforce(temp_dir, start=start, end=end)
+
+        return self._fetch_from_salesforce(BASE_DATA_PATH)
 
     def retrieve_all_slim_documents(
         self,

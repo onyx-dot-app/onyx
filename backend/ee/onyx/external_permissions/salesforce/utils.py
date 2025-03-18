@@ -55,6 +55,7 @@ _CACHED_SF_EMAIL_TO_ID_MAP: dict[str, str] = {}
 
 
 def get_salesforce_user_id_from_email(
+    directory: str,
     sf_client: Salesforce,
     user_email: str,
 ) -> str | None:
@@ -85,11 +86,11 @@ def get_salesforce_user_id_from_email(
     db_exists = True
     try:
         # Check if the user is already in the database
-        user_id = get_user_id_by_email(user_email)
+        user_id = get_user_id_by_email(directory, user_email)
     except Exception:
-        init_db()
+        init_db(directory)
         try:
-            user_id = get_user_id_by_email(user_email)
+            user_id = get_user_id_by_email(directory, user_email)
         except Exception as e:
             logger.error(f"Error checking if user is in database: {e}")
             user_id = None
@@ -100,7 +101,7 @@ def get_salesforce_user_id_from_email(
         # ...query Salesforce and store the result in the database
         user_id = _query_salesforce_user_id(sf_client, user_email)
         if db_exists:
-            update_email_to_id_table(user_email, user_id)
+            update_email_to_id_table(directory, user_email, user_id)
             return user_id
         elif user_id is None:
             return None

@@ -350,10 +350,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         llm = get_default_llm_with_vision()
 
     if not llm:
-        logger.warning(
-            "No vision-capable LLM available. Image sections will not be processed."
-        )
-
         # Even without LLM, we still convert to IndexingDocument with base Sections
         return [
             IndexingDocument(
