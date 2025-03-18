@@ -197,7 +197,7 @@ if not MULTI_TENANT:
             {
                 "name": "monitor-process-memory",
                 "task": OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
-                "schedule": timedelta(seconds=5),
+                "schedule": timedelta(minutes=5),
                 "options": {
                     "priority": OnyxCeleryPriority.LOW,
                     "expires": BEAT_EXPIRES_DEFAULT,
