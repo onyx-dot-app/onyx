@@ -403,6 +403,7 @@ class OnyxCeleryTask:
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+    MONITOR_PROCESS_MEMORY = "monitor_process_memory"
 
     # Tenant pre-provisioning
     PRE_PROVISION_TENANT = "pre_provision_tenant"
