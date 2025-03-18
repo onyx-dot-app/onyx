@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# USAGE: nohup ./docker_memory_tracking.sh &
+
 # Set default output file or use the provided argument
 OUTPUT_FILE="./docker_stats.log"
 if [ $# -ge 1 ]; then
