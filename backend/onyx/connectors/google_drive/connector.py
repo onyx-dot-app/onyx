@@ -8,8 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from functools import partial
 from typing import Any
-from urllib.parse import urlparse
 from typing import Protocol
+from urllib.parse import urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
