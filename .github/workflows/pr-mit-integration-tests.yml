@@ -1,6 +1,6 @@
-name: Run Integration Tests v2
+name: Run MIT Integration Tests v2
 concurrency:
-  group: Run-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
+  group: Run-MIT-Integration-Tests-${{ github.workflow }}-${{ github.head_ref || github.event.workflow_run.head_branch || github.run_id }}
   cancel-in-progress: true
 
 on:
@@ -88,69 +88,10 @@ jobs:
           cache-from: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/integration-tests/integration/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
 
-      # Start containers for multi-tenant tests
-      - name: Start Docker containers for multi-tenant tests
-        run: |
-          cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
-          MULTI_TENANT=true \
-          AUTH_TYPE=cloud \
-          REQUIRE_EMAIL_VERIFICATION=false \
-          DISABLE_TELEMETRY=true \
-          IMAGE_TAG=test \
-          DEV_MODE=true \
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack up -d
-        id: start_docker_multi_tenant
-
-      # In practice, `cloud` Auth type would require OAUTH credentials to be set.
-      - name: Run Multi-Tenant Integration Tests
-        run: |
-          echo "Waiting for 3 minutes to ensure API server is ready..."
-          sleep 180
-          echo "Running integration tests..."
-          docker run --rm --network onyx-stack_default \
-            --name test-runner \
-            -e POSTGRES_HOST=relational_db \
-            -e POSTGRES_USER=postgres \
-            -e POSTGRES_PASSWORD=password \
-            -e POSTGRES_DB=postgres \
-            -e POSTGRES_USE_NULL_POOL=true \
-            -e VESPA_HOST=index \
-            -e REDIS_HOST=cache \
-            -e API_SERVER_HOST=api_server \
-            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
-            -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
-            -e TEST_WEB_HOSTNAME=test-runner \
-            -e AUTH_TYPE=cloud \
-            -e MULTI_TENANT=true \
-            -e REQUIRE_EMAIL_VERIFICATION=false \
-            -e DISABLE_TELEMETRY=true \
-            -e IMAGE_TAG=test \
-            -e DEV_MODE=true \
-            onyxdotapp/onyx-integration:test \
-            /app/tests/integration/multitenant_tests
-        continue-on-error: true
-        id: run_multitenant_tests
-
-      - name: Check multi-tenant test results
-        run: |
-          if [ ${{ steps.run_multitenant_tests.outcome }} == 'failure' ]; then
-            echo "Multi-tenant integration tests failed. Exiting with error."
-            exit 1
-          else
-            echo "All multi-tenant integration tests passed successfully."
-          fi
-
-      - name: Stop multi-tenant Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.multitenant-dev.yml -p onyx-stack down -v
-
       # NOTE: Use pre-ping/null pool to reduce flakiness due to dropped connections
       - name: Start Docker containers
         run: |
           cd deployment/docker_compose
-          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
           AUTH_TYPE=basic \
           POSTGRES_POOL_PRE_PING=true \
           POSTGRES_USE_NULL_POOL=true \
