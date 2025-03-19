@@ -67,6 +67,7 @@ def _convert_single_file(
     creds: Any,
     primary_admin_email: str,
     file: dict[str, Any],
+    allow_images: bool,
 ) -> Any:
     user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
     user_drive_service = get_drive_service(creds, user_email=user_email)
@@ -75,6 +76,7 @@ def _convert_single_file(
         file=file,
         drive_service=user_drive_service,
         docs_service=docs_service,
+        allow_images=allow_images,
     )
 
 
@@ -191,6 +193,10 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
 
         self._retrieved_ids: set[str] = set()
+        self.allow_images = False
+
+    def set_allow_images(self, value: bool) -> None:
+        self.allow_images = value
 
     @property
     def primary_admin_email(self) -> str:
@@ -531,6 +537,7 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                 _convert_single_file,
                 self.creds,
                 self.primary_admin_email,
+                self.allow_images,
             )
 
             # Fetch files in batches

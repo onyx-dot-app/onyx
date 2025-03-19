@@ -57,6 +57,9 @@ class BaseConnector(abc.ABC):
         Default is a no-op (always successful).
         """
 
+    def set_allow_images(self, value: bool) -> None:
+        pass
+
 
 # Large set update or reindex, generally pulling a complete state or from a savestate file
 class LoadConnector(BaseConnector):

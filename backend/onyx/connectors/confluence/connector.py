@@ -114,6 +114,7 @@ class ConfluenceConnector(
         self.timezone_offset = timezone_offset
         self._confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
+        self.allow_images = False
 
         # Remove trailing slash from wiki_base if present
         self.wiki_base = wiki_base.rstrip("/")
@@ -157,6 +158,9 @@ class ConfluenceConnector(
             "max_backoff_retries": 10,
             "max_backoff_seconds": 60,
         }
+
+    def set_allow_images(self, value: bool) -> None:
+        self._download_images = value
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -264,6 +268,7 @@ class ConfluenceConnector(
                         self.confluence_client,
                         attachment,
                         page_id,
+                        self._download_images,
                     )
 
                     if result and result.text:
@@ -373,6 +378,7 @@ class ConfluenceConnector(
                         confluence_client=self.confluence_client,
                         attachment=attachment,
                         page_id=page["id"],
+                        allow_images=self._download_images,
                     )
                     if response is None:
                         continue
