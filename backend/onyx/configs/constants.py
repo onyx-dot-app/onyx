@@ -174,6 +174,7 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
+    HIGHSPOT = "highspot"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -388,6 +389,9 @@ class OnyxCeleryTask:
     )
     CHECK_AVAILABLE_TENANTS = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
 
+    # Tenant pre-provisioning
+    PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
+
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"
@@ -402,9 +406,7 @@ class OnyxCeleryTask:
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
-
-    # Tenant pre-provisioning
-    PRE_PROVISION_TENANT = "pre_provision_tenant"
+    MONITOR_PROCESS_MEMORY = "monitor_process_memory"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (

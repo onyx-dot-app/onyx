@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -147,7 +148,7 @@ def _get_permissions_from_slim_doc(
 def gdrive_doc_sync(
     cc_pair: ConnectorCredentialPair,
     callback: IndexingHeartbeatInterface | None,
-) -> list[DocExternalAccess]:
+) -> Generator[DocExternalAccess, None, None]:
     """
     Adds the external permissions to the documents in postgres
     if the document doesn't already exists in postgres, we create
@@ -161,7 +162,6 @@ def gdrive_doc_sync(
 
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 
-    document_external_accesses = []
     for slim_doc_batch in slim_doc_generator:
         for slim_doc in slim_doc_batch:
             if callback:
@@ -174,10 +174,7 @@ def gdrive_doc_sync(
                 google_drive_connector=google_drive_connector,
                 slim_doc=slim_doc,
             )
-            document_external_accesses.append(
-                DocExternalAccess(
-                    external_access=ext_access,
-                    doc_id=slim_doc.id,
-                )
+            yield DocExternalAccess(
+                external_access=ext_access,
+                doc_id=slim_doc.id,
             )
-    return document_external_accesses
