@@ -194,6 +194,16 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.MONITORING,
                 },
             },
+            {
+                "name": "monitor-process-memory",
+                "task": OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
+                "schedule": timedelta(minutes=5),
+                "options": {
+                    "priority": OnyxCeleryPriority.LOW,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
         ]
     )
 

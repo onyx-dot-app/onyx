@@ -40,6 +40,9 @@ def highspot_connector() -> HighspotConnector:
     return connector
 
 
+@pytest.mark.xfail(
+    reason="Accessing postgres that isn't available in connector only tests",
+)
 def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None:
     """Test basic functionality of the Highspot connector."""
     all_docs: list[Document] = []
@@ -73,6 +76,9 @@ def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None
         assert len(section.text) > 0
 
 
+@pytest.mark.xfail(
+    reason="Possibly accessing postgres that isn't available in connector only tests",
+)
 def test_highspot_connector_slim(highspot_connector: HighspotConnector) -> None:
     """Test slim document retrieval."""
     # Get all doc IDs from the full connector
