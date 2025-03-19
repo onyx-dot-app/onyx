@@ -1,0 +1,201 @@
+/* ThinkingBox.css */
+:root {
+  --thinking-border-color: rgba(0, 0, 0, 0.1);
+  --thinking-bg-color: transparent;
+  --thinking-text-color: #6b7280;
+  --thinking-title-color: #374151;
+  --thinking-fade-start: rgba(249, 250, 251, 1);
+  --thinking-fade-end: rgba(249, 250, 251, 0);
+}
+
+.dark {
+  --thinking-border-color: rgba(255, 255, 255, 0.1);
+  --thinking-bg-color: transparent;
+  --thinking-text-color: #9ca3af;
+  --thinking-title-color: #e5e7eb;
+  --thinking-fade-start: rgba(30, 41, 59, 1);
+  --thinking-fade-end: rgba(30, 41, 59, 0);
+}
+
+.thinking-box {
+  width: 100%;
+  margin-bottom: 0.5rem;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+}
+
+.thinking-box__container {
+  border: 1px solid var(--thinking-border-color);
+  border-radius: 0.75rem;
+  background-color: var(--thinking-bg-color);
+  overflow: hidden;
+  transition: all 0.2s ease-in-out;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* More subtle collapsed state */
+.thinking-box__container--collapsed {
+  border-color: var(--thinking-border-color);
+  opacity: 0.9;
+}
+
+/* No preview - make the bottom border curved too */
+.thinking-box__container--no-preview {
+  border-bottom-left-radius: 0.75rem;
+  border-bottom-right-radius: 0.75rem;
+}
+
+/* Remove the bottom border when there's no preview */
+.thinking-box__container--no-preview .thinking-box__header {
+  border-bottom: none;
+}
+
+.thinking-box__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+  user-select: none;
+  border-bottom: 1px solid var(--thinking-border-color);
+}
+
+.thinking-box__header:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.thinking-box__title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--thinking-title-color);
+}
+
+.thinking-box__icon {
+  color: var(--thinking-text-color);
+  margin-right: 0.25rem;
+  animation: pulse 1.5s infinite ease-in-out;
+}
+
+.thinking-box__title-text {
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.thinking-box__timer {
+  font-size: 0.8rem;
+  color: var(--thinking-text-color);
+  margin-left: 0.25rem;
+}
+
+.thinking-box__collapse-icon {
+  color: var(--thinking-text-color);
+  display: flex;
+  align-items: center;
+}
+
+.thinking-box__content {
+  border-top: 1px solid var(--thinking-border-color);
+  padding: 1rem;
+  max-height: 400px;
+  overflow-y: auto;
+  color: var(--thinking-text-color);
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.thinking-box__markdown {
+  font-size: 0.875rem;
+  color: var(--thinking-text-color);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+
+/* Preview container (collapsed state) */
+.thinking-box__preview {
+  position: relative;
+  height: 1.8rem; /* Slightly taller to show more content */
+  overflow: hidden;
+}
+
+.thinking-box__fade-container {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Create fade effect at top and bottom */
+.thinking-box__fade-container::before,
+.thinking-box__fade-container::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0.5rem;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.thinking-box__fade-container::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--thinking-fade-start), var(--thinking-fade-end));
+}
+
+.thinking-box__fade-container::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--thinking-fade-start), var(--thinking-fade-end));
+}
+
+.thinking-box__scroll-content {
+  padding: 0.25rem 1rem;
+  height: 100%;
+  overflow-y: hidden;
+  will-change: transform, scroll-position; /* Optimize for animation */
+  transform: translateZ(0); /* Force GPU acceleration */
+  backface-visibility: hidden;
+  -webkit-font-smoothing: antialiased;
+  mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+}
+
+.thinking-box__preview-text {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.65rem;
+  color: var(--thinking-text-color);
+  white-space: pre-wrap;
+  margin: 0;
+  display: block;
+  opacity: 0.8;
+}
+
+.thinking-box__expand-prompt {
+  display: none;
+}
+
+/* Animation for thinking indicator */
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+/* Fade in animation */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Fade out animation */
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Smooth scrolling effect */
+@keyframes scrollText {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-100%); }
+} 
