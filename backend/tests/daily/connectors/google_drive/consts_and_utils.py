@@ -223,9 +223,12 @@ def load_all_docs(connector: GoogleDriveConnector) -> list[Document]:
             connector.load_from_checkpoint(0, time.time(), checkpoint)
         ):
             assert failure is None
-            assert isinstance(doc, Document), f"Should not fail with {type(doc)} {doc}"
-            retrieved_docs.append(doc)
-            if next_checkpoint is not None:
+            if next_checkpoint is None:
+                assert isinstance(
+                    doc, Document
+                ), f"Should not fail with {type(doc)} {doc}"
+                retrieved_docs.append(doc)
+            else:
                 assert isinstance(next_checkpoint, GoogleDriveCheckpoint)
                 checkpoint = next_checkpoint
     return retrieved_docs
