@@ -86,8 +86,8 @@ def _extract_ids_from_urls(urls: list[str]) -> list[str]:
 def _convert_single_file(
     creds: Any,
     primary_admin_email: str,
-    file: dict[str, Any],
     allow_images: bool,
+    file: dict[str, Any],
 ) -> Document | ConnectorFailure | None:
     user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
 
