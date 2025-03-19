@@ -574,6 +574,22 @@ class Document(Base):
     )
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
+    # tables for the knowledge graph data
+    kg_processed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this document has been processed for knowledge graph extraction",
+    )
+
+    kg_data: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Knowledge graph data extracted from this document",
+    )
+
     retrieval_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="document"
     )
@@ -963,7 +979,7 @@ class Connector(Base):
         DateTime, nullable=True
     )
 
-    kg_extract: Mapped[bool] = mapped_column(
+    kg_extraction_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,
@@ -1395,6 +1411,12 @@ class DocumentByConnectorCredentialPair(Base):
     # not be counted as part of the connector's document count until
     # the actual indexing is complete
     has_been_indexed: Mapped[bool] = mapped_column(Boolean)
+
+    has_been_kg_processed: Mapped[bool | None] = mapped_column(
+        Boolean,
+        nullable=True,
+        comment="Whether this document has been processed for knowledge graph extraction",
+    )
 
     connector: Mapped[Connector] = relationship(
         "Connector", back_populates="documents_by_connector"

@@ -18,12 +18,6 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add kg_extract column to connector table
-    op.add_column(
-        "connector",
-        sa.Column("kg_extract", sa.Boolean(), nullable=False, server_default="false"),
-    )
-
     # Create kg_entity_type table
     op.create_table(
         "kg_entity_type",
@@ -243,6 +237,28 @@ def upgrade() -> None:
     op.create_index("ix_kg_term_id", "kg_term", ["id"])
     op.create_index("ix_kg_term_term", "kg_term", ["term"])
     op.create_index("ix_search_term_entities", "kg_term", ["entity_types"])
+    op.add_column(
+        "document",
+        sa.Column("kg_processed", sa.Boolean(), nullable=False, server_default="false"),
+    )
+    op.add_column(
+        "document",
+        sa.Column("kg_data", postgresql.JSONB(), nullable=False, server_default="{}"),
+    )
+    op.add_column(
+        "connector",
+        sa.Column(
+            "kg_extraction_enabled",
+            sa.Boolean(),
+            nullable=False,
+            server_default="false",
+        ),
+    )
+
+    op.add_column(
+        "document_by_connector_credential_pair",
+        sa.Column("has_been_kg_processed", sa.Boolean(), nullable=True),
+    )
 
 
 def downgrade() -> None:
@@ -252,4 +268,7 @@ def downgrade() -> None:
     op.drop_table("kg_entity")
     op.drop_table("kg_relationship_type")
     op.drop_table("kg_entity_type")
-    op.drop_column("connector", "kg_extract")
+    op.drop_column("connector", "kg_extraction_enabled")
+    op.drop_column("document_by_connector_credential_pair", "has_been_kg_processed")
+    op.drop_column("document", "kg_data")
+    op.drop_column("document", "kg_processed")
