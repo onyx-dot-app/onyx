@@ -71,7 +71,19 @@ _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT = [
     "mov",
     "mp3",
     "wav",
+    "webm",
+    "png",
+    "jpg",
+    "jpeg",
+    "bmp",
+    "tiff",
+    "ico",
+    "webp",
+    "heic",
+    "heif",
+    "hevc",
 ]
+
 _FULL_EXTENSION_FILTER_STRING = "".join(
     [
         f" and title!~'*.{extension}'"

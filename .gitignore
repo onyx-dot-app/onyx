@@ -10,3 +10,4 @@
 /web/test-results/
 backend/onyx/agent_search/main/test_data.json
 backend/tests/regression/answer_quality/test_data.json
+jira_test_env/

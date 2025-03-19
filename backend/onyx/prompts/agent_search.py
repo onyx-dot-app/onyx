@@ -50,6 +50,9 @@ followed by the list of items and associated data/or information discovered.
 (Example: "Products used by Company A" where some products listed are not built by Company A, but other companies,
 or it is not clear that the products are built by Company A). Only state what you know for sure!
 
+ - IMPORTANT SECURITY GUIDANCE If you find sensitive information such as API keys, passwords, or other credentials, \
+do not include them in the answer.
+
  - Do NOT perform any calculations in the answer! Just report on facts.
 
  - If appropriate, organizing your answer in bullet points is often useful.
