@@ -1,5 +1,4 @@
 import os
-from collections.abc import Generator
 from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone
@@ -19,6 +18,7 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorCheckpoint
@@ -132,7 +132,7 @@ def process_jira_issue(
     if resolution := best_effort_get_field_from_issue(issue, "resolution"):
         metadata_dict["resolution"] = resolution.name
     if labels := best_effort_get_field_from_issue(issue, "labels"):
-        metadata_dict["label"] = labels
+        metadata_dict["labels"] = labels
 
     return Document(
         id=page_url,
@@ -205,10 +205,13 @@ class JiraConnector(CheckpointConnector[JiraConnectorCheckpoint], SlimConnector)
             "%Y-%m-%d %H:%M"
         )
 
-        base_jql = f"project = {self.quoted_jira_project}" if self.jira_project else ""
         time_jql = f"updated >= '{start_date_str}' AND updated <= '{end_date_str}'"
 
-        return f"{base_jql} AND {time_jql}" if base_jql else time_jql
+        if self.jira_project:
+            base_jql = f"project = {self.quoted_jira_project}"
+            return f"{base_jql} AND {time_jql}"
+
+        return time_jql
 
     def load_from_checkpoint(
         self,
@@ -263,7 +266,7 @@ class JiraConnector(CheckpointConnector[JiraConnectorCheckpoint], SlimConnector)
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
-    ) -> Generator[list[SlimDocument], None, None]:
+    ) -> GenerateSlimDocumentOutput:
         jql = self._get_jql_query(start or 0, end or float("inf"))
 
         slim_doc_batch = []
