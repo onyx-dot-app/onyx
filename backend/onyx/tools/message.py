@@ -21,7 +21,6 @@ def build_tool_message(
     )
 
 
-# TODO: does this NEED to be BaseModel__v1?
 class ToolCallSummary(BaseModel):
     tool_call_request: AIMessage
     tool_call_result: ToolMessage

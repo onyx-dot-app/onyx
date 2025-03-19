@@ -24,7 +24,6 @@ from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -405,7 +404,7 @@ def _run_indexing(
             # the beginning in order to avoid weird interactions between
             # checkpointing / failure handling.
             if index_attempt.from_beginning:
-                checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
+                checkpoint = connector_runner.connector.build_dummy_checkpoint()
             else:
                 checkpoint = get_latest_valid_checkpoint(
                     db_session=db_session_temp,
@@ -413,6 +412,7 @@ def _run_indexing(
                     search_settings_id=index_attempt.search_settings_id,
                     window_start=window_start,
                     window_end=window_end,
+                    connector=connector_runner.connector,
                 )
 
             unresolved_errors = get_index_attempt_errors_for_cc_pair(

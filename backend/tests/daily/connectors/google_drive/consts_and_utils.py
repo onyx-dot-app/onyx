@@ -1,5 +1,9 @@
+import time
 from collections.abc import Sequence
 
+from onyx.connectors.connector_runner import CheckpointOutputWrapper
+from onyx.connectors.google_drive.connector import GoogleDriveCheckpoint
+from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 
@@ -21,6 +25,7 @@ FOLDER_2_FILE_IDS = list(range(45, 50))
 FOLDER_2_1_FILE_IDS = list(range(50, 55))
 FOLDER_2_2_FILE_IDS = list(range(55, 60))
 SECTIONS_FILE_IDS = [61]
+FOLDER_3_FILE_IDS = list(range(62, 65))
 
 PUBLIC_FOLDER_RANGE = FOLDER_1_2_FILE_IDS
 PUBLIC_FILE_IDS = list(range(55, 57))
@@ -53,6 +58,8 @@ FOLDER_3_URL = (
 SECTIONS_FOLDER_URL = (
     "https://drive.google.com/drive/u/5/folders/1loe6XJ-pJxu9YYPv7cF3Hmz296VNzA33"
 )
+
+SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
 
 ADMIN_EMAIL = "admin@onyx-test.com"
 TEST_USER_1_EMAIL = "test_user_1@onyx-test.com"
@@ -133,17 +140,19 @@ def filter_invalid_prefixes(names: set[str]) -> set[str]:
     return {name for name in names if name.startswith(_VALID_PREFIX)}
 
 
-def print_discrepencies(
+def print_discrepancies(
     expected: set[str],
     retrieved: set[str],
 ) -> None:
     if expected != retrieved:
-        print(expected)
-        print(retrieved)
+        expected_list = sorted(expected)
+        retrieved_list = sorted(retrieved)
+        print(expected_list)
+        print(retrieved_list)
         print("Extra:")
-        print(retrieved - expected)
+        print(sorted(retrieved - expected))
         print("Missing:")
-        print(expected - retrieved)
+        print(sorted(expected - retrieved))
 
 
 def _get_expected_file_content(file_id: int) -> str:
@@ -163,6 +172,8 @@ def assert_retrieved_docs_match_expected(
     expected_file_texts = {
         _get_expected_file_content(file_id) for file_id in expected_file_ids
     }
+
+    retrieved_docs.sort(key=lambda x: x.semantic_identifier)
 
     for doc in retrieved_docs:
         print(f"doc.semantic_identifier: {doc.semantic_identifier}")
@@ -190,15 +201,34 @@ def assert_retrieved_docs_match_expected(
     )
 
     # Check file names
-    print_discrepencies(
+    print_discrepancies(
         expected=expected_file_names,
         retrieved=valid_retrieved_file_names,
     )
     assert expected_file_names == valid_retrieved_file_names
 
     # Check file texts
-    print_discrepencies(
+    print_discrepancies(
         expected=expected_file_texts,
         retrieved=valid_retrieved_texts,
     )
     assert expected_file_texts == valid_retrieved_texts
+
+
+def load_all_docs(connector: GoogleDriveConnector) -> list[Document]:
+    retrieved_docs: list[Document] = []
+    checkpoint = connector.build_dummy_checkpoint()
+    while checkpoint.has_more:
+        for doc, failure, next_checkpoint in CheckpointOutputWrapper()(
+            connector.load_from_checkpoint(0, time.time(), checkpoint)
+        ):
+            assert failure is None
+            if next_checkpoint is None:
+                assert isinstance(
+                    doc, Document
+                ), f"Should not fail with {type(doc)} {doc}"
+                retrieved_docs.append(doc)
+            else:
+                assert isinstance(next_checkpoint, GoogleDriveCheckpoint)
+                checkpoint = next_checkpoint
+    return retrieved_docs
