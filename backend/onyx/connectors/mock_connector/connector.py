@@ -91,7 +91,7 @@ class MockConnector(CheckpointConnector[MockConnectorCheckpoint]):
         return current_yield.checkpoint
 
     @override
-    def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
+    def build_dummy_checkpoint(self) -> MockConnectorCheckpoint:
         return MockConnectorCheckpoint(
             has_more=True,
             last_document_id=None,
