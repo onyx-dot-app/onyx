@@ -18,7 +18,7 @@ spec:
         - name: slack-bot
           image: onyxdotapp/onyx-backend:latest
           imagePullPolicy: IfNotPresent
-          command: ["python", "onyxdotapp/onyxbot/slack/listener.py"]
+          command: ["python", "onyx/onyxbot/slack/listener.py"]
           ports:
             - containerPort: 8000
           resources:
