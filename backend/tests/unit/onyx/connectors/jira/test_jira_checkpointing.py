@@ -215,7 +215,7 @@ def test_load_from_checkpoint_happy_path(
     )
 
     # Check that search_issues was called with the right parameters
-    search_issues_mock.call_count == 2
+    assert search_issues_mock.call_count == 2
     args, kwargs = search_issues_mock.call_args_list[0]
     assert kwargs["startAt"] == 0
     assert kwargs["maxResults"] == PAGE_SIZE
