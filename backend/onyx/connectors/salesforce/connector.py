@@ -40,6 +40,8 @@ _DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
 
 
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
+    MAX_BATCH_BYTES = 1024 * 1024
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -239,6 +241,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         batches_processed = 0
         docs_processed = 0
         docs_to_yield: list[Document] = []
+        docs_to_yield_bytes = 0
 
         # Takes 15-20 seconds per batch
         for parent_type, parent_id_batch in get_affected_parent_ids_by_type(
@@ -266,16 +269,24 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     sf_object=parent_object,
                     sf_instance=self.sf_client.sf_instance,
                 )
+                doc_sizeof = sys.getsizeof(doc)
+                docs_to_yield_bytes += doc_sizeof
                 logger.info(f"Appending doc: doc_id={doc.id} size={sys.getsizeof(doc)}")
                 docs_to_yield.append(doc)
                 docs_processed += 1
 
-                if len(docs_to_yield) >= self.batch_size:
+                # memory usage is sensitive to the input length, so we're yielding immediately
+                # if the batch exceeds a certain byte length
+                if (
+                    len(docs_to_yield) >= self.batch_size
+                    or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
+                ):
                     yield docs_to_yield
                     docs_to_yield = []
+                    docs_to_yield_bytes = 0
 
                     # observed a memory leak / size issue with the account table if we don't gc.collect here.
-                    # gc.collect()
+                    gc.collect()
 
         yield docs_to_yield
 
