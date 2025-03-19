@@ -796,7 +796,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             end=end,
         )
         if is_slim:
-            return drive_files
+            yield from drive_files
+            return
 
         for file in drive_files:
             if file.error is not None:
@@ -885,7 +886,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
-        assert checkpoint is not None, "Must provide checkpoint for full retrieval"
         retrieval_method = (
             self._manage_service_account_retrieval
             if isinstance(self.creds, ServiceAccountCredentials)
