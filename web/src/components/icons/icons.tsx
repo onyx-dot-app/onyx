@@ -89,6 +89,7 @@ import cohereIcon from "../../../public/Cohere.svg";
 import voyageIcon from "../../../public/Voyage.png";
 import googleIcon from "../../../public/Google.webp";
 import xenforoIcon from "../../../public/Xenforo.svg";
+import highspotIcon from "../../../public/Highspot.png";
 import { FaGithub, FaRobot } from "react-icons/fa";
 
 import { cn } from "@/lib/utils";
@@ -2911,6 +2912,13 @@ export const GitbookIcon = ({
     </div>
   </div>
 );
+
+export const HighspotIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return <LogoIcon size={size} className={className} src={highspotIcon} />;
+};
 
 export const PinnedIcon = ({
   size = 16,

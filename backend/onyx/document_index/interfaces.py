@@ -101,6 +101,7 @@ class VespaDocumentFields:
     document_sets: set[str] | None = None
     boost: float | None = None
     hidden: bool | None = None
+    aggregated_chunk_boost_factor: float | None = None
 
 
 @dataclass

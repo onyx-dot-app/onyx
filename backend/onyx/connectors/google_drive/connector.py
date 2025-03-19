@@ -4,6 +4,7 @@ from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any
+from urllib.parse import urlparse
 
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
@@ -59,7 +60,7 @@ def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
 
 
 def _extract_ids_from_urls(urls: list[str]) -> list[str]:
-    return [url.split("/")[-1] for url in urls]
+    return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
 
 
 def _convert_single_file(

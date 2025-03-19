@@ -29,6 +29,8 @@ from onyx.natural_language_processing.exceptions import (
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.natural_language_processing.utils import tokenizer_trim_content
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
+from shared_configs.configs import INDEXING_MODEL_SERVER_PORT
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbeddingProvider
@@ -36,9 +38,11 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import ConnectorClassificationRequest
 from shared_configs.model_server_models import ConnectorClassificationResponse
+from shared_configs.model_server_models import ContentClassificationPrediction
 from shared_configs.model_server_models import Embedding
 from shared_configs.model_server_models import EmbedRequest
 from shared_configs.model_server_models import EmbedResponse
+from shared_configs.model_server_models import InformationContentClassificationResponses
 from shared_configs.model_server_models import IntentRequest
 from shared_configs.model_server_models import IntentResponse
 from shared_configs.model_server_models import RerankRequest
@@ -375,6 +379,31 @@ class QueryAnalysisModel:
         response_model = IntentResponse(**response.json())
 
         return response_model.is_keyword, response_model.keywords
+
+
+class InformationContentClassificationModel:
+    def __init__(
+        self,
+        model_server_host: str = INDEXING_MODEL_SERVER_HOST,
+        model_server_port: int = INDEXING_MODEL_SERVER_PORT,
+    ) -> None:
+        model_server_url = build_model_server_url(model_server_host, model_server_port)
+        self.content_server_endpoint = (
+            model_server_url + "/custom/content-classification"
+        )
+
+    def predict(
+        self,
+        queries: list[str],
+    ) -> list[ContentClassificationPrediction]:
+        response = requests.post(self.content_server_endpoint, json=queries)
+        response.raise_for_status()
+
+        model_responses = InformationContentClassificationResponses(
+            information_content_classifications=response.json()
+        )
+
+        return model_responses.information_content_classifications
 
 
 class ConnectorClassificationModel:

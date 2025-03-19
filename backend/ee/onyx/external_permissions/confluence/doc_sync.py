@@ -2,6 +2,7 @@
 Rules defined here:
 https://confluence.atlassian.com/conf85/check-who-can-view-a-page-1283360557.html
 """
+from collections.abc import Generator
 from typing import Any
 
 from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
@@ -263,13 +264,11 @@ def _fetch_all_page_restrictions(
     space_permissions_by_space_key: dict[str, ExternalAccess],
     is_cloud: bool,
     callback: IndexingHeartbeatInterface | None,
-) -> list[DocExternalAccess]:
+) -> Generator[DocExternalAccess, None, None]:
     """
     For all pages, if a page has restrictions, then use those restrictions.
     Otherwise, use the space's restrictions.
     """
-    document_restrictions: list[DocExternalAccess] = []
-
     for slim_doc in slim_docs:
         if callback:
             if callback.should_stop():
@@ -286,11 +285,9 @@ def _fetch_all_page_restrictions(
             confluence_client=confluence_client,
             perm_sync_data=slim_doc.perm_sync_data,
         ):
-            document_restrictions.append(
-                DocExternalAccess(
-                    doc_id=slim_doc.id,
-                    external_access=restrictions,
-                )
+            yield DocExternalAccess(
+                doc_id=slim_doc.id,
+                external_access=restrictions,
             )
             # If there are restrictions, then we don't need to use the space's restrictions
             continue
@@ -324,11 +321,9 @@ def _fetch_all_page_restrictions(
             continue
 
         # If there are no restrictions, then use the space's restrictions
-        document_restrictions.append(
-            DocExternalAccess(
-                doc_id=slim_doc.id,
-                external_access=space_permissions,
-            )
+        yield DocExternalAccess(
+            doc_id=slim_doc.id,
+            external_access=space_permissions,
         )
         if (
             not space_permissions.is_public
@@ -342,13 +337,12 @@ def _fetch_all_page_restrictions(
             )
 
     logger.debug("Finished fetching all page restrictions for space")
-    return document_restrictions
 
 
 def confluence_doc_sync(
     cc_pair: ConnectorCredentialPair,
     callback: IndexingHeartbeatInterface | None,
-) -> list[DocExternalAccess]:
+) -> Generator[DocExternalAccess, None, None]:
     """
     Adds the external permissions to the documents in postgres
     if the document doesn't already exists in postgres, we create
@@ -387,7 +381,7 @@ def confluence_doc_sync(
         slim_docs.extend(doc_batch)
 
     logger.debug("Fetching all page restrictions for space")
-    return _fetch_all_page_restrictions(
+    yield from _fetch_all_page_restrictions(
         confluence_client=confluence_connector.confluence_client,
         slim_docs=slim_docs,
         space_permissions_by_space_key=space_permissions_by_space_key,

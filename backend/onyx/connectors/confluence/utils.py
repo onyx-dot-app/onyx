@@ -301,7 +301,7 @@ def convert_attachment_to_content(
       2. Extracts content or stores image for later processing
       3. Returns (content_text, stored_file_name) or None if we should skip it
     """
-    media_type = attachment["metadata"]["mediaType"]
+    media_type = attachment.get("metadata", {}).get("mediaType", "")
     # Quick check for unsupported types:
     if media_type.startswith("video/") or media_type == "application/gliffy+json":
         logger.warning(
@@ -522,6 +522,10 @@ def attachment_to_file_record(
         download_link, absolute=True, not_json_response=True
     )
 
+    file_type = attachment.get("metadata", {}).get(
+        "mediaType", "application/octet-stream"
+    )
+
     # Save image to file store
     file_name = f"confluence_attachment_{attachment['id']}"
     lobj_oid = create_populate_lobj(BytesIO(image_data), db_session)
@@ -529,7 +533,7 @@ def attachment_to_file_record(
         file_name=file_name,
         display_name=attachment["title"],
         file_origin=FileOrigin.OTHER,
-        file_type=attachment["metadata"]["mediaType"],
+        file_type=file_type,
         lobj_oid=lobj_oid,
         db_session=db_session,
         commit=True,

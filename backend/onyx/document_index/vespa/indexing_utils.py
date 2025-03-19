@@ -22,6 +22,7 @@ from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
+from onyx.document_index.vespa_constants import AGGREGATED_CHUNK_BOOST_FACTOR
 from onyx.document_index.vespa_constants import BLURB
 from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CHUNK_ID
@@ -201,6 +202,7 @@ def _index_vespa_chunk(
         DOCUMENT_SETS: {document_set: 1 for document_set in chunk.document_sets},
         IMAGE_FILE_NAME: chunk.image_file_name,
         BOOST: chunk.boost,
+        AGGREGATED_CHUNK_BOOST_FACTOR: chunk.aggregated_chunk_boost_factor,
     }
 
     if multitenant:
