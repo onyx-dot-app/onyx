@@ -13,6 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import wait
 from typing import Any
 from typing import Generic
+from typing import overload
 from typing import TypeVar
 
 from pydantic import GetCoreSchemaHandler
@@ -25,6 +26,7 @@ logger = setup_logger()
 R = TypeVar("R")
 KT = TypeVar("KT")  # Key type
 VT = TypeVar("VT")  # Value type
+_T = TypeVar("_T")  # Default type
 
 
 class ThreadSafeDict(MutableMapping[KT, VT]):
@@ -36,19 +38,13 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
         # Create a thread-safe dictionary
         safe_dict: ThreadSafeDict[str, int] = ThreadSafeDict()
 
-        # Basic operations
+        # Basic operations (atomic)
         safe_dict["key"] = 1
         value = safe_dict["key"]
         del safe_dict["key"]
 
         # Bulk operations (atomic)
         safe_dict.update({"key1": 1, "key2": 2})
-
-        # Safe iteration
-        with safe_dict.lock:
-            for key, value in safe_dict.items():
-                # This block is atomic
-                pass
     """
 
     def __init__(self, input_dict: dict[KT, VT] | None = None) -> None:
@@ -102,6 +98,14 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
         """Return a shallow copy of the dictionary atomically."""
         with self.lock:
             return self._dict.copy()
+
+    @overload
+    def get(self, key: KT) -> VT | None:
+        ...
+
+    @overload
+    def get(self, key: KT, default: VT | _T) -> VT | _T:
+        ...
 
     def get(self, key: KT, default: Any = None) -> Any:
         """Get a value with a default, atomically."""

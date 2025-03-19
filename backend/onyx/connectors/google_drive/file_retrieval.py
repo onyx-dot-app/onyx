@@ -72,8 +72,8 @@ def _get_folders_in_parent(
 
 def _get_files_in_parent(
     service: Resource,
-    is_slim: bool,
     parent_id: str,
+    is_slim: bool,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> Iterator[GoogleDriveFileType]:
@@ -96,9 +96,9 @@ def _get_files_in_parent(
 
 
 def crawl_folders_for_files(
-    is_slim: bool,
     service: Resource,
     parent_id: str,
+    is_slim: bool,
     user_email: str,
     traversed_parent_ids: set[str],
     update_traversed_ids_func: Callable[[str], None],
@@ -116,10 +116,10 @@ def crawl_folders_for_files(
         try:
             for file in _get_files_in_parent(
                 service=service,
+                parent_id=parent_id,
                 is_slim=is_slim,
                 start=start,
                 end=end,
-                parent_id=parent_id,
             ):
                 found_files = True
                 logger.info(f"Found file: {file['name']}")
@@ -149,9 +149,9 @@ def crawl_folders_for_files(
     ):
         logger.info("Fetching all files in subfolder: " + subfolder["name"])
         yield from crawl_folders_for_files(
-            is_slim=is_slim,
             service=service,
             parent_id=subfolder["id"],
+            is_slim=is_slim,
             user_email=user_email,
             traversed_parent_ids=traversed_parent_ids,
             update_traversed_ids_func=update_traversed_ids_func,

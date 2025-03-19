@@ -512,9 +512,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 folder_id: str, folder_start: SecondsSinceUnixEpoch | None
             ) -> Iterator[RetrievedDriveFile]:
                 yield from crawl_folders_for_files(
-                    is_slim=is_slim,
                     service=drive_service,
                     parent_id=folder_id,
+                    is_slim=is_slim,
                     user_email=user_email,
                     traversed_parent_ids=self._retrieved_ids,
                     update_traversed_ids_func=self._update_traversed_parent_ids,
@@ -741,9 +741,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             folder_id: str, folder_start: SecondsSinceUnixEpoch | None
         ) -> Iterator[RetrievedDriveFile]:
             yield from crawl_folders_for_files(
-                is_slim=is_slim,
                 service=drive_service,
                 parent_id=folder_id,
+                is_slim=is_slim,
                 user_email=self.primary_admin_email,
                 traversed_parent_ids=self._retrieved_ids,
                 update_traversed_ids_func=self._update_traversed_parent_ids,
@@ -1149,3 +1149,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             completion_map=ThreadSafeDict(),
             has_more=True,
         )
+
+    @override
+    def validate_checkpoint_json(self, checkpoint_json: str) -> GoogleDriveCheckpoint:
+        return GoogleDriveCheckpoint.model_validate_json(checkpoint_json)

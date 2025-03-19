@@ -753,6 +753,10 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
             has_more=True,
         )
 
+    @override
+    def validate_checkpoint_json(self, checkpoint_json: str) -> SlackCheckpoint:
+        return SlackCheckpoint.model_validate_json(checkpoint_json)
+
 
 if __name__ == "__main__":
     import os

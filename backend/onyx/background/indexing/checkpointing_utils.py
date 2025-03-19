@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from datetime import datetime
 from datetime import timedelta
 from io import BytesIO
@@ -7,6 +6,8 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine import get_db_current_time
 from onyx.db.index_attempt import get_index_attempt
@@ -16,7 +17,6 @@ from onyx.db.models import IndexingStatus
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 from onyx.utils.object_size_check import deep_getsizeof
-
 
 logger = setup_logger()
 
@@ -53,7 +53,7 @@ def save_checkpoint(
 
 
 def load_checkpoint(
-    db_session: Session, index_attempt_id: int
+    db_session: Session, index_attempt_id: int, connector: BaseConnector
 ) -> ConnectorCheckpoint | None:
     """Load a checkpoint for a given index attempt from the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
@@ -61,6 +61,8 @@ def load_checkpoint(
     try:
         checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
         checkpoint_data = checkpoint_io.read().decode("utf-8")
+        if isinstance(connector, CheckpointConnector):
+            return connector.validate_checkpoint_json(checkpoint_data)
         return ConnectorCheckpoint.model_validate_json(checkpoint_data)
     except RuntimeError:
         return None
@@ -72,7 +74,7 @@ def get_latest_valid_checkpoint(
     search_settings_id: int,
     window_start: datetime,
     window_end: datetime,
-    build_dummy_checkpoint: Callable[[], ConnectorCheckpoint],
+    connector: BaseConnector,
 ) -> ConnectorCheckpoint:
     """Get the latest valid checkpoint for a given connector credential pair"""
     checkpoint_candidates = get_recent_completed_attempts_for_cc_pair(
@@ -107,7 +109,7 @@ def get_latest_valid_checkpoint(
             f"for cc_pair={cc_pair_id}. Ignoring checkpoint to let the run start "
             "from scratch."
         )
-        return build_dummy_checkpoint()
+        return connector.build_dummy_checkpoint()
 
     # assumes latest checkpoint is the furthest along. This only isn't true
     # if something else has gone wrong.
@@ -115,12 +117,13 @@ def get_latest_valid_checkpoint(
         checkpoint_candidates[0] if checkpoint_candidates else None
     )
 
-    checkpoint = build_dummy_checkpoint()
+    checkpoint = connector.build_dummy_checkpoint()
     if latest_valid_checkpoint_candidate:
         try:
             previous_checkpoint = load_checkpoint(
                 db_session=db_session,
                 index_attempt_id=latest_valid_checkpoint_candidate.id,
+                connector=connector,
             )
         except Exception:
             logger.exception(

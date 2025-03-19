@@ -412,7 +412,7 @@ def _run_indexing(
                     search_settings_id=index_attempt.search_settings_id,
                     window_start=window_start,
                     window_end=window_end,
-                    build_dummy_checkpoint=connector_runner.connector.build_dummy_checkpoint,
+                    connector=connector_runner.connector,
                 )
 
             unresolved_errors = get_index_attempt_errors_for_cc_pair(

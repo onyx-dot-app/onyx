@@ -196,11 +196,7 @@ def test_thread_safe_dict_concurrent_access() -> None:
         for i in range(iterations):
             key = str(i % 5)  # Use 5 different keys
             # Get current value or 0 if not exists, increment, then store
-            current = d.get(key, 0)
-            if current is not None:  # This check is needed since get can return None
-                d[key] = current + 1
-            else:
-                d[key] = 1
+            d[key] = d.get(key, 0) + 1
 
     # Create and start threads
     threads = []

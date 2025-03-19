@@ -7,7 +7,7 @@ import httpx
 import pytest
 
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import InputType
@@ -54,7 +54,7 @@ def test_mock_connector_basic_flow(
         json=[
             {
                 "documents": [test_doc.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                "checkpoint": MockConnectorCheckpoint(has_more=False).model_dump(
                     mode="json"
                 ),
                 "failures": [],
@@ -128,7 +128,7 @@ def test_mock_connector_with_failures(
         json=[
             {
                 "documents": [doc1.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                "checkpoint": MockConnectorCheckpoint(has_more=False).model_dump(
                     mode="json"
                 ),
                 "failures": [doc2_failure.model_dump(mode="json")],
@@ -208,7 +208,7 @@ def test_mock_connector_failure_recovery(
         json=[
             {
                 "documents": [doc1.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                "checkpoint": MockConnectorCheckpoint(has_more=False).model_dump(
                     mode="json"
                 ),
                 "failures": [
@@ -292,7 +292,7 @@ def test_mock_connector_failure_recovery(
                     doc1.model_dump(mode="json"),
                     doc2.model_dump(mode="json"),
                 ],
-                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
+                "checkpoint": MockConnectorCheckpoint(has_more=False).model_dump(
                     mode="json"
                 ),
                 "failures": [],
@@ -372,24 +372,24 @@ def test_mock_connector_checkpoint_recovery(
         json=[
             {
                 "documents": [doc.model_dump(mode="json") for doc in docs_batch_1],
-                "checkpoint": ConnectorCheckpoint(has_more=True).model_dump(
-                    mode="json"
-                ),
+                "checkpoint": MockConnectorCheckpoint(
+                    has_more=True, last_document_id=docs_batch_1[-1].id
+                ).model_dump(mode="json"),
                 "failures": [],
             },
             {
                 "documents": [doc2.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(has_more=True).model_dump(
-                    mode="json"
-                ),
+                "checkpoint": MockConnectorCheckpoint(
+                    has_more=True, last_document_id=doc2.id
+                ).model_dump(mode="json"),
                 "failures": [],
             },
             {
                 "documents": [],
                 # should never hit this, unhandled exception happens first
-                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
-                    mode="json"
-                ),
+                "checkpoint": MockConnectorCheckpoint(
+                    has_more=False, last_document_id=doc2.id
+                ).model_dump(mode="json"),
                 "failures": [],
                 "unhandled_exception": "Simulated unhandled error",
             },
@@ -446,12 +446,16 @@ def test_mock_connector_checkpoint_recovery(
     initial_checkpoints = response.json()
 
     # Verify we got the expected checkpoints in order
-    assert len(initial_checkpoints) > 0
-    assert (
-        initial_checkpoints[0]["checkpoint_content"] == {}
-    )  # Initial empty checkpoint
-    assert initial_checkpoints[1]["checkpoint_content"] == {}
-    assert initial_checkpoints[2]["checkpoint_content"] == {}
+    assert len(initial_checkpoints) == 3
+    assert initial_checkpoints[0] == {
+        "has_more": True,
+        "last_document_id": None,
+    }  # Initial empty checkpoint
+    assert initial_checkpoints[1] == {
+        "has_more": True,
+        "last_document_id": docs_batch_1[-1].id,
+    }
+    assert initial_checkpoints[2] == {"has_more": True, "last_document_id": doc2.id}
 
     # Reset the mock server for the next run
     response = mock_server_client.post("/reset")
@@ -463,9 +467,9 @@ def test_mock_connector_checkpoint_recovery(
         json=[
             {
                 "documents": [doc3.model_dump(mode="json")],
-                "checkpoint": ConnectorCheckpoint(has_more=False).model_dump(
-                    mode="json"
-                ),
+                "checkpoint": MockConnectorCheckpoint(
+                    has_more=False, last_document_id=doc3.id
+                ).model_dump(mode="json"),
                 "failures": [],
             }
         ],
@@ -515,4 +519,4 @@ def test_mock_connector_checkpoint_recovery(
 
     # Verify the recovery run started from the last successful checkpoint
     assert len(recovery_checkpoints) == 1
-    assert recovery_checkpoints[0]["checkpoint_content"] == {}
+    assert recovery_checkpoints[0] == {"has_more": True, "last_document_id": doc2.id}

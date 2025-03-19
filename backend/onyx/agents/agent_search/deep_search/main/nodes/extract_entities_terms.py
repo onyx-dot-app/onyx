@@ -106,7 +106,6 @@ def extract_entities_terms(
         first_bracket = cleaned_response.find("{")
         last_bracket = cleaned_response.rfind("}")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
-        cleaned_response += "g8o723dg87db"
 
         try:
             entity_extraction_result = EntityExtractionResult.model_validate_json(

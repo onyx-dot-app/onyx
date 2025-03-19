@@ -234,3 +234,8 @@ class CheckpointConnector(BaseConnector, Generic[CT]):
     @override
     def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
+        """Validate the checkpoint json and return the checkpoint object"""
+        raise NotImplementedError
