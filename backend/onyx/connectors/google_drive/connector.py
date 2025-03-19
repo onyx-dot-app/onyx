@@ -1,7 +1,6 @@
 import copy
 import threading
 from collections.abc import Callable
-from collections.abc import Generator
 from collections.abc import Iterator
 from concurrent.futures import as_completed
 from concurrent.futures import ThreadPoolExecutor
@@ -51,6 +50,7 @@ from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTION
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
 from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
@@ -1010,7 +1010,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: GoogleDriveCheckpoint,
-    ) -> Generator[Document | ConnectorFailure, None, GoogleDriveCheckpoint]:
+    ) -> CheckpointOutput[GoogleDriveCheckpoint]:
         """
         Entrypoint for the connector; first run is with an empty checkpoint.
         """

@@ -1,3 +1,6 @@
+from typing import cast
+from typing import TypeVar
+
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -7,18 +10,20 @@ from onyx.connectors.models import Document
 
 _ITERATION_LIMIT = 100_000
 
+CT = TypeVar("CT", bound=ConnectorCheckpoint)
+
 
 def load_all_docs_from_checkpoint_connector(
-    connector: CheckpointConnector,
+    connector: CheckpointConnector[CT],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[Document]:
     num_iterations = 0
 
-    checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
+    checkpoint = cast(CT, connector.build_dummy_checkpoint())
     documents: list[Document] = []
     while checkpoint.has_more:
-        doc_batch_generator = CheckpointOutputWrapper()(
+        doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(start, end, checkpoint)
         )
         for document, failure, next_checkpoint in doc_batch_generator:
@@ -37,17 +42,17 @@ def load_all_docs_from_checkpoint_connector(
 
 
 def load_everything_from_checkpoint_connector(
-    connector: CheckpointConnector,
+    connector: CheckpointConnector[CT],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[Document | ConnectorFailure]:
     """Like load_all_docs_from_checkpoint_connector but returns both documents and failures"""
     num_iterations = 0
 
-    checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
+    checkpoint = cast(CT, connector.build_dummy_checkpoint())
     outputs: list[Document | ConnectorFailure] = []
     while checkpoint.has_more:
-        doc_batch_generator = CheckpointOutputWrapper()(
+        doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(start, end, checkpoint)
         )
         for document, failure, next_checkpoint in doc_batch_generator:

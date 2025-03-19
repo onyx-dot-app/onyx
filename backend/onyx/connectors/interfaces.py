@@ -193,10 +193,7 @@ class EventConnector(BaseConnector):
 
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
-# TODO: find a reasonable way to parameterize the return type of the generator
-CheckpointOutput: TypeAlias = Generator[
-    Document | ConnectorFailure, None, ConnectorCheckpoint
-]
+CheckpointOutput: TypeAlias = Generator[Document | ConnectorFailure, None, CT]
 
 
 class CheckpointConnector(BaseConnector, Generic[CT]):
@@ -206,7 +203,7 @@ class CheckpointConnector(BaseConnector, Generic[CT]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
-    ) -> Generator[Document | ConnectorFailure, None, CT]:
+    ) -> CheckpointOutput[CT]:
         """Yields back documents or failures. Final return is the new checkpoint.
 
         Final return can be access via either:

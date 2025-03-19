@@ -24,6 +24,7 @@ from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
@@ -536,7 +537,7 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: SlackCheckpoint,
-    ) -> Generator[Document | ConnectorFailure, None, SlackCheckpoint]:
+    ) -> CheckpointOutput[SlackCheckpoint]:
         """Rough outline:
 
         Step 1: Get all channels, yield back Checkpoint.

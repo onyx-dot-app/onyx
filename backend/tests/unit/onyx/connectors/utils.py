@@ -1,3 +1,7 @@
+from typing import cast
+from typing import Generic
+from typing import TypeVar
+
 from pydantic import BaseModel
 
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
@@ -10,23 +14,26 @@ from onyx.connectors.models import Document
 _ITERATION_LIMIT = 100_000
 
 
-class SingleConnectorCallOutput(BaseModel):
+CT = TypeVar("CT", bound=ConnectorCheckpoint)
+
+
+class SingleConnectorCallOutput(BaseModel, Generic[CT]):
     items: list[Document | ConnectorFailure]
-    next_checkpoint: ConnectorCheckpoint
+    next_checkpoint: CT
 
 
 def load_everything_from_checkpoint_connector(
-    connector: CheckpointConnector,
+    connector: CheckpointConnector[CT],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
-) -> list[SingleConnectorCallOutput]:
+) -> list[SingleConnectorCallOutput[CT]]:
     num_iterations = 0
 
-    checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
-    outputs: list[SingleConnectorCallOutput] = []
+    checkpoint = cast(CT, connector.build_dummy_checkpoint())
+    outputs: list[SingleConnectorCallOutput[CT]] = []
     while checkpoint.has_more:
         items: list[Document | ConnectorFailure] = []
-        doc_batch_generator = CheckpointOutputWrapper()(
+        doc_batch_generator = CheckpointOutputWrapper[CT]()(
             connector.load_from_checkpoint(start, end, checkpoint)
         )
         for document, failure, next_checkpoint in doc_batch_generator:

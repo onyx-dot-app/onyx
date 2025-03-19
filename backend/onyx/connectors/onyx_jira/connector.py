@@ -7,6 +7,7 @@ from typing import Any
 
 from jira import JIRA
 from jira.resources import Issue
+from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import JIRA_CONNECTOR_LABELS_TO_SKIP
@@ -145,7 +146,11 @@ def process_jira_issue(
     )
 
 
-class JiraConnector(CheckpointConnector, SlimConnector):
+class JiraConnectorCheckpoint(ConnectorCheckpoint):
+    offset: int | None = None
+
+
+class JiraConnector(CheckpointConnector[JiraConnectorCheckpoint], SlimConnector):
     def __init__(
         self,
         jira_base_url: str,
@@ -209,12 +214,12 @@ class JiraConnector(CheckpointConnector, SlimConnector):
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
-        checkpoint: ConnectorCheckpoint,
-    ) -> CheckpointOutput:
+        checkpoint: JiraConnectorCheckpoint,
+    ) -> CheckpointOutput[JiraConnectorCheckpoint]:
         jql = self._get_jql_query(start, end)
 
         # Get the current offset from checkpoint or start at 0
-        starting_offset = checkpoint.checkpoint_content.get("offset", 0)
+        starting_offset = checkpoint.offset or 0
         current_offset = starting_offset
 
         for issue in _perform_jql_search(
@@ -246,10 +251,8 @@ class JiraConnector(CheckpointConnector, SlimConnector):
             current_offset += 1
 
         # Update checkpoint
-        checkpoint = ConnectorCheckpoint(
-            checkpoint_content={
-                "offset": current_offset,
-            },
+        checkpoint = JiraConnectorCheckpoint(
+            offset=current_offset,
             # if we didn't retrieve a full batch, we're done
             has_more=current_offset - starting_offset == _JIRA_FULL_PAGE_SIZE,
         )
@@ -336,6 +339,16 @@ class JiraConnector(CheckpointConnector, SlimConnector):
 
                 raise RuntimeError(f"Unexpected Jira error during validation: {e}")
 
+    @override
+    def validate_checkpoint_json(self, checkpoint_json: str) -> JiraConnectorCheckpoint:
+        return JiraConnectorCheckpoint.model_validate_json(checkpoint_json)
+
+    @override
+    def build_dummy_checkpoint(self) -> JiraConnectorCheckpoint:
+        return JiraConnectorCheckpoint(
+            has_more=True,
+        )
+
 
 if __name__ == "__main__":
     import os
@@ -353,6 +366,6 @@ if __name__ == "__main__":
         }
     )
     document_batches = connector.load_from_checkpoint(
-        0, float("inf"), ConnectorCheckpoint(checkpoint_content={}, has_more=True)
+        0, float("inf"), JiraConnectorCheckpoint(has_more=True)
     )
     print(next(document_batches))

@@ -17,11 +17,11 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.onyx_jira.connector import JiraConnector
+from onyx.connectors.onyx_jira.connector import JiraConnectorCheckpoint
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 PAGE_SIZE = 2
@@ -195,10 +195,8 @@ def test_load_from_checkpoint_happy_path(
     document2 = checkpoint_output1.items[1]
     assert isinstance(document2, Document)
     assert document2.id == "https://jira.example.com/browse/TEST-2"
-    assert checkpoint_output1.next_checkpoint == ConnectorCheckpoint(
-        checkpoint_content={
-            "offset": 2,
-        },
+    assert checkpoint_output1.next_checkpoint == JiraConnectorCheckpoint(
+        offset=2,
         has_more=True,
     )
 
@@ -207,10 +205,8 @@ def test_load_from_checkpoint_happy_path(
     document3 = checkpoint_output2.items[0]
     assert isinstance(document3, Document)
     assert document3.id == "https://jira.example.com/browse/TEST-3"
-    assert checkpoint_output2.next_checkpoint == ConnectorCheckpoint(
-        checkpoint_content={
-            "offset": 3,
-        },
+    assert checkpoint_output2.next_checkpoint == JiraConnectorCheckpoint(
+        offset=3,
         has_more=False,
     )
 
@@ -285,7 +281,7 @@ def test_load_from_checkpoint_with_issue_processing_error(
         assert "Failed to process Jira issue" in first_batch.items[1].failure_message
         # Check checkpoint indicates more items (full batch)
         assert first_batch.next_checkpoint.has_more is True
-        assert first_batch.next_checkpoint.checkpoint_content == {"offset": 2}
+        assert first_batch.next_checkpoint.offset == 2
 
         # Check second batch
         second_batch = outputs[1]
@@ -300,13 +296,13 @@ def test_load_from_checkpoint_with_issue_processing_error(
         assert "Failed to process Jira issue" in second_batch.items[1].failure_message
         # Check checkpoint indicates more items
         assert second_batch.next_checkpoint.has_more is True
-        assert second_batch.next_checkpoint.checkpoint_content == {"offset": 4}
+        assert second_batch.next_checkpoint.offset == 4
 
         # Check third, empty batch
         third_batch = outputs[2]
         assert len(third_batch.items) == 0
         assert third_batch.next_checkpoint.has_more is False
-        assert third_batch.next_checkpoint.checkpoint_content == {"offset": 4}
+        assert third_batch.next_checkpoint.offset == 4
 
 
 def test_load_from_checkpoint_with_skipped_issue(
