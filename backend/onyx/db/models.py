@@ -53,6 +53,7 @@ from onyx.db.enums import (
     SyncType,
     SyncStatus,
 )
+
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.constants import TokenRateLimitScope
@@ -588,6 +589,139 @@ class Document(Base):
             last_modified,
             last_synced,
         ),
+    )
+
+
+class KGEntity(Base):
+    __tablename__ = "kg_entity"
+
+    # Primary identifier
+    id: Mapped[str] = mapped_column(NullFilteredString, primary_key=True, index=True)
+
+    # Basic entity information
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    alternative_names: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    keywords: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Access control
+    acl: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Boosts - using JSON for flexibility
+    boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # Index for type-based queries with ACL filtering
+        Index("ix_entity_type_acl", type, acl),
+        # Index for name-based searches
+        Index("ix_entity_name_search", name, type),
+    )
+
+
+class KGRelationship(Base):
+    __tablename__ = "kg_relationship"
+
+    # Primary identifier
+    id: Mapped[str] = mapped_column(NullFilteredString, primary_key=True, index=True)
+
+    # Source and target nodes (foreign keys to Entity table)
+    source_node: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("kg_entity.id"), nullable=False, index=True
+    )
+
+    target_node: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("kg_entity.id"), nullable=False, index=True
+    )
+
+    # Relationship type
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to Entity table
+    source: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[source_node])
+    target: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[target_node])
+
+    __table_args__ = (
+        # Index for querying relationships by type
+        Index("ix_kg_relationship_type", type),
+        # Composite index for source/target queries
+        Index("ix_kg_relationship_nodes", source_node, target_node),
+        # Ensure unique relationships between nodes of a specific type
+        UniqueConstraint(
+            "source_node",
+            "target_node",
+            "type",
+            name="uq_kg_relationship_source_target_type",
+        ),
+    )
+
+
+class KGTerm(Base):
+    __tablename__ = "kg_term"
+
+    # Primary identifier (using integer instead of string this time)
+    id: Mapped[int] = mapped_column(
+        Integer, primary_key=True, autoincrement=True, index=True
+    )
+
+    # The search term
+    term: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
+        unique=True,  # Assuming terms should be unique
+    )
+
+    # List of entity types this term applies to
+    entity_types: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # Index for searching terms with specific entity types
+        Index("ix_search_term_entities", entity_types),
+        # Index for term lookups
+        Index("ix_search_term_term", term),
     )
 
 
