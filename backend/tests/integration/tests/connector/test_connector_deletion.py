@@ -5,6 +5,7 @@ This file contains tests for the following:
     - updates the document sets and user groups to remove the connector
 - Ensure that deleting a connector that is part of an overlapping document set and/or user group works as expected
 """
+import os
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -78,16 +79,17 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
 
     print("Document sets created and synced")
 
-    # create user groups
-    user_group_1: DATestUserGroup = UserGroupManager.create(
-        cc_pair_ids=[cc_pair_1.id],
-        user_performing_action=admin_user,
-    )
-    user_group_2: DATestUserGroup = UserGroupManager.create(
-        cc_pair_ids=[cc_pair_1.id, cc_pair_2.id],
-        user_performing_action=admin_user,
-    )
-    UserGroupManager.wait_for_sync(user_performing_action=admin_user)
+    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+        # create user groups
+        user_group_1: DATestUserGroup = UserGroupManager.create(
+            cc_pair_ids=[cc_pair_1.id],
+            user_performing_action=admin_user,
+        )
+        user_group_2: DATestUserGroup = UserGroupManager.create(
+            cc_pair_ids=[cc_pair_1.id, cc_pair_2.id],
+            user_performing_action=admin_user,
+        )
+        UserGroupManager.wait_for_sync(user_performing_action=admin_user)
 
     # inject a finished index attempt and index attempt error (exercises foreign key errors)
     with Session(get_sqlalchemy_engine()) as db_session:
@@ -147,12 +149,13 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
         )
 
     # Update local records to match the database for later comparison
-    user_group_1.cc_pair_ids = []
-    user_group_2.cc_pair_ids = [cc_pair_2.id]
     doc_set_1.cc_pair_ids = []
     doc_set_2.cc_pair_ids = [cc_pair_2.id]
     cc_pair_1.groups = []
-    cc_pair_2.groups = [user_group_2.id]
+    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+        cc_pair_2.groups = [user_group_2.id]
+    else:
+        cc_pair_2.groups = []
 
     CCPairManager.wait_for_deletion_completion(
         cc_pair_id=cc_pair_1.id, user_performing_action=admin_user
@@ -168,11 +171,15 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
         verify_deleted=True,
     )
 
+    cc_pair_2_group_name_expected = []
+    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+        cc_pair_2_group_name_expected = [user_group_2.name]
+
     DocumentManager.verify(
         vespa_client=vespa_client,
         cc_pair=cc_pair_2,
         doc_set_names=[doc_set_2.name],
-        group_names=[user_group_2.name],
+        group_names=cc_pair_2_group_name_expected,
         doc_creating_user=admin_user,
         verify_deleted=False,
     )
@@ -193,15 +200,19 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
         user_performing_action=admin_user,
     )
 
-    # validate user groups
-    UserGroupManager.verify(
-        user_group=user_group_1,
-        user_performing_action=admin_user,
-    )
-    UserGroupManager.verify(
-        user_group=user_group_2,
-        user_performing_action=admin_user,
-    )
+    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+        user_group_1.cc_pair_ids = []
+        user_group_2.cc_pair_ids = [cc_pair_2.id]
+
+        # validate user groups
+        UserGroupManager.verify(
+            user_group=user_group_1,
+            user_performing_action=admin_user,
+        )
+        UserGroupManager.verify(
+            user_group=user_group_2,
+            user_performing_action=admin_user,
+        )
 
 
 def test_connector_deletion_for_overlapping_connectors(
