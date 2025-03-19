@@ -361,13 +361,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             return None, found_future_work
 
         def drive_id_iterator(thread_id: str) -> Iterator[str]:
-            completion = checkpoint.completion_map.get(
-                thread_id,
-                StageCompletion(
-                    stage=DriveRetrievalStage.MY_DRIVE_FILES,
-                    completed_until=0,
-                ),
-            )
+            completion = checkpoint.completion_map[thread_id]
             # continue iterating until this thread has no more work to do
             while True:
                 # this locks operations on _retrieved_ids and drive_id_status
@@ -413,7 +407,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
         logger.info(f"Impersonating user {user_email}")
-        curr_stage = checkpoint.completion_map.get(user_email, None)
+        curr_stage = checkpoint.completion_map[user_email]
         resuming = True
         if curr_stage is None:
             curr_stage = StageCompletion(
@@ -559,6 +553,12 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         drive_id_iterator = self.make_drive_id_iterator(
             drive_ids_to_retrieve, checkpoint
         )
+
+        for email in all_org_emails:
+            checkpoint.completion_map[email] = StageCompletion(
+                stage=DriveRetrievalStage.MY_DRIVE_FILES,
+                completed_until=0,
+            )
         user_retrieval_gens = [
             self._impersonate_user_for_retrieval(
                 email,
