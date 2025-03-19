@@ -22,7 +22,7 @@ SecondsSinceUnixEpoch = float
 GenerateDocumentsOutput = Iterator[list[Document]]
 GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
 
-CT = TypeVar("CT", bound=ConnectorCheckpoint, default=ConnectorCheckpoint)
+CT = TypeVar("CT", bound=ConnectorCheckpoint)
 
 
 class BaseConnector(abc.ABC, Generic[CT]):
