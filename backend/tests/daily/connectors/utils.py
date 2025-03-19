@@ -49,7 +49,7 @@ def load_everything_from_checkpoint_connector(
     """Like load_all_docs_from_checkpoint_connector but returns both documents and failures"""
     num_iterations = 0
 
-    checkpoint = cast(CT, connector.build_dummy_checkpoint())
+    checkpoint = connector.build_dummy_checkpoint()
     outputs: list[Document | ConnectorFailure] = []
     while checkpoint.has_more:
         doc_batch_generator = CheckpointOutputWrapper[CT]()(

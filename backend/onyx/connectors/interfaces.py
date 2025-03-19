@@ -22,8 +22,10 @@ SecondsSinceUnixEpoch = float
 GenerateDocumentsOutput = Iterator[list[Document]]
 GenerateSlimDocumentOutput = Iterator[list[SlimDocument]]
 
+CT = TypeVar("CT", bound=ConnectorCheckpoint, default=ConnectorCheckpoint)
 
-class BaseConnector(abc.ABC):
+
+class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
     # Common image file extensions supported across connectors
     IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
@@ -58,8 +60,9 @@ class BaseConnector(abc.ABC):
         Default is a no-op (always successful).
         """
 
-    def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
-        return ConnectorCheckpoint(has_more=True)
+    def build_dummy_checkpoint(self) -> CT:
+        # TODO: find a way to make this work without type: ignore
+        return ConnectorCheckpoint(has_more=True)  # type: ignore
 
 
 # Large set update or reindex, generally pulling a complete state or from a savestate file
@@ -192,11 +195,10 @@ class EventConnector(BaseConnector):
         raise NotImplementedError
 
 
-CT = TypeVar("CT", bound=ConnectorCheckpoint)
 CheckpointOutput: TypeAlias = Generator[Document | ConnectorFailure, None, CT]
 
 
-class CheckpointConnector(BaseConnector, Generic[CT]):
+class CheckpointConnector(BaseConnector[CT]):
     @abc.abstractmethod
     def load_from_checkpoint(
         self,
@@ -225,11 +227,8 @@ class CheckpointConnector(BaseConnector, Generic[CT]):
         """
         raise NotImplementedError
 
-    # Ideally return type should be CT, but that's not possible if
-    # we want to override build_dummy_checkpoint and have BaseConnector
-    # return a base ConnectorCheckpoint
     @override
-    def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
+    def build_dummy_checkpoint(self) -> CT:
         raise NotImplementedError
 
     @abc.abstractmethod

@@ -2,7 +2,6 @@ import sys
 import time
 from collections.abc import Generator
 from datetime import datetime
-from typing import cast
 from typing import Generic
 from typing import TypeVar
 
@@ -135,7 +134,7 @@ class ConnectorRunner(Generic[CT]):
                 )
 
             else:
-                finished_checkpoint = cast(CT, self.connector.build_dummy_checkpoint())
+                finished_checkpoint = self.connector.build_dummy_checkpoint()
                 finished_checkpoint.has_more = False
 
                 if isinstance(self.connector, PollConnector):
