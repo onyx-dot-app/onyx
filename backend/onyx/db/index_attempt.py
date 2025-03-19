@@ -757,19 +757,3 @@ def get_index_attempt_errors_for_cc_pair(
         stmt = stmt.offset(page * page_size).limit(page_size)
 
     return list(db_session.scalars(stmt).all())
-
-
-def get_consecutive_connector_validation_errors_count(
-    db_session: Session,
-    cc_pair_id: int,
-    limit: int = 5,
-) -> int:
-    stmt = (
-        select(IndexAttempt.error_msg)
-        .where(
-            IndexAttempt.connector_credential_pair_id == cc_pair_id,
-        )
-        .order_by(desc(IndexAttempt.time_created))
-        .limit(limit)
-    )
-    return db_session.scalars(stmt).limit(limit).count()

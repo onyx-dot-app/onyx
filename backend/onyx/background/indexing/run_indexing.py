@@ -605,10 +605,12 @@ def _run_indexing(
                         # should always be set by now
                         raise RuntimeError("Should never happen.")
 
+                    VALIDATION_ERROR_THRESHOLD = 5
+
                     recent_index_attempts = get_recent_completed_attempts_for_cc_pair(
                         cc_pair_id=ctx.cc_pair_id,
                         search_settings_id=index_attempt.search_settings_id,
-                        limit=5,
+                        limit=VALIDATION_ERROR_THRESHOLD,
                         db_session=db_session_temp,
                     )
                     num_validation_errors = len(
@@ -622,7 +624,6 @@ def _run_indexing(
                         ]
                     )
 
-                    VALIDATION_ERROR_THRESHOLD = 5
                     if num_validation_errors >= VALIDATION_ERROR_THRESHOLD:
                         logger.warning(
                             f"Connector {ctx.connector_id} has {num_validation_errors} consecutive validation"
