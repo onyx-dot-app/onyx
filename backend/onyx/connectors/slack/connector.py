@@ -376,7 +376,7 @@ def _message_to_doc(
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
-    seen_thread_ts: set[str],
+    seen_thread_ts: list[str],
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> Document | None:
     filtered_thread: ThreadType | None = None
@@ -462,7 +462,7 @@ def _process_message(
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
-    seen_thread_ts: set[str],
+    seen_thread_ts: list[str],
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> tuple[Document | None, str | None, ConnectorFailure | None]:
     thread_ts = message.get("thread_ts")
@@ -605,6 +605,7 @@ class SlackConnector(SlimConnector, CheckpointConnector):
 
         oldest = str(start) if start else None
         latest = checkpoint_content["channel_completion_map"].get(channel_id, str(end))
+        # Convert to set for faster lookups during processing, but store as list in checkpoint
         seen_thread_ts = set(checkpoint_content["seen_thread_ts"])
         try:
             logger.debug(

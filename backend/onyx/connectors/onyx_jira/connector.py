@@ -338,17 +338,22 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
 if __name__ == "__main__":
     import os
 
+    jira_base_url = os.environ.get("JIRA_BASE_URL", "")
+    jira_project_key = os.environ.get("JIRA_PROJECT_KEY")
+    jira_api_token = os.environ.get("JIRA_API_TOKEN", "")
+    
+    print(f"Connecting to Jira at {jira_base_url}")
+    print(f"Project key: {jira_project_key or 'Not specified'}")
+    
     connector = JiraConnector(
-        jira_base_url=os.environ["JIRA_BASE_URL"],
-        project_key=os.environ.get("JIRA_PROJECT_KEY"),
+        jira_base_url=jira_base_url,
+        project_key=jira_project_key,
         comment_email_blacklist=[],
     )
 
-    connector.load_credentials(
-        {
-            "jira_user_email": os.environ["JIRA_USER_EMAIL"],
-            "jira_api_token": os.environ["JIRA_API_TOKEN"],
-        }
-    )
+    # Use token-only authentication if no email is provided
+    credentials = {"jira_api_token": jira_api_token}
+
+    connector.load_credentials(credentials)
     document_batches = connector.load_from_state()
     print(next(document_batches))

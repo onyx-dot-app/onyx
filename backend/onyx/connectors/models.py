@@ -243,10 +243,62 @@ class ConnectorCheckpoint(BaseModel):
         """String representation of the checkpoint, with truncation for large checkpoint content."""
         MAX_CHECKPOINT_CONTENT_CHARS = 1000
 
-        content_str = json.dumps(self.checkpoint_content)
+        # Create a copy of the checkpoint_content to avoid modifying the original
+        serializable_content = {}
+        for key, value in self.checkpoint_content.items():
+            # Convert sets to lists for JSON serialization
+            if isinstance(value, set):
+                serializable_content[key] = list(value)
+            else:
+                serializable_content[key] = value
+        
+        content_str = json.dumps(serializable_content)
         if len(content_str) > MAX_CHECKPOINT_CONTENT_CHARS:
             content_str = content_str[: MAX_CHECKPOINT_CONTENT_CHARS - 3] + "..."
         return f"ConnectorCheckpoint(checkpoint_content={content_str}, has_more={self.has_more})"
+    
+    def _prepare_serializable_content(self) -> dict:
+        """Convert any non-JSON serializable objects in checkpoint_content to serializable types."""
+        serializable_content = {}
+        for key, value in self.checkpoint_content.items():
+            if isinstance(value, set):
+                serializable_content[key] = list(value)
+            elif isinstance(value, dict):
+                # Recursively handle nested dictionaries
+                serializable_content[key] = self._prepare_nested_dict(value)
+            else:
+                serializable_content[key] = value
+        return serializable_content
+    
+    def _prepare_nested_dict(self, d: dict) -> dict:
+        """Recursively prepare nested dictionaries for serialization."""
+        result = {}
+        for k, v in d.items():
+            if isinstance(v, set):
+                result[k] = list(v)
+            elif isinstance(v, dict):
+                result[k] = self._prepare_nested_dict(v)
+            else:
+                result[k] = v
+        return result
+    
+    def model_dump_json(self, **kwargs) -> str:
+        """Override model_dump_json to handle sets in checkpoint_content."""
+        # Create a temporary copy of the object with serializable content
+        temp_checkpoint = ConnectorCheckpoint(
+            checkpoint_content=self._prepare_serializable_content(),
+            has_more=self.has_more
+        )
+        # Call the parent's model_dump_json method
+        return super(ConnectorCheckpoint, temp_checkpoint).model_dump_json(**kwargs)
+        
+    def model_dump(self, **kwargs) -> dict:
+        """Override model_dump to handle sets in checkpoint_content."""
+        result = super().model_dump(**kwargs)
+        # Process checkpoint_content
+        if "checkpoint_content" in result:
+            result["checkpoint_content"] = self._prepare_serializable_content()
+        return result
 
 
 class DocumentFailure(BaseModel):
