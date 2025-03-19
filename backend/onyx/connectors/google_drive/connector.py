@@ -409,11 +409,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         logger.info(f"Impersonating user {user_email}")
         curr_stage = checkpoint.completion_map[user_email]
         resuming = True
-        if curr_stage is None:
-            curr_stage = StageCompletion(
-                stage=DriveRetrievalStage.MY_DRIVE_FILES,
-                completed_until=start or 0,
-            )
+        if curr_stage.stage == DriveRetrievalStage.START:
+            curr_stage.stage = DriveRetrievalStage.MY_DRIVE_FILES
             resuming = False
         drive_service = get_drive_service(self.creds, user_email)
 
@@ -556,7 +553,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
 
         for email in all_org_emails:
             checkpoint.completion_map[email] = StageCompletion(
-                stage=DriveRetrievalStage.MY_DRIVE_FILES,
+                stage=DriveRetrievalStage.START,
                 completed_until=0,
             )
         user_retrieval_gens = [
