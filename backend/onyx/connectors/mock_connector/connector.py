@@ -1,4 +1,3 @@
-from collections.abc import Generator
 from typing import Any
 
 import httpx
@@ -6,6 +5,7 @@ from pydantic import BaseModel
 from typing_extensions import override
 
 from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -65,7 +65,7 @@ class MockConnector(CheckpointConnector[MockConnectorCheckpoint]):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: MockConnectorCheckpoint,
-    ) -> Generator[Document | ConnectorFailure, None, MockConnectorCheckpoint]:
+    ) -> CheckpointOutput[MockConnectorCheckpoint]:
         if self.connector_yields is None:
             raise ValueError("No connector yields configured")
 
@@ -91,7 +91,7 @@ class MockConnector(CheckpointConnector[MockConnectorCheckpoint]):
         return current_yield.checkpoint
 
     @override
-    def build_dummy_checkpoint(self) -> ConnectorCheckpoint:
+    def build_dummy_checkpoint(self) -> MockConnectorCheckpoint:
         return MockConnectorCheckpoint(
             has_more=True,
             last_document_id=None,
