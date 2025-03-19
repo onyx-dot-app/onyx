@@ -1,8 +1,12 @@
 import os
+import copy
+import time
 from collections.abc import Iterable
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
+from typing import TypedDict
 
 from jira import JIRA
 from jira.resources import Issue
@@ -15,14 +19,19 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.models import ConnectorCheckpoint
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
+from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.connectors.onyx_jira.utils import best_effort_basic_expert_info
@@ -40,6 +49,29 @@ logger = setup_logger()
 JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
 _JIRA_SLIM_PAGE_SIZE = 500
 _JIRA_FULL_PAGE_SIZE = 50
+
+# Time chunk default of 3 months in seconds
+_DEFAULT_TIME_CHUNK_SIZE = 7776000 
+
+
+class JiraCheckpointContent(TypedDict):
+    # Project-based tracking
+    project_keys: list[str] | None
+    current_project_index: int
+    
+    # Time-based tracking
+    time_chunks: list[tuple[int, int]] | None  # List of (start_time, end_time) unix timestamps
+    current_time_chunk_index: int
+    
+    # Pagination within current slice
+    current_offset: int
+    
+    # Tracking
+    seen_issue_keys: list[str]
+    failed_issue_keys: dict[str, str]
+    
+    # For incremental updates after initial indexing
+    overall_last_indexed_timestamp: int  # Last full indexing run timestamp
 
 
 def _paginate_jql_search(
@@ -156,7 +188,7 @@ def fetch_jira_issues_batch(
         )
 
 
-class JiraConnector(LoadConnector, PollConnector, SlimConnector):
+class JiraConnector(LoadConnector, PollConnector, SlimConnector, CheckpointConnector):
     def __init__(
         self,
         jira_base_url: str,
@@ -282,6 +314,219 @@ class JiraConnector(LoadConnector, PollConnector, SlimConnector):
                 slim_doc_batch = []
 
         yield slim_doc_batch
+    
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: ConnectorCheckpoint,
+    ) -> CheckpointOutput:
+        """Load Jira issues with time-based chunking for scaling to millions of tickets."""
+        if self.jira_client is None:
+            raise ConnectorMissingCredentialError("Jira")
+        
+        # Initialize or get existing checkpoint content
+        checkpoint_content = cast(
+            JiraCheckpointContent,
+            (
+                copy.deepcopy(checkpoint.checkpoint_content)
+                or {
+                    "project_keys": None,
+                    "current_project_index": 0,
+                    "time_chunks": None,
+                    "current_time_chunk_index": 0,
+                    "current_offset": 0,
+                    "seen_issue_keys": [],
+                    "failed_issue_keys": {},
+                    "overall_last_indexed_timestamp": 0,
+                }
+            ),
+        )
+        
+        # First run - initialize projects and time chunks
+        if checkpoint_content["project_keys"] is None:
+            # Initialize projects
+            if not self.jira_project:
+                try:
+                    accessible_projects = self.jira_client.projects()
+                    checkpoint_content["project_keys"] = [p.key for p in accessible_projects]
+                    logger.info(f"Found {len(checkpoint_content['project_keys'])} Jira projects to index")
+                except Exception as e:
+                    logger.error(f"Error fetching projects: {e}")
+                    yield ConnectorFailure(
+                        failed_entity=EntityFailure(
+                            entity_id="all_projects",
+                            missed_time_range=(
+                                datetime.fromtimestamp(start, tz=timezone.utc),
+                                datetime.fromtimestamp(end, tz=timezone.utc),
+                            ),
+                        ),
+                        failure_message=f"Failed to fetch Jira projects: {str(e)}",
+                        exception=e,
+                    )
+                    # Return current checkpoint to retry
+                    return checkpoint
+            else:
+                checkpoint_content["project_keys"] = [self.jira_project]
+            
+            # Initialize time chunks
+            # First, get the earliest project creation date
+            earliest_time = time.time() - (5 * 365 * 24 * 60 * 60)  # Default to 5 years ago
+            try:
+                # Try to find earliest created issue
+                for project_key in checkpoint_content["project_keys"][:5]:  # Limit to first 5 projects for efficiency
+                    jql = f'project = "{project_key}" ORDER BY created ASC'
+                    issues = self.jira_client.search_issues(jql_str=jql, maxResults=1)
+                    if issues and len(issues) > 0:
+                        issue_created = time_str_to_utc(issues[0].fields.created).timestamp()
+                        earliest_time = min(earliest_time, issue_created)
+            except Exception as e:
+                logger.warning(f"Error determining earliest issue date, using default 5 years ago: {e}")
+            
+            # Create time chunks - default to 3-month chunks
+            now = time.time()
+            chunk_size = _DEFAULT_TIME_CHUNK_SIZE  # 3 months in seconds
+            chunks = []
+            
+            current_start = earliest_time
+            while current_start < now:
+                current_end = min(current_start + chunk_size, now)
+                chunks.append((int(current_start), int(current_end)))
+                current_start = current_end
+            
+            # Reverse the chunks to process newest first
+            chunks.reverse()
+            
+            checkpoint_content["time_chunks"] = chunks
+            logger.info(f"Created {len(chunks)} time chunks for Jira indexing, spanning from "
+                      f"{datetime.fromtimestamp(earliest_time)} to {datetime.fromtimestamp(now)}")
+        
+        # Check if we've processed all projects or time chunks
+        if (not checkpoint_content["project_keys"] or 
+            checkpoint_content["current_project_index"] >= len(checkpoint_content["project_keys"]) or
+            not checkpoint_content["time_chunks"] or 
+            checkpoint_content["current_time_chunk_index"] >= len(checkpoint_content["time_chunks"])):
+            return ConnectorCheckpoint(
+                checkpoint_content=checkpoint_content,
+                has_more=False
+            )
+        
+        # Get current processing state
+        current_project_idx = checkpoint_content["current_project_index"]
+        current_project = checkpoint_content["project_keys"][current_project_idx]
+        
+        current_time_chunk_idx = checkpoint_content["current_time_chunk_index"]
+        current_time_chunk = checkpoint_content["time_chunks"][current_time_chunk_idx]
+        time_chunk_start, time_chunk_end = current_time_chunk
+        
+        current_offset = checkpoint_content["current_offset"]
+        
+        # Build JQL query with time constraints
+        start_date_str = datetime.fromtimestamp(time_chunk_start, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+        end_date_str = datetime.fromtimestamp(time_chunk_end, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+        
+        jql = f'project = "{current_project}" AND created >= "{start_date_str}" AND created <= "{end_date_str}"'
+        
+        try:
+            logger.info(f"Fetching Jira issues for project {current_project}, time window "
+                      f"{start_date_str} to {end_date_str}, offset {current_offset}")
+            
+            # Fetch issues with pagination
+            issues = self.jira_client.search_issues(
+                jql_str=jql,
+                startAt=current_offset,
+                maxResults=_JIRA_FULL_PAGE_SIZE,
+            )
+            
+            # Process issues
+            for issue in issues:
+                issue_key = issue.key
+                
+                # Skip already processed issues
+                if issue_key in checkpoint_content["seen_issue_keys"]:
+                    continue
+                    
+                try:
+                    # Process issue
+                    document = None
+                    for doc in fetch_jira_issues_batch(
+                        jira_client=self.jira_client,
+                        jql=f"key = {issue_key}",
+                        batch_size=1,
+                        comment_email_blacklist=self.comment_email_blacklist,
+                        labels_to_skip=self.labels_to_skip,
+                    ):
+                        document = doc
+                        break
+                    
+                    if document:
+                        # Add to processed set
+                        checkpoint_content["seen_issue_keys"].append(issue_key)
+                        # Yield the document
+                        yield document
+                    
+                except Exception as e:
+                    # Track failure for retry in future runs
+                    checkpoint_content["failed_issue_keys"][issue_key] = str(e)
+                    logger.error(f"Error processing Jira issue {issue_key}: {e}")
+                    
+                    yield ConnectorFailure(
+                        failed_entity=EntityFailure(
+                            entity_id=issue_key,
+                            missed_time_range=(
+                                datetime.fromtimestamp(time_chunk_start, tz=timezone.utc),
+                                datetime.fromtimestamp(time_chunk_end, tz=timezone.utc),
+                            ),
+                        ),
+                        failure_message=str(e),
+                        exception=e,
+                    )
+            
+            # Update checkpoint based on pagination results
+            if len(issues) < _JIRA_FULL_PAGE_SIZE:
+                # No more issues in this project+time chunk
+                if current_project_idx < len(checkpoint_content["project_keys"]) - 1:
+                    # Move to next project, same time chunk
+                    checkpoint_content["current_project_index"] += 1
+                    checkpoint_content["current_offset"] = 0
+                else:
+                    # Move to next time chunk, reset to first project
+                    checkpoint_content["current_time_chunk_index"] += 1
+                    checkpoint_content["current_project_index"] = 0
+                    checkpoint_content["current_offset"] = 0
+            else:
+                # Update offset for next batch in same project+time chunk
+                checkpoint_content["current_offset"] += len(issues)
+            
+            # Update overall last indexed timestamp if we're at the most recent time chunk
+            if (checkpoint_content["current_time_chunk_index"] == 0 and
+                checkpoint_content["current_project_index"] >= len(checkpoint_content["project_keys"]) - 1):
+                checkpoint_content["overall_last_indexed_timestamp"] = int(time.time())
+            
+            # Return updated checkpoint
+            has_more = (checkpoint_content["current_project_index"] < len(checkpoint_content["project_keys"]) or
+                      checkpoint_content["current_time_chunk_index"] < len(checkpoint_content["time_chunks"]))
+            
+            return ConnectorCheckpoint(
+                checkpoint_content=checkpoint_content,
+                has_more=has_more
+            )
+            
+        except Exception as e:
+            # Handle general errors
+            logger.exception(f"Error processing Jira project+time: {current_project}, {start_date_str}-{end_date_str}")
+            yield ConnectorFailure(
+                failed_entity=EntityFailure(
+                    entity_id=current_project,
+                    missed_time_range=(
+                        datetime.fromtimestamp(time_chunk_start, tz=timezone.utc),
+                        datetime.fromtimestamp(time_chunk_end, tz=timezone.utc),
+                    ),
+                ),
+                failure_message=str(e),
+                exception=e,
+            )
+            return checkpoint
 
     def validate_connector_settings(self) -> None:
         if self._jira_client is None:
@@ -353,7 +598,35 @@ if __name__ == "__main__":
 
     # Use token-only authentication if no email is provided
     credentials = {"jira_api_token": jira_api_token}
-
+    if "JIRA_USER_EMAIL" in os.environ:
+        credentials["jira_user_email"] = os.environ["JIRA_USER_EMAIL"]
+        print(f"Using email authentication with {os.environ['JIRA_USER_EMAIL']}")
+    else:
+        print("Using token-only authentication")
+    
     connector.load_credentials(credentials)
+    
+    print("Successfully loaded credentials")
+    print("Validating connector settings...")
+    connector.validate_connector_settings()
+    print("Connector settings validated successfully!")
+    
+    print("Fetching documents...")
     document_batches = connector.load_from_state()
-    print(next(document_batches))
+    first_batch = next(document_batches)
+    print(f"Retrieved {len(first_batch)} documents")
+    
+    if first_batch:
+        print("\nFirst document details:")
+        doc = first_batch[0]
+        print(f"ID: {doc.id}")
+        print(f"Semantic identifier: {doc.semantic_identifier}")
+        print(f"Updated at: {doc.doc_updated_at}")
+        print(f"Source: {doc.source}")
+        if doc.primary_owners:
+            print(f"Primary owners: {', '.join([owner.get_semantic_name() for owner in doc.primary_owners])}")
+        print(f"Number of sections: {len(doc.sections)}")
+        if doc.sections:
+            print(f"First section text preview: {doc.sections[0].text[:100]}...")
+    else:
+        print("No documents retrieved")
