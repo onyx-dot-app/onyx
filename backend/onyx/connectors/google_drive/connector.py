@@ -361,7 +361,13 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             return None, found_future_work
 
         def drive_id_iterator(thread_id: str) -> Iterator[str]:
-            completion = checkpoint.completion_map[thread_id]
+            completion = checkpoint.completion_map.get(
+                thread_id,
+                StageCompletion(
+                    stage=DriveRetrievalStage.MY_DRIVE_FILES,
+                    completed_until=0,
+                ),
+            )
             # continue iterating until this thread has no more work to do
             while True:
                 # this locks operations on _retrieved_ids and drive_id_status
