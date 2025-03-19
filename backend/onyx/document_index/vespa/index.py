@@ -98,7 +98,7 @@ class _VespaUpdateRequest:
 
 
 @dataclass
-class KGVespaUpdateRequest:
+class KGVespaChunkUpdateRequest:
     document_id: str
     chunk_id: int
     url: str
@@ -106,7 +106,7 @@ class KGVespaUpdateRequest:
 
 
 @dataclass
-class KGUpdateRequest:
+class KGUChunkpdateRequest:
     """
     Update KG fields for a document
     """
@@ -523,16 +523,16 @@ class VespaIndex(DocumentIndex):
                         raise requests.HTTPError(failure_msg) from e
 
     @classmethod
-    def _apply_kg_updates_batched(
+    def _apply_kg_chunk_updates_batched(
         cls,
-        updates: list[KGVespaUpdateRequest],
+        updates: list[KGVespaChunkUpdateRequest],
         httpx_client: httpx.Client,
         batch_size: int = BATCH_SIZE,
     ) -> None:
         """Runs a batch of updates in parallel via the ThreadPoolExecutor."""
 
         def _kg_update_chunk(
-            update: KGVespaUpdateRequest, http_client: httpx.Client
+            update: KGVespaChunkUpdateRequest, http_client: httpx.Client
         ) -> httpx.Response:
             logger.debug(
                 f"Updating KG with request to {update.url} with body {update.update_request}"
@@ -651,9 +651,9 @@ class VespaIndex(DocumentIndex):
         )
 
     def kg_chunk_updates(
-        self, kg_update_requests: list[KGUpdateRequest], tenant_id: str
+        self, kg_update_requests: list[KGUChunkpdateRequest], tenant_id: str
     ) -> None:
-        processed_updates_requests: list[KGVespaUpdateRequest] = []
+        processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
         logger.debug(f"Updating {len(kg_update_requests)} documents in Vespa")
 
         update_start = time.monotonic()
@@ -692,7 +692,7 @@ class VespaIndex(DocumentIndex):
             )
 
             processed_updates_requests.append(
-                KGVespaUpdateRequest(
+                KGVespaChunkUpdateRequest(
                     document_id=kg_update_request.doc_id,
                     chunk_id=kg_update_request.chunk_id,
                     url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/{doc_chunk_id}",
@@ -701,7 +701,9 @@ class VespaIndex(DocumentIndex):
             )
 
         with self.httpx_client_context as httpx_client:
-            self._apply_kg_updates_batched(processed_updates_requests, httpx_client)
+            self._apply_kg_chunk_updates_batched(
+                processed_updates_requests, httpx_client
+            )
         logger.debug(
             "Finished updating Vespa documents in %.2f seconds",
             time.monotonic() - update_start,

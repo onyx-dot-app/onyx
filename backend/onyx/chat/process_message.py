@@ -85,7 +85,7 @@ from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.vespa.kg_interactions import get_document_kg_info
-from onyx.document_index.vespa.kg_interactions import KGUpdateRequest
+from onyx.document_index.vespa.kg_interactions import KGUChunkpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_info_chunks
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -373,14 +373,14 @@ def stream_chat_message_objects(
     logger.info(f"aaa: {aaa}")
 
     kg_updates = [
-        KGUpdateRequest(
+        KGUChunkpdateRequest(
             doc_id=test_file,
             chunk_id=0,
             kg_entities={f"test_E_{random.randint(0, 10)}"},
             kg_relationships={f"test_R_{random.randint(0, 10)}"},
             kg_terms={f"test_T_{random.randint(0, 10)}"},
         ),
-        KGUpdateRequest(
+        KGUChunkpdateRequest(
             doc_id=test_file,
             chunk_id=1,
             kg_entities={f"test_E_{random.randint(0, 10)}"},
