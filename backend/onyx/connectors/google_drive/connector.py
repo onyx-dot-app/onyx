@@ -827,10 +827,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         if checkpoint.completion_stage == DriveRetrievalStage.OAUTH_FILES:
             completion = checkpoint.completion_map[self.primary_admin_email]
             all_files_start = start
-            if completion is not None:
-                assert (
-                    completion.stage == DriveRetrievalStage.OAUTH_FILES
-                ), "last file completion stage was not oauth files"
+            # if resuming from a checkpoint
+            if completion.stage == DriveRetrievalStage.OAUTH_FILES:
                 all_files_start = completion.completed_until
 
             yield from self._oauth_retrieval_all_files(
