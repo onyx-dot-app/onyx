@@ -387,6 +387,7 @@ def _run_indexing(
     net_doc_change = 0
     document_count = 0
     chunk_count = 0
+    index_attempt: IndexAttempt | None = None
     try:
         with get_session_with_current_tenant() as db_session_temp:
             index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
