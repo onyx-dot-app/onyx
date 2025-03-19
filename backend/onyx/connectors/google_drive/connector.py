@@ -154,21 +154,6 @@ class DriveIdStatus(Enum):
     FINISHED = "finished"
 
 
-class DriveIdServer:
-    """
-    Returns an iterator over drive_ids.
-    """
-
-    def __init__(self, drive_ids: list[str], retrieved_ids: set[str]):
-        self.original_ids = set(drive_ids)
-
-        # drives available for processing
-        self.available_ids = copy.copy(drive_ids)
-
-        # use a reference to allow outside updates to affect this
-        self.finished_ids = retrieved_ids
-
-
 class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpoint]):
     def __init__(
         self,
@@ -362,7 +347,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             processed_ids: set[str], thread_id: str
         ) -> tuple[str | None, bool]:
             found_future_work = False
-            print(f"{thread_id} drive_id_status: {drive_id_status}")
             for drive_id, status in drive_id_status.items():
                 if drive_id in self._retrieved_ids:
                     drive_id_status[drive_id] = DriveIdStatus.FINISHED
@@ -430,7 +414,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 stage=DriveRetrievalStage.MY_DRIVE_FILES,
                 completed_until=start or 0,
             )
-            checkpoint.completion_map[user_email] = curr_stage
             resuming = False
         drive_service = get_drive_service(self.creds, user_email)
 
