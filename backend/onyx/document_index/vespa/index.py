@@ -28,6 +28,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.db.enums import EmbeddingPrecision
 from onyx.document_index.document_index_utils import get_document_chunk_ids
+from onyx.document_index.document_index_utils import get_uuid_from_chunk_info
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentInsertionRecord
 from onyx.document_index.interfaces import EnrichedDocumentIndexingInfo
@@ -94,6 +95,27 @@ class _VespaUpdateRequest:
     document_id: str
     url: str
     update_request: dict[str, dict]
+
+
+@dataclass
+class KGVespaUpdateRequest:
+    document_id: str
+    chunk_id: int
+    url: str
+    update_request: dict[str, dict]
+
+
+@dataclass
+class KGUpdateRequest:
+    """
+    Update KG fields for a document
+    """
+
+    doc_id: str
+    chunk_id: int
+    kg_entities: set[str] | None = None
+    kg_relationships: set[str] | None = None
+    kg_terms: set[str] | None = None
 
 
 def in_memory_zip_from_file_bytes(file_contents: dict[str, bytes]) -> BinaryIO:
@@ -500,6 +522,51 @@ class VespaIndex(DocumentIndex):
                         failure_msg = f"Failed to update document: {future_to_document_id[future]}"
                         raise requests.HTTPError(failure_msg) from e
 
+    @classmethod
+    def _apply_kg_updates_batched(
+        cls,
+        updates: list[KGVespaUpdateRequest],
+        httpx_client: httpx.Client,
+        batch_size: int = BATCH_SIZE,
+    ) -> None:
+        """Runs a batch of updates in parallel via the ThreadPoolExecutor."""
+
+        def _kg_update_chunk(
+            update: KGVespaUpdateRequest, http_client: httpx.Client
+        ) -> httpx.Response:
+            logger.debug(
+                f"Updating KG with request to {update.url} with body {update.update_request}"
+            )
+            return http_client.put(
+                update.url,
+                headers={"Content-Type": "application/json"},
+                json=update.update_request,
+            )
+
+        # NOTE: using `httpx` here since `requests` doesn't support HTTP2. This is beneficient for
+        # indexing / updates / deletes since we have to make a large volume of requests.
+
+        with (
+            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
+            httpx_client as http_client,
+        ):
+            for update_batch in batch_generator(updates, batch_size):
+                future_to_document_id = {
+                    executor.submit(
+                        _kg_update_chunk,
+                        update,
+                        http_client,
+                    ): update.document_id
+                    for update in update_batch
+                }
+                for future in concurrent.futures.as_completed(future_to_document_id):
+                    res = future.result()
+                    try:
+                        res.raise_for_status()
+                    except requests.HTTPError as e:
+                        failure_msg = f"Failed to update document: {future_to_document_id[future]}"
+                        raise requests.HTTPError(failure_msg) from e
+
     def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
         logger.debug(f"Updating {len(update_requests)} documents in Vespa")
 
@@ -578,6 +645,63 @@ class VespaIndex(DocumentIndex):
 
         with self.httpx_client_context as httpx_client:
             self._apply_updates_batched(processed_updates_requests, httpx_client)
+        logger.debug(
+            "Finished updating Vespa documents in %.2f seconds",
+            time.monotonic() - update_start,
+        )
+
+    def kg_chunk_updates(
+        self, kg_update_requests: list[KGUpdateRequest], tenant_id: str
+    ) -> None:
+        processed_updates_requests: list[KGVespaUpdateRequest] = []
+        logger.debug(f"Updating {len(kg_update_requests)} documents in Vespa")
+
+        update_start = time.monotonic()
+
+        # Build the _VespaUpdateRequest objects
+        for kg_update_request in kg_update_requests:
+            kg_update_dict: dict[str, dict] = {"fields": {}}
+
+            if kg_update_request.kg_entities is not None:
+                kg_update_dict["fields"]["kg_entities"] = {
+                    "assign": {
+                        kg_entity: 1 for kg_entity in kg_update_request.kg_entities
+                    }
+                }
+            if kg_update_request.kg_relationships is not None:
+                kg_update_dict["fields"]["kg_relationships"] = {
+                    "assign": {
+                        kg_relationship: 1
+                        for kg_relationship in kg_update_request.kg_relationships
+                    }
+                }
+            if kg_update_request.kg_terms is not None:
+                kg_update_dict["fields"]["kg_terms"] = {
+                    "assign": {kg_term: 1 for kg_term in kg_update_request.kg_terms}
+                }
+
+            if not kg_update_dict["fields"]:
+                logger.error("Update request received but nothing to update")
+                continue
+
+            doc_chunk_id = get_uuid_from_chunk_info(
+                document_id=kg_update_request.doc_id,
+                chunk_id=kg_update_request.chunk_id,
+                tenant_id=tenant_id,
+                large_chunk_id=None,
+            )
+
+            processed_updates_requests.append(
+                KGVespaUpdateRequest(
+                    document_id=kg_update_request.doc_id,
+                    chunk_id=kg_update_request.chunk_id,
+                    url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/{doc_chunk_id}",
+                    update_request=kg_update_dict,
+                )
+            )
+
+        with self.httpx_client_context as httpx_client:
+            self._apply_kg_updates_batched(processed_updates_requests, httpx_client)
         logger.debug(
             "Finished updating Vespa documents in %.2f seconds",
             time.monotonic() - update_start,
