@@ -1,7 +1,5 @@
 from collections.abc import Callable
 from collections.abc import Iterator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from typing import Any
 from urllib.parse import urlparse
@@ -47,6 +45,7 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 # TODO: Improve this by using the batch utility: https://googleapis.github.io/google-api-python-client/docs/batch.html
@@ -84,13 +83,17 @@ def _process_files_batch(
     batch_size: int,
 ) -> GenerateDocumentsOutput:
     doc_batch = []
-    with ThreadPoolExecutor(max_workers=min(16, len(files))) as executor:
-        for doc in executor.map(convert_func, files):
-            if doc:
-                doc_batch.append(doc)
-                if len(doc_batch) >= batch_size:
-                    yield doc_batch
-                    doc_batch = []
+    function_tuples = [(convert_func, (file,)) for file in files]
+    results = run_functions_tuples_in_parallel(
+        function_tuples, allow_failures=True, max_workers=min(16, len(files))
+    )
+
+    for doc in results:
+        if doc:
+            doc_batch.append(doc)
+            if len(doc_batch) >= batch_size:
+                yield doc_batch
+                doc_batch = []
     if doc_batch:
         yield doc_batch
 
@@ -389,24 +392,31 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         logger.info(f"Found {len(folder_ids_to_retrieve)} folders to retrieve")
         logger.debug(f"Folders: {folder_ids_to_retrieve}")
 
-        # Process users in parallel using ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            future_to_email = {
-                executor.submit(
-                    self._impersonate_user_for_retrieval,
+        # Process users in parallel
+        function_tuples = [
+            (
+                self._impersonate_user_for_retrieval,
+                (
                     email,
                     is_slim,
                     drive_ids_to_retrieve,
                     folder_ids_to_retrieve,
                     start,
                     end,
-                ): email
-                for email in all_org_emails
-            }
+                ),
+            )
+            for email in all_org_emails
+        ]
 
-            # Yield results as they complete
-            for future in as_completed(future_to_email):
-                yield from future.result()
+        # Since _impersonate_user_for_retrieval returns an iterator, we need to
+        # collect and yield from each result
+        results = run_functions_tuples_in_parallel(
+            function_tuples, allow_failures=True, max_workers=10
+        )
+
+        for result in results:
+            if result:
+                yield from result
 
         remaining_folders = (
             drive_ids_to_retrieve | folder_ids_to_retrieve
@@ -524,52 +534,46 @@ class GoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
-        # Create a larger process pool for file conversion
-        with ThreadPoolExecutor(max_workers=8) as executor:
-            # Prepare a partial function with the credentials and admin email
-            convert_func = partial(
-                _convert_single_file,
-                self.creds,
-                self.primary_admin_email,
-            )
+        # Prepare a partial function with the credentials and admin email
+        convert_func = partial(
+            _convert_single_file,
+            self.creds,
+            self.primary_admin_email,
+        )
 
-            # Fetch files in batches
-            files_batch: list[GoogleDriveFileType] = []
-            for file in self._fetch_drive_items(is_slim=False, start=start, end=end):
-                files_batch.append(file)
+        # Fetch files in batches
+        files_batch: list[GoogleDriveFileType] = []
+        for file in self._fetch_drive_items(is_slim=False, start=start, end=end):
+            files_batch.append(file)
 
-                if len(files_batch) >= self.batch_size:
-                    # Process the batch
-                    futures = [
-                        executor.submit(convert_func, file) for file in files_batch
-                    ]
-                    documents = []
-                    for future in as_completed(futures):
-                        try:
-                            doc = future.result()
-                            if doc is not None:
-                                documents.append(doc)
-                        except Exception as e:
-                            logger.error(f"Error converting file: {e}")
+            if len(files_batch) >= self.batch_size:
+                # Create function tuples for parallel processing
+                function_tuples = [(convert_func, (file,)) for file in files_batch]
 
-                    if documents:
-                        yield documents
-                    files_batch = []
+                # Process the batch in parallel
+                results = run_functions_tuples_in_parallel(
+                    function_tuples,
+                    allow_failures=True,  # Continue processing even if some conversions fail
+                    max_workers=8,  # Match the current worker count
+                )
 
-            # Process any remaining files
-            if files_batch:
-                futures = [executor.submit(convert_func, file) for file in files_batch]
-                documents = []
-                for future in as_completed(futures):
-                    try:
-                        doc = future.result()
-                        if doc is not None:
-                            documents.append(doc)
-                    except Exception as e:
-                        logger.error(f"Error converting file: {e}")
+                # Filter out None results
+                documents = [doc for doc in results if doc is not None]
 
                 if documents:
                     yield documents
+                files_batch = []
+
+        # Process any remaining files
+        if files_batch:
+            function_tuples = [(convert_func, (file,)) for file in files_batch]
+            results = run_functions_tuples_in_parallel(
+                function_tuples, allow_failures=True, max_workers=8
+            )
+            documents = [doc for doc in results if doc is not None]
+
+            if documents:
+                yield documents
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         try:
