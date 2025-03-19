@@ -419,9 +419,10 @@ def connector_external_group_sync_generator_task(
             try:
                 external_user_groups = ext_group_sync_func(tenant_id, cc_pair)
             except ConnectorValidationError as e:
-                msg = f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
                 # TODO: add some notification to the admins here
-                logger.exception(msg)
+                logger.exception(
+                    f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
+                )
                 raise e
 
             logger.info(
