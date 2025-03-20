@@ -704,25 +704,28 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
                 )
 
             # 3) If channels are specified and regex is not enabled, verify each is accessible
-            if self.channels and not self.channel_regex_enabled:
-                accessible_channels = get_channels(
-                    client=self.fast_client,
-                    exclude_archived=True,
-                    get_public=True,
-                    get_private=True,
-                )
-                # For quick lookups by name or ID, build a map:
-                accessible_channel_names = {ch["name"] for ch in accessible_channels}
-                accessible_channel_ids = {ch["id"] for ch in accessible_channels}
+            # NOTE: removed this for now since it may be too slow for large workspaces which may
+            # have some automations which create a lot of channels (100k+)
 
-                for user_channel in self.channels:
-                    if (
-                        user_channel not in accessible_channel_names
-                        and user_channel not in accessible_channel_ids
-                    ):
-                        raise ConnectorValidationError(
-                            f"Channel '{user_channel}' not found or inaccessible in this workspace."
-                        )
+            # if self.channels and not self.channel_regex_enabled:
+            #     accessible_channels = get_channels(
+            #         client=self.fast_client,
+            #         exclude_archived=True,
+            #         get_public=True,
+            #         get_private=True,
+            #     )
+            #     # For quick lookups by name or ID, build a map:
+            #     accessible_channel_names = {ch["name"] for ch in accessible_channels}
+            #     accessible_channel_ids = {ch["id"] for ch in accessible_channels}
+
+            #     for user_channel in self.channels:
+            #         if (
+            #             user_channel not in accessible_channel_names
+            #             and user_channel not in accessible_channel_ids
+            #         ):
+            #             raise ConnectorValidationError(
+            #                 f"Channel '{user_channel}' not found or inaccessible in this workspace."
+            #             )
 
         except SlackApiError as e:
             slack_error = e.response.get("error", "")
