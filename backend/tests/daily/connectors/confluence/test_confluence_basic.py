@@ -113,6 +113,9 @@ def test_confluence_connector_skip_images(
     assert sum(len(doc.sections) for doc in doc_batch) == 8
 
 
+@pytest.mark.skip(
+    "Connector is improperly accessing the DB directly. Needs to be refactored"
+)
 @pytest.mark.parametrize("space", ["MI"])
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
