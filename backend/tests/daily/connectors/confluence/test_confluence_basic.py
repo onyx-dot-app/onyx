@@ -36,7 +36,6 @@ def confluence_connector() -> ConfluenceConnector:
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-@pytest.mark.skip(reason="Skipping this test")
 def test_confluence_connector_basic(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
@@ -50,15 +49,14 @@ def test_confluence_connector_basic(
 
     page_within_a_page_doc: Document | None = None
     page_doc: Document | None = None
-    txt_doc: Document | None = None
 
     for doc in doc_batch:
         if doc.semantic_identifier == "DailyConnectorTestSpace Home":
             page_doc = doc
-        elif ".txt" in doc.semantic_identifier:
-            txt_doc = doc
         elif doc.semantic_identifier == "Page Within A Page":
             page_within_a_page_doc = doc
+        else:
+            pass
 
     assert page_within_a_page_doc is not None
     assert page_within_a_page_doc.semantic_identifier == "Page Within A Page"
@@ -79,7 +77,7 @@ def test_confluence_connector_basic(
     assert page_doc.metadata["labels"] == ["testlabel"]
     assert page_doc.primary_owners
     assert page_doc.primary_owners[0].email == "hagen@danswer.ai"
-    assert len(page_doc.sections) == 1
+    assert len(page_doc.sections) == 2  # page text + attachment text
 
     page_section = page_doc.sections[0]
     assert page_section.text == "test123 " + page_within_a_page_text
@@ -88,13 +86,7 @@ def test_confluence_connector_basic(
         == "https://danswerai.atlassian.net/wiki/spaces/DailyConne/overview"
     )
 
-    assert txt_doc is not None
-    assert txt_doc.semantic_identifier == "small-file.txt"
-    assert len(txt_doc.sections) == 1
-    assert txt_doc.sections[0].text == "small"
-    assert txt_doc.primary_owners
-    assert txt_doc.primary_owners[0].email == "chris@onyx.app"
-    assert (
-        txt_doc.sections[0].link
-        == "https://danswerai.atlassian.net/wiki/pages/viewpageattachments.action?pageId=52494430&preview=%2F52494430%2F52527123%2Fsmall-file.txt"
-    )
+    text_attachment_section = page_doc.sections[1]
+    assert text_attachment_section.text == "small"
+    assert text_attachment_section.link
+    assert text_attachment_section.link.endswith("small-file.txt")

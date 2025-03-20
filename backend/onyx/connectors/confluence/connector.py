@@ -160,7 +160,7 @@ class ConfluenceConnector(
         }
 
     def set_allow_images(self, value: bool) -> None:
-        self._download_images = value
+        self.allow_images = value
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -237,7 +237,9 @@ class ConfluenceConnector(
             # Extract basic page information
             page_id = page["id"]
             page_title = page["title"]
-            page_url = f"{self.wiki_base}{page['_links']['webui']}"
+            page_url = build_confluence_document_id(
+                self.wiki_base, page["_links"]["webui"], self.is_cloud
+            )
 
             # Get the page content
             page_content = extract_text_from_confluence_html(
@@ -268,7 +270,7 @@ class ConfluenceConnector(
                         self.confluence_client,
                         attachment,
                         page_id,
-                        self._download_images,
+                        self.allow_images,
                     )
 
                     if result and result.text:
@@ -309,13 +311,14 @@ class ConfluenceConnector(
             if "version" in page and "by" in page["version"]:
                 author = page["version"]["by"]
                 display_name = author.get("displayName", "Unknown")
-                primary_owners.append(BasicExpertInfo(display_name=display_name))
+                email = author.get("email", "unknown@domain.invalid")
+                primary_owners.append(
+                    BasicExpertInfo(display_name=display_name, email=email)
+                )
 
             # Create the document
             return Document(
-                id=build_confluence_document_id(
-                    self.wiki_base, page["_links"]["webui"], self.is_cloud
-                ),
+                id=page_url,
                 sections=sections,
                 source=DocumentSource.CONFLUENCE,
                 semantic_identifier=page_title,
@@ -378,7 +381,7 @@ class ConfluenceConnector(
                         confluence_client=self.confluence_client,
                         attachment=attachment,
                         page_id=page["id"],
-                        allow_images=self._download_images,
+                        allow_images=self.allow_images,
                     )
                     if response is None:
                         continue
