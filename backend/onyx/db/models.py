@@ -437,6 +437,9 @@ class ConnectorCredentialPair(Base):
     status: Mapped[ConnectorCredentialPairStatus] = mapped_column(
         Enum(ConnectorCredentialPairStatus, native_enum=False), nullable=False
     )
+    # this is separate from the `status` above, since a connector can be `INITIAL_INDEXING`, `ACTIVE`,
+    # or `PAUSED` and still be in a repeated error state.
+    in_repeated_error_state: Mapped[bool] = mapped_column(Boolean, default=False)
     connector_id: Mapped[int] = mapped_column(
         ForeignKey("connector.id"), primary_key=True
     )

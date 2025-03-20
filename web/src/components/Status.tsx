@@ -98,14 +98,34 @@ export function CCPairStatus({
   status,
   ccPairStatus,
   size = "md",
+  inRepeatedErrorState,
 }: {
   status: ValidStatuses;
   ccPairStatus: ConnectorCredentialPairStatus;
   size?: "xs" | "sm" | "md" | "lg";
+  inRepeatedErrorState?: boolean;
 }) {
   let badge;
 
-  if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
+  if (inRepeatedErrorState) {
+    badge = (
+      <Badge variant="destructive" icon={FiAlertTriangle}>
+        Repeated Errors
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.SCHEDULED) {
+    badge = (
+      <Badge variant="not_started" icon={FiClock}>
+        Scheduled
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.INITIAL_INDEXING) {
+    badge = (
+      <Badge variant="in_progress" icon={FiClock}>
+        Initial Indexing
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
         Deleting
@@ -119,7 +139,11 @@ export function CCPairStatus({
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
     badge = (
-      <Badge variant="invalid" icon={FiAlertTriangle}>
+      <Badge
+        tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
+        circle
+        variant="invalid"
+      >
         Invalid
       </Badge>
     );
@@ -132,7 +156,7 @@ export function CCPairStatus({
   } else {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Active
+        Indexed
       </Badge>
     );
   }

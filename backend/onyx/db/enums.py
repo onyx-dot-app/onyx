@@ -73,13 +73,19 @@ class ChatSessionSharedStatus(str, PyEnum):
 
 
 class ConnectorCredentialPairStatus(str, PyEnum):
+    SCHEDULED = "SCHEDULED"
+    INITIAL_INDEXING = "INITIAL_INDEXING"
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
     DELETING = "DELETING"
     INVALID = "INVALID"
 
     def is_active(self) -> bool:
-        return self == ConnectorCredentialPairStatus.ACTIVE
+        return (
+            self == ConnectorCredentialPairStatus.ACTIVE
+            or self == ConnectorCredentialPairStatus.SCHEDULED
+            or self == ConnectorCredentialPairStatus.INITIAL_INDEXING
+        )
 
 
 class AccessType(str, PyEnum):

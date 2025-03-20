@@ -31,6 +31,8 @@ from onyx.db.index_attempt import create_index_attempt
 from onyx.db.index_attempt import delete_index_attempt
 from onyx.db.index_attempt import get_all_index_attempts_by_status
 from onyx.db.index_attempt import get_index_attempt
+from onyx.db.index_attempt import get_last_attempt_for_cc_pair
+from onyx.db.index_attempt import get_recent_attempts_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
@@ -43,6 +45,8 @@ from onyx.redis.redis_pool import redis_lock_dump
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE = 5
 
 
 def get_unfenced_index_attempt_ids(db_session: Session, r: redis.Redis) -> list[int]:
@@ -346,9 +350,24 @@ def validate_indexing_fences(
     return
 
 
+def is_in_repeated_error_state(
+    cc_pair_id: int, search_settings_id: int, db_session: Session
+) -> bool:
+    """Checks if the cc pair / search setting combination is in a repeated error state."""
+    most_recent_index_attempts = get_recent_attempts_for_cc_pair(
+        cc_pair_id=cc_pair_id,
+        search_settings_id=search_settings_id,
+        limit=NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
+        db_session=db_session,
+    )
+    return all(
+        attempt.status == IndexingStatus.FAILED
+        for attempt in most_recent_index_attempts
+    )
+
+
 def should_index(
     cc_pair: ConnectorCredentialPair,
-    last_index: IndexAttempt | None,
     search_settings_instance: SearchSettings,
     secondary_index_building: bool,
     db_session: Session,
@@ -362,6 +381,16 @@ def should_index(
     Return True if we should try to index, False if not.
     """
     connector = cc_pair.connector
+    last_index_attempt = get_last_attempt_for_cc_pair(
+        cc_pair_id=cc_pair.id,
+        search_settings_id=search_settings_instance.id,
+        db_session=db_session,
+    )
+    all_recent_errored = is_in_repeated_error_state(
+        cc_pair_id=cc_pair.id,
+        search_settings_id=search_settings_instance.id,
+        db_session=db_session,
+    )
 
     # uncomment for debugging
     # task_logger.info(f"_should_index: "
@@ -388,24 +417,24 @@ def should_index(
 
     # When switching over models, always index at least once
     if search_settings_instance.status == IndexModelStatus.FUTURE:
-        if last_index:
+        if last_index_attempt:
             # No new index if the last index attempt succeeded
             # Once is enough. The model will never be able to swap otherwise.
-            if last_index.status == IndexingStatus.SUCCESS:
+            if last_index_attempt.status == IndexingStatus.SUCCESS:
                 # print(
                 #     f"Not indexing cc_pair={cc_pair.id}: FUTURE model with successful last index attempt={last_index.id}"
                 # )
                 return False
 
             # No new index if the last index attempt is waiting to start
-            if last_index.status == IndexingStatus.NOT_STARTED:
+            if last_index_attempt.status == IndexingStatus.NOT_STARTED:
                 # print(
                 #     f"Not indexing cc_pair={cc_pair.id}: FUTURE model with NOT_STARTED last index attempt={last_index.id}"
                 # )
                 return False
 
             # No new index if the last index attempt is running
-            if last_index.status == IndexingStatus.IN_PROGRESS:
+            if last_index_attempt.status == IndexingStatus.IN_PROGRESS:
                 # print(
                 #     f"Not indexing cc_pair={cc_pair.id}: FUTURE model with IN_PROGRESS last index attempt={last_index.id}"
                 # )
@@ -439,18 +468,27 @@ def should_index(
             return True
 
     # if no attempt has ever occurred, we should index regardless of refresh_freq
-    if not last_index:
+    if not last_index_attempt:
         return True
 
     if connector.refresh_freq is None:
         # print(f"Not indexing cc_pair={cc_pair.id}: refresh_freq is None")
         return False
 
+    # if in the "initial" phase, we should always try and kick-off indexing
+    # as soon as possible if there is no ongoing attempt. In other words,
+    # no delay UNLESS we're repeatedly failing to index.
+    if (
+        cc_pair.status == ConnectorCredentialPairStatus.INITIAL_INDEXING
+        and not all_recent_errored
+    ):
+        return True
+
     current_db_time = get_db_current_time(db_session)
-    time_since_index = current_db_time - last_index.time_updated
+    time_since_index = current_db_time - last_index_attempt.time_updated
     if time_since_index.total_seconds() < connector.refresh_freq:
         # print(
-        #     f"Not indexing cc_pair={cc_pair.id}: Last index attempt={last_index.id} "
+        #     f"Not indexing cc_pair={cc_pair.id}: Last index attempt={last_index_attempt.id} "
         #     f"too recent ({time_since_index.total_seconds()}s < {connector.refresh_freq}s)"
         # )
         return False

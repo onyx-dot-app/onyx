@@ -457,7 +457,7 @@ def add_credential_to_connector(
     access_type: AccessType,
     groups: list[int] | None,
     auto_sync_options: dict | None = None,
-    initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
+    initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
     last_successful_index_time: datetime | None = None,
     seeding_flow: bool = False,
     is_user_file: bool = False,
