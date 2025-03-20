@@ -375,6 +375,7 @@ def upsert_documents(
                     last_modified=datetime.now(timezone.utc),
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
+                    kg_processed=False,
                 )
             )
             for doc in seen_documents.values()
@@ -777,3 +778,56 @@ def fetch_chunk_count_for_document(
 ) -> int | None:
     stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_unprocessed_kg_documents_for_connector(
+    db_session: Session,
+    connector_id: int,
+    batch_size: int = 100,
+) -> Generator[DbDocument, None, None]:
+    """
+    Retrieves all documents associated with a connector that have not yet been processed
+    for knowledge graph extraction. Uses a generator pattern to handle large result sets.
+
+    Args:
+        db_session (Session): The database session to use
+        connector_id (int): The ID of the connector to check
+        batch_size (int): Number of documents to fetch per batch, defaults to 100
+
+    Yields:
+        DbDocument: Documents that haven't been KG processed, one at a time
+    """
+    offset = 0
+    while True:
+        stmt = (
+            select(DbDocument)
+            .join(
+                DocumentByConnectorCredentialPair,
+                DbDocument.id == DocumentByConnectorCredentialPair.id,
+            )
+            .where(
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id == connector_id,
+                    or_(
+                        DocumentByConnectorCredentialPair.has_been_kg_processed.is_(
+                            None
+                        ),
+                        DocumentByConnectorCredentialPair.has_been_kg_processed.is_(
+                            False
+                        ),
+                    ),
+                )
+            )
+            .distinct()
+            .limit(batch_size)
+            .offset(offset)
+        )
+
+        batch = list(db_session.scalars(stmt).all())
+        if not batch:
+            break
+
+        for document in batch:
+            yield document
+
+        offset += batch_size

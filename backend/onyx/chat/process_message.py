@@ -91,6 +91,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
+from onyx.kg.extractions.extraction_processing import kg_extraction
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -363,6 +364,8 @@ def stream_chat_message_objects(
 
     test_file = "FILE_CONNECTOR__c4e60107-bcf2-4955-ae5c-cd54a3a18e6d/output_7810.txt"
     index_str = "danswer_chunk_text_embedding_3_small"
+
+    kg_extraction(tenant_id, index_str)
 
     aaa = get_document_kg_info(
         document_id=test_file,

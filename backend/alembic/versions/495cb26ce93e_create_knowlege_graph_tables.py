@@ -25,6 +25,7 @@ def upgrade() -> None:
             "id", sa.Integer(), primary_key=True, autoincrement=True, nullable=False
         ),
         sa.Column("name", sa.String(), nullable=False, unique=True),  # unique=True here
+        sa.Column("description", sa.String(), nullable=True),
         sa.Column("grounding", sa.String(), nullable=False),
         sa.Column(
             "extraction_sources",

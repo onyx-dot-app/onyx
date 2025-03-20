@@ -653,28 +653,52 @@ class VespaIndex(DocumentIndex):
     def kg_chunk_updates(
         self, kg_update_requests: list[KGUChunkpdateRequest], tenant_id: str
     ) -> None:
+        def _get_general_entity(specific_entity: str) -> str:
+            entity_type, entity_name = specific_entity.split(":")
+            if entity_type != "*":
+                return f"{entity_type}:*"
+            else:
+                return specific_entity
+
         processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
         logger.debug(f"Updating {len(kg_update_requests)} documents in Vespa")
 
         update_start = time.monotonic()
 
         # Build the _VespaUpdateRequest objects
+
         for kg_update_request in kg_update_requests:
             kg_update_dict: dict[str, dict] = {"fields": {}}
 
-            if kg_update_request.kg_entities is not None:
-                kg_update_dict["fields"]["kg_entities"] = {
-                    "assign": {
-                        kg_entity: 1 for kg_entity in kg_update_request.kg_entities
-                    }
-                }
+            implied_entities = set()
             if kg_update_request.kg_relationships is not None:
+                for kg_relationship in kg_update_request.kg_relationships:
+                    kg_relationship_split = kg_relationship.split("__")
+                    if len(kg_relationship_split) == 3:
+                        implied_entities.add(kg_relationship_split[0])
+                        implied_entities.add(kg_relationship_split[2])
+                        # Keep this for now in case we want to also add the general entities
+                        # implied_entities.add(_get_general_entity(kg_relationship_split[0]))
+                        # implied_entities.add(_get_general_entity(kg_relationship_split[2]))
+
                 kg_update_dict["fields"]["kg_relationships"] = {
                     "assign": {
                         kg_relationship: 1
                         for kg_relationship in kg_update_request.kg_relationships
                     }
                 }
+
+            if kg_update_request.kg_entities is not None or implied_entities:
+                if kg_update_request.kg_entities is None:
+                    kg_entities = implied_entities
+                else:
+                    kg_entities = set(kg_update_request.kg_entities)
+                    kg_entities.update(implied_entities)
+
+                kg_update_dict["fields"]["kg_entities"] = {
+                    "assign": {kg_entity: 1 for kg_entity in kg_entities}
+                }
+
             if kg_update_request.kg_terms is not None:
                 kg_update_dict["fields"]["kg_terms"] = {
                     "assign": {kg_term: 1 for kg_term in kg_update_request.kg_terms}
