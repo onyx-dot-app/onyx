@@ -88,6 +88,10 @@ def _extract_sections_basic(
     link = file.get("webViewLink", "")
 
     try:
+        # skip images if not explicitly enabled
+        if not allow_images and is_gdrive_image_mime_type(mime_type):
+            return []
+
         # For Google Docs, Sheets, and Slides, export as plain text
         if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
             export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
@@ -108,10 +112,6 @@ def _extract_sections_basic(
 
             text = response.decode("utf-8")
             return [TextSection(link=link, text=text)]
-
-        # skip images if not explicitly enabled
-        if not allow_images and is_gdrive_image_mime_type(mime_type):
-            return []
 
         # For other file types, download the file
         # Use the correct API call for downloading files
