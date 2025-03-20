@@ -98,6 +98,12 @@ schema DANSWER_CHUNK_NAME {
         field metadata type string {
             indexing: summary | attribute
         }
+        field chunk_context type string {
+            indexing: summary | attribute
+        }
+        field doc_summary type string {
+            indexing: summary | attribute
+        }
         field metadata_suffix type string {
             indexing: summary | attribute
         }

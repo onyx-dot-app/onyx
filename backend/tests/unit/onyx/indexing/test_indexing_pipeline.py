@@ -166,6 +166,8 @@ def create_test_chunk(
         embeddings=ChunkEmbedding(full_embedding=[], mini_chunk_embeddings=[]),
         title_embedding=None,
         image_file_name=None,
+        chunk_context="",
+        doc_summary="",
     )
 
 

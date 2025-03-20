@@ -80,6 +80,9 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             reduced_dimension=search_settings.reduced_dimension,
             # Whether switching to this model requires re-indexing
             background_reindex_enabled=search_settings.background_reindex_enabled,
+            enable_contextual_rag=search_settings.enable_contextual_rag,
+            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
+            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
             # Reranking Details
             rerank_model_name=search_settings.rerank_model_name,
             rerank_provider_type=search_settings.rerank_provider_type,
@@ -218,6 +221,8 @@ class InferenceChunk(BaseChunk):
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
+    doc_summary: str
+    chunk_context: str
 
     # when the doc was last updated
     updated_at: datetime | None
