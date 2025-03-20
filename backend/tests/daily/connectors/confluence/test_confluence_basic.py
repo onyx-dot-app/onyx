@@ -1,18 +1,16 @@
 import os
 import time
-from typing import Tuple
+from typing import Any
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.configs.constants import FileOrigin
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.confluence.utils import AttachmentProcessingResult
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
-from onyx.connectors.models import ImageSection
 
 
 @pytest.fixture
@@ -117,24 +115,16 @@ def test_confluence_connector_skip_images(
     assert sum(len(doc.sections) for doc in doc_batch) == 8
 
 
-def mock_store_image_and_create_section(
-    db_session: Session,
-    image_data: bytes,
-    file_name: str,
-    display_name: str,
-    link: str | None = None,
-    media_type: str = "application/octet-stream",
-    file_origin: FileOrigin = FileOrigin.OTHER,
-) -> Tuple[ImageSection, str | None]:
+def mock_process_image_attachment(
+    *args: Any, **kwargs: Any
+) -> AttachmentProcessingResult:
     """We need this mock to bypass DB access happening in the connector. Which shouldn't
     be done as a rule to begin with, but life is not perfect. Fix it later"""
-    stored_file_name = f"{file_origin.name.lower()}_{file_name}"
-    return (
-        ImageSection(
-            image_file_name=stored_file_name,
-            link=f"http://localhost/{stored_file_name}",
-        ),
-        stored_file_name,
+
+    return AttachmentProcessingResult(
+        text="Hi_text",
+        file_name="Hi_filename",
+        error=None,
     )
 
 
@@ -144,12 +134,12 @@ def mock_store_image_and_create_section(
     return_value=None,
 )
 @patch(
-    "onyx.file_processing.image_utils.store_image_and_create_section",
-    side_effect=mock_store_image_and_create_section,
+    "onyx.connectors.confluence.utils._process_image_attachment",
+    side_effect=mock_process_image_attachment,
 )
 def test_confluence_connector_allow_images(
     mock_get_api_key: MagicMock,
-    mock_store_image_and_create_section: MagicMock,
+    mock_process_image_attachment: MagicMock,
     confluence_connector: ConfluenceConnector,
 ) -> None:
     confluence_connector.set_allow_images(True)
