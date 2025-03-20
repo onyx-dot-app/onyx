@@ -12,10 +12,10 @@ from onyx.connectors.models import Document
 
 
 @pytest.fixture
-def confluence_connector() -> ConfluenceConnector:
+def confluence_connector(space: str) -> ConfluenceConnector:
     connector = ConfluenceConnector(
         wiki_base=os.environ["CONFLUENCE_TEST_SPACE_URL"],
-        space=os.environ["CONFLUENCE_TEST_SPACE"],
+        space=space,
         is_cloud=os.environ.get("CONFLUENCE_IS_CLOUD", "true").lower() == "true",
         page_id=os.environ.get("CONFLUENCE_TEST_PAGE_ID", ""),
     )
@@ -32,6 +32,7 @@ def confluence_connector() -> ConfluenceConnector:
     return connector
 
 
+@pytest.mark.parametrize("space", [os.environ["CONFLUENCE_TEST_SPACE"]])
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
@@ -39,6 +40,7 @@ def confluence_connector() -> ConfluenceConnector:
 def test_confluence_connector_basic(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
+    confluence_connector.set_allow_images(False)
     doc_batch_generator = confluence_connector.poll_source(0, time.time())
 
     doc_batch = next(doc_batch_generator)
@@ -90,3 +92,42 @@ def test_confluence_connector_basic(
     assert text_attachment_section.text == "small"
     assert text_attachment_section.link
     assert text_attachment_section.link.endswith("small-file.txt")
+
+
+@pytest.mark.parametrize("space", ["MI"])
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_confluence_connector_skip_images(
+    mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
+) -> None:
+    confluence_connector.set_allow_images(False)
+    doc_batch_generator = confluence_connector.poll_source(0, time.time())
+
+    doc_batch = next(doc_batch_generator)
+    with pytest.raises(StopIteration):
+        next(doc_batch_generator)
+
+    assert len(doc_batch) == 8
+    assert sum(len(doc.sections) for doc in doc_batch) == 8
+
+
+@pytest.mark.parametrize("space", ["MI"])
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_confluence_connector_allow_images(
+    mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
+) -> None:
+    confluence_connector.set_allow_images(True)
+
+    doc_batch_generator = confluence_connector.poll_source(0, time.time())
+
+    doc_batch = next(doc_batch_generator)
+    with pytest.raises(StopIteration):
+        next(doc_batch_generator)
+
+    assert len(doc_batch) == 8
+    assert sum(len(doc.sections) for doc in doc_batch) == 12
