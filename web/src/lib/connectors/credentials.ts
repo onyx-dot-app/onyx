@@ -499,7 +499,7 @@ export const credentialDisplayNames: Record<string, string> = {
   gitbook_space_id: "GitBook Space ID",
   gitbook_api_key: "GitBook API Key",
 
-  //Backstage
+  // Backstage
   backstage_client_id: "Backstage Client ID",
   backstage_client_secret: "Backstage Client Secret",
   backstage_token_endpoint: "Backstage Token Endpoint",
