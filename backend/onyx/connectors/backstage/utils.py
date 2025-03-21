@@ -143,4 +143,5 @@ def get_entity_link(base_url: str, entity: Dict[str, Any]) -> str:
     name = metadata.get(NAME_KEY, "unnamed")
     namespace = metadata.get(NAMESPACE_KEY, "default")
     
+    base_url = base_url.rstrip('/')
     return f"{base_url}/catalog/{namespace}/{kind}/{name}"
