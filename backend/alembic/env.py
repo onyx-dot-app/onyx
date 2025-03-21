@@ -180,7 +180,7 @@ async def run_async_migrations() -> None:
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
-                    logger.warning("--continue is not set, raising exception!")
+                    logger.error("--continue is not set, raising exception!")
                     raise
 
                 logger.warning("--continue is set, continuing to next schema.")
@@ -224,7 +224,7 @@ def run_migrations_offline() -> None:
         engine.sync_engine.dispose()
 
         for schema in tenant_schemas:
-            logger.info(f"Migrating schema2: {schema}")
+            logger.info(f"Migrating schema: {schema}")
             context.configure(
                 url=url,
                 target_metadata=target_metadata,  # type: ignore
@@ -239,7 +239,7 @@ def run_migrations_offline() -> None:
             with context.begin_transaction():
                 context.run_migrations()
     else:
-        logger.info(f"Migrating schema2: {schema_name}")
+        logger.info(f"Migrating schema: {schema_name}")
         context.configure(
             url=url,
             target_metadata=target_metadata,  # type: ignore
