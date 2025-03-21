@@ -1,7 +1,7 @@
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
-import { Message } from "../interfaces";
+import { ChatFileType, Message } from "../interfaces";
 import {
   Dispatch,
   ForwardedRef,
@@ -11,9 +11,13 @@ import {
   useState,
 } from "react";
 import { XIcon } from "@/components/icons/icons";
-
+import {
+  FileSourceCard,
+  FileSourceCardInResults,
+} from "../message/SourcesDisplay";
 interface DocumentResultsProps {
   agenticMessage: boolean;
+  humanMessage: Message | null;
   closeSidebar: () => void;
   selectedMessage: Message | null;
   selectedDocuments: OnyxDocument[] | null;
@@ -25,7 +29,7 @@ interface DocumentResultsProps {
   isOpen: boolean;
   isSharedChat?: boolean;
   modal: boolean;
-  setPresentingDocument: Dispatch<SetStateAction<OnyxDocument | null>>;
+  setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
   removeHeader?: boolean;
 }
 
@@ -33,6 +37,7 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
   (
     {
       agenticMessage,
+      humanMessage,
       closeSidebar,
       modal,
       selectedMessage,
@@ -63,6 +68,9 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
       return () => clearTimeout(timer);
     }, [selectedDocuments]);
 
+    const userFiles = humanMessage?.files.filter(
+      (file) => file.type == ChatFileType.USER_KNOWLEDGE
+    );
     const selectedDocumentIds =
       selectedDocuments?.map((document) => document.document_id) || [];
 
@@ -113,7 +121,17 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
               )}
 
               <div className="overflow-y-auto h-fit mb-8 pb-8 sm:mx-0 flex-grow gap-y-0 default-scrollbar dark-scrollbar flex flex-col">
-                {dedupedDocuments.length > 0 ? (
+                {userFiles && userFiles.length > 0 ? (
+                  <div className=" gap-y-2 flex flex-col pt-2 mx-3">
+                    {userFiles?.map((file, index) => (
+                      <FileSourceCardInResults
+                        key={index}
+                        document={file}
+                        setPresentingDocument={setPresentingDocument}
+                      />
+                    ))}
+                  </div>
+                ) : dedupedDocuments.length > 0 ? (
                   dedupedDocuments.map((document, ind) => (
                     <div
                       key={document.document_id}
@@ -140,9 +158,7 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                       />
                     </div>
                   ))
-                ) : (
-                  <div className="mx-3" />
-                )}
+                ) : null}
               </div>
             </div>
           </div>

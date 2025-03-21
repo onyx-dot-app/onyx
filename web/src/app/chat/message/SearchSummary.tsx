@@ -14,7 +14,8 @@ import {
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
-import { FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
+import { FiBook, FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
+import { FileDescriptor } from "../interfaces";
 
 export function ShowHideDocsButton({
   messageId,
@@ -50,6 +51,7 @@ export function SearchSummary({
   handleSearchQueryEdit,
   docs,
   toggleDocumentSelection,
+  userFileSearch,
 }: {
   index: number;
   finished: boolean;
@@ -57,6 +59,7 @@ export function SearchSummary({
   handleSearchQueryEdit?: (query: string) => void;
   docs: OnyxDocument[];
   toggleDocumentSelection: () => void;
+  userFileSearch: boolean;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [finalQuery, setFinalQuery] = useState(query);
@@ -107,7 +110,8 @@ export function SearchSummary({
           } text-xs desktop:text-sm mobile:ml-auto !line-clamp-1 !break-all px-0.5 flex-grow`}
           ref={searchingForRef}
         >
-          {finished ? "Searched" : "Searching"} for:{" "}
+          {finished ? "Searched" : "Searching"}{" "}
+          {userFileSearch && "knowledge groups "} for:{" "}
           <i>
             {index === 1
               ? finalQuery.length > 50
@@ -239,6 +243,28 @@ export function SearchSummary({
           )}
         </>
       )}
+    </div>
+  );
+}
+
+export function UserKnowledgeFiles({
+  userKnowledgeFiles,
+}: {
+  userKnowledgeFiles: FileDescriptor[];
+}): JSX.Element {
+  if (!userKnowledgeFiles || userKnowledgeFiles.length === 0) {
+    return <></>;
+  }
+
+  return (
+    <div className="flex group w-fit items-center mb-1">
+      <div className="flex items-center text-xs desktop:text-sm">
+        <FiBook className="mobile:hidden flex-none mr-2" size={14} />
+        <span className="text-xs desktop:text-sm">
+          Referenced {userKnowledgeFiles.length}{" "}
+          {userKnowledgeFiles.length === 1 ? "document" : "documents"}
+        </span>
+      </div>
     </div>
   );
 }

@@ -572,6 +572,7 @@ def vespa_metadata_sync_task(self: Task, document_id: str, *, tenant_id: str) ->
                     tenant_id=tenant_id,
                     chunk_count=doc.chunk_count,
                     fields=fields,
+                    user_fields=None,
                 )
 
                 # update db last. Worst case = we crash right before this and

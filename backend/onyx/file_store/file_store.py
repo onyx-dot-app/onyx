@@ -31,6 +31,7 @@ class FileStore(ABC):
         file_origin: FileOrigin,
         file_type: str,
         file_metadata: dict | None = None,
+        commit: bool = True,
     ) -> None:
         """
         Save a file to the blob store
@@ -42,6 +43,8 @@ class FileStore(ABC):
         - display_name: Display name of the file
         - file_origin: Origin of the file
         - file_type: Type of the file
+        - file_metadata: Additional metadata for the file
+        - commit: Whether to commit the transaction after saving the file
         """
         raise NotImplementedError
 
@@ -90,6 +93,7 @@ class PostgresBackedFileStore(FileStore):
         file_origin: FileOrigin,
         file_type: str,
         file_metadata: dict | None = None,
+        commit: bool = True,
     ) -> None:
         try:
             # The large objects in postgres are saved as special objects can be listed with
@@ -104,7 +108,8 @@ class PostgresBackedFileStore(FileStore):
                 db_session=self.db_session,
                 file_metadata=file_metadata,
             )
-            self.db_session.commit()
+            if commit:
+                self.db_session.commit()
         except Exception:
             self.db_session.rollback()
             raise

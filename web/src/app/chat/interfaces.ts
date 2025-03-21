@@ -38,6 +38,7 @@ export enum ChatFileType {
   DOCUMENT = "document",
   PLAIN_TEXT = "plain_text",
   CSV = "csv",
+  USER_KNOWLEDGE = "user_knowledge",
 }
 
 export interface FileDescriptor {
@@ -166,6 +167,10 @@ export interface AgentMessageIDInfo {
 
 export interface AgenticMessageResponseIDInfo {
   agentic_message_ids: AgentMessageIDInfo[];
+}
+
+export interface UserKnowledgeFilePacket {
+  user_files: FileDescriptor[];
 }
 
 export interface DocumentsResponse {
