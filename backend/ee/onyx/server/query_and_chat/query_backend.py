@@ -1,5 +1,6 @@
 import json
 from collections.abc import Generator
+from typing import Optional
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -23,8 +24,12 @@ from onyx.chat.chat_utils import prepare_chat_message_request
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.process_message import ChatPacketStream
 from onyx.chat.process_message import stream_chat_message_objects
+from onyx.configs.app_configs import FAST_SEARCH_MAX_HITS
 from onyx.configs.onyxbot_configs import MAX_THREAD_CONTEXT_PERCENTAGE
+from onyx.context.search.enums import LLMEvaluationType
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import SavedSearchDocWithContent
+from onyx.context.search.models import SearchDoc
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.utils import dedupe_documents
@@ -230,6 +235,26 @@ def get_answer_with_citation(
         raise HTTPException(status_code=500, detail="An internal server error occurred")
 
 
+@basic_router.post("/search")
+def get_search_response(
+    request: OneShotQARequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> StreamingResponse:
+    def stream_generator() -> Generator[str, None, None]:
+        try:
+            for packet in get_answer_stream(request, user, db_session):
+                print("packet is")
+                print(packet.__dict__)
+                serialized = get_json_line(packet.model_dump())
+                yield serialized
+        except Exception as e:
+            logger.exception("Error in answer streaming")
+            yield json.dumps({"error": str(e)})
+
+    return StreamingResponse(stream_generator(), media_type="application/json")
+
+
 @basic_router.post("/stream-answer-with-citation")
 def stream_answer_with_citation(
     request: OneShotQARequest,
@@ -264,3 +289,112 @@ def get_standard_answer(
     except Exception as e:
         logger.error(f"Error in get_standard_answer: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail="An internal server error occurred")
+
+
+class FastSearchRequest(BaseModel):
+    """Request for fast search endpoint that returns raw search results without section merging."""
+
+    query: str
+    filters: BaseFilters | None = (
+        None  # Direct filter options instead of retrieval_options
+    )
+    max_results: Optional[
+        int
+    ] = None  # If not provided, defaults to FAST_SEARCH_MAX_HITS
+
+
+class FastSearchResult(BaseModel):
+    """A search result without section expansion or merging."""
+
+    document_id: str
+    chunk_id: int
+    content: str
+    source_links: dict[int, str] | None = None
+    score: Optional[float] = None
+    metadata: Optional[dict] = None
+
+
+class FastSearchResponse(BaseModel):
+    """Response from the fast search endpoint."""
+
+    results: list[SearchDoc]
+    total_found: int
+
+
+@basic_router.post("/fast-search")
+def get_fast_search_response(
+    request: FastSearchRequest,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_user),
+) -> FastSearchResponse:
+    """Endpoint for fast search that returns up to 300 results without section merging.
+
+    This is optimized for quickly returning a large number of search results without the overhead
+    of section expansion, reranking, relevance evaluation, and merging.
+    """
+    try:
+        # Set up the search request with optimized settings
+        max_results = request.max_results or FAST_SEARCH_MAX_HITS
+
+        # Create a search request with optimized settings
+        search_request = SearchRequest(
+            query=request.query,
+            human_selected_filters=request.filters,
+            # Skip section expansion
+            chunks_above=0,
+            chunks_below=0,
+            # Skip LLM evaluation
+            evaluation_type=LLMEvaluationType.SKIP,
+            # Limit the number of results
+            limit=max_results,
+        )
+
+        # Set up the LLM instances
+
+        llm, fast_llm = get_default_llms()
+
+        # Create the search pipeline with optimized settings
+        search_pipeline = SearchPipeline(
+            search_request=search_request,
+            user=user,
+            llm=llm,
+            fast_llm=fast_llm,
+            skip_query_analysis=True,  # Skip expensive query analysis
+            db_session=db_session,
+            bypass_acl=False,
+        )
+
+        # Only retrieve chunks without further processing
+        chunks = search_pipeline._get_chunks()
+
+        # Convert chunks to response format
+        results = [
+            SearchDoc(
+                document_id=chunk.document_id,
+                chunk_ind=chunk.chunk_id,
+                semantic_identifier=chunk.semantic_identifier,
+                link=None,  # Assuming source_links might be used for link
+                blurb=chunk.content,
+                source_type=chunk.source_type,  # Default source type
+                boost=0,  # Default boost value
+                hidden=False,  # Default visibility
+                metadata=chunk.metadata,
+                score=chunk.score,
+                is_relevant=None,
+                relevance_explanation=None,
+                match_highlights=[],
+                updated_at=None,
+                primary_owners=None,
+                secondary_owners=None,
+                is_internet=False,
+            )
+            for chunk in chunks
+        ]
+
+        return FastSearchResponse(
+            results=results,
+            total_found=len(results),
+        )
+    except Exception as e:
+        logger.exception("Error in fast search")
+        raise HTTPException(status_code=500, detail=str(e))
