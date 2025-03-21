@@ -1,10 +1,12 @@
 import copy
+import time
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
 
 import requests
 from pydantic import BaseModel
+from requests.exceptions import HTTPError
 from typing_extensions import override
 
 from onyx.configs.app_configs import ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
@@ -12,6 +14,9 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     time_str_to_utc,
 )
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorFailure
@@ -57,6 +62,12 @@ class ZendeskClient:
             if retry_after is not None:
                 # Sleep for the duration indicated by the Retry-After header
                 time.sleep(int(retry_after))
+
+        elif (
+            response.status_code == 403
+            and response.json().get("error") == "SupportProductInactive"
+        ):
+            return response.json()
 
         response.raise_for_status()
         return response.json()
@@ -149,7 +160,14 @@ def _get_tickets_page(
 ) -> ZendeskPageResponse:
     params = {"start_time": start_time or 0}
 
+    # NOTE: for some reason zendesk doesn't seem to be respecting the start_time param
+    # in my local testing with very few tickets. We'll look into it if this becomes an
+    # issue in larger deployments
     data = client.make_request("incremental/tickets.json", params)
+    if data.get("error") == "SupportProductInactive":
+        raise ValueError(
+            "Zendesk Support Product is not active for this account, No tickets to index"
+        )
     return ZendeskPageResponse(
         data=data["tickets"],
         meta={"end_time": data["end_time"]},
@@ -404,7 +422,7 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
                     continue
 
                 try:
-                    new_author_map, documents = _article_to_document(
+                    new_author_map, document = _article_to_document(
                         article, self.content_tags, author_map, self.client
                     )
                 except Exception as e:
@@ -421,7 +439,7 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
                 if new_author_map:
                     author_map.update(new_author_map)
 
-                doc_batch.append(documents)
+                doc_batch.append(document)
 
             if not has_more:
                 yield from doc_batch
@@ -544,6 +562,32 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
             yield slim_doc_batch
 
     @override
+    def validate_connector_settings(self) -> None:
+        if self.client is None:
+            raise ZendeskCredentialsNotSetUpError()
+
+        try:
+            _get_article_page(self.client, start_time=0)
+        except HTTPError as e:
+            # Check for HTTP status codes
+            if e.response.status_code == 401:
+                raise CredentialExpiredError(
+                    "Your Zendesk credentials appear to be invalid or expired (HTTP 401)."
+                ) from e
+            elif e.response.status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Your Zendesk token does not have sufficient permissions (HTTP 403)."
+                ) from e
+            elif e.response.status_code == 404:
+                raise ConnectorValidationError(
+                    "Zendesk resource not found (HTTP 404)."
+                ) from e
+            else:
+                raise ConnectorValidationError(
+                    f"Unexpected Zendesk error (status={e.response.status_code}): {e}"
+                ) from e
+
+    @override
     def validate_checkpoint_json(
         self, checkpoint_json: str
     ) -> ZendeskConnectorCheckpoint:
@@ -561,7 +605,6 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
 
 if __name__ == "__main__":
     import os
-    import time
 
     connector = ZendeskConnector()
     connector.load_credentials(
