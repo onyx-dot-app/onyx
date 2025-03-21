@@ -237,6 +237,7 @@ export interface BackstageCredentialJson {
   backstage_client_id: string;
   backstage_client_secret: string;
   backstage_token_endpoint: string;
+  backstage_saml_audience: string;
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
@@ -363,6 +364,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     backstage_client_id : "",
     backstage_client_secret: "",
     backstage_token_endpoint: "",
+    backstage_saml_audience: "",
   } as BackstageCredentialJson,
 
   // NOTE: These are Special Cases
@@ -521,6 +523,7 @@ export const credentialDisplayNames: Record<string, string> = {
   backstage_client_id: "Backstage Client ID",
   backstage_client_secret: "Backstage Client Secret",
   backstage_token_endpoint: "Backstage Token Endpoint",
+  backstage_saml_audience: "Backstage SAML Audience",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {
