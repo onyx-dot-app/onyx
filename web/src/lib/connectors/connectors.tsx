@@ -1393,7 +1393,9 @@ export interface GoogleDriveConfig {
   shared_folder_urls?: string;
 }
 
-export interface BackstageConfig {}
+export interface BackstageConfig {
+  base_url: string;
+}
 export interface GmailConfig {}
 
 export interface BookstackConfig {}
