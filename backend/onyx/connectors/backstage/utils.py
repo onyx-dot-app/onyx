@@ -3,7 +3,7 @@ Utility functions for the Backstage connector.
 """
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any
 
 from onyx.utils.logger import setup_logger
 from .constants import (
