@@ -35,7 +35,7 @@ def add_entity(
         KGEntity: The created entity
     """
     entity_type = entity_type.upper()
-    name = name.capitalize()
+    name = name.title()
     id_name = f"{entity_type}:{name}"
 
     # Create new entity

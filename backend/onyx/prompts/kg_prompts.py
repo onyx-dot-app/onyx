@@ -20,7 +20,8 @@ EXTRACTION_FORMATTING_PROMPT = r"""
 formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization)>],
 "relationships": [<a list of relationship between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
-of therelationship>__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
+of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
+__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
 identify in the text, each formatted simply as '<term>'>]
 }}

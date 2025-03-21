@@ -2,6 +2,9 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import KGRelationship
 from onyx.db.models import KGRelationshipType
+from onyx.kg.utils.formatting_utils import format_entity
+from onyx.kg.utils.formatting_utils import format_relationship
+from onyx.kg.utils.formatting_utils import generate_relationship_type
 
 
 def add_relationship(
@@ -29,17 +32,22 @@ def add_relationship(
 
     (
         source_entity_id_name,
-        relationship_type,
+        relationship_string,
         target_entity_id_name,
     ) = relationship_id_name.split("__")
+
+    source_entity_id_name = format_entity(source_entity_id_name)
+    target_entity_id_name = format_entity(target_entity_id_name)
+    relationship_id_name = format_relationship(relationship_id_name)
+    relationship_type = generate_relationship_type(relationship_id_name)
 
     # Create new relationship
     relationship = KGRelationship(
         id_name=relationship_id_name,
         source_node=source_entity_id_name,
         target_node=target_entity_id_name,
-        type=relationship_type,
-        relationship_type_id_name=relationship_type,  # Assuming type matches relationship_type_id_name
+        type=relationship_string.lower(),
+        relationship_type_id_name=relationship_type,
         cluster_count=cluster_count,
     )
 

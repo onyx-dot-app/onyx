@@ -17,6 +17,7 @@ from onyx.kg.models import KGBatchExtractionStats
 from onyx.kg.models import KGChunkExtraction
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGChunkId
+from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
 from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import message_to_string
@@ -72,6 +73,7 @@ def kg_extraction(
 
     processing_chunks: list[KGChunkFormat] = []
     carryover_chunks: list[KGChunkFormat] = []
+    connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions] = []
 
     for connector_id in connector_ids:
         connector_failed_chunk_extractions: list[KGChunkId] = []
@@ -161,68 +163,83 @@ def kg_extraction(
                 aggregated_batch_extractions.terms
             )
 
-        connector_extraction_stats.append(
-            ConnectorExtractionStats(
-                connector_id=connector_id,
-                num_succeeded=len(connector_failed_chunk_extractions),
-                num_failed=len(connector_succeeded_chunk_extractions),
+            connector_extraction_stats.append(
+                ConnectorExtractionStats(
+                    connector_id=connector_id,
+                    num_failed=len(connector_failed_chunk_extractions),
+                    num_succeeded=len(connector_succeeded_chunk_extractions),
+                )
             )
+
+            processing_chunks = []
+            carryover_chunks = []
+
+        connector_aggregated_kg_extractions_list.append(
+            connector_aggregated_kg_extractions
         )
 
-        for (
-            entity,
-            extraction_count,
-        ) in connector_aggregated_kg_extractions.entities.items():
-            entity_type, entity_name = entity.split(":")
-            entity_type = entity_type.upper()
-            entity_name = entity_name.capitalize()
+    aggregated_kg_extractions = aggregate_kg_extractions(
+        connector_aggregated_kg_extractions_list
+    )
 
-            with get_session_with_current_tenant() as db_session:
-                add_entity(db_session, entity_type, entity_name, extraction_count)
-                db_session.commit()
+    for (
+        entity,
+        extraction_count,
+    ) in aggregated_kg_extractions.entities.items():
+        entity_type, entity_name = entity.split(":")
+        entity_type = entity_type.upper()
+        entity_name = entity_name.capitalize()
 
-        relationship_type_counter: dict[str, int] = defaultdict(int)
-        for (
-            relationship,
-            extraction_count,
-        ) in connector_aggregated_kg_extractions.relationships.items():
-            source_entity, relationship_type, target_entity = relationship.split("__")
-            source_entity_type = source_entity.split(":")[0]
-            target_entity_type = target_entity.split(":")[0]
-            relationship_type_id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
-            relationship_type_counter[relationship_type_id_name] += extraction_count
+        with get_session_with_current_tenant() as db_session:
+            add_entity(db_session, entity_type, entity_name, extraction_count)
+            db_session.commit()
 
-        for (
-            relationship_type_id_name,
-            extraction_count,
-        ) in relationship_type_counter.items():
-            (
-                source_entity_type,
-                relationship_type,
-                target_entity_type,
-            ) = relationship_type_id_name.split("__")
-            with get_session_with_current_tenant() as db_session:
-                add_relationship_type(
-                    db_session=db_session,
-                    source_entity_type=source_entity_type.upper(),
-                    relationship_type=relationship_type,
-                    target_entity_type=target_entity_type.upper(),
-                    definition=False,
-                    extraction_count=extraction_count,
-                )
-                db_session.commit()
+    relationship_type_counter: dict[str, int] = defaultdict(int)
 
-        for (
-            relationship,
-            extraction_count,
-        ) in connector_aggregated_kg_extractions.relationships.items():
-            source_entity, relationship_type, target_entity = relationship.split("__")
-            source_entity_type = source_entity.split(":")[0]
-            target_entity_type = target_entity.split(":")[0]
+    for (
+        relationship,
+        extraction_count,
+    ) in aggregated_kg_extractions.relationships.items():
+        source_entity, relationship_type, target_entity = relationship.split("__")
+        source_entity_general = f"{source_entity.split(':')[0].upper()}"
+        target_entity_general = f"{target_entity.split(':')[0].upper()}"
+        relationship_type_id_name = (
+            f"{source_entity_general}__{relationship_type.lower()}__"
+            f"{target_entity_general}"
+        )
+        relationship_type_counter[relationship_type_id_name] += extraction_count
 
-            with get_session_with_current_tenant() as db_session:
-                add_relationship(db_session, relationship, extraction_count)
-                db_session.commit()
+    for (
+        relationship_type_id_name,
+        extraction_count,
+    ) in relationship_type_counter.items():
+        (
+            source_entity_type,
+            relationship_type,
+            target_entity_type,
+        ) = relationship_type_id_name.split("__")
+        with get_session_with_current_tenant() as db_session:
+            add_relationship_type(
+                db_session=db_session,
+                source_entity_type=source_entity_type.upper(),
+                relationship_type=relationship_type,
+                target_entity_type=target_entity_type.upper(),
+                definition=False,
+                extraction_count=extraction_count,
+            )
+            db_session.commit()
+
+    for (
+        relationship,
+        extraction_count,
+    ) in aggregated_kg_extractions.relationships.items():
+        source_entity, relationship_type, target_entity = relationship.split("__")
+        source_entity_type = source_entity.split(":")[0]
+        target_entity_type = target_entity.split(":")[0]
+
+        with get_session_with_current_tenant() as db_session:
+            add_relationship(db_session, relationship, extraction_count)
+            db_session.commit()
 
     return connector_extraction_stats
 
