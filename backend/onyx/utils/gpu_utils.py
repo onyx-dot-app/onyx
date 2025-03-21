@@ -12,7 +12,7 @@ from shared_configs.configs import MODEL_SERVER_PORT
 logger = setup_logger()
 
 
-def _get_gpu_status_from_model_server(indexing: bool = True) -> bool:
+def _get_gpu_status_from_model_server(indexing: bool) -> bool:
     if indexing:
         model_server_url = f"{INDEXING_MODEL_SERVER_HOST}:{INDEXING_MODEL_SERVER_PORT}"
     else:
