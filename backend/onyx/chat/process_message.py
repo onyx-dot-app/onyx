@@ -1,4 +1,3 @@
-import random  # TODO: remove once beyond prototype
 import traceback
 from collections import defaultdict
 from collections.abc import Callable
@@ -84,9 +83,6 @@ from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
-from onyx.document_index.vespa.kg_interactions import get_document_kg_info
-from onyx.document_index.vespa.kg_interactions import KGUChunkpdateRequest
-from onyx.document_index.vespa.kg_interactions import update_kg_info_chunks
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_all_chat_files
@@ -362,48 +358,12 @@ def stream_chat_message_objects(
 
     llm: LLM
 
-    test_file = "FILE_CONNECTOR__c4e60107-bcf2-4955-ae5c-cd54a3a18e6d/output_7810.txt"
     index_str = "danswer_chunk_text_embedding_3_small"
 
-    kg_extraction(tenant_id, index_str)
+    if new_msg_req.message == "tt":
+        kg_extraction(tenant_id, index_str)
 
-    aaa = get_document_kg_info(
-        document_id=test_file,
-        index_name="danswer_chunk_text_embedding_3_small",
-        filters=None,
-    )
-
-    logger.info(f"aaa: {aaa}")
-
-    kg_updates = [
-        KGUChunkpdateRequest(
-            doc_id=test_file,
-            chunk_id=0,
-            kg_entities={f"test_E_{random.randint(0, 10)}"},
-            kg_relationships={f"test_R_{random.randint(0, 10)}"},
-            kg_terms={f"test_T_{random.randint(0, 10)}"},
-        ),
-        KGUChunkpdateRequest(
-            doc_id=test_file,
-            chunk_id=1,
-            kg_entities={f"test_E_{random.randint(0, 10)}"},
-            kg_relationships={f"test_R_{random.randint(0, 10)}"},
-            kg_terms={f"test_T_{random.randint(0, 10)}"},
-        ),
-    ]
-
-    update_kg_info_chunks(
-        kg_update_requests=kg_updates, index_name=index_str, tenant_id=tenant_id
-    )
-
-    bbb = get_document_kg_info(
-        document_id=test_file,
-        index_name="danswer_chunk_text_embedding_3_small",
-        filters=None,
-    )
-    logger.info(f"bbb: {bbb}")
-
-    raise Exception("Stop here")
+        raise Exception("Stop here")
 
     try:
         user_id = user.id if user is not None else None

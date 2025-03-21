@@ -612,12 +612,8 @@ class KGEntityType(Base):
     __tablename__ = "kg_entity_type"
 
     # Primary identifier
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True, index=True
-    )
-
-    name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=True, unique=True
+    id_name: Mapped[str] = mapped_column(
+        String, primary_key=True, nullable=False, index=True
     )
 
     description: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
@@ -633,6 +629,8 @@ class KGEntityType(Base):
         server_default="{}",
         comment="Clustering information for this entity type",
     )
+
+    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     extraction_sources: Mapped[dict] = mapped_column(
         postgresql.JSONB,
@@ -653,31 +651,32 @@ class KGEntityType(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    __table_args__ = (
-        # Ensure unique combination of name and type
-        UniqueConstraint("name", name="uq_kg_entity_type_name"),
-    )
-
 
 class KGRelationshipType(Base):
     __tablename__ = "kg_relationship_type"
 
     # Primary identifier
-    id: Mapped[int] = mapped_column(
-        Integer,
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
         primary_key=True,
-        autoincrement=True,
+        nullable=False,
         index=True,
     )
 
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
 
-    source_entity_type_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("kg_entity_type.id"), nullable=False, index=True
+    source_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
     )
 
-    target_entity_type_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("kg_entity_type.id"), nullable=False, index=True
+    target_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
     )
 
     definition: Mapped[bool] = mapped_column(
@@ -699,6 +698,8 @@ class KGRelationshipType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -712,23 +713,13 @@ class KGRelationshipType(Base):
     # Relationships to EntityType
     source_type: Mapped["KGEntityType"] = relationship(
         "KGEntityType",
-        foreign_keys=[source_entity_type_id],
-        backref="source_relationship_types",
+        foreign_keys=[source_entity_type_id_name],
+        backref="source_relationship_type",
     )
     target_type: Mapped["KGEntityType"] = relationship(
         "KGEntityType",
-        foreign_keys=[target_entity_type_id],
-        backref="target_relationship_types",
-    )
-
-    __table_args__ = (
-        # Ensure unique combination of name and types
-        UniqueConstraint(
-            "name",
-            "source_entity_type_id",
-            "target_entity_type_id",
-            name="uq_kg_relationship_type_name_types",
-        ),
+        foreign_keys=[target_entity_type_id_name],
+        backref="target_relationship_type",
     )
 
 
@@ -736,7 +727,9 @@ class KGEntity(Base):
     __tablename__ = "kg_entity"
 
     # Primary identifier
-    id: Mapped[str] = mapped_column(NullFilteredString, primary_key=True, index=True)
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, index=True
+    )
 
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
@@ -750,20 +743,23 @@ class KGEntity(Base):
     )
 
     # Reference to KGEntityType
-    entity_type_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("kg_entity_type.id"), nullable=False, index=True
+    entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
     )
 
     # Relationship to KGEntityType
-    entity_type: Mapped["KGEntityType"] = relationship(
-        "KGEntityType", backref="entities"
-    )
+    entity_type: Mapped["KGEntityType"] = relationship("KGEntityType", backref="entity")
 
     description: Mapped[str | None] = mapped_column(String, nullable=True)
 
     keywords: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
     )
+
+    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -790,10 +786,9 @@ class KGEntity(Base):
     )
 
     __table_args__ = (
-        # Index for type-based queries with ACL filtering
-        Index("ix_entity_type_acl", entity_type_id, acl),
-        # Index for name-based searches
-        Index("ix_entity_name_search", name, entity_type_id),
+        # Fixed column names in indexes
+        Index("ix_entity_type_acl", entity_type_id_name, acl),
+        Index("ix_entity_name_search", name, entity_type_id_name),
     )
 
 
@@ -801,29 +796,36 @@ class KGRelationship(Base):
     __tablename__ = "kg_relationship"
 
     # Primary identifier
-    id: Mapped[str] = mapped_column(NullFilteredString, primary_key=True, index=True)
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, index=True
+    )
 
     # Source and target nodes (foreign keys to Entity table)
     source_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id"), nullable=False, index=True
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
     )
 
     target_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id"), nullable=False, index=True
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
     )
 
     # Relationship type
     type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
 
     # Add new relationship type reference
-    relationship_type_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("kg_relationship_type.id"), nullable=False, index=True
+    relationship_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_relationship_type.id_name"),
+        nullable=False,
+        index=True,
     )
 
     # Add the SQLAlchemy relationship property
     relationship_type: Mapped["KGRelationshipType"] = relationship(
-        "KGRelationshipType", backref="relationships"
+        "KGRelationshipType", backref="relationship"
     )
+
+    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -857,17 +859,9 @@ class KGRelationship(Base):
 class KGTerm(Base):
     __tablename__ = "kg_term"
 
-    # Primary identifier (using integer instead of string this time)
-    id: Mapped[int] = mapped_column(
-        Integer, primary_key=True, autoincrement=True, index=True
-    )
-
-    # The search term
-    term: Mapped[str] = mapped_column(
-        NullFilteredString,
-        nullable=False,
-        index=True,
-        unique=True,  # Assuming terms should be unique
+    # Make id_term the primary key
+    id_term: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, nullable=False, index=True
     )
 
     # List of entity types this term applies to
@@ -889,7 +883,7 @@ class KGTerm(Base):
         # Index for searching terms with specific entity types
         Index("ix_search_term_entities", entity_types),
         # Index for term lookups
-        Index("ix_search_term_term", term),
+        Index("ix_search_term_term", id_term),
     )
 
 

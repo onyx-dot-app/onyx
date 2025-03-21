@@ -61,7 +61,7 @@ def get_document_kg_info(
 
 
 @retry(tries=3, delay=1, backoff=2)
-def update_kg_info_chunks(
+def update_kg_chunks_vespa_info(
     kg_update_requests: list[KGUChunkpdateRequest],
     index_name: str,
     tenant_id: str,

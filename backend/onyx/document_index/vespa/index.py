@@ -113,9 +113,9 @@ class KGUChunkpdateRequest:
 
     doc_id: str
     chunk_id: int
-    kg_entities: set[str] | None = None
-    kg_relationships: set[str] | None = None
-    kg_terms: set[str] | None = None
+    entities: set[str] | None = None
+    relationships: set[str] | None = None
+    terms: set[str] | None = None
 
 
 def in_memory_zip_from_file_bytes(file_contents: dict[str, bytes]) -> BinaryIO:
@@ -671,8 +671,8 @@ class VespaIndex(DocumentIndex):
             kg_update_dict: dict[str, dict] = {"fields": {}}
 
             implied_entities = set()
-            if kg_update_request.kg_relationships is not None:
-                for kg_relationship in kg_update_request.kg_relationships:
+            if kg_update_request.relationships is not None:
+                for kg_relationship in kg_update_request.relationships:
                     kg_relationship_split = kg_relationship.split("__")
                     if len(kg_relationship_split) == 3:
                         implied_entities.add(kg_relationship_split[0])
@@ -684,24 +684,24 @@ class VespaIndex(DocumentIndex):
                 kg_update_dict["fields"]["kg_relationships"] = {
                     "assign": {
                         kg_relationship: 1
-                        for kg_relationship in kg_update_request.kg_relationships
+                        for kg_relationship in kg_update_request.relationships
                     }
                 }
 
-            if kg_update_request.kg_entities is not None or implied_entities:
-                if kg_update_request.kg_entities is None:
+            if kg_update_request.entities is not None or implied_entities:
+                if kg_update_request.entities is None:
                     kg_entities = implied_entities
                 else:
-                    kg_entities = set(kg_update_request.kg_entities)
+                    kg_entities = set(kg_update_request.entities)
                     kg_entities.update(implied_entities)
 
                 kg_update_dict["fields"]["kg_entities"] = {
                     "assign": {kg_entity: 1 for kg_entity in kg_entities}
                 }
 
-            if kg_update_request.kg_terms is not None:
+            if kg_update_request.terms is not None:
                 kg_update_dict["fields"]["kg_terms"] = {
-                    "assign": {kg_term: 1 for kg_term in kg_update_request.kg_terms}
+                    "assign": {kg_term: 1 for kg_term in kg_update_request.terms}
                 }
 
             if not kg_update_dict["fields"]:

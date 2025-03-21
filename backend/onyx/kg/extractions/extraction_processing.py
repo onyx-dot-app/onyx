@@ -1,14 +1,20 @@
 import json
+from collections import defaultdict
 from collections.abc import Callable
 
 from onyx.db.connector import get_unprocessed_connector_ids
 from onyx.db.document import get_unprocessed_kg_documents_for_connector
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entities import add_entity
 from onyx.db.entities import get_entity_types
+from onyx.db.relationships import add_relationship
+from onyx.db.relationships import add_relationship_type
 from onyx.document_index.vespa.index import KGUChunkpdateRequest
-from onyx.document_index.vespa.kg_interactions import update_kg_info_chunks
+from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import ConnectorExtractionStats
-from onyx.kg.models import KGChunkExtractionStats
+from onyx.kg.models import KGAggregatedExtractions
+from onyx.kg.models import KGBatchExtractionStats
+from onyx.kg.models import KGChunkExtraction
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGChunkId
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
@@ -33,10 +39,10 @@ def _get_entity_types_str(active: bool) -> str:
         for entity_type in active_entity_types:
             if entity_type.description:
                 entity_types_list.append(
-                    f"{entity_type.name.upper()}: {entity_type.description}"
+                    f"{entity_type.id_name}: {entity_type.description}"
                 )
             else:
-                entity_types_list.append(entity_type.name.upper())
+                entity_types_list.append(entity_type.id_name)
 
     return "\n".join(entity_types_list)
 
@@ -68,8 +74,15 @@ def kg_extraction(
     carryover_chunks: list[KGChunkFormat] = []
 
     for connector_id in connector_ids:
-        connector_failed_chunk_extraction_ids: list[KGChunkId] = []
-        connector_succeeded_chunk_extraction_ids: list[KGChunkId] = []
+        connector_failed_chunk_extractions: list[KGChunkId] = []
+        connector_succeeded_chunk_extractions: list[KGChunkId] = []
+        connector_aggregated_kg_extractions: KGAggregatedExtractions = (
+            KGAggregatedExtractions(
+                entities=defaultdict(int),
+                relationships=defaultdict(int),
+                terms=defaultdict(int),
+            )
+        )
 
         with get_session_with_current_tenant() as db_session:
             unprocessed_documents = get_unprocessed_kg_documents_for_connector(
@@ -100,11 +113,24 @@ def kg_extraction(
                         )
 
                         # Consider removing the stats expressions here and rather write to the db(?)
-                        connector_failed_chunk_extraction_ids.extend(
+                        connector_failed_chunk_extractions.extend(
                             chunk_processing_batch_results.failed
                         )
-                        connector_succeeded_chunk_extraction_ids.extend(
+                        connector_succeeded_chunk_extractions.extend(
                             chunk_processing_batch_results.succeeded
+                        )
+
+                        aggregated_batch_extractions = (
+                            chunk_processing_batch_results.aggregated_kg_extractions
+                        )
+                        connector_aggregated_kg_extractions.entities.update(
+                            aggregated_batch_extractions.entities
+                        )
+                        connector_aggregated_kg_extractions.relationships.update(
+                            aggregated_batch_extractions.relationships
+                        )
+                        connector_aggregated_kg_extractions.terms.update(
+                            aggregated_batch_extractions.terms
                         )
 
                         processing_chunks = carryover_chunks
@@ -115,20 +141,88 @@ def kg_extraction(
             )
 
             # Consider removing the stats expressions here and rather write to the db(?)
-            connector_failed_chunk_extraction_ids.extend(
+            connector_failed_chunk_extractions.extend(
                 chunk_processing_batch_results.failed
             )
-            connector_succeeded_chunk_extraction_ids.extend(
+            connector_succeeded_chunk_extractions.extend(
                 chunk_processing_batch_results.succeeded
+            )
+
+            aggregated_batch_extractions = (
+                chunk_processing_batch_results.aggregated_kg_extractions
+            )
+            connector_aggregated_kg_extractions.entities.update(
+                aggregated_batch_extractions.entities
+            )
+            connector_aggregated_kg_extractions.relationships.update(
+                aggregated_batch_extractions.relationships
+            )
+            connector_aggregated_kg_extractions.terms.update(
+                aggregated_batch_extractions.terms
             )
 
         connector_extraction_stats.append(
             ConnectorExtractionStats(
                 connector_id=connector_id,
-                num_succeeded=len(connector_succeeded_chunk_extraction_ids),
-                num_failed=len(connector_failed_chunk_extraction_ids),
+                num_succeeded=len(connector_failed_chunk_extractions),
+                num_failed=len(connector_succeeded_chunk_extractions),
             )
         )
+
+        for (
+            entity,
+            extraction_count,
+        ) in connector_aggregated_kg_extractions.entities.items():
+            entity_type, entity_name = entity.split(":")
+            entity_type = entity_type.upper()
+            entity_name = entity_name.capitalize()
+
+            with get_session_with_current_tenant() as db_session:
+                add_entity(db_session, entity_type, entity_name, extraction_count)
+                db_session.commit()
+
+        relationship_type_counter: dict[str, int] = defaultdict(int)
+        for (
+            relationship,
+            extraction_count,
+        ) in connector_aggregated_kg_extractions.relationships.items():
+            source_entity, relationship_type, target_entity = relationship.split("__")
+            source_entity_type = source_entity.split(":")[0]
+            target_entity_type = target_entity.split(":")[0]
+            relationship_type_id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
+            relationship_type_counter[relationship_type_id_name] += extraction_count
+
+        for (
+            relationship_type_id_name,
+            extraction_count,
+        ) in relationship_type_counter.items():
+            (
+                source_entity_type,
+                relationship_type,
+                target_entity_type,
+            ) = relationship_type_id_name.split("__")
+            with get_session_with_current_tenant() as db_session:
+                add_relationship_type(
+                    db_session=db_session,
+                    source_entity_type=source_entity_type.upper(),
+                    relationship_type=relationship_type,
+                    target_entity_type=target_entity_type.upper(),
+                    definition=False,
+                    extraction_count=extraction_count,
+                )
+                db_session.commit()
+
+        for (
+            relationship,
+            extraction_count,
+        ) in connector_aggregated_kg_extractions.relationships.items():
+            source_entity, relationship_type, target_entity = relationship.split("__")
+            source_entity_type = source_entity.split(":")[0]
+            target_entity_type = target_entity.split(":")[0]
+
+            with get_session_with_current_tenant() as db_session:
+                add_relationship(db_session, relationship, extraction_count)
+                db_session.commit()
 
     return connector_extraction_stats
 
@@ -137,11 +231,12 @@ def _kg_chunk_batch_extraction(
     chunks: list[KGChunkFormat],
     index_name: str,
     tenant_id: str,
-) -> KGChunkExtractionStats:
+) -> KGBatchExtractionStats:
     _, fast_llm = get_default_llms()
 
-    succeeded_chunks: list[KGChunkId] = []
-    failed_chunks: list[KGChunkId] = []
+    succeeded_chunk_id: list[KGChunkId] = []
+    failed_chunk_id: list[KGChunkId] = []
+    succeeded_chunk_extraction: list[KGChunkExtraction] = []
 
     preformatted_prompt = MASTER_EXTRACTION_PROMPT.format(
         entity_types=_get_entity_types_str(active=True)
@@ -149,14 +244,12 @@ def _kg_chunk_batch_extraction(
 
     def process_single_chunk(
         chunk: KGChunkFormat, preformatted_prompt: str
-    ) -> tuple[bool, KGChunkId]:
+    ) -> tuple[bool, KGUChunkpdateRequest]:
         """Process a single chunk and return success status and chunk ID."""
 
         # For now, we're just processing the content
         # TODO: Implement actual prompt application logic
         formatted_prompt = preformatted_prompt.replace("---content---", chunk.content)
-
-        kg_chunk_id = KGChunkId(document_id=chunk.document_id, chunk_id=chunk.chunk_id)
 
         try:
             logger.info(
@@ -175,19 +268,19 @@ def _kg_chunk_batch_extraction(
                     KGUChunkpdateRequest(
                         doc_id=chunk.document_id,
                         chunk_id=chunk.chunk_id,
-                        kg_entities=extracted_entities,
-                        kg_relationships=extracted_relationships,
-                        kg_terms=extracted_terms,
+                        entities=extracted_entities,
+                        relationships=extracted_relationships,
+                        terms=extracted_terms,
                     ),
                 ]
 
-                update_kg_info_chunks(
+                update_kg_chunks_vespa_info(
                     kg_update_requests=kg_updates,
                     index_name=index_name,
                     tenant_id=tenant_id,
                 )
 
-                return True, kg_chunk_id
+                return True, kg_updates[0]  # only single chunk
 
             except json.JSONDecodeError as e:
                 logger.error(
@@ -195,51 +288,86 @@ def _kg_chunk_batch_extraction(
                              from doc {chunk.document_id}: {str(e)}"
                 )
                 logger.error(f"Raw output: {extraction_result}")
-                return False, kg_chunk_id
+                return False, KGUChunkpdateRequest(
+                    doc_id=chunk.document_id,
+                    chunk_id=chunk.chunk_id,
+                    entities=set(),
+                    relationships=set(),
+                    terms=set(),
+                )
 
         except Exception as e:
             logger.error(
                 f"Failed to process chunk {chunk.chunk_id} from doc {chunk.document_id}: {str(e)}"
             )
-            return False, kg_chunk_id
+            return False, KGUChunkpdateRequest(
+                doc_id=chunk.document_id,
+                chunk_id=chunk.chunk_id,
+                entities=set(),
+                relationships=set(),
+                terms=set(),
+            )
 
-    use_threads = True
-    if use_threads:
-        functions_with_args: list[tuple[Callable, tuple]] = [
-            (process_single_chunk, (chunk, preformatted_prompt)) for chunk in chunks
-        ]
+    # Assume for prototype: use_threads = True
 
-        logger.debug("Running KG extraction on chunks in parallel")
-        results = run_functions_tuples_in_parallel(
-            functions_with_args, allow_failures=True
-        )
+    functions_with_args: list[tuple[Callable, tuple]] = [
+        (process_single_chunk, (chunk, preformatted_prompt)) for chunk in chunks
+    ]
 
-        # Sort results into succeeded and failed
-        for success, chunk_id in results:
-            if success:
-                succeeded_chunks.append(chunk_id)
-            else:
-                failed_chunks.append(chunk_id)
+    logger.debug("Running KG extraction on chunks in parallel")
+    results = run_functions_tuples_in_parallel(functions_with_args, allow_failures=True)
 
-        return KGChunkExtractionStats(
-            connector_id=chunks[0].connector_id if chunks else None,  # TODO: Update!
-            succeeded=succeeded_chunks,
-            failed=failed_chunks,
-        )
+    # Sort results into succeeded and failed
+    for success, chunk_results in results:
+        if success:
+            succeeded_chunk_id.append(
+                KGChunkId(
+                    document_id=chunk_results.doc_id, chunk_id=chunk_results.chunk_id
+                )
+            )
+            succeeded_chunk_extraction.append(chunk_results)
+        else:
+            failed_chunk_id.append(
+                KGChunkId(
+                    document_id=chunk_results.doc_id, chunk_id=chunk_results.chunk_id
+                )
+            )
 
-    else:
-        for chunk in chunks:
-            success, chunk_id = process_single_chunk(chunk, preformatted_prompt)
-            if success:
-                succeeded_chunks.append(chunk_id)
-            else:
-                failed_chunks.append(chunk_id)
+    # Collect data for postgres later on
 
-        return KGChunkExtractionStats(
-            connector_id=chunks[0].connector_id if chunks else None,  # TODO: Update!
-            succeeded=succeeded_chunks,
-            failed=failed_chunks,
-        )
+    aggregated_kg_extractions = KGAggregatedExtractions(
+        entities=defaultdict(int),
+        relationships=defaultdict(int),
+        terms=defaultdict(int),
+    )
+
+    for chunk_result in succeeded_chunk_extraction:
+        mentioned_chunk_entities: set[str] = set()
+        for relationship in chunk_result.relationships:
+            relationship_split = relationship.split("__")
+            if len(relationship_split) == 3:
+                if relationship_split[0] not in mentioned_chunk_entities:
+                    aggregated_kg_extractions.entities[relationship_split[0]] += 1
+                    mentioned_chunk_entities.add(relationship_split[0])
+                if relationship_split[2] not in mentioned_chunk_entities:
+                    aggregated_kg_extractions.entities[relationship_split[2]] += 1
+                    mentioned_chunk_entities.add(relationship_split[2])
+            aggregated_kg_extractions.relationships[relationship] += 1
+
+        for kg_entity in chunk_result.entities:
+            if kg_entity not in mentioned_chunk_entities:
+                aggregated_kg_extractions.entities[kg_entity] += 1
+                mentioned_chunk_entities.add(kg_entity)
+
+        for kg_term in chunk_result.terms:
+            aggregated_kg_extractions.terms[kg_term] += 1
+
+    return KGBatchExtractionStats(
+        connector_id=chunks[0].connector_id if chunks else None,  # TODO: Update!
+        succeeded=succeeded_chunk_id,
+        failed=failed_chunk_id,
+        aggregated_kg_extractions=aggregated_kg_extractions,
+    )
 
 
 def _kg_connector_extraction(
