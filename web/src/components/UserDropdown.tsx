@@ -256,7 +256,10 @@ export function UserDropdown({
 
                 {toggleUserSettings && (
                   <DropdownOption
-                    onClick={toggleUserSettings}
+                    onClick={() => {
+                      setUserInfoVisible(false);
+                      toggleUserSettings();
+                    }}
                     icon={<UserIcon size={16} className="my-auto" />}
                     label="User Settings"
                   />
