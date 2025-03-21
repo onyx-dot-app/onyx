@@ -153,7 +153,7 @@ def _get_tickets_page(
     return ZendeskPageResponse(
         data=data["tickets"],
         meta={"end_time": data["end_time"]},
-        has_more=bool(data.get("end_of_stream", False)),
+        has_more=not bool(data.get("end_of_stream", False)),
     )
 
 
