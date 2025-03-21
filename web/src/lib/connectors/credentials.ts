@@ -238,7 +238,6 @@ export interface BackstageCredentialJson {
   backstage_client_secret: string;
   backstage_token_endpoint: string;
 }
-}
 
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
@@ -377,11 +376,6 @@ export const credentialTemplates: Record<ValidSources, any> = {
     highspot_key: "",
     highspot_secret: "",
   } as HighspotCredentialJson,
-  backstage: {
-    backstage_client_id: "",
-    backstage_client_secret: "",
-    backstage_token_endpoint: "",
-  } as BackstageCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
