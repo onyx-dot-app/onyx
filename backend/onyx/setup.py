@@ -324,7 +324,7 @@ def update_default_multipass_indexing(db_session: Session) -> None:
         logger.info(
             "No existing docs or connectors found. Checking GPU availability for multipass indexing."
         )
-        gpu_available = gpu_status_request()
+        gpu_available = gpu_status_request(indexing=True)
         logger.info(f"GPU available: {gpu_available}")
 
         current_settings = get_current_search_settings(db_session)

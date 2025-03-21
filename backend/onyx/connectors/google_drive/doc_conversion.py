@@ -79,6 +79,7 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
 def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
+    allow_images: bool,
 ) -> list[TextSection | ImageSection]:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
@@ -87,6 +88,10 @@ def _download_and_extract_sections_basic(
     link = file.get("webViewLink", "")
 
     try:
+        # skip images if not explicitly enabled
+        if not allow_images and is_gdrive_image_mime_type(mime_type):
+            return []
+
         # For Google Docs, Sheets, and Slides, export as plain text
         if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
             export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
@@ -207,6 +212,7 @@ def convert_drive_item_to_document(
     file: GoogleDriveFileType,
     drive_service: Callable[[], GoogleDriveService],
     docs_service: Callable[[], GoogleDocsService],
+    allow_images: bool,
     size_threshold: int,
 ) -> Document | ConnectorFailure | None:
     """
@@ -250,7 +256,9 @@ def convert_drive_item_to_document(
 
         # If we don't have sections yet, use the basic extraction method
         if not sections:
-            sections = _download_and_extract_sections_basic(file, drive_service())
+            sections = _download_and_extract_sections_basic(
+                file, drive_service(), allow_images
+            )
 
         # If we still don't have any sections, skip this file
         if not sections:
