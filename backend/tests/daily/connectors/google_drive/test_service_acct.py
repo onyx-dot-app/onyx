@@ -80,6 +80,33 @@ def test_include_all(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
+def test_include_shared_drives_only_with_size_threshold(
+    mock_get_api_key: MagicMock,
+    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+) -> None:
+    print("\n\nRunning test_include_shared_drives_only")
+    connector = google_drive_service_acct_connector_factory(
+        primary_admin_email=ADMIN_EMAIL,
+        include_shared_drives=True,
+        include_my_drives=False,
+        include_files_shared_with_me=False,
+        shared_folder_urls=None,
+        shared_drive_urls=None,
+        my_drive_emails=None,
+    )
+
+    # this threshold will skip one file
+    connector.size_threshold = 16384
+
+    retrieved_docs = load_all_docs(connector)
+
+    assert len(retrieved_docs) == 50
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_include_shared_drives_only(
     mock_get_api_key: MagicMock,
     google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
@@ -94,6 +121,7 @@ def test_include_shared_drives_only(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
+
     retrieved_docs = load_all_docs(connector)
 
     # Should only get shared drives
@@ -108,6 +136,9 @@ def test_include_shared_drives_only(
         + FOLDER_2_2_FILE_IDS
         + SECTIONS_FILE_IDS
     )
+
+    assert len(retrieved_docs) == 51
+
     assert_retrieved_docs_match_expected(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,

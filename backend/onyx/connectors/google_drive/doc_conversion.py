@@ -76,7 +76,7 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     return is_valid_image_type(mime_type)
 
 
-def _extract_sections_basic(
+def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
 ) -> list[TextSection | ImageSection]:
@@ -207,6 +207,7 @@ def convert_drive_item_to_document(
     file: GoogleDriveFileType,
     drive_service: Callable[[], GoogleDriveService],
     docs_service: Callable[[], GoogleDocsService],
+    size_threshold: int,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
@@ -234,9 +235,22 @@ def convert_drive_item_to_document(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."
                 )
 
+        size_str = file.get("size")
+        if size_str:
+            try:
+                size_int = int(size_str)
+            except ValueError:
+                logger.warning(f"Parsing string to int failed: size_str={size_str}")
+            else:
+                if size_int > size_threshold:
+                    logger.warning(
+                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
+                    )
+                    return None
+
         # If we don't have sections yet, use the basic extraction method
         if not sections:
-            sections = _extract_sections_basic(file, drive_service())
+            sections = _download_and_extract_sections_basic(file, drive_service())
 
         # If we still don't have any sections, skip this file
         if not sections:

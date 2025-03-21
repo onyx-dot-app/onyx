@@ -15,6 +15,7 @@ from google.oauth2.service_account import Credentials as ServiceAccountCredentia
 from googleapiclient.errors import HttpError  # type: ignore
 from typing_extensions import override
 
+from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_DRIVE_WORKERS
 from onyx.configs.constants import DocumentSource
@@ -86,6 +87,7 @@ def _extract_ids_from_urls(urls: list[str]) -> list[str]:
 def _convert_single_file(
     creds: Any,
     primary_admin_email: str,
+    size_threshold: int,
     file: dict[str, Any],
 ) -> Document | ConnectorFailure | None:
     user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
@@ -101,6 +103,7 @@ def _convert_single_file(
         file=file,
         drive_service=user_drive_service,
         docs_service=docs_service,
+        size_threshold=size_threshold,
     )
 
 
@@ -234,6 +237,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
 
         self._retrieved_ids: set[str] = set()
+
+        self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 
     @property
     def primary_admin_email(self) -> str:
@@ -900,6 +905,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                     _convert_single_file,
                     self.creds,
                     self.primary_admin_email,
+                    self.size_threshold,
                 )
 
                 # Fetch files in batches
