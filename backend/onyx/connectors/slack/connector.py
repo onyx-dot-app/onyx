@@ -438,7 +438,11 @@ def _get_all_doc_ids(
 
 class ProcessedSlackMessage(BaseModel):
     doc: Document | None
-    thread_ts: str | None
+    # if the message is part of a thread, this is the thread_ts
+    # otherwise, this is the message_ts. Either way, will be a unique identifier.
+    # In the future, if the message becomes a thread, then the thread_ts
+    # will be set to the message_ts.
+    thread_or_message_ts: str
     failure: ConnectorFailure | None
 
 
@@ -452,6 +456,7 @@ def _process_message(
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> ProcessedSlackMessage:
     thread_ts = message.get("thread_ts")
+    thread_or_message_ts = thread_ts or message["ts"]
     try:
         # causes random failures for testing checkpointing / continue on failure
         # import random
@@ -467,16 +472,18 @@ def _process_message(
             seen_thread_ts=seen_thread_ts,
             msg_filter_func=msg_filter_func,
         )
-        return ProcessedSlackMessage(doc=doc, thread_ts=thread_ts, failure=None)
+        return ProcessedSlackMessage(
+            doc=doc, thread_or_message_ts=thread_or_message_ts, failure=None
+        )
     except Exception as e:
         logger.exception(f"Error processing message {message['ts']}")
         return ProcessedSlackMessage(
             doc=None,
-            thread_ts=thread_ts,
+            thread_or_message_ts=thread_or_message_ts,
             failure=ConnectorFailure(
                 failed_document=DocumentFailure(
                     document_id=_build_doc_id(
-                        channel_id=channel["id"], thread_ts=(thread_ts or message["ts"])
+                        channel_id=channel["id"], thread_ts=thread_or_message_ts
                     ),
                     document_link=get_message_link(message, client, channel["id"]),
                 ),
@@ -616,7 +623,7 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
                 for future in as_completed(futures):
                     processed_slack_message = future.result()
                     doc = processed_slack_message.doc
-                    thread_ts = processed_slack_message.thread_ts
+                    thread_or_message_ts = processed_slack_message.thread_or_message_ts
                     failure = processed_slack_message.failure
                     if doc:
                         # handle race conditions here since this is single
@@ -624,11 +631,13 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
                         # but since this is single threaded, we won't run into simul
                         # writes. At worst, we can duplicate a thread, which will be
                         # deduped later on.
-                        if thread_ts not in seen_thread_ts:
+                        if thread_or_message_ts not in seen_thread_ts:
                             yield doc
 
-                        assert thread_ts, "found non-None doc with None thread_ts"
-                        seen_thread_ts.add(thread_ts)
+                        assert (
+                            thread_or_message_ts
+                        ), "found non-None doc with None thread_or_message_ts"
+                        seen_thread_ts.add(thread_or_message_ts)
                     elif failure:
                         yield failure
 
