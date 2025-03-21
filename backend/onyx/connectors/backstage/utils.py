@@ -16,7 +16,6 @@ from .constants import (
     DESCRIPTION_KEY,
 )
 
-logger = setup_logger()
 
 def format_entity_text(entity: Dict[str, Any]) -> str:
     """
