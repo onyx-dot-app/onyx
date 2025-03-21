@@ -131,20 +131,39 @@ class BackstageConnector(PollConnector, LoadConnector):
         self.client_id = credentials["backstage_client_id"]
         self.client_secret = credentials["backstage_client_secret"]
         self.token_endpoint = credentials["backstage_token_endpoint"]
-        
+        self.audience = credentials["backstage_saml_audience"]
         # Get initial access token
         self._refresh_access_token()        
         return credentials
     
     def _refresh_access_token(self):
+        """
+        Refresh the OAuth access token using client credentials flow.
+        
+        This method obtains a new access token from the OAuth server and updates the auth headers.
+        """
         issuer = self.token_endpoint
-        audience = 'portal.services.as24.tech' # Make this configurable
+        
+        # Extract audience from base_url (domain name without protocol and path)
+        audience = self.audience
+        
         client_id = self.client_id
         secret = self.client_secret
+        
         access_token = self._retrieve_token(client_id, secret, audience, issuer)
         self.access_token = access_token['access_token']
         self.headers["Authorization"] = f"Bearer {self.access_token}"
         
+        # Set token expiry time if provided
+        if 'expires_in' in access_token:
+            self.token_expiry = datetime.now() + timedelta(seconds=access_token['expires_in'])
+        else:
+            # Default to 1 hour if not provided
+            self.token_expiry = datetime.now() + timedelta(hours=1)
+        
+        logger.debug(f"Access token refreshed, valid until {self.token_expiry}")
+
+   
 
     def _retrieve_token(self, client_id, secret, audience, issuer):
         headers = {
