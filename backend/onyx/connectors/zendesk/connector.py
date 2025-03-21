@@ -343,6 +343,7 @@ class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
     after_cursor: str | None
     next_start_time: int | None
     cached_author_map: dict[str, BasicExpertInfo] | None
+    cached_content_tags: dict[str, str] | None
 
 
 class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckpoint]):
@@ -379,7 +380,9 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
         if self.client is None:
             raise ZendeskCredentialsNotSetUpError()
 
-        self.content_tags = _get_content_tag_mapping(self.client)
+        if not checkpoint.cached_content_tags:
+            checkpoint.cached_content_tags = _get_content_tag_mapping(self.client)
+        self.content_tags = checkpoint.cached_content_tags
 
         if self.content_type == "articles":
             return self._retrieve_articles(start, end, checkpoint)
@@ -599,6 +602,7 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
             after_cursor=None,
             next_start_time=None,
             cached_author_map=None,
+            cached_content_tags=None,
             has_more=True,
         )
 
