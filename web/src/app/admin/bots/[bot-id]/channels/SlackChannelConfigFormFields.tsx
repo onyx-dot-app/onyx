@@ -184,6 +184,10 @@ export function SlackChannelConfigFormFields({
         name: channel.name,
         value: channel.id,
       }));
+    },
+    {
+      shouldRetryOnError: false, // don't spam the Slack API
+      dedupingInterval: 60000, // Limit re-fetching to once per minute
     }
   );
 

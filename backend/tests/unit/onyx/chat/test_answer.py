@@ -50,7 +50,7 @@ def answer_instance(
     mocker: MockerFixture,
 ) -> Answer:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
     return _answer_fixture_impl(mock_llm, answer_style_config, prompt_config)
@@ -400,7 +400,7 @@ def test_no_slow_reranking(
     mocker: MockerFixture,
 ) -> None:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=gpu_enabled,
     )
     rerank_settings = (

@@ -28,6 +28,14 @@ The idea is that each test can use the manager class to create (.create()) a "te
    pytest -s tests/integration/tests/path_to/test_file.py::test_function_name
    ```
 
+Running some single tests require the `mock_connector_server` container to be running. If the above doesn't work, 
+navigate to `backend/tests/integration/mock_services` and run
+```sh
+docker compose -f docker-compose.mock-it-services.yml -p mock-it-services-stack up -d
+```
+You will have to modify the networks section of the docker-compose file to `<your stack name>_default` if you brought up the standard
+onyx services with a name different from the default `onyx-stack`.
+
 ## Guidelines for Writing Integration Tests
 
 - As authentication is currently required for all tests, each test should start by creating a user.

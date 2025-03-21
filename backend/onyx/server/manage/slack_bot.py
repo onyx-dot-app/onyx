@@ -32,8 +32,12 @@ from onyx.server.manage.models import SlackChannelConfig
 from onyx.server.manage.models import SlackChannelConfigCreationRequest
 from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
+from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
+
+
+logger = setup_logger()
 
 
 router = APIRouter(prefix="/manage")
@@ -376,7 +380,7 @@ def get_all_channels_from_slack_api(
             status_code=404, detail="Bot token not found for the given bot ID"
         )
 
-    client = WebClient(token=tokens["bot_token"])
+    client = WebClient(token=tokens["bot_token"], timeout=1)
     all_channels = []
     next_cursor = None
     current_page = 0
@@ -431,6 +435,7 @@ def get_all_channels_from_slack_api(
 
     except SlackApiError as e:
         # Handle rate limiting or other API errors
+        logger.exception("Error fetching channels from Slack API")
         raise HTTPException(
             status_code=500,
             detail=f"Error fetching channels from Slack API: {str(e)}",

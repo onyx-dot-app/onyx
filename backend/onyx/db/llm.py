@@ -16,8 +16,8 @@ from onyx.db.models import User__UserGroup
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
-from onyx.server.manage.llm.models import FullLLMProvider
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import LLMProviderView
 from shared_configs.enums import EmbeddingProvider
 
 
@@ -67,7 +67,7 @@ def upsert_cloud_embedding_provider(
 def upsert_llm_provider(
     llm_provider: LLMProviderUpsertRequest,
     db_session: Session,
-) -> FullLLMProvider:
+) -> LLMProviderView:
     existing_llm_provider = db_session.scalar(
         select(LLMProviderModel).where(LLMProviderModel.name == llm_provider.name)
     )
@@ -98,7 +98,7 @@ def upsert_llm_provider(
         group_ids=llm_provider.groups,
         db_session=db_session,
     )
-    full_llm_provider = FullLLMProvider.from_model(existing_llm_provider)
+    full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
 
     db_session.commit()
 
@@ -130,6 +130,16 @@ def fetch_existing_llm_providers(
 ) -> list[LLMProviderModel]:
     stmt = select(LLMProviderModel)
     return list(db_session.scalars(stmt).all())
+
+
+def fetch_existing_llm_provider(
+    provider_name: str, db_session: Session
+) -> LLMProviderModel | None:
+    provider_model = db_session.scalar(
+        select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
+    )
+
+    return provider_model
 
 
 def fetch_existing_llm_providers_for_user(
@@ -177,7 +187,7 @@ def fetch_embedding_provider(
     )
 
 
-def fetch_default_provider(db_session: Session) -> FullLLMProvider | None:
+def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
     provider_model = db_session.scalar(
         select(LLMProviderModel).where(
             LLMProviderModel.is_default_provider == True  # noqa: E712
@@ -185,10 +195,10 @@ def fetch_default_provider(db_session: Session) -> FullLLMProvider | None:
     )
     if not provider_model:
         return None
-    return FullLLMProvider.from_model(provider_model)
+    return LLMProviderView.from_model(provider_model)
 
 
-def fetch_default_vision_provider(db_session: Session) -> FullLLMProvider | None:
+def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
     provider_model = db_session.scalar(
         select(LLMProviderModel).where(
             LLMProviderModel.is_default_vision_provider == True  # noqa: E712
@@ -196,16 +206,18 @@ def fetch_default_vision_provider(db_session: Session) -> FullLLMProvider | None
     )
     if not provider_model:
         return None
-    return FullLLMProvider.from_model(provider_model)
+    return LLMProviderView.from_model(provider_model)
 
 
-def fetch_provider(db_session: Session, provider_name: str) -> FullLLMProvider | None:
+def fetch_llm_provider_view(
+    db_session: Session, provider_name: str
+) -> LLMProviderView | None:
     provider_model = db_session.scalar(
         select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
     )
     if not provider_model:
         return None
-    return FullLLMProvider.from_model(provider_model)
+    return LLMProviderView.from_model(provider_model)
 
 
 def remove_embedding_provider(

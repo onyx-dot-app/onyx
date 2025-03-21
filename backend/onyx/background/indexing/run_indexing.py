@@ -24,7 +24,6 @@ from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
@@ -32,8 +31,11 @@ from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_time
 from onyx.db.connector_credential_pair import update_connector_credential_pair
+from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexModelStatus
 from onyx.db.index_attempt import create_index_attempt_error
 from onyx.db.index_attempt import get_index_attempt
 from onyx.db.index_attempt import get_index_attempt_errors_for_cc_pair
@@ -46,8 +48,6 @@ from onyx.db.index_attempt import transition_attempt_to_in_progress
 from onyx.db.index_attempt import update_docs_indexed
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
-from onyx.db.models import IndexingStatus
-from onyx.db.models import IndexModelStatus
 from onyx.document_index.factory import get_default_document_index
 from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.embedder import DefaultIndexingEmbedder
@@ -387,6 +387,7 @@ def _run_indexing(
     net_doc_change = 0
     document_count = 0
     chunk_count = 0
+    index_attempt: IndexAttempt | None = None
     try:
         with get_session_with_current_tenant() as db_session_temp:
             index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
@@ -405,7 +406,7 @@ def _run_indexing(
             # the beginning in order to avoid weird interactions between
             # checkpointing / failure handling.
             if index_attempt.from_beginning:
-                checkpoint = ConnectorCheckpoint.build_dummy_checkpoint()
+                checkpoint = connector_runner.connector.build_dummy_checkpoint()
             else:
                 checkpoint = get_latest_valid_checkpoint(
                     db_session=db_session_temp,
@@ -413,6 +414,7 @@ def _run_indexing(
                     search_settings_id=index_attempt.search_settings_id,
                     window_start=window_start,
                     window_end=window_end,
+                    connector=connector_runner.connector,
                 )
 
             unresolved_errors = get_index_attempt_errors_for_cc_pair(
@@ -596,16 +598,44 @@ def _run_indexing(
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session_temp,
-                    reason=str(e),
+                    reason=f"{CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX}{str(e)}",
                 )
 
                 if ctx.is_primary:
-                    update_connector_credential_pair(
+                    if not index_attempt:
+                        # should always be set by now
+                        raise RuntimeError("Should never happen.")
+
+                    VALIDATION_ERROR_THRESHOLD = 5
+
+                    recent_index_attempts = get_recent_completed_attempts_for_cc_pair(
+                        cc_pair_id=ctx.cc_pair_id,
+                        search_settings_id=index_attempt.search_settings_id,
+                        limit=VALIDATION_ERROR_THRESHOLD,
                         db_session=db_session_temp,
-                        connector_id=ctx.connector_id,
-                        credential_id=ctx.credential_id,
-                        status=ConnectorCredentialPairStatus.INVALID,
                     )
+                    num_validation_errors = len(
+                        [
+                            index_attempt
+                            for index_attempt in recent_index_attempts
+                            if index_attempt.error_msg
+                            and index_attempt.error_msg.startswith(
+                                CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
+                            )
+                        ]
+                    )
+
+                    if num_validation_errors >= VALIDATION_ERROR_THRESHOLD:
+                        logger.warning(
+                            f"Connector {ctx.connector_id} has {num_validation_errors} consecutive validation"
+                            f" errors. Marking the CC Pair as invalid."
+                        )
+                        update_connector_credential_pair(
+                            db_session=db_session_temp,
+                            connector_id=ctx.connector_id,
+                            credential_id=ctx.credential_id,
+                            status=ConnectorCredentialPairStatus.INVALID,
+                        )
             memory_tracer.stop()
             raise e
 
