@@ -114,6 +114,14 @@ def execute_paginated_retrieval(
         if next_page_token:
             request_kwargs[PAGE_TOKEN_KEY] = next_page_token
 
+        # Add fields for shortcut detection if not already specified
+        if list_key == "files":
+            if "fields" in request_kwargs:
+                if "shortcutDetails" not in request_kwargs["fields"]:
+                    request_kwargs["fields"] += ", files/shortcutDetails"
+                else:
+                    request_kwargs["fields"] = "nextPageToken, files/shortcutDetails, *"
+
         try:
             results = retrieval_function(**request_kwargs).execute()
         except HttpError as e:
@@ -138,6 +146,25 @@ def execute_paginated_retrieval(
         next_page_token = results.get(NEXT_PAGE_TOKEN_KEY)
         if list_key:
             for item in results.get(list_key, []):
-                yield item
+                if (item.get("shortcutDetails") and
+                    item.get("mimeType") == "application/vnd.google-apps.shortcut"):
+                    # If this is a shortcut, fetch the target file
+                    try:
+                        target_file = retrieval_function.__self__.get(
+                            fileId=item["shortcutDetails"]["targetId"],
+                            fields="id, name, mimeType, parents",
+                        ).execute()
+                        # Preserve the original file's location metadata
+                        target_file["parents"] = item.get("parents", [])
+                        target_file["webViewLink"] = item.get("webViewLink", "")
+                        target_file["modifiedTime"] = item.get("modifiedTime", "")
+                        yield target_file
+                    except HttpError as e:
+                        if continue_on_404_or_403 and e.resp.status in (403, 404):
+                            logger.debug(f"Error resolving shortcut target: {e}")
+                            continue
+                        raise
+                else:
+                    yield item
         else:
             yield results
