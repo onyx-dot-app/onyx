@@ -1,0 +1,31 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template to create an ACM Certificate.
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: The primary domain name for the certificate (e.g., example.com).
+    Default: example.com
+  Environment:
+    Type: String
+    Default: production
+  ValidationMethod:
+    Type: String
+    Default: DNS
+
+Resources:
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: !Ref ValidationMethod
+      Tags:
+        - Key: env
+          Value: !Ref Environment
+
+Outputs:
+  OutputAcm:
+    Description: ACM Cert Id
+    Value: !Ref Certificate
+    Export:
+      Name: !Sub ${AWS::StackName}-OnyxCertificate
