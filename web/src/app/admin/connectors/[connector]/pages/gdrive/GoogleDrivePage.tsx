@@ -165,6 +165,10 @@ const GDriveMain = ({
         serviceAccountCredentialData={serviceAccountKeyData}
         isAdmin={isAdmin}
         onSuccess={handleRefresh}
+        existingAuthCredential={Boolean(
+          googleDrivePublicUploadedCredential ||
+            googleDriveServiceAccountCredential
+        )}
       />
 
       {isAdmin &&

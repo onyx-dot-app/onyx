@@ -173,6 +173,9 @@ export const GmailMain = () => {
         serviceAccountCredentialData={serviceAccountKeyData}
         isAdmin={isAdmin}
         onSuccess={handleRefresh}
+        existingAuthCredential={Boolean(
+          gmailPublicUploadedCredential || gmailServiceAccountCredential
+        )}
       />
 
       {isAdmin && hasUploadedCredentials && (
