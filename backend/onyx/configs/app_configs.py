@@ -388,6 +388,10 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
 # connector as some point.
 CONFLUENCE_TIMEZONE_OFFSET = float(os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", 0.0))
 
+GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
+
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")

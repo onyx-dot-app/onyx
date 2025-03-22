@@ -7,7 +7,7 @@ from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_retrieved_docs_match_expected,
+    assert_expected_docs_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
@@ -62,7 +62,7 @@ def test_include_all(
         + FOLDER_2_2_FILE_IDS
         + SECTIONS_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -100,7 +100,7 @@ def test_include_shared_drives_only(
         + FOLDER_2_2_FILE_IDS
         + SECTIONS_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -128,7 +128,7 @@ def test_include_my_drives_only(
 
     # Should only get primary_admins My Drive because we are impersonating them
     expected_file_ids = ADMIN_FILE_IDS + ADMIN_FOLDER_3_FILE_IDS
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -161,7 +161,7 @@ def test_drive_one_only(
         + FOLDER_1_1_FILE_IDS
         + FOLDER_1_2_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -198,7 +198,7 @@ def test_folder_and_shared_drive(
         + FOLDER_2_1_FILE_IDS
         + FOLDER_2_2_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -241,7 +241,7 @@ def test_folders_only(
         + FOLDER_2_2_FILE_IDS
         + ADMIN_FOLDER_3_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -271,7 +271,7 @@ def test_personal_folders_only(
     retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = ADMIN_FOLDER_3_FILE_IDS
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )

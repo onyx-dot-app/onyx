@@ -5,7 +5,7 @@ from unittest.mock import patch
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_retrieved_docs_match_expected,
+    assert_expected_docs_in_retrieved_docs,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
@@ -50,7 +50,7 @@ def test_all(
         + ADMIN_FOLDER_3_FILE_IDS
         + list(range(0, 2))
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -83,7 +83,7 @@ def test_shared_drives_only(
         + FOLDER_1_1_FILE_IDS
         + FOLDER_1_2_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -114,7 +114,7 @@ def test_shared_with_me_only(
         ADMIN_FOLDER_3_FILE_IDS
         + list(range(0, 2))
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -142,7 +142,7 @@ def test_my_drive_only(
 
     # These are the files from my drive
     expected_file_ids = TEST_USER_1_FILE_IDS
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -172,7 +172,7 @@ def test_shared_my_drive_folder(
         # this is a folder from admin's drive that is shared with me
         ADMIN_FOLDER_3_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -199,7 +199,7 @@ def test_shared_drive_folder(
     retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = FOLDER_1_FILE_IDS + FOLDER_1_1_FILE_IDS + FOLDER_1_2_FILE_IDS
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )

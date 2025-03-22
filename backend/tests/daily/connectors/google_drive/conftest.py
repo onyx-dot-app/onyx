@@ -1,5 +1,6 @@
 import json
 import os
+import resource
 from collections.abc import Callable
 
 import pytest
@@ -136,3 +137,22 @@ def google_drive_service_acct_connector_factory() -> (
         return connector
 
     return _connector_factory
+
+
+@pytest.fixture(scope="session", autouse=True)
+def set_resource_limits() -> None:
+    # the google sdk is aggressive about using up file descriptors and
+    # macos is stingy ... these tests will fail randomly unless the descriptor limit is raised
+    RLIMIT_MINIMUM = 2048
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    desired_soft = min(RLIMIT_MINIMUM, hard)  # Pick your target here
+
+    print(f"Open file limit: soft={soft} hard={hard} soft_required={RLIMIT_MINIMUM}")
+
+    if soft < desired_soft:
+        print(f"Raising open file limit: {soft} -> {desired_soft}")
+        resource.setrlimit(resource.RLIMIT_NOFILE, (desired_soft, hard))
+
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    print(f"New open file limit: soft={soft} hard={hard}")
+    return
