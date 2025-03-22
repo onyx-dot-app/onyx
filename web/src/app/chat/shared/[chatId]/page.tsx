@@ -9,11 +9,6 @@ import { redirect } from "next/navigation";
 import { BackendChatSession } from "../../interfaces";
 import { SharedChatDisplay } from "./SharedChatDisplay";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import {
-  FetchAssistantsResponse,
-  fetchAssistantsSS,
-} from "@/lib/assistants/fetchAssistantsSS";
-import { defaultPersona } from "@/app/admin/assistants/lib";
 import { constructMiniFiedPersona } from "@/lib/assistantIconUtils";
 
 async function getSharedChat(chatId: string) {

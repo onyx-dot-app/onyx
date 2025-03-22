@@ -125,6 +125,7 @@ export default function SearchPage({
     shouldShowWelcomeModal,
     refreshChatSessions,
     proSearchToggled,
+    authors,
   } = useChatContext();
 
   const defaultAssistantIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -982,13 +983,6 @@ export default function SearchPage({
 
   // Filter state management
   const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
-  const [authors] = useState<string[]>([
-    "John Doe",
-    "Jane Smith",
-    "Alex Johnson",
-    "Maria Garcia",
-    "Sam Lee",
-  ]);
 
   const handleAuthorSelect = (author: string) => {
     setSelectedAuthors((prev) =>
@@ -1319,20 +1313,21 @@ export default function SearchPage({
                           }
                         />
 
-                        <FilterBox
-                          label="Author"
-                          icon={<FiUsers className="h-4 w-4" />}
-                          selected={selectedAuthors.length > 0}
-                          count={selectedAuthors.length || undefined}
-                          contentComponent={
-                            <AuthorFilter
-                              authors={authors}
-                              selectedAuthors={selectedAuthors}
-                              onAuthorSelect={handleAuthorSelect}
-                            />
-                          }
-                        />
-
+                        {authors && authors.length > 0 && (
+                          <FilterBox
+                            label="Author"
+                            icon={<FiUsers className="h-4 w-4" />}
+                            selected={selectedAuthors.length > 0}
+                            count={selectedAuthors.length || undefined}
+                            contentComponent={
+                              <AuthorFilter
+                                authors={authors}
+                                selectedAuthors={selectedAuthors}
+                                onAuthorSelect={handleAuthorSelect}
+                              />
+                            }
+                          />
+                        )}
                         {tags.length > 0 ||
                           (documentSets.length > 0 && (
                             <FilterBox
