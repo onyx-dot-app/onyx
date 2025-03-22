@@ -508,6 +508,13 @@ def try_creating_indexing_task(
 
         custom_task_id = redis_connector_index.generate_generator_task_id()
 
+        # Determine which queue to use based on whether this is a user file
+        queue = (
+            OnyxCeleryQueues.USER_FILES_INDEXING
+            if cc_pair.is_user_file
+            else OnyxCeleryQueues.CONNECTOR_INDEXING
+        )
+
         # when the task is sent, we have yet to finish setting up the fence
         # therefore, the task must contain code that blocks until the fence is ready
         result = celery_app.send_task(
@@ -518,7 +525,7 @@ def try_creating_indexing_task(
                 search_settings_id=search_settings.id,
                 tenant_id=tenant_id,
             ),
-            queue=OnyxCeleryQueues.CONNECTOR_INDEXING,
+            queue=queue,
             task_id=custom_task_id,
             priority=OnyxCeleryPriority.MEDIUM,
         )

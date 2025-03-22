@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import IMAGE_ANALYSIS_SYSTEM_PROMPT
+from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.llm_configs import get_search_time_image_analysis_enabled
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
@@ -354,6 +355,28 @@ def filter_sections(
 
     Returns a list of the unique chunk IDs that were marked as relevant
     """
+    # Log evaluation type to help with debugging
+    logger.info(f"filter_sections called with evaluation_type={query.evaluation_type}")
+
+    # Fast path: immediately return empty list for SKIP evaluation type (ordering-only mode)
+    if query.evaluation_type == LLMEvaluationType.SKIP:
+        logger.info("Fast path: Skipping LLM section filtering for ordering-only mode")
+        # Add stack trace for debugging purposes
+        import traceback
+
+        logger.debug(
+            f"Stack trace for inappropriate filter_sections call:\n{traceback.format_stack()}"
+        )
+        return []
+
+    # Additional safeguard: Log a warning if this function is ever called with SKIP evaluation type
+    # This should never happen if our fast paths are working correctly
+    if query.evaluation_type == LLMEvaluationType.SKIP:
+        logger.warning(
+            "WARNING: filter_sections called with SKIP evaluation_type. This should never happen!"
+        )
+        return []
+
     sections_to_filter = sections_to_filter[: query.max_llm_filter_sections]
 
     contents = [
@@ -386,6 +409,16 @@ def search_postprocessing(
     llm: LLM,
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> Iterator[list[InferenceSection] | list[SectionRelevancePiece]]:
+    # Fast path for ordering-only: detect it by checking if evaluation_type is SKIP
+    if search_query.evaluation_type == LLMEvaluationType.SKIP:
+        logger.info(
+            "Fast path: Detected ordering-only mode, bypassing all post-processing"
+        )
+        # Immediately yield the sections without any processing and an empty relevance list
+        yield retrieved_sections
+        yield cast(list[SectionRelevancePiece], [])
+        return
+
     post_processing_tasks: list[FunctionCall] = []
 
     if not retrieved_sections:
@@ -422,10 +455,14 @@ def search_postprocessing(
         sections_yielded = True
 
     llm_filter_task_id = None
-    if search_query.evaluation_type in [
-        LLMEvaluationType.BASIC,
-        LLMEvaluationType.UNSPECIFIED,
-    ]:
+    # Only add LLM filtering if not in SKIP mode and if LLM doc relevance is not disabled
+    if (
+        search_query.evaluation_type not in [LLMEvaluationType.SKIP]
+        and not DISABLE_LLM_DOC_RELEVANCE
+        and search_query.evaluation_type
+        in [LLMEvaluationType.BASIC, LLMEvaluationType.UNSPECIFIED]
+    ):
+        logger.info("Adding LLM filtering task for document relevance evaluation")
         post_processing_tasks.append(
             FunctionCall(
                 filter_sections,
@@ -437,6 +474,10 @@ def search_postprocessing(
             )
         )
         llm_filter_task_id = post_processing_tasks[-1].result_id
+    elif search_query.evaluation_type == LLMEvaluationType.SKIP:
+        logger.info("Fast path: Skipping LLM filtering task for ordering-only mode")
+    elif DISABLE_LLM_DOC_RELEVANCE:
+        logger.info("Skipping LLM filtering task because LLM doc relevance is disabled")
 
     post_processing_results = (
         run_functions_in_parallel(post_processing_tasks)

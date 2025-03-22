@@ -74,12 +74,15 @@ def setup_onyx(
 
     The Tenant Service calls the tenants/create endpoint which runs this.
     """
+    print("checking and performing index swap")
     check_and_perform_index_swap(db_session=db_session)
 
+    print("getting active search settings")
     active_search_settings = get_active_search_settings(db_session)
     search_settings = active_search_settings.primary
     secondary_search_settings = active_search_settings.secondary
 
+    print("getting current search settings")
     # search_settings = get_current_search_settings(db_session)
     # multipass_config_1 = get_multipass_config(search_settings)
 
@@ -91,6 +94,7 @@ def setup_onyx(
 
     # Break bad state for thrashing indexes
     if secondary_search_settings and DISABLE_INDEX_UPDATE_ON_SWAP:
+        print("expiring index attempts")
         expire_index_attempts(
             search_settings_id=search_settings.id, db_session=db_session
         )
@@ -99,6 +103,7 @@ def setup_onyx(
             resync_cc_pair(cc_pair, db_session=db_session)
 
     # Expire all old embedding models indexing attempts, technically redundant
+    print("cancelling indexing attempts past model")
     cancel_indexing_attempts_past_model(db_session)
 
     logger.notice(f'Using Embedding model: "{search_settings.model_name}"')

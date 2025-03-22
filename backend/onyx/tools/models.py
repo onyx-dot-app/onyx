@@ -70,6 +70,11 @@ class SearchToolOverrideKwargs(BaseModel):
     precomputed_query_embedding: Embedding | None = None
     precomputed_is_keyword: bool | None = None
     precomputed_keywords: list[str] | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
+    ordering_only: bool | None = (
+        None  # Flag for fast path when search is only needed for ordering
+    )
 
     class Config:
         arbitrary_types_allowed = True
