@@ -161,7 +161,7 @@ def _get_expected_file_content(file_id: int) -> str:
     return file_text_template.format(file_id)
 
 
-def assert_retrieved_docs_match_expected(
+def assert_expected_docs_in_retrieved_docs(
     retrieved_docs: list[Document],
     expected_file_ids: Sequence[int],
 ) -> None:
