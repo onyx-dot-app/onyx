@@ -38,10 +38,11 @@ from onyx.redis.redis_connector_index import RedisConnectorIndex
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_stop import RedisConnectorStop
 from onyx.redis.redis_document_set import RedisDocumentSet
-from onyx.redis.redis_pool import get_shared_redis_client
+from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_usergroup import RedisUserGroup
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
@@ -102,7 +103,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     # This is singleton work that should be done on startup exactly once
     # by the primary worker. This is unnecessary in the multi tenant scenario
-    r = get_shared_redis_client()
+    r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
 
     # Log the role and slave count - being connected to a slave or slave count > 0 could be problematic
     info: dict[str, Any] = cast(dict, r.info("replication"))
@@ -235,7 +236,7 @@ class HubPeriodicTask(bootsteps.StartStopStep):
 
             lock: RedisLock = worker.primary_worker_lock
 
-            r = get_shared_redis_client()
+            r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
 
             if lock.owned():
                 task_logger.debug("Reacquiring primary worker lock.")

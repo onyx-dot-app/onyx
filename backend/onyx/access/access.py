@@ -18,13 +18,15 @@ def _get_access_for_document(
         document_id=document_id,
     )
 
-    return DocumentAccess.build(
+    doc_access = DocumentAccess.build(
         user_emails=info[1] if info and info[1] else [],
         user_groups=[],
         external_user_emails=[],
         external_user_group_ids=[],
         is_public=info[2] if info else False,
     )
+
+    return doc_access
 
 
 def get_access_for_document(
@@ -67,7 +69,7 @@ def _get_access_for_documents(
         for document_id, user_emails, is_public in document_access_info
     }
 
-    # Sometimes the document has not be indexed by the indexing job yet, in those cases
+    # Sometimes the document has not been indexed by the indexing job yet, in those cases
     # the document does not exist and so we use least permissive. Specifically the EE version
     # checks the MIT version permissions and creates a superset. This ensures that this flow
     # does not fail even if the Document has not yet been indexed.

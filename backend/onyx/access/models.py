@@ -64,25 +64,26 @@ class DocumentAccess(ExternalAccess):
     user_groups: set[str]
 
     def to_acl(self) -> set[str]:
-        return set(
-            [
-                prefix_user_email(user_email)
-                for user_email in self.user_emails
-                if user_email
-            ]
-            + [prefix_user_group(group_name) for group_name in self.user_groups]
-            + [
-                prefix_user_email(user_email)
-                for user_email in self.external_user_emails
-            ]
-            + [
-                # The group names are already prefixed by the source type
-                # This adds an additional prefix of "external_group:"
-                prefix_external_group(group_name)
-                for group_name in self.external_user_group_ids
-            ]
-            + ([PUBLIC_DOC_PAT] if self.is_public else [])
-        )
+        # all acl's are prefixed by type
+
+        acl_set: set[str] = set()
+        for user_email in self.user_emails:
+            if user_email:
+                acl_set.add(prefix_user_email(user_email))
+
+        for group_name in self.user_groups:
+            acl_set.add(prefix_user_group(group_name))
+
+        for external_user_email in self.external_user_emails:
+            acl_set.add(prefix_user_email(external_user_email))
+
+        for external_group_id in self.external_user_group_ids:
+            acl_set.add(prefix_external_group(external_group_id))
+
+        if self.is_public:
+            acl_set.add(PUBLIC_DOC_PAT)
+
+        return acl_set
 
     @classmethod
     def build(
@@ -93,20 +94,16 @@ class DocumentAccess(ExternalAccess):
         external_user_group_ids: list[str],
         is_public: bool,
     ) -> "DocumentAccess":
+        """Don't prefix incoming data, prefix on read from to_acl!"""
+
         return cls(
             external_user_emails={
-                prefix_user_email(external_email)
-                for external_email in external_user_emails
+                external_email for external_email in external_user_emails
             },
             external_user_group_ids={
-                prefix_external_group(external_group_id)
-                for external_group_id in external_user_group_ids
+                external_group_id for external_group_id in external_user_group_ids
             },
-            user_emails={
-                prefix_user_email(user_email)
-                for user_email in user_emails
-                if user_email
-            },
+            user_emails={user_email for user_email in user_emails if user_email},
             user_groups=set(user_groups),
             is_public=is_public,
         )
