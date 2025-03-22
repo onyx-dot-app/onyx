@@ -1333,27 +1333,30 @@ export default function SearchPage({
                           }
                         />
 
-                        <FilterBox
-                          label="More Filters"
-                          icon={<FiFilter className="h-4 w-4" />}
-                          selected={
-                            filterManager.selectedDocumentSets.length > 0 ||
-                            filterManager.selectedTags.length > 0
-                          }
-                          count={
-                            filterManager.selectedDocumentSets.length +
-                              filterManager.selectedTags.length || undefined
-                          }
-                          contentComponent={
-                            <MoreFiltersPopup
-                              filterManager={filterManager}
-                              availableSources={sources}
-                              availableDocumentSets={documentSets}
-                              availableTags={tags}
-                              trigger={<></>}
+                        {tags.length > 0 ||
+                          (documentSets.length > 0 && (
+                            <FilterBox
+                              label="More Filters"
+                              icon={<FiFilter className="h-4 w-4" />}
+                              selected={
+                                filterManager.selectedDocumentSets.length > 0 ||
+                                filterManager.selectedTags.length > 0
+                              }
+                              count={
+                                filterManager.selectedDocumentSets.length +
+                                  filterManager.selectedTags.length || undefined
+                              }
+                              contentComponent={
+                                <MoreFiltersPopup
+                                  filterManager={filterManager}
+                                  availableSources={sources}
+                                  availableDocumentSets={documentSets}
+                                  availableTags={tags}
+                                  trigger={<></>}
+                                />
+                              }
                             />
-                          }
-                        />
+                          ))}
                       </div>
                     </div>
                   </div>

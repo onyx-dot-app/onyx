@@ -36,7 +36,7 @@ export function FilterBox({
         <Button
           variant="outline"
           className={cn(
-            "border border-gray-300 rounded-md px-4 py-2 h-auto flex items-center gap-2 text-sm font-medium transition-colors hover:bg-gray-50 w-[160px] justify-between",
+            "border border-gray-300  rounded-md px-4 py-2 h-auto flex items-center gap-2 text-sm font-medium transition-colors hover:bg-gray-50 w-[160px] justify-between",
             selected && "bg-gray-100 border-gray-400"
           )}
           onClick={onClick}
@@ -45,7 +45,7 @@ export function FilterBox({
             {icon}
             <span>{label}</span>
             {count !== undefined && (
-              <Badge variant="secondary" className="ml-1 text-xs">
+              <Badge variant="secondary" className=" -my-1 -mr-4 ml-1 text-xs">
                 {count}
               </Badge>
             )}
