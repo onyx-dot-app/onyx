@@ -323,10 +323,6 @@ export function ChatPage({
           )
         : undefined
   );
-  // Gather default temperature settings
-  const search_param_temperature = searchParams.get(
-    SEARCH_PARAM_NAMES.TEMPERATURE
-  );
 
   const setSelectedAssistantFromId = (assistantId: number) => {
     // NOTE: also intentionally look through available assistants here, so that
