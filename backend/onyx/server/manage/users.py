@@ -84,7 +84,7 @@ USERS_PAGE_SIZE = 10
 @router.patch("/manage/set-user-role")
 def set_user_role(
     user_role_update_request: UserRoleUpdateRequest,
-    current_user: User = Depends(current_admin_user),
+    current_user: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
     user_to_update = get_user_by_email(
@@ -104,7 +104,7 @@ def set_user_role(
         current_role=current_role,
     )
 
-    if user_to_update.id == current_user.id:
+    if current_user and user_to_update.id == current_user.id:
         raise HTTPException(
             status_code=400,
             detail="An admin cannot demote themselves from admin role!",
