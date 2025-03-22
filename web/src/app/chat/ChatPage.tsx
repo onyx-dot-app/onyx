@@ -1383,6 +1383,7 @@ export function ChatPage({
           if (!packet) {
             continue;
           }
+          console.log("Packet:", JSON.stringify(packet));
 
           if (!initialFetchDetails) {
             if (!Object.hasOwn(packet, "user_message_id")) {
@@ -1728,6 +1729,7 @@ export function ChatPage({
         }
       }
     } catch (e: any) {
+      console.log("Error:", e);
       const errorMsg = e.message;
       upsertToCompleteMessageMap({
         messages: [
@@ -1755,11 +1757,13 @@ export function ChatPage({
         completeMessageMapOverride: currentMessageMap(completeMessageDetail),
       });
     }
+    console.log("Finished streaming");
     setAgenticGenerating(false);
     resetRegenerationState(currentSessionId());
 
     updateChatState("input");
     if (isNewSession) {
+      console.log("Setting up new session");
       if (finalMessage) {
         setSelectedMessageForDocDisplay(finalMessage.message_id);
       }
