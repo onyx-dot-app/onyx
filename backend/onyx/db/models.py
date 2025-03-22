@@ -2430,6 +2430,7 @@ class UserFile(Base):
     cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
         "ConnectorCredentialPair", back_populates="user_file"
     )
+    link_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 """

@@ -25,6 +25,7 @@ from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.credentials import create_credential
 from onyx.db.engine import get_session
 from onyx.db.enums import AccessType
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
@@ -363,11 +364,13 @@ def create_file_from_link(
         soup = BeautifulSoup(content, "html.parser")
         parsed_html = web_html_cleanup(soup, mintlify_cleanup_enabled=False)
 
-        file_name = f"{parsed_html.title or 'Untitled'}.txt"
+        file_name = f"{parsed_html.title or 'Untitled'}"
         file_content = parsed_html.cleaned_text.encode()
 
         file = UploadFile(filename=file_name, file=io.BytesIO(file_content))
-        user_files = create_user_files([file], request.folder_id, user, db_session)
+        user_files = create_user_files(
+            [file], request.folder_id, user, db_session, link_url=request.url
+        )
 
         # Create connector and credential (same as in upload_user_files)
         for user_file in user_files:
@@ -446,6 +449,61 @@ def get_files_token_estimate(
     """Get token estimate for files and folders"""
     total_tokens = calculate_user_files_token_count(file_ids, folder_ids, db_session)
     return {"total_tokens": total_tokens}
+
+
+class ReindexFileRequest(BaseModel):
+    file_id: int
+
+
+@router.post("/user/file/reindex")
+def reindex_file(
+    request: ReindexFileRequest,
+    user: User = Depends(current_user),
+    db_session: Session = Depends(get_session),
+) -> MessageResponse:
+    user_id = user.id if user else None
+    user_file_to_reindex = (
+        db_session.query(UserFile)
+        .filter(UserFile.id == request.file_id, UserFile.user_id == user_id)
+        .first()
+    )
+
+    if not user_file_to_reindex:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if not user_file_to_reindex.cc_pair_id:
+        raise HTTPException(
+            status_code=400,
+            detail="File does not have an associated connector-credential pair",
+        )
+
+    # Get the connector id from the cc_pair
+    cc_pair = (
+        db_session.query(ConnectorCredentialPair)
+        .filter_by(id=user_file_to_reindex.cc_pair_id)
+        .first()
+    )
+    if not cc_pair:
+        raise HTTPException(
+            status_code=404, detail="Associated connector-credential pair not found"
+        )
+
+    # Trigger immediate reindexing with highest priority
+    tenant_id = get_current_tenant_id()
+    try:
+        trigger_indexing_for_cc_pair(
+            [], cc_pair.connector_id, True, tenant_id, db_session, is_user_file=True
+        )
+        return MessageResponse(
+            message="File reindexing has been triggered successfully"
+        )
+    except Exception as e:
+        logger.error(
+            f"Error triggering reindexing for file {request.file_id}: {str(e)}"
+        )
+        raise HTTPException(
+            status_code=500, detail=f"Failed to trigger reindexing: {str(e)}"
+        )
 
 
 class BulkCleanupRequest(BaseModel):

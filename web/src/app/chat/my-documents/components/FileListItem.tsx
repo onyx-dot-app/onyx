@@ -18,12 +18,21 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FiDownload, FiEdit, FiTrash } from "react-icons/fi";
+import {
+  FiAlertCircle,
+  FiAlertTriangle,
+  FiDownload,
+  FiEdit,
+  FiRefreshCw,
+  FiTrash,
+  FiTrash2,
+} from "react-icons/fi";
 import { getFormattedDateTime } from "@/lib/dateUtils";
-import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { AnimatedDots } from "../[id]/components/DocumentList";
 import { FolderMoveIcon } from "@/components/icons/icons";
 import { truncateString } from "@/lib/utils";
+import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 
 interface FileListItemProps {
   file: FileResponse;
@@ -40,6 +49,7 @@ interface FileListItemProps {
   onMove: (fileId: number, targetFolderId: number) => Promise<void>;
   folders: FolderResponse[];
   isIndexed: boolean;
+  failed: boolean;
 }
 
 export const FileListItem: React.FC<FileListItemProps> = ({
@@ -52,6 +62,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
   onMove,
   folders,
   isIndexed,
+  failed,
 }) => {
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [indexingStatus, setIndexingStatus] = useState<boolean | null>(null);
@@ -82,6 +93,72 @@ export const FileListItem: React.FC<FileListItemProps> = ({
     onMove(file.id, targetFolderId);
     setShowMoveOptions(false);
   };
+  const FailureWithPopover = () => {
+    return (
+      <Popover>
+        <PopoverTrigger onClick={(e) => e.stopPropagation()} asChild>
+          <div className="text-red-500 cursor-pointer">
+            <FiAlertTriangle className="h-4 w-4" />
+          </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-3 shadow-lg rounded-md border border-neutral-200 dark:border-neutral-800">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <p className="text-xs font-medium text-red-500">
+                Indexing failed.
+                <br />
+                You can attempt a reindex to continue using this file, or delete
+                the file.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start text-sm font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  fetch(`/api/user/file/reindex`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ file_id: file.id }),
+                  })
+                    .then((response) => {
+                      if (!response.ok) {
+                        throw new Error("Failed to reindex file");
+                      }
+                      setIndexingStatus(false); // Set to false to show indexing status
+                      refreshFolders(); // Refresh the folder list
+                    })
+                    .catch((error) => {
+                      console.error("Error reindexing file:", error);
+                    });
+                }}
+              >
+                <FiRefreshCw className="mr-2 h-3.5 w-3.5" />
+                Reindex
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start text-sm font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 hover:text-red-600 transition-colors"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete();
+                }}
+              >
+                <FiTrash2 className="mr-2 h-3.5 w-3.5" />
+                Delete
+              </Button>
+            </div>
+          </div>
+        </PopoverContent>
+      </Popover>
+    );
+  };
 
   return (
     <div
@@ -97,7 +174,11 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           {isSelected !== undefined && (
             <Checkbox checked={isSelected} className="mr-2 shrink-0" />
           )}
-          {getFileIconFromFileName(file.name)}
+          {file.failed ? (
+            <FailureWithPopover />
+          ) : (
+            getFileIconFromFileNameAndLink(file.name, file.link_url)
+          )}
           {file.name.length > 50 ? (
             <TooltipProvider>
               <Tooltip>

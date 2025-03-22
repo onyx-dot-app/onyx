@@ -8,7 +8,8 @@ import React, { useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
 import { FileDescriptor } from "@/app/chat/interfaces";
 import { FiFileText } from "react-icons/fi";
-import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
+import { FileResponse } from "@/app/chat/my-documents/DocumentsContext";
 
 export const ResultIcon = ({
   doc,
@@ -169,48 +170,34 @@ export function SeeMoreBlock({
   );
 }
 
-export function getUniqueFileIcons(files: FileDescriptor[]): JSX.Element[] {
+export function getUniqueFileIcons(files: FileResponse[]): JSX.Element[] {
   const uniqueIcons: JSX.Element[] = [];
   const seenExtensions = new Set<string>();
 
-  // Helper function to extract filename from id when name is missing
-  const getFileName = (file: FileDescriptor): string => {
-    if (file.name) return file.name;
-
-    // Extract filename from the id if possible
-    if (file.id) {
-      const idParts = file.id.split("/");
-      if (idParts.length > 1) {
-        return idParts[idParts.length - 1]; // Get the last part after the last slash
-      }
-    }
-
-    return "unknown.txt"; // Fallback filename
-  };
-
   // Helper function to get a styled icon
-  const getStyledIcon = (fileName: string, fileId: string) => {
-    return React.cloneElement(getFileIconFromFileName(fileName), {
-      key: `file-${fileId}`,
-    });
+  const getStyledIcon = (
+    fileName: string,
+    fileId: number,
+    link_url?: string | null
+  ) => {
+    return React.cloneElement(
+      getFileIconFromFileNameAndLink(fileName, link_url),
+      {
+        key: `file-${fileId}`,
+      }
+    );
   };
 
   for (const file of files) {
-    const fileName = getFileName(file);
-    const extension = fileName.split(".").pop()?.toLowerCase() || "";
-
-    if (!seenExtensions.has(extension)) {
-      seenExtensions.add(extension);
-      uniqueIcons.push(getStyledIcon(fileName, file.id));
-    }
+    uniqueIcons.push(getStyledIcon(file.name, file.id, file.link_url));
   }
 
   // If we have zero icons, use a fallback
   if (uniqueIcons.length === 0) {
     return [
-      getFileIconFromFileName("fallback1.txt"),
-      getFileIconFromFileName("fallback2.txt"),
-      getFileIconFromFileName("fallback3.txt"),
+      getFileIconFromFileNameAndLink("fallback1.txt"),
+      getFileIconFromFileNameAndLink("fallback2.txt"),
+      getFileIconFromFileNameAndLink("fallback3.txt"),
     ];
   }
 
@@ -237,7 +224,7 @@ export function FilesSeeMoreBlock({
   fullWidth = false,
 }: {
   toggleDocumentSelection: () => void;
-  files: FileDescriptor[];
+  files: FileResponse[];
   toggled: boolean;
   fullWidth?: boolean;
 }) {

@@ -38,6 +38,7 @@ def create_user_files(
     folder_id: int | None,
     user: User | None,
     db_session: Session,
+    link_url: str | None = None,
 ) -> list[UserFile]:
     upload_response = upload_files(files, db_session)
     user_files = []
@@ -50,6 +51,7 @@ def create_user_files(
             document_id="USER_FILE_CONNECTOR__" + file_path,
             name=file.filename,
             token_count=None,
+            link_url=link_url,
         )
         db_session.add(new_file)
         user_files.append(new_file)

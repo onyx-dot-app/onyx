@@ -189,6 +189,7 @@ export function ChatPage({
     removeSelectedFolder,
     clearSelectedItems,
     folders: userFolders,
+    files: allUserFiles,
     uploadFile,
     removeSelectedFile,
     currentMessageFiles,
@@ -2764,11 +2765,25 @@ export function ChatPage({
                                     ? messageHistory[i + 1]
                                     : undefined;
 
-                                const userFiles = previousMessage?.files.filter(
-                                  (file) =>
-                                    file.type == ChatFileType.USER_KNOWLEDGE
+                                const attachedFileDescriptors =
+                                  previousMessage?.files.filter(
+                                    (file) =>
+                                      file.type == ChatFileType.USER_KNOWLEDGE
+                                  );
+                                const userFiles = allUserFiles?.filter((file) =>
+                                  attachedFileDescriptors?.some(
+                                    (descriptor) =>
+                                      descriptor.id === file.file_id
+                                  )
                                 );
-
+                                console.log("alluser files");
+                                console.log(allUserFiles);
+                                console.log(
+                                  "current attached file descriptors"
+                                );
+                                console.log(attachedFileDescriptors);
+                                console.log("user files");
+                                console.log(userFiles);
                                 return (
                                   <div
                                     className="text-text"

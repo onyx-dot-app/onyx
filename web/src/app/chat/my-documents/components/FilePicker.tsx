@@ -53,7 +53,7 @@ import { getFormattedDateTime } from "@/lib/dateUtils";
 import { FileUploadSection } from "../[id]/components/upload/FileUploadSection";
 import { truncateString } from "@/lib/utils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { TokenDisplay } from "@/components/TokenDisplay";
 
 // Define a type for uploading files that includes progress
@@ -114,8 +114,6 @@ const DraggableItem: React.FC<{
       {...listeners}
       className="flex group w-full items-center"
     >
-      {/* // className="flex group items-center" */}
-
       <div className="w-6 flex items-center justify-center shrink-0">
         <div
           className="opacity-0 group-hover:opacity-100 transition-opacity duration-150"
@@ -157,7 +155,7 @@ const DraggableItem: React.FC<{
       >
         <div className="flex items-center flex-1 min-w-0" onClick={onClick}>
           <div className="flex text-sm items-center gap-2 w-[65%] min-w-0">
-            {getFileIconFromFileName(file.name)}
+            {getFileIconFromFileNameAndLink(file.name, file.link_url)}
             {file.name.length > 34 ? (
               <TooltipProvider>
                 <Tooltip>
@@ -460,10 +458,14 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     }
   };
   const handleFileClick = (file: FileResponse) => {
-    setPresentingDocument({
-      document_id: file.document_id,
-      semantic_identifier: file.name,
-    });
+    if (file.link_url) {
+      window.open(file.link_url, "_blank");
+    } else {
+      setPresentingDocument({
+        document_id: file.document_id,
+        semantic_identifier: file.name,
+      });
+    }
   };
 
   const handleFileSelect = (

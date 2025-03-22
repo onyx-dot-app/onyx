@@ -16,6 +16,8 @@ import {
 import { FiArrowDown, FiEdit, FiTrash } from "react-icons/fi";
 import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { useDocumentsContext } from "../DocumentsContext";
+import { TruncatedText } from "@/components/ui/truncatedText";
+import { truncateString } from "@/lib/utils";
 
 interface SharedFolderItemProps {
   folder: {
@@ -60,21 +62,27 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
         <div className="flex items-center flex-1 min-w-0">
           <div className="flex items-center gap-3 w-[40%]">
             <FolderIcon className="h-5 w-5 text-black dark:text-black shrink-0 fill-black dark:fill-black" />
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="truncate text-text-dark dark:text-text-dark">
-                    {folder.name}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">
-                  <p>{folder.name}</p>
-                  {description && (
-                    <p className="text-xs text-neutral-500">{description}</p>
-                  )}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {folder.name.length > 50 ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="truncate text-text-dark dark:text-text-dark">
+                      {truncateString(folder.name, 60)}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>{folder.name}</p>
+                    {description && (
+                      <p className="text-xs text-neutral-500">{description}</p>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <span className="truncate text-text-dark dark:text-text-dark">
+                {folder.name}
+              </span>
+            )}
           </div>
 
           <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">

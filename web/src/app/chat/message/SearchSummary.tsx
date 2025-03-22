@@ -16,6 +16,7 @@ import { ValidSources } from "@/lib/types";
 import { useEffect, useRef, useState } from "react";
 import { FiBook, FiCheck, FiEdit2, FiSearch, FiX } from "react-icons/fi";
 import { FileDescriptor } from "../interfaces";
+import { FileResponse } from "../my-documents/DocumentsContext";
 
 export function ShowHideDocsButton({
   messageId,
@@ -250,7 +251,7 @@ export function SearchSummary({
 export function UserKnowledgeFiles({
   userKnowledgeFiles,
 }: {
-  userKnowledgeFiles: FileDescriptor[];
+  userKnowledgeFiles: FileResponse[];
 }): JSX.Element {
   if (!userKnowledgeFiles || userKnowledgeFiles.length === 0) {
     return <></>;

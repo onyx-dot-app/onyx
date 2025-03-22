@@ -535,7 +535,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
 
                     {/* Content area - different for each mode but with consistent spacing */}
                     <div className="flex-1 w-full flex flex-col items-center justify-center mt-2">
-                      <div className="flex items-center gap-2 w-full mx-4 max-w-md">
+                      <div className="flex items-center gap-2 w-full  px-4 max-w-md">
                         <input
                           ref={urlInputRef}
                           type="text"

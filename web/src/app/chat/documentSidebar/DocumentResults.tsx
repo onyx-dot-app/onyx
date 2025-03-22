@@ -15,6 +15,7 @@ import {
   FileSourceCard,
   FileSourceCardInResults,
 } from "../message/SourcesDisplay";
+import { useDocumentsContext } from "../my-documents/DocumentsContext";
 interface DocumentResultsProps {
   agenticMessage: boolean;
   humanMessage: Message | null;
@@ -67,9 +68,13 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
 
       return () => clearTimeout(timer);
     }, [selectedDocuments]);
+    const { files: allUserFiles } = useDocumentsContext();
 
-    const userFiles = humanMessage?.files.filter(
+    const humanFileDescriptors = humanMessage?.files.filter(
       (file) => file.type == ChatFileType.USER_KNOWLEDGE
+    );
+    const userFiles = allUserFiles?.filter((file) =>
+      humanFileDescriptors?.some((descriptor) => descriptor.id === file.file_id)
     );
     const selectedDocumentIds =
       selectedDocuments?.map((document) => document.document_id) || [];
@@ -127,7 +132,12 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                       <FileSourceCardInResults
                         key={index}
                         document={file}
-                        setPresentingDocument={setPresentingDocument}
+                        setPresentingDocument={() =>
+                          setPresentingDocument({
+                            document_id: file.document_id,
+                            semantic_identifier: file.file_id || null,
+                          })
+                        }
                       />
                     ))}
                   </div>

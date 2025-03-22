@@ -50,6 +50,10 @@ export interface FileDescriptor {
   isUploading?: boolean;
 }
 
+export interface FileDescriptorWithHighlights extends FileDescriptor {
+  match_highlights: string[];
+}
+
 export interface LLMRelevanceFilterPacket {
   relevant_chunk_indices: number[];
 }

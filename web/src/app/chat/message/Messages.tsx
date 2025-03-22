@@ -73,6 +73,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { transformLinkUri } from "@/lib/utils";
+import { FileResponse } from "../my-documents/DocumentsContext";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -164,6 +165,46 @@ function FileDisplay({
   );
 }
 
+function FileResponseDisplay({
+  files,
+  alignBubble,
+  setPresentingDocument,
+}: {
+  files: FileResponse[];
+  alignBubble?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+}) {
+  if (!files || files.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      id="onyx-file-response"
+      className={`${alignBubble && "ml-auto"} mt-2 auto mb-4`}
+    >
+      <div className="flex flex-col gap-2">
+        {files.map((file) => {
+          return (
+            <div key={file.id} className="w-fit">
+              <DocumentPreview
+                fileName={file.name || file.document_id}
+                alignBubble={alignBubble}
+                open={() =>
+                  setPresentingDocument({
+                    document_id: file.document_id,
+                    semantic_identifier: file.name || file.document_id,
+                  })
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export const AIMessage = ({
   userKnowledgeFiles = [],
   regenerate,
@@ -195,7 +236,7 @@ export const AIMessage = ({
   documentSidebarVisible,
   removePadding,
 }: {
-  userKnowledgeFiles?: FileDescriptor[];
+  userKnowledgeFiles?: FileResponse[];
   index?: number;
   shared?: boolean;
   isActive?: boolean;
@@ -323,6 +364,7 @@ export const AIMessage = ({
       <MemoizedAnchor
         updatePresentingDocument={setPresentingDocument!}
         docs={docs}
+        userFiles={userKnowledgeFiles}
         href={props.href}
       >
         {props.children}
@@ -522,8 +564,11 @@ export const AIMessage = ({
                                     <SourceCard
                                       document={doc}
                                       key={ind}
-                                      setPresentingDocument={
-                                        setPresentingDocument
+                                      setPresentingDocument={() =>
+                                        setPresentingDocument({
+                                          document_id: doc.document_id,
+                                          semantic_identifier: doc.document_id,
+                                        })
                                       }
                                     />
                                   ))}
@@ -555,15 +600,19 @@ export const AIMessage = ({
                               userKnowledgeFiles.length > 0 &&
                               userKnowledgeFiles
                                 .slice(0, 2)
-                                .map((file: FileDescriptor, ind: number) => (
+                                .map((file: FileResponse, ind: number) => (
                                   <FileSourceCard
                                     key={ind}
                                     document={file}
-                                    setPresentingDocument={
-                                      setPresentingDocument
+                                    setPresentingDocument={() =>
+                                      setPresentingDocument({
+                                        document_id: file.document_id,
+                                        semantic_identifier: file.name,
+                                      })
                                     }
                                   />
                                 ))}
+
                             {userKnowledgeFiles.length > 2 && (
                               <FilesSeeMoreBlock
                                 key={10}
@@ -578,11 +627,12 @@ export const AIMessage = ({
                         </div>
                       </div>
                     )}
-                    {content || userKnowledgeFiles || files ? (
+
+                    {content || files ? (
                       <>
                         <FileDisplay
                           setPresentingDocument={setPresentingDocument}
-                          files={userKnowledgeFiles || files || []}
+                          files={files || []}
                         />
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">

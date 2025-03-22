@@ -12,9 +12,6 @@ from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
-from onyx.configs.constants import (
-    DEFAULT_BOOST,
-)
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
     get_experts_stores_representations,
 )
@@ -65,10 +62,10 @@ from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.llm.factory import get_default_llm_with_vision
+from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
-from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
@@ -835,6 +832,8 @@ def index_doc_batch(
         update_chunk_boost_components__no_commit(
             chunk_data=updatable_chunk_data, db_session=db_session
         )
+
+        # Pause user file ccpairs
 
         db_session.commit()
 

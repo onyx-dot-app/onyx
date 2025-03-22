@@ -1,7 +1,7 @@
 """add user files
 
 Revision ID: 9aadf32dfeb4
-Revises: df46c75b714e
+Revises: 3781a5eb12cb
 Create Date: 2025-01-26 16:08:21.551022
 
 """
@@ -12,7 +12,7 @@ import datetime
 
 # revision identifiers, used by Alembic.
 revision = "9aadf32dfeb4"
-down_revision = "df46c75b714e"
+down_revision = "3781a5eb12cb"
 branch_labels = None
 depends_on = None
 
@@ -42,6 +42,7 @@ def upgrade() -> None:
             sa.ForeignKey("user_folder.id"),
             nullable=True,
         ),
+        sa.Column("link_url", sa.String(), nullable=True),
         sa.Column("token_count", sa.Integer(), nullable=True),
         sa.Column("file_type", sa.String(), nullable=True),
         sa.Column("file_id", sa.String(length=255), nullable=False),

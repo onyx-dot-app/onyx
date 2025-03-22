@@ -12,6 +12,7 @@ export interface UserFile {
   name: string;
   parent_folder_id: number | null;
   token_count: number | null;
+  link_url: string | null;
 }
 
 export interface FolderNode extends UserFolder {

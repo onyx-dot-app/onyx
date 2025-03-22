@@ -19,6 +19,8 @@ class UserFileSnapshot(BaseModel):
     assistant_ids: List[int] = []  # List of assistant IDs
     token_count: int | None
     indexed: bool
+    link_url: str | None
+    failed: bool | None
 
     @classmethod
     def from_model(cls, model: UserFile) -> "UserFileSnapshot":
@@ -32,9 +34,12 @@ class UserFileSnapshot(BaseModel):
             created_at=model.created_at,
             assistant_ids=[assistant.id for assistant in model.assistants],
             token_count=model.token_count,
+            failed=len(model.cc_pair.index_attempts) > 0
+            and model.cc_pair.last_successful_index_time is None,
             indexed=model.cc_pair.last_successful_index_time is not None
             if model.cc_pair
             else False,
+            link_url=model.link_url,
         )
 
 

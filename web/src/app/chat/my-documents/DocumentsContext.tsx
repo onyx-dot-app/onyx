@@ -34,7 +34,10 @@ export type FileResponse = {
   assistant_ids?: number[];
   indexed?: boolean;
   created_at?: string;
+  file_id?: string;
   file_type?: string;
+  link_url?: string | null;
+  failed?: boolean;
 };
 
 export interface FileUploadResponse {
@@ -43,6 +46,7 @@ export interface FileUploadResponse {
 
 export interface DocumentsContextType {
   folders: FolderResponse[];
+  files: FileResponse[];
   currentFolder: number | null;
   presentingDocument: MinimalOnyxDocument | null;
   searchQuery: string;
@@ -486,6 +490,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
   );
 
   const value: DocumentsContextType = {
+    files: folders.map((folder) => folder.files).flat(),
     folders,
     currentFolder,
     presentingDocument,

@@ -6,8 +6,9 @@ import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay
 import { ValidSources } from "@/lib/types";
 import { FiFileText } from "react-icons/fi";
 import { FileDescriptor } from "../interfaces";
-import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { truncateString } from "@/lib/utils";
+import { FileResponse } from "../my-documents/DocumentsContext";
 
 interface SourcesDisplayProps {
   documents: OnyxDocument[];
@@ -67,14 +68,21 @@ export const SourceCard: React.FC<{
 };
 
 export const FileSourceCard: React.FC<{
-  document: FileDescriptor;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+  document: FileResponse;
+  setPresentingDocument: (document: FileResponse) => void;
 }> = ({ document, setPresentingDocument }) => {
+  const openDocument = () => {
+    if (document.link_url) {
+      window.open(document.link_url, "_blank");
+    } else {
+      setPresentingDocument(document as any);
+    }
+  };
   const fileName = document.name || document.id;
 
   return (
     <button
-      onClick={() => setPresentingDocument(document as any)}
+      onClick={openDocument}
       className="w-full max-w-[260px] h-[80px] p-3
              text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80
              cursor-pointer rounded-lg
@@ -90,14 +98,13 @@ export const FileSourceCard: React.FC<{
         text-ellipsis
       "
       >
-        {truncateString(fileName, 45)}
+        Content from {fileName}
       </div>
 
       <div className="flex items-center gap-1 mt-1">
-        {getFileIconFromFileName(fileName)}
-
+        {getFileIconFromFileNameAndLink(document.name, document.link_url)}
         <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0">
-          Document
+          {truncateString(document.name, 45)}
         </div>
       </div>
     </button>
@@ -105,14 +112,19 @@ export const FileSourceCard: React.FC<{
 };
 
 export const FileSourceCardInResults: React.FC<{
-  document: FileDescriptor;
-  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+  document: FileResponse;
+  setPresentingDocument: (document: FileResponse) => void;
 }> = ({ document, setPresentingDocument }) => {
-  const fileName = document.name || document.id;
-
+  const openDocument = () => {
+    if (document.link_url) {
+      window.open(document.link_url, "_blank");
+    } else {
+      setPresentingDocument(document as any);
+    }
+  };
   return (
     <button
-      onClick={() => setPresentingDocument(document as any)}
+      onClick={openDocument}
       className="w-full h-[80px] p-4
              text-left bg-background hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700
              cursor-pointer rounded-lg
@@ -129,13 +141,15 @@ export const FileSourceCardInResults: React.FC<{
         text-ellipsis
       "
       >
-        {truncateString(fileName, 45)}
+        Content from {document.name}
       </div>
 
       <div className="flex items-center gap-2 mt-2">
-        <div className="flex-shrink-0">{getFileIconFromFileName(fileName)}</div>
+        <div className="flex-shrink-0">
+          {getFileIconFromFileNameAndLink(document.name, document.link_url)}
+        </div>
         <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0 font-medium">
-          Document
+          {truncateString(document.name, 45)}
         </div>
       </div>
     </button>

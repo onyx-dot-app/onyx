@@ -9,6 +9,7 @@ import {
   ImagesIcon,
   XMLIcon,
 } from "@/components/icons/icons";
+import { SearchResultIcon } from "@/components/SearchResultIcon";
 
 export interface GridShape {
   encodedGrid: number;
@@ -180,7 +181,13 @@ export const constructMiniFiedPersona = (
   };
 };
 
-export const getFileIconFromFileName = (fileName: string) => {
+export const getFileIconFromFileNameAndLink = (
+  fileName: string,
+  linkUrl?: string | null
+) => {
+  if (linkUrl) {
+    return <SearchResultIcon url={linkUrl} />;
+  }
   const extension = fileName.split(".").pop()?.toLowerCase();
   if (extension === "pdf") {
     return <PDFIcon className="h-4 w-4 shrink-0" />;

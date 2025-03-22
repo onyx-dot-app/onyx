@@ -116,6 +116,13 @@ export const DocumentList: React.FC<DocumentListProps> = ({
 }) => {
   const [presentingDocument, setPresentingDocument] =
     useState<FileResponse | null>(null);
+  const openDocument = (file: FileResponse) => {
+    if (file.link_url) {
+      window.open(file.link_url, "_blank");
+    } else {
+      setPresentingDocument(file);
+    }
+  };
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [completedFiles, setCompletedFiles] = useState<string[]>([]);
   const [refreshInterval, setRefreshInterval] = useState<NodeJS.Timeout | null>(
@@ -499,8 +506,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         onDownload={onDownload}
                         onMove={onMove}
                         folders={folders}
-                        onSelect={() => setPresentingDocument(file)}
+                        onSelect={() => openDocument(file)}
                         isIndexed={file.indexed || false}
+                        failed={file.failed || false}
                       />
                     )}
                   </div>

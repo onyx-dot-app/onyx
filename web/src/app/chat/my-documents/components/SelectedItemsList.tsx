@@ -11,7 +11,7 @@ import {
   useDocumentsContext,
 } from "../DocumentsContext";
 import { useDocumentSelection } from "../../useDocumentSelection";
-import { getFileIconFromFileName } from "@/lib/assistantIconUtils";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { UploadingFile } from "./FilePicker";
 import { CircularProgress } from "../[id]/components/upload/CircularProgress";
@@ -35,10 +35,14 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
 }) => {
   const hasItems = folders.length > 0 || files.length > 0;
   const openFile = (file: FileResponse) => {
-    setPresentingDocument({
-      semantic_identifier: file.name,
-      document_id: file.document_id,
-    });
+    if (file.link_url) {
+      window.open(file.link_url, "_blank");
+    } else {
+      setPresentingDocument({
+        semantic_identifier: file.name,
+        document_id: file.document_id,
+      });
+    }
   };
 
   return (
@@ -116,13 +120,12 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                     onClick={() => openFile(file)}
                   >
                     <div className="flex items-center min-w-0 flex-1">
-                      {getFileIconFromFileName(file.name)}
+                      {getFileIconFromFileNameAndLink(file.name, file.link_url)}
                       <span className="text-sm truncate text-neutral-700 dark:text-neutral-200 ml-2.5">
                         {truncateString(file.name, 34)}
                       </span>
                     </div>
                   </div>
-
                   <Button
                     variant="ghost"
                     size="sm"
