@@ -245,13 +245,7 @@ interface SearchBarProps {
 
 export const SearchBar = ({ query, setQuery, onSearch }: SearchBarProps) => {
   const handleChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    const target = event.target;
-    setQuery(target.value);
-
-    // Resize the textarea to fit the content
-    target.style.height = "24px";
-    const newHeight = target.scrollHeight;
-    target.style.height = `${newHeight}px`;
+    setQuery(event.target.value.replace(/\n/g, ""));
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
