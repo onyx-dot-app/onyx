@@ -11,6 +11,8 @@ import {
   Router,
   X,
   Loader2,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { ContextUsage } from "./ContextUsage";
 import { SelectedItemsList } from "./SelectedItemsList";
@@ -20,6 +22,7 @@ import {
   FolderResponse,
   FileResponse,
   FileUploadResponse,
+  FileStatus,
 } from "../DocumentsContext";
 import {
   DndContext,
@@ -292,6 +295,17 @@ interface LLMModelDescriptor {
   maxTokens: number;
 }
 
+enum SortType {
+  TimeCreated = "Time Created",
+  Alphabetical = "Alphabetical",
+  Files = "Files",
+}
+
+enum SortDirection {
+  Ascending = "asc",
+  Descending = "desc",
+}
+
 export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   isOpen,
   onClose,
@@ -369,6 +383,12 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const [uploadStartTime, setUploadStartTime] = useState<number | null>(null);
   const MAX_UPLOAD_TIME = 30000; // 30 seconds max for any upload
 
+  const [sortType, setSortType] = useState<SortType>(SortType.TimeCreated);
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    SortDirection.Descending
+  );
+  const [hoveredColumn, setHoveredColumn] = useState<SortType | null>(null);
+
   useEffect(() => {
     if (isOpen) {
       // Initialize selected file IDs
@@ -401,17 +421,55 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           (file) => !folders.some((f) => f.id === file.folder_id)
         );
 
-        setCurrentFolderFiles([...filesInFolder, ...selectedFilesNotInFolders]);
+        const combinedFiles = [...filesInFolder, ...selectedFilesNotInFolders];
+
+        // Sort the files
+        const sortedFiles = combinedFiles.sort((a, b) => {
+          let comparison = 0;
+
+          if (sortType === SortType.TimeCreated) {
+            comparison =
+              new Date(b.created_at || "").getTime() -
+              new Date(a.created_at || "").getTime();
+          } else if (sortType === SortType.Alphabetical) {
+            comparison = a.name.localeCompare(b.name);
+          }
+
+          return sortDirection === SortDirection.Ascending
+            ? -comparison
+            : comparison;
+        });
+
+        setCurrentFolderFiles(sortedFiles);
       } else {
         const folder = folders.find(
           (f) => f.id === currentFolder && f.name != "Recent Documents"
         );
-        setCurrentFolderFiles(folder?.files || []);
+        const files = folder?.files || [];
+
+        // Sort the files
+        const sortedFiles = [...files].sort((a, b) => {
+          let comparison = 0;
+
+          if (sortType === SortType.TimeCreated) {
+            comparison =
+              new Date(b.created_at || "").getTime() -
+              new Date(a.created_at || "").getTime();
+          } else if (sortType === SortType.Alphabetical) {
+            comparison = a.name.localeCompare(b.name);
+          }
+
+          return sortDirection === SortDirection.Ascending
+            ? -comparison
+            : comparison;
+        });
+
+        setCurrentFolderFiles(sortedFiles);
       }
     } else {
       setCurrentFolderFiles([]);
     }
-  }, [currentFolder, folders, selectedFiles]);
+  }, [currentFolder, folders, selectedFiles, sortType, sortDirection]);
 
   useEffect(() => {
     if (searchQuery) {
@@ -642,27 +700,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const markFileComplete = (fileName: string) => {
-    // Update progress to 100%
-    setUploadingFiles((prev) =>
-      prev.map((file) =>
-        file.name === fileName ? { ...file, progress: 100 } : file
-      )
-    );
-
-    // Add to completed files
-    setCompletedFiles((prev) => [...prev, fileName]);
-
-    // Remove from uploading files after showing 100% for a moment
-    setTimeout(() => {
-      setUploadingFiles((prev) =>
-        prev.filter((file) => file.name !== fileName)
-      );
-    }, 2000); // Show complete state for 2 seconds
-
-    // Remove from completed files after a longer delay
-    setTimeout(() => {
-      setCompletedFiles((prev) => prev.filter((name) => name !== fileName));
-    }, 3000);
+    setUploadingFiles((prev) => prev.filter((file) => file.name !== fileName));
   };
 
   const startRefreshInterval = () => {
@@ -802,6 +840,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           type: file.type,
           lastModified: new Date().toISOString(),
           token_count: 0,
+          status: FileStatus.INDEXED,
         };
         addSelectedFile(uploadedFile);
         markFileComplete(file.name);
@@ -852,30 +891,85 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       setLinkUrl("");
 
       if (response.file_paths && response.file_paths.length > 0) {
+        // Extract domain from URL to help with detection
+        const urlObj = new URL(linkUrl);
+        const hostname = urlObj.hostname;
+
         const createdFile: FileResponse = {
           id: Date.now(),
-          name: new URL(linkUrl).hostname,
+          name: hostname, // Use hostname directly for better detection
           document_id: response.file_paths[0],
           folder_id: currentFolder || null,
           size: 0,
           type: "link",
           lastModified: new Date().toISOString(),
           token_count: 0,
+          status: FileStatus.INDEXED,
         };
         addSelectedFile(createdFile);
+        // Make sure to remove the uploading file indicator when done
+        markFileComplete(linkUrl);
       }
 
       await refreshFolders();
-    } catch (error) {
-      console.error("Error creating file from link:", error);
+    } catch (e) {
+      console.error("Error creating file from link:", e);
+      // Also remove the uploading indicator on error
+      markFileComplete(linkUrl);
     } finally {
       setIsCreatingFileFromLink(false);
     }
   };
 
-  const filteredFolders = folders.filter(function (folder) {
-    return folder.name.toLowerCase().includes(searchQuery.toLowerCase());
-  });
+  const handleSortChange = (newSortType: SortType) => {
+    if (sortType === newSortType) {
+      setSortDirection(
+        sortDirection === SortDirection.Ascending
+          ? SortDirection.Descending
+          : SortDirection.Ascending
+      );
+    } else {
+      setSortType(newSortType);
+      setSortDirection(SortDirection.Descending);
+    }
+  };
+
+  const renderSortIndicator = (columnType: SortType) => {
+    if (sortType !== columnType) return null;
+
+    return sortDirection === SortDirection.Ascending ? (
+      <ArrowUp className="ml-1 h-3 w-3 inline" />
+    ) : (
+      <ArrowDown className="ml-1 h-3 w-3 inline" />
+    );
+  };
+
+  const renderHoverIndicator = (columnType: SortType) => {
+    if (sortType === columnType || hoveredColumn !== columnType) return null;
+
+    return <ArrowDown className="ml-1 h-3 w-3 inline opacity-70" />;
+  };
+
+  const filteredFolders = folders
+    .filter(function (folder) {
+      return folder.name.toLowerCase().includes(searchQuery.toLowerCase());
+    })
+    .sort((a, b) => {
+      let comparison = 0;
+
+      if (sortType === SortType.TimeCreated) {
+        comparison =
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      } else if (sortType === SortType.Alphabetical) {
+        comparison = a.name.localeCompare(b.name);
+      } else if (sortType === SortType.Files) {
+        comparison = b.files.length - a.files.length;
+      }
+
+      return sortDirection === SortDirection.Ascending
+        ? -comparison
+        : comparison;
+    });
 
   const renderNavigation = () => {
     if (currentFolder !== null) {
@@ -1047,7 +1141,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       className="max-w-4xl py-6 px-1 flex flex-col w-full !overflow-visible h-[70vh]"
       title={
         currentFolder
-          ? folders?.find((folder) => (folder.id = currentFolder))?.name
+          ? folders?.find((folder) => folder.id === currentFolder)?.name
           : "My Documents"
       }
     >
@@ -1087,13 +1181,56 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               <div className="pl-2 h-full flex-grow  overflow-y-auto max-h-full default-scrollbar pr-4">
                 <div className="flex ml-6 items-center border-b border-border dark:border-border-200 py-2 pr-3 text-sm font-medium text-text-400 dark:text-neutral-400">
                   <div className="flex pl-2 items-center gap-3 w-[65%] min-w-0">
-                    <span className="px-1">Name</span>
+                    <button
+                      onClick={() => handleSortChange(SortType.Alphabetical)}
+                      onMouseEnter={() =>
+                        setHoveredColumn(SortType.Alphabetical)
+                      }
+                      onMouseLeave={() => setHoveredColumn(null)}
+                      className="px-1 cursor-pointer flex items-center"
+                    >
+                      Name
+                      {renderSortIndicator(SortType.Alphabetical)}
+                      {renderHoverIndicator(SortType.Alphabetical)}
+                    </button>
                   </div>
                   <div className="w-[35%] text-right pr-4">
-                    {currentFolder === null ? "Files" : "Created"}
+                    <button
+                      onClick={() =>
+                        handleSortChange(
+                          currentFolder === null
+                            ? SortType.Files
+                            : SortType.TimeCreated
+                        )
+                      }
+                      onMouseEnter={() =>
+                        setHoveredColumn(
+                          currentFolder === null
+                            ? SortType.Files
+                            : SortType.TimeCreated
+                        )
+                      }
+                      onMouseLeave={() => setHoveredColumn(null)}
+                      className="cursor-pointer flex items-center justify-end w-full ml-auto"
+                    >
+                      <span className="ml-auto gap-x-1 flex items-center">
+                        {renderSortIndicator(
+                          currentFolder === null
+                            ? SortType.Files
+                            : SortType.TimeCreated
+                        )}
+                        {renderHoverIndicator(
+                          currentFolder === null
+                            ? SortType.Files
+                            : SortType.TimeCreated
+                        )}
+                        {currentFolder === null ? "Files" : "Created"}
+                      </span>
+                    </button>
                   </div>
                 </div>
 
+                {/* {JSON.stringify(folders)} */}
                 <DndContext
                   sensors={sensors}
                   onDragStart={handleDragStart}
@@ -1269,14 +1406,18 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                             type: "link",
                             lastModified: new Date().toISOString(),
                             token_count: 0,
+                            status: FileStatus.INDEXED,
                           };
                           addSelectedFile(createdFile);
+                          // Make sure to remove the uploading file indicator when done
                           markFileComplete(url);
                         }
 
                         await refreshFolders();
                       } catch (e) {
                         console.error("Error creating file from link:", e);
+                        // Also remove the uploading indicator on error
+                        markFileComplete(url);
                       } finally {
                         setIsCreatingFileFromLink(false);
                       }

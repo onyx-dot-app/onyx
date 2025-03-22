@@ -206,6 +206,19 @@ export const getFileIconFromFileNameAndLink = (
   } else if (extension === "xml") {
     return <XMLIcon className="h-4 w-4 shrink-0" />;
   } else {
-    return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    if (fileName.includes(".")) {
+      try {
+        // Check if fileName could be a valid domain when prefixed with https://
+        const url = new URL(`https://${fileName}`);
+        if (url.hostname === fileName) {
+          return <SearchResultIcon url={`https://${fileName}`} />;
+        }
+      } catch (e) {
+        // If URL construction fails, it's not a valid domain
+      }
+      return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    } else {
+      return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    }
   }
 };

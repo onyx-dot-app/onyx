@@ -381,6 +381,10 @@ def fetch_user_folders_for_documents(
     return result
 
 
+def get_user_file_from_id(db_session: Session, user_file_id: int) -> UserFile | None:
+    return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
 # def fetch_user_files_for_documents(
 # #     document_ids: list[str],
 # #     db_session: Session,

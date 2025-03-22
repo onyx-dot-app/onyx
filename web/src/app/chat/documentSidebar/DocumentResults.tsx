@@ -85,6 +85,10 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
     const tokenLimitReached = selectedDocumentTokens > maxTokens - 75;
 
     const hasSelectedDocuments = selectedDocumentIds.length > 0;
+    console.log("dedupedDocuments");
+    console.log(dedupedDocuments);
+    console.log("userFiles");
+    console.log(userFiles);
 
     return (
       <>
@@ -131,6 +135,11 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                     {userFiles?.map((file, index) => (
                       <FileSourceCardInResults
                         key={index}
+                        relevantDocument={dedupedDocuments.find(
+                          (doc) =>
+                            doc.document_id ===
+                            `FILE_CONNECTOR__${file.file_id}`
+                        )}
                         document={file}
                         setPresentingDocument={() =>
                           setPresentingDocument({

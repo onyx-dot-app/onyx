@@ -332,6 +332,9 @@ def _update_connector_credential_pair(
         cc_pair.total_docs_indexed += net_docs
     if status is not None:
         cc_pair.status = status
+    if cc_pair.is_user_file:
+        cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+
     db_session.commit()
 
 

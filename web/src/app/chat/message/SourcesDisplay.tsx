@@ -114,7 +114,8 @@ export const FileSourceCard: React.FC<{
 export const FileSourceCardInResults: React.FC<{
   document: FileResponse;
   setPresentingDocument: (document: FileResponse) => void;
-}> = ({ document, setPresentingDocument }) => {
+  relevantDocument: OnyxDocument | undefined;
+}> = ({ document, setPresentingDocument, relevantDocument }) => {
   const openDocument = () => {
     if (document.link_url) {
       window.open(document.link_url, "_blank");
@@ -125,32 +126,37 @@ export const FileSourceCardInResults: React.FC<{
   return (
     <button
       onClick={openDocument}
-      className="w-full h-[80px] p-4
+      className="w-full rounded-xl 
              text-left bg-background hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-700
-             cursor-pointer rounded-lg
-             flex flex-col justify-between
-             border border-neutral-200 dark:border-neutral-700"
+             cursor-pointer
+             flex flex-col 
+             border border-neutral-200 dark:border-neutral-700
+             px-3 py-2.5 my-1"
     >
-      <div
-        className="
-        text-neutral-900 dark:text-neutral-100 text-sm
-        font-medium leading-tight
-        whitespace-normal
-        break-all
-        line-clamp-2 
-        text-ellipsis
-      "
-      >
-        Content from {document.name}
-      </div>
-
-      <div className="flex items-center gap-2 mt-2">
+      <div className="flex items-center gap-2 mb-1">
         <div className="flex-shrink-0">
           {getFileIconFromFileNameAndLink(document.name, document.link_url)}
         </div>
-        <div className="text-text-700 text-xs leading-tight truncate flex-1 min-w-0 font-medium">
+        <div className="text-neutral-900 dark:text-neutral-300 text-sm font-semibold truncate flex-1 min-w-0">
           {truncateString(document.name, 45)}
         </div>
+      </div>
+
+      <div
+        className="
+        text-neutral-900 dark:text-neutral-300 text-sm
+        font-normal leading-snug
+        whitespace-normal
+        break-all
+        line-clamp-3
+        overflow-hidden
+        mt-2
+      "
+      >
+        {buildDocumentSummaryDisplay(
+          relevantDocument?.match_highlights || [],
+          relevantDocument?.blurb || ""
+        )}
       </div>
     </button>
   );

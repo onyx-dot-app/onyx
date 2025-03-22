@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/popover";
 import {
   FileResponse,
+  FileStatus,
   FolderResponse,
   useDocumentsContext,
 } from "../DocumentsContext";
@@ -33,6 +34,7 @@ import { AnimatedDots } from "../[id]/components/DocumentList";
 import { FolderMoveIcon } from "@/components/icons/icons";
 import { truncateString } from "@/lib/utils";
 import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
+import { usePopup } from "@/components/admin/connectors/Popup";
 
 interface FileListItemProps {
   file: FileResponse;
@@ -48,8 +50,8 @@ interface FileListItemProps {
   onDownload: (documentId: string) => Promise<void>;
   onMove: (fileId: number, targetFolderId: number) => Promise<void>;
   folders: FolderResponse[];
-  isIndexed: boolean;
-  failed: boolean;
+
+  status: FileStatus;
 }
 
 export const FileListItem: React.FC<FileListItemProps> = ({
@@ -61,9 +63,9 @@ export const FileListItem: React.FC<FileListItemProps> = ({
   onDownload,
   onMove,
   folders,
-  isIndexed,
-  failed,
+  status,
 }) => {
+  const { setPopup, popup } = usePopup();
   const [showMoveOptions, setShowMoveOptions] = useState(false);
   const [indexingStatus, setIndexingStatus] = useState<boolean | null>(null);
   const { getFilesIndexingStatus, refreshFolders } = useDocumentsContext();
@@ -132,9 +134,17 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                       }
                       setIndexingStatus(false); // Set to false to show indexing status
                       refreshFolders(); // Refresh the folder list
+                      setPopup({
+                        type: "success",
+                        message: "Reindexing will start shortly.",
+                      });
                     })
                     .catch((error) => {
                       console.error("Error reindexing file:", error);
+                      setPopup({
+                        type: "error",
+                        message: "Failed to reindex file",
+                      });
                     });
                 }}
               >
@@ -174,7 +184,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           {isSelected !== undefined && (
             <Checkbox checked={isSelected} className="mr-2 shrink-0" />
           )}
-          {file.failed ? (
+          {status === FileStatus.FAILED ? (
             <FailureWithPopover />
           ) : (
             getFileIconFromFileNameAndLink(file.name, file.link_url)
@@ -212,13 +222,14 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               N/A, indexing
               <AnimatedDots />
             </>
-          ) : file.token_count ? (
+          ) : indexingStatus != undefined && file.token_count !== undefined ? (
             `${file.token_count?.toLocaleString()} tokens`
           ) : (
             "N/A"
           )}
         </div>
       </div>
+      {popup}
 
       <div className="action-menu" onClick={(e) => e.stopPropagation()}>
         <Popover

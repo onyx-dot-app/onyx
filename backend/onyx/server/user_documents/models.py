@@ -1,11 +1,21 @@
 from datetime import datetime
+from enum import Enum as PyEnum
 from typing import List
 from uuid import UUID
 
 from pydantic import BaseModel
 
+from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.enums import IndexingStatus
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
+
+
+class UserFileStatus(str, PyEnum):
+    FAILED = "FAILED"
+    INDEXING = "INDEXING"
+    INDEXED = "INDEXED"
+    REINDEXING = "REINDEXING"
 
 
 class UserFileSnapshot(BaseModel):
@@ -20,7 +30,7 @@ class UserFileSnapshot(BaseModel):
     token_count: int | None
     indexed: bool
     link_url: str | None
-    failed: bool | None
+    status: UserFileStatus
 
     @classmethod
     def from_model(cls, model: UserFile) -> "UserFileSnapshot":
@@ -34,8 +44,26 @@ class UserFileSnapshot(BaseModel):
             created_at=model.created_at,
             assistant_ids=[assistant.id for assistant in model.assistants],
             token_count=model.token_count,
-            failed=len(model.cc_pair.index_attempts) > 0
-            and model.cc_pair.last_successful_index_time is None,
+            status=(
+                UserFileStatus.FAILED
+                if model.cc_pair
+                and len(model.cc_pair.index_attempts) > 0
+                and model.cc_pair.last_successful_index_time is None
+                and (
+                    model.cc_pair.status == ConnectorCredentialPairStatus.PAUSED
+                    or len(model.cc_pair.index_attempts) == 1
+                    and model.cc_pair.index_attempts[0].status == IndexingStatus.FAILED
+                )
+                else UserFileStatus.INDEXED
+                if model.cc_pair
+                and model.cc_pair.last_successful_index_time is not None
+                else UserFileStatus.REINDEXING
+                if model.cc_pair
+                and len(model.cc_pair.index_attempts) > 1
+                and model.cc_pair.last_successful_index_time is None
+                and model.cc_pair.status != ConnectorCredentialPairStatus.PAUSED
+                else UserFileStatus.INDEXING
+            ),
             indexed=model.cc_pair.last_successful_index_time is not None
             if model.cc_pair
             else False,

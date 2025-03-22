@@ -271,7 +271,6 @@ def _run_indexing(
                 "Search settings must be set for indexing. This should not be possible."
             )
 
-        # search_settings = index_attempt_start.search_settings
         db_connector = index_attempt_start.connector_credential_pair.connector
         db_credential = index_attempt_start.connector_credential_pair.credential
         ctx = RunIndexingContext(
@@ -709,6 +708,7 @@ def _run_indexing(
                 f"Connector succeeded: "
                 f"docs={document_count} chunks={chunk_count} elapsed={elapsed_time:.2f}s"
             )
+
         else:
             mark_attempt_partially_succeeded(index_attempt_id, db_session_temp)
             logger.info(

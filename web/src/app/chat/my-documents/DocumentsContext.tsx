@@ -22,6 +22,13 @@ export interface FolderResponse {
   created_at: string;
 }
 
+export enum FileStatus {
+  FAILED = "FAILED",
+  INDEXING = "INDEXING",
+  INDEXED = "INDEXED",
+  REINDEXING = "REINDEXING",
+}
+
 export type FileResponse = {
   id: number;
   name: string;
@@ -37,7 +44,7 @@ export type FileResponse = {
   file_id?: string;
   file_type?: string;
   link_url?: string | null;
-  failed?: boolean;
+  status: FileStatus;
 };
 
 export interface FileUploadResponse {

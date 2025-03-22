@@ -507,8 +507,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         onMove={onMove}
                         folders={folders}
                         onSelect={() => openDocument(file)}
-                        isIndexed={file.indexed || false}
-                        failed={file.failed || false}
+                        status={file.status}
                       />
                     )}
                   </div>
