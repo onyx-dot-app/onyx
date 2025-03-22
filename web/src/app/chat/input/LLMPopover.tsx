@@ -115,10 +115,7 @@ export default function LLMPopover({
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <button
-          className="dark:text-[#fff] text-[#000] focus:outline-none"
-          data-testid="llm-popover-trigger"
-        >
+        <div>
           <ChatInputOption
             minimize
             toggle
@@ -138,7 +135,7 @@ export default function LLMPopover({
             )}
             tooltipContent="Switch models"
           />
-        </button>
+        </div>
       </PopoverTrigger>
       <PopoverContent
         align="start"
@@ -177,17 +174,19 @@ export default function LLMPopover({
                   {llmManager.imageFilesPresent &&
                     !checkLLMSupportsImageInput(name) && (
                       <TooltipProvider>
-                        <Tooltip delayDuration={0}>
-                          <TooltipTrigger className="my-auto flex items-center ml-auto">
-                            <FiAlertTriangle className="text-alert" size={16} />
-                          </TooltipTrigger>
-                          <TooltipContent>
-                            <p className="text-xs">
-                              This LLM is not vision-capable and cannot process
-                              image files present in your chat session.
-                            </p>
-                          </TooltipContent>
-                        </Tooltip>
+                          <Tooltip delayDuration={0}>
+                            <TooltipTrigger asChild className="my-auto flex items-center ml-auto">
+                              <div>
+                                <FiAlertTriangle className="text-alert" size={16} />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">
+                                This LLM is not vision-capable and cannot process
+                                image files present in your chat session.
+                              </p>
+                            </TooltipContent>
+                          </Tooltip>
                       </TooltipProvider>
                     )}
                 </button>
