@@ -243,4 +243,4 @@ documents = [
 documents_dict = [doc.model_dump() for doc in documents]
 
 with open("./backend/onyx/seeding/initial_docs.json", "w") as json_file:
-    json.dump(documents_dict, json_file, indent=4)
+    json.dump(documents_dict, json_file, indent=4, ensure_ascii=False)

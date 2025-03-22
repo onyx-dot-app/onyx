@@ -118,7 +118,8 @@ def oauth_authorize(
             {
                 _DESIRED_RETURN_URL_KEY: desired_return_url,
                 _ADDITIONAL_KWARGS_KEY: additional_kwargs,
-            }
+            },
+            ensure_ascii=False
         ),
         ex=_OAUTH_STATE_EXPIRATION_SECONDS,
     )

@@ -36,11 +36,18 @@ def tool_call_tokens(
 ) -> int:
     request_tokens = len(
         llm_tokenizer.encode(
-            json.dumps(tool_call_summary.tool_call_request.tool_calls[0]["args"])
+            json.dumps(
+                tool_call_summary.tool_call_request.tool_calls[0]["args"],
+                ensure_ascii=False
+            )
         )
     )
     result_tokens = len(
-        llm_tokenizer.encode(json.dumps(tool_call_summary.tool_call_result.content))
+        llm_tokenizer.encode(
+            json.dumps(
+                tool_call_summary.tool_call_result.content,
+                ensure_ascii=False
+            ))
     )
 
     return request_tokens + result_tokens
