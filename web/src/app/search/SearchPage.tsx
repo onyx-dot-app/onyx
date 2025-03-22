@@ -86,8 +86,16 @@ import { SearchAnswer } from "./components/SearchAnswer";
 import { SourceIcon } from "@/components/SourceIcon";
 import { streamSearchWithCitation } from "./searchUtils";
 import { UserDropdown } from "@/components/UserDropdown";
-import { FiBook, FiTag } from "react-icons/fi";
+import { FiBook, FiTag, FiClock, FiUsers, FiFilter } from "react-icons/fi";
 import { PageSelector } from "@/components/PageSelector";
+import { Badge } from "@/components/ui/badge";
+import {
+  FilterBox,
+  SourceFilter,
+  TimeFilter,
+  AuthorFilter,
+} from "./components/FilterBox";
+import { MoreFiltersPopup } from "./components/MoreFiltersPopup";
 
 const TEMP_USER_MESSAGE_ID = -1;
 const TEMP_ASSISTANT_MESSAGE_ID = -2;
@@ -972,6 +980,51 @@ export default function SearchPage({
     {}
   );
 
+  // Filter state management
+  const [selectedAuthors, setSelectedAuthors] = useState<string[]>([]);
+  const [authors] = useState<string[]>([
+    "John Doe",
+    "Jane Smith",
+    "Alex Johnson",
+    "Maria Garcia",
+    "Sam Lee",
+  ]);
+
+  const handleAuthorSelect = (author: string) => {
+    setSelectedAuthors((prev) =>
+      prev.includes(author)
+        ? prev.filter((a) => a !== author)
+        : [...prev, author]
+    );
+  };
+
+  const handleSourceSelect = (source: SourceMetadata) => {
+    const isSelected = filterManager.selectedSources.some(
+      (s) => s.internalName === source.internalName
+    );
+
+    filterManager.setSelectedSources(
+      isSelected
+        ? filterManager.selectedSources.filter(
+            (s) => s.internalName !== source.internalName
+          )
+        : [...filterManager.selectedSources, source]
+    );
+
+    if (searchQuery) {
+      handleSearch(searchQuery);
+    }
+  };
+
+  const handleTimeSelect = (
+    range: { from: Date; to: Date; selectValue: string } | null
+  ) => {
+    filterManager.setTimeRange(range);
+    if (searchQuery) {
+      handleSearch(searchQuery);
+    }
+  };
+
   // Function to handle search using our new streamSearchWithCitation function
   const handleSearch = async (query: string) => {
     setFirstSearch(false);
@@ -1157,8 +1210,8 @@ export default function SearchPage({
             ref={masterFlexboxRef}
             className="flex h-full w-full overflow-x-hidden"
           >
-            <div className="flex pb-12 pt-12 md:mt-0 flex-col h-full w-full">
-              {/* Header with search inputrflow */}
+            <div className="flex pb-12 pt-12   md:mt-0 flex-col h-full w-full">
+              {/* Header with search input */}
               {!firstSearch && (
                 <div className="flex-none w-full flex justify-center p-4 border-b border-background-200">
                   <SearchInput
@@ -1172,7 +1225,6 @@ export default function SearchPage({
               {/* Main content area */}
               <div className="flex-grow overflow-hidden">
                 {searchQuery ? (
-                  // {true ? (
                   <div className="overflow-y-auto max-w-3xl w-[95%]  md:max-w-4xl flex relative mx-auto ">
                     {/* Filters */}
                     <div className="flex w-full h-screen relative">
@@ -1217,7 +1269,7 @@ export default function SearchPage({
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col  pb-12 items-center justify-center h-full">
+                  <div className="flex flex-col pb-12 items-center justify-center h-full">
                     <div className="text-center max-w-2xl w-full px-4">
                       <h2 className="text-3xl font-semibold mb-4">
                         Find knowledge across your enterprise
@@ -1227,79 +1279,81 @@ export default function SearchPage({
                         information you need.
                       </p>
 
-                      <div className="mb-8 w-full max-w-xl mx-auto">
+                      {/* Add search input to initial landing page */}
+                      <div className="mb-8 w-full  mx-auto">
                         <SearchInput
+                          hide={false}
                           onSearch={handleSearch}
-                          initialQuery={searchQuery}
-                          placeholder="Search for anything..."
+                          initialQuery=""
+                          placeholder="Find knowledge at your enterprise..."
                         />
                       </div>
 
-                      {/* Basic filters */}
-                      <div className="mt-6 flex flex-col gap-4 max-w-lg mx-auto">
-                        <h3 className="text-lg font-medium text-text-800">
-                          Popular filters
-                        </h3>
-                        <div className="flex flex-wrap gap-2 justify-center">
-                          {sources.slice(0, 5).map((source) => (
-                            <div
-                              key={source.internalName}
-                              className="flex items-center gap-2 bg-background-100 px-4 py-2 rounded-full cursor-pointer hover:bg-background-200 transition-colors"
-                              onClick={() => {
-                                filterManager.setSelectedSources([source]);
-                                setSelectedFilter(source.internalName);
-                                if (searchQuery) {
-                                  handleSearch(searchQuery);
-                                }
-                              }}
-                            >
-                              <SourceIcon
-                                sourceType={source.internalName}
-                                iconSize={18}
-                              />
-                              <span>{source.displayName}</span>
-                            </div>
-                          ))}
+                      {/* Filter boxes BELOW the search input */}
+                      <div className="flex w-full grid grid-cols-4 mt-6 gap-x-12 flex-nowrap">
+                        <FilterBox
+                          label="Source"
+                          icon={<FiFilter className="h-4 w-4" />}
+                          selected={filterManager.selectedSources.length > 0}
+                          count={
+                            filterManager.selectedSources.length || undefined
+                          }
+                          contentComponent={
+                            <SourceFilter
+                              sources={sources}
+                              selectedSources={filterManager.selectedSources}
+                              onSourceSelect={handleSourceSelect}
+                            />
+                          }
+                        />
 
-                          {documentSets.length > 0 && (
-                            <div
-                              className="flex items-center gap-2 bg-background-100 px-4 py-2 rounded-full cursor-pointer hover:bg-background-200 transition-colors"
-                              onClick={() => {
-                                setIsChatSearchModalOpen(true);
-                              }}
-                            >
-                              <FiBook size={18} />
-                              <span>Document Sets</span>
-                            </div>
-                          )}
-                        </div>
+                        <FilterBox
+                          label="Time Range"
+                          icon={<FiClock className="h-4 w-4" />}
+                          selected={filterManager.timeRange !== null}
+                          contentComponent={
+                            <TimeFilter
+                              selectedTimeRange={filterManager.timeRange}
+                              onTimeSelect={handleTimeSelect}
+                            />
+                          }
+                        />
 
-                        {tags.length > 0 && (
-                          <div className="mt-4">
-                            <h3 className="text-lg font-medium text-text-600 mb-2">
-                              Tags
-                            </h3>
-                            <div className="flex flex-wrap gap-2 justify-center">
-                              {tags.slice(0, 5).map((tag) => (
-                                <div
-                                  key={`${tag.tag_key}-${tag.tag_value}`}
-                                  className="flex items-center gap-1 bg-background-100 px-3 py-1 rounded-full cursor-pointer hover:bg-background-200 transition-colors"
-                                  onClick={() => {
-                                    filterManager.setSelectedTags([tag]);
-                                    if (searchQuery) {
-                                      handleSearch(searchQuery);
-                                    }
-                                  }}
-                                >
-                                  <FiTag size={14} />
-                                  <span className="text-sm">
-                                    {tag.tag_key}: {tag.tag_value}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                        <FilterBox
+                          label="Author"
+                          icon={<FiUsers className="h-4 w-4" />}
+                          selected={selectedAuthors.length > 0}
+                          count={selectedAuthors.length || undefined}
+                          contentComponent={
+                            <AuthorFilter
+                              authors={authors}
+                              selectedAuthors={selectedAuthors}
+                              onAuthorSelect={handleAuthorSelect}
+                            />
+                          }
+                        />
+
+                        <FilterBox
+                          label="More Filters"
+                          icon={<FiFilter className="h-4 w-4" />}
+                          selected={
+                            filterManager.selectedDocumentSets.length > 0 ||
+                            filterManager.selectedTags.length > 0
+                          }
+                          count={
+                            filterManager.selectedDocumentSets.length +
+                              filterManager.selectedTags.length || undefined
+                          }
+                          contentComponent={
+                            <MoreFiltersPopup
+                              filterManager={filterManager}
+                              availableSources={sources}
+                              availableDocumentSets={documentSets}
+                              availableTags={tags}
+                              trigger={<></>}
+                            />
+                          }
+                        />
                       </div>
                     </div>
                   </div>
