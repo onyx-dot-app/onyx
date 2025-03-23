@@ -5,13 +5,13 @@ import re
 import zipfile
 from collections.abc import Callable
 from collections.abc import Iterator
+from collections.abc import Sequence
 from email.parser import Parser as EmailParser
 from io import BytesIO
 from pathlib import Path
 from typing import Any
 from typing import IO
-from typing import List
-from typing import Tuple
+from typing import NamedTuple
 
 import chardet
 import docx  # type: ignore
@@ -219,7 +219,7 @@ def pdf_to_text(file: IO[Any], pdf_pass: str | None = None) -> str:
 
 def read_pdf_file(
     file: IO[Any], pdf_pass: str | None = None, extract_images: bool = False
-) -> tuple[str, dict, list[tuple[bytes, str]]]:
+) -> tuple[str, dict[str, Any], Sequence[tuple[bytes, str]]]:
     """
     Returns the text, basic PDF metadata, and optionally extracted images.
     """
@@ -282,13 +282,13 @@ def read_pdf_file(
 
 def docx_to_text_and_images(
     file: IO[Any],
-) -> Tuple[str, List[Tuple[bytes, str]]]:
+) -> tuple[str, Sequence[tuple[bytes, str]]]:
     """
     Extract text from a docx. If embed_images=True, also extract inline images.
     Return (text_content, list_of_images).
     """
     paragraphs = []
-    embedded_images: List[Tuple[bytes, str]] = []
+    embedded_images: list[tuple[bytes, str]] = []
 
     doc = docx.Document(file)
 
@@ -426,14 +426,22 @@ def extract_file_text(
         return ""
 
 
+class ExtractionResult(NamedTuple):
+    """Structured result from text and image extraction from various file types."""
+
+    text_content: str
+    embedded_images: Sequence[tuple[bytes, str]]
+    metadata: dict[str, Any]
+
+
 def extract_text_and_images(
     file: IO[Any],
     file_name: str,
     pdf_pass: str | None = None,
-) -> Tuple[str, List[Tuple[bytes, str]]]:
+) -> ExtractionResult:
     """
     Primary new function for the updated connector.
-    Returns (text_content, [(embedded_img_bytes, embedded_img_name), ...]).
+    Returns structured extraction result with text content, embedded images, and metadata.
     """
 
     try:
@@ -442,7 +450,9 @@ def extract_text_and_images(
             # If the user doesn't want embedded images, unstructured is fine
             file.seek(0)
             text_content = unstructured_to_text(file, file_name)
-            return (text_content, [])
+            return ExtractionResult(
+                text_content=text_content, embedded_images=[], metadata={}
+            )
 
         extension = get_file_ext(file_name)
 
@@ -450,54 +460,76 @@ def extract_text_and_images(
         if extension == ".docx":
             file.seek(0)
             text_content, images = docx_to_text_and_images(file)
-            return (text_content, images)
+            return ExtractionResult(
+                text_content=text_content, embedded_images=images, metadata={}
+            )
 
         # PDF example: we do not show complicated PDF image extraction here
         # so we simply extract text for now and skip images.
         if extension == ".pdf":
             file.seek(0)
-            text_content, _, images = read_pdf_file(file, pdf_pass, extract_images=True)
-            return (text_content, images)
+            text_content, pdf_metadata, images = read_pdf_file(
+                file, pdf_pass, extract_images=True
+            )
+            return ExtractionResult(
+                text_content=text_content, embedded_images=images, metadata=pdf_metadata
+            )
 
         # For PPTX, XLSX, EML, etc., we do not show embedded image logic here.
         # You can do something similar to docx if needed.
         if extension == ".pptx":
             file.seek(0)
-            return (pptx_to_text(file), [])
+            return ExtractionResult(
+                text_content=pptx_to_text(file), embedded_images=[], metadata={}
+            )
 
         if extension == ".xlsx":
             file.seek(0)
-            return (xlsx_to_text(file), [])
+            return ExtractionResult(
+                text_content=xlsx_to_text(file), embedded_images=[], metadata={}
+            )
 
         if extension == ".eml":
             file.seek(0)
-            return (eml_to_text(file), [])
+            return ExtractionResult(
+                text_content=eml_to_text(file), embedded_images=[], metadata={}
+            )
 
         if extension == ".epub":
             file.seek(0)
-            return (epub_to_text(file), [])
+            return ExtractionResult(
+                text_content=epub_to_text(file), embedded_images=[], metadata={}
+            )
 
         if extension == ".html":
             file.seek(0)
-            return (parse_html_page_basic(file), [])
+            return ExtractionResult(
+                text_content=parse_html_page_basic(file),
+                embedded_images=[],
+                metadata={},
+            )
 
         # If we reach here and it's a recognized text extension
         if is_text_file_extension(file_name):
             file.seek(0)
             encoding = detect_encoding(file)
-            text_content_raw, _ = read_text_file(
+            text_content_raw, file_metadata = read_text_file(
                 file, encoding=encoding, ignore_onyx_metadata=False
             )
-            return (text_content_raw, [])
+            return ExtractionResult(
+                text_content=text_content_raw,
+                embedded_images=[],
+                metadata=file_metadata,
+            )
 
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
         file.seek(0)
-        return ("", [])
+        return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
     except Exception as e:
         logger.exception(f"Failed to extract text/images from {file_name}: {e}")
-        return ("", [])
+        return ExtractionResult(text_content="", embedded_images=[], metadata={})
 
 
 def convert_docx_to_txt(

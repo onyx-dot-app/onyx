@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
@@ -31,6 +32,7 @@ from onyx.connectors.gong.connector import GongConnector
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_site.connector import GoogleSitesConnector
 from onyx.connectors.guru.connector import GuruConnector
+from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
 from onyx.connectors.interfaces import CheckpointConnector
@@ -119,6 +121,7 @@ def identify_connector_class(
         DocumentSource.FIREFLIES: FirefliesConnector,
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
+        DocumentSource.HIGHSPOT: HighspotConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }
@@ -183,6 +186,8 @@ def instantiate_connector(
 
         if new_credentials is not None:
             backend_update_credential_json(credential, new_credentials, db_session)
+
+    connector.set_allow_images(get_image_extraction_and_analysis_enabled())
 
     return connector
 

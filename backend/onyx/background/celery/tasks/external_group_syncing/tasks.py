@@ -41,7 +41,6 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_external_group_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -402,12 +401,7 @@ def connector_external_group_sync_generator_task(
                 task_logger.exception(
                     f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
                 )
-                update_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    status=ConnectorCredentialPairStatus.INVALID,
-                )
+                # TODO: add some notification to the admins here
                 raise
 
             source_type = cc_pair.connector.source
@@ -425,12 +419,9 @@ def connector_external_group_sync_generator_task(
             try:
                 external_user_groups = ext_group_sync_func(tenant_id, cc_pair)
             except ConnectorValidationError as e:
-                msg = f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
-                update_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    status=ConnectorCredentialPairStatus.INVALID,
+                # TODO: add some notification to the admins here
+                logger.exception(
+                    f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
                 )
                 raise e
 

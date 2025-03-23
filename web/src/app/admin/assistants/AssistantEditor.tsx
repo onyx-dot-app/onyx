@@ -61,7 +61,7 @@ import {
 import { buildImgUrl } from "@/app/chat/files/images/utils";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { debounce } from "lodash";
-import { FullLLMProvider } from "../configuration/llm/interfaces";
+import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
 
 import { Switch, SwitchField } from "@/components/ui/switch";
@@ -123,7 +123,7 @@ export function AssistantEditor({
   documentSets: DocumentSet[];
   user: User | null;
   defaultPublic: boolean;
-  llmProviders: FullLLMProvider[];
+  llmProviders: LLMProviderView[];
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
   admin?: boolean;

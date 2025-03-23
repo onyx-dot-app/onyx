@@ -65,11 +65,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 
     app.state.gpu_type = gpu_type
 
-    if TEMP_HF_CACHE_PATH.is_dir():
-        logger.notice("Moving contents of temp_huggingface to huggingface cache.")
-        _move_files_recursively(TEMP_HF_CACHE_PATH, HF_CACHE_PATH)
-        shutil.rmtree(TEMP_HF_CACHE_PATH, ignore_errors=True)
-        logger.notice("Moved contents of temp_huggingface to huggingface cache.")
+    try:
+        if TEMP_HF_CACHE_PATH.is_dir():
+            logger.notice("Moving contents of temp_huggingface to huggingface cache.")
+            _move_files_recursively(TEMP_HF_CACHE_PATH, HF_CACHE_PATH)
+            shutil.rmtree(TEMP_HF_CACHE_PATH, ignore_errors=True)
+            logger.notice("Moved contents of temp_huggingface to huggingface cache.")
+    except Exception as e:
+        logger.warning(
+            f"Error moving contents of temp_huggingface to huggingface cache: {e}. "
+            "This is not a critical error and the model server will continue to run."
+        )
 
     torch.set_num_threads(max(MIN_THREADS_ML_MODELS, torch.get_num_threads()))
     logger.notice(f"Torch Threads: {torch.get_num_threads()}")

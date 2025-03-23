@@ -170,7 +170,8 @@ def handle_message(
         respond_tag_only = channel_conf.get("respond_tag_only") or False
         respond_member_group_list = channel_conf.get("respond_member_group_list", None)
 
-    if respond_tag_only and not bypass_filters:
+    # NOTE: always respond in the DMs, as long the default config is not disabled.
+    if respond_tag_only and not bypass_filters and not is_bot_dm:
         logger.info(
             "Skipping message since the channel is configured such that "
             "OnyxBot only responds to tags"

@@ -41,6 +41,7 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.slack_bot import fetch_slack_bot
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -519,6 +520,25 @@ class SlackbotHandler:
 
 def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -> bool:
     """True to keep going, False to ignore this Slack request"""
+
+    # skip cases where the bot is disabled in the web UI
+    bot_tag_id = get_onyx_bot_slack_bot_id(client.web_client)
+    with get_session_with_current_tenant() as db_session:
+        slack_bot = fetch_slack_bot(
+            db_session=db_session, slack_bot_id=client.slack_bot_id
+        )
+        if not slack_bot:
+            logger.error(
+                f"Slack bot with ID '{client.slack_bot_id}' not found. Skipping request."
+            )
+            return False
+
+        if not slack_bot.enabled:
+            logger.info(
+                f"Slack bot with ID '{client.slack_bot_id}' is disabled. Skipping request."
+            )
+            return False
+
     if req.type == "events_api":
         # Verify channel is valid
         event = cast(dict[str, Any], req.payload.get("event", {}))
