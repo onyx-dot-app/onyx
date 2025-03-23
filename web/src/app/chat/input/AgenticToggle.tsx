@@ -5,7 +5,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { SearchIcon } from "lucide-react";
 
 interface AgenticToggleProps {
   proSearchEnabled: boolean;

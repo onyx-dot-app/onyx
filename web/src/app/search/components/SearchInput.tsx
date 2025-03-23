@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+import { useRouter } from "next/navigation";
 interface SearchInputProps {
   initialQuery?: string;
   onSearch: (query: string) => void;
@@ -27,6 +28,7 @@ export const SearchInput = ({
 }: SearchInputProps) => {
   const [query, setQuery] = useState(initialQuery);
   const [mode, setMode] = useState<ModeType>("search");
+  const router = useRouter();
 
   const handleSearch = () => {
     if (query.trim()) {
@@ -114,7 +116,10 @@ export const SearchInput = ({
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setMode("chat")}
+              onClick={() => {
+                setMode("chat");
+                router.push("/chat");
+              }}
               className="py-2 px-3 cursor-pointer"
             >
               <div className="flex flex-col">
@@ -125,7 +130,7 @@ export const SearchInput = ({
               </div>
             </DropdownMenuItem>
             <DropdownMenuItem
-              onClick={() => setMode("agent")}
+              onClick={() => router.push("/chat?agentic=true")}
               className="py-2 px-3 cursor-pointer"
             >
               <div className="flex flex-col">

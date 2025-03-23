@@ -1045,8 +1045,8 @@ export default function SearchPage({
         }
 
         if (response.documents.length > 0) {
-          alert(JSON.stringify(response.documents[0]));
           setSearchResults(response.documents);
+          console.log("searchResults", response.documents);
 
           // Count results by source type
           const counts: Record<string, number> = {};
@@ -1078,8 +1078,13 @@ export default function SearchPage({
 
   // Handle document click
   const handleDocumentClick = (document: OnyxDocument) => {
-    setPresentingDocument(document);
-    setDocumentSidebarVisible(true);
+    console.log("document", document);
+    if (document.link || document.document_id.startsWith("https://")) {
+      window.open(document.link || document.document_id, "_blank");
+    } else {
+      setPresentingDocument(document);
+      setDocumentSidebarVisible(true);
+    }
   };
   const [showAssistantsModal, setShowAssistantsModal] = useState(false);
 
@@ -1189,7 +1194,6 @@ export default function SearchPage({
                   currentChatSession={selectedChatSession}
                   folders={folders}
                   removeToggle={removeToggle}
-                  // showShareModal={showShareModal}
                 />
               </div>
             </div>
@@ -1251,8 +1255,37 @@ export default function SearchPage({
                       <div className="w-72 ml-4 sticky top-24 mt-4">
                         <SearchFilters
                           totalResults={searchResults.length}
-                          selectedFilter={selectedFilter}
-                          setSelectedFilter={setSelectedFilter}
+                          selectedSources={
+                            filterManager.selectedSources.length > 0
+                              ? filterManager.selectedSources.map(
+                                  (source) => source.internalName
+                                )
+                              : ["all"]
+                          }
+                          setSelectedSources={(sourceNames) => {
+                            // If "all" is selected, clear all source filters
+                            if (sourceNames.includes("all")) {
+                              filterManager.setSelectedSources([]);
+                              return;
+                            }
+
+                            // Convert source names back to SourceMetadata objects
+                            const sourceMetadataArray = sourceNames
+                              .map((sourceName) => {
+                                // Find the corresponding source metadata from available sources
+                                const sourceMetadata = sources.find(
+                                  (s) => s.internalName === sourceName
+                                );
+
+                                // If found, return the full source metadata object
+                                return sourceMetadata as SourceMetadata;
+                              })
+                              .filter(Boolean) as SourceMetadata[];
+
+                            filterManager.setSelectedSources(
+                              sourceMetadataArray
+                            );
+                          }}
                           availableSources={sources}
                           sourceResults={sourceResults}
                           filterManager={filterManager}
@@ -1328,6 +1361,7 @@ export default function SearchPage({
                             }
                           />
                         )}
+
                         {tags.length > 0 ||
                           (documentSets.length > 0 && (
                             <FilterBox

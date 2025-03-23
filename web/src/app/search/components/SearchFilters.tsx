@@ -11,8 +11,8 @@ import { MoreFiltersPopup } from "./MoreFiltersPopup";
 
 interface SearchFiltersProps {
   totalResults: number;
-  selectedFilter: string;
-  setSelectedFilter: (filter: string) => void;
+  selectedSources: string[];
+  setSelectedSources: (sources: string[]) => void;
   availableSources: SourceMetadata[];
   sourceResults: Record<string, number>;
   filterManager: FilterManager;
@@ -22,14 +22,39 @@ interface SearchFiltersProps {
 
 export function SearchFilters({
   totalResults,
-  selectedFilter,
-  setSelectedFilter,
+  selectedSources,
+  setSelectedSources,
   availableSources,
   sourceResults,
   filterManager,
   availableDocumentSets,
   availableTags,
 }: SearchFiltersProps) {
+  // Toggle source selection
+  const toggleSource = (source: string) => {
+    if (source === "all") {
+      // If "All" is clicked, either select only "all" or clear if already selected
+      setSelectedSources(selectedSources.includes("all") ? [] : ["all"]);
+    } else {
+      // If any other source is clicked
+      const newSelectedSources = [...selectedSources].filter(
+        (s) => s !== "all"
+      );
+
+      // Toggle the clicked source
+      if (newSelectedSources.includes(source)) {
+        newSelectedSources.splice(newSelectedSources.indexOf(source), 1);
+      } else {
+        newSelectedSources.push(source);
+      }
+
+      // If no sources are selected, default to "all"
+      setSelectedSources(
+        newSelectedSources.length > 0 ? newSelectedSources : ["all"]
+      );
+    }
+  };
+
   return (
     <div className="flex flex-col w-full">
       <div className="flex items-center justify-between mb-2">
@@ -44,8 +69,8 @@ export function SearchFilters({
           label="All"
           icon={<SearchIcon size={16} className="text-gray-500" />}
           count={totalResults}
-          isSelected={selectedFilter === "all"}
-          onClick={() => setSelectedFilter("all")}
+          isSelected={selectedSources.includes("all")}
+          onClick={() => toggleSource("all")}
         />
 
         {availableSources.map((source) => (
@@ -53,8 +78,8 @@ export function SearchFilters({
             key={source.internalName}
             label={source.displayName}
             count={sourceResults[source.internalName] || 0}
-            isSelected={selectedFilter === source.internalName}
-            onClick={() => setSelectedFilter(source.internalName)}
+            isSelected={selectedSources.includes(source.internalName)}
+            onClick={() => toggleSource(source.internalName)}
             icon={<SourceIcon sourceType={source.internalName} iconSize={16} />}
           />
         ))}
@@ -81,7 +106,6 @@ export function SearchFilters({
                     Active
                   </span>
                 )}
-                <span className="text-sm text-gray-500">0</span>
               </div>
             </div>
           }

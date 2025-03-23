@@ -1,18 +1,19 @@
 "use client";
 
-import { ArrayHelpers, ErrorMessage, Field, useFormikContext } from "formik";
+import { ArrayHelpers } from "formik";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useEffect, useState } from "react";
-import { FiTrash2, FiRefreshCcw, FiRefreshCw } from "react-icons/fi";
-import { StarterMessage } from "./interfaces";
+import { useState } from "react";
+import { FiTrash2, FiRefreshCw } from "react-icons/fi";
+
 import { Button } from "@/components/ui/button";
 import { SwapIcon } from "@/components/icons/icons";
 import { TextFormField } from "@/components/admin/connectors/Field";
+import { StarterMessage } from "./interfaces";
 
 export default function StarterMessagesList({
   values,

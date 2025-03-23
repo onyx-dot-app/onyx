@@ -78,57 +78,33 @@ export async function* streamSearchWithCitation({
 
   // Since fast-search is not streaming, we need to process the complete response
   const searchResults = await response.json();
+  console.log("searchResults", searchResults);
 
   // Convert results to OnyxDocument format
-  const documents: OnyxDocument[] = searchResults.results.map(
-    (result: FastSearchResult) => {
-      // Create a blurb from the content (first 200 chars)
-      const blurb =
-        result.content.substring(0, 200) +
-        (result.content.length > 200 ? "..." : "");
+  try {
+    const documents: OnyxDocument[] = searchResults.results;
 
-      // Get the source link if available
-      const link =
-        result.source_links && result.source_links.length > 0
-          ? result.source_links[0]
-          : null;
+    console.log("documents", documents);
 
-      // Convert to OnyxDocument format
-      return {
-        document_id: result.document_id,
-        chunk_ind: result.chunk_id,
-        content: result.content,
-        source_type: result.metadata?.source_type || "unknown",
-        semantic_identifier: result.metadata?.semantic_identifier || "Unknown",
-        score: result.score || 0,
-        metadata: result.metadata || {},
-        match_highlights: [],
-        is_internet: false,
-        link: link,
-        updated_at: result.metadata?.updated_at
-          ? new Date(result.metadata.updated_at).toISOString()
-          : null,
-        blurb: blurb,
-        primary_owners: result.metadata?.primary_owners || [],
-        secondary_owners: result.metadata?.secondary_owners || [],
-        boost: result.metadata?.boost || 0,
-        hidden: result.metadata?.hidden || false,
-        validationState: null,
-      };
-    }
-  );
+    // First yield just the documents to maintain similar streaming behavior
+    yield {
+      answer: null,
+      documents,
+      error: null,
+    };
 
-  // First yield just the documents to maintain similar streaming behavior
-  yield {
-    answer: null,
-    documents,
-    error: null,
-  };
-
-  // Final yield with completed results
-  yield {
-    answer: null,
-    documents,
-    error: null,
-  };
+    // Final yield with completed results
+    yield {
+      answer: null,
+      documents,
+      error: null,
+    };
+  } catch (error) {
+    console.error("Error in streamSearchWithCitation", error);
+    yield {
+      answer: null,
+      documents: [],
+      error: `Error: ${error}`,
+    };
+  }
 }

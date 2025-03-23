@@ -5,8 +5,6 @@ import {
   PopoverContent,
 } from "@/components/ui/popover";
 import { SourceMetadata } from "@/lib/search/interfaces";
-import { FilterManager } from "@/lib/hooks";
-import { DocumentSet, Tag } from "@/lib/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { Badge } from "@/components/ui/badge";
 import { Check, ChevronDown } from "lucide-react";
