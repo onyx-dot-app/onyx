@@ -1,6 +1,9 @@
 from collections import defaultdict
 
+from onyx.configs.kg_configs import KG_OWN_COMPANY
+from onyx.configs.kg_configs import KG_OWN_EMAIL_DOMAINS
 from onyx.kg.models import KGAggregatedExtractions
+from onyx.kg.models import KGPerson
 
 
 def format_entity(entity: str) -> str:
@@ -57,3 +60,18 @@ def aggregate_kg_extractions(
         for term, count in connector_aggregated_kg_extractions.terms.items():
             aggregated_kg_extractions.terms[term] += count
     return aggregated_kg_extractions
+
+
+def kg_email_processing(email: str) -> KGPerson:
+    """
+    Process the email.
+    """
+    name, company_domain = email.split("@")
+
+    employee = any(domain in company_domain for domain in KG_OWN_EMAIL_DOMAINS)
+    if employee:
+        company = KG_OWN_COMPANY
+    else:
+        company = company_domain.capitalize()
+
+    return KGPerson(name=name, company=company, employee=employee)

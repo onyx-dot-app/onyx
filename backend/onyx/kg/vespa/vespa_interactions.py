@@ -30,7 +30,14 @@ def get_document_chunks_for_kg_processing(
         chunk_request=VespaChunkRequest(document_id=document_id),
         index_name=index_name,
         filters=IndexFilters(access_control_list=None),
-        field_names=["title", "content", "metadata"],
+        field_names=[
+            "title",
+            "content",
+            "metadata",
+            "primary_owners",
+            "secondary_owners",
+            "source_type",
+        ],
         get_large_chunks=False,
     )
 
@@ -46,6 +53,9 @@ def get_document_chunks_for_kg_processing(
                 connector_id=None,  # We may need to adjust this
                 document_id=document_id,
                 chunk_id=i,
+                primary_owners=fields.get("primary_owners", []),
+                secondary_owners=fields.get("secondary_owners", []),
+                source_type=fields.get("source_type", ""),
                 title=fields.get("title", ""),
                 content=fields.get("content", ""),
                 metadata=fields.get("metadata", {}),

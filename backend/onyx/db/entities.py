@@ -1,3 +1,6 @@
+from sqlalchemy import literal_column
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGEntity
@@ -21,8 +24,9 @@ def add_entity(
     db_session: Session,
     entity_type: str,
     name: str,
+    document_id: str | None = None,
     cluster_count: int = 0,
-) -> "KGEntity":
+) -> "KGEntity | None":
     """Add a new entity to the database.
 
     Args:
@@ -39,14 +43,45 @@ def add_entity(
     id_name = f"{entity_type}:{name}"
 
     # Create new entity
-    entity = KGEntity(
-        id_name=id_name,
-        entity_type_id_name=entity_type,
-        name=name,
-        cluster_count=cluster_count,
+    stmt = (
+        pg_insert(KGEntity)
+        .values(
+            id_name=id_name,
+            entity_type_id_name=entity_type,
+            document_id=document_id,
+            name=name,
+            cluster_count=cluster_count,
+        )
+        .on_conflict_do_update(
+            index_elements=["id_name"],
+            set_=dict(
+                # Direct numeric addition without text()
+                cluster_count=KGEntity.cluster_count
+                + literal_column("EXCLUDED.cluster_count"),
+                # Keep other fields updated as before
+                entity_type_id_name=entity_type,
+                document_id=document_id,
+                name=name,
+            ),
+        )
+        .returning(KGEntity)
     )
 
-    db_session.add(entity)
-    db_session.flush()  # Flush to get any DB errors early
+    result = db_session.execute(stmt).scalar()
+    return result
 
-    return entity
+
+def get_kg_entity_by_document(db: Session, document_id: str) -> KGEntity | None:
+    """
+    Check if a document_id exists in the kg_entities table and return its id_name if found.
+
+    Args:
+        db: SQLAlchemy database session
+        document_id: The document ID to search for
+
+    Returns:
+        The id_name of the matching KGEntity if found, None otherwise
+    """
+    query = select(KGEntity).where(KGEntity.document_id == document_id)
+    result = db.execute(query).scalar()
+    return result

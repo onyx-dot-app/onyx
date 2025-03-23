@@ -17,6 +17,7 @@ from onyx.kg.models import KGBatchExtractionStats
 from onyx.kg.models import KGChunkExtraction
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGChunkId
+from onyx.kg.utils.chunk_preprocessing import prepare_llm_content
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
 from onyx.llm.factory import get_default_llms
@@ -92,87 +93,103 @@ def kg_extraction(
                 connector_id,
             )
 
-            for unprocessed_document in unprocessed_documents:
-                formatted_chunk_batches = get_document_chunks_for_kg_processing(
-                    unprocessed_document.id,
-                    index_name,
-                    batch_size=processing_chunk_batch_size,
-                )
+            # TODO: restricted for testing only
+            unprocessed_documents_list = list(unprocessed_documents)
 
-                for formatted_chunk_batch in formatted_chunk_batches:
-                    processing_chunks.extend(formatted_chunk_batch)
-
-                    if len(processing_chunks) >= processing_chunk_batch_size:
-                        carryover_chunks.extend(
-                            processing_chunks[processing_chunk_batch_size:]
-                        )
-                        processing_chunks = processing_chunks[
-                            :processing_chunk_batch_size
-                        ]
-
-                        chunk_processing_batch_results = _kg_chunk_batch_extraction(
-                            processing_chunks, index_name, tenant_id
-                        )
-
-                        # Consider removing the stats expressions here and rather write to the db(?)
-                        connector_failed_chunk_extractions.extend(
-                            chunk_processing_batch_results.failed
-                        )
-                        connector_succeeded_chunk_extractions.extend(
-                            chunk_processing_batch_results.succeeded
-                        )
-
-                        aggregated_batch_extractions = (
-                            chunk_processing_batch_results.aggregated_kg_extractions
-                        )
-                        connector_aggregated_kg_extractions.entities.update(
-                            aggregated_batch_extractions.entities
-                        )
-                        connector_aggregated_kg_extractions.relationships.update(
-                            aggregated_batch_extractions.relationships
-                        )
-                        connector_aggregated_kg_extractions.terms.update(
-                            aggregated_batch_extractions.terms
-                        )
-
-                        processing_chunks = carryover_chunks
-
-            # processes remaining chunks
-            chunk_processing_batch_results = _kg_chunk_batch_extraction(
-                processing_chunks, index_name, tenant_id
+        unprocessed_documents_list = [
+            unprocessed_documents_list[0],
+            unprocessed_documents_list[6],
+        ]
+        for unprocessed_document in unprocessed_documents_list:
+            formatted_chunk_batches = get_document_chunks_for_kg_processing(
+                unprocessed_document.id,
+                index_name,
+                batch_size=processing_chunk_batch_size,
             )
 
-            # Consider removing the stats expressions here and rather write to the db(?)
-            connector_failed_chunk_extractions.extend(
-                chunk_processing_batch_results.failed
-            )
-            connector_succeeded_chunk_extractions.extend(
-                chunk_processing_batch_results.succeeded
-            )
+            formatted_chunk_batches_list = list(formatted_chunk_batches)
 
-            aggregated_batch_extractions = (
-                chunk_processing_batch_results.aggregated_kg_extractions
-            )
-            connector_aggregated_kg_extractions.entities.update(
-                aggregated_batch_extractions.entities
-            )
-            connector_aggregated_kg_extractions.relationships.update(
-                aggregated_batch_extractions.relationships
-            )
-            connector_aggregated_kg_extractions.terms.update(
-                aggregated_batch_extractions.terms
-            )
+            for formatted_chunk_batch in formatted_chunk_batches_list:
+                processing_chunks.extend(formatted_chunk_batch)
 
-            connector_extraction_stats.append(
-                ConnectorExtractionStats(
-                    connector_id=connector_id,
-                    num_failed=len(connector_failed_chunk_extractions),
-                    num_succeeded=len(connector_succeeded_chunk_extractions),
-                )
-            )
+                if len(processing_chunks) >= processing_chunk_batch_size:
+                    carryover_chunks.extend(
+                        processing_chunks[processing_chunk_batch_size:]
+                    )
+                    processing_chunks = processing_chunks[:processing_chunk_batch_size]
 
-            processing_chunks = []
-            carryover_chunks = []
+                    chunk_processing_batch_results = _kg_chunk_batch_extraction(
+                        processing_chunks, index_name, tenant_id
+                    )
+
+                    # Consider removing the stats expressions here and rather write to the db(?)
+                    connector_failed_chunk_extractions.extend(
+                        chunk_processing_batch_results.failed
+                    )
+                    connector_succeeded_chunk_extractions.extend(
+                        chunk_processing_batch_results.succeeded
+                    )
+
+                    aggregated_batch_extractions = (
+                        chunk_processing_batch_results.aggregated_kg_extractions
+                    )
+                    connector_aggregated_kg_extractions.entities.update(
+                        aggregated_batch_extractions.entities
+                    )
+                    connector_aggregated_kg_extractions.relationships.update(
+                        aggregated_batch_extractions.relationships
+                    )
+                    connector_aggregated_kg_extractions.terms.update(
+                        aggregated_batch_extractions.terms
+                    )
+
+                    processing_chunks = carryover_chunks.copy()
+                    carryover_chunks = []
+
+                    connector_extraction_stats.append(
+                        ConnectorExtractionStats(
+                            connector_id=connector_id,
+                            num_failed=len(connector_failed_chunk_extractions),
+                            num_succeeded=len(connector_succeeded_chunk_extractions),
+                            num_processed=len(processing_chunks),
+                        )
+                    )
+
+        # processes remaining chunks
+        chunk_processing_batch_results = _kg_chunk_batch_extraction(
+            processing_chunks, index_name, tenant_id
+        )
+
+        # Consider removing the stats expressions here and rather write to the db(?)
+        connector_failed_chunk_extractions.extend(chunk_processing_batch_results.failed)
+        connector_succeeded_chunk_extractions.extend(
+            chunk_processing_batch_results.succeeded
+        )
+
+        aggregated_batch_extractions = (
+            chunk_processing_batch_results.aggregated_kg_extractions
+        )
+        connector_aggregated_kg_extractions.entities.update(
+            aggregated_batch_extractions.entities
+        )
+        connector_aggregated_kg_extractions.relationships.update(
+            aggregated_batch_extractions.relationships
+        )
+        connector_aggregated_kg_extractions.terms.update(
+            aggregated_batch_extractions.terms
+        )
+
+        connector_extraction_stats.append(
+            ConnectorExtractionStats(
+                connector_id=connector_id,
+                num_failed=len(connector_failed_chunk_extractions),
+                num_succeeded=len(connector_succeeded_chunk_extractions),
+                num_processed=len(processing_chunks),
+            )
+        )
+
+        processing_chunks = []
+        carryover_chunks = []
 
         connector_aggregated_kg_extractions_list.append(
             connector_aggregated_kg_extractions
@@ -186,13 +203,27 @@ def kg_extraction(
         entity,
         extraction_count,
     ) in aggregated_kg_extractions.entities.items():
+        if len(entity.split(":")) != 2:
+            logger.error(
+                f"Invalid entity {entity} in aggregated_kg_extractions.entities"
+            )
+            continue
+
         entity_type, entity_name = entity.split(":")
         entity_type = entity_type.upper()
         entity_name = entity_name.capitalize()
 
-        with get_session_with_current_tenant() as db_session:
-            add_entity(db_session, entity_type, entity_name, extraction_count)
-            db_session.commit()
+        try:
+            with get_session_with_current_tenant() as db_session:
+                add_entity(
+                    db_session=db_session,
+                    entity_type=entity_type,
+                    name=entity_name,
+                    cluster_count=extraction_count,
+                )
+                db_session.commit()
+        except Exception as e:
+            logger.error(f"Error adding entity {entity} to the database: {e}")
 
     relationship_type_counter: dict[str, int] = defaultdict(int)
 
@@ -218,16 +249,27 @@ def kg_extraction(
             relationship_type,
             target_entity_type,
         ) = relationship_type_id_name.split("__")
-        with get_session_with_current_tenant() as db_session:
-            add_relationship_type(
-                db_session=db_session,
-                source_entity_type=source_entity_type.upper(),
-                relationship_type=relationship_type,
-                target_entity_type=target_entity_type.upper(),
-                definition=False,
-                extraction_count=extraction_count,
+
+        try:
+            with get_session_with_current_tenant() as db_session:
+                try:
+                    add_relationship_type(
+                        db_session=db_session,
+                        source_entity_type=source_entity_type.upper(),
+                        relationship_type=relationship_type,
+                        target_entity_type=target_entity_type.upper(),
+                        definition=False,
+                        extraction_count=extraction_count,
+                    )
+                    db_session.commit()
+                except Exception as e:
+                    logger.error(
+                        f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
+                    )
+        except Exception as e:
+            logger.error(
+                f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
             )
-            db_session.commit()
 
     for (
         relationship,
@@ -237,9 +279,14 @@ def kg_extraction(
         source_entity_type = source_entity.split(":")[0]
         target_entity_type = target_entity.split(":")[0]
 
-        with get_session_with_current_tenant() as db_session:
-            add_relationship(db_session, relationship, extraction_count)
-            db_session.commit()
+        try:
+            with get_session_with_current_tenant() as db_session:
+                add_relationship(db_session, relationship, extraction_count)
+                db_session.commit()
+        except Exception as e:
+            logger.error(
+                f"Error adding relationship {relationship} to the database: {e}"
+            )
 
     return connector_extraction_stats
 
@@ -266,7 +313,12 @@ def _kg_chunk_batch_extraction(
 
         # For now, we're just processing the content
         # TODO: Implement actual prompt application logic
-        formatted_prompt = preformatted_prompt.replace("---content---", chunk.content)
+
+        llm_preprocessing = prepare_llm_content(chunk)
+
+        formatted_prompt = preformatted_prompt.replace(
+            "---content---", llm_preprocessing.llm_context
+        )
 
         try:
             logger.info(
@@ -276,7 +328,10 @@ def _kg_chunk_batch_extraction(
             extraction_result = message_to_string(raw_extraction_result)
 
             try:
-                parsed_result = json.loads(extraction_result)
+                cleaned_result = (
+                    extraction_result.replace("```json", "").replace("```", "").strip()
+                )
+                parsed_result = json.loads(cleaned_result)
                 extracted_entities = parsed_result.get("entities", [])
                 extracted_relationships = parsed_result.get("relationships", [])
                 extracted_terms = parsed_result.get("terms", [])
@@ -295,6 +350,10 @@ def _kg_chunk_batch_extraction(
                     kg_update_requests=kg_updates,
                     index_name=index_name,
                     tenant_id=tenant_id,
+                )
+
+                logger.info(
+                    f"KG updated: {chunk.chunk_id} from doc {chunk.document_id}"
                 )
 
                 return True, kg_updates[0]  # only single chunk
@@ -325,7 +384,7 @@ def _kg_chunk_batch_extraction(
                 terms=set(),
             )
 
-    # Assume for prototype: use_threads = True
+    # Assume for prototype: use_threads = True. TODO: Make thread safe!
 
     functions_with_args: list[tuple[Callable, tuple]] = [
         (process_single_chunk, (chunk, preformatted_prompt)) for chunk in chunks

@@ -9,6 +9,9 @@ class KGChunkFormat(BaseModel):
     chunk_id: int
     title: str
     content: str
+    primary_owners: list[str]
+    secondary_owners: list[str]
+    source_type: str
     metadata: dict[str, str | list[str]] | None = None
 
 
@@ -44,3 +47,10 @@ class ConnectorExtractionStats(BaseModel):
     connector_id: int
     num_succeeded: int
     num_failed: int
+    num_processed: int
+
+
+class KGPerson(BaseModel):
+    name: str
+    company: str
+    employee: bool
