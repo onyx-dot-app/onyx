@@ -340,8 +340,12 @@ def _ticket_to_document(
 
 
 class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
-    after_cursor: str | None
-    next_start_time: int | None
+    # We use cursor-based paginated retrieval for articles
+    after_cursor_articles: str | None
+
+    # We use timestamp-based paginated retrieval for tickets
+    next_start_time_tickets: int | None
+
     cached_author_map: dict[str, BasicExpertInfo] | None
     cached_content_tags: dict[str, str] | None
 
@@ -382,12 +386,15 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
 
         if not checkpoint.cached_content_tags:
             checkpoint.cached_content_tags = _get_content_tag_mapping(self.client)
+            return checkpoint  # save the content tags to the checkpoint
         self.content_tags = checkpoint.cached_content_tags
 
         if self.content_type == "articles":
-            return self._retrieve_articles(start, end, checkpoint)
+            checkpoint = yield from self._retrieve_articles(start, end, checkpoint)
+            return checkpoint
         elif self.content_type == "tickets":
-            return self._retrieve_tickets(start, end, checkpoint)
+            checkpoint = yield from self._retrieve_tickets(start, end, checkpoint)
+            return checkpoint
         else:
             raise ValueError(f"Unsupported content_type: {self.content_type}")
 
@@ -400,63 +407,63 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
         checkpoint = copy.deepcopy(checkpoint)
         # This one is built on the fly as there may be more many more authors than tags
         author_map: dict[str, BasicExpertInfo] = checkpoint.cached_author_map or {}
-        after_cursor = checkpoint.after_cursor
+        after_cursor = checkpoint.after_cursor_articles
         doc_batch: list[Document] = []
 
-        # ensure at least one document is retrieved (connector makes progress)
-        while len(doc_batch) == 0:
-            response = _get_article_page(
-                self.client,
-                start_time=int(start) if start else None,
-                after_cursor=after_cursor,
-            )
-            articles = response.data
-            has_more = response.has_more
-            after_cursor = response.meta.get("after_cursor")
-            for article in articles:
-                if (
-                    article.get("body") is None
-                    or article.get("draft")
-                    or any(
-                        label in ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
-                        for label in article.get("label_names", [])
-                    )
-                ):
-                    continue
+        response = _get_article_page(
+            self.client,
+            start_time=int(start) if start else None,
+            after_cursor=after_cursor,
+        )
+        articles = response.data
+        has_more = response.has_more
+        after_cursor = response.meta.get("after_cursor")
+        for article in articles:
+            if (
+                article.get("body") is None
+                or article.get("draft")
+                or any(
+                    label in ZENDESK_CONNECTOR_SKIP_ARTICLE_LABELS
+                    for label in article.get("label_names", [])
+                )
+            ):
+                continue
 
-                try:
-                    new_author_map, document = _article_to_document(
-                        article, self.content_tags, author_map, self.client
-                    )
-                except Exception as e:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"{article.get('id')}",
-                            document_link=article.get("html_url", ""),
-                        ),
-                        failure_message=str(e),
-                        exception=e,
-                    )
-                    continue
+            try:
+                new_author_map, document = _article_to_document(
+                    article, self.content_tags, author_map, self.client
+                )
+            except Exception as e:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=f"{article.get('id')}",
+                        document_link=article.get("html_url", ""),
+                    ),
+                    failure_message=str(e),
+                    exception=e,
+                )
+                continue
 
-                if new_author_map:
-                    author_map.update(new_author_map)
+            if new_author_map:
+                author_map.update(new_author_map)
 
-                doc_batch.append(document)
+            doc_batch.append(document)
 
-            if not has_more:
-                yield from doc_batch
-                checkpoint.has_more = False
-                return checkpoint
+        if not has_more:
+            yield from doc_batch
+            checkpoint.has_more = False
+            return checkpoint
 
-        # At least one document was retrieved, but generally its a full page
-        # of documents.
+        # Sometimes no documents are retrieved, but the cursor
+        # is still updated so the connector makes progress.
         yield from doc_batch
-        checkpoint.after_cursor = after_cursor
+        checkpoint.after_cursor_articles = after_cursor
+
+        last_doc_updated_at = doc_batch[-1].doc_updated_at if doc_batch else None
         checkpoint.has_more = bool(
             end is None
-            or doc_batch[-1].doc_updated_at is None
-            or doc_batch[-1].doc_updated_at.timestamp() <= end
+            or last_doc_updated_at is None
+            or last_doc_updated_at.timestamp() <= end
         )
         checkpoint.cached_author_map = (
             author_map if len(author_map) <= MAX_AUTHOR_MAP_SIZE else None
@@ -476,50 +483,50 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
         author_map: dict[str, BasicExpertInfo] = checkpoint.cached_author_map or {}
 
         doc_batch: list[Document] = []
-        next_start_time = int(checkpoint.next_start_time or start or 0)
-        while len(doc_batch) == 0:
-            ticket_response = _get_tickets_page(self.client, start_time=next_start_time)
-            tickets = ticket_response.data
-            has_more = ticket_response.has_more
-            next_start_time = ticket_response.meta["end_time"]
-            for ticket in tickets:
-                if ticket.get("status") == "deleted":
-                    continue
+        next_start_time = int(checkpoint.next_start_time_tickets or start or 0)
+        ticket_response = _get_tickets_page(self.client, start_time=next_start_time)
+        tickets = ticket_response.data
+        has_more = ticket_response.has_more
+        next_start_time = ticket_response.meta["end_time"]
+        for ticket in tickets:
+            if ticket.get("status") == "deleted":
+                continue
 
-                try:
-                    new_author_map, document = _ticket_to_document(
-                        ticket=ticket,
-                        author_map=author_map,
-                        client=self.client,
-                        default_subdomain=self.subdomain,
-                    )
-                except Exception as e:
-                    yield ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=f"{ticket.get('id')}",
-                            document_link=ticket.get("url", ""),
-                        ),
-                        failure_message=str(e),
-                        exception=e,
-                    )
-                    continue
+            try:
+                new_author_map, document = _ticket_to_document(
+                    ticket=ticket,
+                    author_map=author_map,
+                    client=self.client,
+                    default_subdomain=self.subdomain,
+                )
+            except Exception as e:
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=f"{ticket.get('id')}",
+                        document_link=ticket.get("url", ""),
+                    ),
+                    failure_message=str(e),
+                    exception=e,
+                )
+                continue
 
-                if new_author_map:
-                    author_map.update(new_author_map)
+            if new_author_map:
+                author_map.update(new_author_map)
 
-                doc_batch.append(document)
+            doc_batch.append(document)
 
-            if not has_more:
-                yield from doc_batch
-                checkpoint.has_more = False
-                return checkpoint
+        if not has_more:
+            yield from doc_batch
+            checkpoint.has_more = False
+            return checkpoint
 
         yield from doc_batch
-        checkpoint.next_start_time = next_start_time
+        checkpoint.next_start_time_tickets = next_start_time
+        last_doc_updated_at = doc_batch[-1].doc_updated_at if doc_batch else None
         checkpoint.has_more = bool(
             end is None
-            or doc_batch[-1].doc_updated_at is None
-            or doc_batch[-1].doc_updated_at.timestamp() <= end
+            or last_doc_updated_at is None
+            or last_doc_updated_at.timestamp() <= end
         )
         checkpoint.cached_author_map = (
             author_map if len(author_map) <= MAX_AUTHOR_MAP_SIZE else None
@@ -599,8 +606,8 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
     @override
     def build_dummy_checkpoint(self) -> ZendeskConnectorCheckpoint:
         return ZendeskConnectorCheckpoint(
-            after_cursor=None,
-            next_start_time=None,
+            after_cursor_articles=None,
+            next_start_time_tickets=None,
             cached_author_map=None,
             cached_content_tags=None,
             has_more=True,
