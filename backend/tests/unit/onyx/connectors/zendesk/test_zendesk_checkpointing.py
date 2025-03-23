@@ -157,25 +157,27 @@ def test_load_from_checkpoint_articles_happy_path(
     outputs = load_everything_from_checkpoint_connector(zendesk_connector, 0, end_time)
 
     # Check that we got the documents
-    assert len(outputs) == 1
-    assert len(outputs[0].items) == 2
+    assert len(outputs) == 2
+    assert outputs[0].next_checkpoint.cached_content_tags is not None
+
+    assert len(outputs[1].items) == 2
 
     # Check first document
-    doc1 = outputs[0].items[0]
+    doc1 = outputs[1].items[0]
     assert isinstance(doc1, Document)
     assert doc1.id == "article:1"
     assert doc1.semantic_identifier == "Article 1"
     assert doc1.source == DocumentSource.ZENDESK
 
     # Check second document
-    doc2 = outputs[0].items[1]
+    doc2 = outputs[1].items[1]
     assert isinstance(doc2, Document)
     assert doc2.id == "article:2"
     assert doc2.semantic_identifier == "Article 2"
     assert doc2.source == DocumentSource.ZENDESK
 
     # Check checkpoint state
-    assert not outputs[0].next_checkpoint.has_more
+    assert not outputs[1].next_checkpoint.has_more
 
 
 def test_load_from_checkpoint_tickets_happy_path(
@@ -218,11 +220,12 @@ def test_load_from_checkpoint_tickets_happy_path(
     outputs = load_everything_from_checkpoint_connector(zendesk_connector, 0, end_time)
 
     # Check that we got the documents
-    assert len(outputs) == 1
-    assert len(outputs[0].items) == 2
+    assert len(outputs) == 2
+    assert outputs[0].next_checkpoint.cached_content_tags is not None
+    assert len(outputs[1].items) == 2
 
     # Check first document
-    doc1 = outputs[0].items[0]
+    doc1 = outputs[1].items[0]
     print(doc1, type(doc1))
     assert isinstance(doc1, Document)
     assert doc1.id == "zendesk_ticket_1"
@@ -230,14 +233,14 @@ def test_load_from_checkpoint_tickets_happy_path(
     assert doc1.source == DocumentSource.ZENDESK
 
     # Check second document
-    doc2 = outputs[0].items[1]
+    doc2 = outputs[1].items[1]
     assert isinstance(doc2, Document)
     assert doc2.id == "zendesk_ticket_2"
     assert doc2.semantic_identifier == "Ticket #2: Ticket 2"
     assert doc2.source == DocumentSource.ZENDESK
 
     # Check checkpoint state
-    assert not outputs[0].next_checkpoint.has_more
+    assert not outputs[1].next_checkpoint.has_more
 
 
 def test_load_from_checkpoint_with_rate_limit(
@@ -297,10 +300,11 @@ def test_load_from_checkpoint_with_rate_limit(
             mock_sleep.assert_has_calls([call(60), call(0.1)])
 
         # Check that we got the document after rate limit was handled
-        assert len(outputs) == 1
-        assert len(outputs[0].items) == 1
-        assert isinstance(outputs[0].items[0], Document)
-        assert outputs[0].items[0].id == "article:1"
+        assert len(outputs) == 2
+        assert outputs[0].next_checkpoint.cached_content_tags is not None
+        assert len(outputs[1].items) == 1
+        assert isinstance(outputs[1].items[0], Document)
+        assert outputs[1].items[0].id == "article:1"
 
         # Verify the requests were made with correct parameters
         assert mock_get.call_count == 4
@@ -342,9 +346,10 @@ def test_load_from_checkpoint_with_empty_response(
     outputs = load_everything_from_checkpoint_connector(zendesk_connector, 0, end_time)
 
     # Check that we got no documents
-    assert len(outputs) == 1
-    assert len(outputs[0].items) == 0
-    assert not outputs[0].next_checkpoint.has_more
+    assert len(outputs) == 2
+    assert outputs[0].next_checkpoint.cached_content_tags is not None
+    assert len(outputs[1].items) == 0
+    assert not outputs[1].next_checkpoint.has_more
 
 
 def test_load_from_checkpoint_with_skipped_article(
@@ -373,9 +378,10 @@ def test_load_from_checkpoint_with_skipped_article(
     outputs = load_everything_from_checkpoint_connector(zendesk_connector, 0, end_time)
 
     # Check that no documents were returned
-    assert len(outputs) == 1
-    assert len(outputs[0].items) == 0
-    assert not outputs[0].next_checkpoint.has_more
+    assert len(outputs) == 2
+    assert outputs[0].next_checkpoint.cached_content_tags is not None
+    assert len(outputs[1].items) == 0
+    assert not outputs[1].next_checkpoint.has_more
 
 
 def test_load_from_checkpoint_with_skipped_ticket(
@@ -405,9 +411,10 @@ def test_load_from_checkpoint_with_skipped_ticket(
     outputs = load_everything_from_checkpoint_connector(zendesk_connector, 0, end_time)
 
     # Check that no documents were returned
-    assert len(outputs) == 1
-    assert len(outputs[0].items) == 0
-    assert not outputs[0].next_checkpoint.has_more
+    assert len(outputs) == 2
+    assert outputs[0].next_checkpoint.cached_content_tags is not None
+    assert len(outputs[1].items) == 0
+    assert not outputs[1].next_checkpoint.has_more
 
 
 @pytest.mark.parametrize(

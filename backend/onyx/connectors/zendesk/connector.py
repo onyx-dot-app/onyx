@@ -384,7 +384,7 @@ class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckp
         if self.client is None:
             raise ZendeskCredentialsNotSetUpError()
 
-        if not checkpoint.cached_content_tags:
+        if checkpoint.cached_content_tags is None:
             checkpoint.cached_content_tags = _get_content_tag_mapping(self.client)
             return checkpoint  # save the content tags to the checkpoint
         self.content_tags = checkpoint.cached_content_tags
