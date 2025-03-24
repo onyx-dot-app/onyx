@@ -5,7 +5,6 @@ import { fetchSS } from "@/lib/utilsSS";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { DocumentSet, SlackChannelConfig, ValidSources } from "@/lib/types";
 import { BackButton } from "@/components/BackButton";
-import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import {
   FetchAssistantsResponse,
   fetchAssistantsSS,
@@ -81,8 +80,6 @@ async function EditslackChannelConfigPage(props: {
 
   return (
     <div className="max-w-4xl container mx-auto">
-      <InstantSSRAutoRefresh />
-
       <BackButton />
       <AdminPageTitle
         icon={<SourceIcon sourceType={ValidSources.Slack} iconSize={32} />}
