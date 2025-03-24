@@ -6,8 +6,8 @@ from pydantic import BaseModel
 
 class KGChunkFormat(BaseModel):
     connector_id: int | None = None
-    document_id: str | None
-    chunk_id: int | None
+    document_id: str
+    chunk_id: int
     title: str
     content: str
     primary_owners: list[str]

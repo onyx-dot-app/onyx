@@ -2,13 +2,20 @@ from collections import defaultdict
 from typing import Any
 from typing import Dict
 from typing import List
+from typing import Set
 
 import numpy as np
 from sklearn.cluster import KMeans  # type: ignore
 
 from onyx.db.document import get_kg_processed_document_ids
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entities import add_entity
+from onyx.db.entities import delete_entities_by_id_names
 from onyx.db.entities import get_ungrounded_entities
+from onyx.db.relationships import add_relationship
+from onyx.db.relationships import add_relationship_type
+from onyx.db.relationships import delete_relationship_types_by_id_names
+from onyx.db.relationships import delete_relationships_by_id_names
 from onyx.db.relationships import get_all_relationship_types
 from onyx.db.relationships import get_all_relationships
 from onyx.db.search_settings import get_current_search_settings
@@ -24,6 +31,7 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
 from shared_configs.enums import EmbedTextType
+
 
 logger = setup_logger()
 
@@ -349,7 +357,6 @@ def kg_clustering(
         str, Dict[str, Dict[int, Dict[str, Any]]]
     ] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
     for source_type, target_dict in clustering_results.items():
-        print("a")
         for target_type, clusters in target_dict.items():
             for cluster_id, rel_names in clusters.items():
                 # Create prompt for the LLM
@@ -486,96 +493,113 @@ Only output the category name, nothing else."""
         relationships,
     )
 
-    # ## Database operations - DELETE
+    ## Database operations - DELETE
 
-    # # delete the relationships that will be replaced
+    # delete the relationships that will be replaced
 
-    # try:
-    #     # Get the IDs of relationships to delete (the keys of our replacement dict)
-    #     relationship_ids = list(relationship_replacements.keys())
+    try:
+        # Get the IDs of relationships to delete (the keys of our replacement dict)
+        relationship_ids = list(relationship_replacements.keys())
 
-    #     # Delete relationships using existing function
+        # Delete relationships using existing function
 
-    #     with get_session_with_current_tenant() as db_session:
-    #         deleted_count = delete_relationships_by_id_names(db_session, relationship_ids)
-    #         db_session.commit()
-    #     logger.info(f"Successfully deleted {deleted_count} relationships that will be replaced with clustered versions")
-    # except Exception as e:
-    #     db_session.rollback()
-    #     logger.error(f"Failed to delete relationships: {e}")
-    #     raise
+        with get_session_with_current_tenant() as db_session:
+            deleted_count = delete_relationships_by_id_names(
+                db_session, relationship_ids
+            )
+            db_session.commit()
+        logger.info(
+            f"Successfully deleted {deleted_count} relationships that will be replaced with clustered versions"
+        )
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Failed to delete relationships: {e}")
+        raise
 
-    # # delete the entities that will be replaced
+    # delete the entities that will be replaced
 
-    # try:
-    #     # Get the IDs of entities to delete (the keys of our replacement dict)
-    #     entity_ids = list(entity_replacements.keys())
+    try:
+        # Get the IDs of entities to delete (the keys of our replacement dict)
+        entity_ids = list(entity_replacements.keys())
 
-    #     # Delete entities using existing function
-    #     with get_session_with_current_tenant() as db_session:
-    #         deleted_count = delete_entities_by_id_names(db_session, entity_ids)
-    #         db_session.commit()
-    #     logger.info(f"Successfully deleted {deleted_count} entities that will be replaced with clustered versions")
-    # except Exception as e:
-    #     db_session.rollback()
-    #     logger.error(f"Failed to delete entities: {e}")
-    #     raise
+        # Delete entities using existing function
+        with get_session_with_current_tenant() as db_session:
+            deleted_count = delete_entities_by_id_names(db_session, entity_ids)
+            db_session.commit()
+        logger.info(
+            f"Successfully deleted {deleted_count} entities that will be replaced with clustered versions"
+        )
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Failed to delete entities: {e}")
+        raise
 
-    # # delete the relationship types that will be replaced
+    # delete the relationship types that will be replaced
 
-    # try:
-    #     # Get the IDs of relationship types to delete (the keys of our replacement dict)
-    #     relationship_type_ids = list(relationship_type_replacements.keys())
+    try:
+        # Get the IDs of relationship types to delete (the keys of our replacement dict)
+        relationship_type_ids = list(relationship_type_replacements.keys())
 
-    #     # Delete relationship types using existing function
-    #     with get_session_with_current_tenant() as db_session:
-    #         deleted_count = delete_relationship_types_by_id_names(db_session, relationship_type_ids)
-    #         db_session.commit()
-    #     logger.info(f"Successfully deleted {deleted_count} relationship types that will be replaced with clustered versions")
-    # except Exception as e:
-    #     db_session.rollback()
-    #     logger.error(f"Failed to delete relationship types: {e}")
-    #     raise
+        # Delete relationship types using existing function
+        with get_session_with_current_tenant() as db_session:
+            deleted_count = delete_relationship_types_by_id_names(
+                db_session, relationship_type_ids
+            )
+            db_session.commit()
+        logger.info(
+            f"Successfully deleted {deleted_count} relationship types that will be replaced with clustered versions"
+        )
+    except Exception as e:
+        db_session.rollback()
+        logger.error(f"Failed to delete relationship types: {e}")
+        raise
 
-    # ## Database operations - ADD
+    ## Database operations - ADD
 
-    # # add relationship types
+    # add relationship types
 
-    # with get_session_with_current_tenant() as db_session:
-    #     for rel_type, rel_count in reverse_relationship_type_replacements_count.items():
-    #         source_type, rel_name, target_type = rel_type.split('__')
+    with get_session_with_current_tenant() as db_session:
+        for rel_type, rel_count in reverse_relationship_type_replacements_count.items():
+            assert isinstance(
+                rel_type, str
+            ), f"rel_type must be a string, got {type(rel_type)}"
+            assert rel_type.count("__") == 2, f"Invalid relationship type: {rel_type}"
+            source_type, rel_name, target_type = rel_type.split("__")
 
-    #         add_relationship_type(db_session,
-    #                               source_entity_type=source_type,
-    #                               relationship_type=rel_name,
-    #                               target_entity_type=target_type,
-    #                               extraction_count=rel_count)
+            add_relationship_type(
+                db_session,
+                source_entity_type=source_type,
+                relationship_type=rel_name,
+                target_entity_type=target_type,
+                extraction_count=rel_count,
+            )
 
-    #         db_session.commit()
+            db_session.commit()
 
-    # # add entities
+    # add entities
 
-    # with get_session_with_current_tenant() as db_session:
-    #     for entity, entity_count in reverse_entity_replacements_count.items():
-    #         entity_type, entity_name = entity.split(':')
+    with get_session_with_current_tenant() as db_session:
+        for entity, entity_count in reverse_entity_replacements_count.items():
+            entity_type, entity_name = entity.split(":")
 
-    #         add_entity(db_session,
-    #                    entity_type=entity_type,
-    #                    name=entity_name,
-    #                    cluster_count=entity_count)
+            add_entity(
+                db_session,
+                entity_type=entity_type,
+                name=entity_name,
+                cluster_count=entity_count,
+            )
 
-    #         db_session.commit()
+            db_session.commit()
 
-    # # add relationships
+    # add relationships
 
-    # with get_session_with_current_tenant() as db_session:
-    #     for rel, rel_count in reverse_relationship_replacements_count.items():
+    with get_session_with_current_tenant() as db_session:
+        for rel, rel_count in reverse_relationship_replacements_count.items():
+            add_relationship(
+                db_session, relationship_id_name=rel, cluster_count=rel_count
+            )
 
-    #         add_relationship(db_session,
-    #                                       relationship_id_name=rel,
-    #                                       cluster_count=rel_count)
-
-    #         db_session.commit()
+            db_session.commit()
 
     # replace with clustering results in vespa database
 
@@ -597,9 +621,9 @@ Only output the category name, nothing else."""
                     previous_relationships = formatted_chunk.relationships.keys()
                     formatted_chunk.terms.keys()
 
-                    replacement_entities = set()
-                    replacement_relationships = set()
-                    replacement_terms = set()
+                    replacement_entities: Set[str] = set()
+                    replacement_relationships: Set[str] = set()
+                    replacement_terms: Set[str] = set()
 
                     for previous_entity in previous_entities:
                         replacement_entities.add(
