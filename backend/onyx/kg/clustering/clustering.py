@@ -7,7 +7,9 @@ from typing import Set
 import numpy as np
 from sklearn.cluster import KMeans  # type: ignore
 
+from onyx.db.document import get_all_kg_processed_documents_info
 from onyx.db.document import get_kg_processed_document_ids
+from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import delete_entities_by_id_names
@@ -19,7 +21,7 @@ from onyx.db.relationships import delete_relationships_by_id_names
 from onyx.db.relationships import get_all_relationship_types
 from onyx.db.relationships import get_all_relationships
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.vespa.index import KGUChunkpdateRequest
+from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.utils.formatting_utils import format_entity
 from onyx.kg.utils.formatting_utils import format_relationship
@@ -334,8 +336,8 @@ def kg_clustering(
     )
 
     # Perform clustering for each source/target type pair
-    for source_type, target_dict in relationship_mapping.items():
-        for target_type, rel_types in target_dict.items():
+    for source_type_str, cluster_target_dict in relationship_mapping.items():
+        for target_type_str, rel_types in cluster_target_dict.items():
             # Skip if no relationships
             if not rel_types:
                 continue
@@ -344,23 +346,24 @@ def kg_clustering(
             clusters = _cluster_relationships(rel_types)
 
             # Store results
-            clustering_results[source_type][target_type] = clusters
+            clustering_results[source_type_str][target_type_str] = clusters
 
             # Log results
-            logger.info(f"Clustering results for {source_type} -> {target_type}:")
+            logger.info(
+                f"Clustering results for {source_type_str} -> {target_type_str}:"
+            )
             for cluster_id, rel_names in clusters.items():
                 logger.info(f"Cluster {cluster_id}: {rel_names}")
 
     # Generate cluster names using fast LLM
-
     full_clustering_results: Dict[
         str, Dict[str, Dict[int, Dict[str, Any]]]
-    ] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
-    for source_type, target_dict in clustering_results.items():
-        for target_type, clusters in target_dict.items():
+    ] = defaultdict(lambda: defaultdict(dict))
+    for source_type_str, cluster_target_dict in clustering_results.items():
+        for target_type_str, clusters in cluster_target_dict.items():
             for cluster_id, rel_names in clusters.items():
                 # Create prompt for the LLM
-                prompt = f"""Given these relationship names between {source_type} and {target_type}:
+                prompt = f"""Given these relationship names between {source_type_str} and {target_type_str}:
 {', '.join(rel_names)}
 
 Generate a single, short (1-3 words) relationship name that best captures the semantic meaning of all these relationships.
@@ -371,21 +374,25 @@ Only output the relationship name, nothing else."""
                     cluster_name = message_to_string(cluster_name_result)
                     logger.info(
                         f"Generated cluster name '{cluster_name}' for cluster {cluster_id} "
-                        f"between {source_type} and {target_type}"
+                        f"between {source_type_str} and {target_type_str}"
                     )
 
                     # Add the generated name to the clustering results
-                    full_clustering_results[source_type][target_type][cluster_id] = {
+                    full_clustering_results[source_type_str][target_type_str][
+                        cluster_id
+                    ] = {
                         "relationships": rel_names,
                         "cluster_name": cluster_name,
                     }
                 except Exception as e:
                     logger.error(
-                        f"Failed to generate cluster name for {source_type}->{target_type} "
+                        f"Failed to generate cluster name for {source_type_str}->{target_type_str} "
                         f"cluster {cluster_id}: {e}"
                     )
 
-                    full_clustering_results[source_type][target_type][cluster_id] = {
+                    full_clustering_results[source_type_str][target_type_str][
+                        cluster_id
+                    ] = {
                         "relationships": rel_names,
                         "cluster_name": f"cluster_{cluster_id}",  # fallback name
                     }
@@ -564,13 +571,13 @@ Only output the category name, nothing else."""
                 rel_type, str
             ), f"rel_type must be a string, got {type(rel_type)}"
             assert rel_type.count("__") == 2, f"Invalid relationship type: {rel_type}"
-            source_type, rel_name, target_type = rel_type.split("__")
+            source_type_str, rel_name, target_type_str = rel_type.split("__")
 
             add_relationship_type(
                 db_session,
-                source_entity_type=source_type,
+                source_entity_type=source_type_str,
                 relationship_type=rel_name,
-                target_entity_type=target_type,
+                target_entity_type=target_type_str,
                 extraction_count=rel_count,
             )
 
@@ -625,11 +632,11 @@ Only output the category name, nothing else."""
                     replacement_relationships: Set[str] = set()
                     replacement_terms: Set[str] = set()
 
-                    for previous_entity in previous_entities:
+                    for prev_entity in previous_entities:
                         replacement_entities.add(
                             entity_replacements.get(
-                                format_entity(previous_entity),
-                                format_entity(previous_entity),
+                                format_entity(prev_entity),
+                                format_entity(prev_entity),
                             )
                         )
 
@@ -642,7 +649,7 @@ Only output the category name, nothing else."""
                         )
 
                     new_kg_update_requests.append(
-                        KGUChunkpdateRequest(
+                        KGUChunkUpdateRequest(
                             doc_id=document_id,
                             chunk_id=formatted_chunk.chunk_id,
                             entities=replacement_entities,
@@ -655,5 +662,48 @@ Only output the category name, nothing else."""
                     new_kg_update_requests, index_name, tenant_id
                 )
 
-    # TODO: Store clustering results in database or other persistent storage
-    # return clustering_results
+    # Update document kg info
+
+    with get_session_with_current_tenant() as db_session:
+        all_kg_processed_documents_info = get_all_kg_processed_documents_info(
+            db_session
+        )
+
+    for document_id, document_kg_info in all_kg_processed_documents_info:
+        original_doc_entities = document_kg_info["entities"]
+        original_doc_relationships = document_kg_info["relationships"]
+        original_doc_terms = document_kg_info["terms"]
+
+        doc_replacement_entities = [
+            entity_replacements.get(
+                format_entity(previous_entity),
+                format_entity(previous_entity),
+            )
+            for previous_entity in original_doc_entities
+        ]
+
+        doc_replacement_relationships = [
+            relationship_replacements.get(
+                format_relationship(previous_relationship),
+                format_relationship(previous_relationship),
+            )
+            for previous_relationship in original_doc_relationships
+        ]
+
+        doc_replacement_terms = original_doc_terms
+
+        replacement_kg_data = {
+            "entities": doc_replacement_entities,
+            "relationships": doc_replacement_relationships,
+            "terms": doc_replacement_terms,
+        }
+
+        # Update the document kg info
+        with get_session_with_current_tenant() as db_session:
+            update_document_kg_info(
+                db_session,
+                document_id=document_id,
+                kg_processed=True,
+                kg_data=replacement_kg_data,
+            )
+            db_session.commit()

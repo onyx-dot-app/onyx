@@ -1,15 +1,18 @@
 import json
 from collections import defaultdict
 from collections.abc import Callable
+from typing import Dict
 
 from onyx.db.connector import get_unprocessed_connector_ids
 from onyx.db.document import get_unprocessed_kg_documents_for_connector
+from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import get_entity_types
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
-from onyx.document_index.vespa.index import KGUChunkpdateRequest
+from onyx.document_index.vespa.index import KGUChunkUpdateRequest
+from onyx.document_index.vespa.index import KGUDocumentUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
@@ -72,6 +75,8 @@ def kg_extraction(
 
     connector_extraction_stats: list[ConnectorExtractionStats] = []
 
+    document_kg_updates: Dict[str, KGUDocumentUpdateRequest] = {}
+
     processing_chunks: list[KGChunkFormat] = []
     carryover_chunks: list[KGChunkFormat] = []
     connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions] = []
@@ -100,6 +105,7 @@ def kg_extraction(
             unprocessed_documents_list[0],
             unprocessed_documents_list[6],
         ]
+
         for unprocessed_document in unprocessed_documents_list:
             formatted_chunk_batches = get_document_chunks_for_kg_processing(
                 unprocessed_document.id,
@@ -143,9 +149,6 @@ def kg_extraction(
                         aggregated_batch_extractions.terms
                     )
 
-                    processing_chunks = carryover_chunks.copy()
-                    carryover_chunks = []
-
                     connector_extraction_stats.append(
                         ConnectorExtractionStats(
                             connector_id=connector_id,
@@ -154,6 +157,9 @@ def kg_extraction(
                             num_processed=len(processing_chunks),
                         )
                     )
+
+                    processing_chunks = carryover_chunks.copy()
+                    carryover_chunks = []
 
         # processes remaining chunks
         chunk_processing_batch_results = _kg_chunk_batch_extraction(
@@ -195,10 +201,44 @@ def kg_extraction(
             connector_aggregated_kg_extractions
         )
 
+        # aggregate document updates
+
+        for (
+            processed_document
+        ) in (
+            unprocessed_documents_list
+        ):  # This will need to change if we do not materialize docs
+            document_kg_updates[processed_document.id] = KGUDocumentUpdateRequest(
+                doc_id=processed_document.id,
+                entities=set(),
+                relationships=set(),
+                terms=set(),
+            )
+
+            updated_chunk_batches = get_document_chunks_for_kg_processing(
+                processed_document.id,
+                index_name,
+                batch_size=processing_chunk_batch_size,
+            )
+
+            for updated_chunk_batch in updated_chunk_batches:
+                for updated_chunk in updated_chunk_batch:
+                    chunk_entities = updated_chunk.entities
+                    chunk_relationships = updated_chunk.relationships
+                    chunk_terms = updated_chunk.terms
+                    document_kg_updates[processed_document.id].entities.update(
+                        chunk_entities
+                    )
+                    document_kg_updates[processed_document.id].relationships.update(
+                        chunk_relationships
+                    )
+                    document_kg_updates[processed_document.id].terms.update(chunk_terms)
+
     aggregated_kg_extractions = aggregate_kg_extractions(
         connector_aggregated_kg_extractions_list
     )
 
+    # Populate the KG database with the extracted entities, relationships, and terms
     for (
         entity,
         extraction_count,
@@ -288,6 +328,22 @@ def kg_extraction(
                 f"Error adding relationship {relationship} to the database: {e}"
             )
 
+    # Populate the Documents table with the kg information for the documents
+
+    for document_id, document_kg_update in document_kg_updates.items():
+        with get_session_with_current_tenant() as db_session:
+            update_document_kg_info(
+                db_session,
+                document_id,
+                kg_processed=True,
+                kg_data={
+                    "entities": list(document_kg_update.entities),
+                    "relationships": list(document_kg_update.relationships),
+                    "terms": list(document_kg_update.terms),
+                },
+            )
+            db_session.commit()
+
     return connector_extraction_stats
 
 
@@ -308,7 +364,7 @@ def _kg_chunk_batch_extraction(
 
     def process_single_chunk(
         chunk: KGChunkFormat, preformatted_prompt: str
-    ) -> tuple[bool, KGUChunkpdateRequest]:
+    ) -> tuple[bool, KGUChunkUpdateRequest]:
         """Process a single chunk and return success status and chunk ID."""
 
         # For now, we're just processing the content
@@ -337,7 +393,7 @@ def _kg_chunk_batch_extraction(
                 extracted_terms = parsed_result.get("terms", [])
 
                 kg_updates = [
-                    KGUChunkpdateRequest(
+                    KGUChunkUpdateRequest(
                         doc_id=chunk.document_id,
                         chunk_id=chunk.chunk_id,
                         entities=extracted_entities,
@@ -364,7 +420,7 @@ def _kg_chunk_batch_extraction(
                              from doc {chunk.document_id}: {str(e)}"
                 )
                 logger.error(f"Raw output: {extraction_result}")
-                return False, KGUChunkpdateRequest(
+                return False, KGUChunkUpdateRequest(
                     doc_id=chunk.document_id,
                     chunk_id=chunk.chunk_id,
                     entities=set(),
@@ -376,7 +432,7 @@ def _kg_chunk_batch_extraction(
             logger.error(
                 f"Failed to process chunk {chunk.chunk_id} from doc {chunk.document_id}: {str(e)}"
             )
-            return False, KGUChunkpdateRequest(
+            return False, KGUChunkUpdateRequest(
                 doc_id=chunk.document_id,
                 chunk_id=chunk.chunk_id,
                 entities=set(),

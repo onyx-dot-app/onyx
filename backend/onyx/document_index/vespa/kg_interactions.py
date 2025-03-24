@@ -4,7 +4,7 @@ from retry import retry
 from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
-from onyx.document_index.vespa.index import KGUChunkpdateRequest
+from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.utils.logger import setup_logger
 
@@ -62,7 +62,7 @@ def get_document_kg_info(
 
 @retry(tries=3, delay=1, backoff=2)
 def update_kg_chunks_vespa_info(
-    kg_update_requests: list[KGUChunkpdateRequest],
+    kg_update_requests: list[KGUChunkUpdateRequest],
     index_name: str,
     tenant_id: str,
 ) -> None:

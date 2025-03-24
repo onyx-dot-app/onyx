@@ -845,3 +845,82 @@ def get_kg_processed_document_ids(db_session: Session) -> list[str]:
     """
     stmt = select(DbDocument.id).where(DbDocument.kg_processed.is_(True))
     return list(db_session.scalars(stmt).all())
+
+
+def update_document_kg_info(
+    db_session: Session,
+    document_id: str,
+    kg_processed: bool,
+    kg_data: dict,
+) -> None:
+    """Updates the knowledge graph related information for a document.
+
+    Args:
+        db_session (Session): The database session to use
+        document_id (str): The ID of the document to update
+        kg_processed (bool): Whether the document has been processed for KG extraction
+        kg_data (dict): Dictionary containing KG data with 'entities', 'relationships', and 'terms' keys
+
+    Raises:
+        ValueError: If the document with the given ID is not found
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.id == document_id)
+        .values(
+            kg_processed=kg_processed,
+            kg_data=kg_data,
+        )
+    )
+    db_session.execute(stmt)
+
+
+def get_document_kg_info(
+    db_session: Session,
+    document_id: str,
+) -> tuple[bool, dict] | None:
+    """Retrieves the knowledge graph processing status and data for a document.
+
+    Args:
+        db_session (Session): The database session to use
+        document_id (str): The ID of the document to query
+
+    Returns:
+        Optional[Tuple[bool, dict]]: A tuple containing:
+            - bool: Whether the document has been KG processed
+            - dict: The KG data containing 'entities', 'relationships', and 'terms'
+            Returns None if the document is not found
+    """
+    stmt = select(DbDocument.kg_processed, DbDocument.kg_data).where(
+        DbDocument.id == document_id
+    )
+    result = db_session.execute(stmt).one_or_none()
+
+    if result is None:
+        return None
+
+    return result.kg_processed, result.kg_data or {}
+
+
+def get_all_kg_processed_documents_info(
+    db_session: Session,
+) -> list[tuple[str, dict]]:
+    """Retrieves the knowledge graph data for all documents that have been processed.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        List[Tuple[str, dict]]: A list of tuples containing:
+            - str: The document ID
+            - dict: The KG data containing 'entities', 'relationships', and 'terms'
+        Only returns documents where kg_processed is True
+    """
+    stmt = (
+        select(DbDocument.id, DbDocument.kg_data)
+        .where(DbDocument.kg_processed.is_(True))
+        .order_by(DbDocument.id)
+    )
+
+    results = db_session.execute(stmt).all()
+    return [(str(doc_id), kg_data or {}) for doc_id, kg_data in results]
