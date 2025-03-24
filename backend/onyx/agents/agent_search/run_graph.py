@@ -14,6 +14,8 @@ from onyx.agents.agent_search.deep_search.main.graph_builder import (
 from onyx.agents.agent_search.deep_search.main.states import (
     MainInput as MainInput,
 )
+from onyx.agents.agent_search.kb_search.graph_builder import kb_graph_builder
+from onyx.agents.agent_search.kb_search.states import MainInput as KBMainInput
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.chat.models import AgentAnswerPiece
@@ -82,7 +84,7 @@ def _parse_agent_event(
 def manage_sync_streaming(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    graph_input: BasicInput | MainInput,
+    graph_input: BasicInput | MainInput | KBMainInput,
 ) -> Iterable[StreamEvent]:
     message_id = config.persistence.message_id if config.persistence else None
     for event in compiled_graph.stream(
@@ -96,7 +98,7 @@ def manage_sync_streaming(
 def run_graph(
     compiled_graph: CompiledStateGraph,
     config: GraphConfig,
-    input: BasicInput | MainInput,
+    input: BasicInput | MainInput | KBMainInput,
 ) -> AnswerStream:
     config.behavior.perform_initial_search_decomposition = (
         INITIAL_SEARCH_DECOMPOSITION_ENABLED
@@ -143,6 +145,16 @@ def run_basic_graph(
     graph = basic_graph_builder()
     compiled_graph = graph.compile()
     input = BasicInput(unused=True)
+    return run_graph(compiled_graph, config, input)
+
+
+def run_kb_graph(
+    config: GraphConfig,
+) -> AnswerStream:
+    graph = kb_graph_builder()
+    compiled_graph = graph.compile()
+    input = KBMainInput(log_messages=[])
+    config.inputs.search_request.query = config.inputs.search_request.query[3:].strip()
     return run_graph(compiled_graph, config, input)
 
 

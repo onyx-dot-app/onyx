@@ -126,6 +126,79 @@ Here is the text you are asked to extract knowledge from:
 """.strip()
 
 
+QUERY_EXTRACTION_PROMPT = f"""
+You are an expert in the area of knowledge extraction and using knowledge graphs. You are given a question \
+and asked to extract entities, relationships, and terms from it that you can reliably identify and that then \
+can later be matched with a known knowledge graph.
+
+Here are the entity types that are available for extraction. Some of them may have a description, others \
+should be obvious. You can ONLY extract entities of these types and relationships between objects of these types:
+{SEPARATOR_LINE}
+{ENTITY_TYPE_SETTING_PROMPT}
+{SEPARATOR_LINE}
+Please format your answer in this format:
+{SEPARATOR_LINE}
+{EXTRACTION_FORMATTING_PROMPT}
+{SEPARATOR_LINE}
+
+The list above here is the exclusive, only list of entities you can chose from!
+
+Here are some important additional instructions. (For the purpose of illustration, assume that ]
+ "ACCOUNT", "CONCERN", and "FEATURE" are all in the list of entity types above. Note that this \
+is just assumed for these examples, but you MUST use only the entities above for the actual extraction!)
+
+- You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
+* if the entity type is referred to in general, you would use '*' as the entity name in the extraction.
+As an example, if the question would say:
+ 'Which issues did Nike report?'
+then a valid extraction could be:
+Example 1:
+{EXAMPLE_1}
+
+* If on the other hand the question would say:
+'Did Nike say anything about performance issues?'
+then a much more suitable extraction could be:
+Example 2:
+{EXAMPLE_2}
+
+- You can extract multiple relationships between the same two entity types.
+As an example, if the question would say:
+'Did Nike report some performance issues with our solution? And were they happy that the user experience issue got solved?'
+then a valid extraction could be:
+Example 3:
+{EXAMPLE_3}
+
+- You can extract multiple relationships between the same two actual entities if you think that \
+there are multiple relationships between them based on the question.
+As an example, if the question would say:
+'Nike reported some performance issues with our dashboard solution, but do they think it delivers great value nevertheless?'
+then a valid extraction could be:
+Example 4:
+{EXAMPLE_4}
+
+Note that effectively a three-way relationship (Nike - performance issues - dashboard) extracted as two individual \
+relationships.
+
+- Again,
+   -  you should only extract entities belinging to the entity types above - but do extract all that you \
+can reliably identify in the text
+   - use refer to 'all' entities in an entity type listed above by using '*' as the entity name
+   - only extract important relationships that signify something non-trivial, expressing things like \
+needs, wants, likes, dislikes, plans, interests, lack of interests, problems the account is having, etc.
+   - you MUST only use the intiali list of entities provided! Ignore the entities in the examples unless \
+the are also part of the initial list of entities! This is essential!
+   - only extract relationships between the entities extracted first!
+
+
+{SEPARATOR_LINE}
+
+Here is the question you are asked to extract desired entities, relationships, and terms from:
+{SEPARATOR_LINE}
+---content---
+{SEPARATOR_LINE}
+""".strip()
+
+
 ### Source-specific prompts
 
 FIREFLIES_PREPROCESSING_PROMPT = f"""
