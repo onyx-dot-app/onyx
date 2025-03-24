@@ -1,3 +1,5 @@
+from typing import List
+
 from sqlalchemy import literal_column
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -85,3 +87,41 @@ def get_kg_entity_by_document(db: Session, document_id: str) -> KGEntity | None:
     query = select(KGEntity).where(KGEntity.document_id == document_id)
     result = db.execute(query).scalar()
     return result
+
+
+def get_ungrounded_entities(db_session: Session) -> List[KGEntity]:
+    """Get all entities whose entity type has grounding = 'UE' (ungrounded entities).
+
+    Args:
+        db_session: SQLAlchemy session
+
+    Returns:
+        List of KGEntity objects belonging to ungrounded entity types
+    """
+    return (
+        db_session.query(KGEntity)
+        .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
+        .filter(KGEntityType.grounding == "UE")
+        .all()
+    )
+
+
+def delete_entities_by_id_names(db_session: Session, id_names: list[str]) -> int:
+    """
+    Delete entities from the database based on a list of id_names.
+
+    Args:
+        db_session: SQLAlchemy database session
+        id_names: List of entity id_names to delete
+
+    Returns:
+        Number of entities deleted
+    """
+    deleted_count = (
+        db_session.query(KGEntity)
+        .filter(KGEntity.id_name.in_(id_names))
+        .delete(synchronize_session=False)
+    )
+
+    db_session.flush()  # Flush to ensure deletion is processed
+    return deleted_count

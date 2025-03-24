@@ -99,3 +99,79 @@ def add_relationship_type(
     db_session.flush()  # Flush to get any DB errors early
 
     return rel_type
+
+
+def get_all_relationship_types(db_session: Session) -> list["KGRelationshipType"]:
+    """
+    Retrieve all relationship types from the database.
+
+    Args:
+        db_session: SQLAlchemy database session
+
+    Returns:
+        List of KGRelationshipType objects
+    """
+    return db_session.query(KGRelationshipType).all()
+
+
+def get_all_relationships(db_session: Session) -> list["KGRelationship"]:
+    """
+    Retrieve all relationships from the database.
+
+    Args:
+        db_session: SQLAlchemy database session
+
+    Returns:
+        List of KGRelationship objects
+    """
+    return db_session.query(KGRelationship).all()
+
+
+def delete_relationships_by_id_names(db_session: Session, id_names: list[str]) -> int:
+    """
+    Delete relationships from the database based on a list of id_names.
+
+    Args:
+        db_session: SQLAlchemy database session
+        id_names: List of relationship id_names to delete
+
+    Returns:
+        Number of relationships deleted
+
+    Raises:
+        sqlalchemy.exc.SQLAlchemyError: If there's an error during deletion
+    """
+    deleted_count = (
+        db_session.query(KGRelationship)
+        .filter(KGRelationship.id_name.in_(id_names))
+        .delete(synchronize_session=False)
+    )
+
+    db_session.flush()  # Flush to ensure deletion is processed
+    return deleted_count
+
+
+def delete_relationship_types_by_id_names(
+    db_session: Session, id_names: list[str]
+) -> int:
+    """
+    Delete relationship types from the database based on a list of id_names.
+
+    Args:
+        db_session: SQLAlchemy database session
+        id_names: List of relationship type id_names to delete
+
+    Returns:
+        Number of relationship types deleted
+
+    Raises:
+        sqlalchemy.exc.SQLAlchemyError: If there's an error during deletion
+    """
+    deleted_count = (
+        db_session.query(KGRelationshipType)
+        .filter(KGRelationshipType.id_name.in_(id_names))
+        .delete(synchronize_session=False)
+    )
+
+    db_session.flush()  # Flush to ensure deletion is processed
+    return deleted_count

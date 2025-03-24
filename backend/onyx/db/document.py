@@ -831,3 +831,17 @@ def get_unprocessed_kg_documents_for_connector(
             yield document
 
         offset += batch_size
+
+
+def get_kg_processed_document_ids(db_session: Session) -> list[str]:
+    """
+    Retrieves all document IDs where kg_processed is True.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        list[str]: List of document IDs that have been KG processed
+    """
+    stmt = select(DbDocument.id).where(DbDocument.kg_processed.is_(True))
+    return list(db_session.scalars(stmt).all())

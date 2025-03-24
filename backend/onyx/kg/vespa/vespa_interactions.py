@@ -31,12 +31,17 @@ def get_document_chunks_for_kg_processing(
         index_name=index_name,
         filters=IndexFilters(access_control_list=None),
         field_names=[
+            "document_id",
+            "chunk_id",
             "title",
             "content",
             "metadata",
             "primary_owners",
             "secondary_owners",
             "source_type",
+            "kg_entities",
+            "kg_relationships",
+            "kg_terms",
         ],
         get_large_chunks=False,
     )
@@ -51,14 +56,17 @@ def get_document_chunks_for_kg_processing(
         current_batch.append(
             KGChunkFormat(
                 connector_id=None,  # We may need to adjust this
-                document_id=document_id,
-                chunk_id=i,
+                document_id=fields.get("document_id"),
+                chunk_id=fields.get("chunk_id"),
                 primary_owners=fields.get("primary_owners", []),
                 secondary_owners=fields.get("secondary_owners", []),
                 source_type=fields.get("source_type", ""),
                 title=fields.get("title", ""),
                 content=fields.get("content", ""),
                 metadata=fields.get("metadata", {}),
+                entities=fields.get("kg_entities", {}),
+                relationships=fields.get("kg_relationships", {}),
+                terms=fields.get("kg_terms", {}),
             )
         )
 

@@ -87,6 +87,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
+from onyx.kg.clustering.clustering import kg_clustering
 from onyx.kg.extractions.extraction_processing import kg_extraction
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -360,10 +361,14 @@ def stream_chat_message_objects(
 
     index_str = "danswer_chunk_text_embedding_3_small"
 
-    if new_msg_req.message == "tt":
+    if new_msg_req.message == "ee":
         kg_extraction(tenant_id, index_str)
 
-        raise Exception("Stop here")
+        raise Exception("Extractions done")
+
+    elif new_msg_req.message == "cc":
+        kg_clustering(tenant_id, index_str)
+        raise Exception("Clustering done")
 
     try:
         user_id = user.id if user is not None else None

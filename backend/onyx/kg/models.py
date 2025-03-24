@@ -1,18 +1,22 @@
 from collections import defaultdict
+from typing import Dict
 
 from pydantic import BaseModel
 
 
 class KGChunkFormat(BaseModel):
     connector_id: int | None = None
-    document_id: str
-    chunk_id: int
+    document_id: str | None
+    chunk_id: int | None
     title: str
     content: str
     primary_owners: list[str]
     secondary_owners: list[str]
     source_type: str
     metadata: dict[str, str | list[str]] | None = None
+    entities: Dict[str, int] = {}
+    relationships: Dict[str, int] = {}
+    terms: Dict[str, int] = {}
 
 
 class KGChunkExtraction(BaseModel):
