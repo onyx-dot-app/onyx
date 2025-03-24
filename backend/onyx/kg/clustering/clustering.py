@@ -325,10 +325,12 @@ def kg_clustering(
         lambda: defaultdict(list)
     )
 
-    for rel_type in relationship_types:
-        relationship_mapping[rel_type.source_entity_type_id_name][
-            rel_type.target_entity_type_id_name
-        ].append({"name": rel_type.name, "cluster_count": rel_type.cluster_count})
+    for rel_type_obj in relationship_types:
+        relationship_mapping[rel_type_obj.source_entity_type_id_name][
+            rel_type_obj.target_entity_type_id_name
+        ].append(
+            {"name": rel_type_obj.name, "cluster_count": rel_type_obj.cluster_count}
+        )
 
     # Store clustering results
     clustering_results: Dict[str, Dict[str, Dict[int, List[str]]]] = defaultdict(
@@ -358,9 +360,9 @@ def kg_clustering(
     # Generate cluster names using fast LLM
     full_clustering_results: Dict[
         str, Dict[str, Dict[int, Dict[str, Any]]]
-    ] = defaultdict(lambda: defaultdict(dict))
-    for source_type_str, cluster_target_dict in clustering_results.items():
-        for target_type_str, clusters in cluster_target_dict.items():
+    ] = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    for source_type_str, target_cluster_dict in clustering_results.items():
+        for target_type_str, clusters in target_cluster_dict.items():
             for cluster_id, rel_names in clusters.items():
                 # Create prompt for the LLM
                 prompt = f"""Given these relationship names between {source_type_str} and {target_type_str}:
@@ -566,19 +568,24 @@ Only output the category name, nothing else."""
     # add relationship types
 
     with get_session_with_current_tenant() as db_session:
-        for rel_type, rel_count in reverse_relationship_type_replacements_count.items():
+        for (
+            rel_type_str_5,
+            rel_count_8,
+        ) in reverse_relationship_type_replacements_count.items():
             assert isinstance(
-                rel_type, str
-            ), f"rel_type must be a string, got {type(rel_type)}"
-            assert rel_type.count("__") == 2, f"Invalid relationship type: {rel_type}"
-            source_type_str, rel_name, target_type_str = rel_type.split("__")
+                rel_type_str_5, str
+            ), f"rel_type must be a string, got {type(rel_type_str_5)}"
+            assert (
+                rel_type_str_5.count("__") == 2
+            ), f"Invalid relationship type: {rel_type_str_5}"
+            source_type_str, rel_name, target_type_str = rel_type_str_5.split("__")
 
             add_relationship_type(
                 db_session,
                 source_entity_type=source_type_str,
                 relationship_type=rel_name,
                 target_entity_type=target_type_str,
-                extraction_count=rel_count,
+                extraction_count=rel_count_8,
             )
 
             db_session.commit()
@@ -601,9 +608,9 @@ Only output the category name, nothing else."""
     # add relationships
 
     with get_session_with_current_tenant() as db_session:
-        for rel, rel_count in reverse_relationship_replacements_count.items():
+        for rel, rel_count_8 in reverse_relationship_replacements_count.items():
             add_relationship(
-                db_session, relationship_id_name=rel, cluster_count=rel_count
+                db_session, relationship_id_name=rel, cluster_count=rel_count_8
             )
 
             db_session.commit()
