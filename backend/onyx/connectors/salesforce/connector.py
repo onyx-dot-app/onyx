@@ -29,6 +29,7 @@ from onyx.connectors.salesforce.sqlite_functions import init_db
 from onyx.connectors.salesforce.sqlite_functions import sqlite_log_stats
 from onyx.connectors.salesforce.sqlite_functions import update_sf_db_with_csv
 from onyx.connectors.salesforce.utils import BASE_DATA_PATH
+from onyx.connectors.salesforce.utils import get_sqlite_db_path
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -106,8 +107,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     ) -> None:
         all_object_types: set[str] = set(parent_object_list)
 
-        logger.info(f"Starting with {len(parent_object_list)} parent object types")
-        logger.debug(f"Parent object types: {parent_object_list}")
+        logger.info(
+            f"Parent object types: num={len(parent_object_list)} list={parent_object_list}"
+        )
 
         # This takes like 20 seconds
         for parent_object_type in parent_object_list:
@@ -120,13 +122,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         # Always want to make sure user is grabbed for permissioning purposes
         all_object_types.add("User")
 
-        logger.info(f"Found total of {len(all_object_types)} object types to fetch")
-        logger.debug(f"All object types: {all_object_types}")
+        logger.info(
+            f"All object types: num={len(all_object_types)} list={all_object_types}"
+        )
 
         # gc.collect()
 
         # checkpoint - we've found all object types, now time to fetch the data
-        logger.info("Starting to fetch CSVs for all object types")
+        logger.info("Fetching CSVs for all object types")
 
         # This takes like 30 minutes first time and <2 minutes for updates
         object_type_to_csv_path = fetch_all_csvs_in_parallel(
@@ -271,7 +274,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
-                logger.info(f"Appending doc: doc_id={doc.id} size={sys.getsizeof(doc)}")
+                # logger.info(f"Appending doc: doc_id={doc.id} size={sys.getsizeof(doc)}")
                 docs_to_yield.append(doc)
                 docs_processed += 1
 
@@ -289,12 +292,22 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     gc.collect()
 
         yield docs_to_yield
+        logger.info(
+            f"Final processing stats: "
+            f"processed={docs_processed} "
+            f"remaining={len(updated_ids) - docs_processed}"
+        )
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         if MULTI_TENANT:
             with tempfile.TemporaryDirectory() as temp_dir:
                 return self._fetch_from_salesforce(temp_dir)
 
+        # nuke the db since we're starting from scratch
+        sqlite_db_path = get_sqlite_db_path(BASE_DATA_PATH)
+        if os.path.exists(sqlite_db_path):
+            logger.info(f"load_from_state: Removing db at {sqlite_db_path}.")
+            os.remove(sqlite_db_path)
         return self._fetch_from_salesforce(BASE_DATA_PATH)
 
     def poll_source(
@@ -303,6 +316,15 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         if MULTI_TENANT:
             with tempfile.TemporaryDirectory() as temp_dir:
                 return self._fetch_from_salesforce(temp_dir, start=start, end=end)
+
+        if start == 0:
+            # nuke the db if we're starting from scratch
+            sqlite_db_path = get_sqlite_db_path(BASE_DATA_PATH)
+            if os.path.exists(sqlite_db_path):
+                logger.info(
+                    f"poll_source: Starting at time 0, removing db at {sqlite_db_path}."
+                )
+                os.remove(sqlite_db_path)
 
         return self._fetch_from_salesforce(BASE_DATA_PATH)
 
