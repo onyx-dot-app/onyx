@@ -1,4 +1,3 @@
-import os
 import smtplib
 from datetime import datetime
 from email.mime.image import MIMEImage
@@ -6,8 +5,17 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from email.utils import make_msgid
-from enum import Enum
 
+from onyx.configs.app_configs import EMAIL_CONFIGURED
+from onyx.configs.app_configs import EMAIL_FROM
+from onyx.configs.app_configs import SMTP_PASS
+from onyx.configs.app_configs import SMTP_PORT
+from onyx.configs.app_configs import SMTP_SERVER
+from onyx.configs.app_configs import SMTP_USER
+from onyx.configs.app_configs import WEB_DOMAIN
+from onyx.configs.constants import AuthType
+from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
+from onyx.configs.constants import ONYX_SLACK_URL
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.file import FileWithMimeType
@@ -15,25 +23,6 @@ from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import MULTI_TENANT
 
 # Email configuration
-SMTP_SERVER = os.environ.get("SMTP_SERVER", "")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
-SMTP_USER = os.environ.get("SMTP_USER", "")
-SMTP_PASS = os.environ.get("SMTP_PASS", "")
-EMAIL_FROM = os.environ.get("EMAIL_FROM", "")
-EMAIL_CONFIGURED = bool(SMTP_SERVER and SMTP_PORT and SMTP_USER and SMTP_PASS)
-
-ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
-ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
-
-WEB_DOMAIN = os.environ.get("WEB_DOMAIN", "https://www.onyx.app")
-
-
-class AuthType(str, Enum):
-    CLOUD = "cloud"
-    BASIC = "basic"
-    GOOGLE_OAUTH = "google-oauth"
-    OIDC = "oidc"
-    SAML = "saml"
 
 
 HTML_EMAIL_TEMPLATE = """\

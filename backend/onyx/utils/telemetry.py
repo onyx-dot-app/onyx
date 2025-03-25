@@ -96,6 +96,14 @@ def optional_telemetry(
     user_id: str | None = None,
     tenant_id: str | None = None,  # Allows for override of tenant_id
 ) -> None:
+    print("optional_telemetry", record_type, data, user_id, tenant_id)
+    print("DISABLE_TELEMETRY", DISABLE_TELEMETRY)
+    print("MULTI_TENANT", MULTI_TENANT)
+    print("ENTERPRISE_EDITION_ENABLED", ENTERPRISE_EDITION_ENABLED)
+    print("get_current_tenant_id()", get_current_tenant_id())
+    print("get_or_generate_uuid()", get_or_generate_uuid())
+    print("_get_or_generate_instance_domain()", _get_or_generate_instance_domain())
+    # print("_get_or_generate_customer_id_mt()", _get_or_generate_customer_id_mt(tenant_id))
     if DISABLE_TELEMETRY:
         return
 
