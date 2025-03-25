@@ -177,7 +177,8 @@ def _get_tickets_page(
 
 def _fetch_author(client: ZendeskClient, author_id: str) -> BasicExpertInfo | None:
     # Skip fetching if author_id is invalid
-    if not author_id or author_id == "-1":
+    # cast to str to avoid issues with zendesk changing their types
+    if not author_id or str(author_id) == "-1":
         return None
 
     try:
