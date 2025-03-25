@@ -8,23 +8,29 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import func
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import Select
 
 from onyx.connectors.models import ConnectorFailure
-from onyx.db.engine import get_session_context_manager
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexModelStatus
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
-from onyx.db.models import IndexingStatus
-from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
-from onyx.server.documents.models import ConnectorCredentialPair
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
+
+# Comment out unused imports that cause mypy errors
+# from onyx.auth.models import UserRole
+# from onyx.configs.constants import MAX_LAST_VALID_CHECKPOINT_AGE_SECONDS
+# from onyx.db.connector_credential_pair import ConnectorCredentialPairIdentifier
+# from onyx.db.engine import async_query_for_dms
 
 logger = setup_logger()
 
@@ -434,7 +440,7 @@ def get_latest_index_attempts_parallel(
     eager_load_cc_pair: bool = False,
     only_finished: bool = False,
 ) -> Sequence[IndexAttempt]:
-    with get_session_context_manager() as db_session:
+    with get_session_with_current_tenant() as db_session:
         return get_latest_index_attempts(
             secondary_index,
             db_session,
