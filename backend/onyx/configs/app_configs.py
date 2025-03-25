@@ -1,6 +1,8 @@
 import json
 import os
 import urllib.parse
+from datetime import datetime
+from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
@@ -383,10 +385,27 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
 # https://community.developer.atlassian.com/t/confluence-cloud-time-zone-get-via-rest-api/35954/16
 # https://jira.atlassian.com/browse/CONFCLOUD-69670
 
+
+def get_current_tz_offset() -> int:
+    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
+    # remove tzinfo to compare non-timezone-aware objects.
+    return round(
+        (
+            datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
+        ).total_seconds()
+        / 3600
+    )
+
+
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
 # this will be applied globally, so it probably makes sense to transition this to per
 # connector as some point.
-CONFLUENCE_TIMEZONE_OFFSET = float(os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", 0.0))
+# For the default value, we assume that the user's local timezone is more likely to be
+# correct (i.e. the configured user's timezone or the default server one) than UTC.
+# https://developer.atlassian.com/cloud/confluence/cql-fields/#created
+CONFLUENCE_TIMEZONE_OFFSET = float(
+    os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", get_current_tz_offset())
+)
 
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
