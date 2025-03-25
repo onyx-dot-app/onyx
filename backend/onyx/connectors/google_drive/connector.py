@@ -966,9 +966,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
 
                     if isinstance(result, ConnectorFailure):
                         logger.error(result.exception)
+                        yield [result]
                     elif isinstance(result, Document):
                         documents.append(result)
-                        yield [result]
                     else:
                         logger.warning(f"Unexpected result type: {type(result)}")
                         continue
