@@ -56,9 +56,12 @@ from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
+from onyx.redis.redis_connector import RedisConnector
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
@@ -570,6 +573,22 @@ def _run_indexing(
                 if callback:
                     callback.progress("_run_indexing", len(doc_batch_cleaned))
 
+                # Add telemetry for indexing progress
+                optional_telemetry(
+                    record_type=RecordType.INDEXING_PROGRESS,
+                    data={
+                        "index_attempt_id": index_attempt_id,
+                        "cc_pair_id": ctx.cc_pair_id,
+                        "connector_id": ctx.connector_id,
+                        "credential_id": ctx.credential_id,
+                        "total_docs_indexed": document_count,
+                        "total_chunks": chunk_count,
+                        "batch_num": batch_num,
+                        "source": ctx.source.value,
+                    },
+                    tenant_id=tenant_id,
+                )
+
                 memory_tracer.increment_and_maybe_trace()
 
             # `make sure the checkpoints aren't getting too large`at some regular interval
@@ -584,6 +603,30 @@ def _run_indexing(
                     index_attempt_id=index_attempt_id,
                     checkpoint=checkpoint,
                 )
+
+        # Add telemetry for completed indexing
+        redis_connector = RedisConnector(tenant_id, ctx.cc_pair_id)
+        redis_connector_index = redis_connector.new_index(
+            index_attempt_start.search_settings_id
+        )
+        final_progress = redis_connector_index.get_progress() or 0
+
+        optional_telemetry(
+            record_type=RecordType.INDEXING_COMPLETE,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "cc_pair_id": ctx.cc_pair_id,
+                "connector_id": ctx.connector_id,
+                "credential_id": ctx.credential_id,
+                "total_docs_indexed": document_count,
+                "total_chunks": chunk_count,
+                "batch_count": batch_num,
+                "time_elapsed_seconds": time.monotonic() - start_time,
+                "source": ctx.source.value,
+                "redis_progress": final_progress,
+            },
+            tenant_id=tenant_id,
+        )
 
     except Exception as e:
         logger.exception(
