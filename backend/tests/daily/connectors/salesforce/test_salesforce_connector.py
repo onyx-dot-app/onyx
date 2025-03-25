@@ -46,12 +46,12 @@ def salesforce_connector() -> SalesforceConnector:
 
 
 # TODO: make the credentials not expire
-@pytest.mark.xfail(
-    reason=(
-        "Credentials change over time, so this test will fail if run when "
-        "the credentials expire."
-    )
-)
+# @pytest.mark.xfail(
+#     reason=(
+#         "Credentials change over time, so this test will fail if run when "
+#         "the credentials expire."
+#     )
+# )
 def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -> None:
     test_data = load_test_data()
     target_test_doc: Document | None = None
