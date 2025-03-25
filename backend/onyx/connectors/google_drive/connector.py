@@ -56,7 +56,6 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.lazy import lazy_eval
@@ -903,6 +902,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[list[Document | ConnectorFailure]]:
         try:
+            documents: list[Document | ConnectorFailure] = []
+
             # Prepare a partial function with the credentials and admin email
             convert_func = partial(
                 _convert_single_file,
@@ -959,22 +960,18 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 )
 
                 documents = []
-                for idx, (result, exception) in enumerate(results):
-                    if exception:
-                        error_str = f"Error converting file: {exception}"
-                        logger.error(error_str)
-                        yield [
-                            ConnectorFailure(
-                                failed_document=DocumentFailure(
-                                    document_id=files_batch[idx]["id"],
-                                    document_link=files_batch[idx]["webViewLink"],
-                                ),
-                                failure_message=error_str,
-                                exception=exception,
-                            )
-                        ]
-                    elif result is not None:
+                for idx, result in enumerate(results):
+                    if not result:
+                        continue
+
+                    if isinstance(result, ConnectorFailure):
+                        logger.error(result.exception)
+                    elif isinstance(result, Document):
                         documents.append(result)
+                        yield [result]
+                    else:
+                        logger.warning(f"Unexpected result type: {type(result)}")
+                        continue
 
                 if documents:
                     yield documents
@@ -993,22 +990,18 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 )
 
                 documents = []
-                for idx, (result, exception) in enumerate(results):
-                    if exception:
-                        error_str = f"Error converting file: {exception}"
-                        logger.error(error_str)
-                        yield [
-                            ConnectorFailure(
-                                failed_document=DocumentFailure(
-                                    document_id=files_batch[idx]["id"],
-                                    document_link=files_batch[idx]["webViewLink"],
-                                ),
-                                failure_message=error_str,
-                                exception=exception,
-                            )
-                        ]
-                    elif result is not None:
+                for idx, result in enumerate(results):
+                    if not result:
+                        continue
+
+                    if isinstance(result, ConnectorFailure):
+                        logger.error(result.exception)
+                        yield [result]
+                    elif isinstance(result, Document):
                         documents.append(result)
+                    else:
+                        logger.warning(f"Unexpected result type: {type(result)}")
+                        continue
 
                 if documents:
                     yield documents
