@@ -909,6 +909,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 self.creds,
                 self.primary_admin_email,
                 self.allow_images,
+                self.size_threshold,
             )
 
             # Fetch files in batches
