@@ -1,3 +1,4 @@
+import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { unstable_noStore as noStore } from "next/cache";
 import { redirect } from "next/navigation";
@@ -66,6 +67,7 @@ export default async function GalleryPage(props: {
 
       <div className="w-full py-8">
         <div className="px-32">
+          <InstantSSRAutoRefresh />
           <div className="max-w-4xl  mx-auto !border-none !bg-transparent !ring-none">
             <AssistantStats assistantId={parseInt(params.id)} />
           </div>

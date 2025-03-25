@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { unstable_noStore as noStore } from "next/cache";
 import { fetchChatData } from "@/lib/chat/fetchChatData";
 import { ChatProvider } from "@/components/context/ChatContext";
+import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 
 export default async function Layout({
   children,
@@ -40,6 +41,7 @@ export default async function Layout({
 
   return (
     <>
+      <InstantSSRAutoRefresh />
       <ChatProvider
         value={{
           proSearchToggled,

@@ -3,6 +3,7 @@
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FiPlusSquare } from "react-icons/fi";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -85,6 +86,7 @@ const Page = () => {
         icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="Slack Bots"
       />
+      <InstantSSRAutoRefresh />
 
       <Main />
     </div>

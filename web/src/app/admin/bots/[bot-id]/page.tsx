@@ -4,6 +4,7 @@ import { use } from "react";
 import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
+import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SlackChannelConfigsTable } from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
@@ -69,6 +70,8 @@ function SlackBotEditPage({
 
   return (
     <>
+      <InstantSSRAutoRefresh />
+
       <BackButton routerOverride="/admin/bots" />
 
       <ExistingSlackBotForm
