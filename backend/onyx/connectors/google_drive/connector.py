@@ -2,8 +2,6 @@ import copy
 import threading
 from collections.abc import Callable
 from collections.abc import Iterator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
 from functools import partial
 from typing import Any
@@ -15,6 +13,7 @@ from google.oauth2.service_account import Credentials as ServiceAccountCredentia
 from googleapiclient.errors import HttpError  # type: ignore
 from typing_extensions import override
 
+from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_DRIVE_WORKERS
 from onyx.configs.constants import DocumentSource
@@ -64,6 +63,7 @@ from onyx.utils.lazy import lazy_eval
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 logger = setup_logger()
@@ -87,6 +87,7 @@ def _convert_single_file(
     creds: Any,
     primary_admin_email: str,
     allow_images: bool,
+    size_threshold: int,
     file: dict[str, Any],
 ) -> Document | ConnectorFailure | None:
     user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
@@ -103,6 +104,7 @@ def _convert_single_file(
         drive_service=user_drive_service,
         docs_service=docs_service,
         allow_images=allow_images,
+        size_threshold=size_threshold,
     )
 
 
@@ -237,6 +239,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
 
         self._retrieved_ids: set[str] = set()
         self.allow_images = False
+
+        self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
@@ -899,115 +903,114 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[list[Document | ConnectorFailure]]:
         try:
-            # Create a larger process pool for file conversion
-            with ThreadPoolExecutor(max_workers=8) as executor:
-                # Prepare a partial function with the credentials and admin email
-                convert_func = partial(
-                    _convert_single_file,
-                    self.creds,
-                    self.primary_admin_email,
-                    self.allow_images,
+            # Prepare a partial function with the credentials and admin email
+            convert_func = partial(
+                _convert_single_file,
+                self.creds,
+                self.primary_admin_email,
+                self.allow_images,
+            )
+
+            # Fetch files in batches
+            batches_complete = 0
+            files_batch: list[GoogleDriveFileType] = []
+            func_with_args: list[
+                tuple[
+                    Callable[..., Document | ConnectorFailure | None], tuple[Any, ...]
+                ]
+            ] = []
+            for retrieved_file in self._fetch_drive_items(
+                is_slim=False,
+                checkpoint=checkpoint,
+                start=start,
+                end=end,
+            ):
+                if retrieved_file.error is not None:
+                    failure_stage = retrieved_file.completion_stage.value
+                    failure_message = (
+                        f"retrieval failure during stage: {failure_stage},"
+                    )
+                    failure_message += f"user: {retrieved_file.user_email},"
+                    failure_message += (
+                        f"parent drive/folder: {retrieved_file.parent_id},"
+                    )
+                    failure_message += f"error: {retrieved_file.error}"
+                    logger.error(failure_message)
+                    yield [
+                        ConnectorFailure(
+                            failed_entity=EntityFailure(
+                                entity_id=failure_stage,
+                            ),
+                            failure_message=failure_message,
+                            exception=retrieved_file.error,
+                        )
+                    ]
+                    continue
+                files_batch.append(retrieved_file.drive_file)
+
+                if len(files_batch) < self.batch_size:
+                    continue
+
+                # Process the batch using run_functions_tuples_in_parallel
+                func_with_args = [(convert_func, (file,)) for file in files_batch]
+                results = run_functions_tuples_in_parallel(
+                    func_with_args, max_workers=8
                 )
 
-                # Fetch files in batches
-                batches_complete = 0
-                files_batch: list[GoogleDriveFileType] = []
-                for retrieved_file in self._fetch_drive_items(
-                    is_slim=False,
-                    checkpoint=checkpoint,
-                    start=start,
-                    end=end,
-                ):
-                    if retrieved_file.error is not None:
-                        failure_stage = retrieved_file.completion_stage.value
-                        failure_message = (
-                            f"retrieval failure during stage: {failure_stage},"
-                        )
-                        failure_message += f"user: {retrieved_file.user_email},"
-                        failure_message += (
-                            f"parent drive/folder: {retrieved_file.parent_id},"
-                        )
-                        failure_message += f"error: {retrieved_file.error}"
-                        logger.error(failure_message)
+                documents = []
+                for idx, (result, exception) in enumerate(results):
+                    if exception:
+                        error_str = f"Error converting file: {exception}"
+                        logger.error(error_str)
                         yield [
                             ConnectorFailure(
-                                failed_entity=EntityFailure(
-                                    entity_id=failure_stage,
+                                failed_document=DocumentFailure(
+                                    document_id=files_batch[idx]["id"],
+                                    document_link=files_batch[idx]["webViewLink"],
                                 ),
-                                failure_message=failure_message,
-                                exception=retrieved_file.error,
+                                failure_message=error_str,
+                                exception=exception,
                             )
                         ]
-                        continue
-                    files_batch.append(retrieved_file.drive_file)
+                    elif result is not None:
+                        documents.append(result)
 
-                    if len(files_batch) < self.batch_size:
-                        continue
+                if documents:
+                    yield documents
+                    batches_complete += 1
+                files_batch = []
 
-                    # Process the batch
-                    futures = [
-                        executor.submit(convert_func, file) for file in files_batch
-                    ]
-                    documents = []
-                    for future in as_completed(futures):
-                        try:
-                            doc = future.result()
-                            if doc is not None:
-                                documents.append(doc)
-                        except Exception as e:
-                            error_str = f"Error converting file: {e}"
-                            logger.error(error_str)
-                            yield [
-                                ConnectorFailure(
-                                    failed_document=DocumentFailure(
-                                        document_id=retrieved_file.drive_file["id"],
-                                        document_link=retrieved_file.drive_file[
-                                            "webViewLink"
-                                        ],
-                                    ),
-                                    failure_message=error_str,
-                                    exception=e,
-                                )
-                            ]
+                if batches_complete > BATCHES_PER_CHECKPOINT:
+                    checkpoint.retrieved_folder_and_drive_ids = self._retrieved_ids
+                    return  # create a new checkpoint
 
-                    if documents:
-                        yield documents
-                        batches_complete += 1
-                    files_batch = []
+            # Process any remaining files
+            if files_batch:
+                func_with_args = [(convert_func, (file,)) for file in files_batch]
+                results = run_functions_tuples_in_parallel(
+                    func_with_args, max_workers=8
+                )
 
-                    if batches_complete > BATCHES_PER_CHECKPOINT:
-                        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_ids
-                        return  # create a new checkpoint
+                documents = []
+                for idx, (result, exception) in enumerate(results):
+                    if exception:
+                        error_str = f"Error converting file: {exception}"
+                        logger.error(error_str)
+                        yield [
+                            ConnectorFailure(
+                                failed_document=DocumentFailure(
+                                    document_id=files_batch[idx]["id"],
+                                    document_link=files_batch[idx]["webViewLink"],
+                                ),
+                                failure_message=error_str,
+                                exception=exception,
+                            )
+                        ]
+                    elif result is not None:
+                        documents.append(result)
 
-                # Process any remaining files
-                if files_batch:
-                    futures = [
-                        executor.submit(convert_func, file) for file in files_batch
-                    ]
-                    documents = []
-                    for future in as_completed(futures):
-                        try:
-                            doc = future.result()
-                            if doc is not None:
-                                documents.append(doc)
-                        except Exception as e:
-                            error_str = f"Error converting file: {e}"
-                            logger.error(error_str)
-                            yield [
-                                ConnectorFailure(
-                                    failed_document=DocumentFailure(
-                                        document_id=retrieved_file.drive_file["id"],
-                                        document_link=retrieved_file.drive_file[
-                                            "webViewLink"
-                                        ],
-                                    ),
-                                    failure_message=error_str,
-                                    exception=e,
-                                )
-                            ]
-
-                    if documents:
-                        yield documents
+                if documents:
+                    yield documents
         except Exception as e:
             logger.exception(f"Error extracting documents from Google Drive: {e}")
             raise e
@@ -1067,9 +1070,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                         raise RuntimeError(
                             "_extract_slim_docs_from_google_drive: Stop signal detected"
                         )
-
                     callback.progress("_extract_slim_docs_from_google_drive", 1)
-
         yield slim_batch
 
     def retrieve_all_slim_documents(

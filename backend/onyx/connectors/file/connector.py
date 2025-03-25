@@ -219,24 +219,34 @@ def _process_file(
 
     # 2) Otherwise: text-based approach. Possibly with embedded images.
     file.seek(0)
-    text_content = ""
-    embedded_images: list[tuple[bytes, str]] = []
 
     # Extract text and images from the file
-    text_content, embedded_images = extract_text_and_images(
+    extraction_result = extract_text_and_images(
         file=file,
         file_name=file_name,
         pdf_pass=pdf_pass,
     )
 
+    # Merge file-specific metadata (from file content) with provided metadata
+    if extraction_result.metadata:
+        logger.debug(
+            f"Found file-specific metadata for {file_name}: {extraction_result.metadata}"
+        )
+        metadata.update(extraction_result.metadata)
+
     # Build sections: first the text as a single Section
     sections: list[TextSection | ImageSection] = []
     link_in_meta = metadata.get("link")
-    if text_content.strip():
-        sections.append(TextSection(link=link_in_meta, text=text_content.strip()))
+    if extraction_result.text_content.strip():
+        logger.debug(f"Creating TextSection for {file_name} with link: {link_in_meta}")
+        sections.append(
+            TextSection(link=link_in_meta, text=extraction_result.text_content.strip())
+        )
 
     # Then any extracted images from docx, etc.
-    for idx, (img_data, img_name) in enumerate(embedded_images, start=1):
+    for idx, (img_data, img_name) in enumerate(
+        extraction_result.embedded_images, start=1
+    ):
         # Store each embedded image as a separate file in PGFileStore
         # and create a section with the image reference
         try:

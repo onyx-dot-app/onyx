@@ -79,6 +79,8 @@ _FULL_EXTENSION_FILTER_STRING = "".join(
     ]
 )
 
+ONE_HOUR = 3600
+
 
 class ConfluenceConnector(
     LoadConnector,
@@ -429,7 +431,17 @@ class ConfluenceConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
-        return self._fetch_document_batches(start, end)
+        try:
+            return self._fetch_document_batches(start, end)
+        except Exception as e:
+            if "field 'updated' is invalid" in str(e) and start is not None:
+                logger.warning(
+                    "Confluence says we provided an invalid 'updated' field. This may indicate"
+                    "a real issue, but can also appear during edge cases like daylight"
+                    f"savings time changes. Retrying with a 1 hour offset. Error: {e}"
+                )
+                return self._fetch_document_batches(start - ONE_HOUR, end)
+            raise
 
     def retrieve_all_slim_documents(
         self,

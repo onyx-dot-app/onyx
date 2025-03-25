@@ -555,6 +555,28 @@ def delete_documents_by_connector_credential_pair__no_commit(
     db_session.execute(stmt)
 
 
+def delete_all_documents_by_connector_credential_pair__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+) -> None:
+    """Deletes all document by connector credential pair entries for a specific connector and credential.
+    This is primarily used during connector deletion to ensure all references are removed
+    before deleting the connector itself. This is crucial because connector_id is part of the
+    primary key in DocumentByConnectorCredentialPair, and attempting to delete the Connector
+    would otherwise try to set the foreign key to NULL, which fails for primary keys.
+
+    NOTE: Does not commit the transaction, this must be done by the caller.
+    """
+    stmt = delete(DocumentByConnectorCredentialPair).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+    db_session.execute(stmt)
+
+
 def delete_documents__no_commit(db_session: Session, document_ids: list[str]) -> None:
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
 

@@ -87,11 +87,14 @@ async def get_or_provision_tenant(
             # If we have a pre-provisioned tenant, assign it to the user
             await assign_tenant_to_user(tenant_id, email, referral_source)
             logger.info(f"Assigned pre-provisioned tenant {tenant_id} to user {email}")
-            return tenant_id
         else:
             # If no pre-provisioned tenant is available, create a new one on-demand
             tenant_id = await create_tenant(email, referral_source)
-            return tenant_id
+
+        # Notify control plane if we have created / assigned a new tenant
+        if not DEV_MODE:
+            await notify_control_plane(tenant_id, email, referral_source)
+        return tenant_id
 
     except Exception as e:
         # If we've encountered an error, log and raise an exception
@@ -115,10 +118,6 @@ async def create_tenant(email: str, referral_source: str | None = None) -> str:
     try:
         # Provision tenant on data plane
         await provision_tenant(tenant_id, email)
-
-        # Notify control plane if not already done in provision_tenant
-        if not DEV_MODE and referral_source:
-            await notify_control_plane(tenant_id, email, referral_source)
 
     except Exception as e:
         logger.exception(f"Tenant provisioning failed: {str(e)}")
@@ -561,7 +560,3 @@ async def assign_tenant_to_user(
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
         raise Exception("Failed to assign tenant to user")
-
-    # Notify control plane with retry logic
-    if not DEV_MODE:
-        await notify_control_plane(tenant_id, email, referral_source)

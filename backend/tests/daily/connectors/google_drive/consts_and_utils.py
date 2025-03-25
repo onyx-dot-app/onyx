@@ -161,10 +161,14 @@ def _get_expected_file_content(file_id: int) -> str:
     return file_text_template.format(file_id)
 
 
-def assert_retrieved_docs_match_expected(
+def assert_expected_docs_in_retrieved_docs(
     retrieved_docs: list[Document],
     expected_file_ids: Sequence[int],
 ) -> None:
+    """NOTE: as far as i can tell this does NOT assert for an exact match.
+    it only checks to see if that the expected file id's are IN the retrieved doc list
+    """
+
     expected_file_names = {
         file_name_template.format(file_id) for file_id in expected_file_ids
     }
@@ -175,7 +179,7 @@ def assert_retrieved_docs_match_expected(
     retrieved_docs.sort(key=lambda x: x.semantic_identifier)
 
     for doc in retrieved_docs:
-        print(f"doc.semantic_identifier: {doc.semantic_identifier}")
+        print(f"retrieved doc: doc.semantic_identifier={doc.semantic_identifier}")
 
     # Filter out invalid prefixes to prevent different tests from interfering with each other
     valid_retrieved_docs = [
