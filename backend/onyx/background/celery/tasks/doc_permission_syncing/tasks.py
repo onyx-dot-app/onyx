@@ -286,7 +286,7 @@ def try_creating_permissions_sync_task(
             ),
             queue=OnyxCeleryQueues.CONNECTOR_DOC_PERMISSIONS_SYNC,
             task_id=custom_task_id,
-            priority=OnyxCeleryPriority.HIGH,
+            priority=OnyxCeleryPriority.MEDIUM,
         )
 
         # fill in the celery task id
