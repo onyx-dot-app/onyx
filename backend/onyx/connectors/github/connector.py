@@ -276,7 +276,7 @@ class GithubConnector(CheckpointConnector[GithubConnectorCheckpoint]):
             return checkpoint
 
         assert checkpoint.cached_repo is not None, "No repo saved in checkpoint"
-        repo = checkpoint.cached_repo.to_Repository(self.github_client.requester)
+        repo = checkpoint.cached_repo.to_Repository(self.github_client.requester)  # type: ignore
 
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
