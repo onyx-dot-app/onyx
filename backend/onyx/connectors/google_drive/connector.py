@@ -2,8 +2,6 @@ import copy
 import threading
 from collections.abc import Callable
 from collections.abc import Iterator
-from concurrent.futures import as_completed
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from enum import Enum
 from functools import partial
