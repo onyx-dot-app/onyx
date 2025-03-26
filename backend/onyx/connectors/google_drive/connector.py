@@ -459,6 +459,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                     DriveRetrievalStage.MY_DRIVE_FILES,
                 )
             curr_stage.stage = DriveRetrievalStage.SHARED_DRIVE_FILES
+            resuming = False  # we are starting the next stage for the first time
 
         if curr_stage.stage == DriveRetrievalStage.SHARED_DRIVE_FILES:
 
@@ -494,7 +495,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 )
                 yield from _yield_from_drive(drive_id, start)
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
-
+            resuming = False  # we are starting the next stage for the first time
         if curr_stage.stage == DriveRetrievalStage.FOLDER_FILES:
 
             def _yield_from_folder_crawl(
