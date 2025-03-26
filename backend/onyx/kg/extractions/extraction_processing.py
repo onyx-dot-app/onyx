@@ -437,6 +437,11 @@ def _kg_chunk_batch_extraction(
                 extracted_relationships = parsed_result.get("relationships", [])
                 extracted_terms = parsed_result.get("terms", [])
 
+                implied_extracted_relationships = [
+                    llm_preprocessing.core_entity + "__" + "relates_to" + "__" + entity
+                    for entity in extracted_entities
+                ]
+
                 kg_updates = [
                     KGUChunkUpdateRequest(
                         document_id=chunk.document_id,
@@ -448,6 +453,7 @@ def _kg_chunk_batch_extraction(
                         relationships=set(
                             extracted_relationships
                             + llm_preprocessing.implied_relationships
+                            + implied_extracted_relationships
                         ),
                         terms=set(extracted_terms),
                     ),
