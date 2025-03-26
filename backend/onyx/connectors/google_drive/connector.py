@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from functools import partial
 from typing import Any
+from typing import cast
 from typing import Protocol
 from urllib.parse import urlparse
 
@@ -961,26 +962,15 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
 
                 # Process the batch using run_functions_tuples_in_parallel
                 func_with_args = [(convert_func, (file,)) for file in files_batch]
-                results = run_functions_tuples_in_parallel(
-                    func_with_args, max_workers=8
+                results = cast(
+                    list[Document | ConnectorFailure | None],
+                    run_functions_tuples_in_parallel(func_with_args, max_workers=8),
                 )
 
-                documents = []
-                for idx, result in enumerate(results):
-                    if not result:
-                        continue
+                docs_and_failures = [result for result in results if result is not None]
 
-                    if isinstance(result, ConnectorFailure):
-                        logger.error(result.exception)
-                        yield [result]
-                    elif isinstance(result, Document):
-                        documents.append(result)
-                    else:
-                        logger.warning(f"Unexpected result type: {type(result)}")
-                        continue
-
-                if documents:
-                    yield documents
+                if docs_and_failures:
+                    yield docs_and_failures
                     batches_complete += 1
                 files_batch = []
 
@@ -991,26 +981,15 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             # Process any remaining files
             if files_batch:
                 func_with_args = [(convert_func, (file,)) for file in files_batch]
-                results = run_functions_tuples_in_parallel(
-                    func_with_args, max_workers=8
+                results = cast(
+                    list[Document | ConnectorFailure | None],
+                    run_functions_tuples_in_parallel(func_with_args, max_workers=8),
                 )
 
-                documents = []
-                for idx, result in enumerate(results):
-                    if not result:
-                        continue
+                docs_and_failures = [result for result in results if result is not None]
 
-                    if isinstance(result, ConnectorFailure):
-                        logger.error(result.exception)
-                        yield [result]
-                    elif isinstance(result, Document):
-                        documents.append(result)
-                    else:
-                        logger.warning(f"Unexpected result type: {type(result)}")
-                        continue
-
-                if documents:
-                    yield documents
+                if docs_and_failures:
+                    yield docs_and_failures
         except Exception as e:
             logger.exception(f"Error extracting documents from Google Drive: {e}")
             raise e
