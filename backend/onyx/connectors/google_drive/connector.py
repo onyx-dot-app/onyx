@@ -550,6 +550,16 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             checkpoint, is_slim, DriveRetrievalStage.MY_DRIVE_FILES
         )
 
+        # Setup initial completion map on first connector run
+        for email in all_org_emails:
+            # don't overwrite existing completion map on resuming runs
+            if email in checkpoint.completion_map:
+                continue
+            checkpoint.completion_map[email] = StageCompletion(
+                stage=DriveRetrievalStage.START,
+                completed_until=0,
+            )
+
         # we've found all users and drives, now time to actually start
         # fetching stuff
         logger.info(f"Found {len(all_org_emails)} users to impersonate")
@@ -563,13 +573,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             drive_ids_to_retrieve, checkpoint
         )
 
-        for email in all_org_emails:
-            if email in checkpoint.completion_map:
-                continue
-            checkpoint.completion_map[email] = StageCompletion(
-                stage=DriveRetrievalStage.START,
-                completed_until=0,
-            )
         user_retrieval_gens = [
             self._impersonate_user_for_retrieval(
                 email,
@@ -907,7 +910,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[list[Document | ConnectorFailure]]:
+    ) -> Iterator[Document | ConnectorFailure]:
         try:
             documents: list[Document | ConnectorFailure] = []
 
@@ -919,15 +922,27 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 self.allow_images,
                 self.size_threshold,
             )
-
             # Fetch files in batches
             batches_complete = 0
             files_batch: list[GoogleDriveFileType] = []
-            func_with_args: list[
-                tuple[
-                    Callable[..., Document | ConnectorFailure | None], tuple[Any, ...]
-                ]
-            ] = []
+
+            def _yield_batch(
+                files_batch: list[GoogleDriveFileType],
+            ) -> Iterator[Document | ConnectorFailure]:
+                nonlocal batches_complete
+                # Process the batch using run_functions_tuples_in_parallel
+                func_with_args = [(convert_func, (file,)) for file in files_batch]
+                results = cast(
+                    list[Document | ConnectorFailure | None],
+                    run_functions_tuples_in_parallel(func_with_args, max_workers=8),
+                )
+
+                docs_and_failures = [result for result in results if result is not None]
+
+                if docs_and_failures:
+                    yield from docs_and_failures
+                    batches_complete += 1
+
             for retrieved_file in self._fetch_drive_items(
                 is_slim=False,
                 checkpoint=checkpoint,
@@ -945,33 +960,21 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                     )
                     failure_message += f"error: {retrieved_file.error}"
                     logger.error(failure_message)
-                    yield [
-                        ConnectorFailure(
-                            failed_entity=EntityFailure(
-                                entity_id=failure_stage,
-                            ),
-                            failure_message=failure_message,
-                            exception=retrieved_file.error,
-                        )
-                    ]
+                    yield ConnectorFailure(
+                        failed_entity=EntityFailure(
+                            entity_id=failure_stage,
+                        ),
+                        failure_message=failure_message,
+                        exception=retrieved_file.error,
+                    )
+
                     continue
                 files_batch.append(retrieved_file.drive_file)
 
                 if len(files_batch) < self.batch_size:
                     continue
 
-                # Process the batch using run_functions_tuples_in_parallel
-                func_with_args = [(convert_func, (file,)) for file in files_batch]
-                results = cast(
-                    list[Document | ConnectorFailure | None],
-                    run_functions_tuples_in_parallel(func_with_args, max_workers=8),
-                )
-
-                docs_and_failures = [result for result in results if result is not None]
-
-                if docs_and_failures:
-                    yield docs_and_failures
-                    batches_complete += 1
+                yield from _yield_batch(files_batch)
                 files_batch = []
 
                 if batches_complete > BATCHES_PER_CHECKPOINT:
@@ -980,16 +983,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
 
             # Process any remaining files
             if files_batch:
-                func_with_args = [(convert_func, (file,)) for file in files_batch]
-                results = cast(
-                    list[Document | ConnectorFailure | None],
-                    run_functions_tuples_in_parallel(func_with_args, max_workers=8),
-                )
-
-                docs_and_failures = [result for result in results if result is not None]
-
-                if docs_and_failures:
-                    yield docs_and_failures
+                yield from _yield_batch(files_batch)
         except Exception as e:
             logger.exception(f"Error extracting documents from Google Drive: {e}")
             raise e
@@ -1011,10 +1005,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         checkpoint = copy.deepcopy(checkpoint)
         self._retrieved_ids = checkpoint.retrieved_folder_and_drive_ids
         try:
-            for doc_list in self._extract_docs_from_google_drive(
-                checkpoint, start, end
-            ):
-                yield from doc_list
+            yield from self._extract_docs_from_google_drive(checkpoint, start, end)
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
