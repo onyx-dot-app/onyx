@@ -16,6 +16,7 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_SLACK_URL
+from onyx.configs.constants import TENANT_ID_COOKIE_NAME
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.file import FileWithMimeType
@@ -64,11 +65,6 @@ HTML_EMAIL_TEMPLATE = """\
     }}
     .header img {{
       max-width: 140px;
-      width: 140px;
-      height: auto;
-      filter: brightness(1.1) contrast(1.2);
-      border-radius: 8px;
-      padding: 5px;
     }}
     .body-content {{
       padding: 20px 30px;
@@ -85,16 +81,12 @@ HTML_EMAIL_TEMPLATE = """\
     }}
     .cta-button {{
       display: inline-block;
-      padding: 14px 24px;
-      background-color: #0055FF;
+      padding: 12px 20px;
+      background-color: #000000;
       color: #ffffff !important;
       text-decoration: none;
       border-radius: 4px;
-      font-weight: 600;
-      font-size: 16px;
-      margin-top: 10px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      text-align: center;
+      font-weight: 500;
     }}
     .footer {{
       font-size: 13px;
@@ -177,7 +169,6 @@ def send_email(
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
 
-    # Create a multipart/alternative message - this indicates these are alternative versions of the same content
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["To"] = user_email
@@ -186,30 +177,17 @@ def send_email(
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="onyx.app")
 
-    # Add text part first (lowest priority)
-    text_part = MIMEText(text_body, "plain")
-    msg.attach(text_part)
+    part_text = MIMEText(text_body, "plain")
+    part_html = MIMEText(html_body, "html")
+
+    msg.attach(part_text)
+    msg.attach(part_html)
 
     if inline_png:
-        # For HTML with images, create a multipart/related container
-        related = MIMEMultipart("related")
-
-        # Add the HTML part to the related container
-        html_part = MIMEText(html_body, "html")
-        related.attach(html_part)
-
-        # Add image with proper Content-ID to the related container
         img = MIMEImage(inline_png[1], _subtype="png")
-        img.add_header("Content-ID", f"<{inline_png[0]}>")
+        img.add_header("Content-ID", inline_png[0])  # CID reference
         img.add_header("Content-Disposition", "inline", filename=inline_png[0])
-        related.attach(img)
-
-        # Add the related part to the message (higher priority than text)
-        msg.attach(related)
-    else:
-        # No images, just add HTML directly (higher priority than text)
-        html_part = MIMEText(html_body, "html")
-        msg.attach(html_part)
+        msg.attach(img)
 
     try:
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
@@ -357,24 +335,17 @@ def send_forgot_password_email(
 
     onyx_file = OnyxRuntime.get_emailable_logo()
 
-    subject = f"Reset Your {application_name} Password"
-    heading = "Reset Your Password"
-    tenant_param = f"&tenant={tenant_id}" if tenant_id and MULTI_TENANT else ""
-    message = "<p>Please click the button below to reset your password. This link will expire in 24 hours.</p>"
-    cta_text = "Reset Password"
-    # token is already URL-safe
-    cta_link = f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}"
+    subject = f"{application_name} Forgot Password"
+    link = f"{WEB_DOMAIN}/auth/reset-password?token={token}"
+    if MULTI_TENANT:
+        link += f"&{TENANT_ID_COOKIE_NAME}={tenant_id}"
+    message = f"<p>Click the following link to reset your password:</p><p>{link}</p>"
     html_content = build_html_email(
         application_name,
-        heading,
+        "Reset Your Password",
         message,
-        cta_text,
-        cta_link,
     )
-    text_content = (
-        f"Please click the following link to reset your password. This link will expire in 24 hours.\n"
-        f"{WEB_DOMAIN}/auth/reset-password?token={token}{tenant_param}"
-    )
+    text_content = f"Click the following link to reset your password: {link}"
     send_email(
         user_email,
         subject,

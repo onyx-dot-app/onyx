@@ -15,7 +15,7 @@ from sqlalchemy.orm import contains_eager
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
-from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.failure import ConnectorFailure
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
