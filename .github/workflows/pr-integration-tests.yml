@@ -11,7 +11,7 @@ on:
       - "release/**"
 
 env:
-  ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   CONFLUENCE_TEST_SPACE_URL: ${{ secrets.CONFLUENCE_TEST_SPACE_URL }}
   CONFLUENCE_USER_NAME: ${{ secrets.CONFLUENCE_USER_NAME }}
@@ -118,7 +118,7 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
-            -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e TEST_WEB_HOSTNAME=test-runner \
             -e AUTH_TYPE=cloud \
@@ -216,7 +216,7 @@ jobs:
             -e VESPA_HOST=index \
             -e REDIS_HOST=cache \
             -e API_SERVER_HOST=api_server \
-            -e ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY} \
+            -e OPENAI_API_KEY=${OPENAI_API_KEY} \
             -e SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN} \
             -e CONFLUENCE_TEST_SPACE_URL=${CONFLUENCE_TEST_SPACE_URL} \
             -e CONFLUENCE_USER_NAME=${CONFLUENCE_USER_NAME} \
