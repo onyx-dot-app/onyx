@@ -912,8 +912,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[Document | ConnectorFailure]:
         try:
-            documents: list[Document | ConnectorFailure] = []
-
             # Prepare a partial function with the credentials and admin email
             convert_func = partial(
                 _convert_single_file,
