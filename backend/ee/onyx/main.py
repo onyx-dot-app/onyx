@@ -64,7 +64,15 @@ def get_application() -> FastAPI:
         add_tenant_id_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
-        oauth_client = GoogleOAuth2(OAUTH_CLIENT_ID, OAUTH_CLIENT_SECRET)
+        # For Google OAuth, refresh tokens are requested by:
+        # 1. Adding the right scopes
+        # 2. Properly configuring OAuth in Google Cloud Console to allow offline access
+        oauth_client = GoogleOAuth2(
+            OAUTH_CLIENT_ID,
+            OAUTH_CLIENT_SECRET,
+            # Use standard scopes that include profile and email
+            scopes=["openid", "email", "profile"],
+        )
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
@@ -87,6 +95,16 @@ def get_application() -> FastAPI:
         )
 
     if AUTH_TYPE == AuthType.OIDC:
+        # Ensure we request offline_access for refresh tokens
+        try:
+            oidc_scopes = list(OIDC_SCOPE_OVERRIDE or BASE_SCOPES)
+            if "offline_access" not in oidc_scopes:
+                oidc_scopes.append("offline_access")
+        except Exception as e:
+            logger.warning(f"Error configuring OIDC scopes: {e}")
+            # Fall back to default scopes if there's an error
+            oidc_scopes = BASE_SCOPES
+
         include_auth_router_with_prefix(
             application,
             create_onyx_oauth_router(
@@ -94,8 +112,8 @@ def get_application() -> FastAPI:
                     OAUTH_CLIENT_ID,
                     OAUTH_CLIENT_SECRET,
                     OPENID_CONFIG_URL,
-                    # BASE_SCOPES is the same as not setting this
-                    base_scopes=OIDC_SCOPE_OVERRIDE or BASE_SCOPES,
+                    # Use the configured scopes
+                    base_scopes=oidc_scopes,
                 ),
                 auth_backend,
                 USER_AUTH_SECRET,

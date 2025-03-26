@@ -30,6 +30,9 @@ from onyx.db.connector_credential_pair import (
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
+from onyx.db.document import (
+    delete_all_documents_by_connector_credential_pair__no_commit,
+)
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document_set import delete_document_set_cc_pair_relationship__no_commit
 from onyx.db.engine import get_session_with_current_tenant
@@ -438,6 +441,14 @@ def monitor_connector_deletion_taskset(
             cleanup_user_groups(
                 cc_pair_id=cc_pair_id,
                 db_session=db_session,
+            )
+
+            # Explicitly delete document by connector credential pair records before deleting the connector
+            # This is needed because connector_id is a primary key in that table and cascading deletes won't work
+            delete_all_documents_by_connector_credential_pair__no_commit(
+                db_session=db_session,
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
             )
 
             # finally, delete the cc-pair

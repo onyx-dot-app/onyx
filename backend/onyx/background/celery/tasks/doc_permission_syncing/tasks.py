@@ -46,7 +46,6 @@ from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -69,6 +68,8 @@ from onyx.utils.logger import doc_permission_sync_ctx
 from onyx.utils.logger import format_error_for_logging
 from onyx.utils.logger import LoggerContextVars
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
 
 
 logger = setup_logger()
@@ -420,12 +421,7 @@ def connector_permission_sync_generator_task(
                 task_logger.exception(
                     f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
                 )
-                update_connector_credential_pair(
-                    db_session=db_session,
-                    connector_id=cc_pair.connector.id,
-                    credential_id=cc_pair.credential.id,
-                    status=ConnectorCredentialPairStatus.INVALID,
-                )
+                # TODO: add some notification to the admins here
                 raise
 
             source_type = cc_pair.connector.source
@@ -881,6 +877,21 @@ def monitor_ccpair_permissions_taskset(
         f"remaining={remaining} "
         f"initial={initial}"
     )
+
+    # Add telemetry for permission syncing progress
+    optional_telemetry(
+        record_type=RecordType.PERMISSION_SYNC_PROGRESS,
+        data={
+            "cc_pair_id": cc_pair_id,
+            "id": payload.id if payload else None,
+            "total_docs": initial if initial is not None else 0,
+            "remaining_docs": remaining,
+            "synced_docs": (initial - remaining) if initial is not None else 0,
+            "is_complete": remaining == 0,
+        },
+        tenant_id=tenant_id,
+    )
+
     if remaining > 0:
         return
 

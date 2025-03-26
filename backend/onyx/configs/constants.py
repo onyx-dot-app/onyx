@@ -3,6 +3,10 @@ import socket
 from enum import auto
 from enum import Enum
 
+ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
+ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+ONYX_EMAILABLE_LOGO_MAX_DIM = 512
+
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed
@@ -39,6 +43,7 @@ DISABLED_GEN_AI_MSG = (
     "Please contact them if you wish to have this enabled.\n"
     "You can still use Onyx as a search engine."
 )
+
 
 DEFAULT_PERSONA_ID = 0
 
@@ -174,6 +179,7 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
+    HIGHSPOT = "highspot"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -388,6 +394,9 @@ class OnyxCeleryTask:
     )
     CHECK_AVAILABLE_TENANTS = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
 
+    # Tenant pre-provisioning
+    PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
+
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
     CHECK_FOR_INDEXING = "check_for_indexing"
@@ -402,9 +411,7 @@ class OnyxCeleryTask:
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
-
-    # Tenant pre-provisioning
-    PRE_PROVISION_TENANT = "pre_provision_tenant"
+    MONITOR_PROCESS_MEMORY = "monitor_process_memory"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (

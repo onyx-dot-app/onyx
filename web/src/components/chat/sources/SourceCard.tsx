@@ -26,35 +26,6 @@ export const ResultIcon = ({
   );
 };
 
-// export default function SourceCard({
-//   doc,
-//   setPresentingDocument,
-// }: {
-//   doc: OnyxDocument;
-//   setPresentingDocument?: (document: OnyxDocument) => void;
-// }) {
-//   return (
-//     <div
-//       key={doc.document_id}
-//       onClick={() => openDocument(doc, setPresentingDocument)}
-//       className="cursor-pointer h-[80px] text-left overflow-hidden flex flex-col gap-0.5 rounded-lg px-3 py-2 bg-accent-background hover:bg-accent-background-hovered w-[200px]"
-//     >
-//       <div className="line-clamp-1 font-semibold text-ellipsis text-text-900  flex h-6 items-center gap-2 text-sm">
-//         {doc.is_internet || doc.source_type === "web" ? (
-//           <WebResultIcon url={doc.link} />
-//         ) : (
-//           <SourceIcon sourceType={doc.source_type} iconSize={18} />
-//         )}
-//         <p>{truncateString(doc.semantic_identifier || doc.document_id, 20)}</p>
-//       </div>
-//       <div className="line-clamp-2 text-sm font-semibold"></div>
-//       <div className="line-clamp-2 text-sm font-normal leading-snug text-text-700">
-//         {doc.blurb}
-//       </div>
-//     </div>
-//   );
-// }
-
 interface SeeMoreBlockProps {
   toggleDocumentSelection: () => void;
   docs: OnyxDocument[];

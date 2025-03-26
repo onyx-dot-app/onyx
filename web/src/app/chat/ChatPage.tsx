@@ -1158,6 +1158,7 @@ export function ChatPage({
     let frozenSessionId = currentSessionId();
     updateCanContinue(false, frozenSessionId);
     setUncaughtError(null);
+    setLoadingError(null);
 
     // Mark that we've sent a message for this session in the current page load
     markSessionMessageSent(frozenSessionId);
