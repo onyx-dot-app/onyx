@@ -88,7 +88,7 @@ ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
 # Use NODE_OPTIONS in the build command
-RUN NODE_OPTIONS="${NODE_OPTIONS}" npx next build
+RUN NODE_OPTIONS="--max-old-space-size=13152" npx next build
 
 # Step 2. Production image, copy all the files and run next
 FROM base AS runner
