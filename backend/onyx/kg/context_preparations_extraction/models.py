@@ -7,6 +7,7 @@ class ContextPreparation(BaseModel):
     """
 
     llm_context: str
+    core_entity: str
     implied_entities: list[str]
     implied_relationships: list[str]
     implied_terms: list[str]

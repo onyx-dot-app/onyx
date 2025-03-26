@@ -17,7 +17,7 @@ def prepare_llm_content_fireflies(chunk: KGChunkFormat) -> ContextPreparation:
     primary_owners = chunk.primary_owners
     secondary_owners = chunk.secondary_owners
     content = chunk.content
-    title = chunk.title.capitalize()
+    chunk.title.capitalize()
 
     implied_entities = set()
     implied_relationships = set()
@@ -28,10 +28,11 @@ def prepare_llm_content_fireflies(chunk: KGChunkFormat) -> ContextPreparation:
     if core_document:
         core_document_id_name = core_document.id_name
     else:
-        core_document_id_name = f"FIREFLIES:{title}"
+        core_document_id_name = f"FIREFLIES:{document_id}"
 
     # Do we need this here?
     implied_entities.add(f"ACCOUNT:{KG_OWN_COMPANY}")
+    implied_entities.add(f"{core_document_id_name}")
     implied_relationships.add(
         f"ACCOUNT:{KG_OWN_COMPANY}__participates in__{core_document_id_name}"
     )
@@ -75,6 +76,7 @@ def prepare_llm_content_fireflies(chunk: KGChunkFormat) -> ContextPreparation:
 
     return ContextPreparation(
         llm_context=llm_context,
+        core_entity=core_document_id_name,
         implied_entities=list(implied_entities),
         implied_relationships=list(implied_relationships),
         implied_terms=[],

@@ -29,6 +29,23 @@ identify in the text, each formatted simply as '<term>'>]
 }}
 """.strip()
 
+QUERY_EXTRACTION_FORMATTING_PROMPT = r"""
+{{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
+formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization)>],
+"relationships": [<a list of relationship between the identified entities, formatted as \
+'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
+of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
+__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
+"terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
+identify in the text, each formatted simply as '<term>'>],
+"time_filter": <if needed, a SQL_like filter for a field called 'event_date'>,
+"document_inspection_needed": <do you need to actually look at the text of the documents to answer the question? \
+Or do you just have to count or list specific sources/documents? If you only need to list or count, please say 'no'.
+If you need to see the documents, say 'yes'. Please ONLY with 'yes' or 'no'.
+If you need to inspect the document, \>
+}}
+"""
+
 EXAMPLE_1 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:*"],
     "relationships": ["ACCOUNT:Nike__had__CONCERN:*"], "terms": []}}
@@ -131,14 +148,15 @@ You are an expert in the area of knowledge extraction and using knowledge graphs
 and asked to extract entities, relationships, and terms from it that you can reliably identify and that then \
 can later be matched with a known knowledge graph.
 
-Here are the entity types that are available for extraction. Some of them may have a description, others \
-should be obvious. You can ONLY extract entities of these types and relationships between objects of these types:
+Today is ---today_date---. Here are the entity types that are available for extraction. Some of them may have \
+a description, others should be obvious. You can ONLY extract entities of these types and relationships between \
+objects of these types:
 {SEPARATOR_LINE}
 {ENTITY_TYPE_SETTING_PROMPT}
 {SEPARATOR_LINE}
 Please format your answer in this format:
 {SEPARATOR_LINE}
-{EXTRACTION_FORMATTING_PROMPT}
+{QUERY_EXTRACTION_FORMATTING_PROMPT}
 {SEPARATOR_LINE}
 
 The list above here is the exclusive, only list of entities you can chose from!
@@ -224,4 +242,30 @@ only for the account!
 --
 And here is the content:
 {{content}}
+"""
+
+
+STRATEGY_GENERATION_PROMPT = f"""
+Now you need to decide what type of strategy to use to answer the question. There are two types of strategies \
+available to you:
+
+1. DEEP: You can can leverage the actual text of sources to answer the question, which sits in a vector database.
+2. SIMPLE: You can use a simpler database that is aware of the entities, relationships, and terms, and is suitable
+if it is enough to either list or count entities or relationships.
+
+Your task is to decide which of the two strategies to use.
+
+To help you, here are the entities, relationships, and terms that you have extracted:
+{SEPARATOR_LINE}
+---entities---
+---relationships---
+---entities---
+{SEPARATOR_LINE}
+
+Here is the question you are asked to answer:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+Please answer simply with 'DEEP' or 'SIMPLE'. Do not include any other text or explanations.
 """

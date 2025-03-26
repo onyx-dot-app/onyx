@@ -15,6 +15,7 @@ def prepare_llm_content(chunk: KGChunkFormat) -> ContextPreparation:
     else:
         return ContextPreparation(
             llm_context=chunk.content,
+            core_entity="",
             implied_entities=[],
             implied_relationships=[],
             implied_terms=[],

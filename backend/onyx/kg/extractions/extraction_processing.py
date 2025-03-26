@@ -86,6 +86,7 @@ def kg_extraction(
         connector_succeeded_chunk_extractions: list[KGChunkId] = []
         connector_aggregated_kg_extractions: KGAggregatedExtractions = (
             KGAggregatedExtractions(
+                grounded_entities_document_ids=defaultdict(str),
                 entities=defaultdict(int),
                 relationships=defaultdict(int),
                 terms=defaultdict(int),
@@ -139,6 +140,10 @@ def kg_extraction(
                     aggregated_batch_extractions = (
                         chunk_processing_batch_results.aggregated_kg_extractions
                     )
+                    connector_aggregated_kg_extractions.grounded_entities_document_ids.update(
+                        aggregated_batch_extractions.grounded_entities_document_ids
+                    )
+
                     connector_aggregated_kg_extractions.entities.update(
                         aggregated_batch_extractions.entities
                     )
@@ -161,6 +166,7 @@ def kg_extraction(
                     processing_chunks = carryover_chunks.copy()
                     carryover_chunks = []
 
+            print("after processing chunks")
         # processes remaining chunks
         chunk_processing_batch_results = _kg_chunk_batch_extraction(
             processing_chunks, index_name, tenant_id
@@ -209,7 +215,7 @@ def kg_extraction(
             unprocessed_documents_list
         ):  # This will need to change if we do not materialize docs
             document_kg_updates[processed_document.id] = KGUDocumentUpdateRequest(
-                doc_id=processed_document.id,
+                document_id=processed_document.id,
                 entities=set(),
                 relationships=set(),
                 terms=set(),
@@ -238,6 +244,11 @@ def kg_extraction(
         connector_aggregated_kg_extractions_list
     )
 
+    with get_session_with_current_tenant() as db_session:
+        tracked_entity_types = [
+            x.id_name for x in get_entity_types(db_session, active=None)
+        ]
+
     # Populate the KG database with the extracted entities, relationships, and terms
     for (
         entity,
@@ -253,14 +264,32 @@ def kg_extraction(
         entity_type = entity_type.upper()
         entity_name = entity_name.capitalize()
 
+        if entity_type not in tracked_entity_types:
+            continue
+
         try:
             with get_session_with_current_tenant() as db_session:
-                add_entity(
-                    db_session=db_session,
-                    entity_type=entity_type,
-                    name=entity_name,
-                    cluster_count=extraction_count,
-                )
+                if (
+                    entity
+                    not in aggregated_kg_extractions.grounded_entities_document_ids
+                ):
+                    add_entity(
+                        db_session=db_session,
+                        entity_type=entity_type,
+                        name=entity_name,
+                        cluster_count=extraction_count,
+                    )
+                else:
+                    add_entity(
+                        db_session=db_session,
+                        entity_type=entity_type,
+                        name=entity_name,
+                        cluster_count=extraction_count,
+                        document_id=aggregated_kg_extractions.grounded_entities_document_ids[
+                            entity
+                        ],
+                    )
+
                 db_session.commit()
         except Exception as e:
             logger.error(f"Error adding entity {entity} to the database: {e}")
@@ -272,12 +301,22 @@ def kg_extraction(
         extraction_count,
     ) in aggregated_kg_extractions.relationships.items():
         source_entity, relationship_type, target_entity = relationship.split("__")
-        source_entity_general = f"{source_entity.split(':')[0].upper()}"
-        target_entity_general = f"{target_entity.split(':')[0].upper()}"
+        source_entity_type = source_entity.split(":")[0]
+        target_entity_type = target_entity.split(":")[0]
+
+        if (
+            source_entity_type not in tracked_entity_types
+            or target_entity_type not in tracked_entity_types
+        ):
+            continue
+
+        source_entity_general = f"{source_entity_type.upper()}"
+        target_entity_general = f"{target_entity_type.upper()}"
         relationship_type_id_name = (
             f"{source_entity_general}__{relationship_type.lower()}__"
             f"{target_entity_general}"
         )
+
         relationship_type_counter[relationship_type_id_name] += extraction_count
 
     for (
@@ -289,6 +328,12 @@ def kg_extraction(
             relationship_type,
             target_entity_type,
         ) = relationship_type_id_name.split("__")
+
+        if (
+            source_entity_type not in tracked_entity_types
+            or target_entity_type not in tracked_entity_types
+        ):
+            continue
 
         try:
             with get_session_with_current_tenant() as db_session:
@@ -394,11 +439,17 @@ def _kg_chunk_batch_extraction(
 
                 kg_updates = [
                     KGUChunkUpdateRequest(
-                        doc_id=chunk.document_id,
+                        document_id=chunk.document_id,
                         chunk_id=chunk.chunk_id,
-                        entities=extracted_entities,
-                        relationships=extracted_relationships,
-                        terms=extracted_terms,
+                        core_entity=llm_preprocessing.core_entity,
+                        entities=set(
+                            extracted_entities + llm_preprocessing.implied_entities
+                        ),
+                        relationships=set(
+                            extracted_relationships
+                            + llm_preprocessing.implied_relationships
+                        ),
+                        terms=set(extracted_terms),
                     ),
                 ]
 
@@ -421,8 +472,9 @@ def _kg_chunk_batch_extraction(
                 )
                 logger.error(f"Raw output: {extraction_result}")
                 return False, KGUChunkUpdateRequest(
-                    doc_id=chunk.document_id,
+                    document_id=chunk.document_id,
                     chunk_id=chunk.chunk_id,
+                    core_entity=llm_preprocessing.core_entity,
                     entities=set(),
                     relationships=set(),
                     terms=set(),
@@ -433,8 +485,9 @@ def _kg_chunk_batch_extraction(
                 f"Failed to process chunk {chunk.chunk_id} from doc {chunk.document_id}: {str(e)}"
             )
             return False, KGUChunkUpdateRequest(
-                doc_id=chunk.document_id,
+                document_id=chunk.document_id,
                 chunk_id=chunk.chunk_id,
+                core_entity="",
                 entities=set(),
                 relationships=set(),
                 terms=set(),
@@ -454,26 +507,33 @@ def _kg_chunk_batch_extraction(
         if success:
             succeeded_chunk_id.append(
                 KGChunkId(
-                    document_id=chunk_results.doc_id, chunk_id=chunk_results.chunk_id
+                    document_id=chunk_results.document_id,
+                    chunk_id=chunk_results.chunk_id,
                 )
             )
             succeeded_chunk_extraction.append(chunk_results)
         else:
             failed_chunk_id.append(
                 KGChunkId(
-                    document_id=chunk_results.doc_id, chunk_id=chunk_results.chunk_id
+                    document_id=chunk_results.document_id,
+                    chunk_id=chunk_results.chunk_id,
                 )
             )
 
     # Collect data for postgres later on
 
     aggregated_kg_extractions = KGAggregatedExtractions(
+        grounded_entities_document_ids=defaultdict(str),
         entities=defaultdict(int),
         relationships=defaultdict(int),
         terms=defaultdict(int),
     )
 
     for chunk_result in succeeded_chunk_extraction:
+        aggregated_kg_extractions.grounded_entities_document_ids[
+            chunk_result.core_entity
+        ] = chunk_result.document_id
+
         mentioned_chunk_entities: set[str] = set()
         for relationship in chunk_result.relationships:
             relationship_split = relationship.split("__")

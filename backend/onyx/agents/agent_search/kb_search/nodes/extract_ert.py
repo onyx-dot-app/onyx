@@ -40,13 +40,15 @@ def extract_ert(
 
     # first four lines duplicates from generate_initial_answer
     question = graph_config.inputs.search_request.query
+    today_date = datetime.now().strftime("%A, %Y-%m-%d")
 
     query_extraction_pre_prompt = QUERY_EXTRACTION_PROMPT.format(
         entity_types=_get_entity_types_str(active=True)
     )
+
     query_extraction_prompt = query_extraction_pre_prompt.replace(
         "---content---", question
-    )
+    ).replace("---today_date---", today_date)
 
     msg = [
         HumanMessage(
@@ -83,11 +85,15 @@ def extract_ert(
                 entities=[],
                 relationships=[],
                 terms=[],
+                time_filter="",
             )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
         entity_extraction_result = KGQuestionExtractionResult(
-            entities=[], relationships=[], terms=[]
+            entities=[],
+            relationships=[],
+            terms=[],
+            time_filter="",
         )
 
     ert_entities_string = f"Entities: {entity_extraction_result.entities}\n"
@@ -95,6 +101,7 @@ def extract_ert(
         f"Relationships: {entity_extraction_result.relationships}\n"
     )
     ert_terms_string = f"Terms: {entity_extraction_result.terms}"
+    ert_time_filter_string = f"Time Filter: {entity_extraction_result.time_filter}\n"
 
     write_custom_event(
         "initial_agent_answer",
@@ -126,12 +133,23 @@ def extract_ert(
         ),
         writer,
     )
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece=ert_time_filter_string,
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
     dispatch_main_answer_stop_info(0, writer)
 
     return ERTExtractionUpdate(
         entities=entity_extraction_result.entities,
         relationships=entity_extraction_result.relationships,
         terms=entity_extraction_result.terms,
+        time_filter=entity_extraction_result.time_filter,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

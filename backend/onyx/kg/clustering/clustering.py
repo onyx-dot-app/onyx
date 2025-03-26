@@ -20,47 +20,18 @@ from onyx.db.relationships import delete_relationship_types_by_id_names
 from onyx.db.relationships import delete_relationships_by_id_names
 from onyx.db.relationships import get_all_relationship_types
 from onyx.db.relationships import get_all_relationships
-from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
+from onyx.kg.utils.embeddings import encode_string_batch
 from onyx.kg.utils.formatting_utils import format_entity
 from onyx.kg.utils.formatting_utils import format_relationship
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
 from onyx.llm.factory import get_default_llms
 from onyx.llm.utils import message_to_string
-from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import MODEL_SERVER_HOST
-from shared_configs.configs import MODEL_SERVER_PORT
-from shared_configs.enums import EmbedTextType
 
 
 logger = setup_logger()
-
-
-def _get_clustering_embeddings_batch(relationship_name_batch: List[str]) -> np.ndarray:
-    """
-    Get vector embedding for a relationship name using the index model server.
-    Creates a short-lived session just for getting the search settings.
-
-    Args:
-        relationship_name_batch: List of relationship names to embed
-
-    Returns:
-        numpy array representing the embedding
-    """
-    # Create short-lived session just for getting settings
-    with get_session_with_current_tenant() as db_session:
-        current_search_settings = get_current_search_settings(db_session)
-        model = EmbeddingModel.from_db_model(
-            search_settings=current_search_settings,
-            server_host=MODEL_SERVER_HOST,
-            server_port=MODEL_SERVER_PORT,
-        )
-        # Get embeddings while session is still open
-        embedding = model.encode(relationship_name_batch, text_type=EmbedTextType.QUERY)
-
-    return np.array(embedding)
 
 
 def _cluster_relationships(
@@ -96,7 +67,7 @@ def _cluster_relationships(
         batch_names = [rel["name"] for rel in batch]
 
         # Get embeddings for the entire batch at once
-        batch_embeddings = _get_clustering_embeddings_batch(batch_names)
+        batch_embeddings = encode_string_batch(batch_names)
 
         # Add embeddings and corresponding data
         for rel, embedding in zip(batch, batch_embeddings):
@@ -154,7 +125,7 @@ def _cluster_entities(
         batch_names = [ent["name"] for ent in batch]
 
         # Get embeddings for the entire batch at once
-        batch_embeddings = _get_clustering_embeddings_batch(batch_names)
+        batch_embeddings = encode_string_batch(batch_names)
 
         # Add embeddings and corresponding data
         for ent, embedding in zip(batch, batch_embeddings):
@@ -657,8 +628,9 @@ Only output the category name, nothing else."""
 
                     new_kg_update_requests.append(
                         KGUChunkUpdateRequest(
-                            doc_id=document_id,
+                            document_id=document_id,
                             chunk_id=formatted_chunk.chunk_id,
+                            core_entity="",  # core entities only apply to grounded entities which are not affected by clustering.
                             entities=replacement_entities,
                             relationships=replacement_relationships,
                             terms=replacement_terms,

@@ -44,12 +44,21 @@ def aggregate_kg_extractions(
     connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions],
 ) -> KGAggregatedExtractions:
     aggregated_kg_extractions = KGAggregatedExtractions(
+        grounded_entities_document_ids=defaultdict(str),
         entities=defaultdict(int),
         relationships=defaultdict(int),
         terms=defaultdict(int),
     )
 
     for connector_aggregated_kg_extractions in connector_aggregated_kg_extractions_list:
+        for (
+            grounded_entity,
+            document_id,
+        ) in connector_aggregated_kg_extractions.grounded_entities_document_ids.items():
+            aggregated_kg_extractions.grounded_entities_document_ids[
+                grounded_entity
+            ] = document_id
+
         for entity, count in connector_aggregated_kg_extractions.entities.items():
             aggregated_kg_extractions.entities[entity] += count
         for (

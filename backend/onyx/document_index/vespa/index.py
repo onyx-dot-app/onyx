@@ -17,6 +17,7 @@ from uuid import UUID
 
 import httpx  # type: ignore
 import requests  # type: ignore
+from pydantic import BaseModel
 from retry import retry
 
 from onyx.configs.chat_configs import DOC_TIME_DECAY
@@ -97,34 +98,32 @@ class _VespaUpdateRequest:
     update_request: dict[str, dict]
 
 
-@dataclass
-class KGVespaChunkUpdateRequest:
+class KGVespaChunkUpdateRequest(BaseModel):
     document_id: str
     chunk_id: int
     url: str
     update_request: dict[str, dict]
 
 
-@dataclass
-class KGUChunkUpdateRequest:
+class KGUChunkUpdateRequest(BaseModel):
     """
     Update KG fields for a document
     """
 
-    doc_id: str
+    document_id: str
     chunk_id: int
+    core_entity: str
     entities: set[str] | None = None
     relationships: set[str] | None = None
     terms: set[str] | None = None
 
 
-@dataclass
-class KGUDocumentUpdateRequest:
+class KGUDocumentUpdateRequest(BaseModel):
     """
     Update KG fields for a document
     """
 
-    doc_id: str
+    document_id: str
     entities: set[str]
     relationships: set[str]
     terms: set[str]
@@ -721,7 +720,7 @@ class VespaIndex(DocumentIndex):
                 continue
 
             doc_chunk_id = get_uuid_from_chunk_info(
-                document_id=kg_update_request.doc_id,
+                document_id=kg_update_request.document_id,
                 chunk_id=kg_update_request.chunk_id,
                 tenant_id=tenant_id,
                 large_chunk_id=None,
@@ -729,7 +728,7 @@ class VespaIndex(DocumentIndex):
 
             processed_updates_requests.append(
                 KGVespaChunkUpdateRequest(
-                    document_id=kg_update_request.doc_id,
+                    document_id=kg_update_request.document_id,
                     chunk_id=kg_update_request.chunk_id,
                     url=f"{DOCUMENT_ID_ENDPOINT.format(index_name=self.index_name)}/{doc_chunk_id}",
                     update_request=kg_update_dict,

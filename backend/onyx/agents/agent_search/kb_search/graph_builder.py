@@ -2,6 +2,7 @@ from langgraph.graph import END
 from langgraph.graph import START
 from langgraph.graph import StateGraph
 
+from onyx.agents.agent_search.kb_search.nodes.analyze import analyze
 from onyx.agents.agent_search.kb_search.nodes.extract_ert import extract_ert
 from onyx.agents.agent_search.kb_search.states import MainInput
 from onyx.agents.agent_search.kb_search.states import MainState
@@ -29,12 +30,22 @@ def kb_graph_builder(test_mode: bool = False) -> StateGraph:
         extract_ert,
     )
 
+    graph.add_node(
+        "analyze",
+        analyze,
+    )
+
     ### Add edges ###
 
     graph.add_edge(start_key=START, end_key="extract_ert")
 
     graph.add_edge(
         start_key="extract_ert",
+        end_key="analyze",
+    )
+
+    graph.add_edge(
+        start_key="analyze",
         end_key=END,
     )
 

@@ -11,15 +11,20 @@ from onyx.db.models import KGEntityType
 
 def get_entity_types(
     db_session: Session,
-    active: bool = True,
+    active: bool | None = True,
 ) -> list[KGEntityType]:
     # Query the database for all distinct entity types
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.active == active)
-        .order_by(KGEntityType.id_name)
-        .all()
-    )
+
+    if active is None:
+        return db_session.query(KGEntityType).order_by(KGEntityType.id_name).all()
+
+    else:
+        return (
+            db_session.query(KGEntityType)
+            .filter(KGEntityType.active == active)
+            .order_by(KGEntityType.id_name)
+            .all()
+        )
 
 
 def add_entity(
@@ -125,3 +130,23 @@ def delete_entities_by_id_names(db_session: Session, id_names: list[str]) -> int
 
     db_session.flush()  # Flush to ensure deletion is processed
     return deleted_count
+
+
+def get_entities_for_types(
+    db_session: Session, entity_types: List[str]
+) -> List[KGEntity]:
+    """Get all entities that belong to the specified entity types.
+
+    Args:
+        db_session: SQLAlchemy session
+        entity_types: List of entity type id_names to filter by
+
+    Returns:
+        List of KGEntity objects belonging to the specified entity types
+    """
+    return (
+        db_session.query(KGEntity)
+        .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
+        .filter(KGEntity.entity_type_id_name.in_(entity_types))
+        .all()
+    )

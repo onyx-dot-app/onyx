@@ -1,3 +1,4 @@
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGRelationship
@@ -175,3 +176,28 @@ def delete_relationship_types_by_id_names(
 
     db_session.flush()  # Flush to ensure deletion is processed
     return deleted_count
+
+
+def get_relationships_for_entity_type_pairs(
+    db_session: Session, entity_type_pairs: list[tuple[str, str]]
+) -> list["KGRelationshipType"]:
+    """
+    Get relationship types from the database based on a list of entity type pairs.
+
+    Args:
+        db_session: SQLAlchemy database session
+        entity_type_pairs: List of tuples where each tuple contains (source_entity_type, target_entity_type)
+
+    Returns:
+        List of KGRelationshipType objects where source and target types match the provided pairs
+    """
+
+    conditions = [
+        (
+            (KGRelationshipType.source_entity_type_id_name == source_type)
+            & (KGRelationshipType.target_entity_type_id_name == target_type)
+        )
+        for source_type, target_type in entity_type_pairs
+    ]
+
+    return db_session.query(KGRelationshipType).filter(or_(*conditions)).all()

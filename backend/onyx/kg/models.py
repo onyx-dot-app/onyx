@@ -23,6 +23,7 @@ class KGChunkExtraction(BaseModel):
     connector_id: int
     document_id: str
     chunk_id: int
+    core_entity: str
     entities: list[str]
     relationships: list[str]
     terms: list[str]
@@ -35,6 +36,7 @@ class KGChunkId(BaseModel):
 
 
 class KGAggregatedExtractions(BaseModel):
+    grounded_entities_document_ids: defaultdict[str, str]
     entities: defaultdict[str, int]
     relationships: defaultdict[str, int]
     terms: defaultdict[str, int]
@@ -58,3 +60,18 @@ class KGPerson(BaseModel):
     name: str
     company: str
     employee: bool
+
+
+class NormalizedEntities(BaseModel):
+    entities: list[str]
+    entity_normalization_map: dict[str, str | None]
+
+
+class NormalizedRelationships(BaseModel):
+    relationships: list[str]
+    relationship_normalization_map: dict[str, str | None]
+
+
+class NormalizedTerms(BaseModel):
+    terms: list[str]
+    term_normalization_map: dict[str, str | None]
