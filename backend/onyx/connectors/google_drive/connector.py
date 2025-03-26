@@ -561,6 +561,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         )
 
         for email in all_org_emails:
+            if email in checkpoint.completion_map:
+                continue
             checkpoint.completion_map[email] = StageCompletion(
                 stage=DriveRetrievalStage.START,
                 completed_until=0,
