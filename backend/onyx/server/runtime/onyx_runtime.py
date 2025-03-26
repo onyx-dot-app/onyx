@@ -115,6 +115,9 @@ class OnyxRuntime:
             except ValueError:
                 pass
 
+        if beat_multiplier <= 0.0:
+            return 1.0
+
         return beat_multiplier
 
     @staticmethod
@@ -132,6 +135,9 @@ class OnyxRuntime:
                 value = float(value_bytes.decode())
             except ValueError:
                 pass
+
+        if value <= 0.0:
+            return 1.0
 
         return value
 
@@ -154,5 +160,8 @@ class OnyxRuntime:
                 interval = int(interval_bytes.decode())
             except ValueError:
                 pass
+
+        if interval <= 0.0:
+            return CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
 
         return interval
