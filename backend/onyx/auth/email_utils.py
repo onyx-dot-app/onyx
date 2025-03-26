@@ -23,8 +23,6 @@ from onyx.utils.file import FileWithMimeType
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import MULTI_TENANT
 
-# Email configuration
-
 
 HTML_EMAIL_TEMPLATE = """\
 <!DOCTYPE html>

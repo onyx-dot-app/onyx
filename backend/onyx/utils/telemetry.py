@@ -39,6 +39,7 @@ class RecordType(str, Enum):
     INDEXING_PROGRESS = "indexing_progress"
     INDEXING_COMPLETE = "indexing_complete"
     PERMISSION_SYNC_PROGRESS = "permission_sync_progress"
+    PERMISSION_SYNC_COMPLETE = "permission_sync_complete"
     INDEX_ATTEMPT_STATUS = "index_attempt_status"
 
 

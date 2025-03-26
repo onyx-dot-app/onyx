@@ -579,11 +579,8 @@ def _run_indexing(
                     data={
                         "index_attempt_id": index_attempt_id,
                         "cc_pair_id": ctx.cc_pair_id,
-                        "connector_id": ctx.connector_id,
-                        "credential_id": ctx.credential_id,
-                        "total_docs_indexed": document_count,
-                        "total_chunks": chunk_count,
-                        "batch_num": batch_num,
+                        "current_docs_indexed": document_count,
+                        "current_chunks_indexed": chunk_count,
                         "source": ctx.source.value,
                     },
                     tenant_id=tenant_id,
@@ -609,21 +606,17 @@ def _run_indexing(
         redis_connector_index = redis_connector.new_index(
             index_attempt_start.search_settings_id
         )
-        final_progress = redis_connector_index.get_progress() or 0
+        redis_connector_index.get_progress() or 0
 
         optional_telemetry(
             record_type=RecordType.INDEXING_COMPLETE,
             data={
                 "index_attempt_id": index_attempt_id,
                 "cc_pair_id": ctx.cc_pair_id,
-                "connector_id": ctx.connector_id,
-                "credential_id": ctx.credential_id,
                 "total_docs_indexed": document_count,
                 "total_chunks": chunk_count,
-                "batch_count": batch_num,
                 "time_elapsed_seconds": time.monotonic() - start_time,
                 "source": ctx.source.value,
-                "redis_progress": final_progress,
             },
             tenant_id=tenant_id,
         )
