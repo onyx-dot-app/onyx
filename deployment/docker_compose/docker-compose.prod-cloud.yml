@@ -56,7 +56,7 @@ services:
       - "host.docker.internal:host-gateway"
     # optional, only for debugging purposes
     volumes:
-      - log_store:/var/log/persisted-logs
+      - log_store:/var/log
     logging:
       driver: json-file
       options:
