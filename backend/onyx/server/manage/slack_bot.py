@@ -261,9 +261,6 @@ def create_bot(
     # Create a default Slack channel config
     default_channel_config = ChannelConfig(
         channel_name=None,
-        respond_member_group_list=[],
-        answer_filters=[],
-        follow_up_tags=[],
         respond_tag_only=True,
     )
     insert_slack_channel_config(
@@ -371,7 +368,9 @@ def get_all_channels_from_slack_api(
     _: User | None = Depends(current_admin_user),
 ) -> list[SlackChannel]:
     """
-    Fetches channels the bot is a member of from the Slack API.
+    Fetches all channels in the Slack workspace using the conversations_list API.
+    This includes both public and private channels that are visible to the app,
+    not just the ones the bot is a member of.
     Handles pagination with a limit to avoid excessive API calls.
     """
     tokens = fetch_slack_bot_tokens(db_session, bot_id)
@@ -386,20 +385,20 @@ def get_all_channels_from_slack_api(
     current_page = 0
 
     try:
-        # Use users_conversations with limited pagination
+        # Use conversations_list to get all channels in the workspace (including ones the bot is not a member of)
         while current_page < MAX_SLACK_PAGES:
             current_page += 1
 
             # Make API call with cursor if we have one
             if next_cursor:
-                response = client.users_conversations(
+                response = client.conversations_list(
                     types="public_channel,private_channel",
                     exclude_archived=True,
                     cursor=next_cursor,
                     limit=SLACK_API_CHANNELS_PER_PAGE,
                 )
             else:
-                response = client.users_conversations(
+                response = client.conversations_list(
                     types="public_channel,private_channel",
                     exclude_archived=True,
                     limit=SLACK_API_CHANNELS_PER_PAGE,

@@ -61,7 +61,7 @@ import {
 import { buildImgUrl } from "@/app/chat/files/images/utils";
 import { useAssistants } from "@/components/context/AssistantsContext";
 import { debounce } from "lodash";
-import { FullLLMProvider } from "../configuration/llm/interfaces";
+import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
 
 import { Switch, SwitchField } from "@/components/ui/switch";
@@ -123,7 +123,7 @@ export function AssistantEditor({
   documentSets: DocumentSet[];
   user: User | null;
   defaultPublic: boolean;
-  llmProviders: FullLLMProvider[];
+  llmProviders: LLMProviderView[];
   tools: ToolSnapshot[];
   shouldAddAssistantToUserPreferences?: boolean;
   admin?: boolean;
@@ -1079,7 +1079,7 @@ export function AssistantEditor({
                           </Tooltip>
                         </TooltipProvider>
                         <span className="text-sm ml-2">
-                          {values.is_public ? "Public" : "Private"}
+                          Organization Public
                         </span>
                       </div>
 
@@ -1088,17 +1088,22 @@ export function AssistantEditor({
                           <InfoIcon size={16} className="mr-2" />
                           <span className="text-sm">
                             Default persona must be public. Visibility has been
-                            automatically set to public.
+                            automatically set to organization public.
                           </span>
                         </div>
                       )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
-                          Anyone from your team can view and use this assistant
+                          This assistant will be available to everyone in your
+                          organization
                         </p>
                       ) : (
                         <>
+                          <p className="text-sm text-text-dark mb-2">
+                            This assistant will only be available to specific
+                            users and groups
+                          </p>
                           <div className="mt-2">
                             <Label className="mb-2" small>
                               Share with Users and Groups

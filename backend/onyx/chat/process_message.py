@@ -73,6 +73,7 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
@@ -1069,6 +1070,8 @@ def stream_chat_message_objects(
             prev_message = next_answer_message
 
         logger.debug("Committing messages")
+        # Explicitly update the timestamp on the chat session
+        update_chat_session_updated_at_timestamp(chat_session_id, db_session)
         db_session.commit()  # actually save user / assistant message
 
         yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)

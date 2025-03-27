@@ -9,14 +9,14 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_providers
-from onyx.db.llm import fetch_provider
+from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import model_supports_image_input
-from onyx.server.manage.llm.models import FullLLMProvider
+from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
@@ -62,7 +62,7 @@ def get_llms_for_persona(
         )
 
     with get_session_context_manager() as db_session:
-        llm_provider = fetch_provider(db_session, provider_name)
+        llm_provider = fetch_llm_provider_view(db_session, provider_name)
 
     if not llm_provider:
         raise ValueError("No LLM provider found")
@@ -106,7 +106,7 @@ def get_default_llm_with_vision(
     if DISABLE_GENERATIVE_AI:
         raise GenAIDisabledException()
 
-    def create_vision_llm(provider: FullLLMProvider, model: str) -> LLM:
+    def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
         """Helper to create an LLM if the provider supports image input."""
         return get_llm(
             provider=provider.provider,
@@ -148,7 +148,7 @@ def get_default_llm_with_vision(
             provider.default_vision_model, provider.provider
         ):
             return create_vision_llm(
-                FullLLMProvider.from_model(provider), provider.default_vision_model
+                LLMProviderView.from_model(provider), provider.default_vision_model
             )
 
     return None

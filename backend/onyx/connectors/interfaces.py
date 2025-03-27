@@ -8,7 +8,6 @@ from typing import TypeAlias
 from typing import TypeVar
 
 from pydantic import BaseModel
-from typing_extensions import override
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorCheckpoint
@@ -59,6 +58,10 @@ class BaseConnector(abc.ABC, Generic[CT]):
 
         Default is a no-op (always successful).
         """
+
+    def set_allow_images(self, value: bool) -> None:
+        """Implement if the underlying connector wants to skip/allow image downloading
+        based on the application level image analysis setting."""
 
     def build_dummy_checkpoint(self) -> CT:
         # TODO: find a way to make this work without type: ignore
@@ -227,7 +230,7 @@ class CheckpointConnector(BaseConnector[CT]):
         """
         raise NotImplementedError
 
-    @override
+    @abc.abstractmethod
     def build_dummy_checkpoint(self) -> CT:
         raise NotImplementedError
 

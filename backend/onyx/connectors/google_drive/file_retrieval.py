@@ -1,6 +1,7 @@
 from collections.abc import Callable
 from collections.abc import Iterator
 from datetime import datetime
+from datetime import timezone
 
 from googleapiclient.discovery import Resource  # type: ignore
 
@@ -36,12 +37,12 @@ def _generate_time_range_filter(
 ) -> str:
     time_range_filter = ""
     if start is not None:
-        time_start = datetime.utcfromtimestamp(start).isoformat() + "Z"
+        time_start = datetime.fromtimestamp(start, tz=timezone.utc).isoformat()
         time_range_filter += (
             f" and {GoogleFields.MODIFIED_TIME.value} >= '{time_start}'"
         )
     if end is not None:
-        time_stop = datetime.utcfromtimestamp(end).isoformat() + "Z"
+        time_stop = datetime.fromtimestamp(end, tz=timezone.utc).isoformat()
         time_range_filter += f" and {GoogleFields.MODIFIED_TIME.value} <= '{time_stop}'"
     return time_range_filter
 
@@ -122,7 +123,7 @@ def crawl_folders_for_files(
                 end=end,
             ):
                 found_files = True
-                logger.info(f"Found file: {file['name']}")
+                logger.info(f"Found file: {file['name']}, user email: {user_email}")
                 yield RetrievedDriveFile(
                     drive_file=file,
                     user_email=user_email,

@@ -6,14 +6,17 @@ import uuid
 from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import MutableMapping
+from collections.abc import Sequence
 from concurrent.futures import as_completed
 from concurrent.futures import FIRST_COMPLETED
 from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import wait
 from typing import Any
+from typing import cast
 from typing import Generic
 from typing import overload
+from typing import Protocol
 from typing import TypeVar
 
 from pydantic import GetCoreSchemaHandler
@@ -145,13 +148,20 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
             return collections.abc.ValuesView(self)
 
 
+class CallableProtocol(Protocol):
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        ...
+
+
 def run_functions_tuples_in_parallel(
-    functions_with_args: list[tuple[Callable, tuple]],
+    functions_with_args: Sequence[tuple[CallableProtocol, tuple[Any, ...]]],
     allow_failures: bool = False,
     max_workers: int | None = None,
 ) -> list[Any]:
     """
     Executes multiple functions in parallel and returns a list of the results for each function.
+    This function preserves contextvars across threads, which is important for maintaining
+    context like tenant IDs in database sessions.
 
     Args:
         functions_with_args: List of tuples each containing the function callable and a tuple of arguments.
@@ -159,7 +169,7 @@ def run_functions_tuples_in_parallel(
         max_workers: Max number of worker threads
 
     Returns:
-        dict: A dictionary mapping function names to their results or error messages.
+        list: A list of results from each function, in the same order as the input functions.
     """
     workers = (
         min(max_workers, len(functions_with_args))
@@ -186,7 +196,7 @@ def run_functions_tuples_in_parallel(
                 results.append((index, future.result()))
             except Exception as e:
                 logger.exception(f"Function at index {index} failed due to {e}")
-                results.append((index, None))
+                results.append((index, None))  # type: ignore
 
                 if not allow_failures:
                     raise
@@ -288,7 +298,7 @@ def run_with_timeout(
     if task.is_alive():
         task.end()
 
-    return task.result
+    return task.result  # type: ignore
 
 
 # NOTE: this function should really only be used when run_functions_tuples_in_parallel is
@@ -304,9 +314,9 @@ def run_in_background(
     """
     context = contextvars.copy_context()
     # Timeout not used in the non-blocking case
-    task = TimeoutThread(-1, context.run, func, *args, **kwargs)
+    task = TimeoutThread(-1, context.run, func, *args, **kwargs)  # type: ignore
     task.start()
-    return task
+    return cast(TimeoutThread[R], task)
 
 
 def wait_on_background(task: TimeoutThread[R]) -> R:

@@ -18,6 +18,7 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.configs.app_configs import SLACK_NUM_THREADS
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -437,7 +438,11 @@ def _get_all_doc_ids(
 
 class ProcessedSlackMessage(BaseModel):
     doc: Document | None
-    thread_ts: str | None
+    # if the message is part of a thread, this is the thread_ts
+    # otherwise, this is the message_ts. Either way, will be a unique identifier.
+    # In the future, if the message becomes a thread, then the thread_ts
+    # will be set to the message_ts.
+    thread_or_message_ts: str
     failure: ConnectorFailure | None
 
 
@@ -451,6 +456,7 @@ def _process_message(
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> ProcessedSlackMessage:
     thread_ts = message.get("thread_ts")
+    thread_or_message_ts = thread_ts or message["ts"]
     try:
         # causes random failures for testing checkpointing / continue on failure
         # import random
@@ -466,16 +472,18 @@ def _process_message(
             seen_thread_ts=seen_thread_ts,
             msg_filter_func=msg_filter_func,
         )
-        return ProcessedSlackMessage(doc=doc, thread_ts=thread_ts, failure=None)
+        return ProcessedSlackMessage(
+            doc=doc, thread_or_message_ts=thread_or_message_ts, failure=None
+        )
     except Exception as e:
         logger.exception(f"Error processing message {message['ts']}")
         return ProcessedSlackMessage(
             doc=None,
-            thread_ts=thread_ts,
+            thread_or_message_ts=thread_or_message_ts,
             failure=ConnectorFailure(
                 failed_document=DocumentFailure(
                     document_id=_build_doc_id(
-                        channel_id=channel["id"], thread_ts=(thread_ts or message["ts"])
+                        channel_id=channel["id"], thread_ts=thread_or_message_ts
                     ),
                     document_link=get_message_link(message, client, channel["id"]),
                 ),
@@ -486,7 +494,6 @@ def _process_message(
 
 
 class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
-    MAX_WORKERS = 2
     FAST_TIMEOUT = 1
 
     def __init__(
@@ -496,10 +503,12 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
         # regexes, and will only index channels that fully match the regexes
         channel_regex_enabled: bool = False,
         batch_size: int = INDEX_BATCH_SIZE,
+        num_threads: int = SLACK_NUM_THREADS,
     ) -> None:
         self.channels = channels
         self.channel_regex_enabled = channel_regex_enabled
         self.batch_size = batch_size
+        self.num_threads = num_threads
         self.client: WebClient | None = None
         self.fast_client: WebClient | None = None
         # just used for efficiency
@@ -593,7 +602,7 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
             # Process messages in parallel using ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=SlackConnector.MAX_WORKERS) as executor:
+            with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
                 futures: list[Future[ProcessedSlackMessage]] = []
                 for message in message_batch:
                     # Capture the current context so that the thread gets the current tenant ID
@@ -614,7 +623,7 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
                 for future in as_completed(futures):
                     processed_slack_message = future.result()
                     doc = processed_slack_message.doc
-                    thread_ts = processed_slack_message.thread_ts
+                    thread_or_message_ts = processed_slack_message.thread_or_message_ts
                     failure = processed_slack_message.failure
                     if doc:
                         # handle race conditions here since this is single
@@ -622,11 +631,13 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
                         # but since this is single threaded, we won't run into simul
                         # writes. At worst, we can duplicate a thread, which will be
                         # deduped later on.
-                        if thread_ts not in seen_thread_ts:
+                        if thread_or_message_ts not in seen_thread_ts:
                             yield doc
 
-                        assert thread_ts, "found non-None doc with None thread_ts"
-                        seen_thread_ts.add(thread_ts)
+                        assert (
+                            thread_or_message_ts
+                        ), "found non-None doc with None thread_or_message_ts"
+                        seen_thread_ts.add(thread_or_message_ts)
                     elif failure:
                         yield failure
 
@@ -704,25 +715,28 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
                 )
 
             # 3) If channels are specified and regex is not enabled, verify each is accessible
-            if self.channels and not self.channel_regex_enabled:
-                accessible_channels = get_channels(
-                    client=self.fast_client,
-                    exclude_archived=True,
-                    get_public=True,
-                    get_private=True,
-                )
-                # For quick lookups by name or ID, build a map:
-                accessible_channel_names = {ch["name"] for ch in accessible_channels}
-                accessible_channel_ids = {ch["id"] for ch in accessible_channels}
+            # NOTE: removed this for now since it may be too slow for large workspaces which may
+            # have some automations which create a lot of channels (100k+)
 
-                for user_channel in self.channels:
-                    if (
-                        user_channel not in accessible_channel_names
-                        and user_channel not in accessible_channel_ids
-                    ):
-                        raise ConnectorValidationError(
-                            f"Channel '{user_channel}' not found or inaccessible in this workspace."
-                        )
+            # if self.channels and not self.channel_regex_enabled:
+            #     accessible_channels = get_channels(
+            #         client=self.fast_client,
+            #         exclude_archived=True,
+            #         get_public=True,
+            #         get_private=True,
+            #     )
+            #     # For quick lookups by name or ID, build a map:
+            #     accessible_channel_names = {ch["name"] for ch in accessible_channels}
+            #     accessible_channel_ids = {ch["id"] for ch in accessible_channels}
+
+            #     for user_channel in self.channels:
+            #         if (
+            #             user_channel not in accessible_channel_names
+            #             and user_channel not in accessible_channel_ids
+            #         ):
+            #             raise ConnectorValidationError(
+            #                 f"Channel '{user_channel}' not found or inaccessible in this workspace."
+            #             )
 
         except SlackApiError as e:
             slack_error = e.response.get("error", "")

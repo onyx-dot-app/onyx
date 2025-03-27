@@ -76,9 +76,10 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     return is_valid_image_type(mime_type)
 
 
-def _extract_sections_basic(
+def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
+    allow_images: bool,
 ) -> list[TextSection | ImageSection]:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
@@ -87,6 +88,10 @@ def _extract_sections_basic(
     link = file.get("webViewLink", "")
 
     try:
+        # skip images if not explicitly enabled
+        if not allow_images and is_gdrive_image_mime_type(mime_type):
+            return []
+
         # For Google Docs, Sheets, and Slides, export as plain text
         if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
             export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
@@ -207,6 +212,8 @@ def convert_drive_item_to_document(
     file: GoogleDriveFileType,
     drive_service: Callable[[], GoogleDriveService],
     docs_service: Callable[[], GoogleDocsService],
+    allow_images: bool,
+    size_threshold: int,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
@@ -234,9 +241,24 @@ def convert_drive_item_to_document(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."
                 )
 
+        size_str = file.get("size")
+        if size_str:
+            try:
+                size_int = int(size_str)
+            except ValueError:
+                logger.warning(f"Parsing string to int failed: size_str={size_str}")
+            else:
+                if size_int > size_threshold:
+                    logger.warning(
+                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
+                    )
+                    return None
+
         # If we don't have sections yet, use the basic extraction method
         if not sections:
-            sections = _extract_sections_basic(file, drive_service())
+            sections = _download_and_extract_sections_basic(
+                file, drive_service(), allow_images
+            )
 
         # If we still don't have any sections, skip this file
         if not sections:

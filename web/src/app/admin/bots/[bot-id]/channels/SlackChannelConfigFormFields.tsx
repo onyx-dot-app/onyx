@@ -254,14 +254,14 @@ export function SlackChannelConfigFormFields({
                       onSearchTermChange={(term) => {
                         form.setFieldValue("channel_name", term);
                       }}
+                      allowCustomValues={true}
                     />
                   )}
                 </Field>
                 <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
-                  Note: This list shows public and private channels where the
-                  bot is a member (up to 500 channels). If you don&apos;t see a
-                  channel, make sure the bot is added to that channel in Slack
-                  first, or type the channel name manually.
+                  Note: This list shows existing public and private channels (up
+                  to 500). You can either select from the list or type any
+                  channel name directly.
                 </p>
               </>
             )}

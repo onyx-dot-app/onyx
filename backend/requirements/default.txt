@@ -56,7 +56,7 @@ puremagic==1.28
 pyairtable==3.0.1
 pycryptodome==3.19.1
 pydantic==2.8.2
-PyGithub==1.58.2
+PyGithub==2.5.0
 python-dateutil==2.8.2
 python-gitlab==3.9.0
 python-pptx==0.6.23
