@@ -37,7 +37,7 @@ logger = setup_logger()
 
 TEXT_SECTION_SEPARATOR = "\n\n"
 
-PLAIN_TEXT_FILE_EXTENSIONS = [
+ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
     ".txt",
     ".md",
     ".mdx",
@@ -51,7 +51,7 @@ PLAIN_TEXT_FILE_EXTENSIONS = [
     ".yaml",
 ]
 
-DOCUMENT_FILE_EXTENSIONS = [
+ACCEPTED_DOCUMENT_FILE_EXTENSIONS = [
     ".pdf",
     ".docx",
     ".pptx",
@@ -61,25 +61,17 @@ DOCUMENT_FILE_EXTENSIONS = [
     ".html",
 ]
 
-IMAGE_FILE_EXTENSIONS = [
+ACCEPTED_IMAGE_FILE_EXTENSIONS = [
     ".png",
     ".jpg",
     ".jpeg",
     ".webp",
 ]
 
-ACCEPTED_FILE_EXTENSIONS = (
-    PLAIN_TEXT_FILE_EXTENSIONS
-    + IMAGE_FILE_EXTENSIONS
-    + [
-        ".pdf",
-        ".docx",
-        ".pptx",
-        ".xlsx",
-        ".eml",
-        ".epub",
-        ".html",
-    ]
+ALL_ACCEPTED_FILE_EXTENSIONS = (
+    ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
+    + ACCEPTED_DOCUMENT_FILE_EXTENSIONS
+    + ACCEPTED_IMAGE_FILE_EXTENSIONS
 )
 
 IMAGE_MEDIA_TYPES = [
@@ -97,7 +89,7 @@ class OnyxExtensionType(IntFlag):
 
 
 def is_text_file_extension(file_name: str) -> bool:
-    return any(file_name.endswith(ext) for ext in PLAIN_TEXT_FILE_EXTENSIONS)
+    return any(file_name.endswith(ext) for ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS)
 
 
 def get_file_ext(file_path_or_name: str | Path) -> str:
@@ -110,17 +102,19 @@ def is_valid_media_type(media_type: str) -> bool:
 
 
 def is_accepted_file_ext(ext: str, ext_type: OnyxExtensionType) -> bool:
-    accepted_extensions: set[str] = set()
     if ext_type & OnyxExtensionType.Plain:
-        accepted_extensions.update(PLAIN_TEXT_FILE_EXTENSIONS)
+        if ext_type in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS:
+            return True
 
     if ext_type & OnyxExtensionType.Document:
-        accepted_extensions.update(DOCUMENT_FILE_EXTENSIONS)
+        if ext_type in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
+            return True
 
     if ext_type & OnyxExtensionType.Multimedia:
-        accepted_extensions.update(IMAGE_FILE_EXTENSIONS)
+        if ext_type in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+            return True
 
-    return ext in accepted_extensions
+    return False
 
 
 def is_text_file(file: IO[bytes]) -> bool:
