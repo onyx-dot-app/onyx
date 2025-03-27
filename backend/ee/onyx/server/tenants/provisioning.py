@@ -87,11 +87,14 @@ async def get_or_provision_tenant(
             # If we have a pre-provisioned tenant, assign it to the user
             await assign_tenant_to_user(tenant_id, email, referral_source)
             logger.info(f"Assigned pre-provisioned tenant {tenant_id} to user {email}")
-            return tenant_id
         else:
             # If no pre-provisioned tenant is available, create a new one on-demand
             tenant_id = await create_tenant(email, referral_source)
-            return tenant_id
+
+        # Notify control plane if we have created / assigned a new tenant
+        if not DEV_MODE:
+            await notify_control_plane(tenant_id, email, referral_source)
+        return tenant_id
 
     except Exception as e:
         # If we've encountered an error, log and raise an exception
@@ -115,10 +118,6 @@ async def create_tenant(email: str, referral_source: str | None = None) -> str:
     try:
         # Provision tenant on data plane
         await provision_tenant(tenant_id, email)
-
-        # Notify control plane if not already done in provision_tenant
-        if not DEV_MODE and referral_source:
-            await notify_control_plane(tenant_id, email, referral_source)
 
     except Exception as e:
         logger.exception(f"Tenant provisioning failed: {str(e)}")
@@ -271,6 +270,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             fast_default_model_name="claude-3-5-sonnet-20241022",
             model_names=ANTHROPIC_MODEL_NAMES,
             display_model_names=["claude-3-5-sonnet-20241022"],
+            api_key_changed=True,
         )
         try:
             full_provider = upsert_llm_provider(anthropic_provider, db_session)
@@ -283,7 +283,7 @@ def configure_default_api_keys(db_session: Session) -> None:
         )
 
     if OPENAI_DEFAULT_API_KEY:
-        open_provider = LLMProviderUpsertRequest(
+        openai_provider = LLMProviderUpsertRequest(
             name="OpenAI",
             provider=OPENAI_PROVIDER_NAME,
             api_key=OPENAI_DEFAULT_API_KEY,
@@ -291,9 +291,10 @@ def configure_default_api_keys(db_session: Session) -> None:
             fast_default_model_name="gpt-4o-mini",
             model_names=OPEN_AI_MODEL_NAMES,
             display_model_names=["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"],
+            api_key_changed=True,
         )
         try:
-            full_provider = upsert_llm_provider(open_provider, db_session)
+            full_provider = upsert_llm_provider(openai_provider, db_session)
             update_default_provider(full_provider.id, db_session)
         except Exception as e:
             logger.error(f"Failed to configure OpenAI provider: {e}")
@@ -559,7 +560,3 @@ async def assign_tenant_to_user(
     except Exception:
         logger.exception(f"Failed to assign tenant {tenant_id} to user {email}")
         raise Exception("Failed to assign tenant to user")
-
-    # Notify control plane with retry logic
-    if not DEV_MODE:
-        await notify_control_plane(tenant_id, email, referral_source)

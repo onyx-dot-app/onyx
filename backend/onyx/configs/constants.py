@@ -3,6 +3,10 @@ import socket
 from enum import auto
 from enum import Enum
 
+ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
+ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+ONYX_EMAILABLE_LOGO_MAX_DIM = 512
+
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed
@@ -39,6 +43,7 @@ DISABLED_GEN_AI_MSG = (
     "Please contact them if you wish to have this enabled.\n"
     "You can still use Onyx as a search engine."
 )
+
 
 DEFAULT_PERSONA_ID = 0
 

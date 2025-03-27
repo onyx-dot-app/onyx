@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
@@ -183,6 +184,8 @@ def instantiate_connector(
 
         if new_credentials is not None:
             backend_update_credential_json(credential, new_credentials, db_session)
+
+    connector.set_allow_images(get_image_extraction_and_analysis_enabled())
 
     return connector
 

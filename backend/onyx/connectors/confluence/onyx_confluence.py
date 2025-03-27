@@ -498,10 +498,12 @@ class OnyxConfluence:
                 new_start = get_start_param_from_url(url_suffix)
                 previous_start = get_start_param_from_url(old_url_suffix)
                 if new_start - previous_start > len(results):
-                    logger.warning(
+                    logger.debug(
                         f"Start was updated by more than the amount of results "
-                        f"retrieved. This is a bug with Confluence. Start: {new_start}, "
-                        f"Previous Start: {previous_start}, Len Results: {len(results)}."
+                        f"retrieved for `{url_suffix}`. This is a bug with Confluence, "
+                        "but we have logic to work around it - don't worry this isn't"
+                        f" causing an issue. Start: {new_start}, Previous Start: "
+                        f"{previous_start}, Len Results: {len(results)}."
                     )
 
                     # Update the url_suffix to use the adjusted start

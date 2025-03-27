@@ -1,4 +1,5 @@
 import io
+from collections.abc import Callable
 from datetime import datetime
 from typing import cast
 
@@ -13,7 +14,9 @@ from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
 from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
@@ -73,9 +76,10 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     return is_valid_image_type(mime_type)
 
 
-def _extract_sections_basic(
+def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
+    allow_images: bool,
 ) -> list[TextSection | ImageSection]:
     """Extract text and images from a Google Drive file."""
     file_id = file["id"]
@@ -84,6 +88,10 @@ def _extract_sections_basic(
     link = file.get("webViewLink", "")
 
     try:
+        # skip images if not explicitly enabled
+        if not allow_images and is_gdrive_image_mime_type(mime_type):
+            return []
+
         # For Google Docs, Sheets, and Slides, export as plain text
         if mime_type in GOOGLE_MIME_TYPES_TO_EXPORT:
             export_mime_type = GOOGLE_MIME_TYPES_TO_EXPORT[mime_type]
@@ -202,12 +210,17 @@ def _extract_sections_basic(
 
 def convert_drive_item_to_document(
     file: GoogleDriveFileType,
-    drive_service: GoogleDriveService,
-    docs_service: GoogleDocsService,
-) -> Document | None:
+    drive_service: Callable[[], GoogleDriveService],
+    docs_service: Callable[[], GoogleDocsService],
+    allow_images: bool,
+    size_threshold: int,
+) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
     """
+    doc_id = ""
+    sections: list[TextSection | ImageSection] = []
+
     try:
         # skip shortcuts or folders
         if file.get("mimeType") in [DRIVE_SHORTCUT_TYPE, DRIVE_FOLDER_TYPE]:
@@ -215,13 +228,11 @@ def convert_drive_item_to_document(
             return None
 
         # If it's a Google Doc, we might do advanced parsing
-        sections: list[TextSection | ImageSection] = []
-
-        # Try to get sections using the advanced method first
         if file.get("mimeType") == GDriveMimeType.DOC.value:
             try:
+                # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
-                    docs_service=docs_service, doc_id=file.get("id", "")
+                    docs_service=docs_service(), doc_id=file.get("id", "")
                 )
                 if doc_sections:
                     sections = cast(list[TextSection | ImageSection], doc_sections)
@@ -230,9 +241,24 @@ def convert_drive_item_to_document(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."
                 )
 
+        size_str = file.get("size")
+        if size_str:
+            try:
+                size_int = int(size_str)
+            except ValueError:
+                logger.warning(f"Parsing string to int failed: size_str={size_str}")
+            else:
+                if size_int > size_threshold:
+                    logger.warning(
+                        f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
+                    )
+                    return None
+
         # If we don't have sections yet, use the basic extraction method
         if not sections:
-            sections = _extract_sections_basic(file, drive_service)
+            sections = _download_and_extract_sections_basic(
+                file, drive_service(), allow_images
+            )
 
         # If we still don't have any sections, skip this file
         if not sections:
@@ -257,8 +283,19 @@ def convert_drive_item_to_document(
             ),
         )
     except Exception as e:
-        logger.error(f"Error converting file {file.get('name')}: {e}")
-        return None
+        error_str = f"Error converting file '{file.get('name')}' to Document: {e}"
+        logger.exception(error_str)
+        return ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id=doc_id,
+                document_link=sections[0].link
+                if sections
+                else None,  # TODO: see if this is the best way to get a link
+            ),
+            failed_entity=None,
+            failure_message=error_str,
+            exception=e,
+        )
 
 
 def build_slim_document(file: GoogleDriveFileType) -> SlimDocument | None:

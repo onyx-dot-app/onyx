@@ -102,6 +102,7 @@ def set_user_role(
     validate_user_role_update(
         requested_role=requested_role,
         current_role=current_role,
+        explicit_override=user_role_update_request.explicit_override,
     )
 
     if user_to_update.id == current_user.id:
@@ -120,6 +121,22 @@ def set_user_role(
     user_to_update.role = user_role_update_request.new_role
 
     db_session.commit()
+
+
+class TestUpsertRequest(BaseModel):
+    email: str
+
+
+@router.post("/manage/users/test-upsert-user")
+async def test_upsert_user(
+    request: TestUpsertRequest,
+    _: User = Depends(current_admin_user),
+) -> None | FullUserSnapshot:
+    """Test endpoint for upsert_saml_user. Only used for integration testing."""
+    user = await fetch_ee_implementation_or_noop(
+        "onyx.server.saml", "upsert_saml_user", None
+    )(email=request.email)
+    return FullUserSnapshot.from_user_model(user) if user else None
 
 
 @router.get("/manage/users/accepted")
@@ -351,9 +368,11 @@ def remove_invited_user(
     user_emails = get_invited_users()
     remaining_users = [user for user in user_emails if user != user_email.user_email]
 
-    fetch_ee_implementation_or_noop(
-        "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
-    )([user_email.user_email], tenant_id)
+    if MULTI_TENANT:
+        fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.user_mapping", "remove_users_from_tenant", None
+        )([user_email.user_email], tenant_id)
+
     number_of_invited_users = write_invited_users(remaining_users)
 
     try:

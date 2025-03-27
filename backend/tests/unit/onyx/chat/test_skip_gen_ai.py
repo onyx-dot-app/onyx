@@ -39,7 +39,7 @@ def test_skip_gen_ai_answer_generation_flag(
     mocker: MockerFixture,
 ) -> None:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
     question = config["question"]

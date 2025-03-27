@@ -123,10 +123,15 @@ class UserManager:
         user_to_set: DATestUser,
         target_role: UserRole,
         user_performing_action: DATestUser,
+        explicit_override: bool = False,
     ) -> DATestUser:
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/set-user-role",
-            json={"user_email": user_to_set.email, "new_role": target_role.value},
+            json={
+                "user_email": user_to_set.email,
+                "new_role": target_role.value,
+                "explicit_override": explicit_override,
+            },
             headers=user_performing_action.headers,
         )
         response.raise_for_status()

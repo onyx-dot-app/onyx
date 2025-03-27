@@ -30,7 +30,7 @@ from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import QUERY_FIELD
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
-from onyx.utils.gpu_utils import gpu_status_request
+from onyx.utils.gpu_utils import fast_gpu_status_request
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -88,7 +88,9 @@ class Answer:
             rerank_settings is not None
             and rerank_settings.rerank_provider_type is not None
         )
-        allow_agent_reranking = gpu_status_request() or using_cloud_reranking
+        allow_agent_reranking = (
+            fast_gpu_status_request(indexing=False) or using_cloud_reranking
+        )
 
         # TODO: this is a hack to force the query to be used for the search tool
         #       this should be removed once we fully unify graph inputs (i.e.

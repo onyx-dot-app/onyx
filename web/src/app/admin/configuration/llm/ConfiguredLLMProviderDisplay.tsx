@@ -1,5 +1,5 @@
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
-import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
+import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { Modal } from "@/components/Modal";
 import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
@@ -19,7 +19,7 @@ function LLMProviderUpdateModal({
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
   onClose: () => void;
-  existingLlmProvider?: FullLLMProvider;
+  existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
@@ -61,7 +61,7 @@ function LLMProviderDisplay({
   shouldMarkAsDefault,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
-  existingLlmProvider: FullLLMProvider;
+  existingLlmProvider: LLMProviderView;
   shouldMarkAsDefault?: boolean;
 }) {
   const [formIsVisible, setFormIsVisible] = useState(false);
@@ -146,7 +146,7 @@ export function ConfiguredLLMProviderDisplay({
   existingLlmProviders,
   llmProviderDescriptors,
 }: {
-  existingLlmProviders: FullLLMProvider[];
+  existingLlmProviders: LLMProviderView[];
   llmProviderDescriptors: WellKnownLLMProviderDescriptor[];
 }) {
   existingLlmProviders = existingLlmProviders.sort((a, b) => {
