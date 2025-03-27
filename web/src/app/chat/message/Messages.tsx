@@ -79,7 +79,6 @@ import {
   extractThinkingContent,
   isThinkingComplete,
   removeThinkingTokens,
-  cleanThinkingContent
 } from "../utils/thinkingTokens";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
