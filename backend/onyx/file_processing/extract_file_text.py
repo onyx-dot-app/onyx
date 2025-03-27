@@ -103,15 +103,15 @@ def is_valid_media_type(media_type: str) -> bool:
 
 def is_accepted_file_ext(ext: str, ext_type: OnyxExtensionType) -> bool:
     if ext_type & OnyxExtensionType.Plain:
-        if ext_type in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS:
+        if ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS:
             return True
 
     if ext_type & OnyxExtensionType.Document:
-        if ext_type in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
+        if ext in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
             return True
 
     if ext_type & OnyxExtensionType.Multimedia:
-        if ext_type in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+        if ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
             return True
 
     return False
