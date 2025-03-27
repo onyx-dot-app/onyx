@@ -201,3 +201,31 @@ def get_relationships_for_entity_type_pairs(
     ]
 
     return db_session.query(KGRelationshipType).filter(or_(*conditions)).all()
+
+
+def get_allowed_relationship_type_pairs(
+    db_session: Session, entities: list[str]
+) -> list[str]:
+    """
+    Get the allowed relationship pairs for the given entities.
+
+    Args:
+        db_session: SQLAlchemy database session
+        entities: List of entity type ID names to filter by
+
+    Returns:
+        List of id_names from KGRelationshipType where both source and target entity types
+        are in the provided entities list
+    """
+    entity_types = list(set([entity.split(":")[0] for entity in entities]))
+
+    return [
+        row[0]
+        for row in (
+            db_session.query(KGRelationshipType.id_name)
+            .filter(KGRelationshipType.source_entity_type_id_name.in_(entity_types))
+            .filter(KGRelationshipType.target_entity_type_id_name.in_(entity_types))
+            .distinct()
+            .all()
+        )
+    ]

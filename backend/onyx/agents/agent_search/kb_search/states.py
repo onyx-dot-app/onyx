@@ -25,19 +25,21 @@ class AnalysisUpdate(LoggerUpdate):
     normalized_entities: list[str] = []
     normalized_relationships: list[str] = []
     normalized_terms: list[str] = []
-    normalized_time_filter: str = ""
+    normalized_time_filter: str | None = None
     strategy: KGAnswerStrategy | None = None
 
 
-class SQLGenerationUpdate(LoggerUpdate):
+class SQLSimpleGenerationUpdate(LoggerUpdate):
     sql_query: str = ""
+    results: list[dict] = []
 
 
 class ERTExtractionUpdate(LoggerUpdate):
+    entities_types_str: str = ""
     entities: list[str] = []
     relationships: list[str] = []
     terms: list[str] = []
-    time_filter: str = ""
+    time_filter: str | None = None
 
 
 ## Graph Input State
@@ -54,7 +56,7 @@ class MainState(
     ToolChoiceUpdate,
     ERTExtractionUpdate,
     AnalysisUpdate,
-    SQLGenerationUpdate,
+    SQLSimpleGenerationUpdate,
 ):
     pass
 

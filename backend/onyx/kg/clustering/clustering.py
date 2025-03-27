@@ -335,40 +335,51 @@ def kg_clustering(
     for source_type_str, target_cluster_dict in clustering_results.items():
         for target_type_str, clusters in target_cluster_dict.items():
             for cluster_id, rel_names in clusters.items():
-                # Create prompt for the LLM
-                prompt = f"""Given these relationship names between {source_type_str} and {target_type_str}:
-{', '.join(rel_names)}
-
-Generate a single, short (1-3 words) relationship name that best captures the semantic meaning of all these relationships.
-Only output the relationship name, nothing else."""
-
-                try:
-                    cluster_name_result = fast_llm.invoke(prompt)
-                    cluster_name = message_to_string(cluster_name_result)
-                    logger.info(
-                        f"Generated cluster name '{cluster_name}' for cluster {cluster_id} "
-                        f"between {source_type_str} and {target_type_str}"
-                    )
-
-                    # Add the generated name to the clustering results
+                if len(rel_names) == 1:
+                    cluster_name = rel_names[0]
+                    # Just use the existing relationship name as the cluster name
                     full_clustering_results[source_type_str][target_type_str][
                         cluster_id
                     ] = {
                         "relationships": rel_names,
                         "cluster_name": cluster_name,
                     }
-                except Exception as e:
-                    logger.error(
-                        f"Failed to generate cluster name for {source_type_str}->{target_type_str} "
-                        f"cluster {cluster_id}: {e}"
-                    )
 
-                    full_clustering_results[source_type_str][target_type_str][
-                        cluster_id
-                    ] = {
-                        "relationships": rel_names,
-                        "cluster_name": f"cluster_{cluster_id}",  # fallback name
-                    }
+                # Create prompt for the LLM
+                else:
+                    prompt = f"""Given these relationship names between {source_type_str} and {target_type_str}:
+{', '.join(rel_names)}
+
+Generate a single, short (1-3 words) relationship name that best captures the semantic meaning of all these relationships.
+Only output the relationship name, nothing else."""
+
+                    try:
+                        cluster_name_result = fast_llm.invoke(prompt)
+                        cluster_name = message_to_string(cluster_name_result)
+                        logger.info(
+                            f"Generated cluster name '{cluster_name}' for cluster {cluster_id} "
+                            f"between {source_type_str} and {target_type_str}"
+                        )
+
+                        # Add the generated name to the clustering results
+                        full_clustering_results[source_type_str][target_type_str][
+                            cluster_id
+                        ] = {
+                            "relationships": rel_names,
+                            "cluster_name": cluster_name,
+                        }
+                    except Exception as e:
+                        logger.error(
+                            f"Failed to generate cluster name for {source_type_str}->{target_type_str} "
+                            f"cluster {cluster_id}: {e}"
+                        )
+
+                        full_clustering_results[source_type_str][target_type_str][
+                            cluster_id
+                        ] = {
+                            "relationships": rel_names,
+                            "cluster_name": f"cluster_{cluster_id}",  # fallback name
+                        }
 
     # Now handle entity clustering
     entity_mapping: Dict[str, List[dict]] = defaultdict(list)

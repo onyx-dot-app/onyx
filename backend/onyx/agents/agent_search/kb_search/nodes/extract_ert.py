@@ -5,7 +5,10 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.kb_search.models import KGQuestionExtractionResult
+from onyx.agents.agent_search.kb_search.models import KGQuestionEntityExtractionResult
+from onyx.agents.agent_search.kb_search.models import (
+    KGQuestionRelationshipExtractionResult,
+)
 from onyx.agents.agent_search.kb_search.states import (
     ERTExtractionUpdate,
 )
@@ -19,8 +22,11 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.relationships import get_allowed_relationship_type_pairs
 from onyx.kg.extractions.extraction_processing import _get_entity_types_str
-from onyx.prompts.kg_prompts import QUERY_EXTRACTION_PROMPT
+from onyx.prompts.kg_prompts import QUERY_ENTITY_EXTRACTION_PROMPT
+from onyx.prompts.kg_prompts import QUERY_RELATIONSHIP_EXTRACTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -42,8 +48,12 @@ def extract_ert(
     question = graph_config.inputs.search_request.query
     today_date = datetime.now().strftime("%A, %Y-%m-%d")
 
-    query_extraction_pre_prompt = QUERY_EXTRACTION_PROMPT.format(
-        entity_types=_get_entity_types_str(active=True)
+    all_entity_types = _get_entity_types_str(active=None)
+
+    ### get the entities, terms, and filters
+
+    query_extraction_pre_prompt = QUERY_ENTITY_EXTRACTION_PROMPT.format(
+        entity_types=all_entity_types
     )
 
     query_extraction_prompt = query_extraction_pre_prompt.replace(
@@ -55,53 +65,123 @@ def extract_ert(
             content=query_extraction_prompt,
         )
     ]
-    fast_llm = graph_config.tooling.fast_llm
+    fast_llm = graph_config.tooling.primary_llm
     # Grader
     try:
         llm_response = run_with_timeout(
-            5,
+            15,
             fast_llm.invoke,
             prompt=msg,
-            timeout_override=5,
+            timeout_override=15,
             max_tokens=300,
         )
 
         cleaned_response = (
-            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+            str(llm_response.content)
+            .replace("```json\n", "")
+            .replace("\n```", "")
+            .replace("\n", "")
         )
         first_bracket = cleaned_response.find("{")
         last_bracket = cleaned_response.rfind("}")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
 
         try:
-            entity_extraction_result = KGQuestionExtractionResult.model_validate_json(
-                cleaned_response
+            entity_extraction_result = (
+                KGQuestionEntityExtractionResult.model_validate_json(cleaned_response)
             )
         except ValueError:
             logger.error(
                 "Failed to parse LLM response as JSON in Entity-Term Extraction"
             )
-            entity_extraction_result = KGQuestionExtractionResult(
+            entity_extraction_result = KGQuestionEntityExtractionResult(
                 entities=[],
-                relationships=[],
                 terms=[],
                 time_filter="",
             )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
-        entity_extraction_result = KGQuestionExtractionResult(
+        entity_extraction_result = KGQuestionEntityExtractionResult(
             entities=[],
-            relationships=[],
             terms=[],
             time_filter="",
         )
 
     ert_entities_string = f"Entities: {entity_extraction_result.entities}\n"
-    ert_relationships_string = (
-        f"Relationships: {entity_extraction_result.relationships}\n"
-    )
     ert_terms_string = f"Terms: {entity_extraction_result.terms}"
     ert_time_filter_string = f"Time Filter: {entity_extraction_result.time_filter}\n"
+
+    ### get the relationships
+
+    # find the relationship types that match the extracted entity types
+
+    with get_session_with_current_tenant() as db_session:
+        allowed_relationship_pairs = get_allowed_relationship_type_pairs(
+            db_session, entity_extraction_result.entities
+        )
+
+    query_relationship_extraction_prompt = (
+        QUERY_RELATIONSHIP_EXTRACTION_PROMPT.replace("---content---", question)
+        .replace("---today_date---", today_date)
+        .replace(
+            "---relationship_type_options---",
+            "  - " + "\n  - ".join(allowed_relationship_pairs),
+        )
+        .replace("---identified_entities---", ert_entities_string)
+    )
+
+    msg = [
+        HumanMessage(
+            content=query_relationship_extraction_prompt,
+        )
+    ]
+    fast_llm = graph_config.tooling.primary_llm
+    # Grader
+    try:
+        llm_response = run_with_timeout(
+            15,
+            fast_llm.invoke,
+            prompt=msg,
+            timeout_override=15,
+            max_tokens=300,
+        )
+
+        cleaned_response = (
+            str(llm_response.content)
+            .replace("```json\n", "")
+            .replace("\n```", "")
+            .replace("\n", "")
+        )
+        first_bracket = cleaned_response.find("{")
+        last_bracket = cleaned_response.rfind("}")
+        cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
+        cleaned_response = cleaned_response.replace("{{", '{"')
+        cleaned_response = cleaned_response.replace("}}", '"}')
+
+        try:
+            relationship_extraction_result = (
+                KGQuestionRelationshipExtractionResult.model_validate_json(
+                    cleaned_response
+                )
+            )
+        except ValueError:
+            logger.error(
+                "Failed to parse LLM response as JSON in Entity-Term Extraction"
+            )
+            relationship_extraction_result = KGQuestionRelationshipExtractionResult(
+                relationships=[],
+            )
+    except Exception as e:
+        logger.error(f"Error in extract_ert: {e}")
+        relationship_extraction_result = KGQuestionRelationshipExtractionResult(
+            relationships=[],
+        )
+
+    ert_relationships_string = (
+        f"Relationships: {relationship_extraction_result.relationships}\n"
+    )
+
+    ##
 
     write_custom_event(
         "initial_agent_answer",
@@ -146,8 +226,9 @@ def extract_ert(
     dispatch_main_answer_stop_info(0, writer)
 
     return ERTExtractionUpdate(
+        entities_types_str=all_entity_types,
         entities=entity_extraction_result.entities,
-        relationships=entity_extraction_result.relationships,
+        relationships=relationship_extraction_result.relationships,
         terms=entity_extraction_result.terms,
         time_filter=entity_extraction_result.time_filter,
         log_messages=[

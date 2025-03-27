@@ -33,6 +33,7 @@ def prepare_llm_content_fireflies(chunk: KGChunkFormat) -> ContextPreparation:
     # Do we need this here?
     implied_entities.add(f"ACCOUNT:{KG_OWN_COMPANY}")
     implied_entities.add(f"{core_document_id_name}")
+    implied_entities.add("FIREFLIES:*")
     implied_relationships.add(
         f"ACCOUNT:{KG_OWN_COMPANY}__participates in__{core_document_id_name}"
     )

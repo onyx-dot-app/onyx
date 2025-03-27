@@ -32,7 +32,7 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-def _get_entity_types_str(active: bool) -> str:
+def _get_entity_types_str(active: bool | None = None) -> str:
     """
     Get the entity types from the KGChunkExtraction model.
     """
