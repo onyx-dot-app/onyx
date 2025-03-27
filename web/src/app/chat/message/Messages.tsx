@@ -580,7 +580,6 @@ export const AIMessage = ({
                           content={thinkingContent} 
                           isComplete={isComplete || false} 
                           isStreaming={!isThinkingTokenComplete || !isComplete}
-                          autoCollapse={true} // Always start collapsed
                         />
                       </div>
                     )}
