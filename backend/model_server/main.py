@@ -77,7 +77,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
             "This is not a critical error and the model server will continue to run."
         )
 
-    torch.set_num_threads(1)
+    torch.set_num_threads(max(MIN_THREADS_ML_MODELS, torch.get_num_threads()))
     logger.notice(f"Torch Threads: {torch.get_num_threads()}")
 
     if not INDEXING_ONLY:
