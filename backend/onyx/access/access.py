@@ -40,12 +40,12 @@ def get_access_for_document(
 
 
 def get_null_document_access() -> DocumentAccess:
-    return DocumentAccess(
-        user_emails=set(),
-        user_groups=set(),
+    return DocumentAccess.build(
+        user_emails=[],
+        user_groups=[],
         is_public=False,
-        external_user_emails=set(),
-        external_user_group_ids=set(),
+        external_user_emails=[],
+        external_user_group_ids=[],
     )
 
 
@@ -58,13 +58,13 @@ def _get_access_for_documents(
         document_ids=document_ids,
     )
     doc_access = {
-        document_id: DocumentAccess(
-            user_emails=set([email for email in user_emails if email]),
+        document_id: DocumentAccess.build(
+            user_emails=[email for email in user_emails if email],
             # MIT version will wipe all groups and external groups on update
-            user_groups=set(),
+            user_groups=[],
             is_public=is_public,
-            external_user_emails=set(),
-            external_user_group_ids=set(),
+            external_user_emails=[],
+            external_user_group_ids=[],
         )
         for document_id, user_emails, is_public in document_access_info
     }

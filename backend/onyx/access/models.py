@@ -56,13 +56,22 @@ class DocExternalAccess:
         )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class DocumentAccess(ExternalAccess):
     # User emails for Onyx users, None indicates admin
     user_emails: set[str | None]
 
     # Names of user groups associated with this document
     user_groups: set[str]
+
+    external_user_emails: set[str]
+    external_user_group_ids: set[str]
+    is_public: bool
+
+    def __init__(self) -> None:
+        raise TypeError(
+            "Use `DocumentAccess.build(...)` instead of creating an instance directly."
+        )
 
     def to_acl(self) -> set[str]:
         # the acl's emitted by this function are prefixed by type
@@ -98,23 +107,30 @@ class DocumentAccess(ExternalAccess):
     ) -> "DocumentAccess":
         """Don't prefix incoming data wth acl type, prefix on read from to_acl!"""
 
-        return cls(
-            external_user_emails={
-                external_email for external_email in external_user_emails
-            },
-            external_user_group_ids={
-                external_group_id for external_group_id in external_user_group_ids
-            },
-            user_emails={user_email for user_email in user_emails if user_email},
-            user_groups=set(user_groups),
-            is_public=is_public,
+        obj = object.__new__(cls)
+        object.__setattr__(
+            obj, "user_emails", {user_email for user_email in user_emails if user_email}
         )
+        object.__setattr__(obj, "user_groups", set(user_groups))
+        object.__setattr__(
+            obj,
+            "external_user_emails",
+            {external_email for external_email in external_user_emails},
+        )
+        object.__setattr__(
+            obj,
+            "external_user_group_ids",
+            {external_group_id for external_group_id in external_user_group_ids},
+        )
+        object.__setattr__(obj, "is_public", is_public)
+
+        return obj
 
 
-default_public_access = DocumentAccess(
-    external_user_emails=set(),
-    external_user_group_ids=set(),
-    user_emails=set(),
-    user_groups=set(),
+default_public_access = DocumentAccess.build(
+    external_user_emails=[],
+    external_user_group_ids=[],
+    user_emails=[],
+    user_groups=[],
     is_public=True,
 )
