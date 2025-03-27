@@ -528,7 +528,7 @@ INDEXING_EMBEDDING_MODEL_NUM_THREADS = int(
 
 # During an indexing attempt, specifies the number of batches which are allowed to
 # exception without aborting the attempt.
-INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 0)
+INDEXING_EXCEPTION_LIMIT = int(os.environ.get("INDEXING_EXCEPTION_LIMIT") or 5)
 
 # Maximum file size in a document to be indexed
 MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)

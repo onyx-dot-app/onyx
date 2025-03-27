@@ -129,12 +129,23 @@ def get_channel_messages(
     """Get all messages in a channel"""
     # join so that the bot can access messages
     if not channel["is_member"]:
-        make_slack_api_call_w_retries(
-            client.conversations_join,
-            channel=channel["id"],
-            is_private=channel["is_private"],
-        )
-        logger.info(f"Successfully joined '{channel['name']}'")
+        # Skip the join attempt if the channel is archived
+        if channel.get("is_archived", False):
+            logger.info(f"Skipping joining archived channel '{channel['name']}'")
+        else:
+            try:
+                make_slack_api_call_w_retries(
+                    client.conversations_join,
+                    channel=channel["id"],
+                    is_private=channel["is_private"],
+                )
+                logger.info(f"Successfully joined '{channel['name']}'")
+            except SlackApiError as e:
+                # Handle potential race condition where channel was archived after we checked
+                if "is_archived" in str(e):
+                    logger.info(f"Channel '{channel['name']}' is archived, skipping join")
+                else:
+                    raise
 
     for result in make_paginated_slack_api_call_w_retries(
         client.conversations_history,
@@ -325,12 +336,23 @@ def _get_messages(
 
     # have to be in the channel in order to read messages
     if not channel["is_member"]:
-        make_slack_api_call_w_retries(
-            client.conversations_join,
-            channel=channel["id"],
-            is_private=channel["is_private"],
-        )
-        logger.info(f"Successfully joined '{channel['name']}'")
+        # Skip the join attempt if the channel is archived
+        if channel.get("is_archived", False):
+            logger.info(f"Skipping joining archived channel '{channel['name']}'")
+        else:
+            try:
+                make_slack_api_call_w_retries(
+                    client.conversations_join,
+                    channel=channel["id"],
+                    is_private=channel["is_private"],
+                )
+                logger.info(f"Successfully joined '{channel['name']}'")
+            except SlackApiError as e:
+                # Handle potential race condition where channel was archived after we checked
+                if "is_archived" in str(e):
+                    logger.info(f"Channel '{channel['name']}' is archived, skipping join")
+                else:
+                    raise
 
     response = make_slack_api_call_w_retries(
         client.conversations_history,
@@ -356,7 +378,7 @@ def _message_to_doc(
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
-    seen_thread_ts: set[str],
+    seen_thread_ts: list[str],
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> Document | None:
     filtered_thread: ThreadType | None = None
@@ -452,7 +474,7 @@ def _process_message(
     channel: ChannelType,
     slack_cleaner: SlackTextCleaner,
     user_cache: dict[str, BasicExpertInfo | None],
-    seen_thread_ts: set[str],
+    seen_thread_ts: list[str],
     msg_filter_func: Callable[[MessageType], bool] = default_msg_filter,
 ) -> ProcessedSlackMessage:
     thread_ts = message.get("thread_ts")
