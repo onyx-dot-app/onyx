@@ -156,7 +156,6 @@ def generate_initial_answer(
     for tool_response in yield_search_responses(
         query=question,
         get_retrieved_sections=lambda: answer_generation_documents.context_documents,
-        get_reranked_sections=lambda: answer_generation_documents.streaming_documents,
         get_final_context_sections=lambda: answer_generation_documents.context_documents,
         search_query_info=query_info,
         get_section_relevance=lambda: relevance_list,

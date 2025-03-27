@@ -29,7 +29,6 @@ from onyx.chat.models import LLMRelevanceFilterResponse
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import RefinedAnswerImprovement
@@ -131,7 +130,6 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
-from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -300,7 +298,6 @@ def _get_force_search_settings(
 ChatPacket = (
     StreamingError
     | QADocsResponse
-    | OnyxContexts
     | LLMRelevanceFilterResponse
     | FinalUsedContextDocsResponse
     | ChatMessageDetail
@@ -919,8 +916,6 @@ def stream_chat_message_objects(
                             response=custom_tool_response.tool_result,
                             tool_name=custom_tool_response.tool_name,
                         )
-                elif packet.id == SEARCH_DOC_CONTENT_ID and include_contexts:
-                    yield cast(OnyxContexts, packet.response)
 
             elif isinstance(packet, StreamStopInfo):
                 if packet.stop_reason == StreamStopReason.FINISHED:

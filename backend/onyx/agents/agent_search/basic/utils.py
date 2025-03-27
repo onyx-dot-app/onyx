@@ -7,7 +7,6 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContext
 from onyx.chat.stream_processing.answer_response_handler import AnswerResponseHandler
 from onyx.chat.stream_processing.answer_response_handler import CitationResponseHandler
 from onyx.chat.stream_processing.answer_response_handler import (
@@ -24,7 +23,7 @@ def process_llm_stream(
     should_stream_answer: bool,
     writer: StreamWriter,
     final_search_results: list[LlmDoc] | None = None,
-    displayed_search_results: list[OnyxContext] | list[LlmDoc] | None = None,
+    displayed_search_results: list[LlmDoc] | None = None,
 ) -> AIMessageChunk:
     tool_call_chunk = AIMessageChunk(content="")
 
