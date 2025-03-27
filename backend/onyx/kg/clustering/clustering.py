@@ -286,7 +286,7 @@ def kg_clustering(
 
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 
-    _, fast_llm = get_default_llms()
+    primary_llm, fast_llm = get_default_llms()
 
     with get_session_with_current_tenant() as db_session:
         relationship_types = get_all_relationship_types(db_session)
@@ -347,14 +347,18 @@ def kg_clustering(
 
                 # Create prompt for the LLM
                 else:
-                    prompt = f"""Given these relationship names between {source_type_str} and {target_type_str}:
+                    prompt = f"""Given these relationship names between source type {source_type_str}\
+and target type {target_type_str}:
+
 {', '.join(rel_names)}
 
-Generate a single, short (1-3 words) relationship name that best captures the semantic meaning of all these relationships.
+Generate a single, short (1-3 words) relationship name that best captures the semantic meaning of all these relationships. \
+Also make sure that the relationship naturally connects the source type to the target type, as ultimately we will \
+use the new term for a relationship <source_type>:<relationship_name>:<target_type>. Also, keep it simple and concise.
 Only output the relationship name, nothing else."""
 
                     try:
-                        cluster_name_result = fast_llm.invoke(prompt)
+                        cluster_name_result = primary_llm.invoke(prompt)
                         cluster_name = message_to_string(cluster_name_result)
                         logger.info(
                             f"Generated cluster name '{cluster_name}' for cluster {cluster_id} "
@@ -421,6 +425,7 @@ Only output the relationship name, nothing else."""
     for entity_type, clusters in entity_clustering_results.items():
         for cluster_id, ent_names in clusters.items():
             prompt = f"""Given these entity names of type {entity_type}:
+
 {', '.join(ent_names)}
 
 Generate a single, short (1-3 words) category name that best captures the semantic meaning of all these entities.
@@ -428,7 +433,7 @@ Only output the category name, nothing else."""
 
             try:
                 if len(ent_names) > 1:
-                    cluster_name_result = fast_llm.invoke(prompt)
+                    cluster_name_result = primary_llm.invoke(prompt)
                     cluster_name = message_to_string(cluster_name_result)
                 else:
                     cluster_name = ent_names[

@@ -72,23 +72,93 @@ EXAMPLE_4 = r"""
 """.strip()
 
 RELATIONSHIP_EXAMPLE_1 = r"""
+'Which issues did Nike report?' and the extracted entities were found to be:
+
+  "ACCOUNT:Nike", "CONCERN:*"
+
+then a valid relationship extraction could be:
+
 {{"relationships": ["ACCOUNT:Nike__had__CONCERN:*"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_2 = r"""
+'Did Nike say anything about performance issues?' and the extracted entities were found to be:
+
+"ACCOUNT:Nike", "CONCERN:performance"
+
+then a much more suitable relationship extraction could be:
+
 {{"relationships": ["ACCOUNT:*__had_issues__CONCERN:performance"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_3 = r"""
+'Did Nike report some performance issues with our solution? And were they happy that the user experience issue got solved?', \
+and the extracted entities were found to be:
+
+"ACCOUNT:Nike", "CONCERN:performance", "CONCERN:user_experience"
+
+then a valid relationship extraction could be:
+
 {{"relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
                       "ACCOUNT:Nike__solved__CONCERN:user_experience"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_4 = r"""
+'Nike reported some performance issues with our dashboard solution, but do they think it delivers great value nevertheless?' \
+and the extracted entities were found to be:
+
+"ACCOUNT:Nike", "FEATURE:dashboard", "CONCERN:performance"
+
+then a valid relationship extraction could be:
+Example 4:
+
 {{"relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
                       "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
                       "ACCOUNT:NIKE__gets_value_from__FEATURE:dashboard"]}}
+
+Explanation:
+ - Nike did report performance concerns
+ - Nike had problems with the dashboard, which is a feature
+ - We are interested in the value relationship between Nike and the dashboard feature
+
 """.strip()
+
+RELATIONSHIP_EXAMPLE_5 = r"""
+'In which emails did Nike discuss their issues with the dahboard?' \
+and the extracted entities were found to be:
+
+"ACCOUNT:Nike", "FEATURE:dashboard", "EMAIL:*"
+
+then a valid relationship extraction could be:
+
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*",
+                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__in__EMAIL:*",
+                      "EMAIL:*__discusses__FEATURE:dashboard",
+                      "EMAIL:*Nike__had__CONCERN:* "]}}
+Explanation:
+ - Nike did report unspecified concerns
+ - Nike had problems with the dashboard, which is a feature
+ - We are interested in emails that Nike excchanged with us
+""".strip()
+
+RELATIONSHIP_EXAMPLE_6 = r"""
+'List the last 5 emails that Lisa exchamged with Nike:' \
+and the extracted entities were found to be:
+
+"ACCOUNT:Nike", "EMAIL:*", "EMPLOYEE:Lisa"
+
+then a valid relationship extraction could be:
+
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*",
+                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__in__EMAIL:*"]}}
+Explanation:
+ - Nike did report unspecified concerns
+ - Nike had problems with the dashboard, which is a feature
+ - We are interested in emails that Nike excchanged with us
+""".strip()
+
 
 ENTITY_EXAMPLE_1 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:*"], "terms": []}}
@@ -259,45 +329,24 @@ is just assumed for these examples, but you MUST use only the entities above for
 
 - You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
 * if the entity type is referred to in general, you would use '*' as the entity name in the extraction.
+
 As an example, if the question would say:
- 'Which issues did Nike report?' and the extracted entities were found to be:
 
- "ACCOUNT:Nike", "CONCERN:*"
-
-then a valid relationship extraction could be:
-Example 1:
 {RELATIONSHIP_EXAMPLE_1}
 
 * If on the other hand the question would say:
-'Did Nike say anything about performance issues?' and the extracted entities were found to be:
 
-"ACCOUNT:Nike", "CONCERN:performance"
-
-then a much more suitable relationship extraction could be:
-Example 2:
 {RELATIONSHIP_EXAMPLE_2}
 
 - You can extract multiple relationships between the same two entity types.
-As an example, if the question would say:
-'Did Nike report some performance issues with our solution? And were they happy that the user experience issue got solved?', \
-and the extracted entities were found to be:
+For example 3, if the question would say:
 
-"ACCOUNT:Nike", "CONCERN:performance", "CONCERN:user_experience"
-
-then a valid relationship extraction could be:
-Example 3:
 {RELATIONSHIP_EXAMPLE_3}
 
 - You can extract multiple relationships between the same two actual entities if you think that \
 there are multiple relationships between them based on the question.
 As an example, if the question would say:
-'Nike reported some performance issues with our dashboard solution, but do they think it delivers great value nevertheless?' \
-and the extracted entities were found to be:
 
-"ACCOUNT:Nike", "FEATURE:dashboard", "CONCERN:performance"
-
-then a valid relationship extraction could be:
-Example 4:
 {RELATIONSHIP_EXAMPLE_4}
 
 Note that effectively a three-way relationship (Nike - performance issues - dashboard) extracted as two individual \
