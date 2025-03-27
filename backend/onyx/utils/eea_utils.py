@@ -1,3 +1,4 @@
+import requests
 from urllib import robotparser
 from usp.tree import sitemap_tree_for_homepage
 from datetime import datetime
@@ -29,3 +30,12 @@ def list_pages_for_site_eea(site):
     pages = [page.url for page in tree.all_pages() if test_url(rp, page)]
     pages = list(dict.fromkeys(pages))
     return(pages)
+
+def is_pdf_mime_type(url):
+    response = requests.head(url, stream=True)
+    content_type = response.headers.get('Content-Type', '')
+    logger.info(f"MIME TYPE of {url} : {content_type}")
+    if 'application/pdf' in content_type:
+        return True
+    else:
+        return False

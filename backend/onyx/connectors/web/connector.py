@@ -37,7 +37,8 @@ from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
 from onyx.utils.sitemap import list_pages_for_site
-from onyx.utils.sitemap_eea import list_pages_for_site_eea
+#from onyx.utils.sitemap_eea import list_pages_for_site_eea
+from onyx.utils.eea_utils import is_pdf_mime_type, list_pages_for_site_eea
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -326,7 +327,9 @@ class WebConnector(LoadConnector):
                     playwright, context = start_playwright()
                     restart_playwright = False
 
-                if current_url.split(".")[-1] == "pdf":
+                if current_url.split(".")[-1] == "pdf" or current_url.endswith("@@download/file"):
+                    if not is_pdf_mime_type(current_url):
+                        continue
                     # PDF files are not checked for links
                     response = requests.get(current_url)
                     page_text, metadata = read_pdf_file(
