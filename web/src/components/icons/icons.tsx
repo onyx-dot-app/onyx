@@ -2967,7 +2967,7 @@ export const OnyxIcon = ({
 }: IconProps) => {
   return (
     <img
-      src={'/dialin logo large.png'}
+      src={'/dialin logo small dark.png'}
       style={{ width: `${size}px`, height: `${size}px` }}
       className={`w-[${size}px] h-[${size}px] ` + className}
     />
