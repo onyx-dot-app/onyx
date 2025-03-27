@@ -1,3 +1,2 @@
 .env*
-.jira_test_env*
 secrets.yaml
