@@ -394,7 +394,8 @@ volumes:
   # Created by the container itself
   model_cache_huggingface:
   indexing_huggingface_model_cache:
-  api_server_logs:  # for logs that we don't want to lose on container restarts
+  # for logs that we don't want to lose on container restarts
+  api_server_logs:
   background_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
