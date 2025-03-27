@@ -55,7 +55,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   // Detect thinking token states
   useEffect(() => {
     // For past messages with complete thinking tokens, initialize both as true
-    if (!hasOpeningTokenRef.current && !hasClosingTokenRef.current && isThinkingComplete(content)) {
+    if (!hasOpeningTokenRef.current && !hasClosingTokenRef.current && (isComplete || isThinkingComplete(content))) {
       hasOpeningTokenRef.current = true;
       hasClosingTokenRef.current = true;
       
@@ -87,12 +87,12 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
       const finalElapsedTime = Math.floor((thinkingStoppedTimeRef.current - startTimeRef.current) / 1000);
       setElapsedTime(finalElapsedTime);
     }
-  }, [content, cleanedThinkingContent]);
+  }, [content, cleanedThinkingContent, isComplete]);
   
   // Track content changes and new lines
   useEffect(() => {
     // Skip animation for past messages that are already complete
-    if (hasClosingTokenRef.current && isThinkingComplete(content)) {
+    if (hasClosingTokenRef.current && (isComplete || isThinkingComplete(content))) {
       // For past messages, just store the content lines without animating
       const currentLines = cleanedThinkingContent.split('\n').filter(line => line.trim());
       contentLinesRef.current = currentLines;
@@ -125,7 +125,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
       lastLineCountRef.current = currentLines.length;
       previousContentRef.current = cleanedThinkingContent;
     }
-  }, [cleanedThinkingContent, content]);
+  }, [cleanedThinkingContent, content, isComplete]);
   
   // Smooth scroll to latest content
   const scrollToLatestContent = () => {
@@ -200,7 +200,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   if (!cleanedThinkingContent.trim()) return null;
   
   // Determine if thinking is active (has opening token but not closing token)
-  const isThinkingActive = hasOpeningTokenRef.current && !hasClosingTokenRef.current;
+  const isThinkingActive = (isStreaming && !isComplete) || (hasOpeningTokenRef.current && !hasClosingTokenRef.current);
   
   // Determine if we should show the preview section
   const shouldShowPreview = !isExpanded && cleanedThinkingContent.trim().length > 0;
