@@ -9,7 +9,7 @@ export default function CloudError() {
       </h1>
       <div className="space-y-4 text-gray-600 dark:text-gray-300">
         <p>
-          Onyx is currently in a maintenance window. Please check back in a
+          dialin is currently in a maintenance window. Please check back in a
           couple of minutes.
         </p>
         <p>

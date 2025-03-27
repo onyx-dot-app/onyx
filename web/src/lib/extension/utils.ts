@@ -23,7 +23,7 @@ export const useSendAuthRequiredMessage = () => {
 
 export const sendMessageToParent = () => {
   if (typeof window !== "undefined" && window.parent) {
-    window.parent.postMessage({ type: CHROME_MESSAGE.ONYX_APP_LOADED }, "*");
+    window.parent.postMessage({ type: CHROME_MESSAGE.DIALIN_APP_LOADED }, "*");
   }
 };
 export const useSendMessageToParent = () => {

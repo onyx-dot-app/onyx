@@ -181,7 +181,7 @@ export function WhitelabelingForm() {
               </div>
             ) : (
               <SubLabel>
-                Specify your own logo to replace the standard Onyx logo.
+                Specify your own logo to replace the standard dialin logo.
               </SubLabel>
             )}
 
