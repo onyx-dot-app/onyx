@@ -1,116 +1,74 @@
-<!-- DANSWER_METADATA={"link": "https://github.com/onyx-dot-app/onyx/blob/main/README.md"} -->
+# Mamamia README
 
-<a name="readme-top"></a>
+There is an upstream Onyx README.md, which this file obsures. Check it out too.
 
-<h2 align="center">
-<a href="https://www.onyx.app/"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true)" /></a>
-</h2>
+## Why does this exist?
 
-<p align="center">
-<p align="center">Open Source Gen-AI + Enterprise Search.</p>
+This is a fork of the Onyx repo aimed at fixing a few bugs and enabling some extra functionality. At the moment that includes:
+- fixing the Gmail connector to make it robust against malformed date strings
+- sending `User.email` as an extra body param to LLMs (to enable n8n to do things on a per-user basis)
+- adding docker config and deployment scripts for GCP instances with a GPU attached
 
-<p align="center">
-<a href="https://docs.onyx.app/" target="_blank">
-    <img src="https://img.shields.io/badge/docs-view-blue" alt="Documentation">
-</a>
-<a href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA" target="_blank">
-    <img src="https://img.shields.io/badge/slack-join-blue.svg?logo=slack" alt="Slack">
-</a>
-<a href="https://discord.gg/TDJ59cGV2X" target="_blank">
-    <img src="https://img.shields.io/badge/discord-join-blue.svg?logo=discord&logoColor=white" alt="Discord">
-</a>
-<a href="https://github.com/onyx-dot-app/onyx/blob/main/README.md" target="_blank">
-    <img src="https://img.shields.io/static/v1?label=license&message=MIT&color=blue" alt="License">
-</a>
-</p>
+## Branches
 
-<strong>[Onyx](https://www.onyx.app/)</strong> (formerly Danswer) is the AI platform connected to your company's docs, apps, and people.
-Onyx provides a feature rich Chat interface and plugs into any LLM of your choice.
-Keep knowledge and access controls sync-ed across over 40 connectors like Google Drive, Slack, Confluence, Salesforce, etc.
-Create custom AI agents with unique prompts, knowledge, and actions that the agents can take.
-Onyx can be deployed securely anywhere and for any scale - on a laptop, on-premise, or to cloud.
-
-
-<h3>Feature Highlights</h3>
-
-**Deep research over your team's knowledge:**
-
-https://private-user-images.githubusercontent.com/32520769/414509312-48392e83-95d0-4fb5-8650-a396e05e0a32.mp4?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Mzk5Mjg2MzYsIm5iZiI6MTczOTkyODMzNiwicGF0aCI6Ii8zMjUyMDc2OS80MTQ1MDkzMTItNDgzOTJlODMtOTVkMC00ZmI1LTg2NTAtYTM5NmUwNWUwYTMyLm1wND9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTAyMTklMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwMjE5VDAxMjUzNlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWFhMzk5Njg2Y2Y5YjFmNDNiYTQ2YzM5ZTg5YWJiYTU2NWMyY2YwNmUyODE2NWUxMDRiMWQxZWJmODI4YTA0MTUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.a9D8A0sgKE9AoaoE-mfFbJ6_OKYeqaf7TZ4Han2JfW8
-
-
-**Use Onyx as a secure AI Chat with any LLM:**
-
-![Onyx Chat Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxChatSilentDemo.gif)
-
-
-**Easily set up connectors to your apps:**
-
-![Onyx Connector Silent Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxConnectorSilentDemo.gif)
-
-
-**Access Onyx where your team already works:**
-
-![Onyx Bot Demo](https://github.com/onyx-dot-app/onyx/releases/download/v0.21.1/OnyxBot.png)
-
+- `main` is whatever the target release of upstream Onyx is, plus a change to the build script to build from source (see below)
+- `release` is `main` plus any extra changes we want as part of our fork
 
 ## Deployment
-**To try it out for free and get started in seconds, check out [Onyx Cloud](https://cloud.onyx.app/signup)**.
 
-Onyx can also be run locally (even on a laptop) or deployed on a virtual machine with a single
-`docker compose` command. Checkout our [docs](https://docs.onyx.app/quickstart) to learn more.
+To deploy this fork, you need to build it from source which is NOT the default behaviour for Onyx. The final command in both `init-letsencrypt.sh` and `init-letsencrypt-gpu.sh` has been modified to have a `--build` flag which will make that happen.
 
-We also have built-in support for high-availability/scalable deployment on Kubernetes.
-References [here](https://github.com/onyx-dot-app/onyx/tree/main/deployment).
+### GPU support
 
+This fork includes changes to the docker config and deployment scripts to add support for GPUs. Use the `init-letsencrypt-gpu.sh` script.
 
-## 🔍 Other Notable Benefits of Onyx
-- Custom deep learning models for indexing and inference time, only through Onyx + learning from user feedback.
-- Flexible security features like SSO (OIDC/SAML/OAuth2), RBAC, encryption of credentials, etc.
-- Knowledge curation features like document-sets, query history, usage analytics, etc.
-- Scalable deployment options tested up to many tens of thousands users and hundreds of millions of documents.
+See the `feature/terraform` branch (specifically the boot scripts running in https://github.com/mamamia/onyx/blob/e23831497ca2c9e64df954575c1d49717cd17d7f/deployment/terraform/instance/first_boot.tf) to learn how to configure the VM instance drivers to talk to an attached GPU.
 
+### Troubleshooting
 
-## 🚧 Roadmap
-- New methods in information retrieval (StructRAG, LightGraphRAG, etc.)
-- Personalized Search
-- Organizational understanding and ability to locate and suggest experts from your team.
-- Code Search
-- SQL and Structured Query Language
+#### Logs
 
+To view logs, do the following:
+- ssh into the instance (see below)
+- `sudo docker ps` will show you the available Containers
+- run `sudo docker logs -f <container-name>`, where `<container-name>` is something like `onyx-stack-nginx-1`
 
-## 🔌 Connectors
-Keep knowledge and access up to sync across 40+ connectors:
+#### Cert woes
 
-- Google Drive
-- Confluence
-- Slack
-- Gmail
-- Salesforce
-- Microsoft Sharepoint
-- Github
-- Jira
-- Zendesk
-- Gong
-- Microsoft Teams
-- Dropbox
-- Local Files
-- Websites
-- And more ...
+Sometimes the build scripts don't work properly and you'll see the `api_server` fail to start because it can't see any certificates. You'll need to re-run parts of the build script in sequence until your certs are populated, e.g.
 
-See the full list [here](https://docs.onyx.app/connectors).
+```
+sudo docker compose -f docker-compose.gpu-prod.yml run --name onyx-stack --rm --build --entrypoint "\
+  certbot certonly --webroot -w /var/www/certbot \
+    -d ai-staging.mamamia.com.au \
+    --rsa-key-size 4096 \
+    --agree-tos \
+    --force-renewal" certbot
+```
 
+#### Scorched Earth docker reset
 
-## 📚 Licensing
-There are two editions of Onyx:
+If you need to start fresh, it's easiest to start with a new instance. If for some reason that won't work, here's how to remove all traces of Onyx:
+- ssh into the instance (see below)
+- run `sudo docker rm -vf $(sudo docker ps -aq) && sudo docker rmi -f $(sudo docker images -aq) && sudo docker volume prune -f -a && sudo docker builder prune -a -f`
 
-- Onyx Community Edition (CE) is available freely under the MIT Expat license. Simply follow the Deployment guide above.
-- Onyx Enterprise Edition (EE) includes extra features that are primarily useful for larger organizations.
-For feature details, check out [our website](https://www.onyx.app/pricing).
+## SSH access
 
-To try the Onyx Enterprise Edition:
-1. Checkout [Onyx Cloud](https://cloud.onyx.app/signup).
-2. For self-hosting the Enterprise Edition, contact us at [founders@onyx.app](mailto:founders@onyx.app) or book a call with us on our [Cal](https://cal.com/team/onyx/founders).
+You can always access the instance via SSH through the GCP console, but if you want to do it from your own terminal here's how:
+- install the Google Cloud CLI
+- run `gcloud compute config-ssh` to sync your local with SSH-accessible instances in GCP
+- run `ssh <instance-uri>`, where `<instance-uri>` is something like `onyx-staging.us-central1-a.mamamia-pwa`
 
+## Onyx Database
 
-## 💡 Contributing
-Looking to contribute? Please check out the [Contribution Guide](CONTRIBUTING.md) for more details.
+Onyx uses a Postgres database. It's often useful to view the DB directly - here's how to hook up your favourite Postgres client:
+- install the Google Cloud CLI
+- run `gcloud compute config-ssh` to sync your local with SSH-accessible instances in GCP
+- run `ssh <instance-uri> "sudo docker inspect --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' onyx-stack-relational_db-1", where `<instance-uri>` is something like `onyx-staging.us-central1-a.mamamia-pwa`
+- the IP address returned is the database `host`
+- `user=postgres`
+- `password=password`
+- Configure your DB client to use an SSH tunnel:
+   - run `ssh -v <instance-uri> ' ' 2>&1 | grep '^debug1: Connecting to' to get the public external IP address of the instance (or you could get it from GCP)
+   - use that IP as your SSH tunnel `host`
+   - no need to set `user` or `password`, but make sure you use the private key at `~/.ssh/google_compute_engine` instead of your default one
