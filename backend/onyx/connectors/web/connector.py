@@ -306,7 +306,10 @@ class WebConnector(LoadConnector):
 
         playwright, context = start_playwright()
         restart_playwright = False
+        cnt = 0
         while to_visit:
+            logger.info(f"---------------------------------------------cnt: {cnt}")
+            cnt+=1
             current_url = to_visit.pop()
             if current_url in visited_links:
                 continue
@@ -351,71 +354,73 @@ class WebConnector(LoadConnector):
                             else None,
                         )
                     )
-                    continue
 
-                page = context.new_page()
-                page_response = page.goto(current_url)
-                last_modified = (
-                    page_response.header_value("Last-Modified")
-                    if page_response
-                    else None
-                )
-                final_page = page.url
-                if final_page != current_url:
-                    logger.info(f"Redirected to {final_page}")
-                    protected_url_check(final_page)
-                    current_url = final_page
-                    if current_url in visited_links:
-                        logger.info("Redirected page already indexed")
-                        continue
-                    visited_links.add(current_url)
+#                    continue
 
-                if self.scroll_before_scraping:
-                    scroll_attempts = 0
-                    previous_height = page.evaluate("document.body.scrollHeight")
-                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                        page.wait_for_load_state("networkidle", timeout=30000)
-                        new_height = page.evaluate("document.body.scrollHeight")
-                        if new_height == previous_height:
-                            break  # Stop scrolling when no more content is loaded
-                        previous_height = new_height
-                        scroll_attempts += 1
-
-                content = page.content()
-                soup = BeautifulSoup(content, "html.parser")
-
-                if self.recursive:
-                    internal_links = get_internal_links(base_url, current_url, soup)
-                    for link in internal_links:
-                        if link not in visited_links:
-                            to_visit.append(link)
-
-                if page_response and str(page_response.status)[0] in ("4", "5"):
-                    last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
-                    logger.info(last_error)
-                    continue
-
-                parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
-
-                doc_batch.append(
-                    Document(
-                        id=current_url,
-                        sections=[
-                            Section(link=current_url, text=parsed_html.cleaned_text)
-                        ],
-                        source=DocumentSource.WEB,
-                        semantic_identifier=parsed_html.title or current_url,
-                        metadata={},
-                        doc_updated_at=_get_datetime_from_last_modified_header(
-                            last_modified
-                        )
-                        if last_modified
-                        else None,
+                else:
+                    page = context.new_page()
+                    page_response = page.goto(current_url)
+                    last_modified = (
+                        page_response.header_value("Last-Modified")
+                        if page_response
+                        else None
                     )
-                )
+                    final_page = page.url
+                    if final_page != current_url:
+                        logger.info(f"Redirected to {final_page}")
+                        protected_url_check(final_page)
+                        current_url = final_page
+                        if current_url in visited_links:
+                            logger.info("Redirected page already indexed")
+                            continue
+                        visited_links.add(current_url)
 
-                page.close()
+                    if self.scroll_before_scraping:
+                        scroll_attempts = 0
+                        previous_height = page.evaluate("document.body.scrollHeight")
+                        while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                            page.wait_for_load_state("networkidle", timeout=30000)
+                            new_height = page.evaluate("document.body.scrollHeight")
+                            if new_height == previous_height:
+                                break  # Stop scrolling when no more content is loaded
+                            previous_height = new_height
+                            scroll_attempts += 1
+
+                    content = page.content()
+                    soup = BeautifulSoup(content, "html.parser")
+
+                    if self.recursive:
+                        internal_links = get_internal_links(base_url, current_url, soup)
+                        for link in internal_links:
+                            if link not in visited_links:
+                                to_visit.append(link)
+
+                    if page_response and str(page_response.status)[0] in ("4", "5"):
+                        last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
+                        logger.info(last_error)
+                        continue
+
+                    parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
+
+                    doc_batch.append(
+                        Document(
+                            id=current_url,
+                            sections=[
+                                Section(link=current_url, text=parsed_html.cleaned_text)
+                            ],
+                            source=DocumentSource.WEB,
+                            semantic_identifier=parsed_html.title or current_url,
+                            metadata={},
+                            doc_updated_at=_get_datetime_from_last_modified_header(
+                                last_modified
+                            )
+                            if last_modified
+                            else None,
+                        )
+                    )
+
+                    page.close()
             except Exception as e:
                 last_error = f"Failed to fetch '{current_url}': {e}"
                 logger.exception(last_error)
@@ -423,7 +428,11 @@ class WebConnector(LoadConnector):
                 restart_playwright = True
                 continue
 
+            logger.info("---------------------------------------------doc added to batch")
+            logger.info(f"---------------------------------------------batch_size={len(doc_batch)}")
+            logger.info(f"---------------------------------------------self.batch_size={self.batch_size}")
             if len(doc_batch) >= self.batch_size:
+                logger.info(f"---------------------------------------------yield")
                 playwright.stop()
                 restart_playwright = True
                 at_least_one_doc = True
