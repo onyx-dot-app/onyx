@@ -451,6 +451,8 @@ def monitor_connector_deletion_taskset(
                 credential_id=cc_pair.credential_id,
             )
 
+            db_session.flush()
+
             # finally, delete the cc-pair
             delete_connector_credential_pair__no_commit(
                 db_session=db_session,

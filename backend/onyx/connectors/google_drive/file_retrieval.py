@@ -123,7 +123,7 @@ def crawl_folders_for_files(
                 end=end,
             ):
                 found_files = True
-                logger.info(f"Found file: {file['name']}")
+                logger.info(f"Found file: {file['name']}, user email: {user_email}")
                 yield RetrievedDriveFile(
                     drive_file=file,
                     user_email=user_email,

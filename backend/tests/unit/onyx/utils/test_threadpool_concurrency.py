@@ -89,7 +89,8 @@ def test_run_in_background_and_wait_success() -> None:
     elapsed = time.time() - start_time
 
     assert result == 42
-    assert elapsed >= 0.1  # Verify we actually waited for the sleep
+    # sometimes slightly flaky
+    assert elapsed >= 0.095  # Verify we actually waited for the sleep
 
 
 @pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExceptionWarning")

@@ -18,6 +18,9 @@ from prometheus_client import start_http_server
 from redis.lock import Lock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry import ConnectionErrorRetryHandler
+from slack_sdk.http_retry import RateLimitErrorRetryHandler
+from slack_sdk.http_retry import RetryHandler
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
@@ -944,10 +947,21 @@ def _get_socket_client(
 ) -> TenantSocketModeClient:
     # For more info on how to set this up, checkout the docs:
     # https://docs.onyx.app/slack_bot_setup
+
+    # use the retry handlers built into the slack sdk
+    connection_error_retry_handler = ConnectionErrorRetryHandler()
+    rate_limit_error_retry_handler = RateLimitErrorRetryHandler(max_retry_count=7)
+    slack_retry_handlers: list[RetryHandler] = [
+        connection_error_retry_handler,
+        rate_limit_error_retry_handler,
+    ]
+
     return TenantSocketModeClient(
         # This app-level token will be used only for establishing a connection
         app_token=slack_bot_tokens.app_token,
-        web_client=WebClient(token=slack_bot_tokens.bot_token),
+        web_client=WebClient(
+            token=slack_bot_tokens.bot_token, retry_handlers=slack_retry_handlers
+        ),
         tenant_id=tenant_id,
         slack_bot_id=slack_bot_id,
     )

@@ -102,6 +102,7 @@ def set_user_role(
     validate_user_role_update(
         requested_role=requested_role,
         current_role=current_role,
+        explicit_override=user_role_update_request.explicit_override,
     )
 
     if user_to_update.id == current_user.id:
@@ -120,6 +121,22 @@ def set_user_role(
     user_to_update.role = user_role_update_request.new_role
 
     db_session.commit()
+
+
+class TestUpsertRequest(BaseModel):
+    email: str
+
+
+@router.post("/manage/users/test-upsert-user")
+async def test_upsert_user(
+    request: TestUpsertRequest,
+    _: User = Depends(current_admin_user),
+) -> None | FullUserSnapshot:
+    """Test endpoint for upsert_saml_user. Only used for integration testing."""
+    user = await fetch_ee_implementation_or_noop(
+        "onyx.server.saml", "upsert_saml_user", None
+    )(email=request.email)
+    return FullUserSnapshot.from_user_model(user) if user else None
 
 
 @router.get("/manage/users/accepted")
@@ -296,7 +313,7 @@ def bulk_invite_users(
             detail=f"Invalid email address: {email} - {str(e)}",
         )
 
-    if MULTI_TENANT and not DEV_MODE:
+    if MULTI_TENANT:
         try:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
@@ -318,7 +335,7 @@ def bulk_invite_users(
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
 
-    if not MULTI_TENANT:
+    if not MULTI_TENANT or DEV_MODE:
         return number_of_invited_users
 
     # for billing purposes, write to the control plane about the number of new users
@@ -359,7 +376,7 @@ def remove_invited_user(
     number_of_invited_users = write_invited_users(remaining_users)
 
     try:
-        if MULTI_TENANT:
+        if MULTI_TENANT and not DEV_MODE:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.billing", "register_tenant_users", None
             )(tenant_id, get_total_users_count(db_session))

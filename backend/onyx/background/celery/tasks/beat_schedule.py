@@ -21,6 +21,7 @@ BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 # we have a better implementation (backpressure, etc)
 # Note that DynamicTenantScheduler can adjust the runtime value for this via Redis
 CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0
+CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = []
