@@ -23,6 +23,8 @@ interface ThinkingBoxProps {
 
 export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   content,
+  isComplete = false,
+  isStreaming = false,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
@@ -51,6 +53,31 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   
   // Clean the thinking content
   const cleanedThinkingContent = cleanThinkingContent(content);
+  
+  // Smooth scroll to latest content
+  const scrollToLatestContent = () => {
+    if (!scrollContainerRef.current) {
+      scrollAnimationRef.current = null;
+      return;
+    }
+    
+    const container = scrollContainerRef.current;
+    
+    // Calculate how far to move this frame (15% of remaining distance)
+    const remainingDistance = targetScrollTopRef.current - currentScrollTopRef.current;
+    const step = remainingDistance * 0.15;
+    
+    // Update position
+    currentScrollTopRef.current += step;
+    container.scrollTop = Math.round(currentScrollTopRef.current);
+    
+    // Continue animation if we're not close enough yet
+    if (Math.abs(remainingDistance) > 1) {
+      scrollAnimationRef.current = requestAnimationFrame(scrollToLatestContent);
+    } else {
+      scrollAnimationRef.current = null;
+    }
+  };
   
   // Detect thinking token states
   useEffect(() => {
@@ -126,31 +153,6 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
       previousContentRef.current = cleanedThinkingContent;
     }
   }, [cleanedThinkingContent, content, isComplete]);
-  
-  // Smooth scroll to latest content
-  const scrollToLatestContent = () => {
-    if (!scrollContainerRef.current) {
-      scrollAnimationRef.current = null;
-      return;
-    }
-    
-    const container = scrollContainerRef.current;
-    
-    // Calculate how far to move this frame (15% of remaining distance)
-    const remainingDistance = targetScrollTopRef.current - currentScrollTopRef.current;
-    const step = remainingDistance * 0.15;
-    
-    // Update position
-    currentScrollTopRef.current += step;
-    container.scrollTop = Math.round(currentScrollTopRef.current);
-    
-    // Continue animation if we're not close enough yet
-    if (Math.abs(remainingDistance) > 1) {
-      scrollAnimationRef.current = requestAnimationFrame(scrollToLatestContent);
-    } else {
-      scrollAnimationRef.current = null;
-    }
-  };
   
   // Update elapsed time
   useEffect(() => {
@@ -263,4 +265,4 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   );
 };
 
-export default ThinkingBox; 
+export default ThinkingBox;
