@@ -360,13 +360,6 @@ def filter_sections(
 
     # Fast path: immediately return empty list for SKIP evaluation type (ordering-only mode)
     if query.evaluation_type == LLMEvaluationType.SKIP:
-        logger.info("Fast path: Skipping LLM section filtering for ordering-only mode")
-        # Add stack trace for debugging purposes
-        import traceback
-
-        logger.debug(
-            f"Stack trace for inappropriate filter_sections call:\n{traceback.format_stack()}"
-        )
         return []
 
     # Additional safeguard: Log a warning if this function is ever called with SKIP evaluation type
