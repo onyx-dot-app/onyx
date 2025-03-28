@@ -75,6 +75,8 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         """it seems this function is responsible for the wait to retry ... aka we
         actually sleep in this function."""
         retry_after_value: list[str] | None = None
+        retry_after_header_name: Optional[str] = None
+        duration_s: float = 1.0  # seconds
 
         if response is None:
             if error:
@@ -85,30 +87,31 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         state.next_attempt_requested = True  # this signals the caller to retry
 
         # calculate wait duration based on retry-after + some jitter
-        duration_s = 1.0  # seconds
-
-        retry_after_header_name: Optional[str] = None
         for k in response.headers.keys():
             if k.lower() == "retry-after":
                 retry_after_header_name = k
                 break
 
-        if retry_after_header_name is None:
-            # This situation usually does not arise. Just in case.
-            duration_s += random.random()
-        else:
+        try:
+            if retry_after_header_name is None:
+                # This situation usually does not arise. Just in case.
+                raise ValueError(
+                    "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: retry-after header name is None"
+                )
+
             retry_after_value = response.headers.get(retry_after_header_name)
             if not retry_after_value:
-                duration_s += random.random()
-            else:
-                jitter = 0.0
-                try:
-                    retry_after_value_int = int(retry_after_value[0])
-                    jitter = retry_after_value_int * 0.25 * random.random()
-                except Exception:
-                    pass
+                raise ValueError(
+                    "OnyxRedisSlackRetryHandler.prepare_for_next_attempt: retry-after header value is None"
+                )
 
-                duration_s = math.ceil(retry_after_value_int + jitter)
+            retry_after_value_int = int(
+                retry_after_value[0]
+            )  # will raise if somehow we can't convert to int
+            jitter = retry_after_value_int * 0.25 * random.random()
+            duration_s = math.ceil(retry_after_value_int + jitter)
+        except Exception:
+            duration_s += random.random()
 
         # lock and extend the ttl
         lock: RedisLock = self._redis.lock(
