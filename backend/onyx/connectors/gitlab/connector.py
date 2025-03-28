@@ -147,9 +147,48 @@ class GitlabConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         if self.gitlab_client is None:
             raise ConnectorMissingCredentialError("Gitlab")
-        project: gitlab.Project = self.gitlab_client.projects.get(
-            f"{self.project_owner}/{self.project_name}"
-        )
+
+        # Add error handling for the project fetch
+        project_path = f"{self.project_owner}/{self.project_name}"
+        try:
+            project: gitlab.Project = self.gitlab_client.projects.get(project_path)
+        except gitlab.exceptions.GitlabParsingError as e:
+            # If there's a parsing error, try to handle Response object manually
+            logger.warning(
+                f"Received parsing error for project {project_path}, attempting to handle manually"
+            )
+
+            # Check if the exception contains a Response object
+            response = None
+            for attr_name in dir(e):
+                attr = getattr(e, attr_name, None)
+                if (
+                    attr is not None
+                    and hasattr(attr, "status_code")
+                    and hasattr(attr, "json")
+                    and callable(attr.json)
+                ):
+                    response = attr
+                    break
+
+            if response and response.status_code == 200:
+                try:
+                    # Parse the JSON response manually
+                    project_data = response.json()
+                    # Create Project object manually
+                    project = gitlab.v4.objects.Project(
+                        self.gitlab_client.projects, project_data
+                    )
+                except Exception as parse_err:
+                    logger.error(
+                        f"Failed to manually parse response for project {project_path}: {parse_err}"
+                    )
+                    raise e
+            else:
+                logger.error(
+                    f"Failed to obtain valid response for project {project_path}"
+                )
+                raise e
 
         # Fetch code files
         if self.include_code_files:
