@@ -58,6 +58,16 @@ SECTIONS_FOLDER_URL = (
     "https://drive.google.com/drive/u/5/folders/1loe6XJ-pJxu9YYPv7cF3Hmz296VNzA33"
 )
 
+EXTERNAL_SHARED_FOLDER_URL = (
+    "https://drive.google.com/drive/folders/1sWC7Oi0aQGgifLiMnhTjvkhRWVeDa-XS"
+)
+EXTERNAL_SHARED_DOCS_IN_FOLDER = [
+    "https://docs.google.com/document/d/1Sywmv1-H6ENk2GcgieKou3kQHR_0te1mhIUcq8XlcdY"
+]
+EXTERNAL_SHARED_DOC_SINGLETON = (
+    "https://docs.google.com/document/d/11kmisDfdvNcw5LYZbkdPVjTOdj-Uc5ma6Jep68xzeeA"
+)
+
 SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
 
 ADMIN_EMAIL = "admin@onyx-test.com"
