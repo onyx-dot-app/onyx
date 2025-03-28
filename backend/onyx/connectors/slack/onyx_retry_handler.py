@@ -101,8 +101,13 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
             if not retry_after_value:
                 duration_s += random.random()
             else:
-                retry_after_value_int = int(retry_after_value[0])
-                jitter = retry_after_value_int * 0.25 * random.random()
+                jitter = 0.0
+                try:
+                    retry_after_value_int = int(retry_after_value[0])
+                    jitter = retry_after_value_int * 0.25 * random.random()
+                except Exception:
+                    pass
+
                 duration_s = math.ceil(retry_after_value_int + jitter)
 
         # lock and extend the ttl
