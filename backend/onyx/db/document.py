@@ -587,6 +587,7 @@ def delete_documents_complete__no_commit(
     """This completely deletes the documents from the db, including all foreign key relationships"""
 
     # Start by deleting the chunk stats for the documents
+    # BUG: Is there a reason this is called twice?
     delete_chunk_stats_by_connector_credential_pair__no_commit(
         db_session=db_session,
         document_ids=document_ids,

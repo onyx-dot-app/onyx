@@ -683,6 +683,8 @@ def upload_files_for_chat(
             raise HTTPException(status_code=400, detail="File content type is required")
 
         if file.content_type not in allowed_content_types:
+            # BUG: The error detail code here seems incorrect: it seems like it only ever generates
+            # `Unsupported document file type` for any file type.
             if file.content_type in image_content_types:
                 error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
             elif file.content_type in text_content_types:
