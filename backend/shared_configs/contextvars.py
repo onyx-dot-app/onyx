@@ -11,6 +11,10 @@ CURRENT_TENANT_ID_CONTEXTVAR: contextvars.ContextVar[
     "current_tenant_id", default=None if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA
 )
 
+# set by every route in the API server
+REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "request_id", default=None
+)
 
 """Utils related to contextvars"""
 
