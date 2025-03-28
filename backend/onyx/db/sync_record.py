@@ -13,6 +13,37 @@ from onyx.setup import setup_logger
 logger = setup_logger()
 
 
+def fetch_paginated_sync_records(
+    db_session: Session,
+    entity_id: int,
+    sync_type: SyncType,
+    page_num: int,
+    page_size: int,
+) -> tuple[list[SyncRecord], int]:
+    total_count = (
+        db_session.query(SyncRecord)
+        .filter(
+            SyncRecord.entity_id == entity_id,
+            SyncRecord.sync_type == sync_type,
+        )
+        .count()
+    )
+
+    sync_records = (
+        db_session.query(SyncRecord)
+        .filter(
+            SyncRecord.entity_id == entity_id,
+            SyncRecord.sync_type == sync_type,
+        )
+        .order_by(SyncRecord.sync_start_time.desc())
+        .offset(page_num * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    return sync_records, total_count
+
+
 def insert_sync_record(
     db_session: Session,
     entity_id: int,

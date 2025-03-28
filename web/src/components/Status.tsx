@@ -12,7 +12,7 @@ import {
 import { HoverPopup } from "./HoverPopup";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 
-export function IndexAttemptStatus({
+export function AttemptStatus({
   status,
   errorMsg,
 }: {

@@ -1,5 +1,5 @@
 import { PageSelector } from "@/components/PageSelector";
-import { IndexAttemptStatus } from "@/components/Status";
+import { AttemptStatus } from "@/components/Status";
 import { ConnectorIndexingStatus } from "@/lib/types";
 import {
   Table,
@@ -49,7 +49,7 @@ export function ReindexingProgressTable({
                   </TableCell>
                   <TableCell>
                     {reindexingProgress.latest_index_attempt?.status && (
-                      <IndexAttemptStatus
+                      <AttemptStatus
                         status={reindexingProgress.latest_index_attempt.status}
                       />
                     )}

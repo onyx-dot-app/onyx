@@ -1475,7 +1475,6 @@ class DocumentRetrievalFeedback(Base):
     feedback: Mapped[SearchFeedbackType | None] = mapped_column(
         Enum(SearchFeedbackType, native_enum=False), nullable=True
     )
-
     chat_message: Mapped[ChatMessage] = relationship(
         "ChatMessage",
         back_populates="document_feedbacks",

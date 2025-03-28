@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { IndexAttemptStatus } from "@/components/Status";
+import { AttemptStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
   ConnectorIndexingStatus,
@@ -244,7 +244,7 @@ border border-border dark:border-neutral-700
       )}
       <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
       <TableCell>
-        <IndexAttemptStatus
+        <AttemptStatus
           status={ccPairsIndexingStatus.last_finished_status || null}
           errorMsg={ccPairsIndexingStatus?.latest_index_attempt?.error_msg}
         />

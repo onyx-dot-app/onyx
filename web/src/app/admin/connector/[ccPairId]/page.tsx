@@ -23,6 +23,7 @@ import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
 import { DeletionButton } from "./DeletionButton";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
+import { SyncStatusTable } from "./SyncStatusTable";
 import { ModifyStatusButtonCluster } from "./ModifyStatusButtonCluster";
 import { ReIndexButton } from "./ReIndexButton";
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
@@ -32,6 +33,7 @@ import {
   ConnectorCredentialPairStatus,
   IndexAttemptError,
   PaginatedIndexAttemptErrors,
+  SyncRecord,
 } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { Button } from "@/components/ui/button";
@@ -91,12 +93,24 @@ function Main({ ccPairId }: { ccPairId: number }) {
   });
 
   const {
+    currentPageData: syncStatus,
+    isLoading: isLoadingSyncStatus,
+    currentPage: syncStatusCurrentPage,
+    totalPages: syncStatusTotalPages,
+    goToPage: goToSyncStatusPage,
+  } = usePaginatedFetch<SyncRecord>({
+    itemsPerPage: ITEMS_PER_PAGE,
+    pagesPerBatch: PAGES_PER_BATCH,
+    endpoint: `${buildCCPairInfoUrl(ccPairId)}/sync-status`,
+  });
+
+  const {
     currentPageData: indexAttemptErrorsPage,
     currentPage: errorsCurrentPage,
     totalPages: errorsTotalPages,
     goToPage: goToErrorsPage,
   } = usePaginatedFetch<IndexAttemptError>({
-    itemsPerPage: 10,
+    itemsPerPage: 300,
     pagesPerBatch: 1,
     endpoint: `/api/manage/admin/cc-pair/${ccPairId}/errors`,
   });
@@ -450,6 +464,52 @@ function Main({ ccPairId }: { ccPairId: number }) {
         />
       )}
 
+      <div className="mt-6">
+        <div className="flex justify-between items-center">
+          <Title>Permissions Sync</Title>
+          {ccPair.is_editable_for_current_user && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const response = await fetch(
+                    `/api/manage/admin/cc-pair/${ccPair.id}/sync-permissions`,
+                    {
+                      method: "POST",
+                    }
+                  );
+                  if (!response.ok) {
+                    throw new Error(await response.text());
+                  }
+                  setPopup({
+                    message: "Permissions sync started successfully",
+                    type: "success",
+                  });
+                  mutate(buildCCPairInfoUrl(ccPairId));
+                } catch (error) {
+                  setPopup({
+                    message: "Failed to start permissions sync",
+                    type: "error",
+                  });
+                }
+              }}
+              disabled={ccPair.status !== ConnectorCredentialPairStatus.ACTIVE}
+            >
+              Sync Now
+            </Button>
+          )}
+        </div>
+        {syncStatus && (
+          <SyncStatusTable
+            ccPair={ccPair}
+            syncRecords={syncStatus}
+            currentPage={syncStatusCurrentPage}
+            totalPages={syncStatusTotalPages}
+            onPageChange={goToSyncStatusPage}
+          />
+        )}
+      </div>
       <div className="mt-6">
         <div className="flex">
           <Title>Indexing Attempts</Title>

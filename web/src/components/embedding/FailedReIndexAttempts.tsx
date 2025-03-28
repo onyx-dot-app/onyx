@@ -1,6 +1,6 @@
 import { buildCCPairInfoUrl } from "@/app/admin/connector/[ccPairId]/lib";
 import { PageSelector } from "@/components/PageSelector";
-import { IndexAttemptStatus } from "@/components/Status";
+import { AttemptStatus } from "@/components/Status";
 import { deleteCCPair } from "@/lib/documentDeletion";
 import { FailedConnectorIndexingStatus } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -76,7 +76,7 @@ export function FailedReIndexAttempts({
                       </Link>
                     </TableCell>
                     <TableCell>
-                      <IndexAttemptStatus status="failed" />
+                      <AttemptStatus status="failed" />
                     </TableCell>
 
                     <TableCell>

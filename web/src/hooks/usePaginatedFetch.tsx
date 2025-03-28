@@ -27,6 +27,7 @@ interface PaginationConfig {
   query?: string;
   filter?: Record<string, string | boolean | number | string[] | Date>;
   refreshIntervalInMs?: number;
+  zeroIndexed?: boolean; // Flag to indicate if backend uses zero-indexed pages
 }
 
 interface PaginatedHookReturnData<T extends PaginatedType> {
@@ -46,15 +47,18 @@ function usePaginatedFetch<T extends PaginatedType>({
   query,
   filter,
   refreshIntervalInMs = 5000,
+  zeroIndexed = true, // Default to true for zero-indexed pages
 }: PaginationConfig): PaginatedHookReturnData<T> {
   const router = useRouter();
   const currentPath = usePathname();
   const searchParams = useSearchParams();
 
   // State to initialize and hold the current page number
-  const [currentPage, setCurrentPage] = useState(() =>
-    parseInt(searchParams?.get("page") || "1", 10)
-  );
+  const [currentPage, setCurrentPage] = useState(() => {
+    const urlPage = parseInt(searchParams?.get("page") || "1", 10);
+    // For URL display we use 1-indexed, but for internal state we use the appropriate index based on API
+    return zeroIndexed ? urlPage - 1 : urlPage;
+  });
   const [currentPageData, setCurrentPageData] = useState<T[] | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -73,10 +77,11 @@ function usePaginatedFetch<T extends PaginatedType>({
 
   // Calculates which batch we're in, and which page within that batch
   const batchAndPageIndices = useMemo(() => {
-    const batchNum = Math.floor((currentPage - 1) / pagesPerBatch);
-    const batchPageNum = (currentPage - 1) % pagesPerBatch;
+    const pageForCalc = zeroIndexed ? currentPage : currentPage - 1;
+    const batchNum = Math.floor(pageForCalc / pagesPerBatch);
+    const batchPageNum = pageForCalc % pagesPerBatch;
     return { batchNum, batchPageNum };
-  }, [currentPage, pagesPerBatch]);
+  }, [currentPage, pagesPerBatch, zeroIndexed]);
 
   // Fetches a batch of data and stores it in the cache
   const fetchBatchData = useCallback(
@@ -88,9 +93,9 @@ function usePaginatedFetch<T extends PaginatedType>({
       ongoingRequestsRef.current.add(batchNum);
 
       try {
-        // Build query params
+        // Build query params - use zero-based indexing for backend
         const params = new URLSearchParams({
-          page_num: batchNum.toString(),
+          page_num: (batchNum * pagesPerBatch).toString(),
           page_size: (pagesPerBatch * itemsPerPage).toString(),
         });
 
@@ -145,27 +150,31 @@ function usePaginatedFetch<T extends PaginatedType>({
     [endpoint, pagesPerBatch, itemsPerPage, query, filter]
   );
 
-  // Updates the URL with the current page number
+  // Updates the URL with the current page number (always 1-indexed for URL)
   const updatePageUrl = useCallback(
     (page: number) => {
       if (currentPath) {
         const params = new URLSearchParams(searchParams);
-        params.set("page", page.toString());
+        // For URL display we always use 1-indexed
+        const urlPage = zeroIndexed ? page + 1 : page;
+        params.set("page", urlPage.toString());
         router.replace(`${currentPath}?${params.toString()}`, {
           scroll: false,
         });
       }
     },
-    [currentPath, router, searchParams]
+    [currentPath, router, searchParams, zeroIndexed]
   );
 
   // Updates the current page
   const goToPage = useCallback(
     (newPage: number) => {
-      setCurrentPage(newPage);
-      updatePageUrl(newPage);
+      // Ensure page is within bounds
+      const boundedPage = Math.max(0, Math.min(newPage, totalPages - 1));
+      setCurrentPage(boundedPage);
+      updatePageUrl(boundedPage);
     },
-    [updatePageUrl]
+    [updatePageUrl, totalPages]
   );
 
   // Loads the current and adjacent batches
@@ -199,7 +208,14 @@ function usePaginatedFetch<T extends PaginatedType>({
     if (!cachedBatches[0]) {
       fetchBatchData(0);
     }
-  }, [currentPage, cachedBatches, totalPages, pagesPerBatch, fetchBatchData]);
+  }, [
+    currentPage,
+    cachedBatches,
+    totalPages,
+    pagesPerBatch,
+    fetchBatchData,
+    batchAndPageIndices,
+  ]);
 
   // Updates current page data from the cache
   useEffect(() => {
@@ -209,7 +225,7 @@ function usePaginatedFetch<T extends PaginatedType>({
       setCurrentPageData(cachedBatches[batchNum][batchPageNum]);
       setIsLoading(false);
     }
-  }, [currentPage, cachedBatches, pagesPerBatch]);
+  }, [currentPage, cachedBatches, pagesPerBatch, batchAndPageIndices]);
 
   // Implements periodic refresh
   useEffect(() => {
@@ -221,21 +237,28 @@ function usePaginatedFetch<T extends PaginatedType>({
     }, refreshIntervalInMs);
 
     return () => clearInterval(interval);
-  }, [currentPage, pagesPerBatch, refreshIntervalInMs, fetchBatchData]);
+  }, [
+    currentPage,
+    pagesPerBatch,
+    refreshIntervalInMs,
+    fetchBatchData,
+    batchAndPageIndices,
+  ]);
 
   // Manually refreshes the current batch
   const refresh = useCallback(async () => {
     const { batchNum } = batchAndPageIndices;
     await fetchBatchData(batchNum);
-  }, [currentPage, pagesPerBatch, fetchBatchData]);
+  }, [batchAndPageIndices, fetchBatchData]);
 
   // Cache invalidation
   useEffect(() => {
     setCachedBatches({});
     setTotalItems(0);
-    goToPage(1);
+    // Start at page 0 for zero-indexed APIs, page 1 for one-indexed
+    goToPage(zeroIndexed ? 0 : 1);
     setError(null);
-  }, [currentPath, query, filter]);
+  }, [currentPath, query, filter, zeroIndexed, goToPage]);
 
   return {
     currentPage,

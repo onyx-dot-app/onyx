@@ -74,3 +74,11 @@ export interface PaginatedIndexAttemptErrors {
   items: IndexAttemptError[];
   total_items: number;
 }
+export interface SyncRecord {
+  id: number;
+  entity_id: number;
+  sync_type: string;
+  created_at: string;
+  num_docs_synced: number;
+  sync_status: ValidStatuses;
+}

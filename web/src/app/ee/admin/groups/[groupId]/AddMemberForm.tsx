@@ -1,7 +1,7 @@
 import { Modal } from "@/components/Modal";
 import { updateUserGroup } from "./lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { User, UserGroup } from "@/lib/types";
+import { CCPairDescriptor, User, UserGroup } from "@/lib/types";
 import { UserEditor } from "../UserEditor";
 import { useState } from "react";
 
@@ -42,10 +42,14 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
                 )
               ),
             ];
+
             const response = await updateUserGroup(userGroup.id, {
               user_ids: newUserIds,
-              cc_pair_ids: userGroup.cc_pairs.map((ccPair) => ccPair.id),
+              cc_pair_ids: userGroup.cc_pairs.map(
+                (ccPair: CCPairDescriptor<number, number>) => ccPair.id
+              ),
             });
+
             if (response.ok) {
               setPopup({
                 message: "Successfully added users to group",

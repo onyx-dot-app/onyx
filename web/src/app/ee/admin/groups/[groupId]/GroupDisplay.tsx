@@ -46,6 +46,10 @@ import { AddTokenRateLimitForm } from "./AddTokenRateLimitForm";
 import { GenericTokenRateLimitTable } from "@/app/admin/token-rate-limits/TokenRateLimitTables";
 import { useUser } from "@/components/user/UserProvider";
 import { GenericConfirmModal } from "@/components/modals/GenericConfirmModal";
+import { GroupSyncStatusTable } from "./GroupSyncStatusTable";
+import usePaginatedFetch from "@/hooks/usePaginatedFetch";
+import Title from "@/components/ui/title";
+import { SyncRecord } from "@/app/admin/connector/[ccPairId]/types";
 
 interface GroupDisplayProps {
   users: User[];
@@ -178,6 +182,18 @@ export const GroupDisplay = ({
 
   const { isAdmin } = useUser();
 
+  const {
+    currentPageData: syncStatus,
+    isLoading: isLoadingSyncStatus,
+    currentPage: syncStatusCurrentPage,
+    totalPages: syncStatusTotalPages,
+    goToPage: goToSyncStatusPage,
+  } = usePaginatedFetch<SyncRecord>({
+    itemsPerPage: 8,
+    pagesPerBatch: 8,
+    endpoint: `/api/manage/admin/user-group/${userGroup.id}/sync-status`,
+  });
+
   const handlePopup = (message: string, type: "success" | "error") => {
     setPopup({ message, type });
   };
@@ -199,6 +215,22 @@ export const GroupDisplay = ({
           <div className="text-accent font-bold">
             <LoadingAnimation text="Syncing" />
           </div>
+        )}
+      </div>
+
+      <Separator />
+
+      <div className="mt-4 mb-4">
+        <Title>Group Sync Status</Title>
+        {syncStatus && (
+          <GroupSyncStatusTable
+            userGroup={userGroup}
+            syncRecords={syncStatus}
+            currentPage={syncStatusCurrentPage}
+            totalPages={syncStatusTotalPages}
+            onPageChange={goToSyncStatusPage}
+            lastSyncTime={userGroup.last_synced_at}
+          />
         )}
       </div>
 

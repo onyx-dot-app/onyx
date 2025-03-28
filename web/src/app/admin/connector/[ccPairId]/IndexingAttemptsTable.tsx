@@ -13,7 +13,7 @@ import Text from "@/components/ui/text";
 import { Callout } from "@/components/ui/callout";
 import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
-import { IndexAttemptStatus } from "@/components/Status";
+import { AttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { buildCCPairInfoUrl } from "./lib";
@@ -118,7 +118,7 @@ export function IndexingAttemptsTable({
                     : "-"}
                 </TableCell>
                 <TableCell>
-                  <IndexAttemptStatus
+                  <AttemptStatus
                     status={indexAttempt.status || "not_started"}
                   />
                   {docsPerMinute ? (
