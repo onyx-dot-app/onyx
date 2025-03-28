@@ -36,6 +36,7 @@ from onyx.chat.models import StreamingError
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
+from onyx.chat.models import UserKnowledgeFilePacket
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
@@ -51,6 +52,7 @@ from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
+from onyx.context.search.models import BaseFilters
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
@@ -64,6 +66,7 @@ from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import attach_files_to_chat_message
 from onyx.db.chat import create_db_search_doc
 from onyx.db.chat import create_new_chat_message
+from onyx.db.chat import create_search_doc_from_user_file
 from onyx.db.chat import get_chat_message
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_db_search_doc_by_id
@@ -80,12 +83,16 @@ from onyx.db.milestone import update_user_assistant_milestone
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
+from onyx.file_store.utils import load_all_user_file_files
+from onyx.file_store.utils import load_all_user_files
 from onyx.file_store.utils import save_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -98,6 +105,7 @@ from onyx.server.query_and_chat.models import ChatMessageDetail
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.server.utils import get_json_line
 from onyx.tools.force import ForceUseTool
+from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
 from onyx.tools.tool_constructor import construct_tools
@@ -175,11 +183,14 @@ def _handle_search_tool_response_summary(
     db_session: Session,
     selected_search_docs: list[DbSearchDoc] | None,
     dedupe_docs: bool = False,
+    user_files: list[UserFile] | None = None,
+    loaded_user_files: list[InMemoryChatFile] | None = None,
 ) -> tuple[QADocsResponse, list[DbSearchDoc], list[int] | None]:
     response_sumary = cast(SearchResponseSummary, packet.response)
 
     is_extended = isinstance(packet, ExtendedToolResponse)
     dropped_inds = None
+
     if not selected_search_docs:
         top_docs = chunks_or_sections_to_search_docs(response_sumary.top_sections)
 
@@ -193,8 +204,30 @@ def _handle_search_tool_response_summary(
             create_db_search_doc(server_search_doc=doc, db_session=db_session)
             for doc in deduped_docs
         ]
+
     else:
         reference_db_search_docs = selected_search_docs
+
+    doc_ids = {doc.id for doc in reference_db_search_docs}
+    if user_files is not None:
+        for user_file in user_files:
+            if user_file.id not in doc_ids:
+                associated_chat_file = None
+                if loaded_user_files is not None:
+                    associated_chat_file = next(
+                        (
+                            file
+                            for file in loaded_user_files
+                            if file.file_id == str(user_file.file_id)
+                        ),
+                        None,
+                    )
+                # Use create_search_doc_from_user_file to properly add the document to the database
+                if associated_chat_file is not None:
+                    db_doc = create_search_doc_from_user_file(
+                        user_file, associated_chat_file, db_session
+                    )
+                    reference_db_search_docs.append(db_doc)
 
     response_docs = [
         translate_db_search_doc_to_server_search_doc(db_search_doc)
@@ -253,7 +286,10 @@ def _handle_internet_search_tool_response_summary(
 
 
 def _get_force_search_settings(
-    new_msg_req: CreateChatMessageRequest, tools: list[Tool]
+    new_msg_req: CreateChatMessageRequest,
+    tools: list[Tool],
+    user_file_ids: list[int],
+    user_folder_ids: list[int],
 ) -> ForceUseTool:
     internet_search_available = any(
         isinstance(tool, InternetSearchTool) for tool in tools
@@ -261,8 +297,11 @@ def _get_force_search_settings(
     search_tool_available = any(isinstance(tool, SearchTool) for tool in tools)
 
     if not internet_search_available and not search_tool_available:
-        # Does not matter much which tool is set here as force is false and neither tool is available
-        return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
+        if new_msg_req.force_user_file_search:
+            return ForceUseTool(force_use=True, tool_name=SearchTool._NAME)
+        else:
+            # Does not matter much which tool is set here as force is false and neither tool is available
+            return ForceUseTool(force_use=False, tool_name=SearchTool._NAME)
 
     tool_name = SearchTool._NAME if search_tool_available else InternetSearchTool._NAME
     # Currently, the internet search tool does not support query override
@@ -272,12 +311,25 @@ def _get_force_search_settings(
         else None
     )
 
+    # Create override_kwargs for the search tool if user_file_ids are provided
+    override_kwargs = None
+    if (user_file_ids or user_folder_ids) and tool_name == SearchTool._NAME:
+        override_kwargs = SearchToolOverrideKwargs(
+            force_no_rerank=False,
+            alternate_db_session=None,
+            retrieved_sections_callback=None,
+            skip_query_analysis=False,
+            user_file_ids=user_file_ids,
+            user_folder_ids=user_folder_ids,
+        )
+
     if new_msg_req.file_descriptors:
         # If user has uploaded files they're using, don't run any of the search tools
         return ForceUseTool(force_use=False, tool_name=tool_name)
 
     should_force_search = any(
         [
+            new_msg_req.force_user_file_search,
             new_msg_req.retrieval_options
             and new_msg_req.retrieval_options.run_search
             == OptionalSearchSetting.ALWAYS,
@@ -290,9 +342,17 @@ def _get_force_search_settings(
     if should_force_search:
         # If we are using selected docs, just put something here so the Tool doesn't need to build its own args via an LLM call
         args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
-        return ForceUseTool(force_use=True, tool_name=tool_name, args=args)
 
-    return ForceUseTool(force_use=False, tool_name=tool_name, args=args)
+        return ForceUseTool(
+            force_use=True,
+            tool_name=tool_name,
+            args=args,
+            override_kwargs=override_kwargs,
+        )
+
+    return ForceUseTool(
+        force_use=False, tool_name=tool_name, args=args, override_kwargs=override_kwargs
+    )
 
 
 ChatPacket = (
@@ -311,6 +371,7 @@ ChatPacket = (
     | AgenticMessageResponseIDInfo
     | StreamStopInfo
     | AgentSearchPacket
+    | UserKnowledgeFilePacket
 )
 ChatPacketStream = Iterator[ChatPacket]
 
@@ -356,6 +417,10 @@ def stream_chat_message_objects(
     llm: LLM
 
     try:
+        # Move these variables inside the try block
+        file_id_to_user_file = {}
+        ordered_user_files = None
+
         user_id = user.id if user is not None else None
 
         chat_session = get_chat_session_by_id(
@@ -535,6 +600,70 @@ def stream_chat_message_objects(
         )
         req_file_ids = [f["id"] for f in new_msg_req.file_descriptors]
         latest_query_files = [file for file in files if file.file_id in req_file_ids]
+        user_file_ids = new_msg_req.user_file_ids or []
+        user_folder_ids = new_msg_req.user_folder_ids or []
+
+        if persona.user_files:
+            for file in persona.user_files:
+                user_file_ids.append(file.id)
+        if persona.user_folders:
+            for folder in persona.user_folders:
+                user_folder_ids.append(folder.id)
+
+        # Initialize flag for user file search
+        use_search_for_user_files = False
+
+        user_files: list[InMemoryChatFile] | None = None
+        search_for_ordering_only = False
+        user_file_files: list[UserFile] | None = None
+        if user_file_ids or user_folder_ids:
+            # Load user files
+            user_files = load_all_user_files(
+                user_file_ids or [],
+                user_folder_ids or [],
+                db_session,
+            )
+            user_file_files = load_all_user_file_files(
+                user_file_ids or [],
+                user_folder_ids or [],
+                db_session,
+            )
+            # Store mapping of file_id to file for later reordering
+            if user_files:
+                file_id_to_user_file = {file.file_id: file for file in user_files}
+
+            # Calculate token count for the files
+            from onyx.db.user_documents import calculate_user_files_token_count
+            from onyx.chat.prompt_builder.citations_prompt import (
+                compute_max_document_tokens_for_persona,
+            )
+
+            total_tokens = calculate_user_files_token_count(
+                user_file_ids or [],
+                user_folder_ids or [],
+                db_session,
+            )
+
+            # Calculate available tokens for documents based on prompt, user input, etc.
+            available_tokens = compute_max_document_tokens_for_persona(
+                db_session=db_session,
+                persona=persona,
+                actual_user_input=message_text,  # Use the actual user message
+            )
+
+            logger.debug(
+                f"Total file tokens: {total_tokens}, Available tokens: {available_tokens}"
+            )
+
+            # ALWAYS use search for user files, but track if we need it for context or just ordering
+            use_search_for_user_files = True
+            # If files are small enough for context, we'll just use search for ordering
+            search_for_ordering_only = total_tokens <= available_tokens
+
+            if search_for_ordering_only:
+                # Add original user files to context since they fit
+                if user_files:
+                    latest_query_files.extend(user_files)
 
         if user_message:
             attach_files_to_chat_message(
@@ -677,8 +806,10 @@ def stream_chat_message_objects(
             prompt_config=prompt_config,
             db_session=db_session,
             user=user,
+            user_knowledge_present=bool(user_files or user_folder_ids),
             llm=llm,
             fast_llm=fast_llm,
+            use_file_search=new_msg_req.force_user_file_search,
             search_tool_config=SearchToolConfig(
                 answer_style_config=answer_style_config,
                 document_pruning_config=document_pruning_config,
@@ -708,17 +839,138 @@ def stream_chat_message_objects(
         for tool_list in tool_dict.values():
             tools.extend(tool_list)
 
+        force_use_tool = _get_force_search_settings(
+            new_msg_req, tools, user_file_ids, user_folder_ids
+        )
+
+        # Set force_use if user files exceed token limit
+        if use_search_for_user_files:
+            try:
+                # Check if search tool is available in the tools list
+                search_tool_available = any(
+                    isinstance(tool, SearchTool) for tool in tools
+                )
+
+                # If no search tool is available, add one
+                if not search_tool_available:
+                    logger.info("No search tool available, creating one for user files")
+                    # Create a basic search tool config
+                    search_tool_config = SearchToolConfig(
+                        answer_style_config=answer_style_config,
+                        document_pruning_config=document_pruning_config,
+                        retrieval_options=retrieval_options or RetrievalDetails(),
+                    )
+
+                    # Create and add the search tool
+                    search_tool = SearchTool(
+                        db_session=db_session,
+                        user=user,
+                        persona=persona,
+                        retrieval_options=search_tool_config.retrieval_options,
+                        prompt_config=prompt_config,
+                        llm=llm,
+                        fast_llm=fast_llm,
+                        pruning_config=search_tool_config.document_pruning_config,
+                        answer_style_config=search_tool_config.answer_style_config,
+                        evaluation_type=(
+                            LLMEvaluationType.BASIC
+                            if persona.llm_relevance_filter
+                            else LLMEvaluationType.SKIP
+                        ),
+                        bypass_acl=bypass_acl,
+                    )
+
+                    # Add the search tool to the tools list
+                    tools.append(search_tool)
+
+                    logger.info(
+                        "Added search tool for user files that exceed token limit"
+                    )
+
+                # Now set force_use_tool.force_use to True
+                force_use_tool.force_use = True
+                force_use_tool.tool_name = SearchTool._NAME
+
+                # Set query argument if not already set
+                if not force_use_tool.args:
+                    force_use_tool.args = {"query": final_msg.message}
+
+                # Pass the user file IDs to the search tool
+                if user_file_ids or user_folder_ids:
+                    # Create a BaseFilters object with user_file_ids
+                    if not retrieval_options:
+                        retrieval_options = RetrievalDetails()
+                    if not retrieval_options.filters:
+                        retrieval_options.filters = BaseFilters()
+
+                    # Set user file and folder IDs in the filters
+                    retrieval_options.filters.user_file_ids = user_file_ids
+                    retrieval_options.filters.user_folder_ids = user_folder_ids
+
+                    # Create override kwargs for the search tool
+                    override_kwargs = SearchToolOverrideKwargs(
+                        force_no_rerank=search_for_ordering_only,  # Skip reranking for ordering-only
+                        alternate_db_session=None,
+                        retrieved_sections_callback=None,
+                        skip_query_analysis=search_for_ordering_only,  # Skip query analysis for ordering-only
+                        user_file_ids=user_file_ids,
+                        user_folder_ids=user_folder_ids,
+                        ordering_only=search_for_ordering_only,  # Set ordering_only flag for fast path
+                    )
+
+                    # Set the override kwargs in the force_use_tool
+                    force_use_tool.override_kwargs = override_kwargs
+
+                    if search_for_ordering_only:
+                        logger.info(
+                            "Fast path: Configured search tool with optimized settings for ordering-only"
+                        )
+                        logger.info(
+                            "Fast path: Skipping reranking and query analysis for ordering-only mode"
+                        )
+                        logger.info(
+                            f"Using {len(user_file_ids or [])} files and {len(user_folder_ids or [])} folders"
+                        )
+                    else:
+                        logger.info(
+                            "Configured search tool to use ",
+                            f"{len(user_file_ids or [])} files and {len(user_folder_ids or [])} folders",
+                        )
+            except Exception as e:
+                logger.exception(
+                    f"Error configuring search tool for user files: {str(e)}"
+                )
+                use_search_for_user_files = False
+
         # TODO: unify message history with single message history
         message_history = [
             PreviousMessage.from_chat_message(msg, files) for msg in history_msgs
         ]
+        if not use_search_for_user_files and user_files:
+            yield UserKnowledgeFilePacket(
+                user_files=[
+                    FileDescriptor(
+                        id=str(file.file_id), type=ChatFileType.USER_KNOWLEDGE
+                    )
+                    for file in user_files
+                ]
+            )
+
+        if search_for_ordering_only:
+            logger.info(
+                "Performance: Forcing LLMEvaluationType.SKIP to prevent chunk evaluation for ordering-only search"
+            )
 
         search_request = SearchRequest(
             query=final_msg.message,
             evaluation_type=(
-                LLMEvaluationType.BASIC
-                if persona.llm_relevance_filter
-                else LLMEvaluationType.SKIP
+                LLMEvaluationType.SKIP
+                if search_for_ordering_only
+                else (
+                    LLMEvaluationType.BASIC
+                    if persona.llm_relevance_filter
+                    else LLMEvaluationType.SKIP
+                )
             ),
             human_selected_filters=(
                 retrieval_options.filters if retrieval_options else None
@@ -737,7 +989,6 @@ def stream_chat_message_objects(
             ),
         )
 
-        force_use_tool = _get_force_search_settings(new_msg_req, tools)
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
                 user_query=final_msg.message,
@@ -806,8 +1057,22 @@ def stream_chat_message_objects(
                 info = info_by_subq[
                     SubQuestionKey(level=level, question_num=level_question_num)
                 ]
+
+                # Skip LLM relevance processing entirely for ordering-only mode
+                if search_for_ordering_only and packet.id == SECTION_RELEVANCE_LIST_ID:
+                    logger.info(
+                        "Fast path: Completely bypassing section relevance processing for ordering-only mode"
+                    )
+                    # Skip this packet entirely since it would trigger LLM processing
+                    continue
+
                 # TODO: don't need to dedupe here when we do it in agent flow
                 if packet.id == SEARCH_RESPONSE_SUMMARY_ID:
+                    if search_for_ordering_only:
+                        logger.info(
+                            "Fast path: Skipping document deduplication for ordering-only mode"
+                        )
+
                     (
                         info.qa_docs_response,
                         info.reference_db_search_docs,
@@ -817,15 +1082,90 @@ def stream_chat_message_objects(
                         db_session=db_session,
                         selected_search_docs=selected_db_search_docs,
                         # Deduping happens at the last step to avoid harming quality by dropping content early on
+                        # Skip deduping completely for ordering-only mode to save time
                         dedupe_docs=(
-                            retrieval_options.dedupe_docs
-                            if retrieval_options
-                            else False
+                            False
+                            if search_for_ordering_only
+                            else (
+                                retrieval_options.dedupe_docs
+                                if retrieval_options
+                                else False
+                            )
                         ),
+                        user_files=user_file_files if search_for_ordering_only else [],
+                        loaded_user_files=user_files
+                        if search_for_ordering_only
+                        else [],
                     )
+
+                    # If we're using search just for ordering user files
+                    if (
+                        search_for_ordering_only
+                        and user_files
+                        and info.qa_docs_response
+                    ):
+                        logger.info(
+                            f"ORDERING: Processing search results for ordering {len(user_files)} user files"
+                        )
+                        import time
+
+                        ordering_start = time.time()
+
+                        # Extract document order from search results
+                        doc_order = []
+                        for doc in info.qa_docs_response.top_documents:
+                            doc_id = doc.document_id
+                            if str(doc_id).startswith("USER_FILE_CONNECTOR__"):
+                                file_id = doc_id.replace("USER_FILE_CONNECTOR__", "")
+                                if file_id in file_id_to_user_file:
+                                    doc_order.append(file_id)
+
+                        logger.info(
+                            f"ORDERING: Found {len(doc_order)} files from search results"
+                        )
+
+                        # Add any files that weren't in search results at the end
+                        missing_files = [
+                            f_id
+                            for f_id in file_id_to_user_file.keys()
+                            if f_id not in doc_order
+                        ]
+
+                        missing_files.extend(doc_order)
+                        doc_order = missing_files
+
+                        logger.info(
+                            f"ORDERING: Added {len(missing_files)} missing files to the end"
+                        )
+
+                        # Reorder user files based on search results
+                        ordered_user_files = [
+                            file_id_to_user_file[f_id]
+                            for f_id in doc_order
+                            if f_id in file_id_to_user_file
+                        ]
+
+                        time.time() - ordering_start
+
+                        yield UserKnowledgeFilePacket(
+                            user_files=[
+                                FileDescriptor(
+                                    id=str(file.file_id),
+                                    type=ChatFileType.USER_KNOWLEDGE,
+                                )
+                                for file in ordered_user_files
+                            ]
+                        )
+
                     yield info.qa_docs_response
                 elif packet.id == SECTION_RELEVANCE_LIST_ID:
                     relevance_sections = packet.response
+
+                    if search_for_ordering_only:
+                        logger.info(
+                            "Performance: Skipping relevance filtering for ordering-only mode"
+                        )
+                        continue
 
                     if info.reference_db_search_docs is None:
                         logger.warning(
@@ -936,7 +1276,7 @@ def stream_chat_message_objects(
                     ]
                     info.tool_result = packet
                 yield cast(ChatPacket, packet)
-        logger.debug("Reached end of stream")
+
     except ValueError as e:
         logger.exception("Failed to process chat message.")
 
@@ -1018,10 +1358,16 @@ def stream_chat_message_objects(
             error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
-                    tool_id=tool_name_to_tool_id[info.tool_result.tool_name],
-                    tool_name=info.tool_result.tool_name,
-                    tool_arguments=info.tool_result.tool_args,
-                    tool_result=info.tool_result.tool_result,
+                    tool_id=tool_name_to_tool_id.get(info.tool_result.tool_name, 0)
+                    if info.tool_result
+                    else None,
+                    tool_name=info.tool_result.tool_name if info.tool_result else None,
+                    tool_arguments=info.tool_result.tool_args
+                    if info.tool_result
+                    else None,
+                    tool_result=info.tool_result.tool_result
+                    if info.tool_result
+                    else None,
                 )
                 if info.tool_result
                 else None

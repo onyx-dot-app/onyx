@@ -41,6 +41,9 @@ from onyx.db.pg_file_store import read_lobj
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
+from onyx.db.user_documents import fetch_user_files_for_documents
+from onyx.db.user_documents import fetch_user_folders_for_documents
+from onyx.db.user_documents import update_user_file_token_count__no_commit
 from onyx.document_index.document_index_utils import (
     get_multipass_config,
 )
@@ -48,6 +51,7 @@ from onyx.document_index.interfaces import DocumentIndex
 from onyx.document_index.interfaces import DocumentMetadata
 from onyx.document_index.interfaces import IndexBatchParams
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
+from onyx.file_store.utils import store_user_file_plaintext
 from onyx.indexing.chunker import Chunker
 from onyx.indexing.embedder import embed_chunks_with_failure_handling
 from onyx.indexing.embedder import IndexingEmbedder
@@ -58,9 +62,12 @@ from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
 from onyx.llm.factory import get_default_llm_with_vision
+from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
+from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import (
@@ -638,6 +645,15 @@ def index_doc_batch(
             )
         }
 
+        doc_id_to_user_file_id: dict[str, int | None] = fetch_user_files_for_documents(
+            document_ids=updatable_ids, db_session=db_session
+        )
+        doc_id_to_user_folder_id: dict[
+            str, int | None
+        ] = fetch_user_folders_for_documents(
+            document_ids=updatable_ids, db_session=db_session
+        )
+
         doc_id_to_previous_chunk_cnt: dict[str, int | None] = {
             document_id: chunk_count
             for document_id, chunk_count in fetch_chunk_counts_for_documents(
@@ -657,6 +673,50 @@ def index_doc_batch(
             for document_id in updatable_ids
         }
 
+        llm_tokenizer: BaseTokenizer | None = None
+
+        try:
+            llm, _ = get_default_llms()
+
+            llm_tokenizer = get_tokenizer(
+                model_name=llm.config.model_name,
+                provider_type=llm.config.model_provider,
+            )
+        except Exception as e:
+            logger.error(f"Error getting tokenizer: {e}")
+            llm_tokenizer = None
+
+        # Calculate token counts for each document by combining all its chunks' content
+        user_file_id_to_token_count: dict[int, int | None] = {}
+        user_file_id_to_raw_text: dict[int, str] = {}
+        for document_id in updatable_ids:
+            # Only calculate token counts for documents that have a user file ID
+            if (
+                document_id in doc_id_to_user_file_id
+                and doc_id_to_user_file_id[document_id] is not None
+            ):
+                user_file_id = doc_id_to_user_file_id[document_id]
+                if not user_file_id:
+                    continue
+                document_chunks = [
+                    chunk
+                    for chunk in chunks_with_embeddings
+                    if chunk.source_document.id == document_id
+                ]
+                if document_chunks:
+                    combined_content = " ".join(
+                        [chunk.content for chunk in document_chunks]
+                    )
+                    token_count = (
+                        len(llm_tokenizer.encode(combined_content))
+                        if llm_tokenizer
+                        else 0
+                    )
+                    user_file_id_to_token_count[user_file_id] = token_count
+                    user_file_id_to_raw_text[user_file_id] = combined_content
+                else:
+                    user_file_id_to_token_count[user_file_id] = None
+
         # we're concerned about race conditions where multiple simultaneous indexings might result
         # in one set of metadata overwriting another one in vespa.
         # we still write data here for the immediate and most likely correct sync, but
@@ -668,6 +728,10 @@ def index_doc_batch(
                 access=doc_id_to_access_info.get(chunk.source_document.id, no_access),
                 document_sets=set(
                     doc_id_to_document_set.get(chunk.source_document.id, [])
+                ),
+                user_file=doc_id_to_user_file_id.get(chunk.source_document.id, None),
+                user_folder=doc_id_to_user_folder_id.get(
+                    chunk.source_document.id, None
                 ),
                 boost=(
                     ctx.id_to_db_doc_map[chunk.source_document.id].boost
@@ -750,6 +814,11 @@ def index_doc_batch(
             db_session=db_session,
         )
 
+        update_user_file_token_count__no_commit(
+            user_file_id_to_token_count=user_file_id_to_token_count,
+            db_session=db_session,
+        )
+
         # these documents can now be counted as part of the CC Pairs
         # document count, so we need to mark them as indexed
         # NOTE: even documents we skipped since they were already up
@@ -761,11 +830,21 @@ def index_doc_batch(
             document_ids=[doc.id for doc in filtered_documents],
             db_session=db_session,
         )
+        # Store the plaintext in the file store for faster retrieval
+        for user_file_id, raw_text in user_file_id_to_raw_text.items():
+            # Use the dedicated function to store plaintext
+            store_user_file_plaintext(
+                user_file_id=user_file_id,
+                plaintext_content=raw_text,
+                db_session=db_session,
+            )
 
         # save the chunk boost components to postgres
         update_chunk_boost_components__no_commit(
             chunk_data=updatable_chunk_data, db_session=db_session
         )
+
+        # Pause user file ccpairs
 
         db_session.commit()
 

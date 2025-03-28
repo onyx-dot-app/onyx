@@ -6,7 +6,9 @@ export const buildFilters = (
   sources: SourceMetadata[],
   documentSets: string[],
   timeRange: DateRangePickerValue | null,
-  tags: Tag[]
+  tags: Tag[],
+  userFileIds?: number[] | null,
+  userFolderIds?: number[] | null
 ): Filters => {
   const filters = {
     source_type:
@@ -14,6 +16,8 @@ export const buildFilters = (
     document_set: documentSets.length > 0 ? documentSets : null,
     time_cutoff: timeRange?.from ? timeRange.from : null,
     tags: tags,
+    user_file_ids: userFileIds || null,
+    // user_folder_ids: userFolderIds || null,
   };
 
   return filters;

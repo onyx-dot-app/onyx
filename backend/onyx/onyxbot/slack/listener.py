@@ -594,7 +594,7 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
         bot_tag_id = get_onyx_bot_slack_bot_id(client.web_client)
         if event_type == "message":
             is_dm = event.get("channel_type") == "im"
-            is_tagged = bot_tag_id and bot_tag_id in msg
+            is_tagged = bot_tag_id and f"<@{bot_tag_id}>" in msg
             is_onyx_bot_msg = bot_tag_id and bot_tag_id in event.get("user", "")
 
             # OnyxBot should never respond to itself
@@ -727,7 +727,11 @@ def build_request_details(
         event = cast(dict[str, Any], req.payload["event"])
         msg = cast(str, event["text"])
         channel = cast(str, event["channel"])
-        tagged = event.get("type") == "app_mention"
+        # Check for both app_mention events and messages containing bot tag
+        bot_tag_id = get_onyx_bot_slack_bot_id(client.web_client)
+        tagged = (event.get("type") == "app_mention") or (
+            event.get("type") == "message" and bot_tag_id and f"<@{bot_tag_id}>" in msg
+        )
         message_ts = event.get("ts")
         thread_ts = event.get("thread_ts")
         sender_id = event.get("user") or None

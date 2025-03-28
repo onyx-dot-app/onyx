@@ -59,7 +59,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
 
@@ -210,6 +209,7 @@ def create_persona(
         and len(persona_upsert_request.prompt_ids) > 0
         else None
     )
+
     prompt = upsert_prompt(
         db_session=db_session,
         user=user,

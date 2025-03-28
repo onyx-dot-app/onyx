@@ -23,6 +23,7 @@ interface ModalProps {
   heightOverride?: string;
   removeBottomPadding?: boolean;
   removePadding?: boolean;
+  increasedPadding?: boolean;
 }
 
 export function Modal({
@@ -41,6 +42,7 @@ export function Modal({
   heightOverride,
   removeBottomPadding,
   removePadding,
+  increasedPadding,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -111,7 +113,7 @@ export function Modal({
                 <h2
                   className={`my-auto flex content-start gap-x-4 font-bold ${
                     titleSize || "text-2xl"
-                  }`}
+                  } ${increasedPadding && "px-6"}`}
                 >
                   {title}
                   {icon && icon({ size: 30 })}

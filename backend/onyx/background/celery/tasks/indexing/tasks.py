@@ -365,6 +365,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
     Occcasionally does some validation of existing state to clear up error conditions"""
 
     time_start = time.monotonic()
+    task_logger.warning("check_for_indexing - Starting")
 
     tasks_created = 0
     locked = False
@@ -433,7 +434,9 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         lock_beat.reacquire()
         cc_pair_ids: list[int] = []
         with get_session_with_current_tenant() as db_session:
-            cc_pairs = fetch_connector_credential_pairs(db_session)
+            cc_pairs = fetch_connector_credential_pairs(
+                db_session, include_user_files=True
+            )
             for cc_pair_entry in cc_pairs:
                 cc_pair_ids.append(cc_pair_entry.id)
 
@@ -452,12 +455,18 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         not search_settings_instance.status.is_current()
                         and not search_settings_instance.background_reindex_enabled
                     ):
+                        task_logger.warning("SKIPPING DUE TO NON-LIVE SEARCH SETTINGS")
+
                         continue
 
                     redis_connector_index = redis_connector.new_index(
                         search_settings_instance.id
                     )
                     if redis_connector_index.fenced:
+                        task_logger.info(
+                            f"check_for_indexing - Skipping fenced connector: "
+                            f"cc_pair={cc_pair_id} search_settings={search_settings_instance.id}"
+                        )
                         continue
 
                     cc_pair = get_connector_credential_pair_from_id(
@@ -465,6 +474,9 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         cc_pair_id=cc_pair_id,
                     )
                     if not cc_pair:
+                        task_logger.warning(
+                            f"check_for_indexing - CC pair not found: cc_pair={cc_pair_id}"
+                        )
                         continue
 
                     last_attempt = get_last_attempt_for_cc_pair(
@@ -478,7 +490,20 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
                     ):
+                        task_logger.info(
+                            f"check_for_indexing - Not indexing cc_pair_id: {cc_pair_id} "
+                            f"search_settings={search_settings_instance.id}, "
+                            f"last_attempt={last_attempt.id if last_attempt else None}, "
+                            f"secondary_index_building={len(search_settings_list) > 1}"
+                        )
                         continue
+                    else:
+                        task_logger.info(
+                            f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
+                            f"search_settings={search_settings_instance.id}, "
+                            f"last_attempt={last_attempt.id if last_attempt else None}, "
+                            f"secondary_index_building={len(search_settings_list) > 1}"
+                        )
 
                     reindex = False
                     if search_settings_instance.status.is_current():
@@ -517,6 +542,12 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                             f"search_settings={search_settings_instance.id}"
                         )
                         tasks_created += 1
+                    else:
+                        task_logger.info(
+                            f"Failed to create indexing task: "
+                            f"cc_pair={cc_pair.id} "
+                            f"search_settings={search_settings_instance.id}"
+                        )
 
         lock_beat.reacquire()
 
@@ -1149,6 +1180,9 @@ def connector_indexing_proxy_task(
     if result.status == IndexingWatchdogTerminalStatus.TERMINATED_BY_SIGNAL:
         try:
             with get_session_with_current_tenant() as db_session:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to termination signal"
+                )
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session,

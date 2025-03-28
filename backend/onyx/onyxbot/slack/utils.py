@@ -145,7 +145,7 @@ def update_emote_react(
 
 def remove_onyx_bot_tag(message_str: str, client: WebClient) -> str:
     bot_tag_id = get_onyx_bot_slack_bot_id(web_client=client)
-    return re.sub(rf"<@{bot_tag_id}>\s", "", message_str)
+    return re.sub(rf"<@{bot_tag_id}>\s*", "", message_str)
 
 
 def _check_for_url_in_block(block: Block) -> bool:

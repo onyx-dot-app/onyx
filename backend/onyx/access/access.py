@@ -57,8 +57,9 @@ def _get_access_for_documents(
         db_session=db_session,
         document_ids=document_ids,
     )
-    doc_access = {
-        document_id: DocumentAccess.build(
+    doc_access = {}
+    for document_id, user_emails, is_public in document_access_info:
+        doc_access[document_id] = DocumentAccess.build(
             user_emails=[email for email in user_emails if email],
             # MIT version will wipe all groups and external groups on update
             user_groups=[],
@@ -66,8 +67,6 @@ def _get_access_for_documents(
             external_user_emails=[],
             external_user_group_ids=[],
         )
-        for document_id, user_emails, is_public in document_access_info
-    }
 
     # Sometimes the document has not been indexed by the indexing job yet, in those cases
     # the document does not exist and so we use least permissive. Specifically the EE version

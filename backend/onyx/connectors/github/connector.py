@@ -276,7 +276,26 @@ class GithubConnector(CheckpointConnector[GithubConnectorCheckpoint]):
             return checkpoint
 
         assert checkpoint.cached_repo is not None, "No repo saved in checkpoint"
-        repo = checkpoint.cached_repo.to_Repository(self.github_client.requester)
+
+        # Try to access the requester - different PyGithub versions may use different attribute names
+        try:
+            # Try direct access to a known attribute name first
+            if hasattr(self.github_client, "_requester"):
+                requester = self.github_client._requester
+            elif hasattr(self.github_client, "_Github__requester"):
+                requester = self.github_client._Github__requester
+            else:
+                # If we can't find the requester attribute, we need to fall back to recreating the repo
+                raise AttributeError("Could not find requester attribute")
+
+            repo = checkpoint.cached_repo.to_Repository(requester)
+        except Exception as e:
+            # If all else fails, re-fetch the repo directly
+            logger.warning(
+                f"Failed to deserialize repository: {e}. Attempting to re-fetch."
+            )
+            repo_id = checkpoint.cached_repo.id
+            repo = self.github_client.get_repo(repo_id)
 
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")

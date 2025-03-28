@@ -65,6 +65,15 @@ beat_task_templates.extend(
             },
         },
         {
+            "name": "check-for-user-file-folder-sync",
+            "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
+            "schedule": timedelta(seconds=30),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
             "name": "check-for-pruning",
             "task": OnyxCeleryTask.CHECK_FOR_PRUNING,
             "schedule": timedelta(seconds=20),

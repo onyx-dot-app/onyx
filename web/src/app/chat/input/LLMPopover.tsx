@@ -3,6 +3,7 @@ import React, {
   useEffect,
   useCallback,
   useLayoutEffect,
+  useMemo,
 } from "react";
 import {
   Popover,
@@ -51,50 +52,66 @@ export default function LLMPopover({
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
 
-  const llmOptionsByProvider: {
-    [provider: string]: {
-      name: string;
-      value: string;
-      icon: React.FC<{ size?: number; className?: string }>;
-    }[];
-  } = {};
-  const uniqueModelNames = new Set<string>();
+  // Memoize the options to prevent unnecessary recalculations
+  const {
+    llmOptionsByProvider,
+    llmOptions,
+    defaultProvider,
+    defaultModelDisplayName,
+  } = useMemo(() => {
+    const llmOptionsByProvider: {
+      [provider: string]: {
+        name: string;
+        value: string;
+        icon: React.FC<{ size?: number; className?: string }>;
+      }[];
+    } = {};
 
-  llmProviders.forEach((llmProvider) => {
-    if (!llmOptionsByProvider[llmProvider.provider]) {
-      llmOptionsByProvider[llmProvider.provider] = [];
-    }
+    const uniqueModelNames = new Set<string>();
 
-    (llmProvider.display_model_names || llmProvider.model_names).forEach(
-      (modelName) => {
-        if (!uniqueModelNames.has(modelName)) {
-          uniqueModelNames.add(modelName);
-          llmOptionsByProvider[llmProvider.provider].push({
-            name: modelName,
-            value: structureValue(
-              llmProvider.name,
-              llmProvider.provider,
-              modelName
-            ),
-            icon: getProviderIcon(llmProvider.provider, modelName),
-          });
-        }
+    llmProviders.forEach((llmProvider) => {
+      if (!llmOptionsByProvider[llmProvider.provider]) {
+        llmOptionsByProvider[llmProvider.provider] = [];
       }
+
+      (llmProvider.display_model_names || llmProvider.model_names).forEach(
+        (modelName) => {
+          if (!uniqueModelNames.has(modelName)) {
+            uniqueModelNames.add(modelName);
+            llmOptionsByProvider[llmProvider.provider].push({
+              name: modelName,
+              value: structureValue(
+                llmProvider.name,
+                llmProvider.provider,
+                modelName
+              ),
+              icon: getProviderIcon(llmProvider.provider, modelName),
+            });
+          }
+        }
+      );
+    });
+
+    const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
+      ([provider, options]) => [...options]
     );
-  });
 
-  const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
-    ([provider, options]) => [...options]
-  );
+    const defaultProvider = llmProviders.find(
+      (llmProvider) => llmProvider.is_default_provider
+    );
 
-  const defaultProvider = llmProviders.find(
-    (llmProvider) => llmProvider.is_default_provider
-  );
+    const defaultModelName = defaultProvider?.default_model_name;
+    const defaultModelDisplayName = defaultModelName
+      ? getDisplayNameForModel(defaultModelName)
+      : null;
 
-  const defaultModelName = defaultProvider?.default_model_name;
-  const defaultModelDisplayName = defaultModelName
-    ? getDisplayNameForModel(defaultModelName)
-    : null;
+    return {
+      llmOptionsByProvider,
+      llmOptions,
+      defaultProvider,
+      defaultModelDisplayName,
+    };
+  }, [llmProviders]);
 
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
@@ -104,42 +121,52 @@ export default function LLMPopover({
     setLocalTemperature(llmManager.temperature ?? 0.5);
   }, [llmManager.temperature]);
 
-  const handleTemperatureChange = (value: number[]) => {
+  // Use useCallback to prevent function recreation
+  const handleTemperatureChange = useCallback((value: number[]) => {
     setLocalTemperature(value[0]);
-  };
+  }, []);
 
-  const handleTemperatureChangeComplete = (value: number[]) => {
-    llmManager.updateTemperature(value[0]);
-  };
+  const handleTemperatureChangeComplete = useCallback(
+    (value: number[]) => {
+      llmManager.updateTemperature(value[0]);
+    },
+    [llmManager]
+  );
+
+  // Memoize trigger content to prevent rerendering
+  const triggerContent = useMemo(
+    () => (
+      <button
+        className="dark:text-[#fff] text-[#000] focus:outline-none"
+        data-testid="llm-popover-trigger"
+      >
+        <ChatInputOption
+          minimize
+          toggle
+          flexPriority="stiff"
+          name={getDisplayNameForModel(
+            llmManager?.currentLlm.modelName ||
+              defaultModelDisplayName ||
+              "Models"
+          )}
+          Icon={getProviderIcon(
+            llmManager?.currentLlm.provider ||
+              defaultProvider?.provider ||
+              "anthropic",
+            llmManager?.currentLlm.modelName ||
+              defaultProvider?.default_model_name ||
+              "claude-3-5-sonnet-20240620"
+          )}
+          tooltipContent="Switch models"
+        />
+      </button>
+    ),
+    [defaultModelDisplayName, defaultProvider, llmManager?.currentLlm]
+  );
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <button
-          className="dark:text-[#fff] text-[#000] focus:outline-none"
-          data-testid="llm-popover-trigger"
-        >
-          <ChatInputOption
-            minimize
-            toggle
-            flexPriority="stiff"
-            name={getDisplayNameForModel(
-              llmManager?.currentLlm.modelName ||
-                defaultModelDisplayName ||
-                "Models"
-            )}
-            Icon={getProviderIcon(
-              llmManager?.currentLlm.provider ||
-                defaultProvider?.provider ||
-                "anthropic",
-              llmManager?.currentLlm.modelName ||
-                defaultProvider?.default_model_name ||
-                "claude-3-5-sonnet-20240620"
-            )}
-            tooltipContent="Switch models"
-          />
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{triggerContent}</PopoverTrigger>
       <PopoverContent
         align="start"
         className="w-64 p-1 bg-background border border-background-200 rounded-md shadow-lg flex flex-col"
