@@ -54,8 +54,8 @@ export const ConnectorTitle = ({
   } else if (connector.source === "jira") {
     const typedConnector = connector as Connector<JiraConfig>;
     additionalMetadata.set(
-      "Jira Project URL",
-      typedConnector.connector_specific_config.jira_project_url
+      "Jira Filters",
+      typedConnector.connector_specific_config.jira_filter
     );
   } else if (connector.source === "google_drive") {
     const typedConnector = connector as Connector<GoogleDriveConfig>;

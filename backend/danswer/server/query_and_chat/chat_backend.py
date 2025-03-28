@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_user
 from danswer.chat.chat_utils import create_chat_chain
 from danswer.chat.process_message import stream_chat_message
@@ -69,7 +70,8 @@ from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
-router = APIRouter(prefix="/chat")
+router = APIRouter(prefix="/chat", dependencies=[Depends(validate_api_key)])
+# api_router = APIRouter(prefix="/chat", dependencies=[Depends(validate_api_key)])
 
 
 @router.get("/get-user-chat-sessions")

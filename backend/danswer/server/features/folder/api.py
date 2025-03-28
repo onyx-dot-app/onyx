@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from fastapi import Path
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_user
 from danswer.db.chat import get_chat_session_by_id
 from danswer.db.engine import get_session
@@ -24,7 +25,7 @@ from danswer.server.features.folder.models import GetUserFoldersResponse
 from danswer.server.models import DisplayPriorityRequest
 from danswer.server.query_and_chat.models import ChatSessionDetails
 
-router = APIRouter(prefix="/folder")
+router = APIRouter(prefix="/folder", dependencies=[Depends(validate_api_key)])
 
 
 @router.get("")

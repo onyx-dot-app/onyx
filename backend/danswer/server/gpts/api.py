@@ -6,6 +6,7 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.db.engine import get_session
 from danswer.llm.factory import get_default_llms
 from danswer.search.models import SearchRequest
@@ -13,11 +14,10 @@ from danswer.search.pipeline import SearchPipeline
 from danswer.server.danswer_api.ingestion import api_key_dep
 from danswer.utils.logger import setup_logger
 
-
 logger = setup_logger()
 
 
-router = APIRouter(prefix="/gpts")
+router = APIRouter(prefix="/gpts", dependencies=[Depends(validate_api_key)])
 
 
 def time_ago(dt: datetime) -> str:

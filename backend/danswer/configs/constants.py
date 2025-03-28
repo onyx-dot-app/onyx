@@ -95,6 +95,7 @@ class DocumentSource(str, Enum):
     SHAREPOINT = "sharepoint"
     TEAMS = "teams"
     SALESFORCE = "salesforce"
+    SFKBARTICLES = "sfkbarticles"
     DISCOURSE = "discourse"
     AXERO = "axero"
     CLICKUP = "clickup"

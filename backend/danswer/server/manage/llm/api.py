@@ -5,6 +5,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.db.engine import get_session
@@ -28,8 +29,8 @@ from danswer.utils.threadpool_concurrency import run_functions_tuples_in_paralle
 logger = setup_logger()
 
 
-admin_router = APIRouter(prefix="/admin/llm")
-basic_router = APIRouter(prefix="/llm")
+admin_router = APIRouter(prefix="/admin/llm", dependencies=[Depends(validate_api_key)])
+basic_router = APIRouter(prefix="/llm", dependencies=[Depends(validate_api_key)])
 
 
 @admin_router.get("/built-in/options")

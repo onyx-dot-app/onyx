@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import HTTPException
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.db.models import User
@@ -10,8 +11,10 @@ from danswer.server.settings.store import load_settings
 from danswer.server.settings.store import store_settings
 
 
-admin_router = APIRouter(prefix="/admin/settings")
-basic_router = APIRouter(prefix="/settings")
+admin_router = APIRouter(
+    prefix="/admin/settings", dependencies=[Depends(validate_api_key)]
+)
+basic_router = APIRouter(prefix="/settings", dependencies=[Depends(validate_api_key)])
 
 
 @admin_router.put("")

@@ -310,48 +310,67 @@ def get_search_answer(
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> OneShotQAResponse:
     """Collects the streamed one shot answer responses into a single object"""
-    qa_response = OneShotQAResponse()
+    max_attempts = 5
+    attempt = 0
+    qa_response = None
 
-    results = stream_answer_objects(
-        query_req=query_req,
-        user=user,
-        max_document_tokens=max_document_tokens,
-        max_history_tokens=max_history_tokens,
-        db_session=db_session,
-        bypass_acl=bypass_acl,
-        use_citations=use_citations,
-        danswerbot_flow=danswerbot_flow,
-        timeout=answer_generation_timeout,
-        retrieval_metrics_callback=retrieval_metrics_callback,
-        rerank_metrics_callback=rerank_metrics_callback,
-    )
+    while attempt < max_attempts:
+        qa_response = OneShotQAResponse()
 
-    answer = ""
-    for packet in results:
-        if isinstance(packet, QueryRephrase):
-            qa_response.rephrase = packet.rephrased_query
-        if isinstance(packet, DanswerAnswerPiece) and packet.answer_piece:
-            answer += packet.answer_piece
-        elif isinstance(packet, QADocsResponse):
-            qa_response.docs = packet
-        elif isinstance(packet, LLMRelevanceFilterResponse):
-            qa_response.llm_chunks_indices = packet.relevant_chunk_indices
-        elif isinstance(packet, DanswerQuotes):
-            qa_response.quotes = packet
-        elif isinstance(packet, CitationInfo):
-            if qa_response.citations:
-                qa_response.citations.append(packet)
-            else:
-                qa_response.citations = [packet]
-        elif isinstance(packet, DanswerContexts):
-            qa_response.contexts = packet
-        elif isinstance(packet, StreamingError):
-            qa_response.error_msg = packet.error
-        elif isinstance(packet, ChatMessageDetail):
-            qa_response.chat_message_id = packet.message_id
+        results = stream_answer_objects(
+            query_req=query_req,
+            user=user,
+            max_document_tokens=max_document_tokens,
+            max_history_tokens=max_history_tokens,
+            db_session=db_session,
+            bypass_acl=bypass_acl,
+            use_citations=use_citations,
+            danswerbot_flow=danswerbot_flow,
+            timeout=answer_generation_timeout,
+            retrieval_metrics_callback=retrieval_metrics_callback,
+            rerank_metrics_callback=rerank_metrics_callback,
+        )
 
-    if answer:
-        qa_response.answer = answer
+        answer = ""
+        for packet in results:
+            if isinstance(packet, QueryRephrase):
+                qa_response.rephrase = packet.rephrased_query
+            if isinstance(packet, DanswerAnswerPiece) and packet.answer_piece:
+                answer += packet.answer_piece
+            elif isinstance(packet, QADocsResponse):
+                qa_response.docs = packet
+            elif isinstance(packet, LLMRelevanceFilterResponse):
+                qa_response.llm_chunks_indices = packet.relevant_chunk_indices
+            elif isinstance(packet, DanswerQuotes):
+                qa_response.quotes = packet
+            elif isinstance(packet, CitationInfo):
+                if qa_response.citations:
+                    qa_response.citations.append(packet)
+                else:
+                    qa_response.citations = [packet]
+            elif isinstance(packet, DanswerContexts):
+                qa_response.contexts = packet
+            elif isinstance(packet, StreamingError):
+                qa_response.error_msg = packet.error
+            elif isinstance(packet, ChatMessageDetail):
+                qa_response.chat_message_id = packet.message_id
+
+        if answer:
+            qa_response.answer = answer
+
+        if use_citations and qa_response.answer and qa_response.citations:
+            qa_response.answer, qa_response.citations = reorganize_citations(
+                qa_response.answer, qa_response.citations
+            )
+            break  # Citations found, break out of retry loop.
+        # If citations are not required, we can exit immediately.
+        elif not use_citations:
+            break
+
+        logger.info(
+            f"Citations not found, retrying... (attempt {attempt + 1}/{max_attempts})"
+        )
+        attempt += 1
 
     if enable_reflexion:
         # Because follow up messages are explicitly tagged, we don't need to verify the answer
@@ -360,11 +379,5 @@ def get_search_answer(
             qa_response.answer_valid = get_answer_validity(first_query, answer)
         else:
             qa_response.answer_valid = True
-
-    if use_citations and qa_response.answer and qa_response.citations:
-        # Reorganize citation nums to be in the same order as the answer
-        qa_response.answer, qa_response.citations = reorganize_citations(
-            qa_response.answer, qa_response.citations
-        )
 
     return qa_response

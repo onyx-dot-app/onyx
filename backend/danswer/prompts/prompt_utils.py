@@ -178,9 +178,10 @@ def drop_messages_history_overflow(
         final_msgs = [final_msg]
 
     # Start dropping from the history if necessary
-    ind_prev_msg_start = find_last_index(
-        token_counts, max_prompt_tokens=max_allowed_tokens
-    )
+    # ind_prev_msg_start = find_last_index(
+    #     token_counts, max_prompt_tokens=max_allowed_tokens
+    # )
+    ind_prev_msg_start = 0
 
     if system_msg and ind_prev_msg_start <= len(history_msgs):
         final_messages.append(system_msg)

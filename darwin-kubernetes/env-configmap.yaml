@@ -15,7 +15,7 @@ data:
   EMAIL_FROM: ""  # 'your-email@company.com' SMTP_USER missing used instead
   # Gen AI Settings
   GEN_AI_MODEL_PROVIDER: "custom"
-  GEN_AI_API_ENDPOINT: "https://alpha.uipath.com/llmgateway_/openai/deployments/gpt-35-turbo/chat/completions?api-version=2023-03-15-preview"
+  GEN_AI_API_ENDPOINT: "https://alpha.uipath.com/llmgateway_/openai/deployments/gpt-4o-mini-2024-07-18/chat/completions?api-version=2024-06-01"
   GEN_AI_IDENTITY_ENDPOINT: "https://alpha.uipath.com/identity_/connect/token"
   GEN_AI_CLIENT_ID: "XXX"
   GEN_AI_CLIENT_SECRET: "XXX"

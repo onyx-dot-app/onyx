@@ -198,6 +198,10 @@ JIRA_CONNECTOR_LABELS_TO_SKIP = [
     for ignored_tag in os.environ.get("JIRA_CONNECTOR_LABELS_TO_SKIP", "").split(",")
     if ignored_tag
 ]
+# Maximum size for Jira tickets in bytes (default: 100KB)
+JIRA_CONNECTOR_MAX_TICKET_SIZE = int(
+    os.environ.get("JIRA_CONNECTOR_MAX_TICKET_SIZE", 100 * 1024)
+)
 
 GONG_CONNECTOR_START_TIME = os.environ.get("GONG_CONNECTOR_START_TIME")
 

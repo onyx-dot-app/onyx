@@ -3,6 +3,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.schemas import UserRole
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
@@ -19,7 +20,7 @@ from danswer.server.documents.models import ObjectCreationIdResponse
 from danswer.server.models import StatusResponse
 
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(validate_api_key)])
 
 
 """Admin-only endpoints"""

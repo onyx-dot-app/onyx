@@ -20,7 +20,18 @@ ESCAPE_SEQUENCE_RE = re.compile(
 
 def decode_escapes(s: str) -> str:
     def decode_match(match: re.Match) -> str:
-        return codecs.decode(match.group(0), "unicode-escape")
+        matched_str = match.group(0)
+
+        # Only double escape non-Unicode sequences
+        if matched_str.startswith("\\U") and not re.match(
+            r"\\U[0-9a-fA-F]{8}", matched_str
+        ):
+            return matched_str
+
+        try:
+            return codecs.decode(matched_str, "unicode-escape")
+        except UnicodeDecodeError:
+            return matched_str
 
     return ESCAPE_SEQUENCE_RE.sub(decode_match, s)
 

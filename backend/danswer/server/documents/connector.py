@@ -11,6 +11,7 @@ from fastapi import UploadFile
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.background.celery.celery_utils import get_deletion_status
@@ -90,7 +91,7 @@ _GMAIL_CREDENTIAL_ID_COOKIE_NAME = "gmail_credential_id"
 _GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id"
 
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(validate_api_key)])
 
 
 """Admin only API endpoints"""

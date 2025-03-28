@@ -93,13 +93,13 @@ def make_slack_api_rate_limited(
                     error = "unknown error"
 
                 if error == "ratelimited":
-                        # Handle rate limiting: get the 'Retry-After' header value and sleep for that duration
-                        retry_after = int(e.response.headers['Retry-After'])
-                        logger.info(
-                            f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
-                        )
-                        time.sleep(retry_after)
-                        continue
+                    # Handle rate limiting: get the 'Retry-After' header value and sleep for that duration
+                    retry_after = int(e.response.headers["Retry-After"])
+                    logger.info(
+                        f"Slack call rate limited, retrying after {retry_after} seconds. Exception: {e}"
+                    )
+                    time.sleep(retry_after)
+                    continue
                 elif error in ["already_reacted", "no_reaction"]:
                     logger.info("not here already_reacted")
                     # The response isn't used for reactions, this is basically just a pass
@@ -278,3 +278,9 @@ class SlackTextCleaner:
     def add_zero_width_whitespace_after_tag(message: str) -> str:
         """Add a 0 width whitespace after every @"""
         return message.replace("@", "@\u200B")
+
+    @staticmethod
+    def handle_bold_syntax_for_slack(text: str) -> str:
+        """Replace instances of '**' with a single '*'"""
+        corrected_text = text.replace("**", "*")
+        return corrected_text

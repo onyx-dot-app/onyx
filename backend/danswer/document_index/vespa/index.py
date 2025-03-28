@@ -18,14 +18,14 @@ import httpx
 import requests
 from retry import retry
 
+from danswer.configs.app_configs import ENVIRONMENT
 from danswer.configs.app_configs import LOG_VESPA_TIMING_INFORMATION
 from danswer.configs.app_configs import VESPA_CONFIG_SERVER_HOST
+from danswer.configs.app_configs import VESPA_FEED_HOST
+from danswer.configs.app_configs import VESPA_FEED_PORT
 from danswer.configs.app_configs import VESPA_HOST
 from danswer.configs.app_configs import VESPA_PORT
 from danswer.configs.app_configs import VESPA_TENANT_PORT
-from danswer.configs.app_configs import VESPA_FEED_HOST
-from danswer.configs.app_configs import VESPA_FEED_PORT
-from danswer.configs.app_configs import ENVIRONMENT
 from danswer.configs.chat_configs import DOC_TIME_DECAY
 from danswer.configs.chat_configs import EDIT_KEYWORD_QUERY
 from danswer.configs.chat_configs import HYBRID_ALPHA
@@ -608,11 +608,10 @@ def _vespa_hit_to_inference_chunk(hit: dict[str, Any]) -> InferenceChunk:
         for k, v in cast(dict[str, str], source_links_dict_unprocessed).items()
     }
 
-    if 'web' in fields[SOURCE_TYPE]:
-        score = 1.0
+    if "web" in fields[SOURCE_TYPE]:
+        pass
     else:
-        score = hit.get("relevance", 0)
-
+        hit.get("relevance", 0)
 
     inference_chunk = InferenceChunk(
         chunk_id=fields[CHUNK_ID],
@@ -624,10 +623,10 @@ def _vespa_hit_to_inference_chunk(hit: dict[str, Any]) -> InferenceChunk:
         source_type=fields[SOURCE_TYPE],
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),
-        #boost = boost,
+        # boost = boost,
         recency_bias=fields.get("matchfeatures", {}).get(RECENCY_BIAS, 1.0),
         score=hit.get("relevance", 0),
-        #score = score,
+        # score = score,
         hidden=fields.get(HIDDEN, False),
         primary_owners=fields.get(PRIMARY_OWNERS),
         secondary_owners=fields.get(SECONDARY_OWNERS),
@@ -635,14 +634,14 @@ def _vespa_hit_to_inference_chunk(hit: dict[str, Any]) -> InferenceChunk:
         match_highlights=match_highlights,
         updated_at=updated_at,
     )
-    attrs = vars(inference_chunk)
-    #logger.info(', '.join("%s: %s" % item for item in attrs.items()))
+    vars(inference_chunk)
+    # logger.info(', '.join("%s: %s" % item for item in attrs.items()))
 
     return inference_chunk
 
 
 def query_vespa_helper(params):
-    #logger.info("Vespa Query ---> {0}".format(params))
+    # logger.info("Vespa Query ---> {0}".format(params))
 
     response = requests.post(
         SEARCH_ENDPOINT,
@@ -690,7 +689,6 @@ def _query_vespa(query_params: Mapping[str, str | int | float]) -> list[Inferenc
     if "query" in query_params and not cast(str, query_params["query"]).strip():
         raise ValueError("No/empty query received")
 
-    
     params = dict(
         **query_params,
         **{
@@ -699,21 +697,26 @@ def _query_vespa(query_params: Mapping[str, str | int | float]) -> list[Inferenc
         if LOG_VESPA_TIMING_INFORMATION
         else {},
     )
-  
-    #All records including web
+
+    # All records including web
     params["hits"] = 50
     filtered_hits_all = query_vespa_helper(params)
 
-    #Only Web Records
+    # Only Web Records and Salesforce KB articles
     params["hits"] = 10
-    params["yql"] = params["yql"] + ' and source_type contains "web"'
-    filtered_hits_web = query_vespa_helper(params)
+    params["yql"] = (
+        params["yql"]
+        + ' and (source_type contains "web" or source_type contains "sfkabarticles")'
+    )
+    filtered_hits_web_sf = query_vespa_helper(params)
 
-    filtered_hits_final = filtered_hits_web + filtered_hits_all
+    filtered_hits_final = filtered_hits_web_sf + filtered_hits_all
 
-    inference_chunks = [_vespa_hit_to_inference_chunk(hit) for hit in filtered_hits_final]
-    #inplace sorting based on score
-    #inference_chunks.sort(key=lambda x: x.score, reverse=True)
+    inference_chunks = [
+        _vespa_hit_to_inference_chunk(hit) for hit in filtered_hits_final
+    ]
+    # inplace sorting based on score
+    # inference_chunks.sort(key=lambda x: x.score, reverse=True)
 
     unique_chunks: dict[tuple[str, int], InferenceChunk] = {}
     for chunk in inference_chunks:

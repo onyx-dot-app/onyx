@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from fastapi import status
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.configs.app_configs import DISABLE_INDEX_UPDATE_ON_SWAP
@@ -23,7 +24,7 @@ from danswer.server.manage.models import FullModelVersionResponse
 from danswer.server.models import IdReturn
 from danswer.utils.logger import setup_logger
 
-router = APIRouter(prefix="/secondary-index")
+router = APIRouter(prefix="/secondary-index", dependencies=[Depends(validate_api_key)])
 logger = setup_logger()
 
 

@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.background.celery.celery_utils import get_deletion_status
@@ -19,7 +20,7 @@ from danswer.server.documents.models import ConnectorCredentialPairIdentifier
 from danswer.server.documents.models import ConnectorCredentialPairMetadata
 from danswer.server.models import StatusResponse
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(validate_api_key)])
 
 
 @router.get("/admin/cc-pair/{cc_pair_id}")

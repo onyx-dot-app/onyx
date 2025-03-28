@@ -3,6 +3,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.db.document_set import check_document_sets_are_public
@@ -23,7 +24,7 @@ from danswer.server.features.document_set.models import DocumentSetCreationReque
 from danswer.server.features.document_set.models import DocumentSetUpdateRequest
 
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(validate_api_key)])
 
 
 @router.post("/admin/document-set")

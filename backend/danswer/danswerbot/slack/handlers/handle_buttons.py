@@ -7,6 +7,7 @@ from slack_sdk.models.views import View
 from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import NoResultFound
 
 from danswer.configs.constants import SearchFeedbackType
 from danswer.configs.danswerbot_configs import DANSWER_FOLLOWUP_EMOJI
@@ -32,6 +33,10 @@ from danswer.danswerbot.slack.utils import update_emote_react
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.feedback import create_chat_message_feedback
 from danswer.db.feedback import create_doc_retrieval_feedback
+from danswer.db.persona import fetch_persona_by_id
+from danswer.db.users import add_slack_persona_for_user
+from danswer.db.users import add_user_slack_persona
+from danswer.db.users import fetch_user_slack_persona
 from danswer.document_index.document_index_utils import get_both_index_names
 from danswer.document_index.factory import get_default_document_index
 from danswer.utils.logger import setup_logger
@@ -293,3 +298,63 @@ def handle_followup_resolved_button(
         thread_ts=thread_ts,
         unfurl=False,
     )
+
+
+def handle_persona_selection(req: SocketModeRequest, client: SocketModeClient) -> None:
+    action = cast(dict[str, Any], req.payload.get("actions", [])[0])
+    user_id = req.payload["user"]["id"]
+    channel_id = req.payload["container"]["channel_id"]
+    persona_id = action.get("value")
+    message_ts_to_respond_to = req.payload.get("container", {}).get("thread_ts")
+
+    with Session(get_sqlalchemy_engine()) as db_session:
+        try:
+            persona = fetch_persona_by_id(db_session=db_session, persona_id=persona_id)
+
+            if persona is None:
+                respond_in_thread(
+                    client=client.web_client,
+                    channel=channel_id,
+                    text="Persona not found.",
+                    thread_ts=message_ts_to_respond_to,
+                )
+                return
+
+            user_slack_persona = fetch_user_slack_persona(
+                db_session=db_session, sender_id=user_id
+            )
+            if user_slack_persona:
+                add_slack_persona_for_user(
+                    db_session=db_session,
+                    persona=persona,
+                    user_slack_persona=user_slack_persona,
+                )
+                response_text = f"Persona '{persona.name}' has been set!\n"
+                respond_in_thread(
+                    client=client.web_client,
+                    channel=channel_id,
+                    text=response_text,
+                    thread_ts=message_ts_to_respond_to,
+                )
+                return
+
+            else:
+                add_user_slack_persona(
+                    db_session=db_session, sender_id=user_id, persona=persona
+                )
+                respond_in_thread(
+                    client=client.web_client,
+                    channel=channel_id,
+                    text=f"'{persona.name}' has been successfully set as the current persona.",
+                    thread_ts=message_ts_to_respond_to,
+                )
+                return
+
+        except NoResultFound:
+            respond_in_thread(
+                client=client.web_client,
+                channel=channel_id,
+                text="Error in fetching persona",
+                thread_ts=message_ts_to_respond_to,
+            )
+            return

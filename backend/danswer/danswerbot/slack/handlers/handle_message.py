@@ -1,6 +1,7 @@
 import datetime
 import functools
 import logging
+import re
 from collections.abc import Callable
 from typing import Any
 from typing import cast
@@ -23,7 +24,6 @@ from danswer.configs.danswerbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
 from danswer.configs.danswerbot_configs import DANSWER_BOT_NUM_RETRIES
 from danswer.configs.danswerbot_configs import DANSWER_BOT_TARGET_CHUNK_PERCENTAGE
 from danswer.configs.danswerbot_configs import DANSWER_BOT_USE_QUOTES
-from danswer.configs.danswerbot_configs import DANSWER_FOLLOWUP_EMOJI
 from danswer.configs.danswerbot_configs import DANSWER_REACT_EMOJI
 from danswer.configs.danswerbot_configs import DISABLE_DANSWER_BOT_FILTER_DETECT
 from danswer.configs.danswerbot_configs import ENABLE_DANSWERBOT_REFLEXION
@@ -47,6 +47,9 @@ from danswer.db.models import Persona
 from danswer.db.models import SlackBotConfig
 from danswer.db.models import SlackBotResponseType
 from danswer.db.persona import fetch_persona_by_id
+from danswer.db.persona import get_persona_with_docset_and_prompts
+from danswer.db.persona import get_personas
+from danswer.db.users import fetch_user_slack_persona
 from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
 )
@@ -67,6 +70,7 @@ logger_base = setup_logger()
 srl = SlackRateLimiter()
 
 RT = TypeVar("RT")  # return type
+MAX_BUTTONS_PER_BLOCK = 25  # Slack limit
 
 
 def rate_limits(
@@ -172,11 +176,23 @@ def remove_scheduled_feedback_reminder(
             )
 
 
+def contains_questionmark_outside_links(message: str) -> bool:
+    """
+    Checks if the message contains a question mark outside of URLs.
+    """
+    url_pattern = r"<https?://[^\s>]+>|https?://\S+"
+
+    message_without_links = re.sub(url_pattern, "", message)
+
+    return "?" in message_without_links
+
+
 def handle_message(
     message_info: SlackMessageInfo,
     channel_config: SlackBotConfig | None,
     client: WebClient,
     feedback_reminder_id: str | None,
+    channel_name: str | None,
     num_retries: int = DANSWER_BOT_NUM_RETRIES,
     answer_generation_timeout: int = DANSWER_BOT_ANSWER_GENERATION_TIMEOUT,
     should_respond_with_error_msgs: bool = DANSWER_BOT_DISPLAY_ERROR_MSGS,
@@ -206,9 +222,98 @@ def handle_message(
     bypass_filters = message_info.bypass_filters
     is_bot_msg = message_info.is_bot_msg
     is_bot_dm = message_info.is_bot_dm
+    persona_name = None
+
+    if channel_name is None:
+        with Session(get_sqlalchemy_engine()) as db_session:
+            user_slack_persona = fetch_user_slack_persona(
+                db_session=db_session, sender_id=sender_id
+            )
+            if user_slack_persona:
+                slack_persona_id = user_slack_persona.persona_id or None
+                persona = get_persona_with_docset_and_prompts(
+                    persona_id=slack_persona_id, db_session=db_session
+                )
+                persona_name = persona.name
+            else:
+                persona = None
+    else:
+        persona = channel_config.persona if channel_config else None
+
+    if is_bot_msg and channel_name is None:
+        command = message_info.command
+        if command == "/personas":
+            with Session(get_sqlalchemy_engine()) as db_session:
+                personas = get_personas(
+                    user_id=None, db_session=db_session, include_default=False
+                )
+
+            if not personas:
+                respond_in_thread(
+                    client=client,
+                    channel=channel,
+                    text="No personas are available.",
+                    thread_ts=message_ts_to_respond_to,
+                )
+                return
+
+            persona_buttons = [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": persona.name},
+                    "value": str(persona.id),
+                    "action_id": f"set_persona_{persona.id}",
+                }
+                for persona in personas
+            ]
+
+            blocks = [
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "Here are the available personas. Click on one to set it:",
+                    },
+                }
+            ]
+
+            for i in range(0, len(persona_buttons), MAX_BUTTONS_PER_BLOCK):
+                blocks.append(
+                    {
+                        "type": "actions",
+                        "elements": persona_buttons[i : i + MAX_BUTTONS_PER_BLOCK],
+                    }
+                )
+
+            respond_in_thread(
+                client=client,
+                channel=channel,
+                blocks=blocks,
+                thread_ts=message_ts_to_respond_to,
+            )
+            return
+        elif command == "/current_persona":
+            if persona_name is None:
+                respond_in_thread(
+                    client=client,
+                    channel=channel,
+                    text="No persona is set. Please use the /personas command to set up a persona.",
+                    thread_ts=message_ts_to_respond_to,
+                )
+                return
+            else:
+                respond_in_thread(
+                    client=client,
+                    channel=channel,
+                    text=f"Current persona : {persona_name}",
+                    thread_ts=message_ts_to_respond_to,
+                )
+                return
+    elif is_bot_msg and (command == "/personas" or command == "/current_persona"):
+        logger.info("The slash command was used in a channel, won't work")
+        return
 
     document_set_names: list[str] | None = None
-    persona = channel_config.persona if channel_config else None
     prompt = None
     if persona:
         document_set_names = [
@@ -247,10 +352,9 @@ def handle_message(
         if not bypass_filters and "answer_filters" in channel_conf:
             reflexion = "well_answered_postfilter" in channel_conf["answer_filters"]
 
-            if (
-                "questionmark_prefilter" in channel_conf["answer_filters"]
-                and "?" not in messages[-1].message
-            ):
+            if "questionmark_prefilter" in channel_conf[
+                "answer_filters"
+            ] and not contains_questionmark_outside_links(messages[-1].message):
                 logger.info(
                     "Skipping message since it does not contain a question mark"
                 )
@@ -487,21 +591,22 @@ def handle_message(
     except SlackApiError as e:
         logger.error(f"Failed to remove Reaction due to: {e}")
 
-    if answer.answer_valid is False:
-        logger.info(
-            "Answer was evaluated to be invalid, throwing it away without responding."
-        )
-        update_emote_react(
-            emoji=DANSWER_FOLLOWUP_EMOJI,
-            channel=message_info.channel_to_respond,
-            message_ts=message_info.msg_to_respond,
-            remove=False,
-            client=client,
-        )
+    # Removing this as we are handling this with citations logic
+    # if answer.answer_valid is False:
+    #     logger.info(
+    #         "Answer was evaluated to be invalid, throwing it away without responding."
+    #     )
+    #     update_emote_react(
+    #         emoji=DANSWER_FOLLOWUP_EMOJI,
+    #         channel=message_info.channel_to_respond,
+    #         message_ts=message_info.msg_to_respond,
+    #         remove=False,
+    #         client=client,
+    #     )
 
-        if answer.answer:
-            logger.debug(answer.answer)
-        return True
+    #     if answer.answer:
+    #         logger.debug(answer.answer)
+    #     return True
 
     retrieval_info = answer.docs
     if not retrieval_info:
@@ -570,6 +675,18 @@ def handle_message(
             )
             if matching_doc:
                 cited_docs.append((citation.citation_num, matching_doc))
+
+        if not cited_docs:
+            logger.info("Skipping response: No context documents cited for this query.")
+            update_emote_react(
+                emoji="no-idea",
+                channel=channel,
+                message_ts=message_ts_to_respond_to,
+                remove=False,
+                client=client,
+            )
+
+            return True
 
         cited_docs.sort()
         citations_block = build_sources_blocks(cited_documents=cited_docs)

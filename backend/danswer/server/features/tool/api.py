@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.db.engine import get_session
@@ -20,8 +21,8 @@ from danswer.tools.custom.openapi_parsing import MethodSpec
 from danswer.tools.custom.openapi_parsing import openapi_to_method_specs
 from danswer.tools.custom.openapi_parsing import validate_openapi_schema
 
-router = APIRouter(prefix="/tool")
-admin_router = APIRouter(prefix="/admin/tool")
+router = APIRouter(prefix="/tool", dependencies=[Depends(validate_api_key)])
+admin_router = APIRouter(prefix="/admin/tool", dependencies=[Depends(validate_api_key)])
 
 
 class CustomToolCreate(BaseModel):

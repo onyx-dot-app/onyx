@@ -172,6 +172,11 @@ const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Salesforce",
     category: SourceCategory.AppConnection,
   },
+  sfkbarticles: {
+    icon: SalesforceIcon,
+    displayName: "SfKbArticles",
+    category: SourceCategory.AppConnection,
+  },
   sharepoint: {
     icon: SharepointIcon,
     displayName: "Sharepoint",

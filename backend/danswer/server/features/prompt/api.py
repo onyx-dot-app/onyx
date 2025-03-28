@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from starlette import status
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_user
 from danswer.db.engine import get_session
 from danswer.db.models import User
@@ -22,7 +23,7 @@ from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
 
-basic_router = APIRouter(prefix="/prompt")
+basic_router = APIRouter(prefix="/prompt", dependencies=[Depends(validate_api_key)])
 
 
 def create_update_prompt(

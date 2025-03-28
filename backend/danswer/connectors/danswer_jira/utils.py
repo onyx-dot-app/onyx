@@ -1,4 +1,5 @@
 """Module with custom fields processing functions"""
+import os
 from typing import Any
 from typing import List
 
@@ -7,9 +8,79 @@ from jira.resources import CustomFieldOption
 from jira.resources import Issue
 from jira.resources import User
 
+from danswer.connectors.models import BasicExpertInfo
 from danswer.utils.logger import setup_logger
 
 logger = setup_logger()
+
+JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
+
+
+def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
+    display_name = None
+    email = None
+    if hasattr(obj, "display_name"):
+        display_name = obj.display_name
+    else:
+        display_name = obj.get("displayName")
+
+    if hasattr(obj, "emailAddress"):
+        email = obj.emailAddress
+    else:
+        email = obj.get("emailAddress")
+
+    if not email and not display_name:
+        return None
+
+    return BasicExpertInfo(display_name=display_name, email=email)
+
+
+def best_effort_get_field_from_issue(jira_issue: Issue, field: str) -> Any:
+    if hasattr(jira_issue.fields, field):
+        return getattr(jira_issue.fields, field)
+
+    try:
+        return jira_issue.raw["fields"][field]
+    except Exception:
+        return None
+
+
+def extract_text_from_content(content: dict) -> str:
+    texts = []
+    if "content" in content:
+        for block in content["content"]:
+            if "content" in block:
+                for item in block["content"]:
+                    if item["type"] == "text":
+                        texts.append(item["text"])
+    return " ".join(texts)
+
+
+def get_comment_strs(
+    issue: Issue, comment_email_blacklist: tuple[str, ...] = ()
+) -> list[str]:
+    comment_strs = []
+    for comment in issue.fields.comment.comments:
+        try:
+            body_text = (
+                comment.body
+                if JIRA_API_VERSION == "2"
+                else extract_text_from_content(comment.raw["body"])
+            )
+
+            if (
+                hasattr(comment, "author")
+                and hasattr(comment.author, "emailAddress")
+                and comment.author.emailAddress in comment_email_blacklist
+            ):
+                continue  # Skip adding comment if author's email is in blacklist
+
+            comment_strs.append(body_text)
+        except Exception as e:
+            logger.error(f"Failed to process comment due to an error: {e}")
+            continue
+
+    return comment_strs
 
 
 class CustomFieldExtractor:

@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.invited_users import get_invited_users
 from danswer.auth.invited_users import write_invited_users
 from danswer.auth.noauth_user import fetch_no_auth_user
@@ -38,7 +39,7 @@ from ee.danswer.db.api_key import is_api_key_email_address
 
 logger = setup_logger()
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(validate_api_key)])
 
 
 USERS_PAGE_SIZE = 10

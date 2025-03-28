@@ -11,3 +11,4 @@ class SlackMessageInfo(BaseModel):
     bypass_filters: bool  # User has tagged @DanswerBot
     is_bot_msg: bool  # User is using /DanswerBot
     is_bot_dm: bool  # User is direct messaging to DanswerBot
+    command: str | None  # Slash command used by user

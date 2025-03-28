@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterator
 from typing import cast
 from uuid import uuid4
@@ -382,6 +383,53 @@ class Answer:
         prompt = prompt_builder.build()
         yield from message_generator_to_string_generator(self.llm.stream(prompt=prompt))
 
+    def _fix_document_references(self, answer: str) -> str:
+        """
+        Searches the input string for DOCUMENT references in any of these forms:
+        - DOCUMENT <number> (link)
+        - [DOCUMENT <number>] (link)
+        - DOCUMENT <number>
+        - [DOCUMENT <number>]
+
+
+        and converts them to the proper citation format:
+        - If a link is provided, returns a linked citation: [[number]](link)
+        - Otherwise, returns a non-linked citation: [number]
+
+
+        However, if an adjacent citation (linked or non-linked) for the same number already follows
+        immediately (ignoring whitespace), the DOCUMENT reference is not converted (i.e. it is removed)
+        to avoid duplicate citations.
+        """
+        pattern = r"\[?DOCUMENT\s+(\d+)\]?(?:\s*\((.*?)\))?"
+
+        def replacer(match: re.Match) -> str:
+            try:
+                num = int(match.group(1))
+            except Exception:
+                return match.group(0)
+
+            if match.group(2) and match.group(2).strip():
+                citation = f"[[{num}]]({match.group(2).strip()})"
+            else:
+                citation = f"[{num}]"
+
+            post_text = answer[match.end() :]
+            adj_pattern = (
+                r"^\s*(\[\[\s*"
+                + re.escape(str(num))
+                + r"\s*\]\]\([^)]+\)|\[\s*"
+                + re.escape(str(num))
+                + r"\s*\])"
+            )
+            if re.match(adj_pattern, post_text):
+                # If an adjacent citation for the same number exists, return an empty string (skip replacement).
+                return ""
+            else:
+                return citation
+
+        return re.sub(pattern, replacer, answer)
+
     @property
     def processed_streamed_output(self) -> AnswerStream:
         if self._processed_stream is not None:
@@ -465,7 +513,7 @@ class Answer:
             if isinstance(packet, DanswerAnswerPiece) and packet.answer_piece:
                 answer += packet.answer_piece
 
-        return answer
+        return self._fix_document_references(answer)
 
     @property
     def citations(self) -> list[CitationInfo]:

@@ -8,6 +8,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.configs.app_configs import GENERATIVE_MODEL_ACCESS_CHECK_FREQ
 from danswer.configs.constants import DocumentSource
@@ -32,7 +33,7 @@ from danswer.server.manage.models import BoostUpdateRequest
 from danswer.server.manage.models import HiddenUpdateRequest
 from danswer.utils.logger import setup_logger
 
-router = APIRouter(prefix="/manage")
+router = APIRouter(prefix="/manage", dependencies=[Depends(validate_api_key)])
 logger = setup_logger()
 
 GEN_AI_KEY_CHECK_TIME = "genai_api_key_last_check_time"

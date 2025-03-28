@@ -5,6 +5,7 @@ from fastapi import Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_admin_user
 from danswer.auth.users import current_user
 from danswer.db.engine import get_session
@@ -27,8 +28,10 @@ from danswer.utils.logger import setup_logger
 logger = setup_logger()
 
 
-admin_router = APIRouter(prefix="/admin/persona")
-basic_router = APIRouter(prefix="/persona")
+admin_router = APIRouter(
+    prefix="/admin/persona", dependencies=[Depends(validate_api_key)]
+)
+basic_router = APIRouter(prefix="/persona", dependencies=[Depends(validate_api_key)])
 
 
 class IsVisibleRequest(BaseModel):

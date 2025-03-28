@@ -59,7 +59,21 @@ def get_sqlalchemy_engine() -> Engine:
     global _SYNC_ENGINE
     if _SYNC_ENGINE is None:
         connection_string = build_connection_string(db_api=SYNC_DB_API)
-        _SYNC_ENGINE = create_engine(connection_string, pool_size=40, max_overflow=10)
+
+        keepalive_kwargs = {
+            "keepalives": 1,  # Enable TCP Keepalives
+            "keepalives_idle": 30,  # Idle time before keepalive probes
+            "keepalives_interval": 5,  # Interval between keepalive probes
+            "keepalives_count": 5,  # Number of keepalive probes before connection drop
+        }
+
+        _SYNC_ENGINE = create_engine(
+            connection_string,
+            pool_size=40,
+            max_overflow=10,
+            pool_pre_ping=True,
+            connect_args=keepalive_kwargs,
+        )
     return _SYNC_ENGINE
 
 

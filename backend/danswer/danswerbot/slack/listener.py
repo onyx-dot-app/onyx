@@ -1,3 +1,4 @@
+import re
 import time
 from threading import Event
 from typing import Any
@@ -27,6 +28,7 @@ from danswer.danswerbot.slack.handlers.handle_buttons import handle_followup_but
 from danswer.danswerbot.slack.handlers.handle_buttons import (
     handle_followup_resolved_button,
 )
+from danswer.danswerbot.slack.handlers.handle_buttons import handle_persona_selection
 from danswer.danswerbot.slack.handlers.handle_buttons import handle_slack_feedback
 from danswer.danswerbot.slack.handlers.handle_message import handle_message
 from danswer.danswerbot.slack.handlers.handle_message import (
@@ -92,6 +94,16 @@ def prefilter_requests(req: SocketModeRequest, client: SocketModeClient) -> bool
 
         if not msg:
             channel_specific_logger.error("Cannot respond to empty message - skipping")
+            return False
+
+        if re.search(r"!darwin", msg, re.IGNORECASE):
+            channel_specific_logger.info("Ignoring message containing '!darwin'")
+            return False
+
+        if re.search(r":announcement\d*:", msg):
+            channel_specific_logger.info(
+                "Ignoring message: contains the announcement emoji"
+            )
             return False
 
         if (
@@ -167,7 +179,7 @@ def prefilter_requests(req: SocketModeRequest, client: SocketModeClient) -> bool
             and message_ts != thread_ts
             and event_type != "app_mention"
             and event.get("channel_type") != "im"
-            and event.get("subtype")  != "thread_broadcast"
+            and event.get("subtype") != "thread_broadcast"
         ):
             channel_specific_logger.debug(
                 "Skipping message since it is not the root of a thread"
@@ -197,6 +209,21 @@ def prefilter_requests(req: SocketModeRequest, client: SocketModeClient) -> bool
                 "Cannot respond to DanswerBot command without sender to respond to."
             )
             return False
+
+    # Do not respond to messages if the channel is tagged
+    payload = req.payload
+    event = payload.get("event", {})
+    blocks = event.get("blocks", [])
+    for block in blocks:
+        if block.get("type") == "rich_text":
+            for element in block.get("elements", []):
+                if element.get("type") == "rich_text_section":
+                    for sub_element in element.get("elements", []):
+                        if sub_element.get("type") == "broadcast" and sub_element.get(
+                            "range"
+                        ) in {"channel", "here"}:
+                            logger.info("Broadcast message detected; skipping reply.")
+                            return False
 
     logger.debug(f"Handling Slack request with Payload: '{req.payload}'")
     return True
@@ -277,6 +304,7 @@ def build_request_details(
         channel = req.payload["channel_id"]
         msg = req.payload["text"]
         sender = req.payload["user_id"]
+        command = req.payload["command"]
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
 
@@ -288,6 +316,7 @@ def build_request_details(
             bypass_filters=True,
             is_bot_msg=True,
             is_bot_dm=False,
+            command=command,
         )
 
     raise RuntimeError("Programming fault, this should never happen.")
@@ -356,6 +385,7 @@ def process_message(
             channel_config=slack_bot_config,
             client=client.web_client,
             feedback_reminder_id=feedback_reminder_id,
+            channel_name=channel_name,
         )
 
         if failed:
@@ -391,6 +421,9 @@ def action_routing(req: SocketModeRequest, client: SocketModeClient) -> None:
             return handle_followup_resolved_button(req, client, immediate=True)
         elif action["action_id"] == FOLLOWUP_BUTTON_RESOLVED_ACTION_ID:
             return handle_followup_resolved_button(req, client, immediate=False)
+        elif action["action_id"].startswith("set_persona_"):
+            # Persona selection
+            return handle_persona_selection(req, client)
 
 
 def view_routing(req: SocketModeRequest, client: SocketModeClient) -> None:

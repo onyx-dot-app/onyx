@@ -114,27 +114,29 @@ def combine_message_chain(
     return "\n\n".join(message_strs)
 
 
-def reorganize_citations(
-    answer: str, citations: list[CitationInfo]
-) -> tuple[str, list[CitationInfo]]:
-    """For a complete, citation-aware response, we want to reorganize the citations so that
+def reorganize_citations(answer: str, citations: list) -> tuple[str, list]:
+    """
+    For a complete, citation-aware response, we want to reorganize the citations so that
     they are in the order of the documents that were used in the response. This just looks nicer / avoids
-    confusion ("Why is there [7] when only 2 documents are cited?")."""
+    confusion ("Why is there [7] when only 2 documents are cited?").
 
-    # Regular expression to find all instances of [[x]](LINK)
-    pattern = r"\[\[(.*?)\]\]\((.*?)\)"
+    Now also handles citations in the format [number] in addition to [[number]](LINK).
+    """
+
+    pattern = r"\[\[(\d+)\]\]\((.*?)\)|\[(\d+)\]"
 
     all_citation_matches = re.findall(pattern, answer)
 
     new_citation_info: dict[int, CitationInfo] = {}
     for citation_match in all_citation_matches:
         try:
-            citation_num = int(citation_match[0])
+            citation_str = citation_match[0] if citation_match[0] else citation_match[2]
+            citation_num = int(citation_str)
             if citation_num in new_citation_info:
                 continue
 
             matching_citation = next(
-                iter([c for c in citations if c.citation_num == int(citation_num)]),
+                (c for c in citations if c.citation_num == citation_num),
                 None,
             )
             if matching_citation is None:
@@ -149,16 +151,28 @@ def reorganize_citations(
 
     # Function to replace citations with their new number
     def slack_link_format(match: re.Match) -> str:
-        link_text = match.group(1)
-        try:
-            citation_num = int(link_text)
-            if citation_num in new_citation_info:
-                link_text = new_citation_info[citation_num].citation_num
-        except Exception:
-            pass
-
-        link_url = match.group(2)
-        return f"[[{link_text}]]({link_url})"
+        # Case 1: Linked citation ([[number]](LINK))
+        if match.group(1):
+            link_text = match.group(1)
+            try:
+                citation_num = int(link_text)
+                if citation_num in new_citation_info:
+                    link_text = new_citation_info[citation_num].citation_num
+            except Exception:
+                pass
+            link_url = match.group(2)
+            return f"[[{link_text}]]({link_url})"
+        # Case 2: Non-linked citation ([number])
+        elif match.group(3):
+            try:
+                citation_num = int(match.group(3))
+                if citation_num in new_citation_info:
+                    citation_num = new_citation_info[citation_num].citation_num
+            except Exception:
+                pass
+            return f"[{citation_num}]"
+        else:
+            return match.group(0)
 
     # Substitute all matches in the input text
     new_answer = re.sub(pattern, slack_link_format, answer)

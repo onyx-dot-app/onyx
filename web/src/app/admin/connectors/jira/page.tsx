@@ -26,18 +26,6 @@ import { usePublicCredentials } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Card, Divider, Text, Title } from "@tremor/react";
 
-// Copied from the `extract_jira_project` function
-const extractJiraProject = (url: string): string | null => {
-  const parsedUrl = new URL(url);
-  const splitPath = parsedUrl.pathname.split("/");
-  const projectPos = splitPath.indexOf("projects");
-  if (projectPos !== -1 && splitPath.length > projectPos + 1) {
-    const jiraProject = splitPath[projectPos + 1];
-    return jiraProject;
-  }
-  return null;
-};
-
 const Main = () => {
   const { popup, setPopup } = usePopup();
 
@@ -224,14 +212,8 @@ const Main = () => {
         <>
           {" "}
           <Text className="mb-4">
-            Specify any link to a Jira page below and click &quot;Index&quot; to
-            Index. Based on the provided link, we will index the ENTIRE PROJECT,
-            not just the specified page. For example, entering{" "}
-            <i>
-              https://danswer.atlassian.net/jira/software/projects/DAN/boards/1
-            </i>{" "}
-            and clicking the Index button will index the whole <i>DAN</i> Jira
-            project.
+            Please specify the filters you want to use for indexing the Jira
+            Issues.
           </Text>
           {jiraConnectorIndexingStatuses.length > 0 && (
             <>
@@ -261,19 +243,12 @@ const Main = () => {
                   }}
                   specialColumns={[
                     {
-                      header: "Url",
-                      key: "url",
+                      header: "Filters",
+                      key: "filters",
                       getValue: (ccPairStatus) => {
                         const connectorConfig =
                           ccPairStatus.connector.connector_specific_config;
-                        return (
-                          <a
-                            className="text-blue-500"
-                            href={connectorConfig.jira_project_url}
-                          >
-                            {connectorConfig.jira_project_url}
-                          </a>
-                        );
+                        return connectorConfig.jira_filter;
                       },
                     },
                     {
@@ -300,21 +275,15 @@ const Main = () => {
           <Card className="mt-4">
             <h2 className="font-bold mb-3">Add a New Project</h2>
             <ConnectorForm<JiraConfig>
-              nameBuilder={(values) =>
-                `JiraConnector-${values.jira_project_url}`
-              }
-              ccPairNameBuilder={(values) =>
-                extractJiraProject(values.jira_project_url)
-              }
+              nameBuilder={(values) => `JiraConnector-${values.jira_filter}`}
+              ccPairNameBuilder={(values) => `JIRA - ${values.jira_filter}`}
               credentialId={jiraCredential.id}
               source="jira"
               inputType="poll"
               formBody={
                 <>
-                  <TextFormField
-                    name="jira_project_url"
-                    label="Jira Project URL:"
-                  />
+                  <TextFormField name="jira_base_url" label="Jira Base Url:" />
+                  <TextFormField name="jira_filter" label="Jira Filter:" />
                 </>
               }
               formBodyBuilder={(values) => {
@@ -331,15 +300,19 @@ const Main = () => {
                 );
               }}
               validationSchema={Yup.object().shape({
-                jira_project_url: Yup.string().required(
-                  "Please enter any link to your jira project e.g. https://danswer.atlassian.net/jira/software/projects/DAN/boards/1"
+                jira_base_url: Yup.string().required(
+                  "Please provide the base url e.g. https://danswer.atlassian.net"
+                ),
+                jira_filter: Yup.string().required(
+                  "Please provide some filters."
                 ),
                 comment_email_blacklist: Yup.array()
                   .of(Yup.string().required("Emails names must be strings"))
                   .required(),
               })}
               initialValues={{
-                jira_project_url: "",
+                jira_base_url: "",
+                jira_filter: "",
                 comment_email_blacklist: [],
               }}
               refreshFreq={10 * 60} // 10 minutes

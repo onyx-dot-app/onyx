@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from fastapi import Query
 from sqlalchemy.orm import Session
 
+from danswer.auth.api_key import validate_api_key
 from danswer.auth.users import current_user
 from danswer.db.embedding_model import get_current_db_embedding_model
 from danswer.db.engine import get_session
@@ -16,7 +17,7 @@ from danswer.server.documents.models import ChunkInfo
 from danswer.server.documents.models import DocumentInfo
 
 
-router = APIRouter(prefix="/document")
+router = APIRouter(prefix="/document", dependencies=[Depends(validate_api_key)])
 
 
 # Have to use a query parameter as FastAPI is interpreting the URL type document_ids

@@ -1108,6 +1108,16 @@ class SlackBotConfig(Base):
     persona: Mapped[Persona | None] = relationship("Persona")
 
 
+class UserSlackPersona(Base):
+    __tablename__ = "user_slack_persona"
+
+    sender_id: Mapped[str] = mapped_column(primary_key=True)
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    persona: Mapped[Persona | None] = relationship("Persona", foreign_keys=[persona_id])
+
+
 class TaskQueueState(Base):
     # Currently refers to Celery Tasks
     __tablename__ = "task_queue_jobs"
