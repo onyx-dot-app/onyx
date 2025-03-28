@@ -17,7 +17,16 @@ logger = setup_logger()
 
 
 class OnyxRedisSlackRetryHandler(RetryHandler):
-    """Another way to do this is just to do exponential backoff. Might be easier."""
+    """
+    This class uses Redis to share a rate limit among multiple threads.
+    Threads that encounter a rate limit with observe the current delay and add their
+    own retry delay to the shared value.
+    This has the effect of serializing calls when a rate limit is hit, which is what
+    needs to happens if the server punishes us with additional limiting when we make
+    a call too early.
+
+    Another way to do this is just to do exponential backoff. Might be easier?
+    """
 
     LOCK_TTL = 60  # used to serialize access to the retry TTL
     LOCK_BLOCKING_TIMEOUT = 60  # how long to wait for the lock
@@ -60,6 +69,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         error: Optional[Exception] = None,
     ) -> None:
         """it seems this function is responsible for the wait to retry"""
+        retry_after_value: list[str] | None = None
 
         if response is None:
             if error:
@@ -92,7 +102,7 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
 
         # lock and extend the ttl
         lock: RedisLock = self._redis.lock(
-            self._delay_key,
+            self._delay_lock,
             timeout=OnyxRedisSlackRetryHandler.LOCK_TTL,
             thread_local=False,
         )
@@ -106,9 +116,11 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         try:
             if acquired:
                 # if we can get the lock, then read and extend the ttl
-                ttl_ms = cast(int, self._redis.pttl("retry-after"))
+                ttl_ms = cast(int, self._redis.pttl(self._delay_key))
+                if ttl_ms < 0:  # negative values are error status codes ... see docs
+                    ttl_ms = 0
                 ttl_ms_new = ttl_ms + int(duration_s * 1000.0)
-                self._redis.set("retry-after", "1", px=ttl_ms_new)
+                self._redis.set(self._delay_key, "1", px=ttl_ms_new)
             else:
                 # if we can't get the lock, just go ahead.
                 # TODO: if we know our actual parallelism, multiplying by that
@@ -119,7 +131,9 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
                 lock.release()
 
         logger.warning(
-            f"Slack rate limited: current_shared_delay_ms={ttl_ms} new_shared_delay_ms={ttl_ms_new}"
+            f"OnyxRedisSlackRetryHandler.prepare_for_next_attempt wait: "
+            f"retry-after={retry_after_value} "
+            f"shared_delay_ms={ttl_ms} new_shared_delay_ms={ttl_ms_new}"
         )
 
         # TODO: would be good to take an event var and sleep in short increments to

@@ -501,7 +501,6 @@ def _process_message(
 class SlackConnector(
     SlimConnector, CredentialsConnector, CheckpointConnector[SlackCheckpoint]
 ):
-    MAX_WORKERS = 2
     FAST_TIMEOUT = 1
 
     MAX_RETRIES = 7  # arbitrarily selected
