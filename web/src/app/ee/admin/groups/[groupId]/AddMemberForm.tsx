@@ -19,10 +19,11 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
   setPopup,
 }) => {
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
+  const [newUserEmails, setNewUserEmails] = useState<string[]>([]);
 
   return (
     <Modal
-      className="max-w-xl"
+      className="max-w-xl overflow-visible"
       title="Add New User"
       onOutsideClick={() => onClose()}
     >
@@ -32,6 +33,8 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
           setSelectedUserIds={setSelectedUserIds}
           allUsers={users}
           existingUsers={userGroup.users}
+          newUserEmails={newUserEmails}
+          setNewUserEmails={setNewUserEmails}
           onSubmit={async (selectedUsers) => {
             const newUserIds = [
               ...Array.from(
@@ -45,6 +48,7 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
             const response = await updateUserGroup(userGroup.id, {
               user_ids: newUserIds,
               cc_pair_ids: userGroup.cc_pairs.map((ccPair) => ccPair.id),
+              new_user_emails: newUserEmails,
             });
             if (response.ok) {
               setPopup({

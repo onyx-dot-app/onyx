@@ -6,6 +6,7 @@ from onyx.configs.constants import NotificationType
 from onyx.db.models import Persona__User
 from onyx.db.models import Persona__UserGroup
 from onyx.db.notification import create_notification
+from onyx.db.users import add_belongs_user_if_not_exists
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 
 
@@ -14,6 +15,7 @@ def make_persona_private(
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
     db_session: Session,
+    new_user_emails: list[str] | None = None,
 ) -> None:
     """NOTE(rkuo): This function batches all updates into a single commit. If we don't
     dedupe the inputs, the commit will exception."""
@@ -38,6 +40,27 @@ def make_persona_private(
                     persona_id=persona_id,
                 ).model_dump(),
             )
+
+    # Handle new user emails (create users that don't exist yet)
+    if new_user_emails is not None and len(new_user_emails) > 0:
+        for email in new_user_emails:
+            # Create a new user with BELONGS_TO_GROUP role if not exists
+            user = add_belongs_user_if_not_exists(db_session=db_session, email=email)
+
+            # Add user to persona
+            db_session.add(Persona__User(persona_id=persona_id, user_id=user.id))
+
+            # Create notification
+            create_notification(
+                user_id=user.id,
+                notif_type=NotificationType.PERSONA_SHARED,
+                db_session=db_session,
+                additional_data=PersonaSharedNotificationData(
+                    persona_id=persona_id,
+                ).model_dump(),
+            )
+
+        db_session.commit()
 
     if group_ids:
         group_ids_set = set(group_ids)

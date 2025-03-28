@@ -505,16 +505,30 @@ export function AssistantEditor({
 
           // don't set groups if marked as public
           const groups = values.is_public ? [] : values.selectedGroups;
+
+          // Extract new user emails from users with isNew flag
+          const newUserEmails = values.selectedUsers
+            .filter(
+              (u: MinimalUserSnapshot & { isNew?: boolean }) =>
+                u.isNew && u.id === null
+            )
+            .map((u: MinimalUserSnapshot) => u.email);
+
           const submissionData: PersonaUpsertParameters = {
             ...values,
             existing_prompt_id: existingPrompt?.id ?? null,
             starter_messages: starterMessages,
             groups: groups,
+            new_user_emails: newUserEmails,
             users: values.is_public
               ? undefined
               : [
                   ...(user && !checkUserIsNoAuthUser(user.id) ? [user.id] : []),
-                  ...values.selectedUsers.map((u: MinimalUserSnapshot) => u.id),
+                  ...values.selectedUsers
+                    .filter(
+                      (u: MinimalUserSnapshot & { isNew?: boolean }) => !u.isNew
+                    )
+                    .map((u: MinimalUserSnapshot) => u.id),
                 ],
             tool_ids: enabledTools,
             remove_image: removePersonaImage,
@@ -1110,6 +1124,14 @@ export function AssistantEditor({
                             </Label>
 
                             <SearchMultiSelectDropdown
+                              allowCustomValues
+                              customValueValidator={(value) => {
+                                // Simple email validation regex
+                                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                                return emailRegex.test(value);
+                              }}
+                              customValueErrorMessage="Please enter a valid email address"
+                              placeholder="Search users and groups or enter an email address"
                               options={[
                                 ...(Array.isArray(users) ? users : [])
                                   .filter(
@@ -1154,6 +1176,13 @@ export function AssistantEditor({
                                     option.value,
                                   ]);
                                 }
+                              }}
+                              onCustomValueSelect={(email: string) => {
+                                // Add the email as a user that doesn't exist yet
+                                setFieldValue("selectedUsers", [
+                                  ...values.selectedUsers,
+                                  { email: email, id: null, isNew: true },
+                                ]);
                               }}
                             />
                           </div>

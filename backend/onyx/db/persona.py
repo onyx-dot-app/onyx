@@ -35,6 +35,7 @@ from onyx.db.models import User
 from onyx.db.models import User__UserGroup
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
+from onyx.db.users import add_belongs_user_if_not_exists
 from onyx.server.features.persona.models import PersonaSharedNotificationData
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
@@ -169,6 +170,7 @@ def make_persona_private(
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
     db_session: Session,
+    new_user_emails: list[str] | None = None,
 ) -> None:
     if user_ids is not None:
         db_session.query(Persona__User).filter(
@@ -180,6 +182,27 @@ def make_persona_private(
 
             create_notification(
                 user_id=user_uuid,
+                notif_type=NotificationType.PERSONA_SHARED,
+                db_session=db_session,
+                additional_data=PersonaSharedNotificationData(
+                    persona_id=persona_id,
+                ).model_dump(),
+            )
+
+        db_session.commit()
+
+    # Handle new user emails (create users that don't exist yet)
+    if new_user_emails is not None and len(new_user_emails) > 0:
+        for email in new_user_emails:
+            # Create a new user with BELONGS_TO_GROUP role if not exists
+            user = add_belongs_user_if_not_exists(db_session=db_session, email=email)
+
+            # Add user to persona
+            db_session.add(Persona__User(persona_id=persona_id, user_id=user.id))
+
+            # Create notification
+            create_notification(
+                user_id=user.id,
                 notif_type=NotificationType.PERSONA_SHARED,
                 db_session=db_session,
                 additional_data=PersonaSharedNotificationData(
@@ -262,6 +285,7 @@ def create_update_persona(
             user_ids=create_persona_request.users,
             group_ids=create_persona_request.groups,
             db_session=db_session,
+            new_user_emails=create_persona_request.new_user_emails,
         )
 
     except ValueError as e:

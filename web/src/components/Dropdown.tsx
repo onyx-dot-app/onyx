@@ -55,6 +55,10 @@ export function SearchMultiSelectDropdown({
   onSearchTermChange,
   initialSearchTerm = "",
   allowCustomValues = false,
+  customValueValidator,
+  customValueErrorMessage,
+  onCustomValueSelect,
+  placeholder,
 }: {
   options: StringOrNumberOption[];
   onSelect: (selected: StringOrNumberOption) => void;
@@ -64,15 +68,21 @@ export function SearchMultiSelectDropdown({
   onSearchTermChange?: (term: string) => void;
   initialSearchTerm?: string;
   allowCustomValues?: boolean;
+  customValueValidator?: (value: string) => boolean;
+  customValueErrorMessage?: string;
+  onCustomValueSelect?: (value: string) => void;
+  placeholder?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSelect = (option: StringOrNumberOption) => {
     onSelect(option);
     setIsOpen(false);
     setSearchTerm(""); // Clear search term after selection
+    setValidationError(null);
   };
 
   const filteredOptions = options.filter((option) =>
@@ -82,12 +92,30 @@ export function SearchMultiSelectDropdown({
   // Handle selecting a custom value not in the options list
   const handleCustomValueSelect = () => {
     if (allowCustomValues && searchTerm.trim() !== "") {
+      // If validator is provided, check if the value is valid
+      if (customValueValidator && !customValueValidator(searchTerm)) {
+        setValidationError(customValueErrorMessage || "Invalid value");
+        return;
+      }
+
+      // If onCustomValueSelect is provided, use it instead
+      if (onCustomValueSelect) {
+        onCustomValueSelect(searchTerm);
+        setIsOpen(false);
+        setSearchTerm("");
+        setValidationError(null);
+        return;
+      }
+
+      // Default behavior
       const customOption: StringOrNumberOption = {
         name: searchTerm,
         value: searchTerm,
       };
       onSelect(customOption);
       setIsOpen(false);
+      setSearchTerm("");
+      setValidationError(null);
     }
   };
 
@@ -122,12 +150,16 @@ export function SearchMultiSelectDropdown({
         <input
           type="text"
           placeholder={
-            allowCustomValues ? "Search or enter custom value..." : "Search..."
+            placeholder ||
+            (allowCustomValues
+              ? "Search or enter custom value..."
+              : "Search...")
           }
           value={searchTerm}
           onChange={(e: ChangeEvent<HTMLInputElement>) => {
             const newValue = e.target.value;
             setSearchTerm(newValue);
+            setValidationError(null);
             if (onSearchTermChange) {
               onSearchTermChange(newValue);
             }
@@ -148,7 +180,9 @@ export function SearchMultiSelectDropdown({
               handleCustomValueSelect();
             }
           }}
-          className="inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-text-800 border border-background-300 rounded-md shadow-sm"
+          className={`inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-text-800 border ${
+            validationError ? "border-red-500" : "border-background-300"
+          } rounded-md shadow-sm`}
         />
         <button
           type="button"
@@ -160,6 +194,10 @@ export function SearchMultiSelectDropdown({
           <ChevronDownIcon className="my-auto w-4 h-4 text-text-600" />
         </button>
       </div>
+
+      {validationError && (
+        <div className="text-red-500 text-xs mt-1">{validationError}</div>
+      )}
 
       {isOpen && (
         <div className="absolute z-10 mt-1 w-full rounded-md shadow-lg bg-white border border-background-300 max-h-60 overflow-y-auto">

@@ -2,7 +2,7 @@ import { User } from "@/lib/types";
 import { FiPlus, FiX } from "react-icons/fi";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
 import { UsersIcon } from "@/components/icons/icons";
-import { Button } from "@/components/Button";
+import { Button } from "@/components/ui/button";
 
 interface UserEditorProps {
   selectedUserIds: string[];
@@ -10,6 +10,8 @@ interface UserEditorProps {
   allUsers: User[];
   existingUsers: User[];
   onSubmit?: (users: User[]) => void;
+  newUserEmails?: string[];
+  setNewUserEmails?: (emails: string[]) => void;
 }
 
 export const UserEditor = ({
@@ -18,6 +20,8 @@ export const UserEditor = ({
   allUsers,
   existingUsers,
   onSubmit,
+  newUserEmails = [],
+  setNewUserEmails = () => {},
 }: UserEditorProps) => {
   const selectedUsers = allUsers.filter((user) =>
     selectedUserIds.includes(user.id)
@@ -48,10 +52,39 @@ export const UserEditor = ({
               {selectedUser.email} <FiX className="ml-1 my-auto" />
             </div>
           ))}
+
+        {newUserEmails.length > 0 &&
+          newUserEmails.map((email) => (
+            <div
+              key={email}
+              onClick={() => {
+                setNewUserEmails(newUserEmails.filter((e) => e !== email));
+              }}
+              className={`
+                  flex 
+                  rounded-lg 
+                  px-2 
+                  py-1 
+                  border 
+                  border-border 
+                  hover:bg-accent-background 
+                  cursor-pointer`}
+            >
+              {email} (new) <FiX className="ml-1 my-auto" />
+            </div>
+          ))}
       </div>
 
       <div className="flex">
         <SearchMultiSelectDropdown
+          allowCustomValues
+          customValueValidator={(value) => {
+            // Simple email validation regex
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(value);
+          }}
+          customValueErrorMessage="Please enter a valid email address"
+          placeholder="Search users or enter an email address"
           options={allUsers
             .filter(
               (user) =>
@@ -70,6 +103,12 @@ export const UserEditor = ({
                 new Set([...selectedUserIds, option.value as string])
               ),
             ]);
+          }}
+          onCustomValueSelect={(email: string) => {
+            // Make sure it's not already in the list
+            if (!newUserEmails.includes(email)) {
+              setNewUserEmails([...newUserEmails, email]);
+            }
           }}
           itemComponent={({ option }) => (
             <div className="flex px-4 py-2.5 cursor-pointer hover:bg-accent-background-hovered">

@@ -346,3 +346,30 @@ def delete_user_from_db(
         if remaining_user_email != user_to_delete.email
     ]
     write_invited_users(remaining_users)
+
+
+def _generate_belongs_user(email: str) -> User:
+    fastapi_users_pw_helper = PasswordHelper()
+    password = fastapi_users_pw_helper.generate()
+    hashed_pass = fastapi_users_pw_helper.hash(password)
+    return User(
+        email=email,
+        hashed_password=hashed_pass,
+        role=UserRole.BELONGS,
+    )
+
+
+def add_belongs_user_if_not_exists(db_session: Session, email: str) -> User:
+    email = email.lower()
+    user = get_user_by_email(email, db_session)
+    if user is not None:
+        # If the user is an external permissioned user, we update it to a belongs to group user
+        if user.role == UserRole.EXT_PERM_USER:
+            user.role = UserRole.BELONGS
+            db_session.commit()
+        return user
+
+    user = _generate_belongs_user(email=email)
+    db_session.add(user)
+    db_session.commit()
+    return user

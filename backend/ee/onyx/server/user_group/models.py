@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from pydantic import BaseModel
+from pydantic import Field
 
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import ConnectorCredentialPairDescriptor
@@ -79,11 +80,13 @@ class UserGroup(BaseModel):
 class UserGroupCreate(BaseModel):
     name: str
     user_ids: list[UUID]
+    new_user_emails: list[str] = Field(default_factory=list)
     cc_pair_ids: list[int]
 
 
 class UserGroupUpdate(BaseModel):
     user_ids: list[UUID]
+    new_user_emails: list[str] = Field(default_factory=list)
     cc_pair_ids: list[int]
 
 

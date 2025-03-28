@@ -74,6 +74,9 @@ class PersonaUpsertRequest(BaseModel):
     starter_messages: list[StarterMessage] | None = None
     # For Private Personas, who should be able to access these
     users: list[UUID] = Field(default_factory=list)
+    new_user_emails: list[str] = Field(
+        default_factory=list
+    )  # New field for adding users by email that don't exist yet
     groups: list[int] = Field(default_factory=list)
     # e.g. ID of SearchTool or ImageGenerationTool or <USER_DEFINED_TOOL>
     tool_ids: list[int]

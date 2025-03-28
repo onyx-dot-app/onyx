@@ -19,6 +19,7 @@ interface PersonaUpsertRequest {
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
+  new_user_emails?: string[];
   groups: number[];
   tool_ids: number[];
   icon_color: string | null;
@@ -47,6 +48,7 @@ export interface PersonaUpsertParameters {
   llm_model_version_override: string | null;
   starter_messages: StarterMessage[] | null;
   users?: string[];
+  new_user_emails?: string[];
   groups: number[];
   tool_ids: number[];
   icon_color: string | null;
@@ -109,6 +111,7 @@ function buildPersonaUpsertRequest(
     existing_prompt_id,
     datetime_aware,
     users,
+    new_user_emails,
     tool_ids,
     icon_color,
     icon_shape,
@@ -127,6 +130,7 @@ function buildPersonaUpsertRequest(
     uploaded_image_id,
     groups,
     users,
+    new_user_emails,
     tool_ids,
     icon_color,
     icon_shape,

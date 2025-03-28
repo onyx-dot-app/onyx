@@ -374,25 +374,35 @@ def _add_user_group__cc_pair_relationships__no_commit(
 
 
 def insert_user_group(db_session: Session, user_group: UserGroupCreate) -> UserGroup:
-    db_user_group = UserGroup(
-        name=user_group.name, time_last_modified_by_user=func.now()
-    )
-    db_session.add(db_user_group)
-    db_session.flush()  # give the group an ID
+    # create the user group
+    new_group = UserGroup(name=user_group.name)
+    db_session.add(new_group)
+    db_session.flush()
 
-    _add_user__user_group_relationships__no_commit(
-        db_session=db_session,
-        user_group_id=db_user_group.id,
-        user_ids=user_group.user_ids,
-    )
-    _add_user_group__cc_pair_relationships__no_commit(
-        db_session=db_session,
-        user_group_id=db_user_group.id,
-        cc_pair_ids=user_group.cc_pair_ids,
-    )
+    user_ids = list(user_group.user_ids)
+
+    # Handle new user emails by creating users with BELONGS role
+    if user_group.new_user_emails and len(user_group.new_user_emails) > 0:
+        from onyx.db.users import add_belongs_user_if_not_exists
+
+        for email in user_group.new_user_emails:
+            user = add_belongs_user_if_not_exists(db_session=db_session, email=email)
+            user_ids.append(user.id)
+
+    if user_ids:
+        _add_user__user_group_relationships__no_commit(
+            db_session=db_session, user_group_id=new_group.id, user_ids=user_ids
+        )
+
+    if user_group.cc_pair_ids:
+        _add_user_group__cc_pair_relationships__no_commit(
+            db_session=db_session,
+            user_group_id=new_group.id,
+            cc_pair_ids=user_group.cc_pair_ids,
+        )
 
     db_session.commit()
-    return db_user_group
+    return new_group
 
 
 def _mark_user_group__cc_pair_relationships_outdated__no_commit(
@@ -585,8 +595,18 @@ def update_user_group(
 
     _check_user_group_is_modifiable(db_user_group)
 
+    user_ids = list(user_group_update.user_ids)
+
+    # Handle new user emails by creating users with BELONGS role
+    if user_group_update.new_user_emails and len(user_group_update.new_user_emails) > 0:
+        from onyx.db.users import add_belongs_user_if_not_exists
+
+        for email in user_group_update.new_user_emails:
+            user = add_belongs_user_if_not_exists(db_session=db_session, email=email)
+            user_ids.append(user.id)
+
     current_user_ids = set([user.id for user in db_user_group.users])
-    updated_user_ids = set(user_group_update.user_ids)
+    updated_user_ids = set(user_ids)
     added_user_ids = list(updated_user_ids - current_user_ids)
     removed_user_ids = list(current_user_ids - updated_user_ids)
 
