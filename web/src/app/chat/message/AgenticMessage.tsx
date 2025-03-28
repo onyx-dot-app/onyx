@@ -43,6 +43,15 @@ import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
+import { ThinkingBox } from "./ThinkingBox";
+import {
+  hasCompletedThinkingTokens,
+  hasPartialThinkingTokens,
+  extractThinkingContent,
+  isThinkingComplete,
+  removeThinkingTokens,
+  cleanThinkingContent
+} from "../utils/thinkingTokens";
 
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -128,7 +137,7 @@ export const AgenticMessage = ({
 
   const [lastKnownContentLength, setLastKnownContentLength] = useState(0);
 
-  const [allowStreaming, setAllowStreaming] = useState(isComplete);
+  const [allowStreaming, setAllowStreaming] = useState(isComplete || false);
   const [allowDocuments, setAllowDocuments] = useState(isComplete);
 
   const alternativeContent = secondLevelAssistantMessage || "";
@@ -137,6 +146,11 @@ export const AgenticMessage = ({
     if (typeof incoming !== "string") return incoming;
 
     let processed = incoming;
+
+    // Apply thinking tokens processing first
+    if (hasCompletedThinkingTokens(processed) || hasPartialThinkingTokens(processed)) {
+      processed = removeThinkingTokens(processed) as string;
+    }
 
     const codeBlockRegex = /```(\w*)\n[\s\S]*?```|```[\s\S]*?$/g;
     const matches = processed.match(codeBlockRegex);
@@ -174,6 +188,29 @@ export const AgenticMessage = ({
   );
   const finalContent = processContent(content) as string;
   const finalAlternativeContent = processContent(alternativeContent) as string;
+
+  // Check if content contains thinking tokens
+  const hasThinkingTokens = useMemo(() => {
+    return hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content);
+  }, [content]);
+
+  // Extract thinking content
+  const thinkingContent = useMemo(() => {
+    if (!hasThinkingTokens) return "";
+    return extractThinkingContent(content);
+  }, [content, hasThinkingTokens]);
+
+  // Track if thinking is complete
+  const isThinkingTokenComplete = useMemo(() => {
+    return isThinkingComplete(thinkingContent);
+  }, [thinkingContent]);
+
+  // Enable streaming when thinking tokens are detected
+  useEffect(() => {
+    if (hasThinkingTokens) {
+      setAllowStreaming(true);
+    }
+  }, [hasThinkingTokens]);
 
   const [isViewingInitialAnswer, setIsViewingInitialAnswer] = useState(true);
 
@@ -454,6 +491,17 @@ export const AgenticMessage = ({
                       setPresentingDocument={setPresentingDocument!}
                       unToggle={false}
                     />
+                  )}
+                  {/* Render thinking box if thinking tokens exist */}
+                  {hasThinkingTokens && thinkingContent && (
+                    <div className="mb-2 mt-1">
+                      <ThinkingBox 
+                        content={thinkingContent} 
+                        isComplete={isComplete || false} 
+                        isStreaming={!isThinkingTokenComplete || !isComplete}
+                        autoCollapse={true} // Start collapsed, expand only during active streaming
+                      />
+                    </div>
                   )}
                   {/* For debugging purposes */}
                   {/* <SubQuestionProgress subQuestions={subQuestions || []} /> */}
