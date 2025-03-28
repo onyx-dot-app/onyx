@@ -370,7 +370,7 @@ Here is the question you are asked to extract desired entities, relationships, a
 ### Source-specific prompts
 
 FIREFLIES_PREPROCESSING_PROMPT = f"""
-This is a call between employees of our company and representatives of one or more accounts (usually one). \
+This is a call between employees of the VENDOR's company and representatives of one or more ACCOUNTs (usually one). \
 When you exract information based on the instructions, please make sure that you properly attribute the information \
 to the correct employee and account. \
 
@@ -385,7 +385,7 @@ look at the context and try to identify whether the statement comes from the oth
 
 Note: when you extract relationships, please make sure that:
   - if you see a relationship for one of our employees, you should extract the relationship once for the employee AND \
-    once for the account, i.e. ACCOUNT:{KG_OWN_COMPANY}.
+    once for the account, i.e. VENDOR:{KG_OWN_COMPANY}.
   - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
 only for the account!
 
