@@ -1,3 +1,4 @@
+from collections import defaultdict
 from collections.abc import Callable
 from functools import partial
 from typing import Protocol
@@ -8,7 +9,13 @@ from sqlalchemy.orm import Session
 
 from onyx.access.access import get_access_for_documents
 from onyx.access.models import DocumentAccess
+from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_NAME
+from onyx.configs.app_configs import DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER
+from onyx.configs.app_configs import ENABLE_CONTEXTUAL_RAG
 from onyx.configs.app_configs import MAX_DOCUMENT_CHARS
+from onyx.configs.app_configs import MAX_TOKENS_FOR_FULL_INCLUSION
+from onyx.configs.app_configs import USE_CHUNK_SUMMARY
+from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.configs.model_configs import USE_INFORMATION_CONTENT_CLASSIFICATION
@@ -36,9 +43,10 @@ from onyx.db.document import upsert_documents
 from onyx.db.document_set import fetch_document_sets_for_documents
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Document as DBDocument
+from onyx.db.models import IndexModelStatus
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.db.pg_file_store import read_lobj
-from onyx.db.search_settings import get_current_search_settings
+from onyx.db.search_settings import get_active_search_settings
 from onyx.db.tag import create_or_add_document_tag
 from onyx.db.tag import create_or_add_document_tag_list
 from onyx.document_index.document_index_utils import (
@@ -57,11 +65,24 @@ from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.indexing.models import IndexChunk
 from onyx.indexing.models import UpdatableChunkData
 from onyx.indexing.vector_db_insertion import write_chunks_to_vector_db_with_backoff
+from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.factory import get_default_llm_with_vision
+from onyx.llm.factory import get_llm_for_contextual_rag
+from onyx.llm.interfaces import LLM
+from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import MAX_CONTEXT_TOKENS
+from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
+from onyx.natural_language_processing.utils import BaseTokenizer
+from onyx.natural_language_processing.utils import get_tokenizer
+from onyx.natural_language_processing.utils import tokenizer_trim_middle
+from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_PROMPT1
+from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_PROMPT2
+from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_PROMPT
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import (
     INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH,
@@ -249,6 +270,8 @@ def index_doc_batch_with_handler(
     db_session: Session,
     tenant_id: str,
     ignore_time_skip: bool = False,
+    enable_contextual_rag: bool = False,
+    llm: LLM | None = None,
 ) -> IndexingPipelineResult:
     try:
         index_pipeline_result = index_doc_batch(
@@ -261,6 +284,8 @@ def index_doc_batch_with_handler(
             db_session=db_session,
             ignore_time_skip=ignore_time_skip,
             tenant_id=tenant_id,
+            enable_contextual_rag=enable_contextual_rag,
+            llm=llm,
         )
     except Exception as e:
         # don't log the batch directly, it's too much text
@@ -523,6 +548,145 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     return indexed_documents
 
 
+def add_document_summaries(
+    chunks_by_doc: list[DocAwareChunk],
+    llm: LLM,
+    tokenizer: BaseTokenizer,
+    trunc_doc_tokens: int,
+) -> list[int] | None:
+    """
+    Adds a document summary to a list of chunks from the same document.
+    Returns the number of tokens in the document.
+    """
+
+    doc_tokens = []
+    # this is value is the same for each chunk in the document; 0 indicates
+    # There is not enough space for contextual RAG (the chunk content
+    # and possibly metadata took up too much space)
+    if chunks_by_doc[0].contextual_rag_reserved_tokens == 0:
+        return None
+
+    doc_tokens = tokenizer.encode(chunks_by_doc[0].source_document.get_text_content())
+    doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_tokens, tokenizer)
+    summary_prompt = DOCUMENT_SUMMARY_PROMPT.format(document=doc_content)
+    doc_summary = message_to_string(
+        llm.invoke(summary_prompt, max_tokens=MAX_CONTEXT_TOKENS)
+    )
+
+    for chunk in chunks_by_doc:
+        chunk.doc_summary = doc_summary
+
+    return doc_tokens
+
+
+def add_chunk_summaries(
+    chunks_by_doc: list[DocAwareChunk],
+    llm: LLM,
+    tokenizer: BaseTokenizer,
+    trunc_doc_chunk_tokens: int,
+    doc_tokens: list[int] | None,
+) -> None:
+    """
+    Adds chunk summaries to the chunks grouped by document id.
+    Chunk summaries look at the chunk as well as the entire document (or a summary,
+    if the document is too long) and describe how the chunk relates to the document.
+    """
+    # all chunks within a document have the same contextual_rag_reserved_tokens
+    if chunks_by_doc[0].contextual_rag_reserved_tokens == 0:
+        return
+
+    # use values computed in above doc summary section if available
+    doc_tokens = doc_tokens or tokenizer.encode(
+        chunks_by_doc[0].source_document.get_text_content()
+    )
+    doc_content = tokenizer_trim_middle(doc_tokens, trunc_doc_chunk_tokens, tokenizer)
+
+    # only compute doc summary if needed
+    doc_info = (
+        doc_content
+        if len(doc_tokens) <= MAX_TOKENS_FOR_FULL_INCLUSION
+        else chunks_by_doc[0].doc_summary
+    )
+    if not doc_info:
+        # This happens if the document is too long AND document summaries are turned off
+        # In this case we compute a doc summary using the LLM
+        doc_info = message_to_string(
+            llm.invoke(
+                DOCUMENT_SUMMARY_PROMPT.format(document=doc_content),
+                max_tokens=MAX_CONTEXT_TOKENS,
+            )
+        )
+
+    context_prompt1 = CONTEXTUAL_RAG_PROMPT1.format(document=doc_info)
+
+    def assign_context(chunk: DocAwareChunk) -> None:
+        context_prompt2 = CONTEXTUAL_RAG_PROMPT2.format(chunk=chunk.content)
+        try:
+            chunk.chunk_context = message_to_string(
+                llm.invoke(
+                    context_prompt1 + context_prompt2,
+                    max_tokens=MAX_CONTEXT_TOKENS,
+                )
+            )
+        except LLMRateLimitError as e:
+            # Erroring during chunker is undesirable, so we log the error and continue
+            # TODO: for v2, add robust retry logic
+            logger.exception(f"Rate limit adding chunk summary: {e}", exc_info=e)
+            chunk.chunk_context = ""
+        except Exception as e:
+            logger.exception(f"Error adding chunk summary: {e}", exc_info=e)
+            chunk.chunk_context = ""
+
+    run_functions_tuples_in_parallel(
+        [(assign_context, (chunk,)) for chunk in chunks_by_doc]
+    )
+
+
+def add_contextual_summaries(
+    chunks: list[DocAwareChunk],
+    llm: LLM,
+    tokenizer: BaseTokenizer,
+    chunk_token_limit: int,
+) -> list[DocAwareChunk]:
+    """
+    Adds Document summary and chunk-within-document context to the chunks
+    based on which environment variables are set.
+    """
+    max_context = get_max_input_tokens(
+        model_name=llm.config.model_name,
+        model_provider=llm.config.model_provider,
+        output_tokens=MAX_CONTEXT_TOKENS,
+    )
+    doc2chunks = defaultdict(list)
+    for chunk in chunks:
+        doc2chunks[chunk.source_document.id].append(chunk)
+
+    # The number of tokens allowed for the document when computing a document summary
+    trunc_doc_summary_tokens = max_context - len(
+        tokenizer.encode(DOCUMENT_SUMMARY_PROMPT)
+    )
+
+    prompt_tokens = len(
+        tokenizer.encode(CONTEXTUAL_RAG_PROMPT1 + CONTEXTUAL_RAG_PROMPT2)
+    )
+    # The number of tokens allowed for the document when computing a
+    # "chunk in context of document" summary
+    trunc_doc_chunk_tokens = max_context - prompt_tokens - chunk_token_limit
+    for chunks_by_doc in doc2chunks.values():
+        doc_tokens = None
+        if USE_DOCUMENT_SUMMARY:
+            doc_tokens = add_document_summaries(
+                chunks_by_doc, llm, tokenizer, trunc_doc_summary_tokens
+            )
+
+        if USE_CHUNK_SUMMARY:
+            add_chunk_summaries(
+                chunks_by_doc, llm, tokenizer, trunc_doc_chunk_tokens, doc_tokens
+            )
+
+    return chunks
+
+
 @log_function_time(debug_only=True)
 def index_doc_batch(
     *,
@@ -534,6 +698,8 @@ def index_doc_batch(
     index_attempt_metadata: IndexAttemptMetadata,
     db_session: Session,
     tenant_id: str,
+    enable_contextual_rag: bool = False,
+    llm: LLM | None = None,
     ignore_time_skip: bool = False,
     filter_fnc: Callable[[list[Document]], list[Document]] = filter_documents,
 ) -> IndexingPipelineResult:
@@ -595,6 +761,20 @@ def index_doc_batch(
     # NOTE: no special handling for failures here, since the chunker is not
     # a common source of failure for the indexing pipeline
     chunks: list[DocAwareChunk] = chunker.chunk(ctx.indexable_docs)
+
+    # contextual RAG
+    if enable_contextual_rag:
+        assert llm is not None, "must provide an LLM for contextual RAG"
+        llm_tokenizer = get_tokenizer(
+            model_name=llm.config.model_name,
+            provider_type=llm.config.model_provider,
+        )
+
+        # Because the chunker's tokens are different from the LLM's tokens,
+        # We add a fudge factor to ensure we truncate prompts to the LLM's token limit
+        chunks = add_contextual_summaries(
+            chunks, llm, llm_tokenizer, chunker.chunk_token_limit * 2
+        )
 
     logger.debug("Starting embedding")
     chunks_with_embeddings, embedding_failures = (
@@ -791,13 +971,33 @@ def build_indexing_pipeline(
     callback: IndexingHeartbeatInterface | None = None,
 ) -> IndexingPipelineProtocol:
     """Builds a pipeline which takes in a list (batch) of docs and indexes them."""
-    search_settings = get_current_search_settings(db_session)
+    all_search_settings = get_active_search_settings(db_session)
+    if (
+        all_search_settings.secondary
+        and all_search_settings.secondary.status == IndexModelStatus.FUTURE
+    ):
+        search_settings = all_search_settings.secondary
+    else:
+        search_settings = all_search_settings.primary
+
     multipass_config = get_multipass_config(search_settings)
+
+    enable_contextual_rag = (
+        search_settings.enable_contextual_rag or ENABLE_CONTEXTUAL_RAG
+    )
+    llm = None
+    if enable_contextual_rag:
+        llm = get_llm_for_contextual_rag(
+            search_settings.contextual_rag_llm_name or DEFAULT_CONTEXTUAL_RAG_LLM_NAME,
+            search_settings.contextual_rag_llm_provider
+            or DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER,
+        )
 
     chunker = chunker or Chunker(
         tokenizer=embedder.embedding_model.tokenizer,
         enable_multipass=multipass_config.multipass_indexing,
         enable_large_chunks=multipass_config.enable_large_chunks,
+        enable_contextual_rag=enable_contextual_rag,
         # after every doc, update status in case there are a bunch of really long docs
         callback=callback,
     )
@@ -811,4 +1011,6 @@ def build_indexing_pipeline(
         ignore_time_skip=ignore_time_skip,
         db_session=db_session,
         tenant_id=tenant_id,
+        enable_contextual_rag=enable_contextual_rag,
+        llm=llm,
     )

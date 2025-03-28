@@ -495,6 +495,11 @@ NUM_SECONDARY_INDEXING_WORKERS = int(
 ENABLE_MULTIPASS_INDEXING = (
     os.environ.get("ENABLE_MULTIPASS_INDEXING", "").lower() == "true"
 )
+# Enable contextual retrieval
+ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
+
+DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
+DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
 # Finer grained chunking for more detail retention
 # Slightly larger since the sentence aware split is a max cutoff so most minichunks will be under MINI_CHUNK_SIZE
 # tokens. But we need it to be at least as big as 1/4th chunk size to avoid having a tiny mini-chunk at the end
@@ -535,6 +540,17 @@ MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
+
+# Use document summary for contextual rag
+USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
+# Use chunk summary for contextual rag
+USE_CHUNK_SUMMARY = os.environ.get("USE_CHUNK_SUMMARY", "true").lower() == "true"
+# Average summary embeddings for contextual rag (not yet implemented)
+AVERAGE_SUMMARY_EMBEDDINGS = (
+    os.environ.get("AVERAGE_SUMMARY_EMBEDDINGS", "false").lower() == "true"
+)
+
+MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
 #####
 # Miscellaneous

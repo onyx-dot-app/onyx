@@ -38,6 +38,8 @@ def create_inference_chunk(
         match_highlights=[],
         updated_at=None,
         image_file_name=None,
+        doc_summary="",
+        chunk_context="",
     )
 
 

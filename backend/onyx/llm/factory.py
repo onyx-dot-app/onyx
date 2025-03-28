@@ -16,6 +16,7 @@ from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import model_supports_image_input
+from onyx.server.manage.llm.models import LLMProvider
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -154,6 +155,40 @@ def get_default_llm_with_vision(
     return None
 
 
+def llm_from_provider(
+    model_name: str,
+    llm_provider: LLMProvider,
+    timeout: int | None = None,
+    temperature: float | None = None,
+    additional_headers: dict[str, str] | None = None,
+    long_term_logger: LongTermLogger | None = None,
+) -> LLM:
+    return get_llm(
+        provider=llm_provider.provider,
+        model=model_name,
+        deployment_name=llm_provider.deployment_name,
+        api_key=llm_provider.api_key,
+        api_base=llm_provider.api_base,
+        api_version=llm_provider.api_version,
+        custom_config=llm_provider.custom_config,
+        timeout=timeout,
+        temperature=temperature,
+        additional_headers=additional_headers,
+        long_term_logger=long_term_logger,
+    )
+
+
+def get_llm_for_contextual_rag(model_name: str, model_provider: str) -> LLM:
+    with get_session_context_manager() as db_session:
+        llm_provider = fetch_llm_provider_view(db_session, model_provider)
+    if not llm_provider:
+        raise ValueError("No LLM provider with name {} found".format(model_provider))
+    return llm_from_provider(
+        model_name=model_name,
+        llm_provider=llm_provider,
+    )
+
+
 def get_default_llms(
     timeout: int | None = None,
     temperature: float | None = None,
@@ -179,14 +214,9 @@ def get_default_llms(
         raise ValueError("No fast default model name found")
 
     def _create_llm(model: str) -> LLM:
-        return get_llm(
-            provider=llm_provider.provider,
-            model=model,
-            deployment_name=llm_provider.deployment_name,
-            api_key=llm_provider.api_key,
-            api_base=llm_provider.api_base,
-            api_version=llm_provider.api_version,
-            custom_config=llm_provider.custom_config,
+        return llm_from_provider(
+            model_name=model,
+            llm_provider=llm_provider,
             timeout=timeout,
             temperature=temperature,
             additional_headers=additional_headers,

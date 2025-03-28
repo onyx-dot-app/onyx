@@ -21,9 +21,11 @@ from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
+from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
@@ -286,3 +288,38 @@ def list_llm_provider_basics(
             db_session, user
         )
     ]
+
+
+@admin_router.get("/provider-contextual-cost")
+def get_provider_contextual_cost(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LLMCost]:
+    """
+    Get the cost of Re-indexing all documents for contextual retrieval.
+
+    See https://docs.litellm.ai/docs/completion/token_usage#5-cost_per_token
+    This includes:
+    - The cost of invoking the LLM on each chunk-document pair to get
+      - the doc_summary
+      - the chunk_context
+    - The per-token cost of the LLM used to generate the doc_summary and chunk_context
+    """
+    providers = fetch_existing_llm_providers(db_session)
+    costs = []
+    for provider in providers:
+        for model_name in provider.display_model_names or provider.model_names or []:
+            llm = get_llm(
+                provider=provider.provider,
+                model=model_name,
+                deployment_name=provider.deployment_name,
+                api_key=provider.api_key,
+                api_base=provider.api_base,
+                api_version=provider.api_version,
+                custom_config=provider.custom_config,
+            )
+            cost = get_llm_contextual_cost(llm)
+            costs.append(
+                LLMCost(provider=provider.name, model_name=model_name, cost=cost)
+            )
+    return costs
