@@ -531,23 +531,6 @@ class SlackConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
 
-        # connection_error_retry_handler = ConnectionErrorRetryHandler()
-        # onyx_retry_handler = OnyxRetryHandler(max_retry_count=7)
-        # custom_retry_handlers: list[RetryHandler] = [
-        #     connection_error_retry_handler,
-        #     onyx_retry_handler,
-        # ]
-
-        # bot_token = credentials["slack_bot_token"]
-        # self.client = WebClient(token=bot_token, retry_handlers=custom_retry_handlers)
-        # # use for requests that must return quickly (e.g. realtime flows where user is waiting)
-        # self.fast_client = WebClient(
-        #     token=bot_token, timeout=SlackConnector.FAST_TIMEOUT
-        # )
-        # self.text_cleaner = SlackTextCleaner(client=self.client)
-        # self.credentials_provider: CredentialsProviderInterface | None = None
-        # return None
-
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
@@ -561,8 +544,9 @@ class SlackConnector(
         self.delay_lock = f"{self.credential_prefix}:delay_lock"
         self.delay_key = f"{self.credential_prefix}:delay"
 
+        # NOTE: slack has a built in RateLimitErrorRetryHandler, but it isn't designed
+        # for concurrent workers. We've extended it with OnyxRedisSlackRetryHandler.
         connection_error_retry_handler = ConnectionErrorRetryHandler()
-        # rate_limit_error_retry_handler = RateLimitErrorRetryHandler()
         onyx_rate_limit_error_retry_handler = OnyxRedisSlackRetryHandler(
             max_retry_count=self.MAX_RETRIES,
             delay_lock=self.delay_lock,
@@ -571,7 +555,6 @@ class SlackConnector(
         )
         custom_retry_handlers: list[RetryHandler] = [
             connection_error_retry_handler,
-            # rate_limit_error_retry_handler,
             onyx_rate_limit_error_retry_handler,
         ]
 

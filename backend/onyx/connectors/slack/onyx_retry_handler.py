@@ -19,13 +19,18 @@ logger = setup_logger()
 class OnyxRedisSlackRetryHandler(RetryHandler):
     """
     This class uses Redis to share a rate limit among multiple threads.
-    Threads that encounter a rate limit with observe the current delay and add their
-    own retry delay to the shared value.
+
+    Threads that encounter a rate limit will observe the shared delay, increment the
+    shared delay with the retry value, and use the new shared value as a wait interval.
+
     This has the effect of serializing calls when a rate limit is hit, which is what
     needs to happens if the server punishes us with additional limiting when we make
-    a call too early.
+    a call too early. We believe this is what Slack is doing based on empirical
+    observation, meaning we see indefinite hangs if we're too aggressive.
 
     Another way to do this is just to do exponential backoff. Might be easier?
+
+    Adapted from slack's RateLimitErrorRetryHandler.
     """
 
     LOCK_TTL = 60  # used to serialize access to the retry TTL
@@ -41,7 +46,6 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         r: Redis,
     ):
         """
-
         delay_lock: the redis key to use with RedisLock (to synchronize access to delay_key)
         delay_key: the redis key containing a shared TTL
         """
@@ -68,7 +72,8 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         response: Optional[HttpResponse] = None,
         error: Optional[Exception] = None,
     ) -> None:
-        """it seems this function is responsible for the wait to retry"""
+        """it seems this function is responsible for the wait to retry ... aka we
+        actually sleep in this function."""
         retry_after_value: list[str] | None = None
 
         if response is None:

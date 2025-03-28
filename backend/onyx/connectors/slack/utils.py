@@ -63,6 +63,9 @@ def _make_slack_api_call_paginated(
     return paginated_call
 
 
+# NOTE(rkuo): we may not need this any more if the integrated retry handlers work as
+# expected.  Do we want to keep this around?
+
 # def make_slack_api_rate_limited(
 #     call: Callable[..., SlackResponse], max_retries: int = 7
 # ) -> Callable[..., SlackResponse]:
