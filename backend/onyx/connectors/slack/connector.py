@@ -14,6 +14,8 @@ from typing import cast
 from pydantic import BaseModel
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry import ConnectionErrorRetryHandler
+from slack_sdk.http_retry import RetryHandler
 from typing_extensions import override
 
 from onyx.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
@@ -26,6 +28,8 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointConnector
 from onyx.connectors.interfaces import CheckpointOutput
+from onyx.connectors.interfaces import CredentialsConnector
+from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
@@ -38,14 +42,15 @@ from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.connectors.slack.onyx_retry_handler import OnyxRedisSlackRetryHandler
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.connectors.slack.utils import get_message_link
 from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
 from onyx.connectors.slack.utils import make_slack_api_call_w_retries
 from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
@@ -493,8 +498,12 @@ def _process_message(
         )
 
 
-class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
+class SlackConnector(
+    SlimConnector, CredentialsConnector, CheckpointConnector[SlackCheckpoint]
+):
     FAST_TIMEOUT = 1
+
+    MAX_RETRIES = 7  # arbitrarily selected
 
     def __init__(
         self,
@@ -514,16 +523,49 @@ class SlackConnector(SlimConnector, CheckpointConnector[SlackCheckpoint]):
         # just used for efficiency
         self.text_cleaner: SlackTextCleaner | None = None
         self.user_cache: dict[str, BasicExpertInfo | None] = {}
+        self.credentials_provider: CredentialsProviderInterface | None = None
+        self.credential_prefix: str | None = None
+        self.delay_lock: str | None = None  # the redis key for the shared lock
+        self.delay_key: str | None = None  # the redis key for the shared delay
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        raise NotImplementedError("Use set_credentials_provider with this connector.")
+
+    def set_credentials_provider(
+        self, credentials_provider: CredentialsProviderInterface
+    ) -> None:
+        credentials = credentials_provider.get_credentials()
+        tenant_id = credentials_provider.get_tenant_id()
+        self.redis = get_redis_client(tenant_id=tenant_id)
+
+        self.credential_prefix = (
+            f"connector:slack:credential_{credentials_provider.get_provider_key()}"
+        )
+        self.delay_lock = f"{self.credential_prefix}:delay_lock"
+        self.delay_key = f"{self.credential_prefix}:delay"
+
+        # NOTE: slack has a built in RateLimitErrorRetryHandler, but it isn't designed
+        # for concurrent workers. We've extended it with OnyxRedisSlackRetryHandler.
+        connection_error_retry_handler = ConnectionErrorRetryHandler()
+        onyx_rate_limit_error_retry_handler = OnyxRedisSlackRetryHandler(
+            max_retry_count=self.MAX_RETRIES,
+            delay_lock=self.delay_lock,
+            delay_key=self.delay_key,
+            r=self.redis,
+        )
+        custom_retry_handlers: list[RetryHandler] = [
+            connection_error_retry_handler,
+            onyx_rate_limit_error_retry_handler,
+        ]
+
         bot_token = credentials["slack_bot_token"]
-        self.client = WebClient(token=bot_token)
+        self.client = WebClient(token=bot_token, retry_handlers=custom_retry_handlers)
         # use for requests that must return quickly (e.g. realtime flows where user is waiting)
         self.fast_client = WebClient(
             token=bot_token, timeout=SlackConnector.FAST_TIMEOUT
         )
         self.text_cleaner = SlackTextCleaner(client=self.client)
-        return None
+        self.credentials_provider = credentials_provider
 
     def retrieve_all_slim_documents(
         self,

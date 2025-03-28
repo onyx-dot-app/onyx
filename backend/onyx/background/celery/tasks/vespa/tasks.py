@@ -80,7 +80,8 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
     """Runs periodically to check if any document needs syncing.
     Generates sets of tasks for Celery if syncing is needed."""
 
-    # Useful for debugging timing issues with reacquisitions. TODO: remove once more generalized logging is in place
+    # Useful for debugging timing issues with reacquisitions.
+    # TODO: remove once more generalized logging is in place
     task_logger.info("check_for_vespa_sync_task started")
 
     time_start = time.monotonic()
