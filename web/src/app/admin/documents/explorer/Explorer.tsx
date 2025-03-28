@@ -148,7 +148,8 @@ export function Explorer({
       clearTimeout(timeoutId);
     }
 
-    if (query && query.trim() !== "") {
+    let doSearch = true;
+    if (doSearch) {
       router.replace(
         `/admin/documents/explorer?query=${encodeURIComponent(query)}`
       );

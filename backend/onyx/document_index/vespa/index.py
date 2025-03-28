@@ -821,25 +821,29 @@ class VespaIndex(DocumentIndex):
         num_to_retrieve: int = NUM_RETURNED_HITS,
         offset: int = 0,
     ) -> list[InferenceChunkUncleaned]:
-        vespa_where_clauses = build_vespa_filters(filters, include_hidden=True)
-        yql = (
-            YQL_BASE.format(index_name=self.index_name)
-            + vespa_where_clauses
-            + '({grammar: "weakAnd"}userInput(@query) '
-            # `({defaultIndex: "content_summary"}userInput(@query))` section is
-            # needed for highlighting while the N-gram highlighting is broken /
-            # not working as desired
-            + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
+        vespa_where_clauses = build_vespa_filters(
+            filters, include_hidden=True, remove_trailing_and=True
         )
+        yql = YQL_BASE.format(index_name=self.index_name) + vespa_where_clauses
 
         params: dict[str, str | int] = {
             "yql": yql,
-            "query": query,
             "hits": num_to_retrieve,
             "offset": 0,
             "ranking.profile": "admin_search",
             "timeout": VESPA_TIMEOUT,
         }
+
+        if len(query.strip()) > 0:
+            yql += (
+                ' and ({grammar: "weakAnd"}userInput(@query) '
+                # `({defaultIndex: "content_summary"}userInput(@query))` section is
+                # needed for highlighting while the N-gram highlighting is broken /
+                # not working as desired
+                + f'or ({{defaultIndex: "{CONTENT_SUMMARY}"}}userInput(@query)))'
+            )
+            params["yql"] = yql
+            params["query"] = query
 
         return query_vespa(params)
 

@@ -102,7 +102,7 @@ export function UserProvider({
   };
 
   // Use the custom token refresh hook
-  useTokenRefresh(upToDateUser, fetchUser);
+  // useTokenRefresh(upToDateUser, fetchUser);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
