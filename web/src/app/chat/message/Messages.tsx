@@ -72,6 +72,15 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { transformLinkUri } from "@/lib/utils";
+import { ThinkingBox } from "./ThinkingBox";
+import {
+  hasCompletedThinkingTokens,
+  hasPartialThinkingTokens,
+  extractThinkingContent,
+  isThinkingComplete,
+  removeThinkingTokens,
+  cleanThinkingContent
+} from "../utils/thinkingTokens";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -222,6 +231,47 @@ export const AIMessage = ({
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
 
+  // Check if content contains thinking tokens (complete or partial)
+  const hasThinkingTokens = useMemo(() => {
+    return hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content);
+  }, [content]);
+
+  // Extract thinking content
+  const thinkingContent = useMemo(() => {
+    if (!hasThinkingTokens) return "";
+    return extractThinkingContent(content);
+  }, [content, hasThinkingTokens]);
+
+  // Track if thinking is complete
+  const isThinkingTokenComplete = useMemo(() => {
+    return isThinkingComplete(thinkingContent);
+  }, [thinkingContent]);
+
+  // Extract final content (remove thinking tokens)
+  const finalContent = useMemo(() => {
+    if (!hasThinkingTokens) return content;
+    return removeThinkingTokens(content);
+  }, [content, hasThinkingTokens]);
+
+  // Only show the message content when we've completed the thinking section
+  // or there are no thinking tokens to begin with
+  const shouldShowContent = useMemo(() => {
+    if (!hasThinkingTokens) return true;
+    
+    // If the message is complete, we always show the content
+    if (isComplete) return true;
+    
+    // If thinking is not complete, we don't show the content yet
+    if (!isThinkingTokenComplete) return false;
+    
+    // If thinking is complete but we're not done with the message yet,
+    // only show the content if there's actually something to show
+    const cleanedContent = (typeof finalContent === 'string') ? 
+      finalContent.trim() : finalContent;
+    
+    return !!cleanedContent && cleanedContent !== '';
+  }, [hasThinkingTokens, isComplete, isThinkingTokenComplete, finalContent]);
+
   const processContent = (content: string | JSX.Element) => {
     if (typeof content !== "string") {
       return content;
@@ -251,7 +301,7 @@ export const AIMessage = ({
     );
   };
 
-  const finalContent = processContent(content as string);
+  const finalContentProcessed = processContent(finalContent as string);
 
   const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
@@ -355,7 +405,7 @@ export const AIMessage = ({
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(
           node,
-          finalContent as string,
+          finalContentProcessed as string,
           children
         );
 
@@ -366,15 +416,15 @@ export const AIMessage = ({
         );
       },
     }),
-    [anchorCallback, paragraphCallback, finalContent]
+    [anchorCallback, paragraphCallback, finalContentProcessed]
   );
   const markdownRef = useRef<HTMLDivElement>(null);
 
   // Process selection copying with HTML formatting
 
   const renderedMarkdown = useMemo(() => {
-    if (typeof finalContent !== "string") {
-      return finalContent;
+    if (typeof finalContentProcessed !== "string") {
+      return finalContentProcessed;
     }
 
     return (
@@ -385,10 +435,10 @@ export const AIMessage = ({
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
         urlTransform={transformLinkUri}
       >
-        {finalContent}
+        {finalContentProcessed}
       </ReactMarkdown>
     );
-  }, [finalContent, markdownComponents]);
+  }, [finalContentProcessed, markdownComponents]);
 
   const includeMessageSwitcher =
     currentMessageInd !== undefined &&
@@ -523,7 +573,20 @@ export const AIMessage = ({
                       </div>
                     )}
 
-                    {content || files ? (
+                    {/* Render thinking box if thinking tokens exist */}
+                    {hasThinkingTokens && thinkingContent && (
+                      <div className="mb-2 mt-1">
+                        <ThinkingBox 
+                          content={thinkingContent} 
+                          isComplete={isComplete || false} 
+                          isStreaming={!isThinkingTokenComplete || !isComplete}
+                          autoCollapse={true} // Always start collapsed
+                        />
+                      </div>
+                    )}
+
+                    {/* Only show the message content once thinking is complete or if there's no thinking */}
+                    {shouldShowContent && (content || files) ? (
                       <>
                         <FileDisplay files={files || []} />
 
@@ -584,7 +647,7 @@ export const AIMessage = ({
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
                               copyAllFn={() =>
-                                copyAll(finalContent as string, markdownRef)
+                                copyAll(finalContentProcessed as string, markdownRef)
                               }
                             />
                           </CustomTooltip>
@@ -670,7 +733,7 @@ export const AIMessage = ({
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
                               copyAllFn={() =>
-                                copyAll(finalContent as string, markdownRef)
+                                copyAll(finalContentProcessed as string, markdownRef)
                               }
                             />
                           </CustomTooltip>
