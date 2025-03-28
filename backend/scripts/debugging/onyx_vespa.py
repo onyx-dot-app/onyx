@@ -62,7 +62,6 @@ from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.utils.logger import setup_logger
@@ -111,8 +110,8 @@ def build_vespa_filters(
     if not include_hidden:
         filter_str += f"AND !({HIDDEN}=true) "
 
-    if filters.tenant_id and MULTI_TENANT:
-        filter_str += f'AND ({TENANT_ID} contains "{filters.tenant_id}") '
+    # if filters.tenant_id and MULTI_TENANT:
+    #     filter_str += f'AND ({TENANT_ID} contains "{filters.tenant_id}") '
 
     if filters.access_control_list is not None:
         acl_str = _build_or_filters(ACCESS_CONTROL_LIST, filters.access_control_list)
@@ -339,8 +338,8 @@ def list_documents(n: int = 10, tenant_id: Optional[str] = None) -> None:
     # List documents from any source, filtered by tenant if provided.
     logger.info(f"Listing up to {n} documents for tenant={tenant_id or 'ALL'}")
     yql = "select * from sources * where true"
-    if tenant_id:
-        yql += f" and tenant_id contains '{tenant_id}'"
+    # if tenant_id:
+    #     yql += f" and tenant_id contains '{tenant_id}'"
     documents = query_vespa(yql, tenant_id=tenant_id, limit=n)
     print(f"Total documents found: {len(documents)}")
     logger.info(f"Total documents found: {len(documents)}")

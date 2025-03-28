@@ -442,9 +442,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
 
         # kick off index attempts
         for cc_pair_id in cc_pair_ids:
-            task_logger.info(
-                f"check_for_indexing - Acquiring lock for cc_pair_id: {cc_pair_id}"
-            )
             lock_beat.reacquire()
 
             redis_connector = RedisConnector(tenant_id, cc_pair_id)

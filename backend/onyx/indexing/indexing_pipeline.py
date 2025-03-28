@@ -66,6 +66,7 @@ from onyx.llm.factory import get_default_llms
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
@@ -672,12 +673,19 @@ def index_doc_batch(
             for document_id in updatable_ids
         }
 
-        llm, _ = get_default_llms()
+        llm_tokenizer: BaseTokenizer | None = None
 
-        llm_tokenizer = get_tokenizer(
-            model_name=llm.config.model_name,
-            provider_type=llm.config.model_provider,
-        )
+        try:
+            llm, _ = get_default_llms()
+
+            llm_tokenizer = get_tokenizer(
+                model_name=llm.config.model_name,
+                provider_type=llm.config.model_provider,
+            )
+        except Exception as e:
+            logger.error(f"Error getting tokenizer: {e}")
+            llm_tokenizer = None
+
         # Calculate token counts for each document by combining all its chunks' content
         user_file_id_to_token_count: dict[int, int | None] = {}
         user_file_id_to_raw_text: dict[int, str] = {}
@@ -699,7 +707,11 @@ def index_doc_batch(
                     combined_content = " ".join(
                         [chunk.content for chunk in document_chunks]
                     )
-                    token_count = len(llm_tokenizer.encode(combined_content))
+                    token_count = (
+                        len(llm_tokenizer.encode(combined_content))
+                        if llm_tokenizer
+                        else 0
+                    )
                     user_file_id_to_token_count[user_file_id] = token_count
                     user_file_id_to_raw_text[user_file_id] = combined_content
                 else:
