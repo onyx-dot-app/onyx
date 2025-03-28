@@ -121,23 +121,6 @@ def _check_if_object_type_is_empty(
     return True
 
 
-# def _check_for_existing_csvs(sf_type: str) -> list[str] | None:
-#     # Check if the csv already exists
-#     if os.path.exists(get_object_type_path(sf_type)):
-#         existing_csvs = [
-#             os.path.join(get_object_type_path(sf_type), f)
-#             for f in os.listdir(get_object_type_path(sf_type))
-#             if f.endswith(".csv")
-#         ]
-#         # If the csv already exists, return the path
-#         # This is likely due to a previous run that failed
-#         # after downloading the csv but before the data was
-#         # written to the db
-#         if existing_csvs:
-#             return existing_csvs
-#     return None
-
-
 def _build_bulk_query(sf_client: Salesforce, sf_type: str, time_filter: str) -> str:
     queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
@@ -153,9 +136,6 @@ def _bulk_retrieve_from_salesforce(
     """
     if not _check_if_object_type_is_empty(sf_client, sf_type, time_filter):
         return sf_type, None
-
-    # if existing_csvs := _check_for_existing_csvs(sf_type):
-    #     return sf_type, existing_csvs
 
     query = _build_bulk_query(sf_client, sf_type, time_filter)
 

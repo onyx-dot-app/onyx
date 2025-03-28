@@ -79,7 +79,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     def reconstruct_object_types(directory: str) -> dict[str, list[str] | None]:
         """
         Scans the given directory for all CSV files and reconstructs the available object types.
-        Assumes filenames are formatted as "ObjectType_filename.csv" or "ObjectType.csv".
+        Assumes filenames are formatted as "ObjectType.filename.csv" or "ObjectType.csv".
 
         Args:
             directory (str): The path to the directory containing CSV files.
@@ -91,7 +91,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         for filename in os.listdir(directory):
             if filename.endswith(".csv"):
-                parts = filename.split(".", 1)  # Split on the first underscore
+                parts = filename.split(".", 1)  # Split on the first period
                 object_type = parts[0]  # Take the first part as the object type
                 object_types[object_type].append(os.path.join(directory, filename))
 
@@ -231,8 +231,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         # Step 2 - load CSV's to sqlite
         updated_ids = SalesforceConnector._load_csvs_to_db(temp_dir, temp_dir)
-        # csv_directory = "/Users/rkuo/Downloads/frc_salesforce"
-        # updated_ids = SalesforceConnector._load_csvs_to_db(csv_directory, temp_dir)
         gc.collect()
 
         logger.info(f"Found {len(updated_ids)} total updated records")
@@ -300,6 +298,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         if MULTI_TENANT:
+            # if multi tenant, we cannot expect the sqlite db to be cached/present
             with tempfile.TemporaryDirectory() as temp_dir:
                 return self._fetch_from_salesforce(temp_dir)
 
@@ -314,6 +313,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
         if MULTI_TENANT:
+            # if multi tenant, we cannot expect the sqlite db to be cached/present
             with tempfile.TemporaryDirectory() as temp_dir:
                 return self._fetch_from_salesforce(temp_dir, start=start, end=end)
 
