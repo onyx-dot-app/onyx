@@ -6,11 +6,9 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import Link from "next/link";
 import { SlackChannelConfigsTable } from "./SlackChannelConfigsTable";
 import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
-import { FiPlusSquare } from "react-icons/fi";
 import { Separator } from "@/components/ui/separator";
 
 function SlackBotEditPage({
@@ -37,7 +35,11 @@ function SlackBotEditPage({
   } = useSlackChannelConfigsByBot(Number(unwrappedParams["bot-id"]));
 
   if (isSlackBotLoading || isSlackChannelConfigsLoading) {
-    return <ThreeDotsLoader />;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <ThreeDotsLoader />
+      </div>
+    );
   }
 
   if (slackBotError || !slackBot) {
@@ -67,7 +69,7 @@ function SlackBotEditPage({
   }
 
   return (
-    <div className="container mx-auto">
+    <>
       <InstantSSRAutoRefresh />
 
       <BackButton routerOverride="/admin/bots" />
@@ -86,8 +88,18 @@ function SlackBotEditPage({
           setPopup={setPopup}
         />
       </div>
-    </div>
+    </>
   );
 }
 
-export default SlackBotEditPage;
+export default function Page({
+  params,
+}: {
+  params: Promise<{ "bot-id": string }>;
+}) {
+  return (
+    <div className="container mx-auto">
+      <SlackBotEditPage params={params} />
+    </div>
+  );
+}

@@ -8,7 +8,6 @@ from pydantic import model_validator
 
 from ee.onyx.server.manage.models import StandardAnswer
 from onyx.chat.models import CitationInfo
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import SubQuestionIdentifier
@@ -220,4 +219,3 @@ class OneShotQAResponse(BaseModel):
     llm_selected_doc_indices: list[int] | None = None
     error_msg: str | None = None
     chat_message_id: int | None = None
-    contexts: OnyxContexts | None = None

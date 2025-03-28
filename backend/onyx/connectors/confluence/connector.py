@@ -65,19 +65,7 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
-_ATTACHMENT_EXTENSIONS_TO_FILTER_OUT = [
-    "gif",
-    "mp4",
-    "mov",
-    "mp3",
-    "wav",
-]
-_FULL_EXTENSION_FILTER_STRING = "".join(
-    [
-        f" and title!~'*.{extension}'"
-        for extension in _ATTACHMENT_EXTENSIONS_TO_FILTER_OUT
-    ]
-)
+ONE_HOUR = 3600
 
 
 class ConfluenceConnector(
@@ -114,6 +102,7 @@ class ConfluenceConnector(
         self.timezone_offset = timezone_offset
         self._confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
+        self.allow_images = False
 
         # Remove trailing slash from wiki_base if present
         self.wiki_base = wiki_base.rstrip("/")
@@ -157,6 +146,9 @@ class ConfluenceConnector(
             "max_backoff_retries": 10,
             "max_backoff_seconds": 60,
         }
+
+    def set_allow_images(self, value: bool) -> None:
+        self.allow_images = value
 
     @property
     def confluence_client(self) -> OnyxConfluence:
@@ -203,7 +195,6 @@ class ConfluenceConnector(
     def _construct_attachment_query(self, confluence_page_id: str) -> str:
         attachment_query = f"type=attachment and container='{confluence_page_id}'"
         attachment_query += self.cql_label_filter
-        attachment_query += _FULL_EXTENSION_FILTER_STRING
         return attachment_query
 
     def _get_comment_string_for_page_id(self, page_id: str) -> str:
@@ -233,7 +224,9 @@ class ConfluenceConnector(
             # Extract basic page information
             page_id = page["id"]
             page_title = page["title"]
-            page_url = f"{self.wiki_base}{page['_links']['webui']}"
+            page_url = build_confluence_document_id(
+                self.wiki_base, page["_links"]["webui"], self.is_cloud
+            )
 
             # Get the page content
             page_content = extract_text_from_confluence_html(
@@ -264,6 +257,7 @@ class ConfluenceConnector(
                         self.confluence_client,
                         attachment,
                         page_id,
+                        self.allow_images,
                     )
 
                     if result and result.text:
@@ -304,13 +298,14 @@ class ConfluenceConnector(
             if "version" in page and "by" in page["version"]:
                 author = page["version"]["by"]
                 display_name = author.get("displayName", "Unknown")
-                primary_owners.append(BasicExpertInfo(display_name=display_name))
+                email = author.get("email", "unknown@domain.invalid")
+                primary_owners.append(
+                    BasicExpertInfo(display_name=display_name, email=email)
+                )
 
             # Create the document
             return Document(
-                id=build_confluence_document_id(
-                    self.wiki_base, page["_links"]["webui"], self.is_cloud
-                ),
+                id=page_url,
                 sections=sections,
                 source=DocumentSource.CONFLUENCE,
                 semantic_identifier=page_title,
@@ -364,15 +359,18 @@ class ConfluenceConnector(
                 if not validate_attachment_filetype(
                     attachment,
                 ):
+                    logger.info(f"Skipping attachment: {attachment['title']}")
                     continue
+
+                logger.info(f"Processing attachment: {attachment['title']}")
 
                 # Attempt to get textual content or image summarization:
                 try:
-                    logger.info(f"Processing attachment: {attachment['title']}")
                     response = convert_attachment_to_content(
                         confluence_client=self.confluence_client,
                         attachment=attachment,
                         page_id=page["id"],
+                        allow_images=self.allow_images,
                     )
                     if response is None:
                         continue
@@ -420,7 +418,17 @@ class ConfluenceConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
-        return self._fetch_document_batches(start, end)
+        try:
+            return self._fetch_document_batches(start, end)
+        except Exception as e:
+            if "field 'updated' is invalid" in str(e) and start is not None:
+                logger.warning(
+                    "Confluence says we provided an invalid 'updated' field. This may indicate"
+                    "a real issue, but can also appear during edge cases like daylight"
+                    f"savings time changes. Retrying with a 1 hour offset. Error: {e}"
+                )
+                return self._fetch_document_batches(start - ONE_HOUR, end)
+            raise
 
     def retrieve_all_slim_documents(
         self,

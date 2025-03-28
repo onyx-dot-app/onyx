@@ -18,6 +18,9 @@ from prometheus_client import start_http_server
 from redis.lock import Lock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry import ConnectionErrorRetryHandler
+from slack_sdk.http_retry import RateLimitErrorRetryHandler
+from slack_sdk.http_retry import RetryHandler
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
@@ -41,6 +44,7 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
+from onyx.db.slack_bot import fetch_slack_bot
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
@@ -519,6 +523,25 @@ class SlackbotHandler:
 
 def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -> bool:
     """True to keep going, False to ignore this Slack request"""
+
+    # skip cases where the bot is disabled in the web UI
+    bot_tag_id = get_onyx_bot_slack_bot_id(client.web_client)
+    with get_session_with_current_tenant() as db_session:
+        slack_bot = fetch_slack_bot(
+            db_session=db_session, slack_bot_id=client.slack_bot_id
+        )
+        if not slack_bot:
+            logger.error(
+                f"Slack bot with ID '{client.slack_bot_id}' not found. Skipping request."
+            )
+            return False
+
+        if not slack_bot.enabled:
+            logger.info(
+                f"Slack bot with ID '{client.slack_bot_id}' is disabled. Skipping request."
+            )
+            return False
+
     if req.type == "events_api":
         # Verify channel is valid
         event = cast(dict[str, Any], req.payload.get("event", {}))
@@ -924,10 +947,21 @@ def _get_socket_client(
 ) -> TenantSocketModeClient:
     # For more info on how to set this up, checkout the docs:
     # https://docs.onyx.app/slack_bot_setup
+
+    # use the retry handlers built into the slack sdk
+    connection_error_retry_handler = ConnectionErrorRetryHandler()
+    rate_limit_error_retry_handler = RateLimitErrorRetryHandler(max_retry_count=7)
+    slack_retry_handlers: list[RetryHandler] = [
+        connection_error_retry_handler,
+        rate_limit_error_retry_handler,
+    ]
+
     return TenantSocketModeClient(
         # This app-level token will be used only for establishing a connection
         app_token=slack_bot_tokens.app_token,
-        web_client=WebClient(token=slack_bot_tokens.bot_token),
+        web_client=WebClient(
+            token=slack_bot_tokens.bot_token, retry_handlers=slack_retry_handlers
+        ),
         tenant_id=tenant_id,
         slack_bot_id=slack_bot_id,
     )

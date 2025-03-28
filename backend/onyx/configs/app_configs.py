@@ -1,6 +1,8 @@
 import json
 import os
 import urllib.parse
+from datetime import datetime
+from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
@@ -33,6 +35,10 @@ GENERATIVE_MODEL_ACCESS_CHECK_FREQ = int(
 )  # 1 day
 DISABLE_GENERATIVE_AI = os.environ.get("DISABLE_GENERATIVE_AI", "").lower() == "true"
 
+# Controls whether to allow admin query history reports with:
+# 1. associated user emails
+# 2. anonymized user emails
+# 3. no queries
 ONYX_QUERY_HISTORY_TYPE = QueryHistoryType(
     (os.environ.get("ONYX_QUERY_HISTORY_TYPE") or QueryHistoryType.NORMAL.value).lower()
 )
@@ -153,10 +159,9 @@ VESPA_CLOUD_CERT_PATH = os.environ.get("VESPA_CLOUD_CERT_PATH")
 VESPA_CLOUD_KEY_PATH = os.environ.get("VESPA_CLOUD_KEY_PATH")
 
 # Number of documents in a batch during indexing (further batching done by chunks before passing to bi-encoder)
-try:
-    INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE", 16))
-except ValueError:
-    INDEX_BATCH_SIZE = 16
+INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
+
+MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
@@ -341,8 +346,8 @@ HTML_BASED_CONNECTOR_TRANSFORM_LINKS_STRATEGY = os.environ.get(
     HtmlBasedConnectorTransformLinksStrategy.STRIP,
 )
 
-NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP = (
-    os.environ.get("NOTION_CONNECTOR_ENABLE_RECURSIVE_PAGE_LOOKUP", "").lower()
+NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP = (
+    os.environ.get("NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP", "").lower()
     == "true"
 )
 
@@ -380,10 +385,27 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
 # https://community.developer.atlassian.com/t/confluence-cloud-time-zone-get-via-rest-api/35954/16
 # https://jira.atlassian.com/browse/CONFCLOUD-69670
 
+
+def get_current_tz_offset() -> int:
+    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
+    # remove tzinfo to compare non-timezone-aware objects.
+    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
+    return round(time_diff.total_seconds() / 3600)
+
+
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
 # this will be applied globally, so it probably makes sense to transition this to per
 # connector as some point.
-CONFLUENCE_TIMEZONE_OFFSET = float(os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", 0.0))
+# For the default value, we assume that the user's local timezone is more likely to be
+# correct (i.e. the configured user's timezone or the default server one) than UTC.
+# https://developer.atlassian.com/cloud/confluence/cql-fields/#created
+CONFLUENCE_TIMEZONE_OFFSET = float(
+    os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", get_current_tz_offset())
+)
+
+GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
@@ -413,6 +435,9 @@ EGNYTE_CLIENT_SECRET = os.getenv("EGNYTE_CLIENT_SECRET")
 # Linear specific configs
 LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
+
+# Slack specific configs
+SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 2)
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
@@ -666,4 +691,8 @@ IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
 IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
     "IMAGE_ANALYSIS_SYSTEM_PROMPT",
     DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT,
+)
+
+DISABLE_AUTO_AUTH_REFRESH = (
+    os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )

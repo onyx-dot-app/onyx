@@ -72,6 +72,7 @@ from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.redis.redis_pool import redis_lock_dump
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 from onyx.redis.redis_utils import is_fence
+from onyx.server.runtime.onyx_runtime import OnyxRuntime
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import INDEXING_MODEL_SERVER_HOST
@@ -401,7 +402,11 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                     logger.warning(f"Adding {key_bytes} to the lookup table.")
                     redis_client.sadd(OnyxRedisConstants.ACTIVE_FENCES, key_bytes)
 
-            redis_client.set(OnyxRedisSignals.BLOCK_BUILD_FENCE_LOOKUP_TABLE, 1, ex=300)
+            redis_client.set(
+                OnyxRedisSignals.BLOCK_BUILD_FENCE_LOOKUP_TABLE,
+                1,
+                ex=OnyxRuntime.get_build_fence_lookup_table_interval(),
+            )
 
         # 1/3: KICKOFF
 

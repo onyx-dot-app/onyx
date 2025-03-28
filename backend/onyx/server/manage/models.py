@@ -132,6 +132,7 @@ class UserByEmail(BaseModel):
 class UserRoleUpdateRequest(BaseModel):
     user_email: str
     new_role: UserRole
+    explicit_override: bool = False
 
 
 class UserRoleResponse(BaseModel):

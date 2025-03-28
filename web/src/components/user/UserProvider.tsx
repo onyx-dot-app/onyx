@@ -1,11 +1,18 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+} from "react";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { SettingsContext } from "../settings/SettingsProvider";
+import { useTokenRefresh } from "@/hooks/useTokenRefresh";
 
 interface UserContextType {
   user: User | null;
@@ -93,6 +100,10 @@ export function UserProvider({
       console.error("Error fetching current user:", error);
     }
   };
+
+  // Use the custom token refresh hook
+  useTokenRefresh(upToDateUser, fetchUser);
+
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
       setUpToDateUser((prevUser) => {

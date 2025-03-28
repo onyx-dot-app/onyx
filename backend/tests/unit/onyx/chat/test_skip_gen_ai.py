@@ -39,7 +39,7 @@ def test_skip_gen_ai_answer_generation_flag(
     mocker: MockerFixture,
 ) -> None:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
     question = config["question"]
@@ -79,7 +79,7 @@ def test_skip_gen_ai_answer_generation_flag(
     for res in results:
         print(res)
 
-    expected_count = 4 if skip_gen_ai_answer_generation else 5
+    expected_count = 3 if skip_gen_ai_answer_generation else 4
     assert len(results) == expected_count
     if not skip_gen_ai_answer_generation:
         mock_llm.stream.assert_called_once()

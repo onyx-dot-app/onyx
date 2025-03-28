@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class TestLLMRequest(BaseModel):
     # provider level
+    name: str | None = None
     provider: str
     api_key: str | None = None
     api_base: str | None = None
@@ -76,16 +77,19 @@ class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
     model_names: list[str] | None = None
+    api_key_changed: bool = False
 
 
-class FullLLMProvider(LLMProvider):
+class LLMProviderView(LLMProvider):
+    """Stripped down representation of LLMProvider for display / limited access info only"""
+
     id: int
     is_default_provider: bool | None = None
     is_default_vision_provider: bool | None = None
     model_names: list[str]
 
     @classmethod
-    def from_model(cls, llm_provider_model: "LLMProviderModel") -> "FullLLMProvider":
+    def from_model(cls, llm_provider_model: "LLMProviderModel") -> "LLMProviderView":
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -111,7 +115,7 @@ class FullLLMProvider(LLMProvider):
         )
 
 
-class VisionProviderResponse(FullLLMProvider):
+class VisionProviderResponse(LLMProviderView):
     """Response model for vision providers endpoint, including vision-specific fields."""
 
     vision_models: list[str]
