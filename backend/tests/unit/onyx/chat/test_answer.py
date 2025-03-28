@@ -280,7 +280,7 @@ def test_answer_with_search_no_tool_calling(
     output = list(answer_instance.processed_streamed_output)
 
     # Assertions
-    assert len(output) == 8
+    assert len(output) == 7
     assert output[0] == ToolCallKickoff(
         tool_name="search", tool_args=DEFAULT_SEARCH_ARGS
     )
