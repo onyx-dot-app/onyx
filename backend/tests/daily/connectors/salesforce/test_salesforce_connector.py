@@ -62,9 +62,9 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
                 target_test_doc = doc
                 break
 
-    # The number of docs here increases actively so do a very loose check
+    # The number of docs here seems to change actively so do a very loose check
     # as of 2025-03-28 it was around 32472
-    assert len(all_docs) > 32472
+    assert len(all_docs) > 32000
     assert len(all_docs) < 40000
 
     assert target_test_doc is not None
