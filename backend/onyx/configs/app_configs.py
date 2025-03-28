@@ -437,7 +437,7 @@ LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
 # Slack specific configs
-SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 2)
+SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
