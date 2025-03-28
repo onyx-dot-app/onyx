@@ -36,6 +36,10 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
 
+    is_ee = (
+        os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
+    )
+
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
     # create api key
@@ -82,7 +86,7 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
 
     print("Document sets created and synced")
 
-    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+    if is_ee:
         # create user groups
         user_group_1 = UserGroupManager.create(
             cc_pair_ids=[cc_pair_1.id],
@@ -155,7 +159,7 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
     doc_set_1.cc_pair_ids = []
     doc_set_2.cc_pair_ids = [cc_pair_2.id]
     cc_pair_1.groups = []
-    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+    if is_ee:
         cc_pair_2.groups = [user_group_2.id]
     else:
         cc_pair_2.groups = []
@@ -175,7 +179,7 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
     )
 
     cc_pair_2_group_name_expected = []
-    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+    if is_ee:
         cc_pair_2_group_name_expected = [user_group_2.name]
 
     DocumentManager.verify(
@@ -203,7 +207,7 @@ def test_connector_deletion(reset: None, vespa_client: vespa_fixture) -> None:
         user_performing_action=admin_user,
     )
 
-    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+    if is_ee:
         user_group_1.cc_pair_ids = []
         user_group_2.cc_pair_ids = [cc_pair_2.id]
 
@@ -226,6 +230,10 @@ def test_connector_deletion_for_overlapping_connectors(
     """
     user_group_1: DATestUserGroup
     user_group_2: DATestUserGroup
+
+    is_ee = (
+        os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
+    )
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -298,7 +306,7 @@ def test_connector_deletion_for_overlapping_connectors(
         doc_creating_user=admin_user,
     )
 
-    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+    if is_ee:
         # create a user group and attach it to connector 1
         user_group_1 = UserGroupManager.create(
             name="Test User Group 1",
@@ -373,7 +381,7 @@ def test_connector_deletion_for_overlapping_connectors(
     # verify the document is not in any document sets
     # verify the document is only in user group 2
     group_names_expected = []
-    if bool(os.getenv("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES")):
+    if is_ee:
         group_names_expected = [user_group_2.name]
 
     DocumentManager.verify(
