@@ -1,0 +1,10 @@
+[
+    {"ParameterKey": "EFSName", "ParameterValue": "onyx-efs"},
+    {"ParameterKey": "Environment", "ParameterValue": "production"},
+    {"ParameterKey": "VpcID", "ParameterValue": "vpc-0dac18b1f5913dbb9"},
+    {"ParameterKey": "SubnetId1", "ParameterValue": "subnet-0cf9acc0cbbeb2ec3"},
+    {"ParameterKey": "SubnetId2", "ParameterValue": "subnet-0bdbce01335e31546"},
+    {"ParameterKey": "SubnetId3", "ParameterValue": "subnet-0c1a6e490c2d05c12"},
+    {"ParameterKey": "SubnetId4", "ParameterValue": "subnet-0311d737212f2d06a"}
+
+]
