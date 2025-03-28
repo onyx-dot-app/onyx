@@ -2,8 +2,10 @@ import csv
 import json
 import os
 import sqlite3
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 
 from onyx.connectors.salesforce.utils import get_sqlite_db_path
 from onyx.connectors.salesforce.utils import SalesforceObject
@@ -16,6 +18,7 @@ logger = setup_logger()
 
 @contextmanager
 def get_db_connection(
+    directory: str,
     isolation_level: str | None = None,
 ) -> Iterator[sqlite3.Connection]:
     """Get a database connection with proper isolation level and error handling.
@@ -25,7 +28,7 @@ def get_db_connection(
             can be "IMMEDIATE" or "EXCLUSIVE" for more strict isolation.
     """
     # 60 second timeout for locks
-    conn = sqlite3.connect(get_sqlite_db_path(), timeout=60.0)
+    conn = sqlite3.connect(get_sqlite_db_path(directory), timeout=60.0)
 
     if isolation_level is not None:
         conn.isolation_level = isolation_level
@@ -38,17 +41,41 @@ def get_db_connection(
         conn.close()
 
 
-def init_db() -> None:
+def sqlite_log_stats(directory: str) -> None:
+    with get_db_connection(directory, "EXCLUSIVE") as conn:
+        cache_pages = conn.execute("PRAGMA cache_size").fetchone()[0]
+        page_size = conn.execute("PRAGMA page_size").fetchone()[0]
+        if cache_pages >= 0:
+            cache_bytes = cache_pages * page_size
+        else:
+            cache_bytes = abs(cache_pages * 1024)
+        logger.info(
+            f"SQLite stats: sqlite_version={sqlite3.sqlite_version} "
+            f"cache_pages={cache_pages} "
+            f"page_size={page_size} "
+            f"cache_bytes={cache_bytes}"
+        )
+
+
+def init_db(directory: str) -> None:
     """Initialize the SQLite database with required tables if they don't exist."""
     # Create database directory if it doesn't exist
-    os.makedirs(os.path.dirname(get_sqlite_db_path()), exist_ok=True)
+    start = time.monotonic()
 
-    with get_db_connection("EXCLUSIVE") as conn:
+    os.makedirs(os.path.dirname(get_sqlite_db_path(directory)), exist_ok=True)
+
+    with get_db_connection(directory, "EXCLUSIVE") as conn:
         cursor = conn.cursor()
 
-        db_exists = os.path.exists(get_sqlite_db_path())
+        db_exists = os.path.exists(get_sqlite_db_path(directory))
 
-        if not db_exists:
+        if db_exists:
+            file_path = Path(get_sqlite_db_path(directory))
+            file_size = file_path.stat().st_size
+            logger.info(f"init_db - found existing sqlite db: len={file_size}")
+        else:
+            # why is this only if the db doesn't exist?
+
             # Enable WAL mode for better concurrent access and write performance
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA synchronous=NORMAL")
@@ -143,16 +170,31 @@ def init_db() -> None:
             """,
         )
 
+        elapsed = time.monotonic() - start
+        logger.info(f"init_db - create tables and indices: elapsed={elapsed:.2f}")
+
         # Analyze tables to help query planner
-        cursor.execute("ANALYZE relationships")
-        cursor.execute("ANALYZE salesforce_objects")
-        cursor.execute("ANALYZE relationship_types")
-        cursor.execute("ANALYZE user_email_map")
+        # NOTE(rkuo): skip ANALYZE - it takes too long and we likely don't have
+        # complicated queries that need this
+        # start = time.monotonic()
+        # cursor.execute("ANALYZE relationships")
+        # cursor.execute("ANALYZE salesforce_objects")
+        # cursor.execute("ANALYZE relationship_types")
+        # cursor.execute("ANALYZE user_email_map")
+        # elapsed = time.monotonic() - start
+        # logger.info(f"init_db - analyze: elapsed={elapsed:.2f}")
 
         # If database already existed but user_email_map needs to be populated
+        start = time.monotonic()
         cursor.execute("SELECT COUNT(*) FROM user_email_map")
+        elapsed = time.monotonic() - start
+        logger.info(f"init_db - count user_email_map: elapsed={elapsed:.2f}")
+
+        start = time.monotonic()
         if cursor.fetchone()[0] == 0:
             _update_user_email_map(conn)
+        elapsed = time.monotonic() - start
+        logger.info(f"init_db - update_user_email_map: elapsed={elapsed:.2f}")
 
         conn.commit()
 
@@ -240,15 +282,15 @@ def _update_user_email_map(conn: sqlite3.Connection) -> None:
 
 
 def update_sf_db_with_csv(
+    directory: str,
     object_type: str,
     csv_download_path: str,
-    delete_csv_after_use: bool = True,
 ) -> list[str]:
     """Update the SF DB with a CSV file using SQLite storage."""
     updated_ids = []
 
     # Use IMMEDIATE to get a write lock at the start of the transaction
-    with get_db_connection("IMMEDIATE") as conn:
+    with get_db_connection(directory, "IMMEDIATE") as conn:
         cursor = conn.cursor()
 
         with open(csv_download_path, "r", newline="", encoding="utf-8") as f:
@@ -295,17 +337,12 @@ def update_sf_db_with_csv(
 
         conn.commit()
 
-    if delete_csv_after_use:
-        # Remove the csv file after it has been used
-        # to successfully update the db
-        os.remove(csv_download_path)
-
     return updated_ids
 
 
-def get_child_ids(parent_id: str) -> set[str]:
+def get_child_ids(directory: str, parent_id: str) -> set[str]:
     """Get all child IDs for a given parent ID."""
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
 
         # Force index usage with INDEXED BY
@@ -317,9 +354,9 @@ def get_child_ids(parent_id: str) -> set[str]:
     return child_ids
 
 
-def get_type_from_id(object_id: str) -> str | None:
+def get_type_from_id(directory: str, object_id: str) -> str | None:
     """Get the type of an object from its ID."""
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT object_type FROM salesforce_objects WHERE id = ?", (object_id,)
@@ -332,15 +369,15 @@ def get_type_from_id(object_id: str) -> str | None:
 
 
 def get_record(
-    object_id: str, object_type: str | None = None
+    directory: str, object_id: str, object_type: str | None = None
 ) -> SalesforceObject | None:
     """Retrieve the record and return it as a SalesforceObject."""
     if object_type is None:
-        object_type = get_type_from_id(object_id)
+        object_type = get_type_from_id(directory, object_id)
         if not object_type:
             return None
 
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT data FROM salesforce_objects WHERE id = ?", (object_id,))
         result = cursor.fetchone()
@@ -352,9 +389,9 @@ def get_record(
         return SalesforceObject(id=object_id, type=object_type, data=data)
 
 
-def find_ids_by_type(object_type: str) -> list[str]:
+def find_ids_by_type(directory: str, object_type: str) -> list[str]:
     """Find all object IDs for rows of the specified type."""
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM salesforce_objects WHERE object_type = ?", (object_type,)
@@ -363,6 +400,7 @@ def find_ids_by_type(object_type: str) -> list[str]:
 
 
 def get_affected_parent_ids_by_type(
+    directory: str,
     updated_ids: list[str],
     parent_types: list[str],
     batch_size: int = 500,
@@ -374,7 +412,7 @@ def get_affected_parent_ids_by_type(
     updated_ids_batches = batch_list(updated_ids, batch_size)
     updated_parent_ids: set[str] = set()
 
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
 
         for batch_ids in updated_ids_batches:
@@ -419,7 +457,7 @@ def get_affected_parent_ids_by_type(
                     yield parent_type, new_affected_ids
 
 
-def has_at_least_one_object_of_type(object_type: str) -> bool:
+def has_at_least_one_object_of_type(directory: str, object_type: str) -> bool:
     """Check if there is at least one object of the specified type in the database.
 
     Args:
@@ -428,7 +466,7 @@ def has_at_least_one_object_of_type(object_type: str) -> bool:
     Returns:
         bool: True if at least one object exists, False otherwise
     """
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT COUNT(*) FROM salesforce_objects WHERE object_type = ?",
@@ -443,7 +481,7 @@ def has_at_least_one_object_of_type(object_type: str) -> bool:
 NULL_ID_STRING = "N/A"
 
 
-def get_user_id_by_email(email: str) -> str | None:
+def get_user_id_by_email(directory: str, email: str) -> str | None:
     """Get the Salesforce User ID for a given email address.
 
     Args:
@@ -454,7 +492,7 @@ def get_user_id_by_email(email: str) -> str | None:
             - was_found: True if the email exists in the table, False if not found
             - user_id: The Salesforce User ID if exists, None otherwise
     """
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT user_id FROM user_email_map WHERE email = ?", (email,))
         result = cursor.fetchone()
@@ -463,10 +501,10 @@ def get_user_id_by_email(email: str) -> str | None:
         return result[0]
 
 
-def update_email_to_id_table(email: str, id: str | None) -> None:
+def update_email_to_id_table(directory: str, email: str, id: str | None) -> None:
     """Update the email to ID map table with a new email and ID."""
     id_to_use = id or NULL_ID_STRING
-    with get_db_connection() as conn:
+    with get_db_connection(directory) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "INSERT OR REPLACE INTO user_email_map (email, user_id) VALUES (?, ?)",

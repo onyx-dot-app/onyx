@@ -34,7 +34,7 @@ def confluence_connector(space: str) -> ConfluenceConnector:
     return connector
 
 
-@pytest.mark.parametrize("space", [os.environ["CONFLUENCE_TEST_SPACE"]])
+@pytest.mark.parametrize("space", [os.getenv("CONFLUENCE_TEST_SPACE") or "DailyConne"])
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,

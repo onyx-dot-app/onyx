@@ -5,7 +5,10 @@ from ee.onyx.external_permissions.salesforce.postprocessing import (
 )
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.context.search.models import InferenceChunk
+
+SQLITE_DIR = BASE_DATA_PATH
 
 
 def create_test_chunk(
@@ -37,6 +40,7 @@ def create_test_chunk(
 
 def test_validate_salesforce_access_single_object() -> None:
     """Test filtering when chunk has a single Salesforce object reference"""
+
     section = "This is a test document about a Salesforce object."
     test_content = section
     test_chunk = create_test_chunk(
@@ -48,6 +52,7 @@ def test_validate_salesforce_access_single_object() -> None:
 
     # Test when user has access
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={"object1": True},
@@ -57,6 +62,7 @@ def test_validate_salesforce_access_single_object() -> None:
 
     # Test when user doesn't have access
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={"object1": False},
@@ -87,6 +93,7 @@ def test_validate_salesforce_access_multiple_objects() -> None:
 
     # Test when user has access to all objects
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={
@@ -100,6 +107,7 @@ def test_validate_salesforce_access_multiple_objects() -> None:
 
     # Test when user has access to some objects
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={
@@ -115,6 +123,7 @@ def test_validate_salesforce_access_multiple_objects() -> None:
 
     # Test when user has no access
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={
@@ -146,6 +155,7 @@ def test_validate_salesforce_access_multiple_chunks() -> None:
 
     # Test mixed access
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[chunk1, chunk2],
         user_email="test@example.com",
         access_map={
@@ -169,6 +179,7 @@ def test_validate_salesforce_access_no_source_links() -> None:
     )
 
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={},
@@ -188,6 +199,7 @@ def test_validate_salesforce_access_blurb_update() -> None:
     )
 
     filtered_chunks = censor_salesforce_chunks(
+        SQLITE_DIR,
         chunks=[test_chunk],
         user_email="test@example.com",
         access_map={"object1": True},

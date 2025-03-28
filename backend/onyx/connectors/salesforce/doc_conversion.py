@@ -124,13 +124,14 @@ def _extract_section(salesforce_object: SalesforceObject, base_url: str) -> Text
 
 
 def _extract_primary_owners(
+    directory: str,
     sf_object: SalesforceObject,
 ) -> list[BasicExpertInfo] | None:
     object_dict = sf_object.data
     if not (last_modified_by_id := object_dict.get("LastModifiedById")):
         logger.warning(f"No LastModifiedById found for {sf_object.id}")
         return None
-    if not (last_modified_by := get_record(last_modified_by_id)):
+    if not (last_modified_by := get_record(directory, last_modified_by_id)):
         logger.warning(f"No LastModifiedBy found for {last_modified_by_id}")
         return None
 
@@ -159,6 +160,7 @@ def _extract_primary_owners(
 
 
 def convert_sf_object_to_doc(
+    directory: str,
     sf_object: SalesforceObject,
     sf_instance: str,
 ) -> Document:
@@ -170,8 +172,8 @@ def convert_sf_object_to_doc(
     extracted_semantic_identifier = object_dict.get("Name", "Unknown Object")
 
     sections = [_extract_section(sf_object, base_url)]
-    for id in get_child_ids(sf_object.id):
-        if not (child_object := get_record(id)):
+    for id in get_child_ids(directory, sf_object.id):
+        if not (child_object := get_record(directory, id)):
             continue
         sections.append(_extract_section(child_object, base_url))
 
@@ -181,7 +183,7 @@ def convert_sf_object_to_doc(
         source=DocumentSource.SALESFORCE,
         semantic_identifier=extracted_semantic_identifier,
         doc_updated_at=extracted_doc_updated_at,
-        primary_owners=_extract_primary_owners(sf_object),
+        primary_owners=_extract_primary_owners(directory, sf_object),
         metadata={},
     )
     return doc

@@ -202,8 +202,8 @@ class EmbeddingModel:
             end_time = time.time()
 
             processing_time = end_time - start_time
-            logger.info(
-                f"Batch {batch_idx} processing time: {processing_time:.2f} seconds"
+            logger.debug(
+                f"EmbeddingModel.process_batch: Batch {batch_idx} processing time: {processing_time:.2f} seconds"
             )
 
             return batch_idx, response.embeddings
