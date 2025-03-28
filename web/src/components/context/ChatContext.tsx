@@ -20,6 +20,7 @@ interface ChatContextProps {
   availableSources: ValidSources[];
   ccPairs: CCPairBasicInfo[];
   tags: Tag[];
+  authors?: string[];
   documentSets: DocumentSet[];
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
@@ -57,6 +58,7 @@ export const ChatProvider: React.FC<{
   const [inputPrompts, setInputPrompts] = useState(value?.inputPrompts || []);
   const [chatSessions, setChatSessions] = useState(value?.chatSessions || []);
   const [folders, setFolders] = useState(value?.folders || []);
+  const [authors, setAuthors] = useState(value?.authors || []);
 
   const reorderFolders = (displayPriorityMap: Record<number, number>) => {
     setFolders(
@@ -113,6 +115,7 @@ export const ChatProvider: React.FC<{
         reorderFolders,
         refreshChatSessions,
         refreshFolders,
+        authors,
       }}
     >
       {children}

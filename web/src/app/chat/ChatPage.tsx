@@ -169,6 +169,8 @@ export function ChatPage({
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const proSearchOverriden = searchParams.get("agentic");
+
   const {
     chatSessions,
     ccPairs,
@@ -178,8 +180,10 @@ export function ChatPage({
     folders,
     shouldShowWelcomeModal,
     refreshChatSessions,
-    proSearchToggled,
+    proSearchToggled: proSearchToggledFromContext,
   } = useChatContext();
+
+  const proSearchToggled = proSearchOverriden || proSearchToggledFromContext;
 
   const {
     selectedFiles,
@@ -322,10 +326,6 @@ export function ChatPage({
             (assistant) => assistant.id === defaultAssistantId
           )
         : undefined
-  );
-  // Gather default temperature settings
-  const search_param_temperature = searchParams.get(
-    SEARCH_PARAM_NAMES.TEMPERATURE
   );
 
   const setSelectedAssistantFromId = (assistantId: number) => {
