@@ -75,7 +75,7 @@ class HighspotClient:
 
         self.key = key
         self.secret = secret
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/") + "/"
         self.timeout = timeout
 
         # Set up session with retry logic
