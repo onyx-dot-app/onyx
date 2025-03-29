@@ -301,6 +301,10 @@ def prune_sections(
 
 
 def _merge_doc_chunks(chunks: list[InferenceChunk]) -> InferenceSection:
+    assert (
+        len(set([chunk.document_id for chunk in chunks])) == 1
+    ), "One distinct document must be passed into merge_doc_chunks"
+
     # Assuming there are no duplicates by this point
     sorted_chunks = sorted(chunks, key=lambda x: x.chunk_id)
 

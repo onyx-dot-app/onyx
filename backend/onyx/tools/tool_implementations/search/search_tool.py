@@ -353,7 +353,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
         yield from yield_search_responses(
             query=query,
-            get_retrieved_sections=lambda: search_pipeline.retrieved_sections,
+            # give back the merged sections to prevent duplicate docs from appearing in the UI
+            get_retrieved_sections=lambda: search_pipeline.merged_retrieved_sections,
             get_final_context_sections=lambda: search_pipeline.final_context_sections,
             search_query_info=search_query_info,
             get_section_relevance=lambda: search_pipeline.section_relevance,

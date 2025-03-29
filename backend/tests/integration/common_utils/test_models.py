@@ -10,6 +10,7 @@ from pydantic import Field
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import QAFeedbackType
 from onyx.context.search.enums import RecencyBiasSetting
+from onyx.context.search.models import SavedSearchDoc
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import IndexAttemptSnapshot
@@ -157,7 +158,7 @@ class StreamedResponse(BaseModel):
     full_message: str = ""
     rephrased_query: str | None = None
     tool_name: str | None = None
-    top_documents: list[dict[str, Any]] | None = None
+    top_documents: list[SavedSearchDoc] | None = None
     relevance_summaries: list[dict[str, Any]] | None = None
     tool_result: Any | None = None
     user: str | None = None
