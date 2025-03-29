@@ -211,7 +211,7 @@ def _apply_pruning(
             break
 
     try:
-        logger.debug(f"Number of documents after pruning: {ind}")
+        logger.debug(f"Number of documents after pruning: {ind + 1}")
         logger.debug("Number of tokens per document (pruned):")
         for x, y in section_idx_token_count.items():
             logger.debug(f"{x + 1}: {y}")
