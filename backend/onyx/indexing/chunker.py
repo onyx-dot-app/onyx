@@ -224,27 +224,6 @@ class Chunker:
         )
         chunks_list.append(new_chunk)
 
-    def _chunk_document(
-        self,
-        document: IndexingDocument,
-        title_prefix: str,
-        metadata_suffix_semantic: str,
-        metadata_suffix_keyword: str,
-        content_token_limit: int,
-    ) -> list[DocAwareChunk]:
-        """
-        Legacy method for backward compatibility.
-        Calls _chunk_document_with_sections with document.sections.
-        """
-        return self._chunk_document_with_sections(
-            document,
-            document.processed_sections,
-            title_prefix,
-            metadata_suffix_semantic,
-            metadata_suffix_keyword,
-            content_token_limit,
-        )
-
     def _chunk_document_with_sections(
         self,
         document: IndexingDocument,
@@ -264,7 +243,7 @@ class Chunker:
 
         for section_idx, section in enumerate(sections):
             # Get section text and other attributes
-            section_text = clean_text(section.text or "")
+            section_text = clean_text(str(section.text or ""))
             section_link_text = section.link or ""
             image_url = section.image_file_name
 

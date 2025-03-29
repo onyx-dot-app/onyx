@@ -439,7 +439,7 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                 **document.dict(),
                 processed_sections=[
                     Section(
-                        text=section.text if isinstance(section, TextSection) else None,
+                        text=section.text if isinstance(section, TextSection) else "",
                         link=section.link,
                         image_file_name=section.image_file_name
                         if isinstance(section, ImageSection)
@@ -459,11 +459,11 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         for section in document.sections:
             # For ImageSection, process and create base Section with both text and image_file_name
             if isinstance(section, ImageSection):
-                # Default section with image path preserved
+                # Default section with image path preserved - ensure text is always a string
                 processed_section = Section(
                     link=section.link,
                     image_file_name=section.image_file_name,
-                    text=None,  # Will be populated if summarization succeeds
+                    text="",  # Initialize with empty string
                 )
 
                 # Try to get image summary
@@ -506,13 +506,21 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
             # For TextSection, create a base Section with text and link
             elif isinstance(section, TextSection):
                 processed_section = Section(
-                    text=section.text, link=section.link, image_file_name=None
+                    text=section.text or "",  # Ensure text is always a string, not None
+                    link=section.link,
+                    image_file_name=None,
                 )
                 processed_sections.append(processed_section)
 
-            # If it's already a base Section (unlikely), just append it
+            # If it's already a base Section (unlikely), just append it with text validation
             else:
-                processed_sections.append(section)
+                # Ensure text is always a string
+                processed_section = Section(
+                    text=section.text if section.text is not None else "",
+                    link=section.link,
+                    image_file_name=section.image_file_name,
+                )
+                processed_sections.append(processed_section)
 
         # Create IndexingDocument with original sections and processed_sections
         indexed_document = IndexingDocument(
