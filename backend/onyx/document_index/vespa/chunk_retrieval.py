@@ -345,6 +345,19 @@ def query_vespa(
     filtered_hits = [hit for hit in hits if hit["fields"].get(CONTENT) is not None]
 
     inference_chunks = [_vespa_hit_to_inference_chunk(hit) for hit in filtered_hits]
+
+    try:
+        num_retrieved_inference_chunks = len(inference_chunks)
+        num_retrieved_document_ids = len(
+            set([chunk.document_id for chunk in inference_chunks])
+        )
+        logger.debug(
+            f"Retrieved {num_retrieved_inference_chunks} inference chunks for {num_retrieved_document_ids} documents"
+        )
+    except Exception as e:
+        # Debug logging only, should not fail the retrieval
+        logger.error(f"Error logging retrieval statistics: {e}")
+
     # Good Debugging Spot
     return inference_chunks
 
