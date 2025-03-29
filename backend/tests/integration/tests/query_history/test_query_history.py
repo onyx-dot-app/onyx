@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -63,6 +64,10 @@ def setup_chat_session(reset: None) -> tuple[DATestUser, str]:
     return admin_user, str(chat_session.id)
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Chat history tests are enterprise only",
+)
 def test_chat_history_endpoints(
     reset: None, setup_chat_session: tuple[DATestUser, str]
 ) -> None:
@@ -116,6 +121,10 @@ def test_chat_history_endpoints(
     assert len(history_response.items) == 0
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="Chat history tests are enterprise only",
+)
 def test_chat_history_csv_export(
     reset: None, setup_chat_session: tuple[DATestUser, str]
 ) -> None:
