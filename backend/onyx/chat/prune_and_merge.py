@@ -380,8 +380,8 @@ def _merge_sections(sections: list[InferenceSection]) -> list[InferenceSection]:
             set([section.center_chunk.document_id for section in new_sections])
         )
         logger.debug(
-            f"Merged {num_merged_sections} sections for {num_merged_document_ids} documents "
-            + f"originally from {num_original_sections} sections for {num_original_document_ids} documents"
+            f"Merged {num_original_sections} sections from {num_original_document_ids} documents "
+            f"into {num_merged_sections} new sections in {num_merged_document_ids} documents"
         )
 
         logger.debug("Number of chunks per document (new ranking):")
