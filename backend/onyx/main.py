@@ -391,6 +391,11 @@ def get_application() -> FastAPI:
             prefix="/auth",
         )
 
+    if (
+        AUTH_TYPE == AuthType.CLOUD
+        or AUTH_TYPE == AuthType.BASIC
+        or AUTH_TYPE == AuthType.GOOGLE_OAUTH
+    ):
         # Add refresh token endpoint for OAuth as well
         include_auth_router_with_prefix(
             application,
