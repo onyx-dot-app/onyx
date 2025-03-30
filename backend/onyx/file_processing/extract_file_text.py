@@ -7,6 +7,8 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import Sequence
 from email.parser import Parser as EmailParser
+from enum import auto
+from enum import IntFlag
 from io import BytesIO
 from pathlib import Path
 from typing import Any
@@ -35,7 +37,7 @@ logger = setup_logger()
 
 TEXT_SECTION_SEPARATOR = "\n\n"
 
-PLAIN_TEXT_FILE_EXTENSIONS = [
+ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [
     ".txt",
     ".md",
     ".mdx",
@@ -49,7 +51,7 @@ PLAIN_TEXT_FILE_EXTENSIONS = [
     ".yaml",
 ]
 
-VALID_FILE_EXTENSIONS = PLAIN_TEXT_FILE_EXTENSIONS + [
+ACCEPTED_DOCUMENT_FILE_EXTENSIONS = [
     ".pdf",
     ".docx",
     ".pptx",
@@ -57,11 +59,20 @@ VALID_FILE_EXTENSIONS = PLAIN_TEXT_FILE_EXTENSIONS + [
     ".eml",
     ".epub",
     ".html",
+]
+
+ACCEPTED_IMAGE_FILE_EXTENSIONS = [
     ".png",
     ".jpg",
     ".jpeg",
     ".webp",
 ]
+
+ALL_ACCEPTED_FILE_EXTENSIONS = (
+    ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
+    + ACCEPTED_DOCUMENT_FILE_EXTENSIONS
+    + ACCEPTED_IMAGE_FILE_EXTENSIONS
+)
 
 IMAGE_MEDIA_TYPES = [
     "image/png",
@@ -70,8 +81,15 @@ IMAGE_MEDIA_TYPES = [
 ]
 
 
+class OnyxExtensionType(IntFlag):
+    Plain = auto()
+    Document = auto()
+    Multimedia = auto()
+    All = Plain | Document | Multimedia
+
+
 def is_text_file_extension(file_name: str) -> bool:
-    return any(file_name.endswith(ext) for ext in PLAIN_TEXT_FILE_EXTENSIONS)
+    return any(file_name.endswith(ext) for ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS)
 
 
 def get_file_ext(file_path_or_name: str | Path) -> str:
@@ -83,8 +101,20 @@ def is_valid_media_type(media_type: str) -> bool:
     return media_type in IMAGE_MEDIA_TYPES
 
 
-def is_valid_file_ext(ext: str) -> bool:
-    return ext in VALID_FILE_EXTENSIONS
+def is_accepted_file_ext(ext: str, ext_type: OnyxExtensionType) -> bool:
+    if ext_type & OnyxExtensionType.Plain:
+        if ext in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS:
+            return True
+
+    if ext_type & OnyxExtensionType.Document:
+        if ext in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
+            return True
+
+    if ext_type & OnyxExtensionType.Multimedia:
+        if ext in ACCEPTED_IMAGE_FILE_EXTENSIONS:
+            return True
+
+    return False
 
 
 def is_text_file(file: IO[bytes]) -> bool:
@@ -382,6 +412,9 @@ def extract_file_text(
     """
     Legacy function that returns *only text*, ignoring embedded images.
     For backward-compatibility in code that only wants text.
+
+    NOTE: Ignoring seems to be defined as returning an empty string for files it can't
+    handle (such as images).
     """
     extension_to_function: dict[str, Callable[[IO[Any]], str]] = {
         ".pdf": pdf_to_text,
@@ -405,7 +438,9 @@ def extract_file_text(
         if extension is None:
             extension = get_file_ext(file_name)
 
-        if is_valid_file_ext(extension):
+        if is_accepted_file_ext(
+            extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+        ):
             func = extension_to_function.get(extension, file_io_to_text)
             file.seek(0)
             return func(file)

@@ -340,6 +340,12 @@ class SearchPipeline:
         return self._retrieved_sections
 
     @property
+    def merged_retrieved_sections(self) -> list[InferenceSection]:
+        """Should be used to display in the UI in order to prevent displaying
+        multiple sections for the same document as separate "documents"."""
+        return _merge_sections(sections=self.retrieved_sections)
+
+    @property
     def reranked_sections(self) -> list[InferenceSection]:
         """Reranking is always done at the chunk level since section merging could create arbitrarily
         long sections which could be:
@@ -415,6 +421,10 @@ class SearchPipeline:
                 raise ValueError(
                     "Basic search evaluation operation called while DISABLE_LLM_DOC_RELEVANCE is enabled."
                 )
+            # NOTE: final_context_sections must be accessed before accessing self._postprocessing_generator
+            # since the property sets the generator. DO NOT REMOVE.
+            _ = self.final_context_sections
+
             self._section_relevance = next(
                 cast(
                     Iterator[list[SectionRelevancePiece]],

@@ -1,10 +1,19 @@
 import io
+from typing import cast
 
 from PIL import Image
 
+from onyx.background.celery.tasks.beat_schedule import CLOUD_BEAT_MULTIPLIER_DEFAULT
+from onyx.background.celery.tasks.beat_schedule import (
+    CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT,
+)
+from onyx.configs.constants import CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
+from onyx.configs.constants import ONYX_CLOUD_REDIS_RUNTIME
+from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import ONYX_EMAILABLE_LOGO_MAX_DIM
 from onyx.db.engine import get_session_with_shared_schema
 from onyx.file_store.file_store import PostgresBackedFileStore
+from onyx.redis.redis_pool import get_redis_replica_client
 from onyx.utils.file import FileWithMimeType
 from onyx.utils.file import OnyxStaticFileManager
 from onyx.utils.variable_functionality import (
@@ -87,3 +96,72 @@ class OnyxRuntime:
         )
 
         return OnyxRuntime._get_with_static_fallback(db_filename, STATIC_FILENAME)
+
+    @staticmethod
+    def get_beat_multiplier() -> float:
+        """the beat multiplier is used to scale up or down the frequency of certain beat
+        tasks in the cloud. It has a significant effect on load and is useful to adjust
+        in real time."""
+
+        beat_multiplier: float = CLOUD_BEAT_MULTIPLIER_DEFAULT
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+
+        beat_multiplier_raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:beat_multiplier")
+        if beat_multiplier_raw is not None:
+            try:
+                beat_multiplier_bytes = cast(bytes, beat_multiplier_raw)
+                beat_multiplier = float(beat_multiplier_bytes.decode())
+            except ValueError:
+                pass
+
+        if beat_multiplier <= 0.0:
+            return 1.0
+
+        return beat_multiplier
+
+    @staticmethod
+    def get_doc_permission_sync_multiplier() -> float:
+        """Permission syncs are a significant source of load / queueing in the cloud."""
+
+        value: float = CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+
+        value_raw = r.get(f"{ONYX_CLOUD_REDIS_RUNTIME}:doc_permission_sync_multiplier")
+        if value_raw is not None:
+            try:
+                value_bytes = cast(bytes, value_raw)
+                value = float(value_bytes.decode())
+            except ValueError:
+                pass
+
+        if value <= 0.0:
+            return 1.0
+
+        return value
+
+    @staticmethod
+    def get_build_fence_lookup_table_interval() -> int:
+        """We maintain an active fence table to make lookups of existing fences efficient.
+        However, reconstructing the table is expensive, so adjusting it in realtime is useful.
+        """
+
+        interval: int = CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
+
+        r = get_redis_replica_client(tenant_id=ONYX_CLOUD_TENANT_ID)
+
+        interval_raw = r.get(
+            f"{ONYX_CLOUD_REDIS_RUNTIME}:build_fence_lookup_table_interval"
+        )
+        if interval_raw is not None:
+            try:
+                interval_bytes = cast(bytes, interval_raw)
+                interval = int(interval_bytes.decode())
+            except ValueError:
+                pass
+
+        if interval <= 0.0:
+            return CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT
+
+        return interval

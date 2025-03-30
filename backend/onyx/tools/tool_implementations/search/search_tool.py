@@ -12,7 +12,6 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import DocumentPruningConfig
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
@@ -42,9 +41,6 @@ from onyx.tools.models import SearchQueryInfo
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.search.search_utils import (
-    context_from_inference_section,
-)
 from onyx.tools.tool_implementations.search.search_utils import llm_doc_to_dict
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     build_next_prompt_for_search_like_tool,
@@ -58,7 +54,6 @@ from onyx.utils.special_types import JSON_ro
 logger = setup_logger()
 
 SEARCH_RESPONSE_SUMMARY_ID = "search_response_summary"
-SEARCH_DOC_CONTENT_ID = "search_doc_content"
 SECTION_RELEVANCE_LIST_ID = "section_relevance_list"
 SEARCH_EVALUATION_ID = "llm_doc_eval"
 QUERY_FIELD = "query"
@@ -357,13 +352,13 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             recency_bias_multiplier=search_pipeline.search_query.recency_bias_multiplier,
         )
         yield from yield_search_responses(
-            query,
-            lambda: search_pipeline.retrieved_sections,
-            lambda: search_pipeline.reranked_sections,
-            lambda: search_pipeline.final_context_sections,
-            search_query_info,
-            lambda: search_pipeline.section_relevance,
-            self,
+            query=query,
+            # give back the merged sections to prevent duplicate docs from appearing in the UI
+            get_retrieved_sections=lambda: search_pipeline.merged_retrieved_sections,
+            get_final_context_sections=lambda: search_pipeline.final_context_sections,
+            search_query_info=search_query_info,
+            get_section_relevance=lambda: search_pipeline.section_relevance,
+            search_tool=self,
         )
 
     def final_result(self, *args: ToolResponse) -> JSON_ro:
@@ -405,7 +400,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 def yield_search_responses(
     query: str,
     get_retrieved_sections: Callable[[], list[InferenceSection]],
-    get_reranked_sections: Callable[[], list[InferenceSection]],
     get_final_context_sections: Callable[[], list[InferenceSection]],
     search_query_info: SearchQueryInfo,
     get_section_relevance: Callable[[], list[SectionRelevancePiece] | None],
@@ -420,16 +414,6 @@ def yield_search_responses(
             predicted_search=search_query_info.predicted_search,
             final_filters=search_query_info.final_filters,
             recency_bias_multiplier=search_query_info.recency_bias_multiplier,
-        ),
-    )
-
-    yield ToolResponse(
-        id=SEARCH_DOC_CONTENT_ID,
-        response=OnyxContexts(
-            contexts=[
-                context_from_inference_section(section)
-                for section in get_reranked_sections()
-            ]
         ),
     )
 

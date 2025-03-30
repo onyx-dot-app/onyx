@@ -22,8 +22,9 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.extract_file_text import is_valid_file_ext
+from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import load_files_from_zip
+from onyx.file_processing.extract_file_text import OnyxExtensionType
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
@@ -51,7 +52,7 @@ def _read_files_and_metadata(
             file_content, ignore_dirs=True
         ):
             yield os.path.join(directory_path, file_info.filename), subfile, metadata
-    elif is_valid_file_ext(extension):
+    elif is_accepted_file_ext(extension, OnyxExtensionType.All):
         yield file_name, file_content, metadata
     else:
         logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
@@ -122,7 +123,7 @@ def _process_file(
         logger.warning(f"No file record found for '{file_name}' in PG; skipping.")
         return []
 
-    if not is_valid_file_ext(extension):
+    if not is_accepted_file_ext(extension, OnyxExtensionType.All):
         logger.warning(
             f"Skipping file '{file_name}' with unrecognized extension '{extension}'"
         )

@@ -29,7 +29,6 @@ from onyx.chat.models import LLMRelevanceFilterResponse
 from onyx.chat.models import MessageResponseIDInfo
 from onyx.chat.models import MessageSpecificCitations
 from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import QADocsResponse
 from onyx.chat.models import RefinedAnswerImprovement
@@ -73,6 +72,7 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.chat import reserve_message_id
 from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
+from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
@@ -130,7 +130,6 @@ from onyx.tools.tool_implementations.internet_search.internet_search_tool import
 from onyx.tools.tool_implementations.search.search_tool import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
-from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -299,7 +298,6 @@ def _get_force_search_settings(
 ChatPacket = (
     StreamingError
     | QADocsResponse
-    | OnyxContexts
     | LLMRelevanceFilterResponse
     | FinalUsedContextDocsResponse
     | ChatMessageDetail
@@ -918,8 +916,6 @@ def stream_chat_message_objects(
                             response=custom_tool_response.tool_result,
                             tool_name=custom_tool_response.tool_name,
                         )
-                elif packet.id == SEARCH_DOC_CONTENT_ID and include_contexts:
-                    yield cast(OnyxContexts, packet.response)
 
             elif isinstance(packet, StreamStopInfo):
                 if packet.stop_reason == StreamStopReason.FINISHED:
@@ -1069,6 +1065,8 @@ def stream_chat_message_objects(
             prev_message = next_answer_message
 
         logger.debug("Committing messages")
+        # Explicitly update the timestamp on the chat session
+        update_chat_session_updated_at_timestamp(chat_session_id, db_session)
         db_session.commit()  # actually save user / assistant message
 
         yield AgenticMessageResponseIDInfo(agentic_message_ids=agentic_message_ids)

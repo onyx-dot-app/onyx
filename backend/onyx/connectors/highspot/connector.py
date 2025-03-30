@@ -20,8 +20,8 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
+from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.extract_file_text import VALID_FILE_EXTENSIONS
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -298,7 +298,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
 
             elif (
                 is_valid_format
-                and file_extension in VALID_FILE_EXTENSIONS
+                and file_extension in ALL_ACCEPTED_FILE_EXTENSIONS
                 and can_download
             ):
                 # For documents, try to get the text content
