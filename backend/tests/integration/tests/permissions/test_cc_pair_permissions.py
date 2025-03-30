@@ -19,7 +19,7 @@ from tests.integration.common_utils.managers.user_group import UserGroupManager
 
 @pytest.mark.skipif(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
-    reason="Curator anad User Group tests are enterprise only",
+    reason="Curator and User Group tests are enterprise only",
 )
 def test_cc_pair_permissions(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
