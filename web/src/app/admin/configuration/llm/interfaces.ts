@@ -36,6 +36,12 @@ export interface WellKnownLLMProviderDescriptor {
   groups: number[];
 }
 
+export interface LLMModelDescriptor {
+  modelName: string;
+  provider: string;
+  maxTokens: number;
+}
+
 export interface LLMProvider {
   name: string;
   provider: string;
@@ -49,6 +55,7 @@ export interface LLMProvider {
   groups: number[];
   display_model_names: string[] | null;
   deployment_name: string | null;
+  model_token_limits: { [key: string]: number } | null;
   default_vision_model: string | null;
   is_default_vision_provider: boolean | null;
 }
@@ -74,6 +81,7 @@ export interface LLMProviderDescriptor {
   is_public: boolean;
   groups: number[];
   display_model_names: string[] | null;
+  model_token_limits: { [key: string]: number } | null;
 }
 
 export const getProviderIcon = (providerName: string, modelName?: string) => {

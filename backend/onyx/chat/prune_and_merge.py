@@ -153,6 +153,8 @@ def _apply_pruning(
     # remove docs that are explicitly marked as not for QA
     sections = _remove_sections_to_ignore(sections=sections)
 
+    section_idx_token_count: dict[int, int] = {}
+
     final_section_ind = None
     total_tokens = 0
     for ind, section in enumerate(sections):
@@ -202,9 +204,19 @@ def _apply_pruning(
             section_token_count = DOC_EMBEDDING_CONTEXT_SIZE
 
         total_tokens += section_token_count
+        section_idx_token_count[ind] = section_token_count
+
         if total_tokens > token_limit:
             final_section_ind = ind
             break
+
+    try:
+        logger.debug(f"Number of documents after pruning: {ind + 1}")
+        logger.debug("Number of tokens per document (pruned):")
+        for x, y in section_idx_token_count.items():
+            logger.debug(f"{x + 1}: {y}")
+    except Exception as e:
+        logger.error(f"Error logging prune statistics: {e}")
 
     if final_section_ind is not None:
         if is_manually_selected_docs or use_sections:
@@ -301,6 +313,10 @@ def prune_sections(
 
 
 def _merge_doc_chunks(chunks: list[InferenceChunk]) -> InferenceSection:
+    assert (
+        len(set([chunk.document_id for chunk in chunks])) == 1
+    ), "One distinct document must be passed into merge_doc_chunks"
+
     # Assuming there are no duplicates by this point
     sorted_chunks = sorted(chunks, key=lambda x: x.chunk_id)
 
@@ -357,6 +373,26 @@ def _merge_sections(sections: list[InferenceSection]) -> list[InferenceSection]:
         ),
         reverse=True,
     )
+
+    try:
+        num_original_sections = len(sections)
+        num_original_document_ids = len(
+            set([section.center_chunk.document_id for section in sections])
+        )
+        num_merged_sections = len(new_sections)
+        num_merged_document_ids = len(
+            set([section.center_chunk.document_id for section in new_sections])
+        )
+        logger.debug(
+            f"Merged {num_original_sections} sections from {num_original_document_ids} documents "
+            f"into {num_merged_sections} new sections in {num_merged_document_ids} documents"
+        )
+
+        logger.debug("Number of chunks per document (new ranking):")
+        for x, y in enumerate(new_sections):
+            logger.debug(f"{x + 1}: {len(y.chunks)}")
+    except Exception as e:
+        logger.error(f"Error logging merge statistics: {e}")
 
     return new_sections
 

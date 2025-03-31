@@ -144,6 +144,15 @@ function Main() {
                     </div>
 
                     <div>
+                      <Text className="font-semibold">Contextual RAG</Text>
+                      <Text className="text-text-700">
+                        {searchSettings.enable_contextual_rag
+                          ? "Enabled"
+                          : "Disabled"}
+                      </Text>
+                    </div>
+
+                    <div>
                       <Text className="font-semibold">
                         Disable Reranking for Streaming
                       </Text>

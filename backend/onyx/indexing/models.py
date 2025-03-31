@@ -49,6 +49,15 @@ class DocAwareChunk(BaseChunk):
     metadata_suffix_semantic: str
     metadata_suffix_keyword: str
 
+    # This is the number of tokens reserved for contextual RAG
+    # in the chunk. doc_summary and chunk_context conbined should
+    # contain at most this many tokens.
+    contextual_rag_reserved_tokens: int
+    # This is the summary for the document generated for contextual RAG
+    doc_summary: str
+    # This is the context for this chunk generated for contextual RAG
+    chunk_context: str
+
     mini_chunk_texts: list[str] | None
 
     large_chunk_id: int | None
@@ -91,6 +100,8 @@ class DocMetadataAwareIndexChunk(IndexChunk):
     tenant_id: str
     access: "DocumentAccess"
     document_sets: set[str]
+    user_file: int | None
+    user_folder: int | None
     boost: int
     aggregated_chunk_boost_factor: float
 
@@ -100,6 +111,8 @@ class DocMetadataAwareIndexChunk(IndexChunk):
         index_chunk: IndexChunk,
         access: "DocumentAccess",
         document_sets: set[str],
+        user_file: int | None,
+        user_folder: int | None,
         boost: int,
         aggregated_chunk_boost_factor: float,
         tenant_id: str,
@@ -109,6 +122,8 @@ class DocMetadataAwareIndexChunk(IndexChunk):
             **index_chunk_data,
             access=access,
             document_sets=document_sets,
+            user_file=user_file,
+            user_folder=user_folder,
             boost=boost,
             aggregated_chunk_boost_factor=aggregated_chunk_boost_factor,
             tenant_id=tenant_id,
@@ -154,6 +169,9 @@ class IndexingSetting(EmbeddingModelDetail):
     reduced_dimension: int | None = None
 
     background_reindex_enabled: bool = True
+    enable_contextual_rag: bool
+    contextual_rag_llm_name: str | None = None
+    contextual_rag_llm_provider: str | None = None
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
@@ -178,6 +196,7 @@ class IndexingSetting(EmbeddingModelDetail):
             embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
             background_reindex_enabled=search_settings.background_reindex_enabled,
+            enable_contextual_rag=search_settings.enable_contextual_rag,
         )
 
 

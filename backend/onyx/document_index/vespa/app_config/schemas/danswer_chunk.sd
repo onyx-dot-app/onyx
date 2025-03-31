@@ -98,6 +98,12 @@ schema DANSWER_CHUNK_NAME {
         field metadata type string {
             indexing: summary | attribute
         }
+        field chunk_context type string {
+            indexing: summary | attribute
+        }
+        field doc_summary type string {
+            indexing: summary | attribute
+        }
         field metadata_suffix type string {
             indexing: summary | attribute
         }
@@ -114,8 +120,18 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search
-        }
+        } 
         field document_sets type weightedset<string> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field user_file type int {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field user_folder type int {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search

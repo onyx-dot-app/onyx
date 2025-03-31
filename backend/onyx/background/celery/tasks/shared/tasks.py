@@ -164,6 +164,7 @@ def document_by_cc_pair_cleanup_task(
                     tenant_id=tenant_id,
                     chunk_count=doc.chunk_count,
                     fields=fields,
+                    user_fields=None,
                 )
 
                 # there are still other cc_pair references to the doc, so just resync to Vespa

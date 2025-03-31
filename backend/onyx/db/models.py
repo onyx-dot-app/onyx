@@ -212,6 +212,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
+    folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder", back_populates="user"
+    )
+    files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
 
     @validates("email")
     def validate_email(self, key: str, value: str) -> str:
@@ -419,6 +423,7 @@ class ConnectorCredentialPair(Base):
     """
 
     __tablename__ = "connector_credential_pair"
+    is_user_file: Mapped[bool] = mapped_column(Boolean, default=False)
     # NOTE: this `id` column has to use `Sequence` instead of `autoincrement=True`
     # due to some SQLAlchemy quirks + this not being a primary key column
     id: Mapped[int] = mapped_column(
@@ -503,6 +508,10 @@ class ConnectorCredentialPair(Base):
         "User",
         back_populates="cc_pairs",
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
+    )
+
+    user_file: Mapped["UserFile"] = relationship(
+        "UserFile", back_populates="cc_pair", uselist=False
     )
 
     background_errors: Mapped[list["BackgroundError"]] = relationship(
@@ -790,6 +799,15 @@ class SearchSettings(Base):
 
     # Mini and Large Chunks (large chunk also checks for model max context)
     multipass_indexing: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Contextual RAG
+    enable_contextual_rag: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Contextual RAG LLM
+    contextual_rag_llm_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    contextual_rag_llm_provider: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
 
     multilingual_expansion: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), default=[]
@@ -1799,6 +1817,17 @@ class Persona(Base):
         secondary="persona__user_group",
         viewonly=True,
     )
+    # Relationship to UserFile
+    user_files: Mapped[list["UserFile"]] = relationship(
+        "UserFile",
+        secondary="persona__user_file",
+        back_populates="assistants",
+    )
+    user_folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder",
+        secondary="persona__user_folder",
+        back_populates="assistants",
+    )
     labels: Mapped[list["PersonaLabel"]] = relationship(
         "PersonaLabel",
         secondary=Persona__PersonaLabel.__table__,
@@ -1812,6 +1841,24 @@ class Persona(Base):
             unique=True,
             postgresql_where=(builtin_persona == True),  # noqa: E712
         ),
+    )
+
+
+class Persona__UserFolder(Base):
+    __tablename__ = "persona__user_folder"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_folder_id: Mapped[int] = mapped_column(
+        ForeignKey("user_folder.id"), primary_key=True
+    )
+
+
+class Persona__UserFile(Base):
+    __tablename__ = "persona__user_file"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_file_id: Mapped[int] = mapped_column(
+        ForeignKey("user_file.id"), primary_key=True
     )
 
 
@@ -2335,6 +2382,64 @@ class InputPrompt__User(Base):
         ForeignKey("inputprompt.id"), primary_key=True
     )
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+
+class UserFolder(Base):
+    __tablename__ = "user_folder"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
+    name: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    user: Mapped["User"] = relationship(back_populates="folders")
+    files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
+    assistants: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__UserFolder.__table__,
+        back_populates="user_folders",
+    )
+
+
+class UserDocument(str, Enum):
+    CHAT = "chat"
+    RECENT = "recent"
+    FILE = "file"
+
+
+class UserFile(Base):
+    __tablename__ = "user_file"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
+    assistants: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__UserFile.__table__,
+        back_populates="user_files",
+    )
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+
+    file_id: Mapped[str] = mapped_column(nullable=False)
+    document_id: Mapped[str] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        default=datetime.datetime.utcnow
+    )
+    user: Mapped["User"] = relationship(back_populates="files")
+    folder: Mapped["UserFolder"] = relationship(back_populates="files")
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
+    )
+    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair", back_populates="user_file"
+    )
+    link_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 """

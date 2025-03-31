@@ -45,6 +45,8 @@ export interface Persona {
   icon_color?: string;
   uploaded_image_id?: string;
   labels?: PersonaLabel[];
+  user_file_ids: number[];
+  user_folder_ids: number[];
 }
 
 export interface PersonaLabel {

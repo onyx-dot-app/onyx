@@ -63,7 +63,10 @@ def generate_dummy_chunk(
         title_prefix=f"Title prefix for doc {doc_id}",
         metadata_suffix_semantic="",
         metadata_suffix_keyword="",
+        doc_summary="",
+        chunk_context="",
         mini_chunk_texts=None,
+        contextual_rag_reserved_tokens=0,
         embeddings=ChunkEmbedding(
             full_embedding=generate_random_embedding(embedding_dim),
             mini_chunk_embeddings=[],
@@ -90,6 +93,8 @@ def generate_dummy_chunk(
 
     return DocMetadataAwareIndexChunk.from_index_chunk(
         index_chunk=chunk,
+        user_file=None,
+        user_folder=None,
         access=DocumentAccess.build(
             user_emails=user_emails,
             user_groups=user_groups,

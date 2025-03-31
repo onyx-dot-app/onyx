@@ -30,6 +30,7 @@ from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_summarization import summarize_image_with_error_handling
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.llm.interfaces import LLM
+from onyx.utils.lazy import lazy_eval
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -76,6 +77,26 @@ def is_gdrive_image_mime_type(mime_type: str) -> bool:
     return is_valid_image_type(mime_type)
 
 
+def download_request(service: GoogleDriveService, file_id: str) -> bytes:
+    """
+    Download the file from Google Drive.
+    """
+    # For other file types, download the file
+    # Use the correct API call for downloading files
+    request = service.files().get_media(fileId=file_id)
+    response_bytes = io.BytesIO()
+    downloader = MediaIoBaseDownload(response_bytes, request)
+    done = False
+    while not done:
+        _, done = downloader.next_chunk()
+
+    response = response_bytes.getvalue()
+    if not response:
+        logger.warning(f"Failed to download {file_id}")
+        return bytes()
+    return response
+
+
 def _download_and_extract_sections_basic(
     file: dict[str, str],
     service: GoogleDriveService,
@@ -114,41 +135,31 @@ def _download_and_extract_sections_basic(
 
     # For other file types, download the file
     # Use the correct API call for downloading files
-    request = service.files().get_media(fileId=file_id)
-    response_bytes = io.BytesIO()
-    downloader = MediaIoBaseDownload(response_bytes, request)
-    done = False
-    while not done:
-        _, done = downloader.next_chunk()
-
-    response = response_bytes.getvalue()
-    if not response:
-        logger.warning(f"Failed to download {file_name}")
-        return []
+    response_call = lazy_eval(lambda: download_request(service, file_id))
 
     # Process based on mime type
     if mime_type == "text/plain":
-        text = response.decode("utf-8")
+        text = response_call().decode("utf-8")
         return [TextSection(link=link, text=text)]
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     ):
-        text, _ = docx_to_text_and_images(io.BytesIO(response))
+        text, _ = docx_to_text_and_images(io.BytesIO(response_call()))
         return [TextSection(link=link, text=text)]
 
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ):
-        text = xlsx_to_text(io.BytesIO(response))
+        text = xlsx_to_text(io.BytesIO(response_call()))
         return [TextSection(link=link, text=text)]
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
-        text = pptx_to_text(io.BytesIO(response))
+        text = pptx_to_text(io.BytesIO(response_call()))
         return [TextSection(link=link, text=text)]
 
     elif is_gdrive_image_mime_type(mime_type):
@@ -158,7 +169,7 @@ def _download_and_extract_sections_basic(
             with get_session_with_current_tenant() as db_session:
                 section, embedded_id = store_image_and_create_section(
                     db_session=db_session,
-                    image_data=response,
+                    image_data=response_call(),
                     file_name=file_id,
                     display_name=file_name,
                     media_type=mime_type,
@@ -171,7 +182,7 @@ def _download_and_extract_sections_basic(
         return sections
 
     elif mime_type == "application/pdf":
-        text, _pdf_meta, images = read_pdf_file(io.BytesIO(response))
+        text, _pdf_meta, images = read_pdf_file(io.BytesIO(response_call()))
         pdf_sections: list[TextSection | ImageSection] = [
             TextSection(link=link, text=text)
         ]
@@ -194,8 +205,15 @@ def _download_and_extract_sections_basic(
 
     else:
         # For unsupported file types, try to extract text
+        if mime_type in [
+            "application/vnd.google-apps.video",
+            "application/vnd.google-apps.audio",
+            "application/zip",
+        ]:
+            return []
+        # For unsupported file types, try to extract text
         try:
-            text = extract_file_text(io.BytesIO(response), file_name)
+            text = extract_file_text(io.BytesIO(response_call()), file_name)
             return [TextSection(link=link, text=text)]
         except Exception as e:
             logger.warning(f"Failed to extract text from {file_name}: {e}")

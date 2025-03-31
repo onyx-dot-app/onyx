@@ -29,6 +29,8 @@ interface PersonaUpsertRequest {
   is_default_persona: boolean;
   display_priority: number | null;
   label_ids: number[] | null;
+  user_file_ids: number[] | null;
+  user_folder_ids: number[] | null;
 }
 
 export interface PersonaUpsertParameters {
@@ -56,6 +58,8 @@ export interface PersonaUpsertParameters {
   uploaded_image: File | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
+  user_file_ids: number[];
+  user_folder_ids: number[];
 }
 
 export const createPersonaLabel = (name: string) => {
@@ -114,7 +118,10 @@ function buildPersonaUpsertRequest(
     icon_shape,
     remove_image,
     search_start_date,
+    user_file_ids,
+    user_folder_ids,
   } = creationRequest;
+
   return {
     name,
     description,
@@ -145,6 +152,8 @@ function buildPersonaUpsertRequest(
     starter_messages: creationRequest.starter_messages ?? null,
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,
+    user_file_ids: user_file_ids ?? null,
+    user_folder_ids: user_folder_ids ?? null,
   };
 }
 
@@ -175,7 +184,6 @@ export async function createPersona(
       return null;
     }
   }
-
   const createPersonaResponse = await fetch("/api/persona", {
     method: "POST",
     headers: {
@@ -345,4 +353,6 @@ export const defaultPersona: Persona = {
   owner: null,
   icon_shape: 50910,
   icon_color: "#FF6F6F",
+  user_file_ids: [],
+  user_folder_ids: [],
 };

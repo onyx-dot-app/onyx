@@ -163,8 +163,6 @@ class ChatBasicResponse(BaseModel):
     cited_documents: dict[int, str] | None = None
 
     # FOR BACKWARDS COMPATIBILITY
-    # TODO: deprecate both of these
-    simple_search_docs: list[SimpleDoc] | None = None
     llm_chunks_indices: list[int] | None = None
 
     # agentic fields

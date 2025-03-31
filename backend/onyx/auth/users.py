@@ -360,7 +360,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 reason="Password must contain at least one special character from the following set: "
                 f"{PASSWORD_SPECIAL_CHARS}."
             )
-
         return
 
     async def oauth_callback(
