@@ -58,6 +58,7 @@ INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
+# This should just be the filename base without extension or path.
 LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments

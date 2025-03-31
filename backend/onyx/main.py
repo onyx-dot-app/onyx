@@ -1,3 +1,4 @@
+import logging
 import sys
 import traceback
 from collections.abc import AsyncGenerator
@@ -101,6 +102,7 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
 from onyx.utils.logger import setup_logger
+from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
 from onyx.utils.telemetry import get_or_generate_uuid
 from onyx.utils.telemetry import optional_telemetry
@@ -115,6 +117,12 @@ from shared_configs.configs import SENTRY_DSN
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 logger = setup_logger()
+
+file_handlers = [
+    h for h in logger.logger.handlers if isinstance(h, logging.FileHandler)
+]
+
+setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
 
 def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
