@@ -83,6 +83,9 @@ from onyx.server.middleware.latency_logging import add_latency_logging_middlewar
 from onyx.server.middleware.rate_limiting import close_auth_limiter
 from onyx.server.middleware.rate_limiting import get_auth_rate_limiters
 from onyx.server.middleware.rate_limiting import setup_auth_limiter
+from onyx.server.middleware.request_id_middleware import (
+    add_fastapi_request_id_middleware,
+)
 from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
@@ -413,6 +416,8 @@ def get_application() -> FastAPI:
     )
     if LOG_ENDPOINT_LATENCY:
         add_latency_logging_middleware(application, logger)
+
+    add_fastapi_request_id_middleware(application, "API", logger)
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)

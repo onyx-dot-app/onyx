@@ -13,6 +13,7 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import SLACK_CHANNEL_ID
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
 
 
 logging.addLevelName(logging.INFO + 5, "NOTICE")
@@ -103,6 +104,7 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
                 msg = f"[CC Pair: {cc_pair_id}] {msg}"
 
             break
+
         # Add tenant information if it differs from default
         # This will always be the case for authenticated API requests
         if MULTI_TENANT:
@@ -114,6 +116,11 @@ class OnyxLoggingAdapter(logging.LoggerAdapter):
                     tenant_display[:8] if len(tenant_display) > 8 else tenant_display
                 )
                 msg = f"[t:{short_tenant}] {msg}"
+
+        # request id within a fastapi route
+        fastapi_request_id = ONYX_REQUEST_ID_CONTEXTVAR.get()
+        if fastapi_request_id:
+            msg = f"[{fastapi_request_id}] {msg}"
 
         # For Slack Bot, logs the channel relevant to the request
         channel_id = self.extra.get(SLACK_CHANNEL_ID) if self.extra else None
