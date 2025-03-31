@@ -47,6 +47,40 @@ IFRAME_TEXT_LENGTH_THRESHOLD = 700
 # Message indicating JavaScript is disabled, which often appears when scraping fails
 JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
 
+# Define common headers that mimic a real browser
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+)
+DEFAULT_HEADERS = {
+    "User-Agent": DEFAULT_USER_AGENT,
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,"
+        "image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Sec-CH-UA": '"Google Chrome";v="123", "Not:A-Brand";v="8"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": '"macOS"',
+}
+
+# Common PDF MIME types
+PDF_MIME_TYPES = [
+    "application/pdf",
+    "application/x-pdf",
+    "application/acrobat",
+    "application/vnd.pdf",
+    "text/pdf",
+    "text/x-pdf",
+]
+
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     # Given a base site, index everything under that path
@@ -95,7 +129,7 @@ def protected_url_check(url: str) -> None:
 
 def check_internet_connection(url: str) -> None:
     try:
-        response = requests.get(url, timeout=3)
+        response = requests.get(url, timeout=3, headers=DEFAULT_HEADERS)
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         # Extract status code from the response, defaulting to -1 if response is None
@@ -155,12 +189,40 @@ def get_internal_links(
     return internal_links
 
 
+def is_pdf_content(response: requests.Response) -> bool:
+    """Check if the response contains PDF content based on content-type header"""
+    content_type = response.headers.get("content-type", "").lower()
+    return any(pdf_type in content_type for pdf_type in PDF_MIME_TYPES)
+
+
 def start_playwright() -> Tuple[Playwright, BrowserContext]:
     playwright = sync_playwright().start()
 
     browser = playwright.chromium.launch(headless=True)
 
-    context = browser.new_context()
+    # Create a context with realistic browser properties
+    context = browser.new_context(
+        user_agent=DEFAULT_USER_AGENT,
+        viewport={"width": 1440, "height": 900},
+        device_scale_factor=2.0,
+        locale="en-US",
+        timezone_id="America/Los_Angeles",
+        has_touch=False,
+        java_script_enabled=True,
+        color_scheme="light",
+    )
+
+    # Set additional headers to mimic a real browser
+    context.set_extra_http_headers(
+        {
+            "Accept": DEFAULT_HEADERS["Accept"],
+            "Accept-Language": DEFAULT_HEADERS["Accept-Language"],
+            "Sec-Fetch-Dest": DEFAULT_HEADERS["Sec-Fetch-Dest"],
+            "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
+            "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
+            "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
+        }
+    )
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID
@@ -183,7 +245,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
-        response = requests.get(sitemap_url)
+        response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, "html.parser")
@@ -330,9 +392,15 @@ class WebConnector(LoadConnector):
                     playwright, context = start_playwright()
                     restart_playwright = False
 
-                if initial_url.split(".")[-1] == "pdf":
+                # First do a HEAD request to check content type without downloading the entire content
+                head_response = requests.head(
+                    initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
+                )
+                is_pdf = is_pdf_content(head_response)
+
+                if is_pdf or initial_url.lower().endswith(".pdf"):
                     # PDF files are not checked for links
-                    response = requests.get(initial_url)
+                    response = requests.get(initial_url, headers=DEFAULT_HEADERS)
                     page_text, metadata, images = read_pdf_file(
                         file=io.BytesIO(response.content)
                     )
