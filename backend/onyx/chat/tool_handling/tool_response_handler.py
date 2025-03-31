@@ -162,6 +162,10 @@ def get_tool_call_for_non_tool_calling_llm_impl(
     prompt_builder: AnswerPromptBuilder | PromptSnapshot,
     llm: LLM,
 ) -> tuple[Tool, dict] | None:
+    user_query = prompt_builder.raw_user_query
+    if isinstance(prompt_builder, AnswerPromptBuilder):
+        user_query = prompt_builder.get_user_message_content()
+
     if force_use_tool.force_use:
         # if we are forcing a tool, we don't need to check which tools to run
         tool = get_tool_by_name(tools, force_use_tool.tool_name)
@@ -170,7 +174,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
             force_use_tool.args
             if force_use_tool.args is not None
             else tool.get_args_for_non_tool_calling_llm(
-                query=prompt_builder.raw_user_query,
+                query=user_query,
                 history=prompt_builder.raw_message_history,
                 llm=llm,
                 force_run=True,
@@ -188,7 +192,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
     else:
         tool_options = check_which_tools_should_run_for_non_tool_calling_llm(
             tools=tools,
-            query=prompt_builder.raw_user_query,
+            query=user_query,
             history=prompt_builder.raw_message_history,
             llm=llm,
         )
@@ -207,7 +211,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
             select_single_tool_for_non_tool_calling_llm(
                 tools_and_args=available_tools_and_args,
                 history=prompt_builder.raw_message_history,
-                query=prompt_builder.raw_user_query,
+                query=user_query,
                 llm=llm,
             )
             if available_tools_and_args

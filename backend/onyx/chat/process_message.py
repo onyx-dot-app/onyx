@@ -794,10 +794,10 @@ def stream_chat_message_objects(
                 final_msg.prompt,
                 prompt_override=prompt_override,
             )
-        elif final_msg.prompt:
-            prompt_config = PromptConfig.from_model(final_msg.prompt)
         else:
-            prompt_config = PromptConfig.from_model(persona.prompts[0])
+            prompt_config = PromptConfig.from_model(
+                final_msg.prompt or persona.prompts[0]
+            )
 
         answer_style_config = AnswerStyleConfig(
             citation_config=CitationConfig(
