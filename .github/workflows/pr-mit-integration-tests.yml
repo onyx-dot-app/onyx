@@ -18,7 +18,7 @@ env:
   CONFLUENCE_ACCESS_TOKEN: ${{ secrets.CONFLUENCE_ACCESS_TOKEN }}
 
 jobs:
-  integration-tests:
+  integration-tests-mit:
     # See https://runs-on.com/runners/linux/
     runs-on: [runs-on, runner=32cpu-linux-x64, "run-id=${{ github.run_id }}"]
     steps:
