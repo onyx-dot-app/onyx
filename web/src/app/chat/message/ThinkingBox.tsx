@@ -17,7 +17,6 @@ import "./ThinkingBox.css";
 interface ThinkingBoxProps {
   content: string;
   isComplete: boolean;
-  autoCollapse?: boolean;
   isStreaming?: boolean;
 }
 
@@ -34,7 +33,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   
   // Timing refs
-  const startTimeRef = useRef<number>(Date.now());
+  const startTimeRef = useRef<number | null>(null);
   
   // Content tracking refs
   const previousContentRef = useRef<string>("");
@@ -87,7 +86,6 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
       hasClosingTokenRef.current = true;
       
       // For past messages, set the elapsed time based on content length as an approximation
-      // This is just an estimate since we don't know the actual time it took
       const approximateTimeInSeconds = Math.max(
         3, // Minimum 3 seconds
         Math.min(
@@ -102,7 +100,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
     // Check if we have the opening token
     if (!hasOpeningTokenRef.current && hasPartialThinkingTokens(content)) {
       hasOpeningTokenRef.current = true;
-      startTimeRef.current = Date.now(); // Reset start time when thinking begins
+      startTimeRef.current = Date.now(); // Only set start time when thinking actually begins
     }
     
     // Check if we have the closing token
@@ -111,7 +109,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
       thinkingStoppedTimeRef.current = Date.now(); // Record exactly when thinking stopped
       
       // Immediately update elapsed time to final value
-      const finalElapsedTime = Math.floor((thinkingStoppedTimeRef.current - startTimeRef.current) / 1000);
+      const finalElapsedTime = Math.floor((thinkingStoppedTimeRef.current - startTimeRef.current!) / 1000);
       setElapsedTime(finalElapsedTime);
     }
   }, [content, cleanedThinkingContent, isComplete]);
@@ -156,18 +154,18 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   
   // Update elapsed time
   useEffect(() => {
-    // Only count time while thinking is active (between open and close tokens)
-    if (!hasOpeningTokenRef.current || hasClosingTokenRef.current) return;
+    // Only count time while thinking is active and we have a start time
+    if (!hasOpeningTokenRef.current || hasClosingTokenRef.current || startTimeRef.current === null) return;
     
     const timer = setInterval(() => {
       // If thinking has stopped, use the final time
       if (thinkingStoppedTimeRef.current) {
-        setElapsedTime(Math.floor((thinkingStoppedTimeRef.current - startTimeRef.current) / 1000));
+        setElapsedTime(Math.floor((thinkingStoppedTimeRef.current - startTimeRef.current!) / 1000));
         return;
       }
       
       // Otherwise, use the current time
-      setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      setElapsedTime(Math.floor((Date.now() - startTimeRef.current!) / 1000));
     }, 1000);
     
     return () => clearInterval(timer);
@@ -202,7 +200,7 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
   if (!cleanedThinkingContent.trim()) return null;
   
   // Determine if thinking is active (has opening token but not closing token)
-  const isThinkingActive = (isStreaming && !isComplete) || (hasOpeningTokenRef.current && !hasClosingTokenRef.current);
+  const isThinkingActive = hasOpeningTokenRef.current && !hasClosingTokenRef.current;
   
   // Determine if we should show the preview section
   const shouldShowPreview = !isExpanded && cleanedThinkingContent.trim().length > 0;

@@ -18,19 +18,14 @@ export function hasCompletedThinkingTokens(content: string | JSX.Element): boole
 export function hasPartialThinkingTokens(content: string | JSX.Element): boolean {
   if (typeof content !== 'string') return false;
   
-  // Check for opening tag without closing tag
-  const hasOpeningThink = content.includes('<think>');
-  const hasClosingThink = content.includes('</think>');
-  const hasOpeningThinking = content.includes('<thinking>');
-  const hasClosingThinking = content.includes('</thinking>');
+  // Count opening and closing tags
+  const thinkOpenCount = (content.match(/<think>/g) || []).length;
+  const thinkCloseCount = (content.match(/<\/think>/g) || []).length;
+  const thinkingOpenCount = (content.match(/<thinking>/g) || []).length;
+  const thinkingCloseCount = (content.match(/<\/thinking>/g) || []).length;
   
-  // Return true if we have an opening tag with no corresponding closing tag
-  // or if we have an opening and closing tag, but the pattern "<think>...</think>" isn't found
-  // (which means the closing tag belongs to a different opening tag)
-  return (hasOpeningThink && !hasClosingThink) || 
-         (hasOpeningThinking && !hasClosingThinking) ||
-         (hasOpeningThink && hasClosingThink && !/<think>[\s\S]*?<\/think>/.test(content)) ||
-         (hasOpeningThinking && hasClosingThinking && !/<thinking>[\s\S]*?<\/thinking>/.test(content));
+  // Return true if we have any unmatched tags
+  return thinkOpenCount > thinkCloseCount || thinkingOpenCount > thinkingCloseCount;
 }
 
 /**
@@ -39,36 +34,31 @@ export function hasPartialThinkingTokens(content: string | JSX.Element): boolean
 export function extractThinkingContent(content: string | JSX.Element): string {
   if (typeof content !== 'string') return '';
   
-  // For complete thinking tags, extract the whole section
-  const completeThinkRegex = /<think>[\s\S]*?<\/think>/;
-  const completeThinkingRegex = /<thinking>[\s\S]*?<\/thinking>/;
+  // For complete thinking tags, extract all sections
+  const completeThinkRegex = /<think>[\s\S]*?<\/think>/g;
+  const completeThinkingRegex = /<thinking>[\s\S]*?<\/thinking>/g;
   
-  const thinkMatch = content.match(completeThinkRegex);
-  const thinkingMatch = content.match(completeThinkingRegex);
+  const thinkMatches = Array.from(content.matchAll(completeThinkRegex));
+  const thinkingMatches = Array.from(content.matchAll(completeThinkingRegex));
   
-  if (thinkMatch) {
-    return thinkMatch[0];
-  }
-  
-  if (thinkingMatch) {
-    return thinkingMatch[0];
+  if (thinkMatches.length > 0 || thinkingMatches.length > 0) {
+    // Combine all matches and sort by their position in the original string
+    const allMatches = [...thinkMatches, ...thinkingMatches]
+      .sort((a, b) => (a.index || 0) - (b.index || 0));
+    return allMatches.map(match => match[0]).join('\n');
   }
   
   // For partial thinking tokens (streaming)
   if (hasPartialThinkingTokens(content)) {
-    // Find the opening tag position
-    const thinkPos = content.indexOf('<think>');
-    const thinkingPos = content.indexOf('<thinking>');
+    // Find the last opening tag position
+    const lastThinkPos = content.lastIndexOf('<think>');
+    const lastThinkingPos = content.lastIndexOf('<thinking>');
     
-    let startPos = -1;
-    if (thinkPos >= 0) {
-      startPos = thinkPos;
-    } else if (thinkingPos >= 0) {
-      startPos = thinkingPos;
-    }
+    // Use the position of whichever tag appears last
+    const startPos = Math.max(lastThinkPos, lastThinkingPos);
     
     if (startPos >= 0) {
-      // Extract everything from the opening tag to the end
+      // Extract everything from the last opening tag to the end
       return content.substring(startPos);
     }
   }
@@ -80,17 +70,16 @@ export function extractThinkingContent(content: string | JSX.Element): string {
  * Check if thinking tokens are complete
  */
 export function isThinkingComplete(content: string | JSX.Element): boolean {
-  if (typeof content !== 'string') return true;
+  if (typeof content !== 'string') return false;
   
-  // Check if content has the closing tag
-  const hasClosingThink = content.includes('</think>');
-  const hasClosingThinking = content.includes('</thinking>');
+  // Count opening and closing tags
+  const thinkOpenCount = (content.match(/<think>/g) || []).length;
+  const thinkCloseCount = (content.match(/<\/think>/g) || []).length;
+  const thinkingOpenCount = (content.match(/<thinking>/g) || []).length;
+  const thinkingCloseCount = (content.match(/<\/thinking>/g) || []).length;
   
-  // Also check if we have complete patterns to ensure the closing tag matches the opening tag
-  const hasCompleteThink = /<think>[\s\S]*?<\/think>/.test(content);
-  const hasCompleteThinking = /<thinking>[\s\S]*?<\/thinking>/.test(content);
-  
-  return (hasClosingThink && hasCompleteThink) || (hasClosingThinking && hasCompleteThinking);
+  // All tags must be matched
+  return thinkOpenCount === thinkCloseCount && thinkingOpenCount === thinkingCloseCount;
 }
 
 /**
@@ -105,19 +94,15 @@ export function removeThinkingTokens(content: string | JSX.Element): string | JS
   
   // Handle case where there's an incomplete thinking token at the end
   if (hasPartialThinkingTokens(result)) {
-    const thinkPos = result.indexOf('<think>');
-    const thinkingPos = result.indexOf('<thinking>');
+    // Find the last opening tag position
+    const lastThinkPos = result.lastIndexOf('<think>');
+    const lastThinkingPos = result.lastIndexOf('<thinking>');
     
-    // Find the position of the first opening tag
-    let startPos = -1;
-    if (thinkPos >= 0) {
-      startPos = thinkPos;
-    } else if (thinkingPos >= 0) {
-      startPos = thinkingPos;
-    }
+    // Use the position of whichever tag appears last
+    const startPos = Math.max(lastThinkPos, lastThinkingPos);
     
     if (startPos >= 0) {
-      // Only keep content before the opening tag
+      // Only keep content before the last opening tag
       result = result.substring(0, startPos);
     }
   }
@@ -125,9 +110,9 @@ export function removeThinkingTokens(content: string | JSX.Element): string | JS
   return result.trim();
 }
 
-/**
- * Clean the extracted thinking content (remove tags)
- */
+// /**
+//  * Clean the extracted thinking content (remove tags)
+//  */
 export function cleanThinkingContent(thinkingContent: string): string {
   if (!thinkingContent) return '';
   

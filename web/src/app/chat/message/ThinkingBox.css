@@ -132,7 +132,7 @@
 
 /* Active animation styling - highlight active thinking */
 .thinking-box__preview--crawling {
-  height: 5rem !important;
+  height: 5rem;
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   border-top: 1px solid var(--thinking-border-color);
   background-color: rgba(0, 0, 0, 0.01);
@@ -218,8 +218,8 @@
   transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
-  mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
 }
 
 /* Enhanced text during crawling */
@@ -246,12 +246,6 @@
   to { opacity: 1; }
 }
 
-/* Fade out animation */
-@keyframes fadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
 /* Smooth scrolling effect */
 @keyframes scrollText {
   0% { transform: translateY(0); }
@@ -272,15 +266,15 @@
 
 /* Enhanced masking during crawling */
 .thinking-box__preview--crawling .thinking-box__scroll-content {
-  mask-image: linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
   -webkit-mask-image: linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
+  mask-image: linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
   padding: 0.75rem 1rem;
 }
 
 .thinking-box__icon--active {
-  animation: pulse 1.5s infinite ease-in-out !important;
-  opacity: 1 !important;
-  color: var(--thinking-title-color) !important;
+  animation: pulse 1.5s infinite ease-in-out;
+  opacity: 1;
+  color: var(--thinking-title-color);
 }
 
 /* Make sure the preview adjusts immediately when new content arrives */

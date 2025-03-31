@@ -50,7 +50,6 @@ import {
   extractThinkingContent,
   isThinkingComplete,
   removeThinkingTokens,
-  cleanThinkingContent
 } from "../utils/thinkingTokens";
 
 import remarkMath from "remark-math";
@@ -137,7 +136,7 @@ export const AgenticMessage = ({
 
   const [lastKnownContentLength, setLastKnownContentLength] = useState(0);
 
-  const [allowStreaming, setAllowStreaming] = useState(isComplete || false);
+  const [allowStreaming, setAllowStreaming] = useState(isComplete);
   const [allowDocuments, setAllowDocuments] = useState(isComplete);
 
   const alternativeContent = secondLevelAssistantMessage || "";
@@ -499,7 +498,6 @@ export const AgenticMessage = ({
                         content={thinkingContent} 
                         isComplete={isComplete || false} 
                         isStreaming={!isThinkingTokenComplete || !isComplete}
-                        autoCollapse={true} // Start collapsed, expand only during active streaming
                       />
                     </div>
                   )}
