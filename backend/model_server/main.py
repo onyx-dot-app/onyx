@@ -121,7 +121,11 @@ def get_model_app() -> FastAPI:
     application.include_router(encoders_router)
     application.include_router(custom_models_router)
 
-    add_onyx_request_id_middleware(application, "MDL", logger)
+    request_id_prefix = "INF"
+    if INDEXING_ONLY:
+        request_id_prefix = "IDX"
+
+    add_onyx_request_id_middleware(application, request_id_prefix, logger)
 
     return application
 
