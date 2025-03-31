@@ -72,6 +72,14 @@ def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
     return log_level_dict.get(log_level_str.upper(), logging.getLevelName("NOTICE"))
 
 
+class OnyxRequestIDFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+
+        record.request_id = ONYX_REQUEST_ID_CONTEXTVAR.get() or "-"
+        return True
+
+
 class OnyxLoggingAdapter(logging.LoggerAdapter):
     def process(
         self, msg: str, kwargs: MutableMapping[str, Any]
@@ -172,6 +180,14 @@ class ColoredFormatter(logging.Formatter):
         return super().format(record)
 
 
+def get_uvicorn_standard_formatter() -> ColoredFormatter:
+    """Returns a standard colored logging formatter."""
+    return ColoredFormatter(
+        "%(asctime)s %(filename)30s %(lineno)4s: [%(request_id)s] %(message)s",
+        datefmt="%m/%d/%Y %I:%M:%S %p",
+    )
+
+
 def get_standard_formatter() -> ColoredFormatter:
     """Returns a standard colored logging formatter."""
     return ColoredFormatter(
@@ -208,12 +224,6 @@ def setup_logger(
 
     logger.addHandler(handler)
 
-    uvicorn_logger = logging.getLogger("uvicorn.access")
-    if uvicorn_logger:
-        uvicorn_logger.handlers = []
-        uvicorn_logger.addHandler(handler)
-        uvicorn_logger.setLevel(log_level)
-
     is_containerized = is_running_in_container()
     if LOG_FILE_NAME and (is_containerized or DEV_LOGGING_ENABLED):
         log_levels = ["debug", "info", "notice"]
@@ -232,12 +242,35 @@ def setup_logger(
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
 
-            if uvicorn_logger:
-                uvicorn_logger.addHandler(file_handler)
-
     logger.notice = lambda msg, *args, **kwargs: logger.log(logging.getLevelName("NOTICE"), msg, *args, **kwargs)  # type: ignore
 
     return OnyxLoggingAdapter(logger, extra=extra)
+
+
+def setup_uvicorn_logger(
+    log_level: int = get_log_level_from_str(),
+    shared_file_handlers: list[logging.FileHandler] | None = None,
+) -> None:
+    uvicorn_logger = logging.getLogger("uvicorn.access")
+    if not uvicorn_logger:
+        return
+
+    formatter = get_uvicorn_standard_formatter()
+
+    handler = logging.StreamHandler()
+    handler.setLevel(log_level)
+    handler.setFormatter(formatter)
+
+    uvicorn_logger.handlers = []
+    uvicorn_logger.addHandler(handler)
+    uvicorn_logger.setLevel(log_level)
+    uvicorn_logger.addFilter(OnyxRequestIDFilter())
+
+    if shared_file_handlers:
+        for fh in shared_file_handlers:
+            uvicorn_logger.addHandler(fh)
+
+    return
 
 
 def print_loggers() -> None:

@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from collections.abc import AsyncGenerator
@@ -20,6 +21,7 @@ from model_server.management_endpoints import router as management_router
 from model_server.utils import get_gpu_type
 from onyx import __version__
 from onyx.utils.logger import setup_logger
+from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MIN_THREADS_ML_MODELS
@@ -36,6 +38,12 @@ TEMP_HF_CACHE_PATH = Path(os.path.expanduser("~")) / ".cache/temp_huggingface"
 transformer_logging.set_verbosity_error()
 
 logger = setup_logger()
+
+file_handlers = [
+    h for h in logger.logger.handlers if isinstance(h, logging.FileHandler)
+]
+
+setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
 
 def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -> None:
