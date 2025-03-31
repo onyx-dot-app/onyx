@@ -72,13 +72,16 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
         response: Optional[HttpResponse] = None,
         error: Optional[Exception] = None,
     ) -> None:
-        """it seems this function is responsible for the wait to retry ... aka we
+        """It seems this function is responsible for the wait to retry ... aka we
         actually sleep in this function."""
         retry_after_value: list[str] | None = None
         retry_after_header_name: Optional[str] = None
         duration_s: float = 1.0  # seconds
 
         if response is None:
+            # NOTE(rkuo): this logic comes from RateLimitErrorRetryHandler.
+            # This reads oddly, as if the caller itself could raise the exception.
+            # We don't have the luxury of changing this.
             if error:
                 raise error
 
@@ -107,10 +110,10 @@ class OnyxRedisSlackRetryHandler(RetryHandler):
 
             retry_after_value_int = int(
                 retry_after_value[0]
-            )  # will raise if somehow we can't convert to int
+            )  # will raise ValueError if somehow we can't convert to int
             jitter = retry_after_value_int * 0.25 * random.random()
             duration_s = math.ceil(retry_after_value_int + jitter)
-        except Exception:
+        except ValueError:
             duration_s += random.random()
 
         # lock and extend the ttl
