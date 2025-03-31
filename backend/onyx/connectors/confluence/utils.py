@@ -1,5 +1,6 @@
 import io
 import math
+import posixpath
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -342,9 +343,11 @@ def build_confluence_document_id(
     Returns:
         str: The document id
     """
-    if is_cloud and not base_url.endswith("/wiki"):
-        base_url += "/wiki"
-    return f"{base_url}{content_url}"
+    final_url = base_url.rstrip("/")
+    if is_cloud and not final_url.endswith("/wiki"):
+        final_url = posixpath.join(final_url, "wiki")
+    final_url = posixpath.join(final_url, content_url)
+    return final_url
 
 
 def datetime_from_string(datetime_string: str) -> datetime:
