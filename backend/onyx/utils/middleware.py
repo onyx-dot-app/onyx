@@ -53,9 +53,10 @@ def make_structured_onyx_request_id(prefix: str, request_url: str) -> str:
 def _make_onyx_request_id(prefix: str, hash_input: str) -> str:
     """helper function to return an id given a string input"""
     hash_obj = hashlib.md5(hash_input.encode("utf-8"))
-    hash_bytes = hash_obj.digest()[:6]  # Truncate to 6 bytes (64 bits)
+    hash_bytes = hash_obj.digest()[:6]  # Truncate to 6 bytes
 
     # 6 bytes becomes 8 bytes. we shouldn't need to strip but just in case
+    # NOTE: possible we'll want more input bytes if id's aren't unique enough
     hash_str = base64.urlsafe_b64encode(hash_bytes).decode("utf-8").rstrip("=")
     onyx_request_id = f"{prefix}:{hash_str}"
     return onyx_request_id
