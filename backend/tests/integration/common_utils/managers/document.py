@@ -165,17 +165,18 @@ class DocumentManager:
             doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict
         }
 
+        # NOTE(rkuo): too much log spam
         # Left this here for debugging purposes.
-        import json
+        # import json
 
-        print("DEBUGGING DOCUMENTS")
-        print(retrieved_docs)
-        for doc in retrieved_docs.values():
-            printable_doc = doc.copy()
-            print(printable_doc.keys())
-            printable_doc.pop("embeddings")
-            printable_doc.pop("title_embedding")
-            print(json.dumps(printable_doc, indent=2))
+        # print("DEBUGGING DOCUMENTS")
+        # print(retrieved_docs)
+        # for doc in retrieved_docs.values():
+        #     printable_doc = doc.copy()
+        #     print(printable_doc.keys())
+        #     printable_doc.pop("embeddings")
+        #     printable_doc.pop("title_embedding")
+        #     print(json.dumps(printable_doc, indent=2))
 
         for document in cc_pair.documents:
             retrieved_doc = retrieved_docs.get(document.id)
