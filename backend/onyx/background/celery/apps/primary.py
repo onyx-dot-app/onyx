@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Any
 from typing import cast
 
@@ -95,7 +96,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     app_base.wait_for_db(sender, **kwargs)
     app_base.wait_for_vespa_or_shutdown(sender, **kwargs)
 
-    logger.info("Running as the primary celery worker.")
+    logger.info(f"Running as the primary celery worker: pid={os.getpid()}")
 
     # Less startup checks in multi-tenant case
     if MULTI_TENANT:

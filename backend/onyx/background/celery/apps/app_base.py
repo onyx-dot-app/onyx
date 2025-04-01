@@ -1,5 +1,6 @@
 import logging
 import multiprocessing
+import os
 import time
 from typing import Any
 from typing import cast
@@ -305,7 +306,7 @@ def wait_for_db(sender: Any, **kwargs: Any) -> None:
 
 
 def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
-    logger.info("Running as a secondary celery worker.")
+    logger.info(f"Running as a secondary celery worker: pid={os.getpid()}")
 
     # Set up variables for waiting on primary worker
     WAIT_INTERVAL = 5
