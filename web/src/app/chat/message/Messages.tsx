@@ -253,7 +253,6 @@ export const AIMessage = ({
 
   const finalContent = processContent(content as string);
 
-  const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
   const { isHovering, trackedElementRef, hoverElementRef } = useMouseTracking();
@@ -607,7 +606,6 @@ export const AIMessage = ({
                                 onDropdownVisibleChange={
                                   setIsRegenerateDropdownVisible
                                 }
-                                onHoverChange={setIsRegenerateHovered}
                                 selectedAssistant={currentPersona!}
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
@@ -623,16 +621,10 @@ export const AIMessage = ({
                         absolute -bottom-5
                         z-10
                         invisible ${
-                          (isHovering ||
-                            isRegenerateHovered ||
-                            settings?.isMobile) &&
-                          "!visible"
+                          (isHovering || settings?.isMobile) && "!visible"
                         }
                         opacity-0 ${
-                          (isHovering ||
-                            isRegenerateHovered ||
-                            settings?.isMobile) &&
-                          "!opacity-100"
+                          (isHovering || settings?.isMobile) && "!opacity-100"
                         }
                         flex md:flex-row gap-x-0.5 bg-background-125/40 -mx-1.5 p-1.5 rounded-lg
                         `}
@@ -697,7 +689,6 @@ export const AIMessage = ({
                                 }
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
-                                onHoverChange={setIsRegenerateHovered}
                               />
                             </CustomTooltip>
                           )}
