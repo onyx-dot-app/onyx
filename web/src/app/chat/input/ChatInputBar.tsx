@@ -37,9 +37,6 @@ import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
-import { FidgetSpinner } from "react-loader-spinner";
-import { LoadingAnimation } from "@/components/Loading";
 import { getProviderIcon } from "@/app/admin/configuration/llm/interfaces";
 
 const MAX_INPUT_HEIGHT = 200;

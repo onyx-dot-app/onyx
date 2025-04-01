@@ -1,15 +1,9 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useLayoutEffect,
-} from "react";
+import React, { useState, useEffect } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChatInputOption } from "./ChatInputOption";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
@@ -42,6 +36,7 @@ interface LLMPopoverProps {
   currentAssistant?: Persona;
   trigger: React.ReactElement;
   onSelect?: (value: string) => void;
+  currentModelName?: string;
 }
 
 export default function LLMPopover({
@@ -51,6 +46,7 @@ export default function LLMPopover({
   currentAssistant,
   trigger,
   onSelect,
+  currentModelName,
 }: LLMPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
@@ -91,15 +87,6 @@ export default function LLMPopover({
     ([provider, options]) => [...options]
   );
 
-  const defaultProvider = llmProviders.find(
-    (llmProvider) => llmProvider.is_default_provider
-  );
-
-  const defaultModelName = defaultProvider?.default_model_name;
-  const defaultModelDisplayName = defaultModelName
-    ? getDisplayNameForModel(defaultModelName)
-    : null;
-
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
   );
@@ -130,7 +117,8 @@ export default function LLMPopover({
                 <button
                   key={index}
                   className={`w-full flex items-center gap-x-2 px-3 py-2 text-sm text-left hover:bg-background-100 dark:hover:bg-neutral-800 transition-colors duration-150 ${
-                    llmManager.currentLlm.modelName === name
+                    (currentModelName || llmManager.currentLlm.modelName) ===
+                    name
                       ? "bg-background-100 dark:bg-neutral-900 text-text"
                       : "text-text-darker"
                   }`}
