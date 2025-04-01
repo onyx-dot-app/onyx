@@ -343,10 +343,10 @@ def build_confluence_document_id(
     Returns:
         str: The document id
     """
-    final_url = base_url.rstrip("/")
+    final_url = base_url.rstrip("/") + "/"
     if is_cloud and not final_url.endswith("/wiki"):
-        final_url = urljoin(final_url, "wiki")
-    final_url = urljoin(final_url, content_url)
+        final_url = urljoin(final_url, "wiki") + "/"
+    final_url = urljoin(final_url, content_url.lstrip("/"))
     return final_url
 
 
