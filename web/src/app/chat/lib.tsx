@@ -26,6 +26,7 @@ import {
   StreamingError,
   ToolCallMetadata,
   AgenticMessageResponseIDInfo,
+  UserKnowledgeFilePacket,
 } from "./interfaces";
 import { Persona } from "../admin/assistants/interfaces";
 import { ReadonlyURLSearchParams } from "next/navigation";
@@ -156,12 +157,15 @@ export type PacketType =
   | SubQuestionPiece
   | ExtendedToolResponse
   | RefinedAnswerImprovement
-  | AgenticMessageResponseIDInfo;
+  | AgenticMessageResponseIDInfo
+  | UserKnowledgeFilePacket;
 
 export async function* sendMessage({
   regenerate,
   message,
   fileDescriptors,
+  userFileIds,
+  userFolderIds,
   parentMessageId,
   chatSessionId,
   promptId,
@@ -176,6 +180,7 @@ export async function* sendMessage({
   useExistingUserMessage,
   alternateAssistantId,
   signal,
+  forceUserFileSearch,
   useLanggraph,
 }: {
   regenerate: boolean;
@@ -195,6 +200,9 @@ export async function* sendMessage({
   useExistingUserMessage?: boolean;
   alternateAssistantId?: number;
   signal?: AbortSignal;
+  userFileIds?: number[];
+  userFolderIds?: number[];
+  forceUserFileSearch?: boolean;
   useLanggraph?: boolean;
 }): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
@@ -206,7 +214,10 @@ export async function* sendMessage({
     message: message,
     prompt_id: promptId,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
+    force_user_file_search: forceUserFileSearch,
     file_descriptors: fileDescriptors,
+    user_file_ids: userFileIds,
+    user_folder_ids: userFolderIds,
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
@@ -632,7 +643,11 @@ export function personaIncludesRetrieval(selectedPersona: Persona) {
   return selectedPersona.tools.some(
     (tool) =>
       tool.in_code_tool_id &&
-      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
+      [SEARCH_TOOL_ID, INTERNET_SEARCH_TOOL_ID].includes(
+        tool.in_code_tool_id
+      ) &&
+      selectedPersona.user_file_ids?.length === 0 &&
+      selectedPersona.user_folder_ids?.length === 0
   );
 }
 

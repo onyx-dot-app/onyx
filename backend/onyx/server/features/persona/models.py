@@ -85,6 +85,8 @@ class PersonaUpsertRequest(BaseModel):
     label_ids: list[int] | None = None
     is_default_persona: bool = False
     display_priority: int | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
 
 class PersonaSnapshot(BaseModel):
@@ -113,6 +115,8 @@ class PersonaSnapshot(BaseModel):
     is_default_persona: bool
     search_start_date: datetime | None = None
     labels: list["PersonaLabelSnapshot"] = []
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
     @classmethod
     def from_model(
@@ -161,6 +165,8 @@ class PersonaSnapshot(BaseModel):
             uploaded_image_id=persona.uploaded_image_id,
             search_start_date=persona.search_start_date,
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
+            user_file_ids=[file.id for file in persona.user_files],
+            user_folder_ids=[folder.id for folder in persona.user_folders],
         )
 
 

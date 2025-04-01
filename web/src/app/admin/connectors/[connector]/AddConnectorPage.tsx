@@ -434,7 +434,7 @@ export default function AddConnector({
     >
       {(formikProps) => {
         return (
-          <div className="mx-auto mb-8 w-full">
+          <div className="mx-auto w-full">
             {popup}
 
             {uploading && (

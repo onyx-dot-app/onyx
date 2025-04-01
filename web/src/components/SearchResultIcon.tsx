@@ -1,3 +1,4 @@
+"use client";
 import { useState, useEffect } from "react";
 import faviconFetch from "favicon-fetch";
 import { SourceIcon } from "./SourceIcon";

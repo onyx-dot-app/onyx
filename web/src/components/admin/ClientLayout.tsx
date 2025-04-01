@@ -449,7 +449,7 @@ export function ClientLayout({
             ]}
           />
         </div>
-        <div className="pb-8 relative h-full overflow-y-hidden w-full">
+        <div className="relative h-full overflow-y-hidden w-full">
           <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 px-0 mb-auto w-full items-start flex justify-end">
             <UserDropdown toggleUserSettings={toggleUserSettings} />
           </div>

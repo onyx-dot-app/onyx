@@ -97,6 +97,7 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.token_rate_limits.api import (
     router as token_rate_limit_settings_router,
 )
+from onyx.server.user_documents.api import router as user_documents_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx
 from onyx.setup import setup_onyx
@@ -297,6 +298,7 @@ def get_application() -> FastAPI:
     include_router_with_global_prefix_prepended(application, input_prompt_router)
     include_router_with_global_prefix_prepended(application, admin_input_prompt_router)
     include_router_with_global_prefix_prepended(application, cc_pair_router)
+    include_router_with_global_prefix_prepended(application, user_documents_router)
     include_router_with_global_prefix_prepended(application, folder_router)
     include_router_with_global_prefix_prepended(application, document_set_router)
     include_router_with_global_prefix_prepended(application, search_settings_router)

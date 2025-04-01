@@ -1,4 +1,5 @@
 import copy
+import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
@@ -37,6 +38,7 @@ from onyx.configs.model_configs import DOC_EMBEDDING_CONTEXT_SIZE
 from onyx.configs.model_configs import GEN_AI_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
+from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.interfaces import LLM
@@ -129,7 +131,12 @@ def _build_content(
     text_files = [
         file
         for file in files
-        if file.file_type in (ChatFileType.PLAIN_TEXT, ChatFileType.CSV)
+        if file.file_type
+        in (
+            ChatFileType.PLAIN_TEXT,
+            ChatFileType.CSV,
+            ChatFileType.USER_KNOWLEDGE,
+        )
     ]
 
     if not text_files:
@@ -137,7 +144,18 @@ def _build_content(
 
     final_message_with_files = "FILES:\n\n"
     for file in text_files:
-        file_content = file.content.decode("utf-8")
+        try:
+            file_content = file.content.decode("utf-8")
+        except UnicodeDecodeError:
+            # Try to decode as binary
+            try:
+                file_content, _, _ = read_pdf_file(io.BytesIO(file.content))
+            except Exception:
+                file_content = f"[Binary file content - {file.file_type} format]"
+                logger.exception(
+                    f"Could not decode binary file content for file type: {file.file_type}"
+                )
+                # logger.warning(f"Could not decode binary file content for file type: {file.file_type}")
         file_name_section = f"DOCUMENT: {file.filename}\n" if file.filename else ""
         final_message_with_files += (
             f"{file_name_section}{CODE_BLOCK_PAT.format(file_content.strip())}\n\n\n"
@@ -165,7 +183,6 @@ def build_content_with_imgs(
 
     img_urls = img_urls or []
     b64_imgs = b64_imgs or []
-
     message_main_content = _build_content(message, files)
 
     if exclude_images or (not img_files and not img_urls):
@@ -413,14 +430,12 @@ def _find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | N
     for model_name in filtered_model_names:
         model_obj = model_map.get(f"{provider}/{model_name}")
         if model_obj:
-            logger.debug(f"Using model object for {provider}/{model_name}")
             return model_obj
 
     # Then try all model names without provider prefix
     for model_name in filtered_model_names:
         model_obj = model_map.get(model_name)
         if model_obj:
-            logger.debug(f"Using model object for {model_name}")
             return model_obj
 
     return None
@@ -516,14 +531,10 @@ def get_llm_max_tokens(
 
         if "max_input_tokens" in model_obj:
             max_tokens = model_obj["max_input_tokens"]
-            logger.debug(
-                f"Max tokens for {model_name}: {max_tokens} (from max_input_tokens)"
-            )
             return max_tokens
 
         if "max_tokens" in model_obj:
             max_tokens = model_obj["max_tokens"]
-            logger.debug(f"Max tokens for {model_name}: {max_tokens} (from max_tokens)")
             return max_tokens
 
         logger.error(f"No max tokens found for LLM: {model_name}")
@@ -545,21 +556,16 @@ def get_llm_max_output_tokens(
         model_obj = model_map.get(f"{model_provider}/{model_name}")
         if not model_obj:
             model_obj = model_map[model_name]
-            logger.debug(f"Using model object for {model_name}")
         else:
-            logger.debug(f"Using model object for {model_provider}/{model_name}")
+            pass
 
         if "max_output_tokens" in model_obj:
             max_output_tokens = model_obj["max_output_tokens"]
-            logger.info(f"Max output tokens for {model_name}: {max_output_tokens}")
             return max_output_tokens
 
         # Fallback to a fraction of max_tokens if max_output_tokens is not specified
         if "max_tokens" in model_obj:
             max_output_tokens = int(model_obj["max_tokens"] * 0.1)
-            logger.info(
-                f"Fallback max output tokens for {model_name}: {max_output_tokens} (10% of max_tokens)"
-            )
             return max_output_tokens
 
         logger.error(f"No max output tokens found for LLM: {model_name}")
