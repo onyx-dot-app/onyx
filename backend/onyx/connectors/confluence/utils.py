@@ -343,13 +343,13 @@ def build_confluence_document_id(
     Returns:
         str: The document id
     """
+
+    # NOTE: urljoin is tricky and will drop the last segment of the base if it doesn't
+    # end with "/" because it believes that makes it a file.
     final_url = base_url.rstrip("/") + "/"
-    print(f"final url 1: {final_url} {is_cloud}")
     if is_cloud and not final_url.endswith("/wiki/"):
         final_url = urljoin(final_url, "wiki") + "/"
-        print(f"final url 2: {final_url}")
     final_url = urljoin(final_url, content_url.lstrip("/"))
-    print(f"final url 3: {final_url}")
     return final_url
 
 
