@@ -802,7 +802,7 @@ export function ChatInputBar({
                   currentAssistant={selectedAssistant}
                   trigger={
                     <button
-                      className="dark:text-[#fff] text-[#000] focus:outline-none"
+                      className="dark:text-white text-black focus:outline-none"
                       data-testid="llm-popover-trigger"
                     >
                       <ChatInputOption
