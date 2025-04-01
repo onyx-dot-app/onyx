@@ -1,6 +1,5 @@
 import io
 import math
-import posixpath
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -14,6 +13,7 @@ from typing import TYPE_CHECKING
 from typing import TypeVar
 from urllib.parse import parse_qs
 from urllib.parse import quote
+from urllib.parse import urljoin
 from urllib.parse import urlparse
 
 import requests
@@ -345,8 +345,8 @@ def build_confluence_document_id(
     """
     final_url = base_url.rstrip("/")
     if is_cloud and not final_url.endswith("/wiki"):
-        final_url = posixpath.join(final_url, "wiki")
-    final_url = posixpath.join(final_url, content_url)
+        final_url = urljoin(final_url, "wiki")
+    final_url = urljoin(final_url, content_url)
     return final_url
 
 
