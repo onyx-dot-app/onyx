@@ -12,7 +12,6 @@ import {
 } from "@/lib/constants";
 import { Metadata } from "next";
 import { buildClientUrl } from "@/lib/utilsSS";
-import { Inter } from "next/font/google";
 import {
   EnterpriseSettings,
   ApplicationStatus,
@@ -24,22 +23,22 @@ import { getCurrentUserSS } from "@/lib/userSS";
 import { Suspense } from "react";
 import PostHogPageView from "./PostHogPageView";
 import Script from "next/script";
-import { Hanken_Grotesk } from "next/font/google";
+import { Outfit, Inter } from "next/font/google";
 import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
 import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 
-const inter = Inter({
+const outfit = Outfit({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-outfit",
   display: "swap",
 });
 
-const hankenGrotesk = Hanken_Grotesk({
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-hanken-grotesk",
+  variable: "--font-inter",
   display: "swap",
 });
 
@@ -82,7 +81,7 @@ export default async function RootLayout({
   const getPageContent = async (content: React.ReactNode) => (
     <html
       lang="en"
-      className={`${inter.variable} ${hankenGrotesk.variable}`}
+      className={`${outfit.variable} ${inter.variable}`}
       suppressHydrationWarning
     >
       <head>
@@ -117,7 +116,7 @@ export default async function RootLayout({
         )}
       </head>
 
-      <body className={`relative ${inter.variable} font-hanken`}>
+      <body className={`relative ${outfit.variable} font-inter`}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"

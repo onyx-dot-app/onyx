@@ -90,7 +90,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             name="openai",
             display_name="OpenAI",
             api_key_required=True,
-            api_base_required=False,
+            api_base_required=True,
             api_version_required=False,
             custom_config_keys=[],
             llm_names=fetch_models_for_provider(OPENAI_PROVIDER_NAME),
