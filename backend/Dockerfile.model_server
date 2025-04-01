@@ -46,6 +46,7 @@ WORKDIR /app
 
 # Utils used by model server
 COPY ./onyx/utils/logger.py /app/onyx/utils/logger.py
+COPY ./onyx/utils/middleware.py /app/onyx/utils/middleware.py
 
 # Place to fetch version information
 COPY ./onyx/__init__.py /app/onyx/__init__.py
