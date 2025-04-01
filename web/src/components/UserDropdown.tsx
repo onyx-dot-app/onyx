@@ -18,6 +18,8 @@ import { usePaidEnterpriseFeaturesEnabled } from "./settings/usePaidEnterpriseFe
 import { Notifications } from "./chat/Notifications";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { DemoModeToggle } from "./demo/DemoModeToggle";
+import { useDemoMode } from "../hooks/useDemoMode";
 
 interface DropdownOptionProps {
   href?: string;
@@ -66,6 +68,7 @@ export function UserDropdown({
   hideUserDropdown?: boolean;
 }) {
   const { user, isCurator } = useUser();
+  const { isDemoMode, toggleDemoMode } = useDemoMode();
   const [userInfoVisible, setUserInfoVisible] = useState(false);
   const userInfoRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -238,7 +241,9 @@ export function UserDropdown({
                   />
                 ))}
 
-                {showAdminPanel ? (
+                <DemoModeToggle isDemoMode={isDemoMode} toggleDemoMode={toggleDemoMode} />
+
+                {showAdminPanel && !isDemoMode ? (
                   <DropdownOption
                     href="/admin/indexing/status"
                     icon={<LightSettingsIcon size={16} className="my-auto" />}
