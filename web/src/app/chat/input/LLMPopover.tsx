@@ -40,6 +40,8 @@ interface LLMPopoverProps {
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
   currentAssistant?: Persona;
+  trigger: React.ReactElement;
+  onSelect?: (value: string) => void;
 }
 
 export default function LLMPopover({
@@ -47,6 +49,8 @@ export default function LLMPopover({
   llmManager,
   requiresImageGeneration,
   currentAssistant,
+  trigger,
+  onSelect,
 }: LLMPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
@@ -114,32 +118,7 @@ export default function LLMPopover({
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <button
-          className="dark:text-[#fff] text-[#000] focus:outline-none"
-          data-testid="llm-popover-trigger"
-        >
-          <ChatInputOption
-            minimize
-            toggle
-            flexPriority="stiff"
-            name={getDisplayNameForModel(
-              llmManager?.currentLlm.modelName ||
-                defaultModelDisplayName ||
-                "Models"
-            )}
-            Icon={getProviderIcon(
-              llmManager?.currentLlm.provider ||
-                defaultProvider?.provider ||
-                "anthropic",
-              llmManager?.currentLlm.modelName ||
-                defaultProvider?.default_model_name ||
-                "claude-3-5-sonnet-20240620"
-            )}
-            tooltipContent="Switch models"
-          />
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
       <PopoverContent
         align="start"
         className="w-64 p-1 bg-background border border-background-200 rounded-md shadow-lg flex flex-col"
@@ -157,6 +136,7 @@ export default function LLMPopover({
                   }`}
                   onClick={() => {
                     llmManager.updateCurrentLlm(destructureValue(value));
+                    onSelect?.(value);
                     setIsOpen(false);
                   }}
                 >

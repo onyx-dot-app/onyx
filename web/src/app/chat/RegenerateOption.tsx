@@ -13,6 +13,7 @@ import { Hoverable } from "@/components/Hoverable";
 import { Popover } from "@/components/popover/Popover";
 import { IconType } from "react-icons";
 import { FiRefreshCw, FiCheck } from "react-icons/fi";
+import LLMPopover from "./input/LLMPopover";
 
 export function RegenerateDropdown({
   options,
@@ -153,28 +154,40 @@ export default function RegenerateOption({
       ? selectedAssistant.llm_model_version_override || llmName
       : llmName);
 
+  const [isOpen, setIsOpen] = useState(false);
+
+  const toggleDropdownVisible = (isVisible: boolean) => {
+    setIsOpen(isVisible);
+    onDropdownVisibleChange(isVisible);
+  };
+
   return (
-    <div
-      className="group flex items-center relative"
-      onMouseEnter={() => onHoverChange(true)}
-      onMouseLeave={() => onHoverChange(false)}
-    >
-      <RegenerateDropdown
-        onDropdownVisibleChange={onDropdownVisibleChange}
-        alternate={overriddenModel}
-        options={llmOptions}
-        selected={currentModelName}
-        onSelect={(value) => {
-          const { name, provider, modelName } = destructureValue(
-            value as string
-          );
-          regenerate({
-            name: name,
-            provider: provider,
-            modelName: modelName,
-          });
-        }}
-      />
-    </div>
+    <LLMPopover
+      llmManager={llmManager}
+      llmProviders={llmProviders}
+      requiresImageGeneration={false}
+      currentAssistant={undefined}
+      trigger={
+        <div onClick={() => toggleDropdownVisible(!isOpen)}>
+          {!overriddenModel ? (
+            <Hoverable size={16} icon={FiRefreshCw as IconType} />
+          ) : (
+            <Hoverable
+              size={16}
+              icon={FiRefreshCw as IconType}
+              hoverText={getDisplayNameForModel(overriddenModel)}
+            />
+          )}
+        </div>
+      }
+      onSelect={(value) => {
+        const { name, provider, modelName } = destructureValue(value as string);
+        regenerate({
+          name: name,
+          provider: provider,
+          modelName: modelName,
+        });
+      }}
+    />
   );
 }

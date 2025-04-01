@@ -6,7 +6,7 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
-import { FilterManager, LlmManager } from "@/lib/hooks";
+import { FilterManager, getDisplayNameForModel, LlmManager } from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import {
@@ -40,6 +40,7 @@ import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
 import { FidgetSpinner } from "react-loader-spinner";
 import { LoadingAnimation } from "@/components/Loading";
+import { getProviderIcon } from "@/app/admin/configuration/llm/interfaces";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -784,6 +785,27 @@ export function ChatInputBar({
                   llmManager={llmManager}
                   requiresImageGeneration={false}
                   currentAssistant={selectedAssistant}
+                  trigger={
+                    <button
+                      className="dark:text-[#fff] text-[#000] focus:outline-none"
+                      data-testid="llm-popover-trigger"
+                    >
+                      <ChatInputOption
+                        minimize
+                        toggle
+                        flexPriority="stiff"
+                        name={getDisplayNameForModel(
+                          llmManager?.currentLlm.modelName || "Models"
+                        )}
+                        Icon={getProviderIcon(
+                          llmManager?.currentLlm.provider || "anthropic",
+                          llmManager?.currentLlm.modelName ||
+                            "claude-3-5-sonnet-20240620"
+                        )}
+                        tooltipContent="Switch models"
+                      />
+                    </button>
+                  }
                 />
 
                 {retrievalEnabled && (
