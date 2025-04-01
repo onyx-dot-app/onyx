@@ -122,16 +122,24 @@ class BackstageConnector(PollConnector, LoadConnector):
             raise ConnectorMissingCredentialError(
                 "Both backstage_client_id and backstage_client_secret are required for Backstage OAuth authentication"
             )
-        
+        if "backstage_client_secret" not in credentials:
+            raise ConnectorMissingCredentialError(
+                "backstage_client_secret is required for Backstage OAuth authentication"
+            )         
         if "backstage_token_endpoint" not in credentials:
             raise ConnectorMissingCredentialError(
                 "backstage_token_endpoint is required for Backstage OAuth authentication"
             )
-            
+        if "backstage_token_audience" not in credentials:
+            raise ConnectorMissingCredentialError(
+                "backstage_token_audience is required for Backstage OAuth authentication"
+            )
+
+        # Load credentials                
         self.client_id = credentials["backstage_client_id"]
         self.client_secret = credentials["backstage_client_secret"]
         self.token_endpoint = credentials["backstage_token_endpoint"]
-        self.audience = credentials["backstage_saml_audience"]
+        self.audience = credentials["backstage_token_audience"]
         # Get initial access token
         self._refresh_access_token()        
         return credentials
