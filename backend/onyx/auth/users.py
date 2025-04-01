@@ -56,6 +56,7 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -512,6 +513,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
             return user
+
+    async def on_after_login(
+        self,
+        user: User,
+        request: Optional[Request] = None,
+        response: Optional[Response] = None,
+    ) -> None:
+        try:
+            if response and request and ANONYMOUS_USER_COOKIE_NAME in request.cookies:
+                response.delete_cookie(
+                    ANONYMOUS_USER_COOKIE_NAME,
+                    # Ensure cookie deletion doesn't override other cookies by setting the same path/domain
+                    path="/",
+                    domain=None,
+                    secure=WEB_DOMAIN.startswith("https"),
+                )
+                logger.debug(f"Deleted anonymous user cookie for user {user.email}")
+        except Exception:
+            logger.exception("Error deleting anonymous user cookie")
 
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
@@ -1302,6 +1322,7 @@ def get_oauth_router(
         # Login user
         response = await backend.login(strategy, user)
         await user_manager.on_after_login(user, request, response)
+
         # Prepare redirect response
         if tenant_id is None:
             # Use URL utility to add parameters
@@ -1311,9 +1332,14 @@ def get_oauth_router(
             # No parameters to add
             redirect_response = RedirectResponse(next_url, status_code=302)
 
-        # Copy headers and other attributes from 'response' to 'redirect_response'
+        # Copy headers from auth response to redirect response, with special handling for Set-Cookie
         for header_name, header_value in response.headers.items():
-            redirect_response.headers[header_name] = header_value
+            # FastAPI can have multiple Set-Cookie headers as a list
+            if header_name.lower() == "set-cookie" and isinstance(header_value, list):
+                for cookie_value in header_value:
+                    redirect_response.headers.append(header_name, cookie_value)
+            else:
+                redirect_response.headers[header_name] = header_value
 
         if hasattr(response, "body"):
             redirect_response.body = response.body

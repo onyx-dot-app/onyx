@@ -217,7 +217,6 @@ def mark_attempt_in_progress(
                 "index_attempt_id": index_attempt.id,
                 "status": IndexingStatus.IN_PROGRESS.value,
                 "cc_pair_id": index_attempt.connector_credential_pair_id,
-                "search_settings_id": index_attempt.search_settings_id,
             },
         )
     except Exception:
@@ -246,9 +245,6 @@ def mark_attempt_succeeded(
                 "index_attempt_id": index_attempt_id,
                 "status": IndexingStatus.SUCCESS.value,
                 "cc_pair_id": attempt.connector_credential_pair_id,
-                "search_settings_id": attempt.search_settings_id,
-                "total_docs_indexed": attempt.total_docs_indexed,
-                "new_docs_indexed": attempt.new_docs_indexed,
             },
         )
     except Exception:
@@ -277,9 +273,6 @@ def mark_attempt_partially_succeeded(
                 "index_attempt_id": index_attempt_id,
                 "status": IndexingStatus.COMPLETED_WITH_ERRORS.value,
                 "cc_pair_id": attempt.connector_credential_pair_id,
-                "search_settings_id": attempt.search_settings_id,
-                "total_docs_indexed": attempt.total_docs_indexed,
-                "new_docs_indexed": attempt.new_docs_indexed,
             },
         )
     except Exception:
@@ -312,10 +305,6 @@ def mark_attempt_canceled(
                 "index_attempt_id": index_attempt_id,
                 "status": IndexingStatus.CANCELED.value,
                 "cc_pair_id": attempt.connector_credential_pair_id,
-                "search_settings_id": attempt.search_settings_id,
-                "reason": reason,
-                "total_docs_indexed": attempt.total_docs_indexed,
-                "new_docs_indexed": attempt.new_docs_indexed,
             },
         )
     except Exception:
@@ -350,10 +339,6 @@ def mark_attempt_failed(
                 "index_attempt_id": index_attempt_id,
                 "status": IndexingStatus.FAILED.value,
                 "cc_pair_id": attempt.connector_credential_pair_id,
-                "search_settings_id": attempt.search_settings_id,
-                "reason": failure_reason,
-                "total_docs_indexed": attempt.total_docs_indexed,
-                "new_docs_indexed": attempt.new_docs_indexed,
             },
         )
     except Exception:

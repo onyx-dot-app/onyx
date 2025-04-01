@@ -74,8 +74,10 @@ def build_vespa_filters(
         filter_str += f'({TENANT_ID} contains "{filters.tenant_id}") and '
 
     # ACL filters
-    # if filters.access_control_list is not None:
-    #     filter_str += _build_or_filters(ACCESS_CONTROL_LIST, filters.access_control_list)
+    if filters.access_control_list is not None:
+        filter_str += _build_or_filters(
+            ACCESS_CONTROL_LIST, filters.access_control_list
+        )
 
     # Source type filters
     source_strs = (

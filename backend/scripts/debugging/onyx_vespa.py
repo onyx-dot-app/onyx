@@ -887,6 +887,7 @@ def main() -> None:
         type=int,
         help="Maximum number of documents to delete (for delete-all-documents)",
     )
+    parser.add_argument("--link", help="Document link (for get_acls filter)")
 
     args = parser.parse_args()
     vespa_debug = VespaDebugging(args.tenant_id)
@@ -924,7 +925,11 @@ def main() -> None:
     elif args.action == "get_acls":
         if args.cc_pair_id is None:
             parser.error("--cc-pair-id is required for get_acls action")
-        vespa_debug.acls(args.cc_pair_id, args.n)
+
+        if args.link is None:
+            vespa_debug.acls(args.cc_pair_id, args.n)
+        else:
+            vespa_debug.acls_by_link(args.cc_pair_id, args.link)
 
 
 if __name__ == "__main__":
