@@ -521,9 +521,9 @@ export const credentialDisplayNames: Record<string, string> = {
 
   // Backstage
   backstage_client_id: "OAuth Client ID",
-  backstage_client_secret: "OAuth Client Secret",
   backstage_token_endpoint: "OAuth Token Endpoint",
   backstage_token_audience: "OAuth Token Audience",
+  backstage_client_secret: "OAuth Client Secret",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {
