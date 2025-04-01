@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-} from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
   PopoverContent,
@@ -59,65 +53,61 @@ export default function LLMPopover({
   const { user } = useUser();
 
   // Memoize the options to prevent unnecessary recalculations
-  const {
-    llmOptionsByProvider,
-    llmOptions,
-    defaultProvider,
-    defaultModelDisplayName,
-  } = useMemo(() => {
-    const llmOptionsByProvider: {
-      [provider: string]: {
-        name: string;
-        value: string;
-        icon: React.FC<{ size?: number; className?: string }>;
-      }[];
-    } = {};
+  const { llmOptions, defaultProvider, defaultModelDisplayName } =
+    useMemo(() => {
+      const llmOptionsByProvider: {
+        [provider: string]: {
+          name: string;
+          value: string;
+          icon: React.FC<{ size?: number; className?: string }>;
+        }[];
+      } = {};
 
-    const uniqueModelNames = new Set<string>();
+      const uniqueModelNames = new Set<string>();
 
-    llmProviders.forEach((llmProvider) => {
-      if (!llmOptionsByProvider[llmProvider.provider]) {
-        llmOptionsByProvider[llmProvider.provider] = [];
-      }
-
-      (llmProvider.display_model_names || llmProvider.model_names).forEach(
-        (modelName) => {
-          if (!uniqueModelNames.has(modelName)) {
-            uniqueModelNames.add(modelName);
-            llmOptionsByProvider[llmProvider.provider].push({
-              name: modelName,
-              value: structureValue(
-                llmProvider.name,
-                llmProvider.provider,
-                modelName
-              ),
-              icon: getProviderIcon(llmProvider.provider, modelName),
-            });
-          }
+      llmProviders.forEach((llmProvider) => {
+        if (!llmOptionsByProvider[llmProvider.provider]) {
+          llmOptionsByProvider[llmProvider.provider] = [];
         }
+
+        (llmProvider.display_model_names || llmProvider.model_names).forEach(
+          (modelName) => {
+            if (!uniqueModelNames.has(modelName)) {
+              uniqueModelNames.add(modelName);
+              llmOptionsByProvider[llmProvider.provider].push({
+                name: modelName,
+                value: structureValue(
+                  llmProvider.name,
+                  llmProvider.provider,
+                  modelName
+                ),
+                icon: getProviderIcon(llmProvider.provider, modelName),
+              });
+            }
+          }
+        );
+      });
+
+      const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
+        ([provider, options]) => [...options]
       );
-    });
 
-    const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
-      ([provider, options]) => [...options]
-    );
+      const defaultProvider = llmProviders.find(
+        (llmProvider) => llmProvider.is_default_provider
+      );
 
-    const defaultProvider = llmProviders.find(
-      (llmProvider) => llmProvider.is_default_provider
-    );
+      const defaultModelName = defaultProvider?.default_model_name;
+      const defaultModelDisplayName = defaultModelName
+        ? getDisplayNameForModel(defaultModelName)
+        : null;
 
-    const defaultModelName = defaultProvider?.default_model_name;
-    const defaultModelDisplayName = defaultModelName
-      ? getDisplayNameForModel(defaultModelName)
-      : null;
-
-    return {
-      llmOptionsByProvider,
-      llmOptions,
-      defaultProvider,
-      defaultModelDisplayName,
-    };
-  }, [llmProviders]);
+      return {
+        llmOptionsByProvider,
+        llmOptions,
+        defaultProvider,
+        defaultModelDisplayName,
+      };
+    }, [llmProviders]);
 
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
