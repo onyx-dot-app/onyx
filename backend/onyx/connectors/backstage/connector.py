@@ -180,7 +180,15 @@ class BackstageConnector(PollConnector, LoadConnector):
 
         response = requests.post(issuer, headers=headers, data=data)
         response.raise_for_status()
-        return response.json()
+        token_data = response.json()
+        
+        # Log token expiry information for debugging
+        if 'expires_in' in token_data:
+            logger.debug(f"Token expires in {token_data['expires_in']} seconds")
+        else:
+            logger.warning("No expires_in field in token response, using default 1 hour expiry")
+        
+        return token_data
         
    
 
@@ -305,25 +313,15 @@ class BackstageConnector(PollConnector, LoadConnector):
     def _make_request_with_retry(self, url: str, max_retries: int = 3) -> requests.Response:
         """
         Make an HTTP request with automatic retries for certain failure conditions.
-        
-        Args:
-            url: The URL to request
-            max_retries: Maximum number of retry attempts
-            
-        Returns:
-            Response object
         """
         retry_count = 0
+        
+        # Always ensure valid token before making any request
+        self._ensure_valid_token()  # Add this line
         
         while retry_count < max_retries:
             try:
                 response = requests.get(url, headers=self.headers, timeout=REQUEST_TIMEOUT)
-                
-                # Handle token expiration
-                if response.status_code == 401:
-                    logger.info("Token expired, refreshing...")
-                    self._refresh_access_token()
-                    response = requests.get(url, headers=self.headers, timeout=REQUEST_TIMEOUT)
                 
                 # Handle rate limiting with exponential backoff
                 if response.status_code == 429:
@@ -898,7 +896,7 @@ if __name__ == "__main__":
     
     # Example of how to use the connector with proper error handling
     try:
-        connector = BackstageConnector("https://portal.services.as24.tech/")
+        connector = BackstageConnector("https://demo.backstage.io/")
         connector.load_credentials({
                 "backstage_client_id": os.environ["BACKSTAGE_CLIENT_ID"],
                 "backstage_client_secret": os.environ["BACKSTAGE_CLIENT_SECRET"],
