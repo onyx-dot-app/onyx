@@ -143,6 +143,7 @@ def decompose_orig_question(
                 msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBQUESTION_GENERATION,
                 max_tokens=AGENT_MAX_TOKENS_SUBQUESTION_GENERATION,
+                user_id=graph_config.tooling.user_id,
             ),
             dispatch_subquestion(0, writer),
             sep_callback=dispatch_subquestion_sep(0, writer),

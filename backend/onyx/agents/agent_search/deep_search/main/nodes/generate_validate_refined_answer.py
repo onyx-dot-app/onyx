@@ -310,6 +310,7 @@ def generate_validate_refined_answer(
             max_tokens=AGENT_MAX_TOKENS_ANSWER_GENERATION
             if _should_restrict_tokens(model.config)
             else None,
+            user_id=graph_config.tooling.user_id,
         ):
             # TODO: in principle, the answer here COULD contain images, but we don't support that yet
             content = message.content
@@ -417,6 +418,7 @@ def generate_validate_refined_answer(
             prompt=msg,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_REFINED_ANSWER_VALIDATION,
             max_tokens=AGENT_MAX_TOKENS_VALIDATION,
+            user_id=graph_config.tooling.user_id,
         )
         refined_answer_quality = binary_string_test_after_answer_separator(
             text=cast(str, validation_response.content),

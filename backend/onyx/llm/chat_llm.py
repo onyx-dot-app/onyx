@@ -27,6 +27,7 @@ from langchain_core.prompt_values import PromptValue
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
+from onyx.configs.app_configs import SEND_USER_ID_TO_LLM
 from onyx.configs.chat_configs import QA_TIMEOUT
 from onyx.configs.model_configs import (
     DISABLE_LITELLM_STREAMING,
@@ -403,6 +404,7 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -410,52 +412,53 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         try:
-            return litellm.completion(
-                mock_response=MOCK_LLM_RESPONSE,
+            # Prepare arguments for litellm.completion
+            litellm_args = {
+                "mock_response": MOCK_LLM_RESPONSE,
                 # model choice
-                # model="openai/gpt-4",
-                model=f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
-                # NOTE: have to pass in None instead of empty string for these
-                # otherwise litellm can have some issues with bedrock
-                api_key=self._api_key or None,
-                base_url=self._api_base or None,
-                api_version=self._api_version or None,
-                custom_llm_provider=self._custom_llm_provider or None,
-                # actual input
-                messages=processed_prompt,
-                tools=tools,
-                tool_choice=tool_choice if tools else None,
-                max_tokens=max_tokens,
-                # streaming choice
-                stream=stream,
-                # model params
-                temperature=0,
-                timeout=timeout_override or self._timeout,
-                # For now, we don't support parallel tool calls
-                # NOTE: we can't pass this in if tools are not specified
-                # or else OpenAI throws an error
-                **(
-                    {"parallel_tool_calls": False}
-                    if tools
-                    and self.config.model_name
-                    not in [
-                        "o3-mini",
-                        "o3-preview",
-                        "o1",
-                        "o1-preview",
-                        "o1-mini",
-                        "o1-mini-2024-09-12",
-                        "o3-mini-2025-01-31",
-                    ]
-                    else {}
-                ),  # TODO: remove once LITELLM has patched
-                **(
-                    {"response_format": structured_response_format}
-                    if structured_response_format
-                    else {}
-                ),
+            # model="openai/gpt-4",
+            "model": f"{self.config.model_provider}/{self.config.deployment_name or self.config.model_name}",
+            # NOTE: have to pass in None instead of empty string for these
+            # otherwise litellm can have some issues with bedrock
+            "api_key": self._api_key or None,
+            "base_url": self._api_base or None,
+            "api_version": self._api_version or None,
+            "custom_llm_provider": self._custom_llm_provider or None,
+            # actual input
+            "messages": processed_prompt,
+            "tools": tools,
+            "tool_choice": tool_choice if tools else None,
+            # streaming choice
+            "stream": stream,
+            # model params
+            "temperature": 0,
+            "timeout": timeout_override or self._timeout,
+            "max_tokens": max_tokens,
+            # For now, we don't support parallel tool calls
+            # NOTE: we can't pass this in if tools are not specified
+            # or else OpenAI throws an error
+            **({"parallel_tool_calls": False} if tools and self.config.model_name not in [
+                "o3-mini",
+                "o3-preview",
+                "o1",
+                "o1-preview",
+                "o1-mini",
+                "o1-mini-2024-09-12",
+                "o3-mini-2025-01-31",
+                "phi-4",
+                "deepseek-r1",
+                "llama-3.3-70b-instruct"
+            ] else {}),  # TODO: remove once LITELLM has patched
+            **({"response_format": structured_response_format} if structured_response_format else {}),
+            # Pass user_id if provided AND enabled by config, LiteLLM handles passing it to supported providers (like OpenAI)
+            **({"user": user_id} if SEND_USER_ID_TO_LLM and user_id else {}),
                 **self._model_kwargs,
-            )
+            }
+
+            # Debug log before calling litellm
+            logger.debug(f"Calling litellm.completion with user_id: {user_id}")
+
+            return litellm.completion(**litellm_args)
         except Exception as e:
             self._record_error(processed_prompt, e)
             # for break pointing
@@ -487,6 +490,7 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -501,6 +505,7 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                user_id=user_id,
             ),
         )
         choice = response.choices[0]
@@ -520,6 +525,7 @@ class DefaultMultiLLM(LLM):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> Iterator[BaseMessage]:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -546,6 +552,7 @@ class DefaultMultiLLM(LLM):
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
                 max_tokens=max_tokens,
+                user_id=user_id,
             ),
         )
         try:

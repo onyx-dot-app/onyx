@@ -121,6 +121,7 @@ def generate_sub_answer(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION,
                 max_tokens=AGENT_MAX_TOKENS_SUBANSWER_GENERATION,
+                user_id=graph_config.tooling.user_id,
             ):
                 # TODO: in principle, the answer here COULD contain images, but we don't support that yet
                 content = message.content

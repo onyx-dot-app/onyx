@@ -98,6 +98,7 @@ def expand_queries(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_QUERY_REWRITING_GENERATION,
                 max_tokens=AGENT_MAX_TOKENS_SUBQUERY_GENERATION,
+                user_id=graph_config.tooling.user_id,
             ),
             dispatch_subquery(level, question_num, writer),
         )

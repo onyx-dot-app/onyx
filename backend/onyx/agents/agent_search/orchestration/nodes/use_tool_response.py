@@ -64,6 +64,7 @@ def basic_use_tool_response(
         stream = llm.stream(
             prompt=new_prompt_builder.build(),
             structured_response_format=structured_response_format,
+            user_id=agent_config.tooling.user_id,
         )
 
         # For now, we don't do multiple tool calls, so we ignore the tool_message
