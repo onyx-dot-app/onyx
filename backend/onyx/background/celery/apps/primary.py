@@ -174,6 +174,9 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
                 f"search_settings={attempt.search_settings_id}"
             )
             logger.warning(failure_reason)
+            logger.exception(
+                f"Marking attempt {attempt.id} as canceled due to validation error 2"
+            )
             mark_attempt_canceled(attempt.id, db_session, failure_reason)
 
 
@@ -285,5 +288,6 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.shared",
         "onyx.background.celery.tasks.vespa",
         "onyx.background.celery.tasks.llm_model_update",
+        "onyx.background.celery.tasks.user_file_folder_sync",
     ]
 )

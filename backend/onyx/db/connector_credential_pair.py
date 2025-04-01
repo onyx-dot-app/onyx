@@ -27,6 +27,7 @@ from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserFile
 from onyx.db.models import UserGroup__ConnectorCredentialPair
 from onyx.db.models import UserRole
 from onyx.server.models import StatusResponse
@@ -106,11 +107,13 @@ def get_connector_credential_pairs_for_user(
     eager_load_connector: bool = False,
     eager_load_credential: bool = False,
     eager_load_user: bool = False,
+    include_user_files: bool = False,
 ) -> list[ConnectorCredentialPair]:
     if eager_load_user:
         assert (
             eager_load_credential
         ), "eager_load_credential must be True if eager_load_user is True"
+
     stmt = select(ConnectorCredentialPair).distinct()
 
     if eager_load_connector:
@@ -125,6 +128,9 @@ def get_connector_credential_pairs_for_user(
     stmt = _add_user_filters(stmt, user, get_editable)
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
 
     return list(db_session.scalars(stmt).unique().all())
 
@@ -153,13 +159,15 @@ def get_connector_credential_pairs_for_user_parallel(
 
 
 def get_connector_credential_pairs(
-    db_session: Session,
-    ids: list[int] | None = None,
+    db_session: Session, ids: list[int] | None = None, include_user_files: bool = False
 ) -> list[ConnectorCredentialPair]:
     stmt = select(ConnectorCredentialPair).distinct()
 
     if ids:
         stmt = stmt.where(ConnectorCredentialPair.id.in_(ids))
+
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
 
     return list(db_session.scalars(stmt).all())
 
@@ -207,12 +215,15 @@ def get_connector_credential_pair_for_user(
     connector_id: int,
     credential_id: int,
     user: User | None,
+    include_user_files: bool = False,
     get_editable: bool = True,
 ) -> ConnectorCredentialPair | None:
     stmt = select(ConnectorCredentialPair)
     stmt = _add_user_filters(stmt, user, get_editable)
     stmt = stmt.where(ConnectorCredentialPair.connector_id == connector_id)
     stmt = stmt.where(ConnectorCredentialPair.credential_id == credential_id)
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -321,6 +332,9 @@ def _update_connector_credential_pair(
         cc_pair.total_docs_indexed += net_docs
     if status is not None:
         cc_pair.status = status
+    if cc_pair.is_user_file:
+        cc_pair.status = ConnectorCredentialPairStatus.PAUSED
+
     db_session.commit()
 
 
@@ -446,6 +460,7 @@ def add_credential_to_connector(
     initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
     last_successful_index_time: datetime | None = None,
     seeding_flow: bool = False,
+    is_user_file: bool = False,
 ) -> StatusResponse:
     connector = fetch_connector_by_id(connector_id, db_session)
 
@@ -511,6 +526,7 @@ def add_credential_to_connector(
         access_type=access_type,
         auto_sync_options=auto_sync_options,
         last_successful_index_time=last_successful_index_time,
+        is_user_file=is_user_file,
     )
     db_session.add(association)
     db_session.flush()  # make sure the association has an id
@@ -587,8 +603,12 @@ def remove_credential_from_connector(
 
 def fetch_connector_credential_pairs(
     db_session: Session,
+    include_user_files: bool = False,
 ) -> list[ConnectorCredentialPair]:
-    return db_session.query(ConnectorCredentialPair).all()
+    stmt = select(ConnectorCredentialPair)
+    if not include_user_files:
+        stmt = stmt.where(ConnectorCredentialPair.is_user_file != True)  # noqa: E712
+    return list(db_session.scalars(stmt).unique().all())
 
 
 def resync_cc_pair(
@@ -634,3 +654,23 @@ def resync_cc_pair(
     )
 
     db_session.commit()
+
+
+def get_connector_credential_pairs_with_user_files(
+    db_session: Session,
+) -> list[ConnectorCredentialPair]:
+    """
+    Get all connector credential pairs that have associated user files.
+
+    Args:
+        db_session: Database session
+
+    Returns:
+        List of ConnectorCredentialPair objects that have user files
+    """
+    return (
+        db_session.query(ConnectorCredentialPair)
+        .join(UserFile, UserFile.cc_pair_id == ConnectorCredentialPair.id)
+        .distinct()
+        .all()
+    )

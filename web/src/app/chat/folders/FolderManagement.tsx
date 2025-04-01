@@ -8,7 +8,8 @@ export async function createFolder(folderName: string): Promise<number> {
     body: JSON.stringify({ folder_name: folderName }),
   });
   if (!response.ok) {
-    throw new Error("Failed to create folder");
+    const errorData = await response.json();
+    throw new Error(errorData.detail || "Failed to create folder");
   }
   const data = await response.json();
   return data;

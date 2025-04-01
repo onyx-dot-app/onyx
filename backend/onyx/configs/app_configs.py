@@ -170,7 +170,7 @@ POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
 POSTGRES_PASSWORD = urllib.parse.quote_plus(
     os.environ.get("POSTGRES_PASSWORD") or "password"
 )
-POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
@@ -437,7 +437,7 @@ LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
 # Slack specific configs
-SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 2)
+SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"

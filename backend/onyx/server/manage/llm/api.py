@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from datetime import datetime
+from datetime import timezone
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -138,14 +140,28 @@ def list_llm_providers(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderView]:
+    start_time = datetime.now(timezone.utc)
+    logger.debug("Starting to fetch LLM providers")
+
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(db_session):
+        from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        from_model_end = datetime.now(timezone.utc)
+        from_model_duration = (from_model_end - from_model_start).total_seconds()
+        logger.debug(
+            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
+        )
+
         if full_llm_provider.api_key:
             full_llm_provider.api_key = (
                 full_llm_provider.api_key[:4] + "****" + full_llm_provider.api_key[-4:]
             )
         llm_provider_list.append(full_llm_provider)
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
 
     return llm_provider_list
 
@@ -282,12 +298,25 @@ def list_llm_provider_basics(
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
-    return [
-        LLMProviderDescriptor.from_model(llm_provider_model)
-        for llm_provider_model in fetch_existing_llm_providers_for_user(
-            db_session, user
+    start_time = datetime.now(timezone.utc)
+    logger.debug("Starting to fetch basic LLM providers for user")
+
+    llm_provider_list: list[LLMProviderDescriptor] = []
+    for llm_provider_model in fetch_existing_llm_providers_for_user(db_session, user):
+        from_model_start = datetime.now(timezone.utc)
+        full_llm_provider = LLMProviderDescriptor.from_model(llm_provider_model)
+        from_model_end = datetime.now(timezone.utc)
+        from_model_duration = (from_model_end - from_model_start).total_seconds()
+        logger.debug(
+            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
         )
-    ]
+        llm_provider_list.append(full_llm_provider)
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(f"Completed fetching basic LLM providers in {duration:.2f} seconds")
+
+    return llm_provider_list
 
 
 @admin_router.get("/provider-contextual-cost")
