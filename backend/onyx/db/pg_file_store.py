@@ -67,6 +67,9 @@ def read_lobj(
     use_tempfile: bool = False,
 ) -> IO:
     pg_conn = get_pg_conn_from_session(db_session)
+    # Ensure we're using binary mode by default for large objects
+    if mode is None:
+        mode = "rb"
     large_object = (
         pg_conn.lobject(lobj_oid, mode=mode) if mode else pg_conn.lobject(lobj_oid)
     )
@@ -81,6 +84,7 @@ def read_lobj(
         temp_file.seek(0)
         return temp_file
     else:
+        # Ensure we're getting raw bytes without text decoding
         return BytesIO(large_object.read())
 
 
@@ -147,4 +151,29 @@ def upsert_pgfilestore(
     if commit:
         db_session.commit()
 
+    return pgfilestore
+
+
+def save_bytes_to_pgfilestore(
+    db_session: Session,
+    raw_bytes: bytes,
+    media_type: str,
+    identifier: str,
+    display_name: str,
+    file_origin: FileOrigin = FileOrigin.OTHER,
+) -> PGFileStore:
+    """
+    Saves raw bytes to PGFileStore and returns the resulting record.
+    """
+    file_name = f"{file_origin.name.lower()}_{identifier}"
+    lobj_oid = create_populate_lobj(BytesIO(raw_bytes), db_session)
+    pgfilestore = upsert_pgfilestore(
+        file_name=file_name,
+        display_name=display_name,
+        file_origin=file_origin,
+        file_type=media_type,
+        lobj_oid=lobj_oid,
+        db_session=db_session,
+        commit=True,
+    )
     return pgfilestore

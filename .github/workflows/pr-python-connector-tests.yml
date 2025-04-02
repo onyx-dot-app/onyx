@@ -1,6 +1,7 @@
 name: Connector Tests
 
 on:
+  merge_group:
   pull_request:
     branches: [main]
   schedule:
@@ -47,11 +48,13 @@ env:
   # Gitbook
   GITBOOK_SPACE_ID: ${{ secrets.GITBOOK_SPACE_ID }}
   GITBOOK_API_KEY: ${{ secrets.GITBOOK_API_KEY }}
+  # Notion
+  NOTION_INTEGRATION_TOKEN: ${{ secrets.NOTION_INTEGRATION_TOKEN }}
 
 jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
-    runs-on: [runs-on,runner=8cpu-linux-x64,"run-id=${{ github.run_id }}"]
+    runs-on: [runs-on, runner=8cpu-linux-x64, "run-id=${{ github.run_id }}"]
 
     env:
       PYTHONPATH: ./backend
@@ -76,7 +79,7 @@ jobs:
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
           playwright install chromium
           playwright install-deps chromium
-          
+
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/connectors

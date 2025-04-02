@@ -13,7 +13,7 @@ interface UserContextType {
   isCurator: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
-  updateUserAutoScroll: (autoScroll: boolean | null) => Promise<void>;
+  updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   toggleAssistantPinnedStatus: (
     currentPinnedAssistantIDs: number[],
@@ -76,8 +76,8 @@ export function UserProvider({
       const identifyData: Record<string, any> = {
         email: user.email,
       };
-      if (user.organization_name) {
-        identifyData.organization_name = user.organization_name;
+      if (user.team_name) {
+        identifyData.team_name = user.team_name;
       }
       posthog.identify(user.id, identifyData);
     } else {
@@ -163,7 +163,7 @@ export function UserProvider({
     }
   };
 
-  const updateUserAutoScroll = async (autoScroll: boolean | null) => {
+  const updateUserAutoScroll = async (autoScroll: boolean) => {
     try {
       const response = await fetch("/api/auto-scroll", {
         method: "PATCH",

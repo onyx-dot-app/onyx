@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { usePopup } from "../admin/connectors/Popup";
 
 const ERROR_MESSAGES = {
-  Anonymous: "Your organization does not have anonymous access enabled.",
+  Anonymous: "Your team does not have anonymous access enabled.",
 };
 
 export default function AuthErrorDisplay({

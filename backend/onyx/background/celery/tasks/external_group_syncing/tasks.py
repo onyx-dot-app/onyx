@@ -423,7 +423,7 @@ def connector_external_group_sync_generator_task(
             )
             external_user_groups: list[ExternalUserGroup] = []
             try:
-                external_user_groups = ext_group_sync_func(cc_pair)
+                external_user_groups = ext_group_sync_func(tenant_id, cc_pair)
             except ConnectorValidationError as e:
                 msg = f"Error syncing external groups for {source_type} for cc_pair: {cc_pair_id} {e}"
                 update_connector_credential_pair(

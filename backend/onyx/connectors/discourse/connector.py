@@ -3,6 +3,7 @@ import urllib.parse
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import cast
 
 import requests
 from pydantic import BaseModel
@@ -20,7 +21,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
@@ -112,7 +114,7 @@ class DiscourseConnector(PollConnector):
                     responders.append(BasicExpertInfo(display_name=responder_name))
 
             sections.append(
-                Section(link=topic_url, text=parse_html_page_basic(post["cooked"]))
+                TextSection(link=topic_url, text=parse_html_page_basic(post["cooked"]))
             )
         category_name = self.category_id_map.get(topic["category_id"])
 
@@ -129,7 +131,7 @@ class DiscourseConnector(PollConnector):
 
         doc = Document(
             id="_".join([DocumentSource.DISCOURSE.value, str(topic["id"])]),
-            sections=sections,
+            sections=cast(list[TextSection | ImageSection], sections),
             source=DocumentSource.DISCOURSE,
             semantic_identifier=topic["title"],
             doc_updated_at=time_str_to_utc(topic["last_posted_at"]),

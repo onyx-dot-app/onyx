@@ -77,11 +77,12 @@ export function ClientLayout({
             defaultModel={user?.preferences?.default_model!}
           />
         )}
+
         {settings?.settings.application_status ===
           ApplicationStatus.PAYMENT_REMINDER && (
           <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
             <strong className="font-bold">Warning:</strong> Your trial ends in
-            less than 2 days and no payment method has been added.
+            less than 5 days and no payment method has been added.
             <div className="mt-2">
               <Link href="/admin/billing">
                 <Button
@@ -201,10 +202,10 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Tools</div>
+                              <div className="ml-1">Actions</div>
                             </div>
                           ),
-                          link: "/admin/tools",
+                          link: "/admin/actions",
                         },
                       ]
                     : []),
@@ -359,18 +360,25 @@ export function ClientLayout({
                                 ),
                                 link: "/admin/performance/usage",
                               },
-                              {
-                                name: (
-                                  <div className="flex">
-                                    <DatabaseIconSkeleton
-                                      className="text-text-700"
-                                      size={18}
-                                    />
-                                    <div className="ml-1">Query History</div>
-                                  </div>
-                                ),
-                                link: "/admin/performance/query-history",
-                              },
+                              ...(settings?.settings.query_history_type !==
+                              "disabled"
+                                ? [
+                                    {
+                                      name: (
+                                        <div className="flex">
+                                          <DatabaseIconSkeleton
+                                            className="text-text-700"
+                                            size={18}
+                                          />
+                                          <div className="ml-1">
+                                            Query History
+                                          </div>
+                                        </div>
+                                      ),
+                                      link: "/admin/performance/query-history",
+                                    },
+                                  ]
+                                : []),
                               {
                                 name: (
                                   <div className="flex">

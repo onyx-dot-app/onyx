@@ -145,6 +145,7 @@ def test_multiple_tool_calls(default_multi_llm: DefaultMultiLLM) -> None:
             timeout=30,
             parallel_tool_calls=False,
             mock_response=MOCK_LLM_RESPONSE,
+            max_tokens=None,
         )
 
 
@@ -290,4 +291,5 @@ def test_multiple_tool_calls_streaming(default_multi_llm: DefaultMultiLLM) -> No
             timeout=30,
             parallel_tool_calls=False,
             mock_response=MOCK_LLM_RESPONSE,
+            max_tokens=None,
         )

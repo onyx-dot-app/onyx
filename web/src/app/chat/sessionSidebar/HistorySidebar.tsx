@@ -64,7 +64,6 @@ interface HistorySidebarProps {
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
   explicitlyUntoggle: () => void;
-  showDeleteAllModal?: () => void;
   setShowAssistantsModal: (show: boolean) => void;
   toggleChatSessionSearchModal?: () => void;
 }
@@ -183,7 +182,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       showShareModal,
       toggleChatSessionSearchModal,
       showDeleteModal,
-      showDeleteAllModal,
     },
     ref: ForwardedRef<HTMLDivElement>
   ) => {
@@ -403,7 +401,6 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               existingChats={existingChats}
               currentChatId={currentChatId}
               folders={folders}
-              showDeleteAllModal={showDeleteAllModal}
             />
           </div>
         </div>

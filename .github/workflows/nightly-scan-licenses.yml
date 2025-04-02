@@ -53,24 +53,90 @@ jobs:
           exclude: '(?i)^(pylint|aio[-_]*).*'
           
       - name: Print report
-        if: ${{ always() }}
+        if: always()
         run: echo "${{ steps.license_check_report.outputs.report }}"
       
       - name: Install npm dependencies
         working-directory: ./web
         run: npm ci
-        
-      - name: Run Trivy vulnerability scanner in repo mode
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          scanners: license
-          format: table
-#           format: sarif
-#           output: trivy-results.sarif
-          severity: HIGH,CRITICAL
 
-#       - name: Upload Trivy scan results to GitHub Security tab
-#         uses: github/codeql-action/upload-sarif@v3
+        # be careful enabling the sarif and upload as it may spam the security tab
+        # with a huge amount of items. Work out the issues before enabling upload.       
+#       - name: Run Trivy vulnerability scanner in repo mode
+#         if: always()
+#         uses: aquasecurity/trivy-action@0.29.0
 #         with:
-#           sarif_file: trivy-results.sarif
+#           scan-type: fs
+#           scan-ref: .
+#           scanners: license
+#           format: table
+#           severity: HIGH,CRITICAL
+# #           format: sarif
+# #           output: trivy-results.sarif
+# 
+# #       - name: Upload Trivy scan results to GitHub Security tab
+# #         uses: github/codeql-action/upload-sarif@v3
+# #         with:
+# #           sarif_file: trivy-results.sarif
+
+  scan-trivy:
+    # See https://runs-on.com/runners/linux/
+    runs-on: [runs-on,runner=2cpu-linux-x64,"run-id=${{ github.run_id }}"]
+      
+    steps:
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to Docker Hub
+      uses: docker/login-action@v3
+      with:
+        username: ${{ secrets.DOCKER_USERNAME }}
+        password: ${{ secrets.DOCKER_TOKEN }}
+
+    # Backend
+    - name: Pull backend docker image
+      run: docker pull onyxdotapp/onyx-backend:latest
+
+    - name: Run Trivy vulnerability scanner on backend
+      uses: aquasecurity/trivy-action@0.29.0
+      env:
+        TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
+        TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
+      with:
+        image-ref: onyxdotapp/onyx-backend:latest
+        scanners: license
+        severity: HIGH,CRITICAL
+        vuln-type: library
+        exit-code: 0  # Set to 1 if we want a failed scan to fail the workflow
+
+    # Web server
+    - name: Pull web server docker image
+      run: docker pull onyxdotapp/onyx-web-server:latest
+          
+    - name: Run Trivy vulnerability scanner on web server
+      uses: aquasecurity/trivy-action@0.29.0
+      env:
+        TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
+        TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
+      with:
+        image-ref: onyxdotapp/onyx-web-server:latest
+        scanners: license
+        severity: HIGH,CRITICAL
+        vuln-type: library
+        exit-code: 0
+
+    # Model server
+    - name: Pull model server docker image
+      run: docker pull onyxdotapp/onyx-model-server:latest
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@0.29.0
+      env:
+        TRIVY_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-db:2'
+        TRIVY_JAVA_DB_REPOSITORY: 'public.ecr.aws/aquasecurity/trivy-java-db:1'
+      with:
+        image-ref: onyxdotapp/onyx-model-server:latest
+        scanners: license
+        severity: HIGH,CRITICAL
+        vuln-type: library
+        exit-code: 0

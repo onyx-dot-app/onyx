@@ -91,6 +91,7 @@ class EmbeddingModel:
         callback: IndexingHeartbeatInterface | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
+        reduced_dimension: int | None = None,
     ) -> None:
         self.api_key = api_key
         self.provider_type = provider_type
@@ -102,6 +103,7 @@ class EmbeddingModel:
         self.api_url = api_url
         self.api_version = api_version
         self.deployment_name = deployment_name
+        self.reduced_dimension = reduced_dimension
         self.tokenizer = get_tokenizer(
             model_name=model_name, provider_type=provider_type
         )
@@ -190,6 +192,7 @@ class EmbeddingModel:
                 manual_query_prefix=self.query_prefix,
                 manual_passage_prefix=self.passage_prefix,
                 api_url=self.api_url,
+                reduced_dimension=self.reduced_dimension,
             )
 
             start_time = time.time()
@@ -303,6 +306,7 @@ class EmbeddingModel:
             retrim_content=retrim_content,
             api_version=search_settings.api_version,
             deployment_name=search_settings.deployment_name,
+            reduced_dimension=search_settings.reduced_dimension,
         )
 
 

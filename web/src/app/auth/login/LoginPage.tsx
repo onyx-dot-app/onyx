@@ -51,25 +51,16 @@ export default function LoginPage({
           </div>
           <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
 
-          <div className="flex mt-4 justify-between">
-            <Link
-              href={`/auth/signup${
-                searchParams?.next ? `?next=${searchParams.next}` : ""
-              }`}
-              className="text-link font-medium"
-            >
-              Create an account
-            </Link>
-
-            {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
+          {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
+            <div className="flex mt-4 justify-between">
               <Link
                 href="/auth/forgot-password"
                 className="text-link font-medium"
               >
                 Reset Password
               </Link>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -3,6 +3,7 @@ import {
   EnterpriseSettings,
   ApplicationStatus,
   Settings,
+  QueryHistoryType,
 } from "@/app/admin/settings/interfaces";
 import {
   CUSTOM_ANALYTICS_ENABLED,
@@ -53,6 +54,7 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           anonymous_user_enabled: false,
           pro_search_enabled: true,
           temperature_override_enabled: true,
+          query_history_type: QueryHistoryType.NORMAL,
         };
       } else {
         throw new Error(

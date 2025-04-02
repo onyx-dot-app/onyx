@@ -31,6 +31,7 @@ from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import HIDDEN
+from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import MAX_ID_SEARCH_QUERY_SIZE
 from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
@@ -130,6 +131,7 @@ def _vespa_hit_to_inference_chunk(
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
         source_type=fields[SOURCE_TYPE],
+        image_file_name=fields.get(IMAGE_FILE_NAME),
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),
@@ -211,6 +213,7 @@ def _get_chunks_via_visit_api(
 
         # Check if the response contains any documents
         response_data = response.json()
+
         if "documents" in response_data:
             for document in response_data["documents"]:
                 if filters.access_control_list:
@@ -310,6 +313,11 @@ def query_vespa(
             f"Request Headers: {e.request.headers}\n"
             f"Request Payload: {params}\n"
             f"Exception: {str(e)}"
+            + (
+                f"\nResponse: {e.response.text}"
+                if isinstance(e, httpx.HTTPStatusError)
+                else ""
+            )
         )
         raise httpx.HTTPError(error_base) from e
 

@@ -360,18 +360,13 @@ def backend_update_credential_json(
     db_session.commit()
 
 
-def delete_credential(
+def _delete_credential_internal(
+    credential: Credential,
     credential_id: int,
-    user: User | None,
     db_session: Session,
     force: bool = False,
 ) -> None:
-    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
-    if credential is None:
-        raise ValueError(
-            f"Credential by provided id {credential_id} does not exist or does not belong to user"
-        )
-
+    """Internal utility function to handle the actual deletion of a credential"""
     associated_connectors = (
         db_session.query(ConnectorCredentialPair)
         .filter(ConnectorCredentialPair.credential_id == credential_id)
@@ -414,6 +409,35 @@ def delete_credential(
     _cleanup_credential__user_group_relationships__no_commit(db_session, credential_id)
     db_session.delete(credential)
     db_session.commit()
+
+
+def delete_credential_for_user(
+    credential_id: int,
+    user: User,
+    db_session: Session,
+    force: bool = False,
+) -> None:
+    """Delete a credential that belongs to a specific user"""
+    credential = fetch_credential_by_id_for_user(credential_id, user, db_session)
+    if credential is None:
+        raise ValueError(
+            f"Credential by provided id {credential_id} does not exist or does not belong to user"
+        )
+
+    _delete_credential_internal(credential, credential_id, db_session, force)
+
+
+def delete_credential(
+    credential_id: int,
+    db_session: Session,
+    force: bool = False,
+) -> None:
+    """Delete a credential regardless of ownership (admin function)"""
+    credential = fetch_credential_by_id(credential_id, db_session)
+    if credential is None:
+        raise ValueError(f"Credential by provided id {credential_id} does not exist")
+
+    _delete_credential_internal(credential, credential_id, db_session, force)
 
 
 def create_initial_public_credential(db_session: Session) -> None:

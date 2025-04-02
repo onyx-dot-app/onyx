@@ -4,6 +4,7 @@ from concurrent.futures import Future
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from typing import Any
+from typing import cast
 
 import requests
 from pyairtable import Api as AirtableApi
@@ -16,7 +17,8 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.utils.logger import setup_logger
@@ -200,7 +202,6 @@ class AirtableConnector(LoadConnector):
                                         return attachment_response.content
 
                             logger.error(f"Failed to refresh attachment for {filename}")
-
                         raise
 
                 attachment_content = get_attachment_with_retry(url, record_id)
@@ -268,7 +269,7 @@ class AirtableConnector(LoadConnector):
         table_id: str,
         view_id: str | None,
         record_id: str,
-    ) -> tuple[list[Section], dict[str, str | list[str]]]:
+    ) -> tuple[list[TextSection], dict[str, str | list[str]]]:
         """
         Process a single Airtable field and return sections or metadata.
 
@@ -306,7 +307,7 @@ class AirtableConnector(LoadConnector):
 
         # Otherwise, create relevant sections
         sections = [
-            Section(
+            TextSection(
                 link=link,
                 text=(
                     f"{field_name}:\n"
@@ -341,7 +342,7 @@ class AirtableConnector(LoadConnector):
         table_name = table_schema.name
         record_id = record["id"]
         fields = record["fields"]
-        sections: list[Section] = []
+        sections: list[TextSection] = []
         metadata: dict[str, str | list[str]] = {}
 
         # Get primary field value if it exists
@@ -385,7 +386,7 @@ class AirtableConnector(LoadConnector):
 
         return Document(
             id=f"airtable__{record_id}",
-            sections=sections,
+            sections=(cast(list[TextSection | ImageSection], sections)),
             source=DocumentSource.AIRTABLE,
             semantic_identifier=semantic_id,
             metadata=metadata,

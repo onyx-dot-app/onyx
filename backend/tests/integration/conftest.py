@@ -108,3 +108,13 @@ def admin_user() -> DATestUser:
 @pytest.fixture
 def reset_multitenant() -> None:
     reset_all_multitenant()
+
+
+def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
+    print(f"\nTest start: {nodeid}")
+
+
+def pytest_runtest_logfinish(
+    nodeid: str, location: tuple[str, int | None, str]
+) -> None:
+    print(f"\nTest end: {nodeid}")

@@ -17,7 +17,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.retry_wrapper import retry_builder
 
 
@@ -62,11 +62,11 @@ class ClickupConnector(LoadConnector, PollConnector):
 
         return response.json()
 
-    def _get_task_comments(self, task_id: str) -> list[Section]:
+    def _get_task_comments(self, task_id: str) -> list[TextSection]:
         url_endpoint = f"/task/{task_id}/comment"
         response = self._make_request(url_endpoint)
         comments = [
-            Section(
+            TextSection(
                 link=f'https://app.clickup.com/t/{task_id}?comment={comment_dict["id"]}',
                 text=comment_dict["comment_text"],
             )
@@ -133,7 +133,7 @@ class ClickupConnector(LoadConnector, PollConnector):
                     ],
                     title=task["name"],
                     sections=[
-                        Section(
+                        TextSection(
                             link=task["url"],
                             text=(
                                 task["markdown_description"]

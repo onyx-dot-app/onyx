@@ -181,6 +181,7 @@ class ChatSessionDetails(BaseModel):
     name: str | None
     persona_id: int | None = None
     time_created: str
+    time_updated: str
     shared_status: ChatSessionSharedStatus
     folder_id: int | None = None
     current_alternate_model: str | None = None
@@ -241,6 +242,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
     refined_answer_improvement: bool | None = None
+    is_agentic: bool | None = None
     error: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore

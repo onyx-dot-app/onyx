@@ -193,13 +193,15 @@ export default function AddConnector({
   // Check if there are no credentials
   const noCredentials = credentialTemplate == null;
 
-  if (noCredentials && 1 != formStep) {
-    setFormStep(Math.max(1, formStep));
-  }
+  useEffect(() => {
+    if (noCredentials && 1 != formStep) {
+      setFormStep(Math.max(1, formStep));
+    }
 
-  if (!noCredentials && !credentialActivated && formStep != 0) {
-    setFormStep(Math.min(formStep, 0));
-  }
+    if (!noCredentials && !credentialActivated && formStep != 0) {
+      setFormStep(Math.min(formStep, 0));
+    }
+  }, [noCredentials, formStep, setFormStep]);
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;

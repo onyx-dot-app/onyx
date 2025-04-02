@@ -199,17 +199,17 @@ export function SlackChannelConfigFormFields({
             <Badge variant="agent" className="bg-blue-100 text-blue-800">
               Default Configuration
             </Badge>
-            <p className="mt-2 text-sm text-gray-600">
+            <p className="mt-2 text-sm text-neutral-600">
               This default configuration will apply across all Slack channels
               the bot is added to in the Slack workspace, as well as direct
               messages (DMs), unless disabled.
             </p>
-            <div className="mt-4 p-4 bg-gray-100 rounded-md border border-gray-300">
+            <div className="mt-4 p-4 bg-neutral-100 rounded-md border border-neutral-300">
               <CheckFormField
                 name="disabled"
                 label="Disable Default Configuration"
               />
-              <p className="mt-2 text-sm text-gray-600 italic">
+              <p className="mt-2 text-sm text-neutral-600 italic">
                 Warning: Disabling the default configuration means the bot
                 won&apos;t respond in Slack channels or DMs unless explicitly
                 configured for them.
@@ -238,20 +238,28 @@ export function SlackChannelConfigFormFields({
                 />
               </div>
             ) : (
-              <Field name="channel_name">
-                {({ field, form }: { field: any; form: any }) => (
-                  <SearchMultiSelectDropdown
-                    options={channelOptions || []}
-                    onSelect={(selected) => {
-                      form.setFieldValue("channel_name", selected.name);
-                    }}
-                    initialSearchTerm={field.value}
-                    onSearchTermChange={(term) => {
-                      form.setFieldValue("channel_name", term);
-                    }}
-                  />
-                )}
-              </Field>
+              <>
+                <Field name="channel_name">
+                  {({ field, form }: { field: any; form: any }) => (
+                    <SearchMultiSelectDropdown
+                      options={channelOptions || []}
+                      onSelect={(selected) => {
+                        form.setFieldValue("channel_name", selected.name);
+                      }}
+                      initialSearchTerm={field.value}
+                      onSearchTermChange={(term) => {
+                        form.setFieldValue("channel_name", term);
+                      }}
+                    />
+                  )}
+                </Field>
+                <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
+                  Note: This list shows public and private channels where the
+                  bot is a member (up to 500 channels). If you don&apos;t see a
+                  channel, make sure the bot is added to that channel in Slack
+                  first, or type the channel name manually.
+                </p>
+              </>
             )}
           </>
         )}
@@ -589,6 +597,13 @@ export function SlackChannelConfigFormFields({
                 label="Respond to Bot messages"
                 tooltip="If not set, OnyxBot will always ignore messages from Bots"
               />
+              <CheckFormField
+                name="is_ephemeral"
+                label="Respond to user in a private (ephemeral) message"
+                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also 
+                chose 'Search' Assistant above, selecting this option will make documents that are private to the user 
+                available for their queries."
+              />
 
               <TextArrayField
                 name="respond_member_group_list"
@@ -627,11 +642,14 @@ export function SlackChannelConfigFormFields({
                   Privacy Alert
                 </Label>
                 <p className="text-sm text-text-darker mb-4">
-                  Please note that at least one of the documents accessible by
-                  your OnyxBot is marked as private and may contain sensitive
-                  information. These documents will be accessible to all users
-                  of this OnyxBot. Ensure this aligns with your intended
-                  document sharing policy.
+                  Please note that if the private (ephemeral) response is *not
+                  selected*, only public documents within the selected document
+                  sets will be accessible for user queries. If the private
+                  (ephemeral) response *is selected*, user quries can also
+                  leverage documents that the user has already been granted
+                  access to. Note that users will be able to share the response
+                  with others in the channel, so please ensure that this is
+                  aligned with your company sharing policies.
                 </p>
                 <div className="space-y-2">
                   <h4 className="text-sm text-text font-medium">

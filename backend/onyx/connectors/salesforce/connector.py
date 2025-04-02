@@ -13,6 +13,7 @@ from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.connectors.salesforce.doc_conversion import convert_sf_object_to_doc
 from onyx.connectors.salesforce.doc_conversion import ID_PREFIX
 from onyx.connectors.salesforce.salesforce_calls import fetch_all_csvs_in_parallel
@@ -48,10 +49,12 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         self,
         credentials: dict[str, Any],
     ) -> dict[str, Any] | None:
+        domain = "test" if credentials.get("is_sandbox") else None
         self._sf_client = Salesforce(
             username=credentials["sf_username"],
             password=credentials["sf_password"],
             security_token=credentials["sf_security_token"],
+            domain=domain,
         )
         return None
 
@@ -216,7 +219,8 @@ if __name__ == "__main__":
         for doc in doc_batch:
             section_count += len(doc.sections)
             for section in doc.sections:
-                text_count += len(section.text)
+                if isinstance(section, TextSection) and section.text is not None:
+                    text_count += len(section.text)
     end_time = time.time()
 
     print(f"Doc count: {doc_count}")

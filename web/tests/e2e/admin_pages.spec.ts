@@ -24,6 +24,8 @@ async function verifyAdminPageNavigation(
     console.error(
       `Failed to find h1 with text "${pageTitle}" for path "${path}"`
     );
+    // NOTE: This is a temporary measure for debugging the issue
+    console.error(await page.content());
     throw error;
   }
 

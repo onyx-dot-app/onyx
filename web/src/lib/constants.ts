@@ -82,9 +82,6 @@ export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";
 
-export const NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED =
-  process.env.NEXT_PUBLIC_DELETE_ALL_CHATS_ENABLED?.toLowerCase() === "true";
-
 export const NEXT_PUBLIC_ENABLE_CHROME_EXTENSION =
   process.env.NEXT_PUBLIC_ENABLE_CHROME_EXTENSION?.toLowerCase() === "true";
 
@@ -94,3 +91,17 @@ export const NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK =
 
 export const NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY =
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+
+// Add support for custom URL protocols in markdown links
+export const ALLOWED_URL_PROTOCOLS = [
+  "http:",
+  "https:",
+  "mailto:",
+  "tel:",
+  "slack:",
+  "vscode:",
+  "file:",
+  "sms:",
+  "spotify:",
+  "zoommtg:",
+];

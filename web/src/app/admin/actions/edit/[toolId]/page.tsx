@@ -2,7 +2,7 @@ import { ErrorCallout } from "@/components/ErrorCallout";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";
-import { ToolEditor } from "@/app/admin/tools/ToolEditor";
+import { ActionEditor } from "@/app/admin/actions/ActionEditor";
 import { fetchToolByIdSS } from "@/lib/tools/fetchTools";
 import { DeleteToolButton } from "./DeleteToolButton";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -31,7 +31,7 @@ export default async function Page(props: {
         <div>
           <div>
             <CardSection>
-              <ToolEditor tool={tool} />
+              <ActionEditor tool={tool} />
             </CardSection>
 
             <Title className="mt-12">Delete Tool</Title>

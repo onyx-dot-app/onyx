@@ -5,4 +5,7 @@
     <allow
         until="DATE_REPLACEMENT"
         comment="We need to be able to update the schema for updates to the Onyx schema">indexing-change</allow>
+    <allow 
+        until='DATE_REPLACEMENT'
+        comment="Prevents old alt indices from interfering with changes">field-type-change</allow>
 </validation-overrides>

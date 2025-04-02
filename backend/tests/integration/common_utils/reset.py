@@ -17,7 +17,7 @@ from onyx.db.engine import get_session_context_manager
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.engine import SYNC_DB_API
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.swap_index import check_index_swap
+from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa.index import VespaIndex
@@ -25,7 +25,7 @@ from onyx.indexing.models import IndexingSetting
 from onyx.setup import setup_postgres
 from onyx.setup import setup_vespa
 from onyx.utils.logger import setup_logger
-from tests.integration.common_utils.timeout import run_with_timeout
+from tests.integration.common_utils.timeout import run_with_timeout_multiproc
 
 logger = setup_logger()
 
@@ -161,7 +161,7 @@ def reset_postgres(
     for _ in range(NUM_TRIES):
         logger.info(f"Downgrading Postgres... ({_ + 1}/{NUM_TRIES})")
         try:
-            run_with_timeout(
+            run_with_timeout_multiproc(
                 downgrade_postgres,
                 TIMEOUT,
                 kwargs={
@@ -194,7 +194,7 @@ def reset_vespa() -> None:
 
     with get_session_context_manager() as db_session:
         # swap to the correct default model
-        check_index_swap(db_session)
+        check_and_perform_index_swap(db_session)
 
         search_settings = get_current_search_settings(db_session)
         multipass_config = get_multipass_config(search_settings)
@@ -289,7 +289,7 @@ def reset_vespa_multitenant() -> None:
     for tenant_id in get_all_tenant_ids():
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:
             # swap to the correct default model for each tenant
-            check_index_swap(db_session)
+            check_and_perform_index_swap(db_session)
 
             search_settings = get_current_search_settings(db_session)
             multipass_config = get_multipass_config(search_settings)

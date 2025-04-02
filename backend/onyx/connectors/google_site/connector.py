@@ -12,7 +12,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.db.engine import get_sqlalchemy_engine
 from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.extract_file_text import read_text_file
@@ -118,7 +118,7 @@ class GoogleSitesConnector(LoadConnector):
                     source=DocumentSource.GOOGLE_SITES,
                     semantic_identifier=title,
                     sections=[
-                        Section(
+                        TextSection(
                             link=(self.base_url.rstrip("/") + "/" + path.lstrip("/"))
                             if path
                             else "",

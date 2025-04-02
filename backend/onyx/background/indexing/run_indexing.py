@@ -22,11 +22,13 @@ from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MilestoneRecordType
 from onyx.connectors.connector_runner import ConnectorRunner
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.factory import instantiate_connector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_last_successful_attempt_time
 from onyx.db.connector_credential_pair import update_connector_credential_pair
@@ -92,12 +94,18 @@ def _get_connector_runner(
         if not INTEGRATION_TESTS_MODE:
             runnable_connector.validate_connector_settings()
 
+    except UnexpectedValidationError as e:
+        logger.exception(
+            "Unable to instantiate connector due to an unexpected temporary issue."
+        )
+        raise e
     except Exception as e:
-        logger.exception(f"Unable to instantiate connector due to {e}")
 
-
+        logger.exception("Unable to instantiate connector. Pausing until fixed.")
         # since we failed to even instantiate the connector, we pause the CCPair since
-        # it will never succeed. Sometimes there are cases where the connector will
+        # it will never succeed
+
+        # Sometimes there are cases where the connector will
         # intermittently fail to initialize in which case we should pass in
         # leave_connector_active=True to allow it to continue.
         # For example, if there is nightly maintenance on a Confluence Server instance,
@@ -148,14 +156,12 @@ def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
             )
 
         for section in cleaned_doc.sections:
-            if section.link and "\x00" in section.link:
-                logger.warning(
-                    f"NUL characters found in document link for document: {cleaned_doc.id}"
-                )
+            if section.link is not None:
                 section.link = section.link.replace("\x00", "")
 
             # since text can be longer, just replace to avoid double scan
-            section.text = section.text.replace("\x00", "")
+            if isinstance(section, TextSection) and section.text is not None:
+                section.text = section.text.replace("\x00", "")
 
         cleaned_batch.append(cleaned_doc)
 
@@ -473,7 +479,11 @@ def _run_indexing(
 
                     doc_size = 0
                     for section in doc.sections:
-                        doc_size += len(section.text)
+                        if (
+                            isinstance(section, TextSection)
+                            and section.text is not None
+                        ):
+                            doc_size += len(section.text)
 
                     if doc_size > INDEXING_SIZE_WARNING_THRESHOLD:
                         logger.warning(

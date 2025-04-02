@@ -49,6 +49,7 @@ def get_folders(
                         name=chat_session.description,
                         persona_id=chat_session.persona_id,
                         time_created=chat_session.time_created.isoformat(),
+                        time_updated=chat_session.time_updated.isoformat(),
                         shared_status=chat_session.shared_status,
                         folder_id=folder.id,
                     )

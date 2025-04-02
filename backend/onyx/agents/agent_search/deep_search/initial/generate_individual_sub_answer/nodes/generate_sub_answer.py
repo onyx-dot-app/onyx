@@ -46,6 +46,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.configs.agent_configs import AGENT_MAX_ANSWER_CONTEXT_DOCS
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_SUBANSWER_GENERATION
 from onyx.configs.agent_configs import AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION
 from onyx.configs.agent_configs import AGENT_TIMEOUT_LLM_SUBANSWER_GENERATION
 from onyx.llm.chat_llm import LLMRateLimitError
@@ -119,6 +120,7 @@ def generate_sub_answer(
             for message in fast_llm.stream(
                 prompt=msg,
                 timeout_override=AGENT_TIMEOUT_CONNECT_LLM_SUBANSWER_GENERATION,
+                max_tokens=AGENT_MAX_TOKENS_SUBANSWER_GENERATION,
             ):
                 # TODO: in principle, the answer here COULD contain images, but we don't support that yet
                 content = message.content

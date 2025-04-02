@@ -145,7 +145,8 @@ def _get_permissions_from_slim_doc(
 
 
 def gdrive_doc_sync(
-    cc_pair: ConnectorCredentialPair, callback: IndexingHeartbeatInterface | None
+    cc_pair: ConnectorCredentialPair,
+    callback: IndexingHeartbeatInterface | None,
 ) -> list[DocExternalAccess]:
     """
     Adds the external permissions to the documents in postgres

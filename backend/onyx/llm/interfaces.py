@@ -91,12 +91,18 @@ class LLM(abc.ABC):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
         return self._invoke_implementation(
-            prompt, tools, tool_choice, structured_response_format, timeout_override
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
         )
 
     @abc.abstractmethod
@@ -107,6 +113,7 @@ class LLM(abc.ABC):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         raise NotImplementedError
 
@@ -117,12 +124,18 @@ class LLM(abc.ABC):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
         # implementation
         messages = self._stream_implementation(
-            prompt, tools, tool_choice, structured_response_format, timeout_override
+            prompt,
+            tools,
+            tool_choice,
+            structured_response_format,
+            timeout_override,
+            max_tokens,
         )
 
         tokens = []
@@ -142,5 +155,6 @@ class LLM(abc.ABC):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         raise NotImplementedError

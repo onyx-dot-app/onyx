@@ -16,13 +16,20 @@ from onyx.db.models import UsageReport
 from onyx.file_store.file_store import get_default_file_store
 
 
-# Gets skeletons of all message
+# Gets skeletons of all messages in the given range
 def get_empty_chat_messages_entries__paginated(
     db_session: Session,
     period: tuple[datetime, datetime],
     limit: int | None = 500,
     initial_time: datetime | None = None,
 ) -> tuple[Optional[datetime], list[ChatMessageSkeleton]]:
+    """Returns a tuple where:
+    first element is the most recent timestamp out of the sessions iterated
+    - this timestamp can be used to paginate forward in time
+    second element is a list of messages belonging to all the sessions iterated
+
+    Only messages of type USER are returned
+    """
     chat_sessions = fetch_chat_sessions_eagerly_by_time(
         start=period[0],
         end=period[1],
@@ -52,18 +59,17 @@ def get_empty_chat_messages_entries__paginated(
     if len(chat_sessions) == 0:
         return None, []
 
-    return chat_sessions[0].time_created, message_skeletons
+    return chat_sessions[-1].time_created, message_skeletons
 
 
 def get_all_empty_chat_message_entries(
     db_session: Session,
     period: tuple[datetime, datetime],
 ) -> Generator[list[ChatMessageSkeleton], None, None]:
+    """period is the range of time over which to fetch messages."""
     initial_time: Optional[datetime] = period[0]
-    ind = 0
     while True:
-        ind += 1
-
+        # iterate from oldest to newest
         time_created, message_skeletons = get_empty_chat_messages_entries__paginated(
             db_session,
             period,

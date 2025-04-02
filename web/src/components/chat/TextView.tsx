@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Download, XIcon, ZoomIn, ZoomOut } from "lucide-react";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { MinimalMarkdown } from "./MinimalMarkdown";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 interface TextViewProps {
   presentingDocument: OnyxDocument;
@@ -41,6 +41,15 @@ export default function TextView({
     return markdownFormats.some((format) => mimeType.startsWith(format));
   };
 
+  const isImageFormat = (mimeType: string) => {
+    const imageFormats = [
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/svg+xml",
+    ];
+    return imageFormats.some((format) => mimeType.startsWith(format));
+  };
   // Detect if a given MIME type can be rendered in an <iframe>
   const isSupportedIframeFormat = (mimeType: string): boolean => {
     const supportedFormats = [
@@ -126,6 +135,7 @@ export default function TextView({
           <DialogTitle className="text-lg font-medium truncate">
             {fileName}
           </DialogTitle>
+
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="icon" onClick={handleZoomOut}>
               <ZoomOut className="h-4 w-4" />
@@ -161,7 +171,13 @@ export default function TextView({
                 className="w-full h-full transform origin-center transition-transform duration-300 ease-in-out"
                 style={{ transform: `scale(${zoom / 100})` }}
               >
-                {isSupportedIframeFormat(fileType) ? (
+                {isImageFormat(fileType) ? (
+                  <img
+                    src={fileUrl}
+                    alt={fileName}
+                    className="w-full h-full object-contain object-center"
+                  />
+                ) : isSupportedIframeFormat(fileType) ? (
                   <iframe
                     src={`${fileUrl}#toolbar=0`}
                     className="w-full h-full border-none"

@@ -16,7 +16,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_t
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -24,7 +24,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
 
@@ -165,7 +165,7 @@ def _convert_thread_to_document(
 
     doc = Document(
         id=post_id,
-        sections=[Section(link=web_url, text=thread_text)],
+        sections=[TextSection(link=web_url, text=thread_text)],
         source=DocumentSource.TEAMS,
         semantic_identifier=semantic_string,
         title="",  # teams threads don't really have a "title"
@@ -302,7 +302,7 @@ class TeamsConnector(LoadConnector, PollConnector):
                 raise InsufficientPermissionsError(
                     "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
                 )
-            raise UnexpectedError(f"Unexpected error retrieving teams: {e}")
+            raise UnexpectedValidationError(f"Unexpected error retrieving teams: {e}")
 
         except Exception as e:
             error_str = str(e).lower()

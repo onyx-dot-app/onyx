@@ -18,14 +18,14 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.utils.logger import setup_logger
 
@@ -208,7 +208,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     batch.append(
                         Document(
                             id=f"{self.bucket_type}:{self.bucket_name}:{obj['Key']}",
-                            sections=[Section(link=link, text=text)],
+                            sections=[TextSection(link=link, text=text)],
                             source=DocumentSource(self.bucket_type.value),
                             semantic_identifier=name,
                             doc_updated_at=last_modified,
@@ -310,7 +310,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             # Catch-all for anything not captured by the above
             # Since we are unsure of the error and it may not disable the connector,
             #  raise an unexpected error (does not disable connector)
-            raise UnexpectedError(
+            raise UnexpectedValidationError(
                 f"Unexpected error during blob storage settings validation: {e}"
             )
 
@@ -341,7 +341,14 @@ if __name__ == "__main__":
                 print("Sections:")
                 for section in doc.sections:
                     print(f"  - Link: {section.link}")
-                    print(f"  - Text: {section.text[:100]}...")
+                    if isinstance(section, TextSection) and section.text is not None:
+                        print(f"  - Text: {section.text[:100]}...")
+                    elif (
+                        hasattr(section, "image_file_name") and section.image_file_name
+                    ):
+                        print(f"  - Image: {section.image_file_name}")
+                    else:
+                        print("Error: Unknown section type")
                 print("---")
             break
 

@@ -168,7 +168,7 @@ const FolderItem = ({
   };
 
   const folders = folder.chat_sessions.sort((a, b) => {
-    return a.time_created.localeCompare(b.time_created);
+    return a.time_updated.localeCompare(b.time_updated);
   });
 
   // Determine whether to show the trash can icon
@@ -303,7 +303,6 @@ const FolderItem = ({
               key={chatSession.id}
               chatSession={chatSession}
               isSelected={chatSession.id === currentChatId}
-              skipGradient={isDragOver}
               showShareModal={showShareModal}
               showDeleteModal={showDeleteModal}
             />

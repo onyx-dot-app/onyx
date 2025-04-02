@@ -13,6 +13,9 @@ import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidE
 import { Modal } from "@/components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
+import { useChatContext } from "@/components/context/ChatContext";
+import { LLMSelector } from "@/components/llm/LLMSelector";
+import { useVisionProviders } from "./hooks/useVisionProviders";
 
 export function Checkbox({
   label,
@@ -26,7 +29,7 @@ export function Checkbox({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="flex text-sm cursor-pointer">
+    <label className="flex text-xs cursor-pointer">
       <input
         checked={checked}
         onChange={onChange}
@@ -34,7 +37,7 @@ export function Checkbox({
         className="mr-2 w-3.5 h-3.5 my-auto"
       />
       <div>
-        <Label>{label}</Label>
+        <Label small>{label}</Label>
         {sublabel && <SubLabel>{sublabel}</SubLabel>}
       </div>
     </label>
@@ -111,6 +114,14 @@ export function SettingsForm() {
   const { popup, setPopup } = usePopup();
   const isEnterpriseEnabled = usePaidEnterpriseFeaturesEnabled();
 
+  // Pass setPopup to the hook
+  const {
+    visionProviders,
+    visionLLM,
+    setVisionLLM,
+    updateDefaultVisionProvider,
+  } = useVisionProviders(setPopup);
+
   const combinedSettings = useContext(SettingsContext);
 
   useEffect(() => {
@@ -120,6 +131,7 @@ export function SettingsForm() {
         combinedSettings.settings.maximum_chat_retention_days?.toString() || ""
       );
     }
+    // We don't need to fetch vision providers here anymore as the hook handles it
   }, []);
 
   if (!settings) {
@@ -208,7 +220,7 @@ export function SettingsForm() {
   }
 
   return (
-    <div>
+    <div className="flex flex-col pb-8">
       {popup}
       <Title className="mb-4">Workspace Settings</Title>
       <Checkbox
@@ -290,23 +302,114 @@ export function SettingsForm() {
             id="chatRetentionInput"
             placeholder="Infinite Retention"
           />
-          <Button
-            onClick={handleSetChatRetention}
-            variant="submit"
-            size="sm"
-            className="mr-3"
-          >
-            Set Retention Limit
-          </Button>
-          <Button
-            onClick={handleClearChatRetention}
-            variant="default"
-            size="sm"
-          >
-            Retain All
-          </Button>
+          <div className="mr-auto flex gap-2">
+            <Button
+              onClick={handleSetChatRetention}
+              variant="submit"
+              size="sm"
+              className="mr-auto"
+            >
+              Set Retention Limit
+            </Button>
+            <Button
+              onClick={handleClearChatRetention}
+              variant="default"
+              size="sm"
+              className="mr-auto"
+            >
+              Retain All
+            </Button>
+          </div>
         </>
       )}
+
+      {/* Image Processing Settings */}
+      <Title className="mt-8 mb-4">Image Processing</Title>
+
+      <div className="flex flex-col gap-2">
+        <Checkbox
+          label="Enable Image Extraction and Analysis"
+          sublabel="Extract and analyze images from documents during indexing. This allows the system to process images and create searchable descriptions of them."
+          checked={settings.image_extraction_and_analysis_enabled ?? false}
+          onChange={(e) =>
+            handleToggleSettingsField(
+              "image_extraction_and_analysis_enabled",
+              e.target.checked
+            )
+          }
+        />
+
+        <Checkbox
+          label="Enable Search-time Image Analysis"
+          sublabel="Analyze images at search time when a user asks about images. This provides more detailed and query-specific image analysis but may increase search-time latency."
+          checked={settings.search_time_image_analysis_enabled ?? false}
+          onChange={(e) =>
+            handleToggleSettingsField(
+              "search_time_image_analysis_enabled",
+              e.target.checked
+            )
+          }
+        />
+
+        <IntegerInput
+          label="Maximum Image Size for Analysis (MB)"
+          sublabel="Images larger than this size will not be analyzed to prevent excessive resource usage."
+          value={settings.image_analysis_max_size_mb ?? null}
+          onChange={(e) => {
+            const value = e.target.value ? parseInt(e.target.value) : null;
+            if (value !== null && !isNaN(value) && value > 0) {
+              updateSettingField([
+                { fieldName: "image_analysis_max_size_mb", newValue: value },
+              ]);
+            }
+          }}
+          id="image-analysis-max-size"
+          placeholder="Enter maximum size in MB"
+        />
+        {/* Default Vision LLM Section */}
+        <div className="mt-4">
+          <Label>Default Vision LLM</Label>
+          <SubLabel>
+            Select the default LLM to use for image analysis. This model will be
+            utilized during image indexing and at query time for search results,
+            if the above settings are enabled.
+          </SubLabel>
+
+          <div className="mt-2 max-w-xs">
+            {!visionProviders || visionProviders.length === 0 ? (
+              <div className="text-sm text-gray-500">
+                No vision providers found. Please add a vision provider.
+              </div>
+            ) : visionProviders.length > 0 ? (
+              <>
+                <LLMSelector
+                  userSettings={false}
+                  llmProviders={visionProviders.map((provider) => ({
+                    ...provider,
+                    model_names: provider.vision_models,
+                    display_model_names: provider.vision_models,
+                  }))}
+                  currentLlm={visionLLM}
+                  onSelect={(value) => setVisionLLM(value)}
+                />
+                <Button
+                  onClick={() => updateDefaultVisionProvider(visionLLM)}
+                  className="mt-2"
+                  variant="default"
+                  size="sm"
+                >
+                  Set Default Vision LLM
+                </Button>
+              </>
+            ) : (
+              <div className="text-sm text-gray-500">
+                No vision-capable LLMs found. Please add an LLM provider that
+                supports image input.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

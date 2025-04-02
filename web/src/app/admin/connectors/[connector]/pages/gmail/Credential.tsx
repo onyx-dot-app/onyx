@@ -1,6 +1,6 @@
 import { Button } from "@/components/Button";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useSWRConfig } from "swr";
 import * as Yup from "yup";
 import { useRouter } from "next/navigation";
@@ -17,13 +17,18 @@ import {
   GmailCredentialJson,
   GmailServiceAccountCredentialJson,
 } from "@/lib/connectors/credentials";
+import { refreshAllGoogleData } from "@/lib/googleConnector";
+import { ValidSources } from "@/lib/types";
+import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
 
 type GmailCredentialJsonTypes = "authorized_user" | "service_account";
 
 const DriveJsonUpload = ({
   setPopup,
+  onSuccess,
 }: {
   setPopup: (popupSpec: PopupSpec | null) => void;
+  onSuccess?: () => void;
 }) => {
   const { mutate } = useSWRConfig();
   const [credentialJsonStr, setCredentialJsonStr] = useState<
@@ -72,7 +77,7 @@ const DriveJsonUpload = ({
               credentialFileType = "service_account";
             } else {
               throw new Error(
-                "Unknown credential type, expected 'OAuth Web application'"
+                "Unknown credential type, expected one of 'OAuth Web application' or 'Service Account'"
               );
             }
           } catch (e) {
@@ -99,6 +104,10 @@ const DriveJsonUpload = ({
                 message: "Successfully uploaded app credentials",
                 type: "success",
               });
+              mutate("/api/manage/admin/connector/gmail/app-credential");
+              if (onSuccess) {
+                onSuccess();
+              }
             } else {
               const errorMsg = await response.text();
               setPopup({
@@ -106,7 +115,6 @@ const DriveJsonUpload = ({
                 type: "error",
               });
             }
-            mutate("/api/manage/admin/connector/gmail/app-credential");
           }
 
           if (credentialFileType === "service_account") {
@@ -122,17 +130,20 @@ const DriveJsonUpload = ({
             );
             if (response.ok) {
               setPopup({
-                message: "Successfully uploaded app credentials",
+                message: "Successfully uploaded service account key",
                 type: "success",
               });
+              mutate("/api/manage/admin/connector/gmail/service-account-key");
+              if (onSuccess) {
+                onSuccess();
+              }
             } else {
               const errorMsg = await response.text();
               setPopup({
-                message: `Failed to upload app credentials - ${errorMsg}`,
+                message: `Failed to upload service account key - ${errorMsg}`,
                 type: "error",
               });
             }
-            mutate("/api/manage/admin/connector/gmail/service-account-key");
           }
         }}
       >
@@ -147,6 +158,7 @@ interface DriveJsonUploadSectionProps {
   appCredentialData?: { client_id: string };
   serviceAccountCredentialData?: { service_account_email: string };
   isAdmin: boolean;
+  onSuccess?: () => void;
 }
 
 export const GmailJsonUploadSection = ({
@@ -154,16 +166,37 @@ export const GmailJsonUploadSection = ({
   appCredentialData,
   serviceAccountCredentialData,
   isAdmin,
+  onSuccess,
 }: DriveJsonUploadSectionProps) => {
   const { mutate } = useSWRConfig();
+  const router = useRouter();
+  const [localServiceAccountData, setLocalServiceAccountData] = useState(
+    serviceAccountCredentialData
+  );
+  const [localAppCredentialData, setLocalAppCredentialData] =
+    useState(appCredentialData);
 
-  if (serviceAccountCredentialData?.service_account_email) {
+  // Update local state when props change
+  useEffect(() => {
+    setLocalServiceAccountData(serviceAccountCredentialData);
+    setLocalAppCredentialData(appCredentialData);
+  }, [serviceAccountCredentialData, appCredentialData]);
+
+  const handleSuccess = () => {
+    if (onSuccess) {
+      onSuccess();
+    } else {
+      refreshAllGoogleData(ValidSources.Gmail);
+    }
+  };
+
+  if (localServiceAccountData?.service_account_email) {
     return (
       <div className="mt-2 text-sm">
         <div>
           Found existing service account key with the following <b>Email:</b>
           <p className="italic mt-1">
-            {serviceAccountCredentialData.service_account_email}
+            {localServiceAccountData.service_account_email}
           </p>
         </div>
         {isAdmin ? (
@@ -185,10 +218,15 @@ export const GmailJsonUploadSection = ({
                   mutate(
                     "/api/manage/admin/connector/gmail/service-account-key"
                   );
+                  // Also mutate the credential endpoints to ensure Step 2 is reset
+                  mutate(buildSimilarCredentialInfoURL(ValidSources.Gmail));
                   setPopup({
                     message: "Successfully deleted service account key",
                     type: "success",
                   });
+                  // Immediately update local state
+                  setLocalServiceAccountData(undefined);
+                  handleSuccess();
                 } else {
                   const errorMsg = await response.text();
                   setPopup({
@@ -212,43 +250,56 @@ export const GmailJsonUploadSection = ({
     );
   }
 
-  if (appCredentialData?.client_id) {
+  if (localAppCredentialData?.client_id) {
     return (
       <div className="mt-2 text-sm">
         <div>
           Found existing app credentials with the following <b>Client ID:</b>
-          <p className="italic mt-1">{appCredentialData.client_id}</p>
+          <p className="italic mt-1">{localAppCredentialData.client_id}</p>
         </div>
-        <div className="mt-4 mb-1">
-          If you want to update these credentials, delete the existing
-          credentials through the button below, and then upload a new
-          credentials JSON.
-        </div>
-        <Button
-          onClick={async () => {
-            const response = await fetch(
-              "/api/manage/admin/connector/gmail/app-credential",
-              {
-                method: "DELETE",
-              }
-            );
-            if (response.ok) {
-              mutate("/api/manage/admin/connector/gmail/app-credential");
-              setPopup({
-                message: "Successfully deleted service account key",
-                type: "success",
-              });
-            } else {
-              const errorMsg = await response.text();
-              setPopup({
-                message: `Failed to delete app credential - ${errorMsg}`,
-                type: "error",
-              });
-            }
-          }}
-        >
-          Delete
-        </Button>
+        {isAdmin ? (
+          <>
+            <div className="mt-4 mb-1">
+              If you want to update these credentials, delete the existing
+              credentials through the button below, and then upload a new
+              credentials JSON.
+            </div>
+            <Button
+              onClick={async () => {
+                const response = await fetch(
+                  "/api/manage/admin/connector/gmail/app-credential",
+                  {
+                    method: "DELETE",
+                  }
+                );
+                if (response.ok) {
+                  mutate("/api/manage/admin/connector/gmail/app-credential");
+                  // Also mutate the credential endpoints to ensure Step 2 is reset
+                  mutate(buildSimilarCredentialInfoURL(ValidSources.Gmail));
+                  setPopup({
+                    message: "Successfully deleted app credentials",
+                    type: "success",
+                  });
+                  // Immediately update local state
+                  setLocalAppCredentialData(undefined);
+                  handleSuccess();
+                } else {
+                  const errorMsg = await response.text();
+                  setPopup({
+                    message: `Failed to delete app credential - ${errorMsg}`,
+                    type: "error",
+                  });
+                }
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        ) : (
+          <div className="mt-4 mb-1">
+            To change these credentials, please contact an administrator.
+          </div>
+        )}
       </div>
     );
   }
@@ -276,14 +327,14 @@ export const GmailJsonUploadSection = ({
         >
           here
         </a>{" "}
-        to either (1) setup a google OAuth App in your company workspace or (2)
+        to either (1) setup a Google OAuth App in your company workspace or (2)
         create a Service Account.
         <br />
         <br />
         Download the credentials JSON if choosing option (1) or the Service
-        Account key JSON if chooosing option (2), and upload it here.
+        Account key JSON if choosing option (2), and upload it here.
       </p>
-      <DriveJsonUpload setPopup={setPopup} />
+      <DriveJsonUpload setPopup={setPopup} onSuccess={handleSuccess} />
     </div>
   );
 };
@@ -299,6 +350,34 @@ interface DriveCredentialSectionProps {
   user: User | null;
 }
 
+async function handleRevokeAccess(
+  connectorExists: boolean,
+  setPopup: (popupSpec: PopupSpec | null) => void,
+  existingCredential:
+    | Credential<GmailCredentialJson>
+    | Credential<GmailServiceAccountCredentialJson>,
+  refreshCredentials: () => void
+) {
+  if (connectorExists) {
+    const message =
+      "Cannot revoke the Gmail credential while any connector is still associated with the credential. " +
+      "Please delete all associated connectors, then try again.";
+    setPopup({
+      message: message,
+      type: "error",
+    });
+    return;
+  }
+
+  await adminDeleteCredential(existingCredential.id);
+  setPopup({
+    message: "Successfully revoked the Gmail credential!",
+    type: "success",
+  });
+
+  refreshCredentials();
+}
+
 export const GmailAuthSection = ({
   gmailPublicCredential,
   gmailServiceAccountCredential,
@@ -310,31 +389,49 @@ export const GmailAuthSection = ({
   user,
 }: DriveCredentialSectionProps) => {
   const router = useRouter();
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [localServiceAccountData, setLocalServiceAccountData] = useState(
+    serviceAccountKeyData
+  );
+  const [localAppCredentialData, setLocalAppCredentialData] =
+    useState(appCredentialData);
+  const [localGmailPublicCredential, setLocalGmailPublicCredential] = useState(
+    gmailPublicCredential
+  );
+  const [
+    localGmailServiceAccountCredential,
+    setLocalGmailServiceAccountCredential,
+  ] = useState(gmailServiceAccountCredential);
+
+  // Update local state when props change
+  useEffect(() => {
+    setLocalServiceAccountData(serviceAccountKeyData);
+    setLocalAppCredentialData(appCredentialData);
+    setLocalGmailPublicCredential(gmailPublicCredential);
+    setLocalGmailServiceAccountCredential(gmailServiceAccountCredential);
+  }, [
+    serviceAccountKeyData,
+    appCredentialData,
+    gmailPublicCredential,
+    gmailServiceAccountCredential,
+  ]);
 
   const existingCredential =
-    gmailPublicCredential || gmailServiceAccountCredential;
+    localGmailPublicCredential || localGmailServiceAccountCredential;
   if (existingCredential) {
     return (
       <>
         <p className="mb-2 text-sm">
-          <i>Existing credential already set up!</i>
+          <i>Uploaded and authenticated credential already exists!</i>
         </p>
         <Button
           onClick={async () => {
-            if (connectorExists) {
-              setPopup({
-                message:
-                  "Cannot revoke access to Gmail while any connector is still set up. Please delete all connectors, then try again.",
-                type: "error",
-              });
-              return;
-            }
-            await adminDeleteCredential(existingCredential.id);
-            setPopup({
-              message: "Successfully revoked access to Gmail!",
-              type: "success",
-            });
-            refreshCredentials();
+            handleRevokeAccess(
+              connectorExists,
+              setPopup,
+              existingCredential,
+              refreshCredentials
+            );
           }}
         >
           Revoke Access
@@ -343,20 +440,21 @@ export const GmailAuthSection = ({
     );
   }
 
-  if (serviceAccountKeyData?.service_account_email) {
+  if (localServiceAccountData?.service_account_email) {
     return (
       <div>
-        <CardSection>
-          <Formik
-            initialValues={{
-              google_primary_admin: user?.email || "",
-            }}
-            validationSchema={Yup.object().shape({
-              google_primary_admin: Yup.string().required(),
-            })}
-            onSubmit={async (values, formikHelpers) => {
-              formikHelpers.setSubmitting(true);
-
+        <Formik
+          initialValues={{
+            google_primary_admin: user?.email || "",
+          }}
+          validationSchema={Yup.object().shape({
+            google_primary_admin: Yup.string()
+              .email("Must be a valid email")
+              .required("Required"),
+          })}
+          onSubmit={async (values, formikHelpers) => {
+            formikHelpers.setSubmitting(true);
+            try {
               const response = await fetch(
                 "/api/manage/admin/connector/gmail/service-account-credential",
                 {
@@ -375,6 +473,7 @@ export const GmailAuthSection = ({
                   message: "Successfully created service account credential",
                   type: "success",
                 });
+                refreshCredentials();
               } else {
                 const errorMsg = await response.text();
                 setPopup({
@@ -382,65 +481,73 @@ export const GmailAuthSection = ({
                   type: "error",
                 });
               }
-              refreshCredentials();
-            }}
-          >
-            {({ isSubmitting }) => (
-              <Form>
-                <TextFormField
-                  name="google_primary_admin"
-                  label="Primary Admin Email:"
-                  subtext="You must provide an admin/owner account to retrieve all org emails."
-                />
-                <div className="flex">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className={
-                      "bg-slate-500 hover:bg-slate-700 text-white " +
-                      "font-bold py-2 px-4 rounded focus:outline-none " +
-                      "focus:shadow-outline w-full max-w-sm mx-auto"
-                    }
-                  >
-                    Submit
-                  </button>
-                </div>
-              </Form>
-            )}
-          </Formik>
-        </CardSection>
+            } catch (error) {
+              setPopup({
+                message: `Failed to create service account credential - ${error}`,
+                type: "error",
+              });
+            } finally {
+              formikHelpers.setSubmitting(false);
+            }
+          }}
+        >
+          {({ isSubmitting }) => (
+            <Form>
+              <TextFormField
+                name="google_primary_admin"
+                label="Primary Admin Email:"
+                subtext="Enter the email of an admin/owner of the Google Organization that owns the Gmail account(s) you want to index."
+              />
+              <div className="flex">
+                <Button type="submit" disabled={isSubmitting}>
+                  Create Credential
+                </Button>
+              </div>
+            </Form>
+          )}
+        </Formik>
       </div>
     );
   }
 
-  if (appCredentialData?.client_id) {
+  if (localAppCredentialData?.client_id) {
     return (
       <div className="text-sm mb-4">
         <p className="mb-2">
           Next, you must provide credentials via OAuth. This gives us read
-          access to the docs you have access to in your gmail account.
+          access to the emails you have access to in your Gmail account.
         </p>
         <Button
           onClick={async () => {
-            const [authUrl, errorMsg] = await setupGmailOAuth({
-              isAdmin: true,
-            });
-            if (authUrl) {
-              // cookie used by callback to determine where to finally redirect to
+            setIsAuthenticating(true);
+            try {
               Cookies.set(GMAIL_AUTH_IS_ADMIN_COOKIE_NAME, "true", {
                 path: "/",
               });
-              router.push(authUrl);
-              return;
-            }
+              const [authUrl, errorMsg] = await setupGmailOAuth({
+                isAdmin: true,
+              });
 
-            setPopup({
-              message: errorMsg,
-              type: "error",
-            });
+              if (authUrl) {
+                router.push(authUrl);
+              } else {
+                setPopup({
+                  message: errorMsg,
+                  type: "error",
+                });
+                setIsAuthenticating(false);
+              }
+            } catch (error) {
+              setPopup({
+                message: `Failed to authenticate with Gmail - ${error}`,
+                type: "error",
+              });
+              setIsAuthenticating(false);
+            }
           }}
+          disabled={isAuthenticating}
         >
-          Authenticate with Gmail
+          {isAuthenticating ? "Authenticating..." : "Authenticate with Gmail"}
         </Button>
       </div>
     );
@@ -449,8 +556,8 @@ export const GmailAuthSection = ({
   // case where no keys have been uploaded in step 1
   return (
     <p className="text-sm">
-      Please upload an OAuth or Service Account Credential JSON in Step 1 before
-      moving onto Step 2.
+      Please upload either a OAuth Client Credential JSON or a Gmail Service
+      Account Key JSON in Step 1 before moving onto Step 2.
     </p>
   );
 };

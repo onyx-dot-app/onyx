@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -27,8 +28,25 @@ class ConnectorMissingCredentialError(PermissionError):
 
 
 class Section(BaseModel):
+    """Base section class with common attributes"""
+
+    link: str | None = None
+    text: str | None = None
+    image_file_name: str | None = None
+
+
+class TextSection(Section):
+    """Section containing text content"""
+
     text: str
-    link: str | None
+    link: str | None = None
+
+
+class ImageSection(Section):
+    """Section containing an image reference"""
+
+    image_file_name: str
+    link: str | None = None
 
 
 class BasicExpertInfo(BaseModel):
@@ -98,7 +116,7 @@ class DocumentBase(BaseModel):
     """Used for Onyx ingestion api, the ID is inferred before use if not provided"""
 
     id: str | None = None
-    sections: list[Section]
+    sections: list[TextSection | ImageSection]
     source: DocumentSource | None = None
     semantic_identifier: str  # displayed in the UI as the main identifier for the doc
     metadata: dict[str, str | list[str]]
@@ -148,18 +166,10 @@ class DocumentBase(BaseModel):
 
 
 class Document(DocumentBase):
-    id: str  # This must be unique or during indexing/reindexing, chunks will be overwritten
-    source: DocumentSource
+    """Used for Onyx ingestion api, the ID is required"""
 
-    def get_total_char_length(self) -> int:
-        """Calculate the total character length of the document including sections, metadata, and identifiers."""
-        section_length = sum(len(section.text) for section in self.sections)
-        identifier_length = len(self.semantic_identifier) + len(self.title or "")
-        metadata_length = sum(
-            len(k) + len(v) if isinstance(v, str) else len(k) + sum(len(x) for x in v)
-            for k, v in self.metadata.items()
-        )
-        return section_length + identifier_length + metadata_length
+    id: str
+    source: DocumentSource
 
     def to_short_descriptor(self) -> str:
         """Used when logging the identity of a document"""
@@ -183,6 +193,32 @@ class Document(DocumentBase):
         )
 
 
+class IndexingDocument(Document):
+    """Document with processed sections for indexing"""
+
+    processed_sections: list[Section] = []
+
+    def get_total_char_length(self) -> int:
+        """Get the total character length of the document including processed sections"""
+        title_len = len(self.title or self.semantic_identifier)
+
+        # Use processed_sections if available, otherwise fall back to original sections
+        if self.processed_sections:
+            section_len = sum(
+                len(section.text) if section.text is not None else 0
+                for section in self.processed_sections
+            )
+        else:
+            section_len = sum(
+                len(section.text)
+                if isinstance(section, TextSection) and section.text is not None
+                else 0
+                for section in self.sections
+            )
+
+        return title_len + section_len
+
+
 class SlimDocument(BaseModel):
     id: str
     perm_sync_data: Any | None = None
@@ -202,6 +238,15 @@ class ConnectorCheckpoint(BaseModel):
     @classmethod
     def build_dummy_checkpoint(cls) -> "ConnectorCheckpoint":
         return ConnectorCheckpoint(checkpoint_content={}, has_more=True)
+
+    def __str__(self) -> str:
+        """String representation of the checkpoint, with truncation for large checkpoint content."""
+        MAX_CHECKPOINT_CONTENT_CHARS = 1000
+
+        content_str = json.dumps(self.checkpoint_content)
+        if len(content_str) > MAX_CHECKPOINT_CONTENT_CHARS:
+            content_str = content_str[: MAX_CHECKPOINT_CONTENT_CHARS - 3] + "..."
+        return f"ConnectorCheckpoint(checkpoint_content={content_str}, has_more={self.has_more})"
 
 
 class DocumentFailure(BaseModel):

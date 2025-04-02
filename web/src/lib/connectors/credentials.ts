@@ -171,6 +171,7 @@ export interface SalesforceCredentialJson {
   sf_username: string;
   sf_password: string;
   sf_security_token: string;
+  is_sandbox: boolean;
 }
 
 export interface SharepointCredentialJson {
@@ -270,6 +271,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     sf_username: "",
     sf_password: "",
     sf_security_token: "",
+    is_sandbox: false,
   } as SalesforceCredentialJson,
   sharepoint: {
     sp_client_id: "",
@@ -452,6 +454,7 @@ export const credentialDisplayNames: Record<string, string> = {
   sf_username: "Salesforce Username",
   sf_password: "Salesforce Password",
   sf_security_token: "Salesforce Security Token",
+  is_sandbox: "Is Sandbox Environment",
 
   // Sharepoint
   sp_client_id: "SharePoint Client ID",

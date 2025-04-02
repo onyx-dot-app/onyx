@@ -118,6 +118,7 @@ services:
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       # Seeding configuration
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
+      - ONYX_QUERY_HISTORY_TYPE=${ONYX_QUERY_HISTORY_TYPE:-}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -253,6 +254,9 @@ services:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # optional, only for debugging purposes
+    volumes:
+      - log_store:/var/log/persisted-logs
     logging:
       driver: json-file
       options:
@@ -430,3 +434,4 @@ volumes:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  log_store:  # for logs that we don't want to lose on container restarts

@@ -424,7 +424,7 @@ def _validate_curator_status__no_commit(
         )
 
         # if the user is a curator in any of their groups, set their role to CURATOR
-        # otherwise, set their role to BASIC
+        # otherwise, set their role to BASIC only if they were previously a CURATOR
         if curator_relationships:
             user.role = UserRole.CURATOR
         elif user.role == UserRole.CURATOR:
@@ -631,7 +631,16 @@ def update_user_group(
     removed_users = db_session.scalars(
         select(User).where(User.id.in_(removed_user_ids))  # type: ignore
     ).unique()
-    _validate_curator_status__no_commit(db_session, list(removed_users))
+
+    # Filter out admin and global curator users before validating curator status
+    users_to_validate = [
+        user
+        for user in removed_users
+        if user.role not in [UserRole.ADMIN, UserRole.GLOBAL_CURATOR]
+    ]
+
+    if users_to_validate:
+        _validate_curator_status__no_commit(db_session, users_to_validate)
 
     # update "time_updated" to now
     db_user_group.time_last_modified_by_user = func.now()

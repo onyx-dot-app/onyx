@@ -163,7 +163,7 @@ export function PersonasTable() {
       {popup}
       {deleteModalOpen && personaToDelete && (
         <ConfirmEntityModal
-          entityType="Persona"
+          entityType="Assistant"
           entityName={personaToDelete.name}
           onClose={closeDeleteModal}
           onSubmit={handleDeletePersona}
@@ -177,6 +177,11 @@ export function PersonasTable() {
           entityName={personaToToggleDefault.name}
           onClose={closeDefaultModal}
           onSubmit={handleToggleDefault}
+          actionText={
+            personaToToggleDefault.is_default_persona
+              ? "remove the featured status of"
+              : "set as featured"
+          }
           actionButtonText={
             personaToToggleDefault.is_default_persona
               ? "Remove Featured"

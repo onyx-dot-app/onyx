@@ -28,6 +28,7 @@ DocSyncFuncType = Callable[
 
 GroupSyncFuncType = Callable[
     [
+        str,
         ConnectorCredentialPair,
     ],
     list[ExternalUserGroup],

@@ -100,10 +100,12 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import async_return_default_schema
 from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -413,7 +415,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 "refresh_token": refresh_token,
             }
 
-            user: User
+            user: User | None = None
 
             try:
                 # Attempt to get user by OAuth account
@@ -422,15 +424,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except exceptions.UserNotExists:
                 try:
                     # Attempt to get user by email
-                    user = await self.get_by_email(account_email)
+                    user = await self.user_db.get_by_email(account_email)
                     if not associate_by_email:
                         raise exceptions.UserAlreadyExists()
 
-                    user = await self.user_db.add_oauth_account(
-                        user, oauth_account_dict
-                    )
+                    # Make sure user is not None before adding OAuth account
+                    if user is not None:
+                        user = await self.user_db.add_oauth_account(
+                            user, oauth_account_dict
+                        )
+                    else:
+                        # This shouldn't happen since get_by_email would raise UserNotExists
+                        # but adding as a safeguard
+                        raise exceptions.UserNotExists()
 
-                    # If user not found by OAuth account or email, create a new user
                 except exceptions.UserNotExists:
                     password = self.password_helper.generate()
                     user_dict = {
@@ -441,26 +448,36 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
                     user = await self.user_db.create(user_dict)
 
-                    # Explicitly set the Postgres schema for this session to ensure
-                    # OAuth account creation happens in the correct tenant schema
-
-                    # Add OAuth account
-                    await self.user_db.add_oauth_account(user, oauth_account_dict)
-                    await self.on_after_register(user, request)
+                    # Add OAuth account only if user creation was successful
+                    if user is not None:
+                        await self.user_db.add_oauth_account(user, oauth_account_dict)
+                        await self.on_after_register(user, request)
+                    else:
+                        raise HTTPException(
+                            status_code=500, detail="Failed to create user account"
+                        )
 
             else:
-                for existing_oauth_account in user.oauth_accounts:
-                    if (
-                        existing_oauth_account.account_id == account_id
-                        and existing_oauth_account.oauth_name == oauth_name
-                    ):
-                        user = await self.user_db.update_oauth_account(
-                            user,
-                            # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
-                            # but the type checker doesn't know that :(
-                            existing_oauth_account,  # type: ignore
-                            oauth_account_dict,
-                        )
+                # User exists, update OAuth account if needed
+                if user is not None:  # Add explicit check
+                    for existing_oauth_account in user.oauth_accounts:
+                        if (
+                            existing_oauth_account.account_id == account_id
+                            and existing_oauth_account.oauth_name == oauth_name
+                        ):
+                            user = await self.user_db.update_oauth_account(
+                                user,
+                                # NOTE: OAuthAccount DOES implement the OAuthAccountProtocol
+                                # but the type checker doesn't know that :(
+                                existing_oauth_account,  # type: ignore
+                                oauth_account_dict,
+                            )
+
+            # Ensure user is not None before proceeding
+            if user is None:
+                raise HTTPException(
+                    status_code=500, detail="Failed to authenticate or create user"
+                )
 
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
@@ -510,6 +527,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         try:
             user_count = await get_user_count()
+            logger.debug(f"Current tenant user count: {user_count}")
 
             with get_session_with_tenant(tenant_id=tenant_id) as db_session:
                 if user_count == 1:
@@ -531,7 +549,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-        logger.notice(f"User {user.id} has registered.")
+        logger.debug(f"User {user.id} has registered.")
         optional_telemetry(
             record_type=RecordType.SIGN_UP,
             data={"action": "create"},
@@ -573,14 +591,20 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     ) -> Optional[User]:
         email = credentials.username
 
-        # Get tenant_id from mapping table
-        tenant_id = await fetch_ee_implementation_or_noop(
-            "onyx.server.tenants.provisioning",
-            "get_or_provision_tenant",
-            async_return_default_schema,
-        )(
-            email=email,
-        )
+        tenant_id: str | None = None
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.provisioning",
+                "get_tenant_id_for_email",
+                POSTGRES_DEFAULT_SCHEMA,
+            )(
+                email=email,
+            )
+        except Exception as e:
+            logger.warning(
+                f"User attempted to login with invalid credentials: {str(e)}"
+            )
+
         if not tenant_id:
             # User not found in mapping
             self.password_helper.hash(credentials.password)
@@ -874,7 +898,7 @@ async def current_limited_user(
     return await double_check_user(user)
 
 
-async def current_chat_accesssible_user(
+async def current_chat_accessible_user(
     user: User | None = Depends(optional_user),
 ) -> User | None:
     tenant_id = get_current_tenant_id()
@@ -1075,6 +1099,12 @@ def get_oauth_router(
 
         next_url = state_data.get("next_url", "/")
         referral_source = state_data.get("referral_source", None)
+        try:
+            tenant_id = fetch_ee_implementation_or_noop(
+                "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
+            )(account_email)
+        except exceptions.UserNotExists:
+            tenant_id = None
 
         request.state.referral_source = referral_source
 
@@ -1106,9 +1136,14 @@ def get_oauth_router(
         # Login user
         response = await backend.login(strategy, user)
         await user_manager.on_after_login(user, request, response)
-
         # Prepare redirect response
-        redirect_response = RedirectResponse(next_url, status_code=302)
+        if tenant_id is None:
+            # Use URL utility to add parameters
+            redirect_url = add_url_params(next_url, {"new_team": "true"})
+            redirect_response = RedirectResponse(redirect_url, status_code=302)
+        else:
+            # No parameters to add
+            redirect_response = RedirectResponse(next_url, status_code=302)
 
         # Copy headers and other attributes from 'response' to 'redirect_response'
         for header_name, header_value in response.headers.items():
@@ -1120,6 +1155,7 @@ def get_oauth_router(
             redirect_response.status_code = response.status_code
         if hasattr(response, "media_type"):
             redirect_response.media_type = response.media_type
+
         return redirect_response
 
     return router

@@ -154,7 +154,6 @@ export const SourceChip = ({
         gap-x-1
         h-6
         ${onClick ? "cursor-pointer" : ""}
-        animate-fade-in-scale
       `}
   >
     {icon}
@@ -404,7 +403,8 @@ export function ChatInputBar({
       setTabbingIconIndex((tabbingIconIndex) =>
         Math.min(
           tabbingIconIndex + 1,
-          showPrompts ? filteredPrompts.length : assistantTagOptions.length
+          // showPrompts ? filteredPrompts.length :
+          assistantTagOptions.length
         )
       );
     } else if (e.key === "ArrowUp") {
@@ -437,8 +437,8 @@ export function ChatInputBar({
                   <button
                     key={index}
                     className={`px-2 ${
-                      tabbingIconIndex == index && "bg-background-dark/75"
-                    } rounded items-center rounded-lg content-start flex gap-x-1 py-2 w-full hover:bg-background-dark/90 cursor-pointer`}
+                      tabbingIconIndex == index && "bg-neutral-200"
+                    } rounded items-center rounded-lg content-start flex gap-x-1 py-2 w-full hover:bg-neutral-200/90 cursor-pointer`}
                     onClick={() => {
                       updatedTaggedAssistant(currentAssistant);
                     }}
@@ -460,8 +460,8 @@ export function ChatInputBar({
                   target="_self"
                   className={`${
                     tabbingIconIndex == assistantTagOptions.length &&
-                    "bg-background-dark/75"
-                  } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full items-center hover:bg-background-dark/90 cursor-pointer`}
+                    "bg-neutral-200"
+                  } rounded rounded-lg px-3 flex gap-x-1 py-2 w-full items-center hover:bg-neutral-200/90 cursor-pointer`}
                   href="/assistants/new"
                 >
                   <FiPlus size={17} />

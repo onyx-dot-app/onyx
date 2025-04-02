@@ -759,6 +759,7 @@ def stream_chat_message_objects(
         )
 
         # LLM prompt building, response capturing, etc.
+
         answer = Answer(
             prompt_builder=prompt_builder,
             is_connected=is_connected,

@@ -50,6 +50,10 @@ import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { StatusRefinement } from "../Refinement";
 import { copyAll, handleCopy } from "./copyingUtils";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
+import { ErrorBanner, Resubmit } from "./Resubmit";
+import { transformLinkUri } from "@/lib/utils";
 
 export const AgenticMessage = ({
   isStreamingQuestions,
@@ -84,7 +88,9 @@ export const AgenticMessage = ({
   secondLevelSubquestions,
   toggleDocDisplay,
   error,
+  resubmit,
 }: {
+  resubmit?: () => void;
   isStreamingQuestions: boolean;
   isGenerating: boolean;
   docSidebarToggled?: boolean;
@@ -331,6 +337,7 @@ export const AgenticMessage = ({
         }}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        urlTransform={transformLinkUri}
       >
         {finalAlternativeContent}
       </ReactMarkdown>
@@ -344,6 +351,7 @@ export const AgenticMessage = ({
         components={markdownComponents}
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        urlTransform={transformLinkUri}
       >
         {streamedContent +
           (!isComplete && !secondLevelGenerating ? " [*]() " : "")}
@@ -455,7 +463,6 @@ export const AgenticMessage = ({
                     finalContent.length > 8) ||
                   (files && files.length > 0) ? (
                     <>
-                      {/* <FileDisplay files={files || []} /> */}
                       <div className="w-full  py-4 flex flex-col gap-4">
                         <div className="flex items-center gap-x-2 px-4">
                           <div className="text-black text-lg font-medium">
@@ -503,9 +510,7 @@ export const AgenticMessage = ({
                             content
                           )}
                           {error && (
-                            <p className="mt-2 text-red-700 text-sm my-auto">
-                              {error}
-                            </p>
+                            <ErrorBanner error={error} resubmit={resubmit} />
                           )}
                         </div>
                       </div>
@@ -513,15 +518,13 @@ export const AgenticMessage = ({
                   ) : isComplete ? (
                     error && (
                       <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
-                        {error}
+                        <ErrorBanner error={error} resubmit={resubmit} />
                       </p>
                     )
                   ) : (
                     <>
                       {error && (
-                        <p className="mt-2 mx-4 text-red-700 text-sm my-auto">
-                          {error}
-                        </p>
+                        <ErrorBanner error={error} resubmit={resubmit} />
                       )}
                     </>
                   )}

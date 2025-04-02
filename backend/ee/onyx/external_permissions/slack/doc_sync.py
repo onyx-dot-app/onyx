@@ -123,7 +123,8 @@ def _fetch_channel_permissions(
 
 
 def slack_doc_sync(
-    cc_pair: ConnectorCredentialPair, callback: IndexingHeartbeatInterface | None
+    cc_pair: ConnectorCredentialPair,
+    callback: IndexingHeartbeatInterface | None,
 ) -> list[DocExternalAccess]:
     """
     Adds the external permissions to the documents in postgres

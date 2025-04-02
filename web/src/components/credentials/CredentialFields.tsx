@@ -130,6 +130,7 @@ interface BooleanFormFieldProps {
   small?: boolean;
   alignTop?: boolean;
   noLabel?: boolean;
+  disabled?: boolean;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
@@ -141,6 +142,7 @@ export const AdminBooleanFormField = ({
   small,
   checked,
   alignTop,
+  disabled = false,
   onChange,
 }: BooleanFormFieldProps) => {
   const [field, meta, helpers] = useField(name);
@@ -152,6 +154,7 @@ export const AdminBooleanFormField = ({
           type="checkbox"
           {...field}
           checked={Boolean(field.value)}
+          disabled={disabled}
           onChange={(e) => {
             helpers.setValue(e.target.checked);
           }}
