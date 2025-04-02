@@ -47,6 +47,7 @@ from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.onyx_jira.connector import JiraConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
+from onyx.connectors.regulation.connector import RegulationConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.slab.connector import SlabConnector
@@ -122,6 +123,7 @@ def identify_connector_class(
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
         DocumentSource.OUTLOOK: OutlookConnector,
+        DocumentSource.REGULATION: RegulationConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }

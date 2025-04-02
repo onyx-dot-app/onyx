@@ -392,6 +392,7 @@ export enum ValidSources {
   Gitbook = "gitbook",
   Highspot = "highspot",
   Outlook = "outlook",
+  Regulation = "regulation",
 }
 
 export const validAutoSyncSources = [

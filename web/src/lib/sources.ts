@@ -357,6 +357,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Messaging,
     docs: "https://docs.onyx.app/connectors/outlook",
   },
+  regulation: {
+    icon: GlobeIcon,
+    displayName: "Regulation",
+    category: SourceCategory.Other,
+    docs: "https://docs.onyx.app/connectors/regulation",
+  },
 } as SourceMap;
 
 function fillSourceMetadata(

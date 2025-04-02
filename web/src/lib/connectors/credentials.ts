@@ -358,6 +358,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   not_applicable: null,
   ingestion_api: null,
   discord: { discord_bot_token: "" } as DiscordCredentialJson,
+  regulation: null,
 
   // NOTE: These are Special Cases
   google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,

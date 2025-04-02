@@ -6,7 +6,7 @@ import { Credential } from "@/lib/connectors/credentials"; // Import Credential 
 
 export function isLoadState(connector_name: string): boolean {
   // TODO: centralize connector metadata like this somewhere instead of hardcoding it here
-  const loadStateConnectors = ["web", "xenforo", "file", "airtable"];
+  const loadStateConnectors = ["web", "xenforo", "file", "airtable", "regulation"];
   if (loadStateConnectors.includes(connector_name)) {
     return true;
   }
@@ -135,6 +135,10 @@ export interface WebConfig {
   url_pattern?: string;
 }
 
+export interface RegulationConfig {
+  base_url: string;
+}
+
 export interface OutlookConfig {
   indexing_scope: "everything" | "folders" | "emails";
   folders?: string[];
@@ -192,6 +196,21 @@ export const connectorConfigs: Record<
       },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
+  },
+  regulation: {
+    description: "Configure Regulation connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the e-regulation website URL e.g. https://regulation.example.com/:",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+        description: "The base URL of the e-regulation interactive website to index.",
+      },
+    ],
+    advanced_values: [],
+    overrideDefaultFreq: 60 * 60 * 24, // 24 hours
   },
   outlook: {
     description: "Configure Outlook connector",
