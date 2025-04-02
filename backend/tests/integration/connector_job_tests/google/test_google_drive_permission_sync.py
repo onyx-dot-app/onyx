@@ -110,7 +110,6 @@ def google_drive_test_env_setup() -> (
             GoogleDriveManager.cleanup_drive(drive_service, drive_id)
 
 
-@pytest.mark.xfail(reason="Needs to be tested for flakiness")
 def test_google_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
