@@ -429,6 +429,12 @@ def get_llm_max_tokens(
         )
         return 131072
 
+    if model_name.endswith('mistralai/Mistral-Small-3.1-24B-Instruct-2503'):
+        logger.info(
+            f"mistralai/Mistral-Small-3.1-24B-Instruct-2503 is used, return 131072."
+        )
+        return 131072
+
     if GEN_AI_MAX_TOKENS:
         # This is an override, so always return this
         logger.info(f"Using override GEN_AI_MAX_TOKENS: {GEN_AI_MAX_TOKENS}")

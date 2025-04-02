@@ -48,6 +48,7 @@ logger = setup_logger()
 # parameters like frequency and presence, just ignore them
 litellm.drop_params = True
 litellm.telemetry = False
+litellm.enable_preview_features = True
 
 _LLM_PROMPT_LONG_TERM_LOG_CATEGORY = "llm_prompt"
 

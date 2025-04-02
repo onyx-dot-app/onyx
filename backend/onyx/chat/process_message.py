@@ -145,6 +145,7 @@ from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
 from onyx.utils.timing import log_generator_function_time
+from onyx.utils.eea_utils import add_metadata_to_llm
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -530,6 +531,8 @@ def stream_chat_message_objects(
                         f"Final message id: {final_msg.id}, "
                         f"existing assistant message id: {existing_assistant_message_id}"
                     )
+        llm = add_metadata_to_llm(llm, 'llm', user, user_message, chat_session)
+        fast_llm = add_metadata_to_llm(fast_llm, 'fast_llm', user, user_message, chat_session)
 
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(
