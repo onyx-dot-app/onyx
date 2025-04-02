@@ -227,13 +227,16 @@ class SearchPipeline:
 
         # If ee is enabled, censor the chunk sections based on user access
         # Otherwise, return the retrieved chunks
-        censored_chunks = fetch_ee_implementation_or_noop(
-            "onyx.external_permissions.post_query_censoring",
-            "_post_query_chunk_censoring",
-            retrieved_chunks,
-        )(
-            chunks=retrieved_chunks,
-            user=self.user,
+        censored_chunks = cast(
+            list[InferenceChunk],
+            fetch_ee_implementation_or_noop(
+                "onyx.external_permissions.post_query_censoring",
+                "_post_query_chunk_censoring",
+                retrieved_chunks,
+            )(
+                chunks=retrieved_chunks,
+                user=self.user,
+            ),
         )
 
         above = self.search_query.chunks_above
