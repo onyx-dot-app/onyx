@@ -454,6 +454,19 @@ def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
         logger.warning("HTTPError with `None` as response or as headers")
         raise e
 
+    # Confluence Server returns 403 when rate limited
+    if e.response.status_code == 403:
+        FORBIDDEN_MAX_RETRY_ATTEMPTS = 7
+        FORBIDDEN_RETRY_DELAY = 10
+        if attempt < FORBIDDEN_MAX_RETRY_ATTEMPTS:
+            logger.warning(
+                "403 error. This sometimes happens when we hit "
+                f"Confluence rate limits. Retrying in {FORBIDDEN_RETRY_DELAY} seconds..."
+            )
+            return FORBIDDEN_RETRY_DELAY
+
+        raise e
+
     if (
         e.response.status_code != 429
         and RATE_LIMIT_MESSAGE_LOWERCASE not in e.response.text.lower()
