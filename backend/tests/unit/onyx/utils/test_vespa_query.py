@@ -44,6 +44,24 @@ class TestBuildVespaFilters:
         result = build_vespa_filters(filters, include_hidden=True)
         assert result == f'({SOURCE_TYPE} contains "web") and '
 
+    def test_acl(self) -> None:
+        """Test with acls."""
+        # Single ACL
+        filters = IndexFilters(access_control_list=["user1"])
+        result = build_vespa_filters(filters)
+        assert (
+            result
+            == f'!({HIDDEN}=true) and (access_control_list contains "user1") and '
+        )
+
+        # Multiple ACL's
+        filters = IndexFilters(access_control_list=["user2", "group2"])
+        result = build_vespa_filters(filters)
+        assert (
+            result
+            == f'!({HIDDEN}=true) and (access_control_list contains "user2" or access_control_list contains "group2") and '
+        )
+
     def test_tenant_filter(self) -> None:
         """Test tenant ID filtering."""
         # With tenant ID
@@ -216,6 +234,10 @@ class TestBuildVespaFilters:
 
         # Build expected result piece by piece for readability
         expected = f"!({HIDDEN}=true) and "
+        expected += (
+            '(access_control_list contains "user1" or '
+            'access_control_list contains "group1") and '
+        )
         expected += f'({SOURCE_TYPE} contains "web") and '
         expected += f'({METADATA_LIST} contains "color{INDEX_SEPARATOR}red") and '
         expected += f'({DOCUMENT_SETS} contains "set1") and '
