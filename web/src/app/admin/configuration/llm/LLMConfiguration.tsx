@@ -169,15 +169,13 @@ export function LLMConfiguration() {
       </Text>
 
       <div className="gap-y-4 flex flex-col">
-        {llmProviderDescriptors.map((llmProviderDescriptor) => {
-          return (
-            <DefaultLLMProviderDisplay
-              key={llmProviderDescriptor.name}
-              llmProviderDescriptor={llmProviderDescriptor}
-              shouldMarkAsDefault={existingLlmProviders.length === 0}
-            />
-          );
-        })}
+        {llmProviderDescriptors.map((llmProviderDescriptor) => (
+          <DefaultLLMProviderDisplay
+            key={llmProviderDescriptor.name}
+            llmProviderDescriptor={llmProviderDescriptor}
+            shouldMarkAsDefault={existingLlmProviders.length === 0}
+          />
+        ))}
       </div>
 
       <div className="mt-4">
