@@ -84,10 +84,13 @@ _PROVIDER_TO_MODELS_MAP = {
 }
 
 
+VERTEXAI_PROVIDER_NAME = "vertexai"
+
+
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
         WellKnownLLMProviderDescriptor(
-            name="openai",
+            name=OPENAI_PROVIDER_NAME,
             display_name="OpenAI",
             api_key_required=True,
             api_base_required=False,
@@ -142,6 +145,14 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
             default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
             default_fast_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        ),
+        WellKnownLLMProviderDescriptor(
+            name=VERTEXAI_PROVIDER_NAME,
+            display_name="Gemini",
+            api_key_required=True,
+            api_base_required=True,
+            api_version_required=True,
+            llm_names=fetch_models_for_provider(VERTEXAI_PROVIDER_NAME),
         ),
     ]
 
