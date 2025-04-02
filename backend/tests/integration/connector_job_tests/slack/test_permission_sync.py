@@ -25,7 +25,6 @@ from tests.integration.common_utils.vespa import vespa_fixture
 from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
 
 
-@pytest.mark.xfail(reason="flaky - see DAN-789 for example", strict=False)
 def test_slack_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
