@@ -16,6 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from httpx_oauth.clients.google import GoogleOAuth2
+from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy.orm import Session
@@ -423,6 +424,9 @@ def get_application() -> FastAPI:
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_router_auth(application)
+
+    # Initialize and instrument the app
+    Instrumentator().instrument(application).expose(application)
 
     return application
 
