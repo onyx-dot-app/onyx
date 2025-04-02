@@ -22,7 +22,6 @@ from onyx.document_index.document_index_utils import get_multipass_config
 from onyx.document_index.vespa.index import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa.index import VespaIndex
 from onyx.indexing.models import IndexingSetting
-from onyx.redis.redis_pool import get_redis_client
 from onyx.setup import setup_postgres
 from onyx.setup import setup_vespa
 from onyx.utils.logger import setup_logger
@@ -238,12 +237,6 @@ def reset_vespa() -> None:
             time.sleep(5)
 
 
-def reset_redis() -> None:
-    """Reset the Redis database."""
-    redis_client = get_redis_client()
-    redis_client.flushall()
-
-
 def reset_postgres_multitenant() -> None:
     """Reset the Postgres database for all tenants in a multitenant setup."""
 
@@ -348,8 +341,6 @@ def reset_all() -> None:
     reset_postgres()
     logger.info("Resetting Vespa...")
     reset_vespa()
-    logger.info("Resetting Redis...")
-    reset_redis()
 
 
 def reset_all_multitenant() -> None:
