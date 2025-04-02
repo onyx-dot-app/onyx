@@ -9,6 +9,7 @@ from typing import cast
 from typing import Tuple
 from urllib.parse import urljoin
 from urllib.parse import urlparse
+import re
 
 import requests
 from bs4 import BeautifulSoup
@@ -131,7 +132,7 @@ def is_valid_url(url: str) -> bool:
 
 
 def get_internal_links(
-    base_url: str, url: str, soup: BeautifulSoup, should_ignore_pound: bool = True
+    base_url: str, url: str, soup: BeautifulSoup, should_ignore_pound: bool = True, url_pattern: str | None = None
 ) -> set[str]:
     internal_links = set()
     for link in cast(list[dict[str, Any]], soup.find_all("a")):
@@ -151,7 +152,9 @@ def get_internal_links(
             href = urljoin(url, href)
 
         if urlparse(href).netloc == urlparse(url).netloc and base_url in href:
-            internal_links.add(href)
+            # Apply URL pattern filtering if specified
+            if url_pattern is None or re.search(url_pattern, href):
+                internal_links.add(href)
     return internal_links
 
 
@@ -247,6 +250,7 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        url_pattern: str | None = None,  # Regex pattern to match URLs for recursive scraping
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -254,6 +258,7 @@ class WebConnector(LoadConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
+        self.url_pattern = url_pattern
 
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -395,7 +400,7 @@ class WebConnector(LoadConnector):
                 soup = BeautifulSoup(content, "html.parser")
 
                 if self.recursive:
-                    internal_links = get_internal_links(base_url, initial_url, soup)
+                    internal_links = get_internal_links(base_url, initial_url, soup, url_pattern=self.url_pattern)
                     for link in internal_links:
                         if link not in visited_links:
                             to_visit.append(link)

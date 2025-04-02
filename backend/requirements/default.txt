@@ -45,7 +45,7 @@ llama-index==0.9.45
 Mako==1.2.4
 msal==1.28.0
 nltk==3.8.1
-Office365-REST-Python-Client==2.5.9
+Office365-REST-Python-Client==2.6.1
 oauthlib==3.2.2
 openai==1.66.3
 openpyxl==3.1.2

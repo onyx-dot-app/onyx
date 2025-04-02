@@ -41,6 +41,7 @@ import {
 } from "@/lib/connectors/connectors";
 import { Modal } from "@/components/Modal";
 import { GmailMain } from "./pages/gmail/GmailPage";
+import OutlookPage from "./pages/outlook/OutlookPage";
 import {
   useGmailCredentials,
   useGoogleDriveCredentials,
@@ -453,6 +454,8 @@ export default function AddConnector({
 
                 {connector == ValidSources.Gmail ? (
                   <GmailMain />
+                ) : connector == ValidSources.Outlook ? (
+                  <OutlookPage setPopup={setPopup} onSwitch={onSwap} />
                 ) : (
                   <>
                     <ModifyCredential

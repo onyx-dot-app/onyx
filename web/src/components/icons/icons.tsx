@@ -71,6 +71,7 @@ import egnyteIcon from "../../../public/Egnyte.png";
 import slackIcon from "../../../public/Slack.png";
 import discordIcon from "../../../public/discord.webp";
 import airtableIcon from "../../../public/Airtable.svg";
+import outlookIcon from "../../../public/Outlook.svg";
 
 import s3Icon from "../../../public/S3.png";
 import r2Icon from "../../../public/r2.png";
@@ -1089,6 +1090,13 @@ export const GoogleDriveIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <LogoIcon size={size} className={className} src="/GoogleDrive.png" />
+);
+
+export const OutlookIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <Image src={outlookIcon} alt="Outlook" width={size} height={size} className={className} />
 );
 
 export const BookstackIcon = ({

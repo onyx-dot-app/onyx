@@ -129,6 +129,22 @@ export interface ConnectionConfiguration {
   overrideDefaultFreq?: number;
 }
 
+export interface WebConfig {
+  base_url: string;
+  web_connector_type?: "recursive" | "single" | "sitemap";
+  url_pattern?: string;
+}
+
+export interface OutlookConfig {
+  indexing_scope: "everything" | "folders" | "emails";
+  folders?: string[];
+  email_addresses?: string[];
+  include_attachments: boolean;
+  start_date?: string;
+  include_metadata?: boolean;
+  max_emails?: number;
+}
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -153,9 +169,18 @@ export const connectorConfigs: Record<
           { name: "single", value: "single" },
           { name: "sitemap", value: "sitemap" },
         ],
-      },
+      }
     ],
     advanced_values: [
+      {
+        type: "text",
+        query: "Enter URL pattern for recursive scraping (optional):",
+        label: "URL Pattern",
+        name: "url_pattern",
+        description: "Regex pattern to match URLs for recursive scraping. Only URLs matching this pattern will be followed. Leave empty to follow all URLs.",
+        optional: true,
+        visibleCondition: (values) => values.web_connector_type === "recursive" || values.web_connector_type === "sitemap",
+      },
       {
         type: "checkbox",
         query: "Scroll before scraping:",
@@ -167,6 +192,78 @@ export const connectorConfigs: Record<
       },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
+  },
+  outlook: {
+    description: "Configure Outlook connector",
+    values: [
+      {
+        type: "select",
+        query: "Select what content this connector will index:",
+        label: "Indexing Scope",
+        name: "indexing_scope",
+        optional: false,
+        options: [
+          { name: "Everything", value: "everything" },
+          { name: "Specific Folders", value: "folders" },
+          { name: "Specific Emails", value: "emails" },
+        ],
+        default: "everything",
+      },
+      {
+        type: "list",
+        query: "Enter folders to include:",
+        label: "Folders",
+        name: "folders",
+        optional: true,
+        description: "Specify folders to index (e.g., Inbox, Sent Items, etc.)",
+        visibleCondition: (values: { indexing_scope: string }) => values.indexing_scope === "folders",
+      },
+      {
+        type: "list",
+        query: "Enter email addresses to include:",
+        label: "Email Addresses",
+        name: "email_addresses",
+        optional: true,
+        description: "Specify email addresses to index",
+        visibleCondition: (values: { indexing_scope: string }) => values.indexing_scope === "emails",
+      },
+      {
+        type: "checkbox",
+        query: "Include attachments?",
+        label: "Include Attachments",
+        name: "include_attachments",
+        optional: true,
+        default: true,
+        description: "Index email attachments (text content only)",
+      },
+      {
+        type: "text",
+        query: "Enter start date (YYYY-MM-DD):",
+        label: "Start Date",
+        name: "start_date",
+        optional: true,
+        description: "Only index emails from this date onwards",
+      },
+      {
+        type: "number",
+        query: "Enter maximum number of emails to index:",
+        label: "Max Emails",
+        name: "max_emails",
+        optional: true,
+        description: "Limit the number of emails to index",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "checkbox",
+        query: "Include email metadata?",
+        label: "Include Email Metadata",
+        name: "include_metadata",
+        optional: true,
+        default: false,
+        description: "Include additional email metadata like importance, categories, etc.",
+      },
+    ],
   },
   github: {
     description: "Configure GitHub connector",
@@ -1404,11 +1501,6 @@ export interface ConnectorSnapshot {
   from_beginning?: boolean;
 }
 
-export interface WebConfig {
-  base_url: string;
-  web_connector_type?: "recursive" | "single" | "sitemap";
-}
-
 export interface GithubConfig {
   repo_owner: string;
   repositories: string; // Comma-separated list of repository names
@@ -1583,3 +1675,4 @@ export interface MediaWikiConfig extends MediaWikiBaseConfig {
 }
 
 export interface WikipediaConfig extends MediaWikiBaseConfig {}
+

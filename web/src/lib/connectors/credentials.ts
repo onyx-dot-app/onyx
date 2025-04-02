@@ -232,6 +232,12 @@ export interface HighspotCredentialJson {
   highspot_secret: string;
 }
 
+export interface OutlookCredentialJson {
+  outlook_client_id: string;
+  outlook_client_secret: string;
+  outlook_directory_id: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -364,6 +370,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
     highspot_key: "",
     highspot_secret: "",
   } as HighspotCredentialJson,
+  outlook: {
+    outlook_client_id: "",
+    outlook_client_secret: "",
+    outlook_directory_id: "",
+  } as OutlookCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -504,6 +515,11 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_url: "Highspot URL",
   highspot_key: "Highspot Key",
   highspot_secret: "Highspot Secret",
+
+  // Outlook
+  outlook_client_id: "Outlook Client ID",
+  outlook_client_secret: "Outlook Client Secret",
+  outlook_directory_id: "Outlook Directory ID",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

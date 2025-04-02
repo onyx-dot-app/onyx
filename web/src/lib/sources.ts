@@ -33,6 +33,7 @@ import {
   AsanaIcon,
   S3Icon,
   OCIStorageIcon,
+  OutlookIcon,
   GoogleStorageIcon,
   ColorSlackIcon,
   XenforoIcon,
@@ -349,6 +350,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     icon: GlobeIcon,
     displayName: "Mock Connector",
     category: SourceCategory.Other,
+  },
+  outlook: {
+    icon: OutlookIcon,
+    displayName: "Outlook",
+    category: SourceCategory.Messaging,
+    docs: "https://docs.onyx.app/connectors/outlook",
   },
 } as SourceMap;
 
