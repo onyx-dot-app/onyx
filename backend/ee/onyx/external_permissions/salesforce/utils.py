@@ -42,11 +42,18 @@ def get_any_salesforce_client_for_doc_id(
 
 
 def _query_salesforce_user_id(sf_client: Salesforce, user_email: str) -> str | None:
-    query = f"SELECT Id FROM User WHERE Email = '{user_email}'"
+    query = f"SELECT Id FROM User WHERE Username = '{user_email}' AND IsActive = true"
     result = sf_client.query(query)
-    if len(result["records"]) == 0:
-        return None
-    return result["records"][0]["Id"]
+    if len(result["records"]) > 0:
+        return result["records"][0]["Id"]
+
+    # try emails
+    query = f"SELECT Id FROM User WHERE Email = '{user_email}' AND IsActive = true"
+    result = sf_client.query(query)
+    if len(result["records"]) > 0:
+        return result["records"][0]["Id"]
+
+    return None
 
 
 # This contains only the user_ids that we have found in Salesforce.
