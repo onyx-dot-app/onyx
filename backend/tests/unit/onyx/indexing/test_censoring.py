@@ -20,7 +20,7 @@ _post_query_chunk_censoring = fetch_ee_implementation_or_noop(
     reason="Permissions tests are enterprise only",
 )
 class TestPostQueryChunkCensoring(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock_user = User(id=1, email="test@example.com")
         self.mock_chunk_1 = InferenceChunk(
             document_id="doc1",
@@ -110,7 +110,9 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
     @patch(
         "ee.onyx.external_permissions.post_query_censoring._get_all_censoring_enabled_sources"
     )
-    def test_post_query_chunk_censoring_no_user(self, mock_get_sources):
+    def test_post_query_chunk_censoring_no_user(
+        self, mock_get_sources: MagicMock
+    ) -> None:
         mock_get_sources.return_value = {DocumentSource.SALESFORCE}
         chunks = [self.mock_chunk_1, self.mock_chunk_2]
         result = _post_query_chunk_censoring(chunks, None)
@@ -123,8 +125,8 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
         "ee.onyx.external_permissions.post_query_censoring.DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION"
     )
     def test_post_query_chunk_censoring_salesforce_censored(
-        self, mock_censor_func, mock_get_sources
-    ):
+        self, mock_censor_func: MagicMock, mock_get_sources: MagicMock
+    ) -> None:
         mock_get_sources.return_value = {DocumentSource.SALESFORCE}
         mock_censor_func_impl = MagicMock(
             return_value=[self.mock_chunk_1]
@@ -146,8 +148,8 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
         "ee.onyx.external_permissions.post_query_censoring.DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION"
     )
     def test_post_query_chunk_censoring_salesforce_error(
-        self, mock_censor_func, mock_get_sources
-    ):
+        self, mock_censor_func: MagicMock, mock_get_sources: MagicMock
+    ) -> None:
         mock_get_sources.return_value = {DocumentSource.SALESFORCE}
         mock_censor_func_impl = MagicMock(side_effect=Exception("Censoring error"))
         mock_censor_func.__getitem__.return_value = mock_censor_func_impl
@@ -165,8 +167,8 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
         "ee.onyx.external_permissions.post_query_censoring.DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION"
     )
     def test_post_query_chunk_censoring_no_censoring(
-        self, mock_censor_func, mock_get_sources
-    ):
+        self, mock_censor_func: MagicMock, mock_get_sources: MagicMock
+    ) -> None:
         mock_get_sources.return_value = set()  # No sources to censor
         mock_censor_func_impl = MagicMock()
         mock_censor_func.__getitem__.return_value = mock_censor_func_impl
@@ -183,8 +185,8 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
         "ee.onyx.external_permissions.post_query_censoring.DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION"
     )
     def test_post_query_chunk_censoring_order_maintained(
-        self, mock_censor_func, mock_get_sources
-    ):
+        self, mock_censor_func: MagicMock, mock_get_sources: MagicMock
+    ) -> None:
         mock_get_sources.return_value = {DocumentSource.SALESFORCE}
         mock_censor_func_impl = MagicMock(
             return_value=[self.mock_chunk_3, self.mock_chunk_1]
