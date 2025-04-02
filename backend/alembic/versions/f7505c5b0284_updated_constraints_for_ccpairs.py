@@ -1,7 +1,7 @@
 """updated constraints for ccpairs
 
 Revision ID: f7505c5b0284
-Revises: 6a804aeb4830
+Revises: f71470ba9274
 Create Date: 2025-04-01 17:50:42.504818
 
 """
@@ -10,7 +10,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "f7505c5b0284"
-down_revision = "6a804aeb4830"
+down_revision = "f71470ba9274"
 branch_labels = None
 depends_on = None
 
