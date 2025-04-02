@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from typing import TypeVar
 from urllib.parse import parse_qs
 from urllib.parse import quote
+from urllib.parse import urljoin
 from urllib.parse import urlparse
 
 import requests
@@ -342,9 +343,14 @@ def build_confluence_document_id(
     Returns:
         str: The document id
     """
-    if is_cloud and not base_url.endswith("/wiki"):
-        base_url += "/wiki"
-    return f"{base_url}{content_url}"
+
+    # NOTE: urljoin is tricky and will drop the last segment of the base if it doesn't
+    # end with "/" because it believes that makes it a file.
+    final_url = base_url.rstrip("/") + "/"
+    if is_cloud and not final_url.endswith("/wiki/"):
+        final_url = urljoin(final_url, "wiki") + "/"
+    final_url = urljoin(final_url, content_url.lstrip("/"))
+    return final_url
 
 
 def datetime_from_string(datetime_string: str) -> datetime:
