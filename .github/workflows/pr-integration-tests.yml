@@ -210,7 +210,7 @@ jobs:
             -e POSTGRES_HOST=relational_db \
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
-            -e FULL_CONTROL_DRIVE_SERVICE_ACCOUNT=${GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR} \
+            -e FULL_CONTROL_DRIVE_SERVICE_ACCOUNT=${GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON_STR}
             -e POSTGRES_DB=postgres \
             -e POSTGRES_POOL_PRE_PING=true \
             -e POSTGRES_USE_NULL_POOL=true \
