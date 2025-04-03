@@ -155,13 +155,7 @@ def check_for_doc_permissions_sync(self: Task, *, tenant_id: str) -> bool | None
             for cc_pair in cc_pairs:
                 if _is_external_doc_permissions_sync_due(cc_pair):
                     cc_pair_ids_to_sync.append(cc_pair.id)
-                    task_logger.info(
-                        f"CHECK FOR DOC PERMISSIONS SYNC: cc_pair={cc_pair.id}"
-                    )
-                else:
-                    task_logger.info(
-                        f"CHECK FOR DOC PERMISSIONS SYNC: cc_pair={cc_pair.id} not due"
-                    )
+
         lock_beat.reacquire()
         for cc_pair_id in cc_pair_ids_to_sync:
             payload_id = try_creating_permissions_sync_task(
