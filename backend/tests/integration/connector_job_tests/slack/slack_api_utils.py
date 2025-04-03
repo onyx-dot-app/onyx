@@ -14,6 +14,8 @@ from uuid import uuid4
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
+from onyx.connectors.slack.connector import default_msg_filter
+from onyx.connectors.slack.connector import get_channel_messages
 from onyx.connectors.slack.utils import make_paginated_slack_api_call_w_retries
 from onyx.connectors.slack.utils import make_slack_api_call_w_retries
 
@@ -106,23 +108,23 @@ def _delete_slack_conversation_messages(
     message_to_delete: str | None = None,
 ) -> None:
     """deletes all messages from a channel if message_to_delete is None"""
-    # channel_id = _get_slack_channel_id(channel)
-    # for message_batch in get_channel_messages(slack_client, channel):
-    #     for message in message_batch:
-    #         if default_msg_filter(message):
-    #             continue
+    channel_id = _get_slack_channel_id(channel)
+    for message_batch in get_channel_messages(slack_client, channel):
+        for message in message_batch:
+            if default_msg_filter(message):
+                continue
 
-    #         if message_to_delete and message.get("text") != message_to_delete:
-    #             continue
-    #         print(" removing message: ", message.get("text"))
+            if message_to_delete and message.get("text") != message_to_delete:
+                continue
+            print(" removing message: ", message.get("text"))
 
-    #         try:
-    #             if not (ts := message.get("ts")):
-    #                 raise ValueError("Message timestamp is missing")
-    #             slack_client.chat_delete(channel=channel_id, ts=ts)
-    #         except Exception as e:
-    #             print(f"Error deleting message: {e}")
-    #             print(message)
+            try:
+                if not (ts := message.get("ts")):
+                    raise ValueError("Message timestamp is missing")
+                slack_client.chat_delete(channel=channel_id, ts=ts)
+            except Exception as e:
+                print(f"Error deleting message: {e}")
+                print(message)
 
 
 def _build_slack_channel_from_name(
@@ -223,9 +225,6 @@ class SlackManager:
         user_email_id_map = {}
         for user in users:
             if not (email := user.get("profile", {}).get("email")):
-                print(
-                    f"skipping user {user.get('name', 'unknown')} because it has no email"
-                )
                 continue
             if not (user_id := user.get("id")):
                 raise ValueError("User ID is missing")
