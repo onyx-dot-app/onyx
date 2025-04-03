@@ -24,7 +24,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-GONG_BASE_URL = "https://us-34014.api.gong.io"
+GONG_BASE_URL = "https://api.gong.io"
 
 
 class GongConnector(LoadConnector, PollConnector):
@@ -183,6 +183,12 @@ class GongConnector(LoadConnector, PollConnector):
                     logger.error(
                         f"Couldn't get call information for Call ID: {call_id}"
                     )
+                    if call_id:
+                        logger.error(
+                            f"Call debug info: call_id={call_id} "
+                            f"call_ids={call_ids} "
+                            f"call_details_map={call_details_map.keys()}"
+                        )
                     if not self.continue_on_fail:
                         raise RuntimeError(
                             f"Couldn't get call information for Call ID: {call_id}"
