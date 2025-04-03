@@ -1,5 +1,4 @@
 import os
-import unittest
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -19,7 +18,8 @@ _post_query_chunk_censoring = fetch_ee_implementation_or_noop(
     os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
     reason="Permissions tests are enterprise only",
 )
-class TestPostQueryChunkCensoring(unittest.TestCase):
+class TestPostQueryChunkCensoring:
+    @pytest.fixture(autouse=True)
     def setUp(self) -> None:
         self.mock_user = User(id=1, email="test@example.com")
         self.mock_chunk_1 = InferenceChunk(
@@ -116,7 +116,7 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
         mock_get_sources.return_value = {DocumentSource.SALESFORCE}
         chunks = [self.mock_chunk_1, self.mock_chunk_2]
         result = _post_query_chunk_censoring(chunks, None)
-        self.assertEqual(result, chunks)
+        assert result == chunks
 
     @patch(
         "ee.onyx.external_permissions.post_query_censoring._get_all_censoring_enabled_sources"
@@ -135,10 +135,10 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
 
         chunks = [self.mock_chunk_1, self.mock_chunk_2, self.mock_chunk_3]
         result = _post_query_chunk_censoring(chunks, self.mock_user)
-        self.assertEqual(len(result), 2)
-        self.assertIn(self.mock_chunk_1, result)
-        self.assertIn(self.mock_chunk_2, result)
-        self.assertNotIn(self.mock_chunk_3, result)
+        assert len(result) == 2
+        assert self.mock_chunk_1 in result
+        assert self.mock_chunk_2 in result
+        assert self.mock_chunk_3 not in result
         mock_censor_func_impl.assert_called_once()
 
     @patch(
@@ -156,8 +156,8 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
 
         chunks = [self.mock_chunk_1, self.mock_chunk_2, self.mock_chunk_3]
         result = _post_query_chunk_censoring(chunks, self.mock_user)
-        self.assertEqual(len(result), 1)
-        self.assertIn(self.mock_chunk_2, result)
+        assert len(result) == 1
+        assert self.mock_chunk_2 in result
         mock_censor_func_impl.assert_called_once()
 
     @patch(
@@ -175,7 +175,7 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
 
         chunks = [self.mock_chunk_1, self.mock_chunk_2, self.mock_chunk_3]
         result = _post_query_chunk_censoring(chunks, self.mock_user)
-        self.assertEqual(result, chunks)
+        assert result == chunks
         mock_censor_func_impl.assert_not_called()
 
     @patch(
@@ -200,9 +200,9 @@ class TestPostQueryChunkCensoring(unittest.TestCase):
             self.mock_chunk_4,
         ]
         result = _post_query_chunk_censoring(chunks, self.mock_user)
-        self.assertEqual(len(result), 3)
-        self.assertEqual(result[0], self.mock_chunk_1)
-        self.assertEqual(result[1], self.mock_chunk_2)
-        self.assertEqual(result[2], self.mock_chunk_3)
-        self.assertNotIn(self.mock_chunk_4, result)
+        assert len(result) == 3
+        assert result[0] == self.mock_chunk_1
+        assert result[1] == self.mock_chunk_2
+        assert result[2] == self.mock_chunk_3
+        assert self.mock_chunk_4 not in result
         mock_censor_func_impl.assert_called_once()
