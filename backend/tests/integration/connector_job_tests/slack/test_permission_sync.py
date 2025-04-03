@@ -3,8 +3,6 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-import pytest
-
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
@@ -30,22 +28,21 @@ def test_slack_permission_sync(
     vespa_client: vespa_fixture,
     slack_test_setup: tuple[dict[str, Any], dict[str, Any]],
 ) -> None:
-    print("MADE IT HERE")
     public_channel, private_channel = slack_test_setup
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="pablo@danswer.ai",
+        email="admin@onyx-test.com",
     )
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="pablosfsanchez@gmail.com",
+        email="test_user_1@onyx-test.com",
     )
 
     # Creating a non-admin user
     test_user_2: DATestUser = UserManager.create(
-        email="pablocasandchez@gmail.com",
+        email="test_user_2@onyx-test.com",
     )
 
     slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
@@ -221,7 +218,6 @@ def test_slack_permission_sync(
     assert private_message not in onyx_doc_message_strings
 
 
-@pytest.mark.xfail(reason="flaky", strict=False)
 def test_slack_group_permission_sync(
     reset: None,
     vespa_client: vespa_fixture,
@@ -239,7 +235,7 @@ def test_slack_group_permission_sync(
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="pablosfsanchez@gmail.com",
+        email="test_user_1@onyx-test.com",
     )
 
     # Create a user group and adding the non-admin user to it

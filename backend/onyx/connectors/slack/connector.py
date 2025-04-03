@@ -255,7 +255,8 @@ _DISALLOWED_MSG_SUBTYPES = {
 def default_msg_filter(message: MessageType) -> bool:
     # Don't keep messages from bots
     if message.get("bot_id") or message.get("app_id"):
-        if message.get("bot_profile", {}).get("name") == "OnyxConnector":
+        bot_profile_name = message.get("bot_profile", {}).get("name")
+        if bot_profile_name == "DanswerBot Testing":
             return False
         return True
 
