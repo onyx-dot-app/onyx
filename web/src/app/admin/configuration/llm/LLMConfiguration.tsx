@@ -34,6 +34,12 @@ function LLMProviderUpdateModal({
     llmProviderDescriptor?.name ||
     existingLlmProvider?.name ||
     "Custom LLM Provider";
+
+  const hasAdvancedOptions =
+    (llmProviderDescriptor?.name != "azure" &&
+      llmProviderDescriptor?.name != "vertexai") ||
+    false;
+
   return (
     <Modal title={`Setup ${providerName}`} onOutsideClick={() => onClose()}>
       <div className="max-h-[70vh] overflow-y-auto px-4">
@@ -44,6 +50,7 @@ function LLMProviderUpdateModal({
             existingLlmProvider={existingLlmProvider}
             shouldMarkAsDefault={shouldMarkAsDefault}
             setPopup={setPopup}
+            hasAdvancedOptions={hasAdvancedOptions}
           />
         ) : (
           <CustomLLMProviderUpdateForm

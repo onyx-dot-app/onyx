@@ -149,10 +149,24 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
             display_name="Gemini",
-            api_key_required=True,
-            api_base_required=True,
-            api_version_required=True,
+            api_key_required=False,
+            api_base_required=False,
+            api_version_required=False,
             llm_names=fetch_models_for_provider(VERTEXAI_PROVIDER_NAME),
+            custom_config_keys=[
+                CustomConfigKey(
+                    name="KEY",
+                    is_required=True,
+                    is_secret=False,
+                ),
+                CustomConfigKey(
+                    name="SECRET",
+                    is_required=True,
+                    is_secret=True,
+                ),
+            ],
+            default_model="gemini-1.5-pro-002",
+            default_fast_model="gemini-1.5-pro-002",
         ),
     ]
 

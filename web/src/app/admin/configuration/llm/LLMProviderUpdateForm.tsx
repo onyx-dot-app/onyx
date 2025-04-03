@@ -26,16 +26,16 @@ export function LLMProviderUpdateForm({
   existingLlmProvider,
   shouldMarkAsDefault,
   setPopup,
-  hideAdvanced,
   hideSuccess,
+  hasAdvancedOptions = false,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor;
   onClose: () => void;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
-  hideAdvanced?: boolean;
   setPopup?: (popup: PopupSpec) => void;
   hideSuccess?: boolean;
+  hasAdvancedOptions?: boolean;
 }) {
   const { mutate } = useSWRConfig();
 
@@ -46,7 +46,7 @@ export function LLMProviderUpdateForm({
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
-    name: existingLlmProvider?.name || (hideAdvanced ? "Default" : ""),
+    name: existingLlmProvider?.name || "",
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
@@ -226,19 +226,16 @@ export function LLMProviderUpdateForm({
     >
       {(formikProps) => (
         <Form className="gap-y-4 items-stretch mt-6">
-          {!hideAdvanced && (
-            <TextFormField
-              name="name"
-              label="Display Name"
-              subtext="A name which you can use to identify this provider when selecting it in the UI."
-              placeholder="Display Name"
-              disabled={existingLlmProvider ? true : false}
-            />
-          )}
+          <TextFormField
+            name="name"
+            label="Display Name"
+            subtext="A name which you can use to identify this provider when selecting it in the UI."
+            placeholder="Display Name"
+            disabled={existingLlmProvider ? true : false}
+          />
 
           {llmProviderDescriptor.api_key_required && (
             <TextFormField
-              small={hideAdvanced}
               name="api_key"
               label="API Key"
               placeholder="API Key"
@@ -248,7 +245,6 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_base_required && (
             <TextFormField
-              small={hideAdvanced}
               name="api_base"
               label="API Base"
               placeholder="API Base"
@@ -257,7 +253,6 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_version_required && (
             <TextFormField
-              small={hideAdvanced}
               name="api_version"
               label="API Version"
               placeholder="API Version"
@@ -267,7 +262,6 @@ export function LLMProviderUpdateForm({
           {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => (
             <div key={customConfigKey.name}>
               <TextFormField
-                small={hideAdvanced}
                 name={`custom_config.${customConfigKey.name}`}
                 label={
                   customConfigKey.is_required
@@ -279,76 +273,70 @@ export function LLMProviderUpdateForm({
             </div>
           ))}
 
-          {!(hideAdvanced && llmProviderDescriptor.name != "azure") && (
+          <Separator />
+          {llmProviderDescriptor.llm_names.length > 0 ? (
+            <SelectorFormField
+              name="default_model_name"
+              subtext="The model to use by default for this provider unless otherwise specified."
+              label="Default Model"
+              options={llmProviderDescriptor.llm_names.map((name) => ({
+                // don't clean up names here to give admins descriptive names / handle duplicates
+                // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                name: name,
+                value: name,
+              }))}
+              maxHeight="max-h-56"
+            />
+          ) : (
+            <TextFormField
+              name="default_model_name"
+              subtext="The model to use by default for this provider unless otherwise specified."
+              label="Default Model"
+              placeholder="E.g. gpt-4"
+            />
+          )}
+          {llmProviderDescriptor.deployment_name_required && (
+            <TextFormField
+              name="deployment_name"
+              label="Deployment Name"
+              placeholder="Deployment Name"
+            />
+          )}
+          {!llmProviderDescriptor.single_model_supported &&
+            (llmProviderDescriptor.llm_names.length > 0 ? (
+              <SelectorFormField
+                name="fast_default_model_name"
+                subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+            for this provider. If \`Default\` is specified, will use
+            the Default Model configured above.`}
+                label="[Optional] Fast Model"
+                options={llmProviderDescriptor.llm_names.map((name) => ({
+                  // don't clean up names here to give admins descriptive names / handle duplicates
+                  // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                  name: name,
+                  value: name,
+                }))}
+                includeDefault
+                maxHeight="max-h-56"
+              />
+            ) : (
+              <TextFormField
+                name="fast_default_model_name"
+                subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+            for this provider. If \`Default\` is specified, will use
+            the Default Model configured above.`}
+                label="[Optional] Fast Model"
+                placeholder="E.g. gpt-4"
+              />
+            ))}
+
+          {hasAdvancedOptions && (
             <>
               <Separator />
-              {llmProviderDescriptor.llm_names.length > 0 ? (
-                <SelectorFormField
-                  name="default_model_name"
-                  subtext="The model to use by default for this provider unless otherwise specified."
-                  label="Default Model"
-                  options={llmProviderDescriptor.llm_names.map((name) => ({
-                    // don't clean up names here to give admins descriptive names / handle duplicates
-                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                    name: name,
-                    value: name,
-                  }))}
-                  maxHeight="max-h-56"
-                />
-              ) : (
-                <TextFormField
-                  name="default_model_name"
-                  subtext="The model to use by default for this provider unless otherwise specified."
-                  label="Default Model"
-                  placeholder="E.g. gpt-4"
-                />
-              )}
-              {llmProviderDescriptor.deployment_name_required && (
-                <TextFormField
-                  small={hideAdvanced}
-                  name="deployment_name"
-                  label="Deployment Name"
-                  placeholder="Deployment Name"
-                />
-              )}
-              {!llmProviderDescriptor.single_model_supported &&
-                (llmProviderDescriptor.llm_names.length > 0 ? (
-                  <SelectorFormField
-                    name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
-                for this provider. If \`Default\` is specified, will use 
-                the Default Model configured above.`}
-                    label="[Optional] Fast Model"
-                    options={llmProviderDescriptor.llm_names.map((name) => ({
-                      // don't clean up names here to give admins descriptive names / handle duplicates
-                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                      name: name,
-                      value: name,
-                    }))}
-                    includeDefault
-                    maxHeight="max-h-56"
-                  />
-                ) : (
-                  <TextFormField
-                    name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
-                for this provider. If \`Default\` is specified, will use 
-                the Default Model configured above.`}
-                    label="[Optional] Fast Model"
-                    placeholder="E.g. gpt-4"
-                  />
-                ))}
-
-              {llmProviderDescriptor.name != "azure" && (
-                <>
-                  <Separator />
-
-                  <AdvancedOptionsToggle
-                    showAdvancedOptions={showAdvancedOptions}
-                    setShowAdvancedOptions={setShowAdvancedOptions}
-                  />
-                </>
-              )}
+              <AdvancedOptionsToggle
+                showAdvancedOptions={showAdvancedOptions}
+                setShowAdvancedOptions={setShowAdvancedOptions}
+              />
               {showAdvancedOptions && (
                 <>
                   {llmProviderDescriptor.llm_names.length > 0 && (
@@ -388,6 +376,7 @@ export function LLMProviderUpdateForm({
               )}
             </>
           )}
+
           <div>
             {/* NOTE: this is above the test button to make sure it's visible */}
             {testError && <Text className="text-error mt-2">{testError}</Text>}
