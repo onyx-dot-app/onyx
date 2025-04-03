@@ -30,21 +30,22 @@ def test_slack_permission_sync(
     vespa_client: vespa_fixture,
     slack_test_setup: tuple[dict[str, Any], dict[str, Any]],
 ) -> None:
+    print("MADE IT HERE")
     public_channel, private_channel = slack_test_setup
 
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
-        email="admin@onyx-test.com",
+        email="pablo@danswer.ai",
     )
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@onyx-test.com",
+        email="pablosfsanchez@gmail.com",
     )
 
     # Creating a non-admin user
     test_user_2: DATestUser = UserManager.create(
-        email="test_user_2@onyx-test.com",
+        email="pablocasandchez@gmail.com",
     )
 
     slack_client = SlackManager.get_slack_client(os.environ["SLACK_BOT_TOKEN"])
@@ -238,7 +239,7 @@ def test_slack_group_permission_sync(
 
     # Creating a non-admin user
     test_user_1: DATestUser = UserManager.create(
-        email="test_user_1@onyx-test.com",
+        email="pablosfsanchez@gmail.com",
     )
 
     # Create a user group and adding the non-admin user to it

@@ -96,10 +96,16 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
     # these tasks should never overlap
     if not lock_beat.acquire(blocking=False):
+        task_logger.info(
+            f"check_for_vespa_sync_task - Lock already acquired, skipping: tenant={tenant_id}"
+        )
         return None
 
     try:
         # 1/3: KICKOFF
+        task_logger.info(
+            f"check_for_vespa_sync_task - Starting stale document sync: tenant={tenant_id}"
+        )
         with get_session_with_current_tenant() as db_session:
             try_generate_stale_document_sync_tasks(
                 self.app, VESPA_SYNC_MAX_TASKS, db_session, r, lock_beat, tenant_id
@@ -107,6 +113,9 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
         # region document set scan
         lock_beat.reacquire()
+        task_logger.info(
+            f"check_for_vespa_sync_task - Starting document set scan: tenant={tenant_id}"
+        )
         document_set_ids: list[int] = []
         with get_session_with_current_tenant() as db_session:
             # check if any document sets are not synced
@@ -117,6 +126,9 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
             for document_set, _ in document_set_info:
                 document_set_ids.append(document_set.id)
 
+        task_logger.info(
+            f"check_for_vespa_sync_task - Found {len(document_set_ids)} document sets to process: tenant={tenant_id}"
+        )
         for document_set_id in document_set_ids:
             lock_beat.reacquire()
             with get_session_with_current_tenant() as db_session:
@@ -127,15 +139,20 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
         # check if any user groups are not synced
         lock_beat.reacquire()
+        task_logger.info(
+            f"check_for_vespa_sync_task - Checking user groups: tenant={tenant_id}, is_ee={global_version.is_ee_version()}"
+        )
         if global_version.is_ee_version():
             try:
                 fetch_user_groups = fetch_versioned_implementation(
                     "onyx.db.user_group", "fetch_user_groups"
                 )
             except ModuleNotFoundError:
+                task_logger.info(
+                    f"check_for_vespa_sync_task - ModuleNotFoundError for user_group module: tenant={tenant_id}"
+                )
                 # Always exceptions on the MIT version, which is expected
                 # We shouldn't actually get here if the ee version check works
-                pass
             else:
                 usergroup_ids: list[int] = []
                 with get_session_with_current_tenant() as db_session:
@@ -146,6 +163,9 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
                     for usergroup in user_groups:
                         usergroup_ids.append(usergroup.id)
 
+                task_logger.info(
+                    f"check_for_vespa_sync_task - Found {len(usergroup_ids)} user groups to process: tenant={tenant_id}"
+                )
                 for usergroup_id in usergroup_ids:
                     lock_beat.reacquire()
                     with get_session_with_current_tenant() as db_session:
@@ -157,7 +177,13 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
         # 3/3: FINALIZE
         lock_beat.reacquire()
+        task_logger.info(
+            f"check_for_vespa_sync_task - Starting finalization: tenant={tenant_id}"
+        )
         keys = cast(set[Any], r_replica.smembers(OnyxRedisConstants.ACTIVE_FENCES))
+        task_logger.info(
+            f"check_for_vespa_sync_task - Found {len(keys)} active fences to process: tenant={tenant_id}"
+        )
         for key in keys:
             key_bytes = cast(bytes, key)
 
@@ -167,11 +193,20 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
 
             key_str = key_bytes.decode("utf-8")
             if key_str == RedisGlobalConnectorCredentialPair.FENCE_KEY:
+                task_logger.info(
+                    f"check_for_vespa_sync_task - Monitoring connector taskset: tenant={tenant_id}"
+                )
                 monitor_connector_taskset(r)
             elif key_str.startswith(RedisDocumentSet.FENCE_PREFIX):
+                task_logger.info(
+                    f"check_for_vespa_sync_task - Monitoring document set taskset: {key_str}: tenant={tenant_id}"
+                )
                 with get_session_with_current_tenant() as db_session:
                     monitor_document_set_taskset(tenant_id, key_bytes, r, db_session)
             elif key_str.startswith(RedisUserGroup.FENCE_PREFIX):
+                task_logger.info(
+                    f"check_for_vespa_sync_task - Monitoring user group taskset: {key_str}: tenant={tenant_id}"
+                )
                 monitor_usergroup_taskset = (
                     fetch_versioned_implementation_with_fallback(
                         "onyx.background.celery.tasks.vespa.tasks",
@@ -190,6 +225,9 @@ def check_for_vespa_sync_task(self: Task, *, tenant_id: str) -> bool | None:
         task_logger.exception("Unexpected exception during vespa metadata sync")
     finally:
         if lock_beat.owned():
+            task_logger.info(
+                f"check_for_vespa_sync_task - Releasing lock: tenant={tenant_id}"
+            )
             lock_beat.release()
         else:
             task_logger.error(
@@ -211,16 +249,30 @@ def try_generate_stale_document_sync_tasks(
     lock_beat: RedisLock,
     tenant_id: str,
 ) -> int | None:
+    task_logger.info(
+        f"try_generate_stale_document_sync_tasks - Starting: tenant={tenant_id}"
+    )
     # the fence is up, do nothing
-
+    task_logger.info(
+        f"try_generate_stale_document_sync_tasks - Fence is up, skipping: tenant={tenant_id}"
+    )
     redis_global_ccpair = RedisGlobalConnectorCredentialPair(r)
     if redis_global_ccpair.fenced:
+        task_logger.info(
+            f"try_generate_stale_document_sync_tasks - Fence is up, skipping: tenant={tenant_id}"
+        )
         return None
 
+    task_logger.info(
+        f"try_generate_stale_document_sync_tasks - Deleting taskset: tenant={tenant_id}"
+    )
     redis_global_ccpair.delete_taskset()
 
     # add tasks to celery and build up the task set to monitor in redis
     stale_doc_count = count_documents_by_needs_sync(db_session)
+    task_logger.info(
+        f"try_generate_stale_document_sync_tasks - Found {stale_doc_count} stale documents: tenant={tenant_id}"
+    )
     if stale_doc_count == 0:
         return None
 

@@ -51,6 +51,7 @@ def _get_slack_group_members_email(
 
 
 def slack_group_sync(
+    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
     slack_client = WebClient(

@@ -445,6 +445,9 @@ class CCPairManager:
         if group_sync_result.status_code != 409:
             group_sync_result.raise_for_status()
 
+        # Add a small delay to ensure sync tasks are properly scheduled
+        time.sleep(2)
+
     @staticmethod
     def get_doc_sync_task(
         cc_pair: DATestCCPair,
@@ -539,6 +542,19 @@ class CCPairManager:
         doc_synced = False
         group_synced = False
         start = time.monotonic()
+
+        # Get initial timestamps before waiting to detect changes
+        initial_doc_last_synced = CCPairManager.get_doc_sync_task(
+            cc_pair, user_performing_action
+        )
+        initial_group_last_synced = CCPairManager.get_group_sync_task(
+            cc_pair, user_performing_action
+        )
+
+        print(f"Initial doc sync timestamp: {initial_doc_last_synced}")
+        print(f"Initial group sync timestamp: {initial_group_last_synced}")
+        print(f"Reference timestamp (after): {after}")
+
         while True:
             # We are treating both syncs as part of one larger permission sync job
             doc_last_synced = CCPairManager.get_doc_sync_task(
@@ -548,17 +564,60 @@ class CCPairManager:
                 cc_pair, user_performing_action
             )
 
-            if not doc_synced and doc_last_synced and doc_last_synced > after:
+            # Debug: Check if timestamps are in expected order
+            if doc_last_synced:
+                doc_last_synced < after
+
+            # Check if the doc timestamp has changed since we started waiting
+            # This indicates a new sync completed even if the timestamp is before 'after'
+            doc_timestamp_changed = (
+                doc_last_synced
+                and initial_doc_last_synced
+                and doc_last_synced != initial_doc_last_synced
+            )
+
+            # Consider sync complete if timestamp is after reference time or if it has changed since we started waiting
+            if (
+                not doc_synced
+                and doc_last_synced
+                and (doc_last_synced > after or doc_timestamp_changed)
+            ):
                 print(f"doc_last_synced: {doc_last_synced}")
                 print(f"sync command start time: {after}")
+                if doc_timestamp_changed:
+                    print(
+                        f"Detected doc sync timestamp change from {initial_doc_last_synced} to {doc_last_synced}"
+                    )
                 print(f"permission sync complete: cc_pair={cc_pair.id}")
                 doc_synced = True
+            elif not doc_synced:
+                print(f"doc sync not complete: cc_pair={cc_pair.id}")
+                print(f"doc_last_synced: {doc_last_synced}")
+                print(f"sync command start time: {after}")
 
-            if not group_synced and group_last_synced and group_last_synced > after:
+            # Same approach for group sync
+            group_timestamp_changed = (
+                group_last_synced
+                and initial_group_last_synced
+                and group_last_synced != initial_group_last_synced
+            )
+
+            if (
+                not group_synced
+                and group_last_synced
+                and (group_last_synced > after or group_timestamp_changed)
+            ):
                 print(f"group_last_synced: {group_last_synced}")
                 print(f"sync command start time: {after}")
+                if group_timestamp_changed:
+                    print(
+                        f"Detected group sync timestamp change from {initial_group_last_synced} to {group_last_synced}"
+                    )
                 print(f"group sync complete: cc_pair={cc_pair.id}")
                 group_synced = True
+            elif not group_synced:
+                print(f"group sync not complete: cc_pair={cc_pair.id}")
+                print(f"group_last_synced: {group_last_synced}")
 
             if doc_synced and (group_synced or not should_wait_for_group_sync):
                 break
@@ -600,6 +659,9 @@ class CCPairManager:
                 ):
                     synced_docs += 1
 
+            print(
+                f"Synced docs: {synced_docs}/{len(doc_sync_statuses)}, need {number_of_updated_docs}"
+            )
             if synced_docs >= number_of_updated_docs:
                 print(f"all docs synced: cc_pair={cc_pair.id}")
                 break

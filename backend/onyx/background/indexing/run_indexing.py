@@ -390,6 +390,7 @@ def _run_indexing(
     chunk_count = 0
     index_attempt: IndexAttempt | None = None
     try:
+        print("1")
         with get_session_with_current_tenant() as db_session_temp:
             index_attempt = get_index_attempt(db_session_temp, index_attempt_id)
             if not index_attempt:

@@ -15,6 +15,7 @@ from ee.onyx.external_permissions.post_query_censoring import (
     DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
 )
 from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
+from ee.onyx.external_permissions.slack.group_sync import slack_group_sync
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.db.models import ConnectorCredentialPair
@@ -56,6 +57,7 @@ DOC_PERMISSIONS_FUNC_MAP: dict[DocumentSource, DocSyncFuncType] = {
 GROUP_PERMISSIONS_FUNC_MAP: dict[DocumentSource, GroupSyncFuncType] = {
     DocumentSource.GOOGLE_DRIVE: gdrive_group_sync,
     DocumentSource.CONFLUENCE: confluence_group_sync,
+    DocumentSource.SLACK: slack_group_sync,
 }
 
 
