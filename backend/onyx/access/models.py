@@ -15,6 +15,22 @@ class ExternalAccess:
     # Whether the document is public in the external system or Onyx
     is_public: bool
 
+    def __str__(self) -> str:
+        """Prevent extremely long logs"""
+
+        def truncate_set(s: set[str], max_len: int = 100) -> str:
+            s_str = str(s)
+            if len(s_str) > max_len:
+                return f"{s_str[:max_len]}... ({len(s)} items)"
+            return s_str
+
+        return (
+            f"ExternalAccess("
+            f"external_user_emails={truncate_set(self.external_user_emails)}, "
+            f"external_user_group_ids={truncate_set(self.external_user_group_ids)}, "
+            f"is_public={self.is_public})"
+        )
+
 
 @dataclass(frozen=True)
 class DocExternalAccess:

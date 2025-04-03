@@ -159,6 +159,9 @@ def _get_space_permissions(
 
         # Stores the permissions for each space
         space_permissions_by_space_key[space_key] = space_permissions
+        logger.info(
+            f"Found space permissions for space '{space_key}': {space_permissions}"
+        )
 
     return space_permissions_by_space_key
 
