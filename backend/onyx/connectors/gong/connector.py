@@ -256,7 +256,8 @@ class GongConnector(LoadConnector, PollConnector):
                 call_time_str = call_metadata["started"]
                 call_title = call_metadata["title"]
                 logger.info(
-                    f"Indexing Gong call id {call_id} from {call_time_str.split('T', 1)[0]}: {call_title}"
+                    f"{num_calls+1}: Indexing Gong call id {call_id} "
+                    f"from {call_time_str.split('T', 1)[0]}: {call_title}"
                 )
 
                 call_parties = cast(list[dict] | None, call_details.get("parties"))
