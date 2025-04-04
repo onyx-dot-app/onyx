@@ -3,9 +3,9 @@ Description: CloudFormation template for Onyx Redis TaskDefinition
 Parameters:
   Environment:
     Type: String
-  SubnetIDs:
-    Type: CommaDelimitedList
-    Default: subnet-0af372d676f65b287,subnet-06721b79e2e51d22c
+  SubnetID:
+    Type: String
+    Default: subnet-0af372d676f65b287
   VpcID:
     Type: String
     Default: vpc-098cfa79d637dabff
@@ -45,7 +45,7 @@ Resources:
           SecurityGroups:
             - Ref: SecurityGroup
           Subnets:
-            Ref: SubnetIDs
+            - !Ref SubnetID
       PlatformVersion: LATEST
       DeploymentConfiguration:
         MaximumPercent: 200

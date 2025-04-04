@@ -8,13 +8,10 @@ Parameters:
     Default: production
   VpcID:
     Type: String
-    Default: vpc-098cfa79d637dabff 
-  SubnetId1:
-    Type: String
-    Default: subnet-0af372d676f65b287
-  SubnetId2:
-    Type: String
-    Default: subnet-06721b79e2e51d22c
+    Default: vpc-0f230ca52bb04c722 
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
 
 Resources:
 
@@ -79,7 +76,7 @@ Resources:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref OnyxEfs
-      SubnetId: !Ref SubnetId1
+      SubnetId: !Select [0, !Ref SubnetIDs]
       SecurityGroups:
         - !Ref EFSSecurityGroupMountTargets
 
@@ -88,7 +85,7 @@ Resources:
     Type: AWS::EFS::MountTarget
     Properties:
       FileSystemId: !Ref OnyxEfs
-      SubnetId: !Ref SubnetId2
+      SubnetId: !Select [1, !Ref SubnetIDs]
       SecurityGroups:
         - !Ref EFSSecurityGroupMountTargets
 

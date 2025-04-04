@@ -1,4 +1,0 @@
-[
-    {"ParameterKey": "CronScheduleState", "ParameterValue": "ENABLED"},
-    {"ParameterKey": "Environment", "ParameterValue": "production"}
-]

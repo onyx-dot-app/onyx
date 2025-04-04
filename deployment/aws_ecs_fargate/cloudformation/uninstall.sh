@@ -1,8 +1,24 @@
 #!/bin/bash
 
-ENVIRONMENT="${ENVIRONMENT:-production}"
 AWS_REGION="${AWS_REGION:-us-west-1}"
-S3_BUCKET="${S3_BUCKET:-onyx-ecs-fargate-configs}"
+
+# Reference to consolidated config
+CONFIG_FILE="onyx_config.json"
+
+# Get environment from config file
+ENVIRONMENT=$(jq -r '.Environment' "$CONFIG_FILE")
+if [ -z "$ENVIRONMENT" ] || [ "$ENVIRONMENT" == "null" ]; then
+    echo "Missing Environment in $CONFIG_FILE. Please add the Environment field."
+    exit 1
+fi
+
+# Try to get S3_BUCKET from config, fallback to default if not found
+S3_BUCKET_FROM_CONFIG=$(jq -r '.S3Bucket // empty' "$CONFIG_FILE")
+if [ -n "$S3_BUCKET_FROM_CONFIG" ]; then
+    S3_BUCKET="$S3_BUCKET_FROM_CONFIG"
+else
+    S3_BUCKET="${S3_BUCKET:-onyx-ecs-fargate-configs}"
+fi
 
 STACK_NAMES=(
   "${ENVIRONMENT}-onyx-nginx-service"
@@ -14,7 +30,6 @@ STACK_NAMES=(
   "${ENVIRONMENT}-onyx-vespaengine-service"
   "${ENVIRONMENT}-onyx-redis-service"
   "${ENVIRONMENT}-onyx-postgres-service"
-  "${ENVIRONMENT}-onyx-lambda-cron-restart-services"
   "${ENVIRONMENT}-onyx-cluster"
   "${ENVIRONMENT}-onyx-acm"
   "${ENVIRONMENT}-onyx-efs"

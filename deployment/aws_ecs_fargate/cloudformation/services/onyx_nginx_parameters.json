@@ -1,8 +1,0 @@
-[
-    {"ParameterKey": "DomainName", "ParameterValue": "ecs-chris.danswer.dev"},
-    {"ParameterKey": "Environment", "ParameterValue": "production"},
-    {"ParameterKey": "HostedZoneId", "ParameterValue": ""},
-    {"ParameterKey": "SubnetIDs", "ParameterValue": "subnet-0cf9acc0cbbeb2ec3,subnet-0bdbce01335e31546"},
-    {"ParameterKey": "VpcID", "ParameterValue": "vpc-0dac18b1f5913dbb9"},
-    {"ParameterKey": "OnyxNamespace", "ParameterValue": "onyx-chris"}
-]
