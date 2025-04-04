@@ -549,6 +549,13 @@ class CCPairManager:
                 cc_pair, user_performing_action
             )
 
+            print(f"Current doc_last_synced: {doc_last_synced}")
+            print(f"Current group_last_synced: {group_last_synced}")
+            print(f"Comparing against after time: {after}")
+            print(
+                f"Doc synced status: {doc_synced}, Group synced status: {group_synced}"
+            )
+
             if not doc_synced and doc_last_synced and doc_last_synced > after:
                 print(f"doc_last_synced: {doc_last_synced}")
                 print(f"sync command start time: {after}")
@@ -562,10 +569,17 @@ class CCPairManager:
                 group_synced = True
 
             if doc_synced and (group_synced or not should_wait_for_group_sync):
+                print(f"All required syncs completed for cc_pair={cc_pair.id}")
                 break
 
             elapsed = time.monotonic() - start
             if elapsed > timeout:
+                print(
+                    f"TIMEOUT ERROR - Doc synced: {doc_synced}, Group synced: {group_synced}"
+                )
+                print(
+                    f"Last doc sync time: {doc_last_synced}, Last group sync time: {group_last_synced}"
+                )
                 raise TimeoutError(
                     f"Permission sync was not completed within {timeout} seconds"
                 )
