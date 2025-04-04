@@ -1,12 +1,26 @@
+from enum import Enum
+
 import litellm  # type: ignore
 from pydantic import BaseModel
 
 
+class CustomConfigKeyType(Enum):
+    # used for configuration values that require manual input
+    # i.e., textual API keys (e.g., "abcd1234")
+    TEXT_INPUT = "text_input"
+
+    # used for configuration values that require a file to be select/drag-and-dropped
+    # i.e., file based credentials (e.g., "/path/to/credentials/file.json")
+    DRAG_AND_DROP = "drag_and_drop"
+
+
 class CustomConfigKey(BaseModel):
     name: str
+    display_name: str
     description: str | None = None
     is_required: bool = True
     is_secret: bool = False
+    key_type: CustomConfigKeyType = CustomConfigKeyType.TEXT_INPUT
 
 
 class WellKnownLLMProviderDescriptor(BaseModel):
@@ -77,14 +91,19 @@ ANTHROPIC_MODEL_NAMES = [
 AZURE_PROVIDER_NAME = "azure"
 
 
+VERTEXAI_PROVIDER_NAME = "vertexai"
+VERTEXAI_DEFAULT_MODEL = "gemini-1.5-pro-002"
+VERTEXAI_MODEL_NAMES = [
+    VERTEXAI_DEFAULT_MODEL,
+]
+
+
 _PROVIDER_TO_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
+    VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
 }
-
-
-VERTEXAI_PROVIDER_NAME = "vertexai"
 
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
@@ -129,14 +148,19 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[
-                CustomConfigKey(name="AWS_REGION_NAME"),
+                CustomConfigKey(
+                    name="AWS_REGION_NAME",
+                    display_name="AWS Region Name",
+                ),
                 CustomConfigKey(
                     name="AWS_ACCESS_KEY_ID",
+                    display_name="AWS Access Key ID",
                     is_required=False,
                     description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
                 ),
                 CustomConfigKey(
                     name="AWS_SECRET_ACCESS_KEY",
+                    display_name="AWS Secret Access Key",
                     is_required=False,
                     is_secret=True,
                     description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
@@ -155,18 +179,16 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             llm_names=fetch_models_for_provider(VERTEXAI_PROVIDER_NAME),
             custom_config_keys=[
                 CustomConfigKey(
-                    name="KEY",
+                    name="CREDENTIALS_FILE",
+                    display_name="Credentials File",
+                    description="This should be a JSON file containing some private credentials.",
                     is_required=True,
                     is_secret=False,
-                ),
-                CustomConfigKey(
-                    name="SECRET",
-                    is_required=True,
-                    is_secret=True,
+                    key_type=CustomConfigKeyType.DRAG_AND_DROP,
                 ),
             ],
-            default_model="gemini-1.5-pro-002",
-            default_fast_model="gemini-1.5-pro-002",
+            default_model=VERTEXAI_DEFAULT_MODEL,
+            default_fast_model=VERTEXAI_DEFAULT_MODEL,
         ),
     ]
 
