@@ -221,7 +221,7 @@ class GongConnector(LoadConnector, PollConnector):
                 wait_seconds = self.CALL_DETAILS_DELAY * pow(2, current_attempt - 1)
                 logger.warning(
                     f"_get_call_details_by_ids waiting to retry: "
-                    f"wait={wait_seconds}s"
+                    f"wait={wait_seconds}s "
                     f"current_attempt={current_attempt} "
                     f"next_attempt={current_attempt+1} "
                     f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
