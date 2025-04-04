@@ -18,7 +18,6 @@ from typing_extensions import override
 from onyx.configs.app_configs import GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import MAX_DRIVE_WORKERS
-from onyx.configs.app_configs import USE_SMART_CHIP_SCOPES
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -40,16 +39,12 @@ from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.models import RetrievedDriveFile
 from onyx.connectors.google_drive.models import StageCompletion
 from onyx.connectors.google_utils.google_auth import get_google_creds
-from onyx.connectors.google_utils.google_utils import create_scripts_file_objects
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.google_utils.google_utils import SMART_CHIP_SCRIPT_FILE_NAME
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_google_docs_service
-from onyx.connectors.google_utils.resources import get_google_scripts_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
-from onyx.connectors.google_utils.resources import GoogleScriptsService
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
 )
@@ -95,7 +90,6 @@ def _convert_single_file(
     creds: Any,
     allow_images: bool,
     size_threshold: int,
-    smart_chips_deployment_id: str,
     retriever_email: str,
     file: dict[str, Any],
 ) -> Document | ConnectorFailure | None:
@@ -113,15 +107,10 @@ def _convert_single_file(
     docs_service = lazy_eval(
         lambda: get_google_docs_service(creds, user_email=user_email)
     )
-    scripts_service = lazy_eval(
-        lambda: get_google_scripts_service(creds, user_email=user_email)
-    )
     return convert_drive_item_to_document(
         file=file,
         drive_service=user_drive_service,
         docs_service=docs_service,
-        scripts_service=scripts_service,
-        smart_chips_deployment_id=smart_chips_deployment_id,
         allow_images=allow_images,
         size_threshold=size_threshold,
     )
@@ -187,7 +176,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         my_drive_emails: str | None = None,
         shared_folder_urls: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
-        smart_chip_deployment_id: str = "",
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,
         include_shared: bool | None = None,
@@ -260,8 +248,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         self._retrieved_ids: set[str] = set()
         self.allow_images = False
 
-        self.smart_chip_deployment_id = smart_chip_deployment_id
-
         self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 
     def set_allow_images(self, value: bool) -> None:
@@ -309,107 +295,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             source=DocumentSource.GOOGLE_DRIVE,
         )
 
-        if USE_SMART_CHIP_SCOPES:
-            self.upsert_smart_chip_app_script()
-
         return new_creds_dict
-
-    @staticmethod
-    def _get_latest_deployment(
-        scripts_service: GoogleScriptsService, script_id: str
-    ) -> dict[str, Any]:
-        deployments = (
-            scripts_service.projects()
-            .deployments()
-            .list(
-                scriptId=script_id,
-            )
-            .execute()
-        )
-        all_deployments = deployments.get("deployments", [])
-        while "nextPageToken" in deployments:
-            deployments = (
-                scripts_service.projects()
-                .deployments()
-                .list(
-                    scriptId=script_id,
-                    pageToken=deployments["nextPageToken"],
-                )
-                .execute()
-            )
-            all_deployments.extend(deployments.get("deployments", []))
-
-        if len(all_deployments) == 0:
-            raise RuntimeError(f"No deployments found for script {script_id}")
-        return max(
-            all_deployments,
-            key=lambda x: datetime.fromisoformat(x["updateTime"]).timestamp(),
-        )
-
-    def upsert_smart_chip_app_script(self) -> None:
-        assert self._creds is not None, "creds not set"
-
-        # If a deployment id is provided, we don't need to create a new script.
-        # The deployment id can be retrieved by going under
-        # Deploy -> Test deployments -> Head Deployment ID in the UI (script.google.com)
-        if self.smart_chip_deployment_id:
-            return
-
-        # Step 1: Check if the script already exists by searching the admin drive.
-        drive_service = get_drive_service(
-            self._creds, user_email=self.primary_admin_email
-        )
-        q = f"mimeType = 'application/vnd.google-apps.script' and name = '{SMART_CHIP_SCRIPT_FILE_NAME}' and trashed = false"
-        script_search = (
-            drive_service.files()
-            .list(
-                corpora="user",
-                fields="files(mimeType, id, name)",
-                q=q,
-            )
-            .execute()
-        )
-        script_id = (script_search.get("files") or [{}])[0].get("id")
-        scripts_service = get_google_scripts_service(
-            self._creds, user_email=self.primary_admin_email
-        )
-        if not script_id:
-            # Step 2: Create the script if nonexistent
-            # (Takes about ~10 seconds)
-            req = scripts_service.projects().create(
-                body={"title": SMART_CHIP_SCRIPT_FILE_NAME}
-            )
-            response = req.execute()
-
-            if "scriptId" not in response:
-                raise RuntimeError(
-                    f"Failed to create Smart Chip App Script: {response}"
-                )
-
-            script_id = response["scriptId"]
-            scripts_files = create_scripts_file_objects()
-            # Step 3: Update (upload) the script content
-            response = (
-                scripts_service.projects()
-                .updateContent(scriptId=script_id, body={"files": scripts_files})
-                .execute()
-            )
-
-            if "scriptId" not in response:
-                raise RuntimeError(
-                    f"Failed to update Smart Chip App Script: {response}"
-                )
-
-            script_id = response["scriptId"]
-
-        # Step 4: Get the deployment id
-        self.smart_chip_deployment_id = self._get_latest_deployment(
-            scripts_service, script_id
-        )["deploymentId"]
-
-        # TODO: upsert new version if out of date. We don't expect to do this often.
-        # One way would be to check whether the script files have changed (either via git
-        # or actually pulling the current content and comparing).
 
     def _update_traversed_parent_ids(self, folder_id: str) -> None:
         self._retrieved_ids.add(folder_id)
@@ -1065,7 +951,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 self.creds,
                 self.allow_images,
                 self.size_threshold,
-                self.smart_chip_deployment_id,
             )
             # Fetch files in batches
             batches_complete = 0

@@ -39,7 +39,6 @@ class TextSection(Section):
     """Section containing text content"""
 
     text: str
-    link: str | None = None
 
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.text) + sys.getsizeof(self.link)
@@ -49,7 +48,6 @@ class ImageSection(Section):
     """Section containing an image reference"""
 
     image_file_name: str
-    link: str | None = None
 
     def __sizeof__(self) -> int:
         return sys.getsizeof(self.image_file_name) + sys.getsizeof(self.link)
