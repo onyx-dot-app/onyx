@@ -334,8 +334,10 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
 
             elif (
                 is_valid_format
-                and file_extension in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
-                and file_extension in ACCEPTED_DOCUMENT_FILE_EXTENSIONS
+                and (
+                    file_extension in ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
+                    or file_extension in ACCEPTED_DOCUMENT_FILE_EXTENSIONS
+                )
                 and can_download
             ):
                 content_response = self.client.get_item_content(item_id)
