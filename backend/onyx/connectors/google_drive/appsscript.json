@@ -1,0 +1,17 @@
+{
+    "timeZone": "America/Los_Angeles",
+    "dependencies": {
+      "enabledAdvancedServices": [
+        {
+          "userSymbol": "Docs",
+          "version": "v1",
+          "serviceId": "docs"
+        }
+      ]
+    },
+    "exceptionLogging": "STACKDRIVER",
+    "runtimeVersion": "V8",
+    "executionApi": {
+      "access": "MYSELF"
+    }
+  }
