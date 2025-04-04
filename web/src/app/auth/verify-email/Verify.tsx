@@ -15,9 +15,9 @@ export function Verify({ user }: { user: User | null }) {
   const [error, setError] = useState("");
 
   const verify = useCallback(async () => {
-    const token = searchParams.get("token");
+    const token = searchParams?.get("token");
     const firstUser =
-      searchParams.get("first_user") && NEXT_PUBLIC_CLOUD_ENABLED;
+      searchParams?.get("first_user") && NEXT_PUBLIC_CLOUD_ENABLED;
     if (!token) {
       setError(
         "Missing verification token. Try requesting a new verification email."

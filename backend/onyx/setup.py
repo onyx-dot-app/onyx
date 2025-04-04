@@ -96,7 +96,11 @@ def setup_onyx(
         )
 
         for cc_pair in get_connector_credential_pairs(db_session):
-            resync_cc_pair(cc_pair, db_session=db_session)
+            resync_cc_pair(
+                cc_pair=cc_pair,
+                search_settings_id=search_settings.id,
+                db_session=db_session,
+            )
 
     # Expire all old embedding models indexing attempts, technically redundant
     cancel_indexing_attempts_past_model(db_session)

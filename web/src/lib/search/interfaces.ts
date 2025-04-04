@@ -95,13 +95,15 @@ export interface Quote {
 export interface QuotesInfoPacket {
   quotes: Quote[];
 }
-
-export interface OnyxDocument {
+export interface MinimalOnyxDocument {
   document_id: string;
+  semantic_identifier: string | null;
+}
+
+export interface OnyxDocument extends MinimalOnyxDocument {
   link: string;
   source_type: ValidSources;
   blurb: string;
-  semantic_identifier: string | null;
   boost: number;
   hidden: boolean;
   score: number;
@@ -188,6 +190,8 @@ export interface Filters {
   source_type: string[] | null;
   document_set: string[] | null;
   time_cutoff: Date | null;
+  user_file_ids: number[] | null;
+  // user_folder_ids: number[] | null;
 }
 
 export interface SearchRequestArgs {

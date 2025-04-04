@@ -105,3 +105,5 @@ export const ALLOWED_URL_PROTOCOLS = [
   "spotify:",
   "zoommtg:",
 ];
+
+export const MAX_CHARACTERS_PERSONA_DESCRIPTION = 5000000;

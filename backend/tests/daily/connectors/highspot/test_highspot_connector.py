@@ -2,6 +2,8 @@ import json
 import os
 import time
 from pathlib import Path
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -40,10 +42,13 @@ def highspot_connector() -> HighspotConnector:
     return connector
 
 
-@pytest.mark.xfail(
-    reason="Accessing postgres that isn't available in connector only tests",
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
 )
-def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None:
+def test_highspot_connector_basic(
+    mock_get_api_key: MagicMock, highspot_connector: HighspotConnector
+) -> None:
     """Test basic functionality of the Highspot connector."""
     all_docs: list[Document] = []
     test_data = load_test_data()
@@ -76,10 +81,13 @@ def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None
         assert len(section.text) > 0
 
 
-@pytest.mark.xfail(
-    reason="Possibly accessing postgres that isn't available in connector only tests",
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
 )
-def test_highspot_connector_slim(highspot_connector: HighspotConnector) -> None:
+def test_highspot_connector_slim(
+    mock_get_api_key: MagicMock, highspot_connector: HighspotConnector
+) -> None:
     """Test slim document retrieval."""
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()

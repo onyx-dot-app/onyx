@@ -37,6 +37,7 @@ const nextConfig = {
         pathname: "/s2/favicons/**",
       },
     ],
+    unoptimized: true, // Disable image optimization to avoid requiring Sharp
   },
   async headers() {
     return [

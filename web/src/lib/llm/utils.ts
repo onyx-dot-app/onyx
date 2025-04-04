@@ -77,6 +77,7 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "claude-3-haiku-20240307",
   // custom claude names
   "claude-3.5-sonnet-v2@20241022",
+  "claude-3-7-sonnet@20250219",
   // claude names with AWS Bedrock Suffix
   "claude-3-opus-20240229-v1:0",
   "claude-3-sonnet-20240229-v1:0",
@@ -125,12 +126,27 @@ export function checkLLMSupportsImageInput(model: string) {
   const modelParts = model.split(/[/.]/);
   const lastPart = modelParts[modelParts.length - 1]?.toLowerCase();
 
-  return MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some((modelName) => {
+  // Try matching the last part
+  const lastPartMatch = MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some((modelName) => {
     const modelNameParts = modelName.split(/[/.]/);
     const modelNameLastPart = modelNameParts[modelNameParts.length - 1];
     // lastPart is already lowercased above for tiny performance gain
     return modelNameLastPart?.toLowerCase() === lastPart;
   });
+
+  if (lastPartMatch) {
+    return true;
+  }
+
+  // If no match found, try getting the text after the first slash
+  if (model.includes("/")) {
+    const afterSlash = model.split("/")[1]?.toLowerCase();
+    return MODEL_NAMES_SUPPORTING_IMAGE_INPUT.some((modelName) =>
+      modelName.toLowerCase().includes(afterSlash)
+    );
+  }
+
+  return false;
 }
 
 export const structureValue = (

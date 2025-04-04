@@ -1,4 +1,15 @@
 import { Persona } from "@/app/admin/assistants/interfaces";
+import {
+  FileOptionIcon,
+  PDFIcon,
+  TXTIcon,
+  DOCIcon,
+  HTMLIcon,
+  JSONIcon,
+  ImagesIcon,
+  XMLIcon,
+} from "@/components/icons/icons";
+import { SearchResultIcon } from "@/components/SearchResultIcon";
 
 export interface GridShape {
   encodedGrid: number;
@@ -156,14 +167,56 @@ export const constructMiniFiedPersona = (
     display_priority: 0,
     description: "",
     document_sets: [],
-    prompts: [],
     tools: [],
-    search_start_date: null,
     owner: null,
     starter_messages: null,
     builtin_persona: false,
     is_default_persona: false,
     users: [],
     groups: [],
+    user_file_ids: [],
+    user_folder_ids: [],
   };
+};
+
+export const getFileIconFromFileNameAndLink = (
+  fileName: string,
+  linkUrl?: string | null
+) => {
+  if (linkUrl) {
+    return <SearchResultIcon url={linkUrl} />;
+  }
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  if (extension === "pdf") {
+    return <PDFIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "txt") {
+    return <TXTIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "doc" || extension === "docx") {
+    return <DOCIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "html" || extension === "htm") {
+    return <HTMLIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "json") {
+    return <JSONIcon className="h-4 w-4 shrink-0" />;
+  } else if (
+    ["jpg", "jpeg", "png", "gif", "svg", "webp"].includes(extension || "")
+  ) {
+    return <ImagesIcon className="h-4 w-4 shrink-0" />;
+  } else if (extension === "xml") {
+    return <XMLIcon className="h-4 w-4 shrink-0" />;
+  } else {
+    if (fileName.includes(".")) {
+      try {
+        // Check if fileName could be a valid domain when prefixed with https://
+        const url = new URL(`https://${fileName}`);
+        if (url.hostname === fileName) {
+          return <SearchResultIcon url={`https://${fileName}`} />;
+        }
+      } catch (e) {
+        // If URL construction fails, it's not a valid domain
+      }
+      return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    } else {
+      return <FileOptionIcon className="h-4 w-4 shrink-0" />;
+    }
+  }
 };

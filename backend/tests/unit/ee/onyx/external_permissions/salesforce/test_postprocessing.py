@@ -35,6 +35,8 @@ def create_test_chunk(
         match_highlights=[],
         updated_at=datetime.now(),
         image_file_name=None,
+        doc_summary="",
+        chunk_context="",
     )
 
 

@@ -121,7 +121,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             if chunk.large_chunk_reference_ids:
                 large_chunks_present = True
             chunk_text = (
-                f"{chunk.title_prefix}{chunk.content}{chunk.metadata_suffix_semantic}"
+                f"{chunk.title_prefix}{chunk.doc_summary}{chunk.content}{chunk.chunk_context}{chunk.metadata_suffix_semantic}"
             ) or chunk.source_document.get_title_for_document_index()
 
             if not chunk_text:

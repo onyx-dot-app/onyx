@@ -72,6 +72,7 @@ const Page = async (props: {
           authTypeMetadata={authTypeMetadata}
           nextUrl={nextUrl!}
           searchParams={searchParams}
+          hidePageRedirect={true}
         />
       </AuthFlowContainer>
     </div>

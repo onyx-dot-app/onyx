@@ -24,9 +24,11 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BLURB
 from onyx.document_index.vespa_constants import BOOST
+from onyx.document_index.vespa_constants import CHUNK_CONTEXT
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOC_SUMMARY
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
@@ -126,7 +128,8 @@ def _vespa_hit_to_inference_chunk(
     return InferenceChunkUncleaned(
         chunk_id=fields[CHUNK_ID],
         blurb=fields.get(BLURB, ""),  # Unused
-        content=fields[CONTENT],  # Includes extra title prefix and metadata suffix
+        content=fields[CONTENT],  # Includes extra title prefix and metadata suffix;
+        # also sometimes context for contextual rag
         source_links=source_links_dict or {0: ""},
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
@@ -143,6 +146,8 @@ def _vespa_hit_to_inference_chunk(
         large_chunk_reference_ids=fields.get(LARGE_CHUNK_REFERENCE_IDS, []),
         metadata=metadata,
         metadata_suffix=fields.get(METADATA_SUFFIX),
+        doc_summary=fields.get(DOC_SUMMARY, ""),
+        chunk_context=fields.get(CHUNK_CONTEXT, ""),
         match_highlights=match_highlights,
         updated_at=updated_at,
     )
@@ -345,6 +350,19 @@ def query_vespa(
     filtered_hits = [hit for hit in hits if hit["fields"].get(CONTENT) is not None]
 
     inference_chunks = [_vespa_hit_to_inference_chunk(hit) for hit in filtered_hits]
+
+    try:
+        num_retrieved_inference_chunks = len(inference_chunks)
+        num_retrieved_document_ids = len(
+            set([chunk.document_id for chunk in inference_chunks])
+        )
+        logger.debug(
+            f"Retrieved {num_retrieved_inference_chunks} inference chunks for {num_retrieved_document_ids} documents"
+        )
+    except Exception as e:
+        # Debug logging only, should not fail the retrieval
+        logger.error(f"Error logging retrieval statistics: {e}")
+
     # Good Debugging Spot
     return inference_chunks
 

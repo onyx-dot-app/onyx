@@ -332,14 +332,15 @@ def wait_on_background(task: TimeoutThread[R]) -> R:
     return task.result
 
 
-def _next_or_none(ind: int, g: Iterator[R]) -> tuple[int, R | None]:
-    return ind, next(g, None)
+def _next_or_none(ind: int, gen: Iterator[R]) -> tuple[int, R | None]:
+    return ind, next(gen, None)
 
 
 def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R]:
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
-            executor.submit(_next_or_none, i, g): i for i, g in enumerate(gens)
+            executor.submit(_next_or_none, ind, gen): ind
+            for ind, gen in enumerate(gens)
         }
 
         next_ind = len(gens)

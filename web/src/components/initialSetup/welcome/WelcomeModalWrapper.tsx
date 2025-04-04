@@ -1,6 +1,6 @@
 import {
-  _CompletedWelcomeFlowDummyComponent,
-  _WelcomeModal,
+  CompletedWelcomeFlowDummyComponent,
+  WelcomeModal as WelcomeModalComponent,
 } from "./WelcomeModal";
 import { COMPLETED_WELCOME_FLOW_COOKIE } from "./constants";
 import { User } from "@/lib/types";
@@ -24,8 +24,8 @@ export function WelcomeModal({
 }) {
   const hasCompletedWelcomeFlow = hasCompletedWelcomeFlowSS(requestCookies);
   if (hasCompletedWelcomeFlow) {
-    return <_CompletedWelcomeFlowDummyComponent />;
+    return <CompletedWelcomeFlowDummyComponent />;
   }
 
-  return <_WelcomeModal user={user} />;
+  return <WelcomeModalComponent user={user} />;
 }

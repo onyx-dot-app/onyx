@@ -38,6 +38,7 @@ export enum ChatFileType {
   DOCUMENT = "document",
   PLAIN_TEXT = "plain_text",
   CSV = "csv",
+  USER_KNOWLEDGE = "user_knowledge",
 }
 
 export interface FileDescriptor {
@@ -47,6 +48,10 @@ export interface FileDescriptor {
 
   // FE only
   isUploading?: boolean;
+}
+
+export interface FileDescriptorWithHighlights extends FileDescriptor {
+  match_highlights: string[];
 }
 
 export interface LLMRelevanceFilterPacket {
@@ -166,6 +171,10 @@ export interface AgentMessageIDInfo {
 
 export interface AgenticMessageResponseIDInfo {
   agentic_message_ids: AgentMessageIDInfo[];
+}
+
+export interface UserKnowledgeFilePacket {
+  user_files: FileDescriptor[];
 }
 
 export interface DocumentsResponse {

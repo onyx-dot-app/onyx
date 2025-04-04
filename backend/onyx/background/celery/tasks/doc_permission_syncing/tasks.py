@@ -886,11 +886,8 @@ def monitor_ccpair_permissions_taskset(
         record_type=RecordType.PERMISSION_SYNC_PROGRESS,
         data={
             "cc_pair_id": cc_pair_id,
-            "id": payload.id if payload else None,
-            "total_docs": initial if initial is not None else 0,
-            "remaining_docs": remaining,
-            "synced_docs": (initial - remaining) if initial is not None else 0,
-            "is_complete": remaining == 0,
+            "total_docs_synced": initial if initial is not None else 0,
+            "remaining_docs_to_sync": remaining,
         },
         tenant_id=tenant_id,
     )
@@ -904,6 +901,13 @@ def monitor_ccpair_permissions_taskset(
         f"cc_pair={cc_pair_id} "
         f"id={payload.id} "
         f"num_synced={initial}"
+    )
+
+    # Add telemetry for permission syncing complete
+    optional_telemetry(
+        record_type=RecordType.PERMISSION_SYNC_COMPLETE,
+        data={"cc_pair_id": cc_pair_id},
+        tenant_id=tenant_id,
     )
 
     update_sync_record_status(

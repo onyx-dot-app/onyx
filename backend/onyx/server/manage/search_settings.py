@@ -117,7 +117,11 @@ def set_new_search_settings(
             search_settings_id=search_settings.id, db_session=db_session
         )
         for cc_pair in get_connector_credential_pairs(db_session):
-            resync_cc_pair(cc_pair, db_session=db_session)
+            resync_cc_pair(
+                cc_pair=cc_pair,
+                search_settings_id=new_search_settings.id,
+                db_session=db_session,
+            )
 
     db_session.commit()
     return IdReturn(id=new_search_settings.id)

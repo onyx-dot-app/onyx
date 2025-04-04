@@ -94,6 +94,7 @@ async def get_or_provision_tenant(
         # Notify control plane if we have created / assigned a new tenant
         if not DEV_MODE:
             await notify_control_plane(tenant_id, email, referral_source)
+
         return tenant_id
 
     except Exception as e:
@@ -505,8 +506,11 @@ async def setup_tenant(tenant_id: str) -> None:
     try:
         token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
-        # Run Alembic migrations
-        await asyncio.to_thread(run_alembic_migrations, tenant_id)
+        # Run Alembic migrations in a way that isolates it from the current event loop
+        # Create a new event loop for this synchronous operation
+        loop = asyncio.get_event_loop()
+        # Use run_in_executor which properly isolates the thread execution
+        await loop.run_in_executor(None, lambda: run_alembic_migrations(tenant_id))
 
         # Configure the tenant with default settings
         with get_session_with_tenant(tenant_id=tenant_id) as db_session:

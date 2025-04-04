@@ -43,6 +43,7 @@ from onyx.file_store.models import ChatFileType
 from onyx.secondary_llm_flows.starter_message_creation import (
     generate_starter_messages,
 )
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import GenerateStarterMessageRequest
 from onyx.server.features.persona.models import ImageGenerationToolStatus
 from onyx.server.features.persona.models import PersonaLabelCreate
@@ -58,7 +59,6 @@ from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-
 
 admin_router = APIRouter(prefix="/admin/persona")
 basic_router = APIRouter(prefix="/persona")
@@ -210,6 +210,7 @@ def create_persona(
         and len(persona_upsert_request.prompt_ids) > 0
         else None
     )
+
     prompt = upsert_prompt(
         db_session=db_session,
         user=user,
@@ -424,8 +425,8 @@ def get_persona(
     persona_id: int,
     user: User | None = Depends(current_limited_user),
     db_session: Session = Depends(get_session),
-) -> PersonaSnapshot:
-    return PersonaSnapshot.from_model(
+) -> FullPersonaSnapshot:
+    return FullPersonaSnapshot.from_model(
         get_persona_by_id(
             persona_id=persona_id,
             user=user,

@@ -36,9 +36,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 router = APIRouter(prefix="/auth/saml")
 
-# Define non-authenticated user roles that should be re-created during SAML login
-NON_AUTHENTICATED_ROLES = {UserRole.SLACK_USER, UserRole.EXT_PERM_USER}
-
 
 async def upsert_saml_user(email: str) -> User:
     logger.debug(f"Attempting to upsert SAML user with email: {email}")
@@ -54,7 +51,7 @@ async def upsert_saml_user(email: str) -> User:
                 try:
                     user = await user_manager.get_by_email(email)
                     # If user has a non-authenticated role, treat as non-existent
-                    if user.role in NON_AUTHENTICATED_ROLES:
+                    if not user.role.is_web_login():
                         raise exceptions.UserNotExists()
                     return user
                 except exceptions.UserNotExists:

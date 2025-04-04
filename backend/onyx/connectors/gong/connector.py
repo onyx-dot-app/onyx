@@ -7,6 +7,8 @@ from typing import Any
 from typing import cast
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import GONG_CONNECTOR_START_TIME
@@ -21,13 +23,12 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
-
 logger = setup_logger()
-
-GONG_BASE_URL = "https://us-34014.api.gong.io"
 
 
 class GongConnector(LoadConnector, PollConnector):
+    BASE_URL = "https://api.gong.io"
+
     def __init__(
         self,
         workspaces: list[str] | None = None,
@@ -41,15 +42,23 @@ class GongConnector(LoadConnector, PollConnector):
         self.auth_token_basic: str | None = None
         self.hide_user_info = hide_user_info
 
-    def _get_auth_header(self) -> dict[str, str]:
-        if self.auth_token_basic is None:
-            raise ConnectorMissingCredentialError("Gong")
+        retry_strategy = Retry(
+            total=5,
+            backoff_factor=2,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
 
-        return {"Authorization": f"Basic {self.auth_token_basic}"}
+        session = requests.Session()
+        session.mount(GongConnector.BASE_URL, HTTPAdapter(max_retries=retry_strategy))
+        self._session = session
+
+    @staticmethod
+    def make_url(endpoint: str) -> str:
+        url = f"{GongConnector.BASE_URL}{endpoint}"
+        return url
 
     def _get_workspace_id_map(self) -> dict[str, str]:
-        url = f"{GONG_BASE_URL}/v2/workspaces"
-        response = requests.get(url, headers=self._get_auth_header())
+        response = self._session.get(GongConnector.make_url("/v2/workspaces"))
         response.raise_for_status()
 
         workspaces_details = response.json().get("workspaces")
@@ -66,7 +75,6 @@ class GongConnector(LoadConnector, PollConnector):
     def _get_transcript_batches(
         self, start_datetime: str | None = None, end_datetime: str | None = None
     ) -> Generator[list[dict[str, Any]], None, None]:
-        url = f"{GONG_BASE_URL}/v2/calls/transcript"
         body: dict[str, dict] = {"filter": {}}
         if start_datetime:
             body["filter"]["fromDateTime"] = start_datetime
@@ -94,8 +102,8 @@ class GongConnector(LoadConnector, PollConnector):
                     del body["filter"]["workspaceId"]
 
             while True:
-                response = requests.post(
-                    url, headers=self._get_auth_header(), json=body
+                response = self._session.post(
+                    GongConnector.make_url("/v2/calls/transcript"), json=body
                 )
                 # If no calls in the range, just break out
                 if response.status_code == 404:
@@ -125,14 +133,14 @@ class GongConnector(LoadConnector, PollConnector):
             yield transcripts
 
     def _get_call_details_by_ids(self, call_ids: list[str]) -> dict:
-        url = f"{GONG_BASE_URL}/v2/calls/extensive"
-
         body = {
             "filter": {"callIds": call_ids},
             "contentSelector": {"exposedFields": {"parties": True}},
         }
 
-        response = requests.post(url, headers=self._get_auth_header(), json=body)
+        response = self._session.post(
+            GongConnector.make_url("/v2/calls/extensive"), json=body
+        )
         response.raise_for_status()
 
         calls = response.json().get("calls")
@@ -180,9 +188,17 @@ class GongConnector(LoadConnector, PollConnector):
                 call_id = transcript.get("callId")
 
                 if not call_id or call_id not in call_details_map:
+                    # NOTE(rkuo): seeing odd behavior where call_ids from the transcript
+                    # don't have call details. adding error debugging logs to trace.
                     logger.error(
                         f"Couldn't get call information for Call ID: {call_id}"
                     )
+                    if call_id:
+                        logger.error(
+                            f"Call debug info: call_id={call_id} "
+                            f"call_ids={call_ids} "
+                            f"call_details_map={call_details_map.keys()}"
+                        )
                     if not self.continue_on_fail:
                         raise RuntimeError(
                             f"Couldn't get call information for Call ID: {call_id}"
@@ -262,6 +278,13 @@ class GongConnector(LoadConnector, PollConnector):
         )
         self.auth_token_basic = base64.b64encode(combined.encode("utf-8")).decode(
             "utf-8"
+        )
+
+        if self.auth_token_basic is None:
+            raise ConnectorMissingCredentialError("Gong")
+
+        self._session.headers.update(
+            {"Authorization": f"Basic {self.auth_token_basic}"}
         )
         return None
 
