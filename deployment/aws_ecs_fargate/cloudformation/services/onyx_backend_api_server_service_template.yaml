@@ -3,9 +3,9 @@ Description: CloudFormation template for Onyx Backend Api Server TaskDefinition
 Parameters:
   Environment:
     Type: String
-  SubnetID:
-    Type: String
-    Default: subnet-0af372d676f65b287
+  SubnetIDs:
+    Type: CommaDelimitedList
+    Description: "Comma-delimited list of at least two subnet IDs in different Availability Zones"
   VpcID:
     Type: String
     Default: vpc-098cfa79d637dabff
@@ -44,8 +44,7 @@ Resources:
           AssignPublicIp: ENABLED
           SecurityGroups:
             - Ref: SecurityGroup
-          Subnets:
-            - !Ref SubnetID
+          Subnets: !Ref SubnetIDs
       PlatformVersion: LATEST
       DeploymentConfiguration:
         MaximumPercent: 200
