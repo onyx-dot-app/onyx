@@ -255,11 +255,7 @@ _DISALLOWED_MSG_SUBTYPES = {
 def default_msg_filter(message: MessageType) -> bool:
     # Don't keep messages from bots
     if message.get("bot_id") or message.get("app_id"):
-        bot_profile_name = message.get("bot_profile", {}).get("name")
-        print(f"bot_profile_name: {bot_profile_name}")
-        if bot_profile_name == "DanswerBot Testing":
-            return False
-        return True
+        return message.get("bot_profile", {}).get("name") != "DanswerBot Testing"
 
     # Uninformative
     if message.get("subtype", "") in _DISALLOWED_MSG_SUBTYPES:
