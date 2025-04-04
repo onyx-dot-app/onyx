@@ -2,8 +2,7 @@
 
 import { PageSelector } from "@/components/PageSelector";
 import { DiscordBot } from "@/lib/types";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FiCheck, FiEdit, FiXCircle } from "react-icons/fi";
 import {
   Table,
@@ -13,34 +12,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ClickableTableRow } from "@/components/table/ClickableTableRow";
 
 const NUM_IN_PAGE = 20;
-
-function ClickableTableRow({
-  url,
-  children,
-  ...props
-}: {
-  url: string;
-  children: React.ReactNode;
-  [key: string]: any;
-}) {
-  const router = useRouter();
-
-  useEffect(() => {
-    router.prefetch(url);
-  }, [router]);
-
-  const navigate = () => {
-    router.push(url);
-  };
-
-  return (
-    <TableRow {...props} onClick={navigate}>
-      {children}
-    </TableRow>
-  );
-}
 
 export function DiscordBotTable({
   discordBots,
@@ -106,7 +80,7 @@ export function DiscordBotTable({
                 colSpan={4}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Discord Bot to begin chatting with Danswer!
+                Please add a New Discord Bot to begin chatting with Onyx!
               </TableCell>
             </TableRow>
           )}

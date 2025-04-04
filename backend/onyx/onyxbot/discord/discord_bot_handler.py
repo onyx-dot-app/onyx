@@ -15,6 +15,7 @@ from prometheus_client import Gauge
 from prometheus_client import start_http_server
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import DISALLOWED_SLACK_BOT_TENANT_LIST
 from onyx.configs.app_configs import POD_NAME
 from onyx.configs.app_configs import POD_NAMESPACE
 from onyx.configs.constants import OnyxRedisLocks
@@ -84,6 +85,29 @@ class OnyxDiscordBot(commands.Bot):
             try:
                 logger.info(f"Processing message with tenant: {self.tenant_id}")
                 CURRENT_TENANT_ID_CONTEXTVAR.set(self.tenant_id)
+
+                # Get channel configuration first
+                channel_config = None
+                if not isinstance(message.channel, discord.DMChannel) and message.guild:
+                    with get_session_with_tenant(self.tenant_id) as db_session:
+                        from onyx.onyxbot.discord.config import (
+                            get_discord_channel_config_for_bot_and_channel,
+                        )
+
+                        channel_config = get_discord_channel_config_for_bot_and_channel(
+                            db_session=db_session,
+                            discord_bot_id=self.discord_bot_id,
+                            channel_name=message.channel.name,
+                        )
+
+                # Check if the bot should respond to this message
+                if not self.should_respond(message, channel_config):
+                    logger.info(
+                        "Bot should not respond to this message based on configuration"
+                    )
+                    return
+
+                # If we should respond, build the message info and process
                 message_info = build_message_info(message=message, bot=self)
                 logger.info(f"Built message info: {message_info}")
                 await process_message(message, message_info, self)
@@ -132,18 +156,7 @@ class OnyxDiscordBot(commands.Bot):
 
 
 class DiscordbotHandler:
-    _instance = None
-
-    @classmethod
-    def get_instance(cls) -> "DiscordbotHandler":
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-
     def __init__(self) -> None:
-        if self._instance is not None:
-            raise RuntimeError("Use get_instance() instead")
-
         self.tenant_ids: Set[str | None] = set()
         self.discord_clients: Dict[tuple[str | None, int], OnyxDiscordBot] = {}
         self.running = True
@@ -186,6 +199,15 @@ class DiscordbotHandler:
             current_tenant = tenant_id or POSTGRES_DEFAULT_SCHEMA
             logger.info(f"Processing tenant: {current_tenant}")
 
+            if (
+                DISALLOWED_SLACK_BOT_TENANT_LIST is not None
+                and current_tenant in DISALLOWED_SLACK_BOT_TENANT_LIST
+            ):
+                logger.info(
+                    f"Tenant {current_tenant} is in the disallowed list, skipping"
+                )
+                continue
+
             if current_tenant in self.tenant_ids:
                 logger.info(f"Tenant {current_tenant} already acquired")
                 continue
@@ -208,9 +230,9 @@ class DiscordbotHandler:
 
                     if acquired is None:
                         logger.warning(
-                            f"Redis lock operation failed for {current_tenant}, but continuing"
+                            f"Redis lock operation failed for {current_tenant}, skipping tenant"
                         )
-                        acquired = True
+                        continue  # Skip this tenant if Redis operation failed
                     elif acquired is False:
                         logger.info(
                             f"Another pod holds the lock for tenant {current_tenant}"
@@ -219,9 +241,9 @@ class DiscordbotHandler:
 
                 except Exception as e:
                     logger.warning(
-                        f"Redis error for {current_tenant}, but continuing: {e}"
+                        f"Redis error for {current_tenant}, skipping tenant: {e}"
                     )
-                    acquired = True
+                    continue  # Skip this tenant if there was a Redis error
 
                 self.tenant_ids.add(current_tenant)
 
