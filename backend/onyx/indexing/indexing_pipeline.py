@@ -459,10 +459,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         llm = get_default_llm_with_vision()
 
     if not llm:
-        logger.warning(
-            "No vision-capable LLM available. Image sections will not be processed."
-        )
-
         # Even without LLM, we still convert to IndexingDocument with base Sections
         return [
             IndexingDocument(
@@ -929,10 +925,12 @@ def index_doc_batch(
             for chunk_num, chunk in enumerate(chunks_with_embeddings)
         ]
 
-        logger.debug(
-            "Indexing the following chunks: "
-            f"{[chunk.to_short_descriptor() for chunk in access_aware_chunks]}"
-        )
+        short_descriptor_list = [
+            chunk.to_short_descriptor() for chunk in access_aware_chunks
+        ]
+        short_descriptor_log = str(short_descriptor_list)[:1024]
+        logger.debug(f"Indexing the following chunks: {short_descriptor_log}")
+
         # A document will not be spread across different batches, so all the
         # documents with chunks in this set, are fully represented by the chunks
         # in this set
