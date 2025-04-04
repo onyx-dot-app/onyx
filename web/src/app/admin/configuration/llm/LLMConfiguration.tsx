@@ -36,9 +36,8 @@ function LLMProviderUpdateModal({
     "Custom LLM Provider";
 
   const hasAdvancedOptions =
-    (llmProviderDescriptor?.name != "azure" &&
-      llmProviderDescriptor?.name != "vertexai") ||
-    false;
+    llmProviderDescriptor?.name != "azure" &&
+    llmProviderDescriptor?.name != "vertexai";
 
   return (
     <Modal title={`Setup ${providerName}`} onOutsideClick={() => onClose()}>

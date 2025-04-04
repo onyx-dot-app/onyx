@@ -10,10 +10,11 @@ import {
   SelectorFormField,
   TextFormField,
   MultiSelectField,
+  FileUploadFormField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { defaultModelsByProvider, getDisplayNameForModel } from "@/lib/hooks";
+import { defaultModelsByProvider } from "@/lib/hooks";
 import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
@@ -95,7 +96,9 @@ export function LLMProviderUpdateForm({
               (acc, customConfigKey) => {
                 if (customConfigKey.is_required) {
                   acc[customConfigKey.name] = Yup.string().required(
-                    `${customConfigKey.name} is required`
+                    `${
+                      customConfigKey.display_name || customConfigKey.name
+                    } is required`
                   );
                 }
                 return acc;
@@ -116,6 +119,8 @@ export function LLMProviderUpdateForm({
     display_model_names: Yup.array().of(Yup.string()),
     api_key_changed: Yup.boolean(),
   });
+
+  // useField(propsOrFieldName);
 
   return (
     <Formik
@@ -259,21 +264,37 @@ export function LLMProviderUpdateForm({
             />
           )}
 
-          {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => (
-            <div key={customConfigKey.name}>
-              <TextFormField
-                name={`custom_config.${customConfigKey.name}`}
-                label={
-                  customConfigKey.is_required
-                    ? customConfigKey.name
-                    : `[Optional] ${customConfigKey.name}`
-                }
-                subtext={customConfigKey.description || undefined}
-              />
-            </div>
-          ))}
+          {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => {
+            if (customConfigKey.key_type === "text_input") {
+              return (
+                <div key={customConfigKey.name}>
+                  <TextFormField
+                    name={`custom_config.${customConfigKey.name}`}
+                    label={
+                      customConfigKey.is_required
+                        ? customConfigKey.display_name
+                        : `[Optional] ${customConfigKey.display_name}`
+                    }
+                    subtext={customConfigKey.description || undefined}
+                  />
+                </div>
+              );
+            } else if (customConfigKey.key_type === "drag_and_drop") {
+              return (
+                <FileUploadFormField
+                  key={customConfigKey.name}
+                  name={`custom_config.${customConfigKey.name}`}
+                  label={customConfigKey.display_name}
+                  subtext={customConfigKey.description || undefined}
+                />
+              );
+            } else {
+              throw "Unreachable; there should only exist 2 options";
+            }
+          })}
 
           <Separator />
+
           {llmProviderDescriptor.llm_names.length > 0 ? (
             <SelectorFormField
               name="default_model_name"
@@ -295,6 +316,7 @@ export function LLMProviderUpdateForm({
               placeholder="E.g. gpt-4"
             />
           )}
+
           {llmProviderDescriptor.deployment_name_required && (
             <TextFormField
               name="deployment_name"
@@ -302,6 +324,7 @@ export function LLMProviderUpdateForm({
               placeholder="Deployment Name"
             />
           )}
+
           {!llmProviderDescriptor.single_model_supported &&
             (llmProviderDescriptor.llm_names.length > 0 ? (
               <SelectorFormField
@@ -377,68 +400,66 @@ export function LLMProviderUpdateForm({
             </>
           )}
 
-          <div>
-            {/* NOTE: this is above the test button to make sure it's visible */}
-            {testError && <Text className="text-error mt-2">{testError}</Text>}
+          {/* NOTE: this is above the test button to make sure it's visible */}
+          {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-            <div className="flex w-full mt-4">
-              <Button type="submit" variant="submit">
-                {isTesting ? (
-                  <LoadingAnimation text="Testing" />
-                ) : existingLlmProvider ? (
-                  "Update"
-                ) : (
-                  "Enable"
-                )}
-              </Button>
-              {existingLlmProvider && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="ml-3"
-                  icon={FiTrash}
-                  onClick={async () => {
-                    const response = await fetch(
-                      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
-                      {
-                        method: "DELETE",
-                      }
-                    );
-                    if (!response.ok) {
-                      const errorMsg = (await response.json()).detail;
-                      alert(`Failed to delete provider: ${errorMsg}`);
-                      return;
-                    }
-
-                    // If the deleted provider was the default, set the first remaining provider as default
-                    const remainingProvidersResponse = await fetch(
-                      LLM_PROVIDERS_ADMIN_URL
-                    );
-                    if (remainingProvidersResponse.ok) {
-                      const remainingProviders =
-                        await remainingProvidersResponse.json();
-
-                      if (remainingProviders.length > 0) {
-                        const setDefaultResponse = await fetch(
-                          `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-                          {
-                            method: "POST",
-                          }
-                        );
-                        if (!setDefaultResponse.ok) {
-                          console.error("Failed to set new default provider");
-                        }
-                      }
-                    }
-
-                    mutate(LLM_PROVIDERS_ADMIN_URL);
-                    onClose();
-                  }}
-                >
-                  Delete
-                </Button>
+          <div className="flex w-full mt-4">
+            <Button type="submit" variant="submit">
+              {isTesting ? (
+                <LoadingAnimation text="Testing" />
+              ) : existingLlmProvider ? (
+                "Update"
+              ) : (
+                "Enable"
               )}
-            </div>
+            </Button>
+            {existingLlmProvider && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="ml-3"
+                icon={FiTrash}
+                onClick={async () => {
+                  const response = await fetch(
+                    `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
+                    {
+                      method: "DELETE",
+                    }
+                  );
+                  if (!response.ok) {
+                    const errorMsg = (await response.json()).detail;
+                    alert(`Failed to delete provider: ${errorMsg}`);
+                    return;
+                  }
+
+                  // If the deleted provider was the default, set the first remaining provider as default
+                  const remainingProvidersResponse = await fetch(
+                    LLM_PROVIDERS_ADMIN_URL
+                  );
+                  if (remainingProvidersResponse.ok) {
+                    const remainingProviders =
+                      await remainingProvidersResponse.json();
+
+                    if (remainingProviders.length > 0) {
+                      const setDefaultResponse = await fetch(
+                        `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
+                        {
+                          method: "POST",
+                        }
+                      );
+                      if (!setDefaultResponse.ok) {
+                        console.error("Failed to set new default provider");
+                      }
+                    }
+                  }
+
+                  mutate(LLM_PROVIDERS_ADMIN_URL);
+                  onClose();
+                }}
+              >
+                Delete
+              </Button>
+            )}
           </div>
         </Form>
       )}
