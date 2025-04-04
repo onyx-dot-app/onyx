@@ -33,7 +33,6 @@ def _get_dummy_object_access_map(
 
 
 def _get_objects_access_for_user_email_from_salesforce(
-    directory: str,
     object_ids: set[str],
     user_email: str,
     chunks: list[InferenceChunk],
@@ -53,9 +52,7 @@ def _get_objects_access_for_user_email_from_salesforce(
     # This is cached in the function so the first query takes an extra 0.1-0.3 seconds
     # but subsequent queries by the same user are essentially instant
     start_time = time.monotonic()
-    user_id = get_salesforce_user_id_from_email(
-        directory, salesforce_client, user_email
-    )
+    user_id = get_salesforce_user_id_from_email(salesforce_client, user_email)
     end_time = time.monotonic()
     logger.info(
         f"Time taken to get Salesforce user ID: {end_time - start_time} seconds"
@@ -143,7 +140,6 @@ def _update_censored_chunk(
 
 # TODO: Generalize this to other sources
 def censor_salesforce_chunks(
-    directory: str,
     chunks: list[InferenceChunk],
     user_email: str,
     # This is so we can provide a mock access map for testing
@@ -177,7 +173,6 @@ def censor_salesforce_chunks(
     # This is so we can provide a mock access map for testing
     if access_map is None:
         access_map = _get_objects_access_for_user_email_from_salesforce(
-            directory,
             object_ids=object_ids,
             user_email=user_email,
             chunks=chunks,

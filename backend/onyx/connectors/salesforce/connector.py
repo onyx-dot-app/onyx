@@ -272,7 +272,6 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 doc_sizeof = sys.getsizeof(doc)
                 docs_to_yield_bytes += doc_sizeof
-                # logger.info(f"Appending doc: doc_id={doc.id} size={sys.getsizeof(doc)}")
                 docs_to_yield.append(doc)
                 docs_processed += 1
 

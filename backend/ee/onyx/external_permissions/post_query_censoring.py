@@ -5,7 +5,6 @@ from ee.onyx.external_permissions.salesforce.postprocessing import (
     censor_salesforce_chunks,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
 from onyx.context.search.pipeline import InferenceChunk
 from onyx.db.engine import get_session_context_manager
 from onyx.db.models import User
@@ -16,7 +15,7 @@ logger = setup_logger()
 DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION: dict[
     DocumentSource,
     # list of chunks to be censored and the user email. returns censored chunks
-    Callable[[str, list[InferenceChunk], str], list[InferenceChunk]],
+    Callable[[list[InferenceChunk], str], list[InferenceChunk]],
 ] = {
     DocumentSource.SALESFORCE: censor_salesforce_chunks,
 }
@@ -73,9 +72,7 @@ def _post_query_chunk_censoring(
     for source, chunks_for_source in chunks_to_process.items():
         censor_chunks_for_source = DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION[source]
         try:
-            censored_chunks = censor_chunks_for_source(
-                BASE_DATA_PATH, chunks_for_source, user.email
-            )
+            censored_chunks = censor_chunks_for_source(chunks_for_source, user.email)
         except Exception as e:
             logger.exception(
                 f"Failed to censor chunks for source {source} so throwing out all"
