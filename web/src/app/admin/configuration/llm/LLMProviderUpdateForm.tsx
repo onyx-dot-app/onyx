@@ -120,8 +120,6 @@ export function LLMProviderUpdateForm({
     api_key_changed: Yup.boolean(),
   });
 
-  // useField(propsOrFieldName);
-
   return (
     <Formik
       initialValues={initialValues}

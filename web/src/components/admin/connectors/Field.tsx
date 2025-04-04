@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -364,14 +364,27 @@ export function FileUploadFormField({
   name: string;
   label: string;
   subtext?: string | JSX.Element;
-  error?: string;
 }) {
-  const [, meta] = useField(name);
+  // We create a *temporary* field inside of `Formik` to throw the `File` object into.
+  // The actual *contents* of the file will be thrown into the field called `name`.
+  const fileName = "temporary.credentialsFile";
+  const [fileField] = useField<File>(fileName);
+  const [, , contentsHelper] = useField<string>(name);
+
+  useEffect(() => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      contentsHelper.setValue(e.target?.result as string);
+    };
+    if (fileField.value instanceof File) {
+      reader.readAsText(fileField.value);
+    }
+  }, [contentsHelper, fileField.value]);
 
   return (
     <div className="w-full">
       <FieldLabel name={name} label={label} subtext={subtext} />
-      <FileInput name={name} multiple={false} hideError />
+      <FileInput name={fileName} multiple={false} hideError />
     </div>
   );
 }
@@ -460,7 +473,7 @@ export const MarkdownFormField = ({
   error,
   placeholder = "Enter your markdown here...",
 }: MarkdownPreviewProps) => {
-  const [field, _] = useField(name);
+  const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const togglePreview = () => {
