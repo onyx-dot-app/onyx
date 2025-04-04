@@ -1,16 +1,11 @@
-from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import USE_SMART_CHIP_SCOPES
 from onyx.connectors.google_utils.resources import GoogleDocsService
-from onyx.connectors.google_utils.resources import GoogleScriptsService
 from onyx.connectors.models import TextSection
 
-
-DRIVE_CHIP_CHAR = "\ue907"
-UNKNOWN_SMART_CHIP_STR = "<Smart Chip>"
+HEADING_DELIMITER = "\n"
 
 
 class CurrentHeading(BaseModel):
@@ -31,9 +26,7 @@ def _extract_id_from_heading(paragraph: dict[str, Any]) -> str:
     return paragraph["paragraphStyle"]["headingId"]
 
 
-def _extract_text_from_paragraph(
-    paragraph: dict[str, Any], extract_chip: Callable[[int], str | None]
-) -> tuple[str, int]:
+def _extract_text_from_paragraph(paragraph: dict[str, Any]) -> str:
     """Extracts the text content from a paragraph element"""
     text_elements = []
     for element in paragraph.get("elements", []):
@@ -62,62 +55,14 @@ def _extract_text_from_paragraph(
             link_str = f"[{title}]({uri})"
             text_elements.append(link_str)
 
-    ret = "".join(text_elements)
-
-    # add chip strings in place of each non-text
-    text_chunks = ret.split(DRIVE_CHIP_CHAR)
-    num_non_text_elements = len(text_chunks) - 1
-    for i in range(num_non_text_elements):
-        text_chunks[i] += extract_chip(i) or UNKNOWN_SMART_CHIP_STR
-    return "".join(text_chunks), num_non_text_elements
+    return "".join(text_elements)
 
 
-def _extract_smart_chips_from_document(
-    document_id: str,
-    scripts_service: GoogleScriptsService,
-    deployment_id: str,
-) -> dict[str, str]:
-    """Extracts smart chips from a Google Doc. Returns a dictionary where
-    the keys are the smart chip location keys and the values are the smart chip text.
-
-    This calls a Google Apps Script function, because most smart chips are not currently
-    available through the API https://issuetracker.google.com/issues/225584757
-
-    Each location key is formatted as "tabNum_paragraphNum_nonTextIndexNum".
-    nonTextIndexNum refers to the index at which the value was found while traversing
-    the paragraph or table cell from left to right, top to bottom.
-
-    There are many non-text elements that are currently not supported by Apps Script, (see
-    https://developers.google.com/apps-script/reference/document/element-type ), so some
-    non-text elements won't have an associated text value.
-    """
-
-    # NOTE: the documentation is incorrect; the script id you must specify is
-    # actually the deployment id (what comes up when you go to Deploy-> Test Deployments)
-    http_request = scripts_service.scripts().run(
-        scriptId=deployment_id,
-        body={
-            "function": "docToChips",
-            "parameters": [document_id],
-            # "devMode": True
-        },
-    )
-    doc = http_request.execute()
-    return doc.get("response", {}).get("result", {})
-
-
-def _extract_text_from_table(
-    table: dict[str, Any], extract_chip: Callable[[int], str | None]
-) -> str:
+def _extract_text_from_table(table: dict[str, Any]) -> str:
     """
     Extracts the text content from a table element.
-    Smart chip extraction will be wrong for nested tables.
     """
     row_strs = []
-    seen_non_text = 0
-
-    def table_extract_chip(non_text_index: int) -> str | None:
-        return extract_chip(non_text_index + seen_non_text)
 
     for row in table.get("tableRows", []):
         cells = row.get("tableCells", [])
@@ -128,12 +73,7 @@ def _extract_text_from_table(
             for child_elem in child_elements:
                 if "paragraph" not in child_elem:
                     continue
-                text, num_non_text_elements = _extract_text_from_paragraph(
-                    child_elem["paragraph"], table_extract_chip
-                )
-                cell_str.append(text)
-                seen_non_text += num_non_text_elements
-
+                cell_str.append(_extract_text_from_paragraph(child_elem["paragraph"]))
             cell_strs.append("".join(cell_str))
         row_strs.append(", ".join(cell_strs))
     return "\n".join(row_strs)
@@ -141,8 +81,6 @@ def _extract_text_from_table(
 
 def get_document_sections(
     docs_service: GoogleDocsService,
-    scripts_service: GoogleScriptsService,
-    smart_chips_deployment_id: str,
     doc_id: str,
 ) -> list[TextSection]:
     """Extracts sections from a Google Doc, including their headings and content"""
@@ -159,18 +97,11 @@ def get_document_sections(
     http_request.uri += "&includeTabsContent=true"
     doc = http_request.execute()
 
-    smart_chips = {}
-    if USE_SMART_CHIP_SCOPES:
-        # Get the smart chips
-        smart_chips = _extract_smart_chips_from_document(
-            doc_id, scripts_service, smart_chips_deployment_id
-        )
-
     # Get the content
     tabs = doc.get("tabs", {})
     sections: list[TextSection] = []
-    for tab_num, tab in enumerate(tabs):
-        sections.extend(get_tab_sections(tab, doc_id, tab_num, smart_chips))
+    for tab in tabs:
+        sections.extend(get_tab_sections(tab, doc_id))
     return sections
 
 
@@ -202,7 +133,10 @@ def _add_finished_section(
     if not (current_section or current_heading.text):
         return
     # If we were building a previous section, add it to sections list
-    section_text = f"{current_heading.text}\n" + "\n".join(current_section)
+
+    # this is unlikely to ever matter, but helps if the doc contains weird headings
+    header_text = current_heading.text.replace(HEADING_DELIMITER, "")
+    section_text = f"{header_text}{HEADING_DELIMITER}" + "\n".join(current_section)
     sections.append(
         TextSection(
             text=section_text.strip(),
@@ -211,9 +145,7 @@ def _add_finished_section(
     )
 
 
-def get_tab_sections(
-    tab: dict[str, Any], doc_id: str, tab_num: int, smart_chips: dict[str, str]
-) -> list[TextSection]:
+def get_tab_sections(tab: dict[str, Any], doc_id: str) -> list[TextSection]:
     tab_id = tab["tabProperties"]["tabId"]
     content = tab.get("documentTab", {}).get("body", {}).get("content", [])
 
@@ -221,17 +153,13 @@ def get_tab_sections(
     current_section: list[str] = []
     current_heading = CurrentHeading(id=None, text="")
 
-    for element_num, element in enumerate(content):
-
-        def extract_chip(non_text_index: int) -> str | None:
-            return smart_chips.get(f"{tab_num}_{element_num-1}_{non_text_index}")
-
+    for element in content:
         if "paragraph" in element:
             paragraph = element["paragraph"]
 
             # If this is not a heading, add content to current section
             if not _is_heading(paragraph):
-                text, _ = _extract_text_from_paragraph(paragraph, extract_chip)
+                text = _extract_text_from_paragraph(paragraph)
                 if text.strip():
                     current_section.append(text)
                 continue
@@ -244,13 +172,13 @@ def get_tab_sections(
 
             # Start new heading
             heading_id = _extract_id_from_heading(paragraph)
-            heading_text, _ = _extract_text_from_paragraph(paragraph, extract_chip)
+            heading_text = _extract_text_from_paragraph(paragraph)
             current_heading = CurrentHeading(
                 id=heading_id,
                 text=heading_text,
             )
         elif "table" in element:
-            text = _extract_text_from_table(element["table"], extract_chip)
+            text = _extract_text_from_table(element["table"])
             if text.strip():
                 current_section.append(text)
 
