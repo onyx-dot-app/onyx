@@ -202,7 +202,7 @@ Resources:
         ScaleOutCooldown: 60
         ScaleInCooldown: 60
 
-  ECSAutoScalingPolicyMemroy:
+  ECSAutoScalingPolicyMemory:
     Type: AWS::ApplicationAutoScaling::ScalingPolicy
     Properties:
       PolicyName: !Sub ${Environment}-${ServiceName}-service-mem-scaleout
