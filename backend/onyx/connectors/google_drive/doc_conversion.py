@@ -14,6 +14,7 @@ from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
 from onyx.connectors.google_utils.resources import GoogleDocsService
 from onyx.connectors.google_utils.resources import GoogleDriveService
+from onyx.connectors.google_utils.resources import GoogleScriptsService
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
@@ -224,6 +225,8 @@ def convert_drive_item_to_document(
     file: GoogleDriveFileType,
     drive_service: Callable[[], GoogleDriveService],
     docs_service: Callable[[], GoogleDocsService],
+    scripts_service: Callable[[], GoogleScriptsService],
+    smart_chips_deployment_id: str,
     allow_images: bool,
     size_threshold: int,
 ) -> Document | ConnectorFailure | None:
@@ -244,7 +247,10 @@ def convert_drive_item_to_document(
             try:
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
-                    docs_service=docs_service(), doc_id=file.get("id", "")
+                    docs_service=docs_service(),
+                    scripts_service=scripts_service(),
+                    smart_chips_deployment_id=smart_chips_deployment_id,
+                    doc_id=file.get("id", ""),
                 )
                 if doc_sections:
                     sections = cast(list[TextSection | ImageSection], doc_sections)

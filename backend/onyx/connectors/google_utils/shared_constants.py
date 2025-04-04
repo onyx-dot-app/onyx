@@ -1,5 +1,6 @@
 from enum import Enum as PyEnum
 
+from onyx.configs.app_configs import USE_SMART_CHIP_SCOPES
 from onyx.configs.constants import DocumentSource
 
 # NOTE: do not need https://www.googleapis.com/auth/documents.readonly
@@ -17,6 +18,19 @@ GOOGLE_SCOPES = {
         "https://www.googleapis.com/auth/admin.directory.group.readonly",
     ],
 }
+
+# TODO: add this to the docs
+GOOGLE_SMART_CHIP_SCOPES = [
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/drive.scripts",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/script.deployments",
+    "https://www.googleapis.com/auth/script.projects",
+    "https://www.googleapis.com/auth/documents",
+]
+
+if USE_SMART_CHIP_SCOPES:
+    GOOGLE_SCOPES[DocumentSource.GOOGLE_DRIVE] += GOOGLE_SMART_CHIP_SCOPES
 
 # This is the Oauth token
 DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"

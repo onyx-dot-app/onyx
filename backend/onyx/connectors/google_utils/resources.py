@@ -12,6 +12,10 @@ class GoogleDocsService(Resource):
     pass
 
 
+class GoogleScriptsService(Resource):
+    pass
+
+
 class AdminService(Resource):
     pass
 
@@ -62,3 +66,10 @@ def get_gmail_service(
     user_email: str | None = None,
 ) -> GmailService:
     return _get_google_service("gmail", "v1", creds, user_email)
+
+
+def get_google_scripts_service(
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleScriptsService:
+    return _get_google_service("script", "v1", creds, user_email)

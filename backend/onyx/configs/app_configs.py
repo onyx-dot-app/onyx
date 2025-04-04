@@ -163,6 +163,8 @@ INDEX_BATCH_SIZE = int(os.environ.get("INDEX_BATCH_SIZE") or 16)
 
 MAX_DRIVE_WORKERS = int(os.environ.get("MAX_DRIVE_WORKERS", 4))
 
+USE_SMART_CHIP_SCOPES = os.environ.get("USE_SMART_CHIP_SCOPES", "").lower() == "true"
+
 # Below are intended to match the env variables names used by the official postgres docker image
 # https://hub.docker.com/_/postgres
 POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"

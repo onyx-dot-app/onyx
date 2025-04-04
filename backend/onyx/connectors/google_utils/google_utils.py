@@ -1,3 +1,4 @@
+import json
 import re
 import time
 from collections.abc import Callable
@@ -141,3 +142,50 @@ def execute_paginated_retrieval(
                 yield item
         else:
             yield results
+
+
+# https://developers.google.com/apps-script/api/reference/rest/v1/File#FileType
+class AppsScriptFileType(str, Enum):
+    UNSPECIFIED = "ENUM_TYPE_UNSPECIFIED"
+    SERVER_JS = "SERVER_JS"
+    HTML = "HTML"
+    JSON = "JSON"
+
+
+SMART_CHIP_RETRIEVAL_FUNCTIONS = [
+    ("docToChips", ["document_id"]),
+    ("getKey", ["tabInd", "paragraphInd", "nonTextInd"]),
+    ("parseParagraph", ["paragraph", "callback"]),
+    ("parseTable", ["table", "callback"]),
+]
+
+SMART_CHIP_SCRIPT_FILE_NAME = "Smart_Chip_Extractor"
+
+
+# https://developers.google.com/apps-script/api/reference/rest/v1/projects/updateContent
+def create_scripts_file_objects() -> list[GoogleDriveFileType]:
+    with open("onyx/connectors/google_drive/smart_chip_retrieval.gs", "r") as f:
+        script_source = f.read()
+    with open("onyx/connectors/google_drive/appsscript.json", "r") as f:
+        appsscript_source = json.loads(f.read())
+    return [
+        {
+            "name": "appsscript",
+            "type": AppsScriptFileType.JSON.value,
+            "source": json.dumps(appsscript_source),
+        },
+        {
+            "name": SMART_CHIP_SCRIPT_FILE_NAME,
+            "type": AppsScriptFileType.SERVER_JS.value,
+            "source": script_source,
+            "functionSet": {
+                "values": [
+                    {
+                        "name": name,
+                        "parameters": params,
+                    }
+                    for name, params in SMART_CHIP_RETRIEVAL_FUNCTIONS
+                ],
+            },
+        },
+    ]
