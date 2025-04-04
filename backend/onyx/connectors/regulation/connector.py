@@ -43,10 +43,11 @@ def get_internal_links(base_url: str, current_url: str, soup: BeautifulSoup) -> 
     """Extract internal links from the page that match the base URL pattern."""
     internal_links = []
     base_url_parsed = urlparse(base_url)
-    base_url_pattern = re.compile(f"^{re.escape(base_url)}/.*")
+    base_url_pattern = re.compile(base_url)
 
     for link in soup.find_all("a", href=True):
         href = link["href"]
+        # Handle both absolute and relative paths starting with '/'
         absolute_url = urljoin(current_url, href)
         
         # Only include links that match the base URL pattern
@@ -89,21 +90,21 @@ class RegulationConnector(LoadConnector):
         last_error = None
 
         while to_visit:
-            initial_url = to_visit.pop()
-            if initial_url in visited_links:
+            current_url = to_visit.pop()
+            if current_url in visited_links:
                 continue
-            visited_links.add(initial_url)
+            visited_links.add(current_url)
 
             try:
                 index = len(visited_links)
-                logger.info(f"{index}: Visiting {initial_url}")
+                logger.info(f"{index}: Visiting {current_url}")
 
                 headers = {
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                     "Accept": "text/html,application/xhtml+xml,application/xml"
                 }
             
-                response = requests.get(initial_url, timeout=5, headers=headers)
+                response = requests.get(current_url, timeout=5, headers=headers)
                 response.raise_for_status()
 
                 last_modified = response.headers.get("Last-Modified")
@@ -111,7 +112,7 @@ class RegulationConnector(LoadConnector):
                 soup = BeautifulSoup(content, "html.parser")
 
                 # Extract internal links for recursive crawling
-                internal_links = get_internal_links(self.base_url, initial_url, soup)
+                internal_links = get_internal_links(self.base_url, current_url, soup)
                 for link in internal_links:
                     if link not in visited_links:
                         to_visit.append(link)
@@ -122,10 +123,10 @@ class RegulationConnector(LoadConnector):
                 # Create document from the cleaned content
                 doc_batch.append(
                     Document(
-                        id=initial_url,
-                        sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
+                        id=current_url,
+                        sections=[TextSection(link=current_url, text=parsed_html.cleaned_text)],
                         source=DocumentSource.REGULATION,
-                        semantic_identifier=parsed_html.title or initial_url,
+                        semantic_identifier=parsed_html.title or current_url,
                         metadata={
                             "base_regulation_url": self.base_url
                         },
@@ -136,7 +137,7 @@ class RegulationConnector(LoadConnector):
                 )
 
             except Exception as e:
-                last_error = f"Failed to fetch '{initial_url}': {e}"
+                last_error = f"Failed to fetch '{current_url}': {e}"
                 logger.exception(last_error)
                 continue
 
