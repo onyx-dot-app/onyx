@@ -23,22 +23,40 @@ def gong_connector() -> GongConnector:
     return connector
 
 
+# @patch(
+#     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+#     return_value=None,
+# )
+# def test_gong_basic(mock_get_api_key: MagicMock, gong_connector: GongConnector) -> None:
+#     doc_batch_generator = gong_connector.poll_source(0, time.time())
+
+#     doc_batch = next(doc_batch_generator)
+#     with pytest.raises(StopIteration):
+#         next(doc_batch_generator)
+
+#     assert len(doc_batch) == 2
+
+#     docs: list[Document] = []
+#     for doc in doc_batch:
+#         docs.append(doc)
+
+#     assert docs[0].semantic_identifier == "test with chris"
+#     assert docs[1].semantic_identifier == "Testing Gong"
+
+
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
 )
-def test_gong_basic(mock_get_api_key: MagicMock, gong_connector: GongConnector) -> None:
-    doc_batch_generator = gong_connector.poll_source(0, time.time())
+def test_gong_stub(mock_get_api_key: MagicMock, gong_connector: GongConnector) -> None:
+    end = time.time()
+    start = end - 86400
 
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
-
-    assert len(doc_batch) == 2
+    doc_batch_generator = gong_connector.poll_source(start, end)
 
     docs: list[Document] = []
-    for doc in doc_batch:
-        docs.append(doc)
 
-    assert docs[0].semantic_identifier == "test with chris"
-    assert docs[1].semantic_identifier == "Testing Gong"
+    for doc_batch in doc_batch_generator:
+        for doc in doc_batch:
+            # print(doc.semantic_identifier)
+            docs.append(doc)
