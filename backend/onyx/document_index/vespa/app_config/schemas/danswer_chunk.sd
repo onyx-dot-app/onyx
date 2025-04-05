@@ -178,7 +178,7 @@ schema DANSWER_CHUNK_NAME {
 
     rank-profile hybrid_searchVARIABLE_DIM inherits default, default_rank {
         inputs {
-            query(query_embedding) tensor<float>(x[VARIABLE_DIM])
+            query(query_embedding) tensor<EMBEDDING_PRECISION>(x[VARIABLE_DIM])
         }
 
         function title_vector_score() {
