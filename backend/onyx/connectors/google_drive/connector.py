@@ -837,14 +837,13 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             return
 
         for file in drive_files:
-            if file.error is None:
-                checkpoint.completion_map[file.user_email].update(
-                    stage=file.completion_stage,
-                    completed_until=datetime.fromisoformat(
-                        file.drive_file[GoogleFields.MODIFIED_TIME.value]
-                    ).timestamp(),
-                    completed_until_parent_id=file.parent_id,
-                )
+            checkpoint.completion_map[file.user_email].update(
+                stage=file.completion_stage,
+                completed_until=datetime.fromisoformat(
+                    file.drive_file[GoogleFields.MODIFIED_TIME.value]
+                ).timestamp(),
+                completed_until_parent_id=file.parent_id,
+            )
             yield file
 
     def _manage_oauth_retrieval(
