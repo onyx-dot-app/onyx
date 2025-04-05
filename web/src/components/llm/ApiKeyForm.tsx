@@ -60,7 +60,7 @@ export const ApiKeyForm = ({
             value={String(providerNameToIndexMap.get(provider.name))}
           >
             <LLMProviderUpdateForm
-              hideAdvanced
+              firstTimeConfiguration
               llmProviderDescriptor={provider}
               onClose={() => onSuccess()}
               shouldMarkAsDefault

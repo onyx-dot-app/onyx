@@ -34,6 +34,11 @@ function LLMProviderUpdateModal({
     llmProviderDescriptor?.name ||
     existingLlmProvider?.name ||
     "Custom LLM Provider";
+
+  const hasAdvancedOptions =
+    llmProviderDescriptor?.name != "azure" &&
+    llmProviderDescriptor?.name != "vertex_ai";
+
   return (
     <Modal title={`Setup ${providerName}`} onOutsideClick={() => onClose()}>
       <div className="max-h-[70vh] overflow-y-auto px-4">
@@ -44,6 +49,7 @@ function LLMProviderUpdateModal({
             existingLlmProvider={existingLlmProvider}
             shouldMarkAsDefault={shouldMarkAsDefault}
             setPopup={setPopup}
+            hasAdvancedOptions={hasAdvancedOptions}
           />
         ) : (
           <CustomLLMProviderUpdateForm
@@ -75,9 +81,8 @@ function DefaultLLMProviderDisplay({
       {popup}
       <div className="border border-border p-3 dark:bg-neutral-800 dark:border-neutral-700 rounded w-96 flex shadow-md">
         <div className="my-auto">
-          <div className="font-bold">{providerName} </div>
+          <div className="font-bold">{providerName}</div>
         </div>
-
         <div className="ml-auto">
           <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
             Set up
@@ -169,15 +174,13 @@ export function LLMConfiguration() {
       </Text>
 
       <div className="gap-y-4 flex flex-col">
-        {llmProviderDescriptors.map((llmProviderDescriptor) => {
-          return (
-            <DefaultLLMProviderDisplay
-              key={llmProviderDescriptor.name}
-              llmProviderDescriptor={llmProviderDescriptor}
-              shouldMarkAsDefault={existingLlmProviders.length === 0}
-            />
-          );
-        })}
+        {llmProviderDescriptors.map((llmProviderDescriptor) => (
+          <DefaultLLMProviderDisplay
+            key={llmProviderDescriptor.name}
+            llmProviderDescriptor={llmProviderDescriptor}
+            shouldMarkAsDefault={existingLlmProviders.length === 0}
+          />
+        ))}
       </div>
 
       <div className="mt-4">

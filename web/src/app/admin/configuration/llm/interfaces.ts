@@ -13,9 +13,11 @@ import {
 
 export interface CustomConfigKey {
   name: string;
+  display_name: string;
   description: string | null;
   is_required: boolean;
   is_secret: boolean;
+  key_type: "text_input" | "file_input";
 }
 
 export interface WellKnownLLMProviderDescriptor {

@@ -454,6 +454,13 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
+                **(
+                    {
+                        "vertex_credentials": self.config.credentials_file,
+                    }
+                    if self.config.model_provider == "vertex_ai"
+                    else {}
+                ),
                 **self._model_kwargs,
             )
         except Exception as e:
@@ -469,6 +476,12 @@ class DefaultMultiLLM(LLM):
 
     @property
     def config(self) -> LLMConfig:
+        credentials_file: str | None = (
+            self._custom_config.get("CREDENTIALS_FILE", None)
+            if self._custom_config
+            else None
+        )
+
         return LLMConfig(
             model_provider=self._model_provider,
             model_name=self._model_version,
@@ -477,6 +490,7 @@ class DefaultMultiLLM(LLM):
             api_base=self._api_base,
             api_version=self._api_version,
             deployment_name=self._deployment_name,
+            credentials_file=credentials_file,
         )
 
     def _invoke_implementation(
