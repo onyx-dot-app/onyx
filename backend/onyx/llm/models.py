@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import MessageType
 from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.utils import build_content_with_imgs
+from onyx.llm.utils import message_to_string
 from onyx.tools.models import ToolCallFinalResult
 
 if TYPE_CHECKING:
@@ -59,3 +60,22 @@ class PreviousMessage(BaseModel):
             return AIMessage(content=content)
         else:
             return SystemMessage(content=content)
+
+    @classmethod
+    def from_langchain_msg(
+        cls, msg: BaseMessage, token_count: int
+    ) -> "PreviousMessage":
+        message_type = MessageType.SYSTEM
+        if isinstance(msg, HumanMessage):
+            message_type = MessageType.USER
+        elif isinstance(msg, AIMessage):
+            message_type = MessageType.ASSISTANT
+        message = message_to_string(msg)
+        return cls(
+            message=message,
+            token_count=token_count,
+            message_type=message_type,
+            files=[],
+            tool_call=None,
+            refined_answer_improvement=None,
+        )

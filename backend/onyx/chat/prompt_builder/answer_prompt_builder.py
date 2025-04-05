@@ -155,6 +155,19 @@ class AnswerPromptBuilder:
         query, _ = message_to_prompt_and_imgs(self.user_message_and_token_cnt[0])
         return query
 
+    def get_message_history(self) -> list[PreviousMessage]:
+        """
+        Get the message history as a list of PreviousMessage objects.
+        """
+        ret = []
+        if self.system_message_and_token_cnt:
+            tmp = PreviousMessage.from_langchain_msg(*self.system_message_and_token_cnt)
+            ret.append(tmp)
+        for i, msg in enumerate(self.message_history):
+            tmp = PreviousMessage.from_langchain_msg(msg, self.history_token_cnts[i])
+            ret.append(tmp)
+        return ret
+
     def build(self) -> list[BaseMessage]:
         if not self.user_message_and_token_cnt:
             raise ValueError("User message must be set before building prompt")
