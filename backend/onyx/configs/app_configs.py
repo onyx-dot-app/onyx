@@ -712,3 +712,4 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
+FAST_SEARCH_MAX_HITS = 300
