@@ -28,6 +28,7 @@ export function LLMProviderUpdateForm({
   shouldMarkAsDefault,
   setPopup,
   hideSuccess,
+  firstTimeConfiguration = false,
   hasAdvancedOptions = false,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor;
@@ -36,6 +37,9 @@ export function LLMProviderUpdateForm({
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
   hideSuccess?: boolean;
+
+  // Set this when this is the first time the user is setting Onyx up.
+  firstTimeConfiguration?: boolean;
   hasAdvancedOptions?: boolean;
 }) {
   const { mutate } = useSWRConfig();
@@ -47,7 +51,8 @@ export function LLMProviderUpdateForm({
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
-    name: existingLlmProvider?.name || "",
+    name:
+      existingLlmProvider?.name || (firstTimeConfiguration ? "Default" : ""),
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
@@ -229,16 +234,19 @@ export function LLMProviderUpdateForm({
     >
       {(formikProps) => (
         <Form className="gap-y-4 items-stretch mt-6">
-          <TextFormField
-            name="name"
-            label="Display Name"
-            subtext="A name which you can use to identify this provider when selecting it in the UI."
-            placeholder="Display Name"
-            disabled={existingLlmProvider ? true : false}
-          />
+          {firstTimeConfiguration && (
+            <TextFormField
+              name="name"
+              label="Display Name"
+              subtext="A name which you can use to identify this provider when selecting it in the UI."
+              placeholder="Display Name"
+              disabled={existingLlmProvider ? true : false}
+            />
+          )}
 
           {llmProviderDescriptor.api_key_required && (
             <TextFormField
+              small={firstTimeConfiguration}
               name="api_key"
               label="API Key"
               placeholder="API Key"
@@ -248,6 +256,7 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_base_required && (
             <TextFormField
+              small={firstTimeConfiguration}
               name="api_base"
               label="API Base"
               placeholder="API Base"
@@ -256,6 +265,7 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_version_required && (
             <TextFormField
+              small={firstTimeConfiguration}
               name="api_version"
               label="API Version"
               placeholder="API Version"
@@ -267,6 +277,7 @@ export function LLMProviderUpdateForm({
               return (
                 <div key={customConfigKey.name}>
                   <TextFormField
+                    small={firstTimeConfiguration}
                     name={`custom_config.${customConfigKey.name}`}
                     label={
                       customConfigKey.is_required
