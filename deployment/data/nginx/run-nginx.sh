@@ -1,6 +1,9 @@
 # fill in the template
-ONYX_BACKEND_API_HOST="${ONYX_BACKEND_API_HOST:-api_server}"
-ONYX_WEB_SERVER_HOST="${ONYX_WEB_SERVER_HOST:-web_server}"
+export ONYX_BACKEND_API_HOST="${ONYX_BACKEND_API_HOST:-api_server}"
+export ONYX_WEB_SERVER_HOST="${ONYX_WEB_SERVER_HOST:-web_server}"
+
+echo "Using API server host: $ONYX_BACKEND_API_HOST"
+echo "Using web server host: $ONYX_WEB_SERVER_HOST"
 
 envsubst '$DOMAIN $SSL_CERT_FILE_NAME $SSL_CERT_KEY_FILE_NAME $ONYX_BACKEND_API_HOST $ONYX_WEB_SERVER_HOST' < "/etc/nginx/conf.d/$1" > /etc/nginx/conf.d/app.conf
 
