@@ -26,6 +26,9 @@ APP_API_PREFIX = os.environ.get("API_PREFIX", "")
 
 SKIP_WARM_UP = os.environ.get("SKIP_WARM_UP", "").lower() == "true"
 
+# Whether to send user ID (email or placeholder) to enable LiteLLM Customer Feature for budget tracking/control (https://docs.litellm.ai/docs/proxy/customers)
+SEND_USER_ID_TO_LLM = os.environ.get("SEND_USER_ID_TO_LLM", "").lower() == "true"
+
 #####
 # User Facing Features Configs
 #####

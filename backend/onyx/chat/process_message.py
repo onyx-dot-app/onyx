@@ -423,6 +423,8 @@ def stream_chat_message_objects(
         ordered_user_files = None
 
         user_id = user.id if user is not None else None
+        # Use placeholder if user is not authenticated (anonymous)
+        user_email = user.email if user is not None else "anonymous_user"
 
         chat_session = get_chat_session_by_id(
             chat_session_id=new_msg_req.chat_session_id,
@@ -1037,6 +1039,7 @@ def stream_chat_message_objects(
             tools=tools,
             db_session=db_session,
             use_agentic_search=new_msg_req.use_agentic_search,
+            user_id=user_email,
         )
 
         # reference_db_search_docs = None

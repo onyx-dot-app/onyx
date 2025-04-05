@@ -36,6 +36,7 @@ class GraphTooling(BaseModel):
     # force tool args IF the tool is used
     force_use_tool: ForceUseTool
     using_tool_calling_llm: bool = False
+    user_id: str | None = None
 
     class Config:
         arbitrary_types_allowed = True

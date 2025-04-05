@@ -92,6 +92,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> BaseMessage:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
@@ -103,6 +104,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
+            user_id,
         )
 
     @abc.abstractmethod
@@ -114,6 +116,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> BaseMessage:
         raise NotImplementedError
 
@@ -125,6 +128,7 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> Iterator[BaseMessage]:
         self._precall(prompt)
         # TODO add a postcall to log model outputs independent of concrete class
@@ -136,6 +140,7 @@ class LLM(abc.ABC):
             structured_response_format,
             timeout_override,
             max_tokens,
+            user_id,
         )
 
         tokens = []
@@ -156,5 +161,6 @@ class LLM(abc.ABC):
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
         max_tokens: int | None = None,
+        user_id: str | None = None,
     ) -> Iterator[BaseMessage]:
         raise NotImplementedError

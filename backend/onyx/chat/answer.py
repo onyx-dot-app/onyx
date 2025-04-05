@@ -62,6 +62,7 @@ class Answer:
         skip_gen_ai_answer_generation: bool = False,
         is_connected: Callable[[], bool] | None = None,
         use_agentic_search: bool = False,
+        user_id: str | None = None,
     ) -> None:
         self.is_connected: Callable[[], bool] | None = is_connected
         self._processed_stream: (list[AnswerPacket] | None) = None
@@ -118,6 +119,7 @@ class Answer:
             tools=tools or [],
             force_use_tool=force_use_tool,
             using_tool_calling_llm=using_tool_calling_llm,
+            user_id=user_id,
         )
         self.graph_persistence = GraphPersistence(
             db_session=db_session,

@@ -154,6 +154,7 @@ def choose_tool(
             else None
         ),
         structured_response_format=structured_response_format,
+        user_id=agent_config.tooling.user_id,
     )
 
     tool_message = process_llm_stream(
