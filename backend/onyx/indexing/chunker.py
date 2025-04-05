@@ -511,10 +511,13 @@ class Chunker:
             if self.callback and self.callback.should_stop():
                 raise RuntimeError("Chunker.chunk: Stop signal detected")
 
+                self.callback.progress(
+                    f"Chunker.chunk start: doc={document.id} "
+                    f"total_section_length={document.total_section_length} ",
+                    0,
+                )
+
             chunks = self._handle_single_document(document)
             final_chunks.extend(chunks)
-
-            if self.callback:
-                self.callback.progress("Chunker.chunk", len(chunks))
 
         return final_chunks
