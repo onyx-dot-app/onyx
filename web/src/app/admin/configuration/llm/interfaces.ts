@@ -17,7 +17,7 @@ export interface CustomConfigKey {
   description: string | null;
   is_required: boolean;
   is_secret: boolean;
-  key_type: "text_input" | "drag_and_drop";
+  key_type: "text_input" | "file_input";
 }
 
 export interface WellKnownLLMProviderDescriptor {

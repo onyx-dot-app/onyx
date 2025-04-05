@@ -277,7 +277,7 @@ export function LLMProviderUpdateForm({
                   />
                 </div>
               );
-            } else if (customConfigKey.key_type === "drag_and_drop") {
+            } else if (customConfigKey.key_type === "file_input") {
               return (
                 <FileUploadFormField
                   key={customConfigKey.name}

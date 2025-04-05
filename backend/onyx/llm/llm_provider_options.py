@@ -11,7 +11,7 @@ class CustomConfigKeyType(Enum):
 
     # used for configuration values that require a file to be select/drag-and-dropped
     # i.e., file based credentials (e.g., "/path/to/credentials/file.json")
-    DRAG_AND_DROP = "drag_and_drop"
+    FILE_INPUT = "file_input"
 
 
 class CustomConfigKey(BaseModel):
@@ -184,7 +184,7 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     description="This should be a JSON file containing some private credentials.",
                     is_required=True,
                     is_secret=False,
-                    key_type=CustomConfigKeyType.DRAG_AND_DROP,
+                    key_type=CustomConfigKeyType.FILE_INPUT,
                 ),
             ],
             default_model=VERTEXAI_DEFAULT_MODEL,
