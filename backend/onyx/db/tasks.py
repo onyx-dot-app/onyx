@@ -9,6 +9,15 @@ from onyx.db.models import TaskQueueState
 from onyx.db.models import TaskStatus
 
 
+def get_task_by_task_id(
+    task_id: str,
+    db_session: Session,
+) -> TaskQueueState | None:
+    stmt = select(TaskQueueState).where(TaskQueueState.task_id == task_id)
+    result = db_session.execute(stmt)
+    return result.scalars().first()
+
+
 def get_latest_task(
     task_name: str,
     db_session: Session,

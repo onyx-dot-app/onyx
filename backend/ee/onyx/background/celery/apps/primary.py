@@ -1,5 +1,11 @@
+from datetime import datetime
+
+from celery import Task
+
+from ee.onyx.background.celery.tasks.query_history import query_history_report
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
 from ee.onyx.background.task_name_builders import name_chat_ttl_task
+from ee.onyx.background.task_name_builders import name_query_history_report_task
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import build_celery_task_wrapper
@@ -66,6 +72,11 @@ def check_ttl_management_task(*, tenant_id: str) -> None:
             )
 
 
+#####
+# Non-Periodic Tasks
+#####
+
+
 @celery_app.task(
     name="autogenerate_usage_report_task",
     ignore_result=True,
@@ -78,4 +89,18 @@ def autogenerate_usage_report_task(*, tenant_id: str) -> None:
             db_session=db_session,
             user_id=None,
             period=None,
+        )
+
+
+@build_celery_task_wrapper(name_query_history_report_task)
+@celery_app.task(
+    name="query_history_report_task",
+    bind=True,
+    # ignore_result=True,
+    soft_time_limit=JOB_TIMEOUT,
+)
+def query_history_report_task(self: Task, *, start: datetime, end: datetime) -> str:
+    with get_session_with_current_tenant() as db_session:
+        return query_history_report(
+            db_session=db_session, request_id=self.request.id, start=start, end=end
         )
