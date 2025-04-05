@@ -298,7 +298,7 @@ export function LLMProviderUpdateForm({
                 />
               );
             } else {
-              throw "Unreachable; there should only exist 2 options";
+              throw new Error("Unreachable; there should only exist 2 options");
             }
           })}
 
