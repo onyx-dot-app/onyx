@@ -119,6 +119,7 @@ export function UserDropdown({
   };
 
   const showAdminPanel = !user || user.role === UserRole.ADMIN;
+  const showDemoMode = !user || user.role === UserRole.ADMIN;
 
   const showCuratorPanel = user && isCurator;
   const showLogout =
@@ -241,7 +242,10 @@ export function UserDropdown({
                   />
                 ))}
 
-                <DemoModeToggle isDemoMode={isDemoMode} toggleDemoMode={toggleDemoMode} />
+                {showDemoMode ?
+                  <DemoModeToggle isDemoMode={isDemoMode} toggleDemoMode={toggleDemoMode} />
+                  : <></>
+                }
 
                 {showAdminPanel && !isDemoMode ? (
                   <DropdownOption

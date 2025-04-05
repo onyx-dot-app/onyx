@@ -50,6 +50,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
+import { UserRole } from "@/lib/types";
 
 interface HistorySidebarProps {
   liveAssistant?: Persona | null;
@@ -190,6 +191,8 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
     const { user, toggleAssistantPinnedStatus } = useUser();
     const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
       useAssistants();
+
+    const showExplore = !user || user.role === UserRole.ADMIN;
 
     const currentChatId = currentChatSession?.id;
 
@@ -384,6 +387,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 </div>
               )}
 
+            {showExplore ?
             <div className="w-full px-4">
               <button
                 onClick={() => setShowAssistantsModal(true)}
@@ -392,6 +396,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 Explore Assistants
               </button>
             </div>
+            : <></>}
 
             <PagesTab
               toggleChatSessionSearchModal={toggleChatSessionSearchModal}

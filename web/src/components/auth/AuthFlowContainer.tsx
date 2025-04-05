@@ -14,7 +14,7 @@ export default function AuthFlowContainer({
         <Logo width={70} height={70} />
         <div className="mt-4  w-full">{children}</div>
       </div>
-      {authState === "login" && (
+      {/* {authState === "login" && (
         <div className="text-sm mt-4 text-center w-full text-text-900 font-medium mx-auto">
           Don&apos;t have an account?{" "}
           <Link
@@ -24,7 +24,7 @@ export default function AuthFlowContainer({
             Create one
           </Link>
         </div>
-      )}
+      )} */}
       {authState === "signup" && (
         <div className="text-sm mt-4 text-center w-full text-text-800 font-medium mx-auto">
           Already have an account?{" "}

@@ -15,7 +15,7 @@ import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 
-const Page = async (props: {
+const OldPage = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
   const searchParams = await props.searchParams;
@@ -105,6 +105,10 @@ const Page = async (props: {
       </>
     </AuthFlowContainer>
   );
+};
+
+const Page = async () => {
+  return redirect("/auth/login");
 };
 
 export default Page;
