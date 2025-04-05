@@ -234,7 +234,7 @@ class SqlEngine:
         max_overflow: int,
         **extra_engine_kwargs: Any,
     ) -> None:
-        """NOTE: enfornce that pool_size and pool_max_overflow are passed in. These are
+        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
         important args, and if incorrectly specified, we have run into hitting the pool
         limit / using too many connections and overwhelming the database."""
         with cls._lock:
