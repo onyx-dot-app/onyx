@@ -974,7 +974,7 @@ def _get_socket_client(
 
 if __name__ == "__main__":
     # Initialize the SqlEngine
-    SqlEngine.init_engine(pool_size=20, pool_max_overflow=5)
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     # Initialize the tenant handler which will manage tenant connections
     logger.info("Starting SlackbotHandler")

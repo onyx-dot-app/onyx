@@ -91,7 +91,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME)
     pool_size = cast(int, sender.concurrency)  # type: ignore
-    SqlEngine.init_engine(pool_size=pool_size, pool_max_overflow=EXTRA_CONCURRENCY)
+    SqlEngine.init_engine(pool_size=pool_size, max_overflow=EXTRA_CONCURRENCY)
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)

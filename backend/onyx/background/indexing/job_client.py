@@ -75,7 +75,7 @@ def _initializer(
 
     # Initialize a new engine with desired parameters
     SqlEngine.init_engine(
-        pool_size=4, pool_max_overflow=12, pool_recycle=60, pool_pre_ping=True
+        pool_size=4, max_overflow=12, pool_recycle=60, pool_pre_ping=True
     )
 
     # Proceed with executing the target function

@@ -228,7 +228,11 @@ class SqlEngine:
 
     @classmethod
     def init_engine(
-        cls, pool_size: int, pool_max_overflow: int, **extra_engine_kwargs: Any
+        cls,
+        pool_size: int,
+        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
+        max_overflow: int,
+        **extra_engine_kwargs: Any,
     ) -> None:
         """NOTE: enfornce that pool_size and pool_max_overflow are passed in. These are
         important args, and if incorrectly specified, we have run into hitting the pool
@@ -259,7 +263,7 @@ class SqlEngine:
                     del final_engine_kwargs["max_overflow"]
             else:
                 final_engine_kwargs["pool_size"] = pool_size
-                final_engine_kwargs["max_overflow"] = pool_max_overflow
+                final_engine_kwargs["max_overflow"] = max_overflow
                 final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
                 final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
 

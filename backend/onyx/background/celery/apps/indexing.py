@@ -67,7 +67,7 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     # actually setting the spawn method in the cloud fixes 95% of these.
     # setting pre ping might help even more, but not worrying about that yet
     pool_size = cast(int, sender.concurrency)  # type: ignore
-    SqlEngine.init_engine(pool_size=pool_size, pool_max_overflow=8)
+    SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
