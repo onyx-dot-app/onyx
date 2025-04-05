@@ -326,9 +326,11 @@ def test_answer_with_search_no_tool_calling(
     user_message = (
         answer_instance.graph_inputs.prompt_builder.get_user_message_content()
     )
+
+    prev_messages = answer_instance.graph_inputs.prompt_builder.get_message_history()
     # Verify that get_args_for_non_tool_calling_llm was called on the mock_search_tool
     mock_search_tool.get_args_for_non_tool_calling_llm.assert_called_once_with(
-        user_message, [], answer_instance.graph_config.tooling.primary_llm
+        user_message, prev_messages, answer_instance.graph_config.tooling.primary_llm
     )
 
     # Verify that the search tool's run method was called
