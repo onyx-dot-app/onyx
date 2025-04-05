@@ -1089,14 +1089,10 @@ def stream_chat_message_objects(
                         selected_search_docs=selected_db_search_docs,
                         # Deduping happens at the last step to avoid harming quality by dropping content early on
                         # Skip deduping completely for ordering-only mode to save time
-                        dedupe_docs=(
-                            False
-                            if search_for_ordering_only
-                            else (
-                                retrieval_options.dedupe_docs
-                                if retrieval_options
-                                else False
-                            )
+                        dedupe_docs=bool(
+                            not search_for_ordering_only
+                            and retrieval_options
+                            and retrieval_options.dedupe_docs
                         ),
                         user_files=user_file_files if search_for_ordering_only else [],
                         loaded_user_files=user_files

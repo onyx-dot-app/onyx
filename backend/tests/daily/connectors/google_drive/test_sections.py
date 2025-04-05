@@ -46,28 +46,28 @@ def test_google_drive_sections(
         assert len(doc.sections) == 5
 
         header_section = doc.sections[0]
-        assert header_section.text == "Title\n\nThis is a Google Doc with sections"
+        assert header_section.text == "Title\nThis is a Google Doc with sections"
         assert header_section.link is not None
         assert header_section.link.endswith(
             "?tab=t.0#heading=h.hfjc17k6qwzt"
         ) or header_section.link.endswith("?tab=t.0#heading=h.hfjc17k6qwzt")
 
         section_1 = doc.sections[1]
-        assert section_1.text == "Section 1\n\nSection 1 content"
+        assert section_1.text == "Section 1\nSection 1 content"
         assert section_1.link is not None
         assert section_1.link.endswith("?tab=t.0#heading=h.8slfx752a3g5")
 
         section_2 = doc.sections[2]
-        assert section_2.text == "Sub-Section 1-1\n\nSub-Section 1-1 content"
+        assert section_2.text == "Sub-Section 1-1\nSub-Section 1-1 content"
         assert section_2.link is not None
         assert section_2.link.endswith("?tab=t.0#heading=h.4kj3ayade1bp")
 
         section_3 = doc.sections[3]
-        assert section_3.text == "Sub-Section 1-2\n\nSub-Section 1-2 content"
+        assert section_3.text == "Sub-Section 1-2\nSub-Section 1-2 content"
         assert section_3.link is not None
         assert section_3.link.endswith("?tab=t.0#heading=h.pm6wrpzgk69l")
 
         section_4 = doc.sections[4]
-        assert section_4.text == "Section 2\n\nSection 2 content"
+        assert section_4.text == "Section 2\nSection 2 content"
         assert section_4.link is not None
         assert section_4.link.endswith("?tab=t.0#heading=h.2m0s9youe2k9")
