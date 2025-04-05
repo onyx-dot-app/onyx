@@ -233,6 +233,28 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  github_pages: {
+    description: "Configure GitHub Pages connector",
+    values: [
+      {
+        type: "text",
+        query:
+          "Enter the base URL of the GitHub Pages site (e.g., https://username.github.io/):",
+        label: "Base URL",
+        name: "base_url",
+        optional: false,
+      },
+      {
+        type: "number",
+        query: "Set the batch size for indexing (default is 10):",
+        label: "Batch Size",
+        name: "batch_size",
+        optional: true,
+        default: 10,
+      },
+    ],
+    advanced_values: [],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [
@@ -1416,6 +1438,11 @@ export interface GithubConfig {
   repositories: string; // Comma-separated list of repository names
   include_prs: boolean;
   include_issues: boolean;
+}
+
+export interface GitHubPagesConfig {
+  repo_owner: string;
+  repo_name: string;
 }
 
 export interface GitlabConfig {

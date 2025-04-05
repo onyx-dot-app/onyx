@@ -30,6 +30,11 @@ export interface GithubCredentialJson {
   github_access_token: string;
 }
 
+export interface GithubPagesCredentialJson {
+  github_username: string;
+  github_personal_access_token: string;
+}
+
 export interface GitbookCredentialJson {
   gitbook_api_key: string;
 }
@@ -234,6 +239,10 @@ export interface HighspotCredentialJson {
 
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
+  github_pages: {
+    github_username: "",
+    github_personal_access_token: "",
+  } as GithubPagesCredentialJson,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",
