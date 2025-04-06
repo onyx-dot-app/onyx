@@ -1,4 +1,12 @@
 /* ThinkingBox.css */
+
+/* Apply transition to dark mode as well to ensure smooth color changes */
+html {
+  transition:
+    background-color 0.2s ease-in-out,
+    color 0.2s ease-in-out;
+}
+
 :root {
   --thinking-border-color: rgba(0, 0, 0, 0.1);
   --thinking-bg-color: transparent;
@@ -22,8 +30,12 @@
 .thinking-box {
   width: 98%;
   max-width: 100%;
-  margin: 0.75rem 0;
   position: relative;
+}
+
+/* Simple direct rule to prevent border flash in dark mode */
+.dark .thinking-box * {
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 .thinking-box__container {
@@ -53,6 +65,28 @@
 /* Remove the bottom border when there's no preview */
 .thinking-box__container--no-preview .thinking-box__header {
   border-bottom: none;
+}
+
+/* Style for the transitioning state to prevent flashing */
+.thinking-box__container--transitioning {
+  pointer-events: none; /* Prevent interactions during transition */
+}
+
+/* Fix for the flashing white border in dark mode */
+.dark .thinking-box__container--transitioning {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .thinking-box__container--transitioning .thinking-box__header {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .thinking-box__container--transitioning .thinking-box__content {
+  border-top-color: rgba(255, 255, 255, 0.1);
+}
+
+.dark .thinking-box__container--transitioning .thinking-box__preview--crawling {
+  border-top-color: rgba(255, 255, 255, 0.1);
 }
 
 .thinking-box__header {
@@ -95,7 +129,6 @@
 .thinking-box__timer {
   font-size: 0.8rem;
   color: var(--thinking-text-color);
-  margin-left: 0.25rem;
 }
 
 .thinking-box__collapse-icon {
@@ -167,9 +200,9 @@
 .thinking-box__fade-container::before {
   top: 0;
   background: linear-gradient(
-    to bottom, 
-    var(--thinking-fade-start), 
-    rgba(var(--thinking-fade-start-rgb, 249, 250, 251), 0.85) 25%, 
+    to bottom,
+    var(--thinking-fade-start),
+    rgba(var(--thinking-fade-start-rgb, 249, 250, 251), 0.85) 25%,
     var(--thinking-fade-end) 100%
   );
 }
@@ -177,27 +210,27 @@
 .thinking-box__fade-container::after {
   bottom: 0;
   background: linear-gradient(
-    to top, 
-    var(--thinking-fade-start), 
-    rgba(var(--thinking-fade-start-rgb, 249, 250, 251), 0.85) 25%, 
+    to top,
+    var(--thinking-fade-start),
+    rgba(var(--thinking-fade-start-rgb, 249, 250, 251), 0.85) 25%,
     var(--thinking-fade-end) 100%
   );
 }
 
 .dark .thinking-box__fade-container::before {
   background: linear-gradient(
-    to bottom, 
-    var(--thinking-fade-start), 
-    rgba(var(--thinking-fade-start-rgb, 30, 41, 59), 0.85) 25%, 
+    to bottom,
+    var(--thinking-fade-start),
+    rgba(var(--thinking-fade-start-rgb, 30, 41, 59), 0.85) 25%,
     var(--thinking-fade-end) 100%
   );
 }
 
 .dark .thinking-box__fade-container::after {
   background: linear-gradient(
-    to top, 
-    var(--thinking-fade-start), 
-    rgba(var(--thinking-fade-start-rgb, 30, 41, 59), 0.85) 25%, 
+    to top,
+    var(--thinking-fade-start),
+    rgba(var(--thinking-fade-start-rgb, 30, 41, 59), 0.85) 25%,
     var(--thinking-fade-end) 100%
   );
 }
@@ -218,8 +251,20 @@
   transform: translateZ(0);
   backface-visibility: hidden;
   -webkit-font-smoothing: antialiased;
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, black 12%, black 88%, transparent);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 12%,
+    black 88%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 12%,
+    black 88%,
+    transparent
+  );
 }
 
 /* Enhanced text during crawling */
@@ -235,25 +280,39 @@
 
 /* Animation for thinking indicator */
 @keyframes pulse {
-  0% { opacity: 0.5; }
-  50% { opacity: 1; }
-  100% { opacity: 0.5; }
+  0% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.5;
+  }
 }
 
 /* Fade in animation */
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Smooth scrolling effect */
 @keyframes scrollText {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-100%); }
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-100%);
+  }
 }
 
 .thinking-box__preview-text {
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.7rem;
   color: var(--thinking-text-color);
   white-space: pre-wrap;
@@ -266,15 +325,21 @@
 
 /* Enhanced masking during crawling */
 .thinking-box__preview--crawling .thinking-box__scroll-content {
-  -webkit-mask-image: linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
-  mask-image: linear-gradient(to bottom, transparent, black 8%, black 92%, transparent);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 8%,
+    black 92%,
+    transparent
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 8%,
+    black 92%,
+    transparent
+  );
   padding: 0.75rem 1rem;
-}
-
-.thinking-box__icon--active {
-  animation: pulse 1.5s infinite ease-in-out;
-  opacity: 1;
-  color: var(--thinking-title-color);
 }
 
 /* Make sure the preview adjusts immediately when new content arrives */
@@ -302,4 +367,4 @@
 
 .dark .thinking-box__container--collapsed .thinking-box__header:hover {
   background-color: rgba(255, 255, 255, 0.03);
-} 
+}

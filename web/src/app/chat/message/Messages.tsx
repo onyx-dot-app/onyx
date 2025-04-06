@@ -73,7 +73,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { transformLinkUri } from "@/lib/utils";
-import { ThinkingBox } from "./ThinkingBox";
+import { ThinkingBox } from "./thinkingBox/ThinkingBox";
 import {
   hasCompletedThinkingTokens,
   hasPartialThinkingTokens,
@@ -278,7 +278,9 @@ export const AIMessage = ({
 
   // Check if content contains thinking tokens (complete or partial)
   const hasThinkingTokens = useMemo(() => {
-    return hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content);
+    return (
+      hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content)
+    );
   }, [content]);
 
   // Extract thinking content
@@ -302,19 +304,19 @@ export const AIMessage = ({
   // or there are no thinking tokens to begin with
   const shouldShowContent = useMemo(() => {
     if (!hasThinkingTokens) return true;
-    
+
     // If the message is complete, we always show the content
     if (isComplete) return true;
-    
+
     // If thinking is not complete, we don't show the content yet
     if (!isThinkingTokenComplete) return false;
-    
+
     // If thinking is complete but we're not done with the message yet,
     // only show the content if there's actually something to show
-    const cleanedContent = (typeof finalContent === 'string') ? 
-      finalContent.trim() : finalContent;
-    
-    return !!cleanedContent && cleanedContent !== '';
+    const cleanedContent =
+      typeof finalContent === "string" ? finalContent.trim() : finalContent;
+
+    return !!cleanedContent && cleanedContent !== "";
   }, [hasThinkingTokens, isComplete, isThinkingTokenComplete, finalContent]);
 
   const processContent = (content: string | JSX.Element) => {
@@ -688,10 +690,10 @@ export const AIMessage = ({
 
                     {/* Render thinking box if thinking tokens exist */}
                     {hasThinkingTokens && thinkingContent && (
-                      <div className="mb-2 mt-1">
-                        <ThinkingBox 
-                          content={thinkingContent} 
-                          isComplete={isComplete || false} 
+                      <div className="mb-2">
+                        <ThinkingBox
+                          content={thinkingContent}
+                          isComplete={isComplete || false}
                           isStreaming={!isThinkingTokenComplete || !isComplete}
                         />
                       </div>
@@ -761,7 +763,10 @@ export const AIMessage = ({
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
                               copyAllFn={() =>
-                                copyAll(finalContentProcessed as string, markdownRef)
+                                copyAll(
+                                  finalContentProcessed as string,
+                                  markdownRef
+                                )
                               }
                             />
                           </CustomTooltip>
@@ -840,7 +845,10 @@ export const AIMessage = ({
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
                               copyAllFn={() =>
-                                copyAll(finalContentProcessed as string, markdownRef)
+                                copyAll(
+                                  finalContentProcessed as string,
+                                  markdownRef
+                                )
                               }
                             />
                           </CustomTooltip>
