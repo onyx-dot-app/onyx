@@ -79,6 +79,7 @@ class UserInfo(BaseModel):
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
+    created_at: datetime
 
     @classmethod
     def from_model(
@@ -122,6 +123,7 @@ class UserInfo(BaseModel):
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
             tenant_info=tenant_info,
+            created_at=user.created_at,
         )
 
 

@@ -5,6 +5,7 @@ import React, {
   forwardRef,
   useContext,
   useCallback,
+  useMemo,
 } from "react";
 import Link from "next/link";
 import {
@@ -252,6 +253,27 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       router.push(newChatUrl);
     };
 
+    const getDaysUntilExpiration = useCallback((user: any) => {
+      if (user?.role !== UserRole.DEMO) return null;
+      
+      const demoExpiry = new Date(user.created_at);
+      demoExpiry.setDate(demoExpiry.getDate() + 7);
+      const now = new Date();
+      const diffTime = demoExpiry.getTime() - now.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays <= 0) return 0;
+      
+      const diffHours = Math.floor((diffTime % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      
+      return { days: diffDays, hours: diffHours };
+    }, []);
+
+    const expirationInfo = useMemo(() => {
+      if (!user) return null;
+      return getDaysUntilExpiration(user);
+    }, [user, getDaysUntilExpiration]);
+
     return (
       <>
         <div
@@ -283,6 +305,13 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               explicitlyUntoggle={explicitlyUntoggle}
             />
           </div>
+          
+          {expirationInfo && (
+            <div className="px-4 py-1 text-sm text-yellow-600 dark:text-yellow-500">
+              Trial expires in {expirationInfo.days}d {expirationInfo.hours}h
+            </div>
+          )}
+          
           {page == "chat" && (
             <div className="px-4 px-1 -mx-2 gap-y-1 flex-col text-text-history-sidebar-button flex gap-x-1.5 items-center items-center">
               <Link

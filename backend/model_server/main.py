@@ -80,6 +80,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
     torch.set_num_threads(max(MIN_THREADS_ML_MODELS, torch.get_num_threads()))
     logger.notice(f"Torch Threads: {torch.get_num_threads()}")
 
+    # Pre-load the nomic model
+    try:
+        from model_server.encoders import get_embedding_model
+        logger.notice("Pre-loading nomic-ai/nomic-embed-text-v1 model")
+        get_embedding_model("nomic-ai/nomic-embed-text-v1", max_context_length=512)
+        logger.notice("Successfully pre-loaded nomic-ai/nomic-embed-text-v1 model")
+    except Exception as e:
+        logger.error(f"Failed to pre-load nomic model: {str(e)}")
+
     if not INDEXING_ONLY:
         logger.notice(
             "The intent model should run on the model server. The information content model should not run here."

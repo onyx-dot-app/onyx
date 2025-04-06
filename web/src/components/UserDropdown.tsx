@@ -75,7 +75,6 @@ export function UserDropdown({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [showNotifications, setShowNotifications] = useState(false);
-
   const combinedSettings = useContext(SettingsContext);
   const customNavItems: NavigationItem[] = useMemo(
     () => combinedSettings?.enterpriseSettings?.custom_nav_items || [],

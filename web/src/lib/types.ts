@@ -59,6 +59,7 @@ export interface User {
   current_token_created_at?: Date;
   current_token_expiry_length?: number;
   oidc_expiry?: Date;
+  created_at: Date;
   is_cloud_superuser?: boolean;
   team_name: string | null;
   is_anonymous_user?: boolean;

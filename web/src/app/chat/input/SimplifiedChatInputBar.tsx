@@ -10,6 +10,8 @@ import {
 import { OpenAIIcon, SendIcon } from "@/components/icons/icons";
 import { HorizontalSourceSelector } from "@/components/search/filtering/HorizontalSourceSelector";
 import { Tag } from "@/lib/types";
+import { useUser } from "@/components/user/UserProvider";
+import { UserRole } from "@/lib/types";
 
 const MAX_INPUT_HEIGHT = 200;
 
@@ -40,6 +42,9 @@ export function SimplifiedChatInputBar({
   availableDocumentSets,
   availableTags,
 }: ChatInputBarProps) {
+  const { user } = useUser();
+  const isDemoUser = user?.role === UserRole.DEMO;
+
   useEffect(() => {
     const textarea = textAreaRef.current;
     if (textarea) {
@@ -205,7 +210,7 @@ export function SimplifiedChatInputBar({
             }}
           />
 
-          {filterManager && (
+          {filterManager && !isDemoUser && (
             <HorizontalSourceSelector
               timeRange={filterManager.timeRange}
               setTimeRange={filterManager.setTimeRange}
