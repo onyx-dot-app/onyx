@@ -233,28 +233,13 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
           });
         }
       },
-      [setPinnedAssistants, reorderPinnedAssistants]
+      [setPinnedAssistants]
     );
 
     const combinedSettings = useContext(SettingsContext);
-    if (!combinedSettings) {
-      return null;
-    }
-
-    const handleNewChat = () => {
-      reset();
-      console.log("currentChatSession", currentChatSession);
-
-      const newChatUrl =
-        `/${page}` +
-        (currentChatSession
-          ? `?assistantId=${currentChatSession.persona_id}`
-          : "");
-      router.push(newChatUrl);
-    };
-
+    
     const getDaysUntilExpiration = useCallback((user: any) => {
-      if (user?.role !== UserRole.DEMO) return null;
+      if (!user || user.role !== UserRole.DEMO) return null;
       
       const demoExpiry = new Date(user.created_at);
       demoExpiry.setDate(demoExpiry.getDate() + 7);
@@ -273,6 +258,22 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
       if (!user) return null;
       return getDaysUntilExpiration(user);
     }, [user, getDaysUntilExpiration]);
+
+    if (!combinedSettings) {
+      return null;
+    }
+
+    const handleNewChat = () => {
+      reset();
+      console.log("currentChatSession", currentChatSession);
+
+      const newChatUrl =
+        `/${page}` +
+        (currentChatSession
+          ? `?assistantId=${currentChatSession.persona_id}`
+          : "");
+      router.push(newChatUrl);
+    };
 
     return (
       <>
