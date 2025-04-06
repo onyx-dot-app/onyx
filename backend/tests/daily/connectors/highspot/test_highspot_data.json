@@ -1,5 +1,10 @@
 {
     "target_doc_id": "67cd8eb35d3ee0487de2e704",
     "semantic_identifier": "Highspot in Action _ Salesforce Integration",
-    "link": "https://www.highspot.com/items/67cd8eb35d3ee0487de2e704"
+    "link": "https://www.highspot.com/items/67cd8eb35d3ee0487de2e704",
+    "poll_source": {
+        "target_doc_id":"67ef9edcc3f40b2bf3d816a8",
+        "semantic_identifier":"A Brief Introduction To AI",
+        "link":"https://www.highspot.com/items/67ef9edcc3f40b2bf3d816a8"
+    }
 }

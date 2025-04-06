@@ -59,6 +59,8 @@ from onyx.natural_language_processing.search_nlp_models import (
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
 from onyx.utils.telemetry import create_milestone_and_report
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
@@ -271,7 +273,6 @@ def _run_indexing(
                 "Search settings must be set for indexing. This should not be possible."
             )
 
-        # search_settings = index_attempt_start.search_settings
         db_connector = index_attempt_start.connector_credential_pair.connector
         db_credential = index_attempt_start.connector_credential_pair.credential
         ctx = RunIndexingContext(
@@ -570,6 +571,19 @@ def _run_indexing(
                 if callback:
                     callback.progress("_run_indexing", len(doc_batch_cleaned))
 
+                # Add telemetry for indexing progress
+                optional_telemetry(
+                    record_type=RecordType.INDEXING_PROGRESS,
+                    data={
+                        "index_attempt_id": index_attempt_id,
+                        "cc_pair_id": ctx.cc_pair_id,
+                        "current_docs_indexed": document_count,
+                        "current_chunks_indexed": chunk_count,
+                        "source": ctx.source.value,
+                    },
+                    tenant_id=tenant_id,
+                )
+
                 memory_tracer.increment_and_maybe_trace()
 
             # `make sure the checkpoints aren't getting too large`at some regular interval
@@ -585,6 +599,19 @@ def _run_indexing(
                     checkpoint=checkpoint,
                 )
 
+        optional_telemetry(
+            record_type=RecordType.INDEXING_COMPLETE,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "cc_pair_id": ctx.cc_pair_id,
+                "total_docs_indexed": document_count,
+                "total_chunks": chunk_count,
+                "time_elapsed_seconds": time.monotonic() - start_time,
+                "source": ctx.source.value,
+            },
+            tenant_id=tenant_id,
+        )
+
     except Exception as e:
         logger.exception(
             "Connector run exceptioned after elapsed time: "
@@ -595,6 +622,9 @@ def _run_indexing(
             # and mark the CCPair as invalid. This prevents the connector from being
             # used in the future until the credentials are updated.
             with get_session_with_current_tenant() as db_session_temp:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to validation error."
+                )
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session_temp,
@@ -641,6 +671,9 @@ def _run_indexing(
 
         elif isinstance(e, ConnectorStopSignal):
             with get_session_with_current_tenant() as db_session_temp:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to stop signal."
+                )
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session_temp,
@@ -703,6 +736,7 @@ def _run_indexing(
                 f"Connector succeeded: "
                 f"docs={document_count} chunks={chunk_count} elapsed={elapsed_time:.2f}s"
             )
+
         else:
             mark_attempt_partially_succeeded(index_attempt_id, db_session_temp)
             logger.info(

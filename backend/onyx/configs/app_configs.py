@@ -1,6 +1,8 @@
 import json
 import os
 import urllib.parse
+from datetime import datetime
+from datetime import timezone
 from typing import cast
 
 from onyx.auth.schemas import AuthBackend
@@ -168,7 +170,7 @@ POSTGRES_USER = os.environ.get("POSTGRES_USER") or "postgres"
 POSTGRES_PASSWORD = urllib.parse.quote_plus(
     os.environ.get("POSTGRES_PASSWORD") or "password"
 )
-POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "localhost"
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST") or "127.0.0.1"
 POSTGRES_PORT = os.environ.get("POSTGRES_PORT") or "5432"
 POSTGRES_DB = os.environ.get("POSTGRES_DB") or "postgres"
 AWS_REGION_NAME = os.environ.get("AWS_REGION_NAME") or "us-east-2"
@@ -383,10 +385,27 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
 # https://community.developer.atlassian.com/t/confluence-cloud-time-zone-get-via-rest-api/35954/16
 # https://jira.atlassian.com/browse/CONFCLOUD-69670
 
+
+def get_current_tz_offset() -> int:
+    # datetime now() gets local time, datetime.now(timezone.utc) gets UTC time.
+    # remove tzinfo to compare non-timezone-aware objects.
+    time_diff = datetime.now() - datetime.now(timezone.utc).replace(tzinfo=None)
+    return round(time_diff.total_seconds() / 3600)
+
+
 # enter as a floating point offset from UTC in hours (-24 < val < 24)
 # this will be applied globally, so it probably makes sense to transition this to per
 # connector as some point.
-CONFLUENCE_TIMEZONE_OFFSET = float(os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", 0.0))
+# For the default value, we assume that the user's local timezone is more likely to be
+# correct (i.e. the configured user's timezone or the default server one) than UTC.
+# https://developer.atlassian.com/cloud/confluence/cql-fields/#created
+CONFLUENCE_TIMEZONE_OFFSET = float(
+    os.environ.get("CONFLUENCE_TIMEZONE_OFFSET", get_current_tz_offset())
+)
+
+GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
+    os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
+)
 
 JIRA_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
@@ -418,7 +437,7 @@ LINEAR_CLIENT_ID = os.getenv("LINEAR_CLIENT_ID")
 LINEAR_CLIENT_SECRET = os.getenv("LINEAR_CLIENT_SECRET")
 
 # Slack specific configs
-SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 2)
+SLACK_NUM_THREADS = int(os.getenv("SLACK_NUM_THREADS") or 8)
 
 DASK_JOB_CLIENT_ENABLED = (
     os.environ.get("DASK_JOB_CLIENT_ENABLED", "").lower() == "true"
@@ -476,6 +495,11 @@ NUM_SECONDARY_INDEXING_WORKERS = int(
 ENABLE_MULTIPASS_INDEXING = (
     os.environ.get("ENABLE_MULTIPASS_INDEXING", "").lower() == "true"
 )
+# Enable contextual retrieval
+ENABLE_CONTEXTUAL_RAG = os.environ.get("ENABLE_CONTEXTUAL_RAG", "").lower() == "true"
+
+DEFAULT_CONTEXTUAL_RAG_LLM_NAME = "gpt-4o-mini"
+DEFAULT_CONTEXTUAL_RAG_LLM_PROVIDER = "DevEnvPresetOpenAI"
 # Finer grained chunking for more detail retention
 # Slightly larger since the sentence aware split is a max cutoff so most minichunks will be under MINI_CHUNK_SIZE
 # tokens. But we need it to be at least as big as 1/4th chunk size to avoid having a tiny mini-chunk at the end
@@ -516,6 +540,17 @@ MAX_DOCUMENT_CHARS = int(os.environ.get("MAX_DOCUMENT_CHARS") or 5_000_000)
 MAX_FILE_SIZE_BYTES = int(
     os.environ.get("MAX_FILE_SIZE_BYTES") or 2 * 1024 * 1024 * 1024
 )  # 2GB in bytes
+
+# Use document summary for contextual rag
+USE_DOCUMENT_SUMMARY = os.environ.get("USE_DOCUMENT_SUMMARY", "true").lower() == "true"
+# Use chunk summary for contextual rag
+USE_CHUNK_SUMMARY = os.environ.get("USE_CHUNK_SUMMARY", "true").lower() == "true"
+# Average summary embeddings for contextual rag (not yet implemented)
+AVERAGE_SUMMARY_EMBEDDINGS = (
+    os.environ.get("AVERAGE_SUMMARY_EMBEDDINGS", "false").lower() == "true"
+)
+
+MAX_TOKENS_FOR_FULL_INCLUSION = 4096
 
 #####
 # Miscellaneous
@@ -672,4 +707,8 @@ IMAGE_SUMMARIZATION_USER_PROMPT = os.environ.get(
 IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
     "IMAGE_ANALYSIS_SYSTEM_PROMPT",
     DEFAULT_IMAGE_ANALYSIS_SYSTEM_PROMPT,
+)
+
+DISABLE_AUTO_AUTH_REFRESH = (
+    os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )

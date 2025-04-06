@@ -1,13 +1,23 @@
 from collections.abc import Callable
 from unittest.mock import MagicMock
 from unittest.mock import patch
+from urllib.parse import urlparse
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
-    assert_retrieved_docs_match_expected,
+    assert_expected_docs_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_DOC_SINGLETON,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_DOCS_IN_FOLDER,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    EXTERNAL_SHARED_FOLDER_URL,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_URL
@@ -70,10 +80,38 @@ def test_include_all(
         + FOLDER_2_2_FILE_IDS
         + SECTIONS_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
+
+
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_include_shared_drives_only_with_size_threshold(
+    mock_get_api_key: MagicMock,
+    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+) -> None:
+    print("\n\nRunning test_include_shared_drives_only_with_size_threshold")
+    connector = google_drive_service_acct_connector_factory(
+        primary_admin_email=ADMIN_EMAIL,
+        include_shared_drives=True,
+        include_my_drives=False,
+        include_files_shared_with_me=False,
+        shared_folder_urls=None,
+        shared_drive_urls=None,
+        my_drive_emails=None,
+    )
+
+    # this threshold will skip one file
+    connector.size_threshold = 16384
+
+    retrieved_docs = load_all_docs(connector)
+
+    # 2 extra files from shared drive owned by non-admin and not shared with admin
+    assert len(retrieved_docs) == 52
 
 
 @patch(
@@ -94,6 +132,7 @@ def test_include_shared_drives_only(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
+
     retrieved_docs = load_all_docs(connector)
 
     # Should only get shared drives
@@ -108,7 +147,11 @@ def test_include_shared_drives_only(
         + FOLDER_2_2_FILE_IDS
         + SECTIONS_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+
+    # 2 extra files from shared drive owned by non-admin and not shared with admin
+    assert len(retrieved_docs) == 53
+
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -142,7 +185,7 @@ def test_include_my_drives_only(
         + TEST_USER_2_FILE_IDS
         + TEST_USER_3_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -176,7 +219,7 @@ def test_drive_one_only(
         + FOLDER_1_1_FILE_IDS
         + FOLDER_1_2_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -214,7 +257,7 @@ def test_folder_and_shared_drive(
         + FOLDER_2_1_FILE_IDS
         + FOLDER_2_2_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -257,10 +300,68 @@ def test_folders_only(
         + FOLDER_2_2_FILE_IDS
         + ADMIN_FOLDER_3_FILE_IDS
     )
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
+
+
+def test_shared_folder_owned_by_external_user(
+    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+) -> None:
+    print("\n\nRunning test_shared_folder_owned_by_external_user")
+    connector = google_drive_service_acct_connector_factory(
+        primary_admin_email=ADMIN_EMAIL,
+        include_shared_drives=False,
+        include_my_drives=False,
+        include_files_shared_with_me=False,
+        shared_drive_urls=None,
+        shared_folder_urls=EXTERNAL_SHARED_FOLDER_URL,
+        my_drive_emails=None,
+    )
+    retrieved_docs = load_all_docs(connector)
+
+    expected_docs = EXTERNAL_SHARED_DOCS_IN_FOLDER
+
+    assert len(retrieved_docs) == len(expected_docs)  # 1 for now
+    assert expected_docs[0] in retrieved_docs[0].id
+
+
+def test_shared_with_me(
+    google_drive_service_acct_connector_factory: Callable[..., GoogleDriveConnector],
+) -> None:
+    print("\n\nRunning test_shared_with_me")
+    connector = google_drive_service_acct_connector_factory(
+        primary_admin_email=ADMIN_EMAIL,
+        include_shared_drives=False,
+        include_my_drives=True,
+        include_files_shared_with_me=True,
+        shared_drive_urls=None,
+        shared_folder_urls=None,
+        my_drive_emails=None,
+    )
+    retrieved_docs = load_all_docs(connector)
+
+    print(retrieved_docs)
+
+    expected_file_ids = (
+        ADMIN_FILE_IDS
+        + ADMIN_FOLDER_3_FILE_IDS
+        + TEST_USER_1_FILE_IDS
+        + TEST_USER_2_FILE_IDS
+        + TEST_USER_3_FILE_IDS
+    )
+    assert_expected_docs_in_retrieved_docs(
+        retrieved_docs=retrieved_docs,
+        expected_file_ids=expected_file_ids,
+    )
+
+    retrieved_ids = {urlparse(doc.id).path.split("/")[-2] for doc in retrieved_docs}
+    for id in retrieved_ids:
+        print(id)
+
+    assert EXTERNAL_SHARED_DOC_SINGLETON.split("/")[-1] in retrieved_ids
+    assert EXTERNAL_SHARED_DOCS_IN_FOLDER[0].split("/")[-1] in retrieved_ids
 
 
 @patch(
@@ -288,7 +389,7 @@ def test_specific_emails(
     retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = TEST_USER_1_FILE_IDS + TEST_USER_3_FILE_IDS
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )
@@ -318,7 +419,7 @@ def get_specific_folders_in_my_drive(
     retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = ADMIN_FOLDER_3_FILE_IDS
-    assert_retrieved_docs_match_expected(
+    assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
     )

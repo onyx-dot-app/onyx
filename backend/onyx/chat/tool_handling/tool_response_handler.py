@@ -180,6 +180,10 @@ def get_tool_call_for_non_tool_calling_llm_impl(
         if tool_args is None:
             raise RuntimeError(f"Tool '{tool.name}' did not return args")
 
+        # If we have override_kwargs, add them to the tool_args
+        if force_use_tool.override_kwargs is not None:
+            tool_args["override_kwargs"] = force_use_tool.override_kwargs
+
         return (tool, tool_args)
     else:
         tool_options = check_which_tools_should_run_for_non_tool_calling_llm(

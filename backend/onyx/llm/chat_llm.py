@@ -425,12 +425,12 @@ class DefaultMultiLLM(LLM):
                 messages=processed_prompt,
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
+                max_tokens=max_tokens,
                 # streaming choice
                 stream=stream,
                 # model params
                 temperature=0,
                 timeout=timeout_override or self._timeout,
-                max_tokens=max_tokens,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
                 # or else OpenAI throws an error
@@ -531,6 +531,7 @@ class DefaultMultiLLM(LLM):
                 tool_choice,
                 structured_response_format,
                 timeout_override,
+                max_tokens,
             )
             return
 

@@ -3,8 +3,9 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
+from onyx.db.document import delete_all_documents_for_connector_credential_pair
 from onyx.db.enums import IndexModelStatus
-from onyx.db.index_attempt import cancel_indexing_attempts_past_model
+from onyx.db.index_attempt import cancel_indexing_attempts_for_search_settings
 from onyx.db.index_attempt import (
     count_unique_cc_pairs_with_successful_index_attempts,
 )
@@ -26,31 +27,49 @@ def _perform_index_swap(
     current_search_settings: SearchSettings,
     secondary_search_settings: SearchSettings,
     all_cc_pairs: list[ConnectorCredentialPair],
+    cleanup_documents: bool = False,
 ) -> None:
     """Swap the indices and expire the old one."""
-    current_search_settings = get_current_search_settings(db_session)
-    update_search_settings_status(
-        search_settings=current_search_settings,
-        new_status=IndexModelStatus.PAST,
-        db_session=db_session,
-    )
-
-    update_search_settings_status(
-        search_settings=secondary_search_settings,
-        new_status=IndexModelStatus.PRESENT,
-        db_session=db_session,
-    )
-
     if len(all_cc_pairs) > 0:
         kv_store = get_kv_store()
         kv_store.store(KV_REINDEX_KEY, False)
 
         # Expire jobs for the now past index/embedding model
-        cancel_indexing_attempts_past_model(db_session)
+        cancel_indexing_attempts_for_search_settings(
+            search_settings_id=current_search_settings.id,
+            db_session=db_session,
+        )
 
         # Recount aggregates
         for cc_pair in all_cc_pairs:
-            resync_cc_pair(cc_pair, db_session=db_session)
+            resync_cc_pair(
+                cc_pair=cc_pair,
+                # sync based on the new search settings
+                search_settings_id=secondary_search_settings.id,
+                db_session=db_session,
+            )
+
+        if cleanup_documents:
+            # clean up all DocumentByConnectorCredentialPair / Document rows, since we're
+            # doing an instant swap and no documents will exist in the new index.
+            for cc_pair in all_cc_pairs:
+                delete_all_documents_for_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector_id,
+                    credential_id=cc_pair.credential_id,
+                )
+
+    # swap over search settings
+    update_search_settings_status(
+        search_settings=current_search_settings,
+        new_status=IndexModelStatus.PAST,
+        db_session=db_session,
+    )
+    update_search_settings_status(
+        search_settings=secondary_search_settings,
+        new_status=IndexModelStatus.PRESENT,
+        db_session=db_session,
+    )
 
     # remove the old index from the vector db
     document_index = get_default_document_index(secondary_search_settings, None)
@@ -88,6 +107,9 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
             current_search_settings=current_search_settings,
             secondary_search_settings=secondary_search_settings,
             all_cc_pairs=all_cc_pairs,
+            # clean up all DocumentByConnectorCredentialPair / Document rows, since we're
+            # doing an instant swap.
+            cleanup_documents=True,
         )
         return current_search_settings
 

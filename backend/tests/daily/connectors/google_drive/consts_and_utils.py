@@ -58,6 +58,16 @@ SECTIONS_FOLDER_URL = (
     "https://drive.google.com/drive/u/5/folders/1loe6XJ-pJxu9YYPv7cF3Hmz296VNzA33"
 )
 
+EXTERNAL_SHARED_FOLDER_URL = (
+    "https://drive.google.com/drive/folders/1sWC7Oi0aQGgifLiMnhTjvkhRWVeDa-XS"
+)
+EXTERNAL_SHARED_DOCS_IN_FOLDER = [
+    "https://docs.google.com/document/d/1Sywmv1-H6ENk2GcgieKou3kQHR_0te1mhIUcq8XlcdY"
+]
+EXTERNAL_SHARED_DOC_SINGLETON = (
+    "https://docs.google.com/document/d/11kmisDfdvNcw5LYZbkdPVjTOdj-Uc5ma6Jep68xzeeA"
+)
+
 SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
 
 ADMIN_EMAIL = "admin@onyx-test.com"
@@ -161,10 +171,14 @@ def _get_expected_file_content(file_id: int) -> str:
     return file_text_template.format(file_id)
 
 
-def assert_retrieved_docs_match_expected(
+def assert_expected_docs_in_retrieved_docs(
     retrieved_docs: list[Document],
     expected_file_ids: Sequence[int],
 ) -> None:
+    """NOTE: as far as i can tell this does NOT assert for an exact match.
+    it only checks to see if that the expected file id's are IN the retrieved doc list
+    """
+
     expected_file_names = {
         file_name_template.format(file_id) for file_id in expected_file_ids
     }
@@ -175,7 +189,7 @@ def assert_retrieved_docs_match_expected(
     retrieved_docs.sort(key=lambda x: x.semantic_identifier)
 
     for doc in retrieved_docs:
-        print(f"doc.semantic_identifier: {doc.semantic_identifier}")
+        print(f"retrieved doc: doc.semantic_identifier={doc.semantic_identifier}")
 
     # Filter out invalid prefixes to prevent different tests from interfering with each other
     valid_retrieved_docs = [

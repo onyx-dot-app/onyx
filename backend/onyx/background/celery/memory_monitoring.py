@@ -14,7 +14,7 @@ logger = setup_logger()
 # Only set up memory monitoring in container environment
 if is_running_in_container():
     # Set up a dedicated memory monitoring logger
-    MEMORY_LOG_DIR = "/var/log/persisted-logs/memory"
+    MEMORY_LOG_DIR = "/var/log/memory"
     MEMORY_LOG_FILE = os.path.join(MEMORY_LOG_DIR, "memory_usage.log")
     MEMORY_LOG_MAX_BYTES = 10 * 1024 * 1024  # 10MB
     MEMORY_LOG_BACKUP_COUNT = 5  # Keep 5 backup files

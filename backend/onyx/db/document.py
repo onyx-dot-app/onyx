@@ -43,6 +43,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+ONE_HOUR_IN_SECONDS = 60 * 60
+
 
 def check_docs_exist(db_session: Session) -> bool:
     stmt = select(exists(DbDocument))
@@ -555,6 +557,28 @@ def delete_documents_by_connector_credential_pair__no_commit(
     db_session.execute(stmt)
 
 
+def delete_all_documents_by_connector_credential_pair__no_commit(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+) -> None:
+    """Deletes all document by connector credential pair entries for a specific connector and credential.
+    This is primarily used during connector deletion to ensure all references are removed
+    before deleting the connector itself. This is crucial because connector_id is part of the
+    primary key in DocumentByConnectorCredentialPair, and attempting to delete the Connector
+    would otherwise try to set the foreign key to NULL, which fails for primary keys.
+
+    NOTE: Does not commit the transaction, this must be done by the caller.
+    """
+    stmt = delete(DocumentByConnectorCredentialPair).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+    db_session.execute(stmt)
+
+
 def delete_documents__no_commit(db_session: Session, document_ids: list[str]) -> None:
     db_session.execute(delete(DbDocument).where(DbDocument.id.in_(document_ids)))
 
@@ -583,6 +607,46 @@ def delete_documents_complete__no_commit(
         document_ids=document_ids, db_session=db_session
     )
     delete_documents__no_commit(db_session, document_ids)
+
+
+def delete_all_documents_for_connector_credential_pair(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    timeout: int = ONE_HOUR_IN_SECONDS,
+) -> None:
+    """Delete all documents for a given connector credential pair.
+    This will delete all documents and their associated data (chunks, feedback, tags, etc.)
+
+    NOTE: a bit inefficient, but it's not a big deal since this is done rarely - only during
+    an index swap. If we wanted to make this more efficient, we could use a single delete
+    statement + cascade.
+    """
+    batch_size = 1000
+    start_time = time.monotonic()
+
+    while True:
+        # Get document IDs in batches
+        stmt = (
+            select(DocumentByConnectorCredentialPair.id)
+            .where(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            )
+            .limit(batch_size)
+        )
+        document_ids = db_session.scalars(stmt).all()
+
+        if not document_ids:
+            break
+
+        delete_documents_complete__no_commit(
+            db_session=db_session, document_ids=list(document_ids)
+        )
+        db_session.commit()
+
+        if time.monotonic() - start_time > timeout:
+            raise RuntimeError("Timeout reached while deleting documents")
 
 
 def acquire_document_locks(db_session: Session, document_ids: list[str]) -> bool:

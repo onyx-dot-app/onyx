@@ -87,7 +87,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 credentials.get(key)
                 for key in ["aws_access_key_id", "aws_secret_access_key"]
             ):
-                raise ConnectorMissingCredentialError("Google Cloud Storage")
+                raise ConnectorMissingCredentialError("Amazon S3")
 
             session = boto3.Session(
                 aws_access_key_id=credentials["aws_access_key_id"],

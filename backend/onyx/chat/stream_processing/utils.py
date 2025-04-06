@@ -3,7 +3,6 @@ from collections.abc import Sequence
 from pydantic import BaseModel
 
 from onyx.chat.models import LlmDoc
-from onyx.chat.models import OnyxContext
 from onyx.context.search.models import InferenceChunk
 
 
@@ -12,7 +11,7 @@ class DocumentIdOrderMapping(BaseModel):
 
 
 def map_document_id_order(
-    chunks: Sequence[InferenceChunk | LlmDoc | OnyxContext], one_indexed: bool = True
+    chunks: Sequence[InferenceChunk | LlmDoc], one_indexed: bool = True
 ) -> DocumentIdOrderMapping:
     order_mapping = {}
     current = 1 if one_indexed else 0

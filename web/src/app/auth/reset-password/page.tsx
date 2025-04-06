@@ -23,8 +23,8 @@ const ResetPasswordPage: React.FC = () => {
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const tenantId = searchParams.get(TENANT_ID_COOKIE_NAME);
+  const token = searchParams?.get("token");
+  const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   // Keep search param same name as cookie for simplicity
 
   useEffect(() => {

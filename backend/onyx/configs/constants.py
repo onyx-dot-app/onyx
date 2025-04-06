@@ -102,6 +102,8 @@ CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
 
+CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT = 120
+
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
 
@@ -270,6 +272,7 @@ class FileOrigin(str, Enum):
     CONNECTOR = "connector"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
+    PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
 
 
@@ -310,6 +313,7 @@ class OnyxCeleryQueues:
 
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"
+    USER_FILES_INDEXING = "user_files_indexing"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -328,6 +332,7 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
+    CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
@@ -383,6 +388,7 @@ ONYX_CLOUD_TENANT_ID = "cloud"
 
 # the redis namespace for runtime variables
 ONYX_CLOUD_REDIS_RUNTIME = "runtime"
+CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT = 600
 
 
 class OnyxCeleryTask:
@@ -397,6 +403,7 @@ class OnyxCeleryTask:
 
     # Tenant pre-provisioning
     PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
+    UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
@@ -405,6 +412,7 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+    CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"

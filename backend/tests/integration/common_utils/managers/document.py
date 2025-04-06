@@ -165,8 +165,12 @@ class DocumentManager:
             doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict
         }
 
+        # NOTE(rkuo): too much log spam
         # Left this here for debugging purposes.
         # import json
+
+        # print("DEBUGGING DOCUMENTS")
+        # print(retrieved_docs)
         # for doc in retrieved_docs.values():
         #     printable_doc = doc.copy()
         #     print(printable_doc.keys())
@@ -178,6 +182,9 @@ class DocumentManager:
             retrieved_doc = retrieved_docs.get(document.id)
             if not retrieved_doc:
                 if not verify_deleted:
+                    print(f"Document not found: {document.id}")
+                    print(retrieved_docs.keys())
+                    print(retrieved_docs.values())
                     raise ValueError(f"Document not found: {document.id}")
                 continue
             if verify_deleted:

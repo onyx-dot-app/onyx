@@ -175,7 +175,7 @@ class EmbeddingModel:
         embeddings: list[Embedding] = []
 
         def process_batch(
-            batch_idx: int, text_batch: list[str]
+            batch_idx: int, batch_len: int, text_batch: list[str]
         ) -> tuple[int, list[Embedding]]:
             if self.callback:
                 if self.callback.should_stop():
@@ -202,8 +202,8 @@ class EmbeddingModel:
             end_time = time.time()
 
             processing_time = end_time - start_time
-            logger.info(
-                f"Batch {batch_idx} processing time: {processing_time:.2f} seconds"
+            logger.debug(
+                f"EmbeddingModel.process_batch: Batch {batch_idx}/{batch_len} processing time: {processing_time:.2f} seconds"
             )
 
             return batch_idx, response.embeddings
@@ -215,7 +215,7 @@ class EmbeddingModel:
         if num_threads >= 1 and self.provider_type and len(text_batches) > 1:
             with ThreadPoolExecutor(max_workers=num_threads) as executor:
                 future_to_batch = {
-                    executor.submit(process_batch, idx, batch): idx
+                    executor.submit(process_batch, idx, len(text_batches), batch): idx
                     for idx, batch in enumerate(text_batches, start=1)
                 }
 
@@ -238,7 +238,7 @@ class EmbeddingModel:
         else:
             # Original sequential processing
             for idx, text_batch in enumerate(text_batches, start=1):
-                _, batch_embeddings = process_batch(idx, text_batch)
+                _, batch_embeddings = process_batch(idx, len(text_batches), text_batch)
                 embeddings.extend(batch_embeddings)
                 if self.callback:
                     self.callback.progress("_batch_encode_texts", 1)

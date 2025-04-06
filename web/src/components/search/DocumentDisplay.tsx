@@ -26,7 +26,13 @@ export const buildDocumentSummaryDisplay = (
   matchHighlights: string[],
   blurb: string
 ) => {
-  if (!matchHighlights || matchHighlights.length === 0) {
+  // if there are no match highlights, or if it's really short, just use the blurb
+  // this is to prevent the UI from showing something like `...` for the summary
+  const MIN_MATCH_HIGHLIGHT_LENGTH = 5;
+  if (
+    !matchHighlights ||
+    matchHighlights.length <= MIN_MATCH_HIGHLIGHT_LENGTH
+  ) {
     return blurb;
   }
 

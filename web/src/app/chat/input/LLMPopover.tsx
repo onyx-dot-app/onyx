@@ -1,15 +1,9 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useLayoutEffect,
-} from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChatInputOption } from "./ChatInputOption";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
@@ -34,12 +28,16 @@ import { FiAlertTriangle } from "react-icons/fi";
 import { Slider } from "@/components/ui/slider";
 import { useUser } from "@/components/user/UserProvider";
 import { TruncatedText } from "@/components/ui/truncatedText";
+import { ChatInputOption } from "./ChatInputOption";
 
 interface LLMPopoverProps {
   llmProviders: LLMProviderDescriptor[];
   llmManager: LlmManager;
   requiresImageGeneration?: boolean;
   currentAssistant?: Persona;
+  trigger?: React.ReactElement;
+  onSelect?: (value: string) => void;
+  currentModelName?: string;
 }
 
 export default function LLMPopover({
@@ -47,54 +45,69 @@ export default function LLMPopover({
   llmManager,
   requiresImageGeneration,
   currentAssistant,
+  trigger,
+  onSelect,
+  currentModelName,
 }: LLMPopoverProps) {
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
 
-  const llmOptionsByProvider: {
-    [provider: string]: {
-      name: string;
-      value: string;
-      icon: React.FC<{ size?: number; className?: string }>;
-    }[];
-  } = {};
-  const uniqueModelNames = new Set<string>();
+  // Memoize the options to prevent unnecessary recalculations
+  const { llmOptions, defaultProvider, defaultModelDisplayName } =
+    useMemo(() => {
+      const llmOptionsByProvider: {
+        [provider: string]: {
+          name: string;
+          value: string;
+          icon: React.FC<{ size?: number; className?: string }>;
+        }[];
+      } = {};
 
-  llmProviders.forEach((llmProvider) => {
-    if (!llmOptionsByProvider[llmProvider.provider]) {
-      llmOptionsByProvider[llmProvider.provider] = [];
-    }
+      const uniqueModelNames = new Set<string>();
 
-    (llmProvider.display_model_names || llmProvider.model_names).forEach(
-      (modelName) => {
-        if (!uniqueModelNames.has(modelName)) {
-          uniqueModelNames.add(modelName);
-          llmOptionsByProvider[llmProvider.provider].push({
-            name: modelName,
-            value: structureValue(
-              llmProvider.name,
-              llmProvider.provider,
-              modelName
-            ),
-            icon: getProviderIcon(llmProvider.provider, modelName),
-          });
+      llmProviders.forEach((llmProvider) => {
+        if (!llmOptionsByProvider[llmProvider.provider]) {
+          llmOptionsByProvider[llmProvider.provider] = [];
         }
-      }
-    );
-  });
 
-  const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
-    ([provider, options]) => [...options]
-  );
+        (llmProvider.display_model_names || llmProvider.model_names).forEach(
+          (modelName) => {
+            if (!uniqueModelNames.has(modelName)) {
+              uniqueModelNames.add(modelName);
+              llmOptionsByProvider[llmProvider.provider].push({
+                name: modelName,
+                value: structureValue(
+                  llmProvider.name,
+                  llmProvider.provider,
+                  modelName
+                ),
+                icon: getProviderIcon(llmProvider.provider, modelName),
+              });
+            }
+          }
+        );
+      });
 
-  const defaultProvider = llmProviders.find(
-    (llmProvider) => llmProvider.is_default_provider
-  );
+      const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
+        ([provider, options]) => [...options]
+      );
 
-  const defaultModelName = defaultProvider?.default_model_name;
-  const defaultModelDisplayName = defaultModelName
-    ? getDisplayNameForModel(defaultModelName)
-    : null;
+      const defaultProvider = llmProviders.find(
+        (llmProvider) => llmProvider.is_default_provider
+      );
+
+      const defaultModelName = defaultProvider?.default_model_name;
+      const defaultModelDisplayName = defaultModelName
+        ? getDisplayNameForModel(defaultModelName)
+        : null;
+
+      return {
+        llmOptionsByProvider,
+        llmOptions,
+        defaultProvider,
+        defaultModelDisplayName,
+      };
+    }, [llmProviders]);
 
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
@@ -104,42 +117,54 @@ export default function LLMPopover({
     setLocalTemperature(llmManager.temperature ?? 0.5);
   }, [llmManager.temperature]);
 
-  const handleTemperatureChange = (value: number[]) => {
+  // Use useCallback to prevent function recreation
+  const handleTemperatureChange = useCallback((value: number[]) => {
     setLocalTemperature(value[0]);
-  };
+  }, []);
 
-  const handleTemperatureChangeComplete = (value: number[]) => {
-    llmManager.updateTemperature(value[0]);
-  };
+  const handleTemperatureChangeComplete = useCallback(
+    (value: number[]) => {
+      llmManager.updateTemperature(value[0]);
+    },
+    [llmManager]
+  );
+
+  // Memoize trigger content to prevent rerendering
+  const triggerContent = useMemo(
+    trigger
+      ? () => trigger
+      : () => (
+          <button
+            className="dark:text-[#fff] text-[#000] focus:outline-none"
+            data-testid="llm-popover-trigger"
+          >
+            <ChatInputOption
+              minimize
+              toggle
+              flexPriority="stiff"
+              name={getDisplayNameForModel(
+                llmManager?.currentLlm.modelName ||
+                  defaultModelDisplayName ||
+                  "Models"
+              )}
+              Icon={getProviderIcon(
+                llmManager?.currentLlm.provider ||
+                  defaultProvider?.provider ||
+                  "anthropic",
+                llmManager?.currentLlm.modelName ||
+                  defaultProvider?.default_model_name ||
+                  "claude-3-5-sonnet-20240620"
+              )}
+              tooltipContent="Switch models"
+            />
+          </button>
+        ),
+    [defaultModelDisplayName, defaultProvider, llmManager?.currentLlm]
+  );
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
-      <PopoverTrigger asChild>
-        <button
-          className="dark:text-[#fff] text-[#000] focus:outline-none"
-          data-testid="llm-popover-trigger"
-        >
-          <ChatInputOption
-            minimize
-            toggle
-            flexPriority="stiff"
-            name={getDisplayNameForModel(
-              llmManager?.currentLlm.modelName ||
-                defaultModelDisplayName ||
-                "Models"
-            )}
-            Icon={getProviderIcon(
-              llmManager?.currentLlm.provider ||
-                defaultProvider?.provider ||
-                "anthropic",
-              llmManager?.currentLlm.modelName ||
-                defaultProvider?.default_model_name ||
-                "claude-3-5-sonnet-20240620"
-            )}
-            tooltipContent="Switch models"
-          />
-        </button>
-      </PopoverTrigger>
+      <PopoverTrigger asChild>{triggerContent}</PopoverTrigger>
       <PopoverContent
         align="start"
         className="w-64 p-1 bg-background border border-background-200 rounded-md shadow-lg flex flex-col"
@@ -151,12 +176,14 @@ export default function LLMPopover({
                 <button
                   key={index}
                   className={`w-full flex items-center gap-x-2 px-3 py-2 text-sm text-left hover:bg-background-100 dark:hover:bg-neutral-800 transition-colors duration-150 ${
-                    llmManager.currentLlm.modelName === name
+                    (currentModelName || llmManager.currentLlm.modelName) ===
+                    name
                       ? "bg-background-100 dark:bg-neutral-900 text-text"
                       : "text-text-darker"
                   }`}
                   onClick={() => {
                     llmManager.updateCurrentLlm(destructureValue(value));
+                    onSelect?.(value);
                     setIsOpen(false);
                   }}
                 >

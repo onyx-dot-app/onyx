@@ -1,5 +1,7 @@
 import json
+import os
 
+import pytest
 import requests
 
 from onyx.configs.constants import MessageType
@@ -16,10 +18,11 @@ from tests.integration.common_utils.test_models import DATestCCPair
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_send_message_simple_with_history(reset: None) -> None:
-    # Creating an admin user (first user created is automatically an admin)
-    admin_user: DATestUser = UserManager.create(name="admin_user")
-
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="/chat/send-message-simple-with-history tests are enterprise only",
+)
+def test_send_message_simple_with_history(reset: None, admin_user: DATestUser) -> None:
     # create connectors
     cc_pair_1: DATestCCPair = CCPairManager.create_from_scratch(
         user_performing_action=admin_user,
@@ -53,18 +56,22 @@ def test_send_message_simple_with_history(reset: None) -> None:
     response_json = response.json()
 
     # Check that the top document is the correct document
-    assert response_json["simple_search_docs"][0]["id"] == cc_pair_1.documents[0].id
     assert response_json["top_documents"][0]["document_id"] == cc_pair_1.documents[0].id
 
     # assert that the metadata is correct
     for doc in cc_pair_1.documents:
         found_doc = next(
-            (x for x in response_json["simple_search_docs"] if x["id"] == doc.id), None
+            (x for x in response_json["top_documents"] if x["document_id"] == doc.id),
+            None,
         )
         assert found_doc
         assert found_doc["metadata"]["document_id"] == doc.id
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="/chat/send-message-simple-with-history tests are enterprise only",
+)
 def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
@@ -154,6 +161,10 @@ def test_using_reference_docs_with_simple_with_history_api_flow(reset: None) -> 
     assert response_json["top_documents"][0]["document_id"] == cc_pair_1.documents[2].id
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="/chat/send-message-simple-with-history tests are enterprise only",
+)
 def test_send_message_simple_with_history_strict_json(
     new_admin_user: DATestUser | None,
 ) -> None:

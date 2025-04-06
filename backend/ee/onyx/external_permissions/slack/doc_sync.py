@@ -5,12 +5,14 @@ from slack_sdk import WebClient
 from ee.onyx.external_permissions.slack.utils import fetch_user_id_to_email_map
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import make_paginated_slack_api_call_w_retries
 from onyx.connectors.slack.connector import SlackConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 
 logger = setup_logger()
@@ -101,7 +103,12 @@ def _get_slack_document_access(
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     slack_connector = SlackConnector(**cc_pair.connector.connector_specific_config)
-    slack_connector.load_credentials(cc_pair.credential.credential_json)
+
+    # Use credentials provider instead of directly loading credentials
+    provider = OnyxDBCredentialsProvider(
+        get_current_tenant_id(), "slack", cc_pair.credential.id
+    )
+    slack_connector.set_credentials_provider(provider)
 
     slim_doc_generator = slack_connector.retrieve_all_slim_documents(callback=callback)
 

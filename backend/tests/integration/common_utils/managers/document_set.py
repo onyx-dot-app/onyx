@@ -139,11 +139,23 @@ class DocumentSetManager:
                 break
 
             if time.time() - start > MAX_DELAY:
+                not_synced_doc_sets = [
+                    doc_set for doc_set in doc_sets if not doc_set.is_up_to_date
+                ]
                 raise TimeoutError(
-                    f"Document sets were not synced within the {MAX_DELAY} seconds"
+                    f"Document sets were not synced within the {MAX_DELAY} seconds. "
+                    f"Remaining unsynced document sets: {len(not_synced_doc_sets)}. "
+                    f"IDs: {[doc_set.id for doc_set in not_synced_doc_sets]}"
                 )
             else:
-                print("Document sets were not synced yet, waiting...")
+                not_synced_doc_sets = [
+                    doc_set for doc_set in doc_sets if not doc_set.is_up_to_date
+                ]
+                print(
+                    f"Document sets were not synced yet, waiting... "
+                    f"{len(not_synced_doc_sets)}/{len(doc_sets)} document sets still syncing. "
+                    f"IDs: {[doc_set.id for doc_set in not_synced_doc_sets]}"
+                )
 
             time.sleep(2)
 

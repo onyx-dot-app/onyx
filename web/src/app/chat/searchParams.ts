@@ -5,6 +5,8 @@ export const SEARCH_PARAM_NAMES = {
   CHAT_ID: "chatId",
   SEARCH_ID: "searchId",
   PERSONA_ID: "assistantId",
+  USER_FOLDER_ID: "userFolderId",
+  ALL_MY_DOCUMENTS: "allMyDocuments",
   // overrides
   TEMPERATURE: "temperature",
   MODEL_VERSION: "model-version",
@@ -21,8 +23,10 @@ export const SEARCH_PARAM_NAMES = {
   SEND_ON_LOAD: "send-on-load",
 };
 
-export function shouldSubmitOnLoad(searchParams: ReadonlyURLSearchParams) {
-  const rawSubmitOnLoad = searchParams.get(SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD);
+export function shouldSubmitOnLoad(
+  searchParams: ReadonlyURLSearchParams | null
+) {
+  const rawSubmitOnLoad = searchParams?.get(SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD);
   if (rawSubmitOnLoad === "true" || rawSubmitOnLoad === "1") {
     return true;
   }

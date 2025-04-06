@@ -4,7 +4,7 @@ from uuid import uuid4
 import requests
 
 from onyx.context.search.enums import RecencyBiasSetting
-from onyx.server.features.persona.models import PersonaSnapshot
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -181,7 +181,7 @@ class PersonaManager:
     @staticmethod
     def get_all(
         user_performing_action: DATestUser | None = None,
-    ) -> list[PersonaSnapshot]:
+    ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/admin/persona",
             headers=user_performing_action.headers
@@ -189,13 +189,13 @@ class PersonaManager:
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        return [PersonaSnapshot(**persona) for persona in response.json()]
+        return [FullPersonaSnapshot(**persona) for persona in response.json()]
 
     @staticmethod
     def get_one(
         persona_id: int,
         user_performing_action: DATestUser | None = None,
-    ) -> list[PersonaSnapshot]:
+    ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/{persona_id}",
             headers=user_performing_action.headers
@@ -203,7 +203,7 @@ class PersonaManager:
             else GENERAL_HEADERS,
         )
         response.raise_for_status()
-        return [PersonaSnapshot(**response.json())]
+        return [FullPersonaSnapshot(**response.json())]
 
     @staticmethod
     def verify(
