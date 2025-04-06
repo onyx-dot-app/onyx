@@ -51,7 +51,7 @@ import { CircleX, PinIcon } from "lucide-react";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import { TruncatedText } from "@/components/ui/truncatedText";
 import { UserRole } from "@/lib/types";
-import { useDemoMode } from "@/hooks/useDemoMode";
+import { useDemoModeContext } from "@/components/demo/DemoModeContext";
 
 interface HistorySidebarProps {
   liveAssistant?: Persona | null;
@@ -189,12 +189,12 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
   ) => {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const { isDemoMode } = useDemoMode();
     const { user, toggleAssistantPinnedStatus } = useUser();
     const { refreshAssistants, pinnedAssistants, setPinnedAssistants } =
       useAssistants();
+    const { isDemoMode } = useDemoModeContext();
 
-    const showExplore = !user || (user.role === UserRole.ADMIN && !isDemoMode);
+    const showExplore = (!user || user.role === UserRole.ADMIN) && !isDemoMode;
 
     const currentChatId = currentChatSession?.id;
 

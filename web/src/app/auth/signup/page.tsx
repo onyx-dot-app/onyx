@@ -8,14 +8,12 @@ import {
 } from "@/lib/userSS";
 import { redirect } from "next/navigation";
 import { EmailPasswordForm } from "../login/EmailPasswordForm";
-import Text from "@/components/ui/text";
-import Link from "next/link";
 import { SignInButton } from "../login/SignInButton";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import ReferralSourceSelector from "./ReferralSourceSelector";
 import AuthErrorDisplay from "@/components/auth/AuthErrorDisplay";
 
-const OldPage = async (props: {
+const Page = async (props: {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) => {
   const searchParams = await props.searchParams;
@@ -26,6 +24,21 @@ const OldPage = async (props: {
   const defaultEmail = Array.isArray(searchParams?.email)
     ? searchParams?.email[0]
     : searchParams?.email || null;
+
+  // Check if there are any existing users
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/users`, {
+      credentials: "include",
+    });
+    if (response.ok) {
+      const users = await response.json();
+      if (users.length > 0) {
+        return redirect("/auth/login");
+      }
+    }
+  } catch (e) {
+    console.log(`Error checking users: ${e}`);
+  }
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -74,7 +87,7 @@ const OldPage = async (props: {
         <div className="absolute top-10x w-full"></div>
         <div className="flex w-full flex-col justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
-            {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
+            {cloud ? "Complete your sign up" : "Sign Up"}
           </h2>
           {cloud && (
             <>
@@ -105,10 +118,6 @@ const OldPage = async (props: {
       </>
     </AuthFlowContainer>
   );
-};
-
-const Page = async () => {
-  return redirect("/auth/login");
 };
 
 export default Page;

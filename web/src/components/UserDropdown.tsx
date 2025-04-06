@@ -19,7 +19,7 @@ import { Notifications } from "./chat/Notifications";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { DemoModeToggle } from "./demo/DemoModeToggle";
-import { useDemoMode } from "../hooks/useDemoMode";
+import { useDemoModeContext } from "./demo/DemoModeContext";
 
 interface DropdownOptionProps {
   href?: string;
@@ -68,7 +68,7 @@ export function UserDropdown({
   hideUserDropdown?: boolean;
 }) {
   const { user, isCurator } = useUser();
-  const { isDemoMode, toggleDemoMode } = useDemoMode();
+  const { isDemoMode } = useDemoModeContext();
   const [userInfoVisible, setUserInfoVisible] = useState(false);
   const userInfoRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -243,7 +243,7 @@ export function UserDropdown({
                 ))}
 
                 {showDemoMode ?
-                  <DemoModeToggle isDemoMode={isDemoMode} toggleDemoMode={toggleDemoMode} />
+                  <DemoModeToggle />
                   : <></>
                 }
 

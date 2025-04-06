@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
 
 const DEMO_MODE_KEY = 'dialin_demo_mode';
 
@@ -11,7 +11,11 @@ interface DemoModeState {
   toggleDemoMode: () => void;
 }
 
-export function useDemoMode(): DemoModeState {
+// Create a context for demo mode
+const DemoModeContext = createContext<DemoModeState | null>(null);
+
+// Provider component for demo mode
+export function DemoModeProvider({ children }: { children: ReactNode }) {
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
 
   // Initialize demo mode from localStorage on mount
@@ -39,12 +43,27 @@ export function useDemoMode(): DemoModeState {
     setIsDemoMode((prev) => !prev);
   };
 
-  return {
+  const value = {
     isDemoMode,
     enableDemoMode,
     disableDemoMode,
     toggleDemoMode,
   };
+
+  return (
+    <DemoModeContext.Provider value={value}>
+      {children}
+    </DemoModeContext.Provider>
+  );
+}
+
+// Hook to use demo mode
+export function useDemoMode(): DemoModeState {
+  const context = useContext(DemoModeContext);
+  if (!context) {
+    throw new Error('useDemoMode must be used within a DemoModeProvider');
+  }
+  return context;
 }
 
 // Helper function to check if demo mode is active (can be used outside of React components)

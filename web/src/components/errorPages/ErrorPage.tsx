@@ -10,7 +10,7 @@ export default function Error() {
       </h1>
       <div className="space-y-4 text-gray-600 dark:text-gray-300">
         <p>
-          It seems there was a problem loading your Onyx settings. This could be
+          It seems there was a problem loading your settings. This could be
           due to a configuration issue or incomplete setup.
         </p>
         <p>
@@ -26,7 +26,7 @@ export default function Error() {
           for proper configuration steps. If you&apos;re a user, please contact
           your admin for assistance.
         </p>
-        <p>
+        {/* <p>
           Need help? Join our{" "}
           <a
             className="text-blue-500 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
@@ -37,7 +37,7 @@ export default function Error() {
             Slack community
           </a>{" "}
           for support.
-        </p>
+        </p> */}
       </div>
     </ErrorPageLayout>
   );

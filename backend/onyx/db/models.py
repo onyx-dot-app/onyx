@@ -172,6 +172,10 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         postgresql.JSONB(), nullable=False, default=[]
     )
 
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        TIMESTAMPAware(timezone=True), nullable=False, default=datetime.datetime.now
+    )
+
     pinned_assistants: Mapped[list[int] | None] = mapped_column(
         postgresql.JSONB(), nullable=True, default=None
     )

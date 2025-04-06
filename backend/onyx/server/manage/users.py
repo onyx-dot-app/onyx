@@ -20,6 +20,7 @@ from sqlalchemy import desc
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ee.onyx.configs.app_configs import SUPER_USERS
 from onyx.auth.email_utils import send_user_email_invite
@@ -45,9 +46,8 @@ from onyx.configs.constants import AuthType
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_total_users_count
-from onyx.db.engine import get_session
-from onyx.db.models import AccessToken
-from onyx.db.models import User
+from onyx.db.engine import get_session, get_async_session
+from onyx.db.models import AccessToken, User
 from onyx.db.users import delete_user_from_db
 from onyx.db.users import get_all_users
 from onyx.db.users import get_page_of_filtered_users
@@ -864,3 +864,68 @@ def update_user_assistant_visibility(
         )
     )
     db_session.commit()
+
+
+class CreateUserRequest(BaseModel):
+    email: str
+    password: str
+    role: UserRole
+
+
+@router.post("/manage/admin/create-user")
+async def create_user(
+    user_request: CreateUserRequest,
+    current_user: User | None = Depends(current_admin_user),
+    db_session: AsyncSession = Depends(get_async_session),
+) -> dict:
+    """Create a new user with the specified role."""
+    try:
+        # Check if user already exists
+        existing_user = await db_session.execute(
+            select(User).where(User.email == user_request.email)
+        )
+        existing_user = existing_user.scalar_one_or_none()
+        
+        if existing_user:
+            raise HTTPException(
+                status_code=400, detail=f"User with email {user_request.email} already exists"
+            )
+        
+        # Create the user
+        user = await create_user_async(
+            db=db_session,
+            email=user_request.email,
+            role=user_request.role,
+            is_active=True,
+        )
+        
+        # Set the password
+        user.set_password(user_request.password)
+        await db_session.commit()
+        
+        return {
+            "email": user.email,
+            "role": user.role,
+            "message": "User created successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create user: {str(e)}"
+        )
+
+async def create_user_async(
+    db: AsyncSession,
+    email: str,
+    role: UserRole,
+    is_active: bool = True,
+) -> User:
+    """Create a new user."""
+    user = User(
+        email=email,
+        role=role,
+        is_active=is_active,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user

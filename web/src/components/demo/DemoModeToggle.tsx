@@ -1,10 +1,16 @@
-import { useDemoMode } from "@/hooks/useDemoMode";
 import { FiToggleLeft, FiToggleRight } from "react-icons/fi";
+import { useDemoModeContext } from "./DemoModeContext";
 
-export function DemoModeToggle({ isDemoMode, toggleDemoMode }: { isDemoMode: boolean, toggleDemoMode: () => void }) {
+export function DemoModeToggle() {
+  const { isDemoMode, toggleDemoMode } = useDemoModeContext();
+  
+  const handleToggle = () => {
+    toggleDemoMode();
+  };
+  
   return (
     <div
-      onClick={toggleDemoMode}
+      onClick={handleToggle}
       className="flex items-center gap-2 py-1.5 px-2 text-sm cursor-pointer rounded hover:bg-background-300"
     >
       {isDemoMode ? (

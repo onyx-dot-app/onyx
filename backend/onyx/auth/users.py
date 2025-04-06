@@ -307,13 +307,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             if hasattr(user_create, "role"):
                 user_count = await get_user_count()
-                if (
-                    user_count == 0
-                    or user_create.email in get_default_admin_user_emails()
-                ):
-                    user_create.role = UserRole.ADMIN
-                else:
-                    user_create.role = UserRole.BASIC
+                # Only override the role if it's not explicitly set in the request
+                if user_create.role is None:
+                    if (
+                        user_count == 0
+                        or user_create.email in get_default_admin_user_emails()
+                    ):
+                        user_create.role = UserRole.ADMIN
+                    else:
+                        user_create.role = UserRole.BASIC
             try:
                 user = await super().create(user_create, safe=safe, request=request)  # type: ignore
             except exceptions.UserAlreadyExists:
@@ -1025,6 +1027,14 @@ async def double_check_user(
             raise BasicAuthenticationError(
                 detail="Access denied. User is not verified.",
             )
+
+        # Check if demo account has expired (7 days from creation)
+        if user.role == UserRole.DEMO:
+            demo_expiry = user.created_at + timedelta(days=7)
+            if datetime.now(timezone.utc) > demo_expiry:
+                raise BasicAuthenticationError(
+                    detail="Access denied. Demo account has expired.",
+                )
 
         if (
             user.oidc_expiry

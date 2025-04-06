@@ -23,6 +23,8 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
 import { useUser } from "@/components/user/UserProvider";
+import CreateUserButton from "@/components/admin/users/buttons/CreateUserButton";
+
 const UsersTables = ({
   q,
   setPopup,
@@ -143,6 +145,7 @@ const SearchableTables = () => {
       {popup}
       <div className="flex flex-col gap-y-4">
         <div className="flex gap-x-4">
+          <CreateUserButton setPopup={setPopup} />
           <AddUserButton setPopup={setPopup} />
           <div className="flex-grow">
             <SearchBar
