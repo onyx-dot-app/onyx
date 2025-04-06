@@ -21,6 +21,7 @@ BEAT_EXPIRES_DEFAULT = 15 * 60  # 15 minutes (in seconds)
 # we have a better implementation (backpressure, etc)
 # Note that DynamicTenantScheduler can adjust the runtime value for this via Redis
 CLOUD_BEAT_MULTIPLIER_DEFAULT = 8.0
+CLOUD_DOC_PERMISSION_SYNC_MULTIPLIER_DEFAULT = 1.0
 
 # tasks that run in either self-hosted on cloud
 beat_task_templates: list[dict] = []
@@ -58,6 +59,15 @@ beat_task_templates.extend(
             "name": "check-for-vespa-sync",
             "task": OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             "schedule": timedelta(seconds=20),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
+            "name": "check-for-user-file-folder-sync",
+            "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
+            "schedule": timedelta(seconds=30),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,

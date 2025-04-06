@@ -36,6 +36,7 @@ from onyx.document_index.interfaces import MinimalDocumentIndexingInfo
 from onyx.document_index.interfaces import UpdateRequest
 from onyx.document_index.interfaces import VespaChunkRequest
 from onyx.document_index.interfaces import VespaDocumentFields
+from onyx.document_index.interfaces import VespaDocumentUserFields
 from onyx.document_index.vespa.chunk_retrieval import batch_search_api_retrieval
 from onyx.document_index.vespa.chunk_retrieval import (
     parallel_visit_api_retrieval,
@@ -70,6 +71,8 @@ from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
 from onyx.document_index.vespa_constants import TENANT_ID_PAT
 from onyx.document_index.vespa_constants import TENANT_ID_REPLACEMENT
+from onyx.document_index.vespa_constants import USER_FILE
+from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
@@ -187,7 +190,7 @@ class VespaIndex(DocumentIndex):
     ) -> None:
         if MULTI_TENANT:
             logger.info(
-                "Skipping Vespa index seup for multitenant (would wipe all indices)"
+                "Skipping Vespa index setup for multitenant (would wipe all indices)"
             )
             return None
 
@@ -592,7 +595,8 @@ class VespaIndex(DocumentIndex):
         self,
         doc_chunk_id: UUID,
         index_name: str,
-        fields: VespaDocumentFields,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
         doc_id: str,
         http_client: httpx.Client,
     ) -> None:
@@ -603,21 +607,31 @@ class VespaIndex(DocumentIndex):
 
         update_dict: dict[str, dict] = {"fields": {}}
 
-        if fields.boost is not None:
-            update_dict["fields"][BOOST] = {"assign": fields.boost}
+        if fields is not None:
+            if fields.boost is not None:
+                update_dict["fields"][BOOST] = {"assign": fields.boost}
 
-        if fields.document_sets is not None:
-            update_dict["fields"][DOCUMENT_SETS] = {
-                "assign": {document_set: 1 for document_set in fields.document_sets}
-            }
+            if fields.document_sets is not None:
+                update_dict["fields"][DOCUMENT_SETS] = {
+                    "assign": {document_set: 1 for document_set in fields.document_sets}
+                }
 
-        if fields.access is not None:
-            update_dict["fields"][ACCESS_CONTROL_LIST] = {
-                "assign": {acl_entry: 1 for acl_entry in fields.access.to_acl()}
-            }
+            if fields.access is not None:
+                update_dict["fields"][ACCESS_CONTROL_LIST] = {
+                    "assign": {acl_entry: 1 for acl_entry in fields.access.to_acl()}
+                }
 
-        if fields.hidden is not None:
-            update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
+            if fields.hidden is not None:
+                update_dict["fields"][HIDDEN] = {"assign": fields.hidden}
+
+        if user_fields is not None:
+            if user_fields.user_file_id is not None:
+                update_dict["fields"][USER_FILE] = {"assign": user_fields.user_file_id}
+
+            if user_fields.user_folder_id is not None:
+                update_dict["fields"][USER_FOLDER] = {
+                    "assign": user_fields.user_folder_id
+                }
 
         if not update_dict["fields"]:
             logger.error("Update request received but nothing to update.")
@@ -649,7 +663,8 @@ class VespaIndex(DocumentIndex):
         *,
         chunk_count: int | None,
         tenant_id: str,
-        fields: VespaDocumentFields,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
     ) -> int:
         """Note: if the document id does not exist, the update will be a no-op and the
         function will complete with no errors or exceptions.
@@ -682,7 +697,12 @@ class VespaIndex(DocumentIndex):
 
                 for doc_chunk_id in doc_chunk_ids:
                     self._update_single_chunk(
-                        doc_chunk_id, index_name, fields, doc_id, httpx_client
+                        doc_chunk_id,
+                        index_name,
+                        fields,
+                        user_fields,
+                        doc_id,
+                        httpx_client,
                     )
 
         return doc_chunk_count
@@ -723,6 +743,7 @@ class VespaIndex(DocumentIndex):
                     tenant_id=tenant_id,
                     large_chunks_enabled=large_chunks_enabled,
                 )
+
                 for doc_chunk_ids_batch in batch_generator(
                     chunks_to_delete, BATCH_SIZE
                 ):

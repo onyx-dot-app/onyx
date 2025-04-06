@@ -444,6 +444,7 @@ class CCPairManager:
         )
         if group_sync_result.status_code != 409:
             group_sync_result.raise_for_status()
+        time.sleep(2)
 
     @staticmethod
     def get_doc_sync_task(

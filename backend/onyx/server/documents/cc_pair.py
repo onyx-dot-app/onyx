@@ -21,7 +21,7 @@ from onyx.background.celery.tasks.external_group_syncing.tasks import (
 from onyx.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
-from onyx.background.celery.versioned_apps.primary import app as primary_app
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
@@ -219,7 +219,7 @@ def update_cc_pair_status(
                     continue
 
                 # Revoke the task to prevent it from running
-                primary_app.control.revoke(index_payload.celery_task_id)
+                client_app.control.revoke(index_payload.celery_task_id)
 
                 # If it is running, then signaling for termination will get the
                 # watchdog thread to kill the spawned task
@@ -238,7 +238,7 @@ def update_cc_pair_status(
     db_session.commit()
 
     # this speeds up the start of indexing by firing the check immediately
-    primary_app.send_task(
+    client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         kwargs=dict(tenant_id=tenant_id),
         priority=OnyxCeleryPriority.HIGH,
@@ -376,7 +376,7 @@ def prune_cc_pair(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_prune_generator_task(
-        primary_app, cc_pair, db_session, r, tenant_id
+        client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -450,7 +450,7 @@ def sync_cc_pair(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_permissions_sync_task(
-        primary_app, cc_pair_id, r, tenant_id
+        client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -524,7 +524,7 @@ def sync_cc_pair_groups(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_external_group_sync_task(
-        primary_app, cc_pair_id, r, tenant_id
+        client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -634,7 +634,7 @@ def associate_credential_to_connector(
         )
 
         # trigger indexing immediately
-        primary_app.send_task(
+        client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},

@@ -193,9 +193,10 @@ export function PagesTab({
         } catch (error) {
           console.error("Failed to create folder:", error);
           setPopup({
-            message: `Failed to create folder: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to create folder",
             type: "error",
           });
         }

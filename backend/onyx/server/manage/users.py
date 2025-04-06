@@ -313,7 +313,7 @@ def bulk_invite_users(
             detail=f"Invalid email address: {email} - {str(e)}",
         )
 
-    if MULTI_TENANT and not DEV_MODE:
+    if MULTI_TENANT:
         try:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.provisioning", "add_users_to_tenant", None
@@ -335,7 +335,7 @@ def bulk_invite_users(
         except Exception as e:
             logger.error(f"Error sending email invite to invited users: {e}")
 
-    if not MULTI_TENANT:
+    if not MULTI_TENANT or DEV_MODE:
         return number_of_invited_users
 
     # for billing purposes, write to the control plane about the number of new users
@@ -376,7 +376,7 @@ def remove_invited_user(
     number_of_invited_users = write_invited_users(remaining_users)
 
     try:
-        if MULTI_TENANT:
+        if MULTI_TENANT and not DEV_MODE:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.billing", "register_tenant_users", None
             )(tenant_id, get_total_users_count(db_session))

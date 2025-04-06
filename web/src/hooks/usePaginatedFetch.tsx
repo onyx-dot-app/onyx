@@ -148,7 +148,7 @@ function usePaginatedFetch<T extends PaginatedType>({
   // Updates the URL with the current page number
   const updatePageUrl = useCallback(
     (page: number) => {
-      if (currentPath) {
+      if (currentPath && searchParams) {
         const params = new URLSearchParams(searchParams);
         params.set("page", page.toString());
         router.replace(`${currentPath}?${params.toString()}`, {

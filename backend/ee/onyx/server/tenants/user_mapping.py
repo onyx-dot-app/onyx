@@ -70,6 +70,7 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
     """
     Add users to a tenant with proper transaction handling.
     Checks if users already have a tenant mapping to avoid duplicates.
+    If a user already has an active mapping to any tenant, the new mapping will be added as inactive.
     """
     with get_session_with_tenant(tenant_id=POSTGRES_DEFAULT_SCHEMA) as db_session:
         try:
@@ -88,9 +89,25 @@ def add_users_to_tenant(emails: list[str], tenant_id: str) -> None:
                     .first()
                 )
 
+                # If user already has an active mapping, add this one as inactive
                 if not existing_mapping:
-                    # Only add if mapping doesn't exist
-                    db_session.add(UserTenantMapping(email=email, tenant_id=tenant_id))
+                    # Check if the user already has an active mapping to any tenant
+                    has_active_mapping = (
+                        db_session.query(UserTenantMapping)
+                        .filter(
+                            UserTenantMapping.email == email,
+                            UserTenantMapping.active == True,  # noqa: E712
+                        )
+                        .first()
+                    )
+
+                    db_session.add(
+                        UserTenantMapping(
+                            email=email,
+                            tenant_id=tenant_id,
+                            active=False if has_active_mapping else True,
+                        )
+                    )
 
             # Commit the transaction
             db_session.commit()

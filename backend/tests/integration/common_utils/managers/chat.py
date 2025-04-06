@@ -5,6 +5,7 @@ import requests
 from requests.models import Response
 
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -97,17 +98,24 @@ class ChatSessionManager:
         for data in response_data:
             if "rephrased_query" in data:
                 analyzed.rephrased_query = data["rephrased_query"]
-            elif "tool_name" in data:
+            if "tool_name" in data:
                 analyzed.tool_name = data["tool_name"]
                 analyzed.tool_result = (
                     data.get("tool_result")
                     if analyzed.tool_name == "run_search"
                     else None
                 )
-            elif "relevance_summaries" in data:
+            if "relevance_summaries" in data:
                 analyzed.relevance_summaries = data["relevance_summaries"]
-            elif "answer_piece" in data and data["answer_piece"]:
+            if "answer_piece" in data and data["answer_piece"]:
                 analyzed.full_message += data["answer_piece"]
+            if "top_documents" in data:
+                assert (
+                    analyzed.top_documents is None
+                ), "top_documents should only be set once"
+                analyzed.top_documents = [
+                    SavedSearchDoc(**doc) for doc in data["top_documents"]
+                ]
 
         return analyzed
 

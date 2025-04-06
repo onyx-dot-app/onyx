@@ -26,8 +26,8 @@ export default function OAuthCallbackPage() {
   );
 
   // Extract query parameters
-  const code = searchParams.get("code");
-  const state = searchParams.get("state");
+  const code = searchParams?.get("code");
+  const state = searchParams?.get("state");
 
   const pathname = usePathname();
   const connector = pathname?.split("/")[3];

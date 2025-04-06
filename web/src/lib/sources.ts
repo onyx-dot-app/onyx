@@ -377,7 +377,10 @@ export function listSourceMetadata(): SourceMetadata[] {
   display in the Add Connector page */
   const entries = Object.entries(SOURCE_METADATA_MAP)
     .filter(
-      ([source, _]) => source !== "not_applicable" && source != "ingestion_api"
+      ([source, _]) =>
+        source !== "not_applicable" &&
+        source !== "ingestion_api" &&
+        source !== "mock_connector"
     )
     .map(([source, metadata]) => {
       return fillSourceMetadata(metadata, source as ValidSources);

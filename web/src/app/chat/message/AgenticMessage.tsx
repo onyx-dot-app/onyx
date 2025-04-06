@@ -214,7 +214,6 @@ export const AgenticMessage = ({
   const [isViewingInitialAnswer, setIsViewingInitialAnswer] = useState(true);
 
   const [canShowResponse, setCanShowResponse] = useState(isComplete);
-  const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
 
@@ -643,7 +642,6 @@ export const AgenticMessage = ({
                                 onDropdownVisibleChange={
                                   setIsRegenerateDropdownVisible
                                 }
-                                onHoverChange={setIsRegenerateHovered}
                                 selectedAssistant={currentPersona!}
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
@@ -659,16 +657,10 @@ export const AgenticMessage = ({
                           absolute -bottom-5
                           z-10
                           invisible ${
-                            (isHovering ||
-                              isRegenerateHovered ||
-                              settings?.isMobile) &&
-                            "!visible"
+                            (isHovering || settings?.isMobile) && "!visible"
                           }
                           opacity-0 ${
-                            (isHovering ||
-                              isRegenerateHovered ||
-                              settings?.isMobile) &&
-                            "!opacity-100"
+                            (isHovering || settings?.isMobile) && "!opacity-100"
                           }
                           translate-y-2 ${
                             (isHovering || settings?.isMobile) &&
@@ -743,7 +735,6 @@ export const AgenticMessage = ({
                                 }
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
-                                onHoverChange={setIsRegenerateHovered}
                               />
                             </CustomTooltip>
                           )}

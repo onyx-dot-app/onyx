@@ -63,7 +63,10 @@ def generate_dummy_chunk(
         title_prefix=f"Title prefix for doc {doc_id}",
         metadata_suffix_semantic="",
         metadata_suffix_keyword="",
+        doc_summary="",
+        chunk_context="",
         mini_chunk_texts=None,
+        contextual_rag_reserved_tokens=0,
         embeddings=ChunkEmbedding(
             full_embedding=generate_random_embedding(embedding_dim),
             mini_chunk_embeddings=[],
@@ -78,19 +81,21 @@ def generate_dummy_chunk(
     for i in range(number_of_document_sets):
         document_set_names.append(f"Document Set {i}")
 
-    user_emails: set[str | None] = set()
-    user_groups: set[str] = set()
-    external_user_emails: set[str] = set()
-    external_user_group_ids: set[str] = set()
+    user_emails: list[str | None] = []
+    user_groups: list[str] = []
+    external_user_emails: list[str] = []
+    external_user_group_ids: list[str] = []
     for i in range(number_of_acl_entries):
-        user_emails.add(f"user_{i}@example.com")
-        user_groups.add(f"group_{i}")
-        external_user_emails.add(f"external_user_{i}@example.com")
-        external_user_group_ids.add(f"external_group_{i}")
+        user_emails.append(f"user_{i}@example.com")
+        user_groups.append(f"group_{i}")
+        external_user_emails.append(f"external_user_{i}@example.com")
+        external_user_group_ids.append(f"external_group_{i}")
 
     return DocMetadataAwareIndexChunk.from_index_chunk(
         index_chunk=chunk,
-        access=DocumentAccess(
+        user_file=None,
+        user_folder=None,
+        access=DocumentAccess.build(
             user_emails=user_emails,
             user_groups=user_groups,
             external_user_emails=external_user_emails,

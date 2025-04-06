@@ -23,6 +23,7 @@ from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 from shared_configs.configs import MULTI_TENANT
 
+
 HTML_EMAIL_TEMPLATE = """\
 <!DOCTYPE html>
 <html lang="en">

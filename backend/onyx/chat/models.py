@@ -127,6 +127,10 @@ class StreamStopInfo(SubQuestionIdentifier):
         return data
 
 
+class UserKnowledgeFilePacket(BaseModel):
+    user_files: list[FileDescriptor]
+
+
 class LLMRelevanceFilterResponse(BaseModel):
     llm_selected_doc_indices: list[int]
 
@@ -194,17 +198,6 @@ class StreamingError(BaseModel):
     stack_trace: str | None = None
 
 
-class OnyxContext(BaseModel):
-    content: str
-    document_id: str
-    semantic_identifier: str
-    blurb: str
-
-
-class OnyxContexts(BaseModel):
-    contexts: list[OnyxContext]
-
-
 class OnyxAnswer(BaseModel):
     answer: str | None
 
@@ -270,7 +263,6 @@ class PersonaOverrideConfig(BaseModel):
 AnswerQuestionPossibleReturn = (
     OnyxAnswerPiece
     | CitationInfo
-    | OnyxContexts
     | FileChatDisplay
     | CustomToolResponse
     | StreamingError

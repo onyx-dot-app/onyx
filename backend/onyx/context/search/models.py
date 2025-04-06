@@ -60,7 +60,7 @@ class SearchSettingsCreationRequest(InferenceSettings, IndexingSetting):
         inference_settings = InferenceSettings.from_db_model(search_settings)
         indexing_setting = IndexingSetting.from_db_model(search_settings)
 
-        return cls(**inference_settings.dict(), **indexing_setting.dict())
+        return cls(**inference_settings.model_dump(), **indexing_setting.model_dump())
 
 
 class SavedSearchSettings(InferenceSettings, IndexingSetting):
@@ -80,6 +80,9 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             reduced_dimension=search_settings.reduced_dimension,
             # Whether switching to this model requires re-indexing
             background_reindex_enabled=search_settings.background_reindex_enabled,
+            enable_contextual_rag=search_settings.enable_contextual_rag,
+            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
+            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
             # Reranking Details
             rerank_model_name=search_settings.rerank_model_name,
             rerank_provider_type=search_settings.rerank_provider_type,
@@ -102,6 +105,8 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
 
 class IndexFilters(BaseFilters):
@@ -218,6 +223,8 @@ class InferenceChunk(BaseChunk):
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
+    doc_summary: str
+    chunk_context: str
 
     # when the doc was last updated
     updated_at: datetime | None

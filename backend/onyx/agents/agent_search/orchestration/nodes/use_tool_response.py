@@ -13,9 +13,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
 from onyx.tools.tool_implementations.search.search_tool import SearchResponseSummary
-from onyx.tools.tool_implementations.search.search_utils import (
-    context_from_inference_section,
-)
+from onyx.tools.tool_implementations.search.search_utils import section_to_llm_doc
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
@@ -59,9 +57,7 @@ def basic_use_tool_response(
             search_response_summary = cast(SearchResponseSummary, yield_item.response)
             for section in search_response_summary.top_sections:
                 if section.center_chunk.document_id not in initial_search_results:
-                    initial_search_results.append(
-                        context_from_inference_section(section)
-                    )
+                    initial_search_results.append(section_to_llm_doc(section))
 
     new_tool_call_chunk = AIMessageChunk(content="")
     if not agent_config.behavior.skip_gen_ai_answer_generation:

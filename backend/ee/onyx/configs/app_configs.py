@@ -25,6 +25,10 @@ SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_co
 #####
 # Auto Permission Sync
 #####
+DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
+
 # In seconds, default is 5 minutes
 CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
     os.environ.get("CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
@@ -39,6 +43,7 @@ CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
 CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
+
 NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
 
 
@@ -72,6 +77,13 @@ OAUTH_GOOGLE_DRIVE_CLIENT_SECRET = os.environ.get(
     "OAUTH_GOOGLE_DRIVE_CLIENT_SECRET", ""
 )
 
+GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("SLACK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+)
 
 # The posthog client does not accept empty API keys or hosts however it fails silently
 # when the capture is called. These defaults prevent Posthog issues from breaking the Onyx app

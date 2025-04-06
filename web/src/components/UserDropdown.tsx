@@ -104,7 +104,7 @@ export function UserDropdown({
 
       // Construct the current URL
       const currentUrl = `${pathname}${
-        searchParams.toString() ? `?${searchParams.toString()}` : ""
+        searchParams?.toString() ? `?${searchParams.toString()}` : ""
       }`;
 
       // Encode the current URL to use as a redirect parameter
