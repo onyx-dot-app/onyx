@@ -91,7 +91,9 @@ class RegulationConnector(LoadConnector):
 
         while to_visit:
             current_url = to_visit.pop()
-            if current_url in visited_links:
+            # Remove any URL fragments before checking if visited
+            current_url_no_fragment = current_url.split('#')[0]
+            if current_url_no_fragment in visited_links:
                 continue
             visited_links.add(current_url)
 

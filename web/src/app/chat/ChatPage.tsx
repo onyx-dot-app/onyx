@@ -1309,7 +1309,6 @@ export function ChatPage({
     let isStreamingQuestions = true;
     let includeAgentic = false;
     let secondLevelMessageId: number | null = null;
-    let isAgentic: boolean = false;
 
     let initialFetchDetails: null | {
       user_message_id: number;
@@ -1473,9 +1472,6 @@ export function ChatPage({
                 second_level_generating = true;
               }
             }
-            if (Object.hasOwn(packet, "is_agentic")) {
-              isAgentic = (packet as any).is_agentic;
-            }
 
             if (Object.hasOwn(packet, "refined_answer_improvement")) {
               isImprovement = (packet as RefinedAnswerImprovement)
@@ -1509,7 +1505,6 @@ export function ChatPage({
               );
             } else if (Object.hasOwn(packet, "sub_question")) {
               updateChatState("toolBuilding", frozenSessionId);
-              isAgentic = true;
               is_generating = true;
               sub_questions = constructSubQuestions(
                 sub_questions,
@@ -1710,7 +1705,7 @@ export function ChatPage({
                 sub_questions: sub_questions,
                 second_level_generating: second_level_generating,
                 agentic_docs: agenticDocs,
-                is_agentic: isAgentic,
+                is_agentic: currentPersona.is_agentic,
               },
               ...(includeAgentic
                 ? [

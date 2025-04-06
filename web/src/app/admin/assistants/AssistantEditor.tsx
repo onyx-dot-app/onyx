@@ -260,6 +260,7 @@ export function AssistantEditor({
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
     is_default_persona: existingPersona?.is_default_persona ?? false,
+    is_agentic: existingPersona?.is_agentic ?? false,
   };
 
   interface AssistantPrompt {
@@ -435,6 +436,7 @@ export function AssistantEditor({
             selectedUsers: Yup.array().of(Yup.object()),
             selectedGroups: Yup.array().of(Yup.number()),
             is_default_persona: Yup.boolean().required(),
+            is_agentic: Yup.boolean().required(),
           })
           .test(
             "system-prompt-or-task-prompt",
@@ -1416,6 +1418,12 @@ export function AssistantEditor({
                     explanationText="Learn about prompting in our docs!"
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
+                  />
+
+                  <BooleanFormField
+                    name="is_agentic"
+                    label="Agentic Mode"
+                    subtext="Enable or disable the agentic mode for this assistant."
                   />
                 </>
               )}

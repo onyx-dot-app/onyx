@@ -197,6 +197,8 @@ workflow X performance', 'what are performance benchmarks for workflow X', ...
  - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
  'I', etc.
 
+ - Do not(!) use your existing knowledge or introduce knowledge in sub-questions which is not available in the initial question.
+
  - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
 like making suggestions or asking the user for more information! This is not useful for the actual \
 question-answering process! You need to take the information from the user as it is given to you! \
