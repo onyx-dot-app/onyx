@@ -163,7 +163,6 @@ export const constructMiniFiedPersona = (
     starter_messages: null,
     builtin_persona: false,
     is_default_persona: false,
-    is_agentic: false,
     users: [],
     groups: [],
   };

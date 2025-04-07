@@ -41,7 +41,6 @@ personas:
     icon_color: "#6FB1FF"
     display_priority: 0
     is_visible: true
-    is_agentic: true
     is_default_persona: true
     starter_messages:
       - name: "Give me an overview of what's here"
@@ -62,7 +61,6 @@ personas:
     num_chunks: 0
     llm_relevance_filter: true
     llm_filter_extraction: true
-    is_agentic: false
     recency_bias: "auto"
     document_sets: []
     icon_shape: 50910
@@ -95,7 +93,6 @@ personas:
     icon_color: "#6FFF8D"
     display_priority: 2
     is_visible: false
-    is_agentic: false
     is_default_persona: true
     starter_messages:
       - name: "Document Search"
@@ -123,7 +120,6 @@ personas:
     image_generation: true
     display_priority: 3
     is_visible: true
-    is_agentic: false
     is_default_persona: true
     starter_messages:
       - name: "Create visuals for a presentation"

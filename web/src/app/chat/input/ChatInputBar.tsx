@@ -35,6 +35,7 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
+import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
 import { FidgetSpinner } from "react-loader-spinner";
@@ -808,6 +809,12 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
+                {retrievalEnabled && settings?.settings.pro_search_enabled && (
+                  <AgenticToggle
+                    proSearchEnabled={proSearchEnabled}
+                    setProSearchEnabled={setProSearchEnabled}
+                  />
+                )}
                 <button
                   id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${

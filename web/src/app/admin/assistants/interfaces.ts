@@ -45,7 +45,6 @@ export interface Persona {
   icon_color?: string;
   uploaded_image_id?: string;
   labels?: PersonaLabel[];
-  is_agentic: boolean;
 }
 
 export interface PersonaLabel {
