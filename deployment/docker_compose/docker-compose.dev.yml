@@ -304,6 +304,9 @@ services:
       # Enterprise Edition only
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=${ENABLE_PAID_ENTERPRISE_EDITION_FEATURES:-false}
       - NEXT_PUBLIC_CUSTOM_REFRESH_URL=${NEXT_PUBLIC_CUSTOM_REFRESH_URL:-}
+    volumes:
+      - next_cache:/root/.next/cache
+      - babel_cache:/root/.cache/babel-loader
 
   inference_model_server:
     image: onyxdotapp/onyx-model-server:${IMAGE_TAG:-latest}
@@ -446,3 +449,6 @@ volumes:
   background_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
+  # Next.js build caches
+  next_cache:
+  babel_cache:

@@ -112,6 +112,9 @@ services:
       - .env
     environment:
       - INTERNAL_URL=http://api_server:8080
+    volumes:
+      - next_cache:/root/.next/cache
+      - babel_cache:/root/.cache/babel-loader
     logging:
       driver: json-file
       options:
@@ -274,3 +277,6 @@ volumes:
   background_logs:
   inference_model_server_logs:
   indexing_model_server_logs:
+  # Next.js build caches
+  next_cache:
+  babel_cache:

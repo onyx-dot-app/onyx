@@ -13,25 +13,36 @@ ENV ONYX_VERSION=${ONYX_VERSION}
 
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
 
-# Step 1. Install dependencies + rebuild the source code only when needed
-FROM base AS builder
+# Step 1. Install dependencies only when needed
+FROM base AS deps
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
+# Copy package files first to leverage Docker cache
+COPY package.json package-lock.json ./
+
+# Install dependencies with specific optimizations and caching
+RUN --mount=type=cache,target=/root/.npm \
+    npm config set registry https://registry.npmjs.org/ && \
+    npm config set fetch-retries 3 && \
+    npm config set fetch-retry-mintimeout 5000 && \
+    npm config set fetch-retry-maxtimeout 10000 && \
+    npm ci --prefer-offline --no-audit
+
+# Step 2. Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
 # Add NODE_OPTIONS argument
 ARG NODE_OPTIONS
 
-# pull in source code / package.json / package-lock.json
-COPY . .
-
-# Install dependencies
-RUN npm ci
-
 # needed to get the `standalone` dir we expect later
 ENV NEXT_PRIVATE_STANDALONE=true
-
-# Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Environment variables must be present at build time
@@ -88,10 +99,25 @@ ENV NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=${NEXT_PUBLIC_INCLUDE_ERROR_POP
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
-# Use NODE_OPTIONS in the build command
-RUN NODE_OPTIONS="--max-old-space-size=13152" npx next build
+# Optimize Next.js build with additional settings
+ENV NEXT_SHARP_PATH=/app/node_modules/sharp
+ENV NEXT_TURBO=1
+ENV NEXT_RUNTIME_NODE_ENV=production
 
-# Step 2. Production image, copy all the files and run next
+# Additional Next.js build optimizations
+ENV NEXT_WEBPACK_USEPOLLING=false
+ENV NEXT_WEBPACK_POLLING_INTERVAL=0
+ENV NEXT_EXPERIMENTAL_TURBO=true
+ENV NEXT_EXPERIMENTAL_TURBO_TRACE=true
+ENV NEXT_EXPERIMENTAL_TURBO_LOADER=true
+
+# Use NODE_OPTIONS in the build command with optimized settings and caching
+RUN --mount=type=cache,target=/root/.next/cache \
+    --mount=type=cache,target=/root/.cache/babel-loader \
+    NODE_OPTIONS="--max-old-space-size=13152 --max-semi-space-size=64" \
+    npx next build
+
+# Step 3. Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app
 
@@ -99,9 +125,6 @@ WORKDIR /app
 # (all dependencies are copied over into the `/app` dir itself). These
 # global modules may be outdated and trigger security scans.
 RUN rm -rf /usr/local/lib/node_modules
-
-# Not needed, set by compose 
-# ENV NODE_ENV production  
 
 # Disable automatic telemetry collection
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -111,11 +134,8 @@ RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 USER nextjs
 
-# Add back in if we add anything to `public`
+# Copy only necessary files from builder
 COPY --from=builder /app/public ./public
-
-# Automatically leverage output traces to reduce image size
-# https://nextjs.org/docs/advanced-features/output-file-tracing
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
