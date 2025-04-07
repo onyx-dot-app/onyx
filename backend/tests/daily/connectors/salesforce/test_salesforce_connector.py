@@ -114,7 +114,7 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     secondary_owners = (
         [owner.model_dump() for owner in target_test_doc.secondary_owners]
         if target_test_doc.secondary_owners
-        else []
+        else None
     )
     assert secondary_owners == test_data["secondary_owners"]
     assert target_test_doc.title == test_data["title"]
