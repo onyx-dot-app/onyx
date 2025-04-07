@@ -27,6 +27,8 @@ import { DragHandle } from "@/components/table/DragHandle";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useChatContext } from "@/components/context/ChatContext";
+import { useUser } from "@/components/user/UserProvider";
+import { UserRole } from "@/lib/types";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -56,10 +58,12 @@ export function ChatSessionDisplay({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
+  const { user } = useUser();
 
   const { refreshChatSessions, refreshFolders } = useChatContext();
 
   const isMobile = settings?.isMobile;
+  const isDemoUser = user?.role === UserRole.DEMO;
   const handlePopoverOpenChange = useCallback(
     (open: boolean) => {
       setPopoverOpen(open);
@@ -347,11 +351,13 @@ export function ChatSessionDisplay({
                                         onSelect={() => setIsRenamingChat(true)}
                                       />
                                     )}
-                                    <DefaultDropdownElement
-                                      name="Delete"
-                                      icon={FiTrash}
-                                      onSelect={handleDeleteClick}
-                                    />
+                                    {!isDemoUser && (
+                                      <DefaultDropdownElement
+                                        name="Delete"
+                                        icon={FiTrash}
+                                        onSelect={handleDeleteClick}
+                                      />
+                                    )}
                                   </>
                                 ) : (
                                   <div className="p-3">
