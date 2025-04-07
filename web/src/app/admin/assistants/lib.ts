@@ -57,6 +57,7 @@ export interface PersonaUpsertParameters {
   uploaded_image: File | null;
   is_default_persona: boolean;
   label_ids: number[] | null;
+  pro_search_enabled: boolean;
 }
 
 export const createPersonaLabel = (name: string) => {
@@ -115,6 +116,7 @@ function buildPersonaUpsertRequest(
     icon_shape,
     remove_image,
     search_start_date,
+    pro_search_enabled,
   } = creationRequest;
   return {
     name,
@@ -143,7 +145,7 @@ function buildPersonaUpsertRequest(
       creationRequest.llm_model_provider_override ?? null,
     llm_model_version_override:
       creationRequest.llm_model_version_override ?? null,
-    pro_search_enabled: false,
+    pro_search_enabled: pro_search_enabled ?? false,
     starter_messages: creationRequest.starter_messages ?? null,
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,
