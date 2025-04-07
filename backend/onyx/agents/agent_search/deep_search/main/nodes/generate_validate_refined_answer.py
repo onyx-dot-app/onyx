@@ -146,10 +146,8 @@ def generate_validate_refined_answer(
     consolidated_context_docs = structured_subquestion_docs.cited_documents
 
     counter = 0
-    for original_doc_number, original_doc in enumerate(
-        original_question_verified_documents
-    ):
-        if original_doc_number not in structured_subquestion_docs.cited_documents:
+    for original_doc in original_question_verified_documents:
+        if original_doc not in structured_subquestion_docs.cited_documents:
             if (
                 counter <= AGENT_MIN_ORIG_QUESTION_DOCS
                 or len(consolidated_context_docs)

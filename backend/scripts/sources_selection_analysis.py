@@ -186,7 +186,9 @@ class CompareAnalysis:
                     )
         return changes
 
-    def check_config_changes(self, previous_doc_rank: int, new_doc_rank: int) -> None:
+    def check_config_changes(
+        self, previous_doc_rank: int | str, new_doc_rank: int
+    ) -> None:
         """Try to identify possible reasons why a change has been detected by
             checking the latest document update date or the boost value.
 
@@ -194,7 +196,7 @@ class CompareAnalysis:
             previous_doc_rank (int): The document rank for the previous analysis
             new_doc_rank (int): The document rank for the new analysis
         """
-        if new_doc_rank == "not_ranked":
+        if isinstance(new_doc_rank, str) and new_doc_rank == "not_ranked":
             color_output(
                 (
                     "NOTE: The document is missing in the 'current' analysis file. "

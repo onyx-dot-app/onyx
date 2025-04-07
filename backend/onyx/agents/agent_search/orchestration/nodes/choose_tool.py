@@ -57,7 +57,7 @@ def choose_tool(
         not agent_config.behavior.use_agentic_search
         and agent_config.tooling.search_tool is not None
         and (
-            not force_use_tool.force_use or force_use_tool.tool_name == SearchTool.name
+            not force_use_tool.force_use or force_use_tool.tool_name == SearchTool._NAME
         )
     ):
         override_kwargs = SearchToolOverrideKwargs()

@@ -117,16 +117,16 @@ def generate_initial_answer(
 
     consolidated_context_docs = structured_subquestion_docs.cited_documents
     counter = 0
-    for original_doc_number, original_doc in enumerate(
-        orig_question_retrieval_documents
-    ):
-        if original_doc_number not in structured_subquestion_docs.cited_documents:
-            if (
-                counter <= AGENT_MIN_ORIG_QUESTION_DOCS
-                or len(consolidated_context_docs) < AGENT_MAX_ANSWER_CONTEXT_DOCS
-            ):
-                consolidated_context_docs.append(original_doc)
-                counter += 1
+    for original_doc in orig_question_retrieval_documents:
+        if original_doc in structured_subquestion_docs.cited_documents:
+            continue
+
+        if (
+            counter <= AGENT_MIN_ORIG_QUESTION_DOCS
+            or len(consolidated_context_docs) < AGENT_MAX_ANSWER_CONTEXT_DOCS
+        ):
+            consolidated_context_docs.append(original_doc)
+            counter += 1
 
     # sort docs by their scores - though the scores refer to different questions
     relevant_docs = dedup_inference_section_list(consolidated_context_docs)

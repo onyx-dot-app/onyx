@@ -243,7 +243,8 @@ class PersonaManager:
                     and set(user.email for user in fetched_persona.users)
                     == set(persona.users)
                     and set(fetched_persona.groups) == set(persona.groups)
-                    and set(fetched_persona.labels) == set(persona.label_ids)
+                    and {label.id for label in fetched_persona.labels}
+                    == set(persona.label_ids)
                 )
         return False
 

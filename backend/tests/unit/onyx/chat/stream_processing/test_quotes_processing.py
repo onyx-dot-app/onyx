@@ -192,7 +192,7 @@ def test_fuzzy_match_quotes_to_docs() -> None:
     results = match_quotes_to_docs(
         test_quotes, [test_chunk_0, test_chunk_1], fuzzy_search=True
     )
-    assert results == {
+    assert results.model_dump() == {
         "a doc with some": {"document": "test doc 0", "link": "doc 0 base"},
         "a doc with some LINK": {
             "document": "test doc 0",
