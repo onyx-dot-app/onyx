@@ -112,9 +112,13 @@ services:
       - .env
     environment:
       - INTERNAL_URL=http://api_server:8080
+      - NODE_ENV=production
+      - NEXT_TELEMETRY_DISABLED=1
     volumes:
       - next_cache:/root/.next/cache
       - babel_cache:/root/.cache/babel-loader
+    command: >
+      /bin/sh -c "node server.js"
     logging:
       driver: json-file
       options:
