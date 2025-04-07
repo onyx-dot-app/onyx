@@ -46,7 +46,6 @@ interface FetchChatDataResult {
   finalDocumentSidebarInitialWidth?: number;
   shouldShowWelcomeModal: boolean;
   inputPrompts: InputPrompt[];
-  proSearchToggled: boolean;
 }
 
 export async function fetchChatData(searchParams: {
@@ -177,10 +176,6 @@ export async function fetchChatData(searchParams: {
   );
   const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
 
-  const proSearchToggled =
-    requestCookies.get(PRO_SEARCH_TOGGLED_COOKIE_NAME)?.value.toLowerCase() ===
-    "true";
-
   // IF user is an anoymous user, we don't want to show the sidebar (they have no access to chat history)
   const sidebarInitiallyVisible =
     !user?.is_anonymous_user &&
@@ -233,6 +228,5 @@ export async function fetchChatData(searchParams: {
     sidebarInitiallyVisible,
     shouldShowWelcomeModal,
     inputPrompts,
-    proSearchToggled,
   };
 }

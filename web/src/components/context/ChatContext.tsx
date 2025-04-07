@@ -34,7 +34,6 @@ interface ChatContextProps {
   refreshFolders: () => Promise<void>;
   refreshInputPrompts: () => Promise<void>;
   inputPrompts: InputPrompt[];
-  proSearchToggled: boolean;
 }
 
 const ChatContext = createContext<ChatContextProps | undefined>(undefined);

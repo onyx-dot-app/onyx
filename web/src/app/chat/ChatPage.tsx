@@ -164,8 +164,7 @@ export function ChatPage({
     llmProviders,
     folders,
     shouldShowWelcomeModal,
-    refreshChatSessions,
-    proSearchToggled,
+    refreshChatSessions
   } = useChatContext();
 
   const defaultAssistantIdRaw = searchParams.get(SEARCH_PARAM_NAMES.PERSONA_ID);
@@ -202,14 +201,6 @@ export function ChatPage({
   const enterpriseSettings = settings?.enterpriseSettings;
 
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
-  const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
-  const toggleProSearch = () => {
-    Cookies.set(
-      PRO_SEARCH_TOGGLED_COOKIE_NAME,
-      String(!proSearchEnabled).toLocaleLowerCase()
-    );
-    setProSearchEnabled(!proSearchEnabled);
-  };
 
   const isInitialLoad = useRef(true);
   const [userSettingsToggled, setUserSettingsToggled] = useState(false);
@@ -1979,6 +1970,7 @@ export function ChatPage({
   const innerSidebarElementRef = useRef<HTMLDivElement>(null);
   const [settingsToggled, setSettingsToggled] = useState(false);
   const currentPersona = alternativeAssistant || liveAssistant;
+  const proSearchEnabled = currentPersona.pro_search_enabled === true
 
   const HORIZON_DISTANCE = 800;
   const handleScroll = useCallback(() => {
@@ -3090,8 +3082,6 @@ export function ChatPage({
 
                           <div className="pointer-events-auto w-[95%] mx-auto relative mb-8">
                             <ChatInputBar
-                              proSearchEnabled={proSearchEnabled}
-                              setProSearchEnabled={() => toggleProSearch()}
                               toggleDocumentSidebar={toggleDocumentSidebar}
                               availableSources={sources}
                               availableDocumentSets={documentSets}

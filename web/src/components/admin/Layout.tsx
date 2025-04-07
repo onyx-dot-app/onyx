@@ -62,7 +62,6 @@ export async function Layout({ children }: { children: React.ReactNode }) {
     shouldShowWelcomeModal,
     ccPairs,
     inputPrompts,
-    proSearchToggled,
   } = data;
 
   return (
@@ -70,7 +69,6 @@ export async function Layout({ children }: { children: React.ReactNode }) {
       value={{
         inputPrompts,
         chatSessions,
-        proSearchToggled,
         sidebarInitiallyVisible,
         availableSources,
         ccPairs,

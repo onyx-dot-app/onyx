@@ -35,11 +35,7 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
-import { FidgetSpinner } from "react-loader-spinner";
-import { LoadingAnimation } from "@/components/Loading";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -195,8 +191,6 @@ interface ChatInputBarProps {
   availableDocumentSets: DocumentSet[];
   availableTags: Tag[];
   retrievalEnabled: boolean;
-  proSearchEnabled: boolean;
-  setProSearchEnabled: (proSearchEnabled: boolean) => void;
 }
 
 export function ChatInputBar({
@@ -225,8 +219,6 @@ export function ChatInputBar({
   availableDocumentSets,
   availableTags,
   llmManager,
-  proSearchEnabled,
-  setProSearchEnabled,
 }: ChatInputBarProps) {
   const { user } = useUser();
   const settings = useContext(SettingsContext);
@@ -809,12 +801,6 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
-                {retrievalEnabled && settings?.settings.pro_search_enabled && selectedAssistant?.pro_search_enabled && (
-                  <AgenticToggle
-                    proSearchEnabled={proSearchEnabled}
-                    setProSearchEnabled={setProSearchEnabled}
-                  />
-                )}
                 <button
                   id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${
