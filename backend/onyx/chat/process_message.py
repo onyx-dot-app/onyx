@@ -277,23 +277,9 @@ def _get_force_search_settings(
         # If user has uploaded files they're using, don't run any of the search tools
         return ForceUseTool(force_use=False, tool_name=tool_name)
 
-    should_force_search = any(
-        [
-            new_msg_req.retrieval_options
-            and new_msg_req.retrieval_options.run_search
-            == OptionalSearchSetting.ALWAYS,
-            new_msg_req.search_doc_ids,
-            new_msg_req.query_override is not None,
-            DISABLE_LLM_CHOOSE_SEARCH,
-        ]
-    )
-
-    if should_force_search:
-        # If we are using selected docs, just put something here so the Tool doesn't need to build its own args via an LLM call
-        args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
-        return ForceUseTool(force_use=True, tool_name=tool_name, args=args)
-
-    return ForceUseTool(force_use=False, tool_name=tool_name, args=args)
+    # Always force search for every chat
+    args = {"query": new_msg_req.message} if new_msg_req.search_doc_ids else args
+    return ForceUseTool(force_use=True, tool_name=tool_name, args=args)
 
 
 ChatPacket = (
