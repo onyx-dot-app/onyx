@@ -52,7 +52,7 @@ from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_S
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -165,7 +165,7 @@ class DriveIdStatus(Enum):
     FINISHED = "finished"
 
 
-class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpoint]):
+class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheckpoint]):
     def __init__(
         self,
         include_shared_drives: bool = False,
