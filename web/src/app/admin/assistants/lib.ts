@@ -17,6 +17,7 @@ interface PersonaUpsertRequest {
   llm_relevance_filter: boolean | null;
   llm_model_provider_override: string | null;
   llm_model_version_override: string | null;
+  pro_search_enabled: boolean;
   starter_messages: StarterMessage[] | null;
   users?: string[];
   groups: number[];
@@ -142,6 +143,7 @@ function buildPersonaUpsertRequest(
       creationRequest.llm_model_provider_override ?? null,
     llm_model_version_override:
       creationRequest.llm_model_version_override ?? null,
+    pro_search_enabled: false,
     starter_messages: creationRequest.starter_messages ?? null,
     display_priority: null,
     label_ids: creationRequest.label_ids ?? null,

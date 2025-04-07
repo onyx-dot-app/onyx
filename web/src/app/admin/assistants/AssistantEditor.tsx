@@ -74,6 +74,7 @@ import { useUserGroups } from "@/lib/hooks";
 import {
   SearchMultiSelectDropdown,
   Option as DropdownOption,
+  StringOrNumberOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
 import { TagIcon, UserIcon, XIcon, InfoIcon } from "lucide-react";
@@ -243,6 +244,7 @@ export function AssistantEditor({
       existingPersona?.llm_model_provider_override ?? null,
     llm_model_version_override:
       existingPersona?.llm_model_version_override ?? null,
+    pro_search_enabled: existingPersona?.pro_search_enabled ?? false,
     starter_messages: existingPersona?.starter_messages?.length
       ? existingPersona.starter_messages
       : [{ message: "" }],
@@ -421,6 +423,7 @@ export function AssistantEditor({
             llm_relevance_filter: Yup.boolean().required(),
             llm_model_version_override: Yup.string().nullable(),
             llm_model_provider_override: Yup.string().nullable(),
+            pro_search_enabled: Yup.boolean().required(),
             starter_messages: Yup.array().of(
               Yup.object().shape({
                 message: Yup.string(),
@@ -1069,29 +1072,13 @@ export function AssistantEditor({
                                 />
                               </div>
                             </TooltipTrigger>
-                            {values.is_default_persona && (
-                              <TooltipContent side="top" align="center">
-                                Default persona must be public. Set
-                                &quot;Default Persona&quot; to false to change
-                                visibility.
-                              </TooltipContent>
-                            )}
+                            <TooltipContent>
+                              <p>Make this assistant available to everyone</p>
+                            </TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
-                        <span className="text-sm ml-2">
-                          Organization Public
-                        </span>
+                        <Label className="ml-2">Public</Label>
                       </div>
-
-                      {showVisibilityWarning && (
-                        <div className="flex items-center text-warning mt-2">
-                          <InfoIcon size={16} className="mr-2" />
-                          <span className="text-sm">
-                            Default persona must be public. Visibility has been
-                            automatically set to organization public.
-                          </span>
-                        </div>
-                      )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
@@ -1111,33 +1098,18 @@ export function AssistantEditor({
 
                             <SearchMultiSelectDropdown
                               options={[
-                                ...(Array.isArray(users) ? users : [])
-                                  .filter(
-                                    (u: MinimalUserSnapshot) =>
-                                      !values.selectedUsers.some(
-                                        (su: MinimalUserSnapshot) =>
-                                          su.id === u.id
-                                      ) && u.id !== user?.id
-                                  )
-                                  .map((u: MinimalUserSnapshot) => ({
-                                    name: u.email,
-                                    value: u.id,
-                                    type: "user",
-                                  })),
-                                ...(userGroups || [])
-                                  .filter(
-                                    (g: UserGroup) =>
-                                      !values.selectedGroups.includes(g.id)
-                                  )
-                                  .map((g: UserGroup) => ({
-                                    name: g.name,
-                                    value: g.id,
-                                    type: "group",
-                                  })),
+                                ...values.selectedUsers.map((u: MinimalUserSnapshot) => ({
+                                  name: u.email,
+                                  value: u.id,
+                                  type: "user" as const,
+                                })),
+                                ...values.selectedGroups.map((g: number) => ({
+                                  name: g.toString(),
+                                  value: g,
+                                  type: "group" as const,
+                                })),
                               ]}
-                              onSelect={(
-                                selected: DropdownOption<string | number>
-                              ) => {
+                              onSelect={(selected: StringOrNumberOption) => {
                                 const option = selected as {
                                   name: string;
                                   value: string | number;
@@ -1155,50 +1127,79 @@ export function AssistantEditor({
                                   ]);
                                 }
                               }}
-                            />
-                          </div>
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {values.selectedUsers.map(
-                              (user: MinimalUserSnapshot) => (
-                                <SourceChip
-                                  key={user.id}
-                                  onRemove={() => {
+                              onDelete={(name: string) => {
+                                // Find the option by name
+                                const option = [
+                                  ...values.selectedUsers.map((u: MinimalUserSnapshot) => ({
+                                    name: u.email,
+                                    value: u.id,
+                                    type: "user" as const,
+                                  })),
+                                  ...values.selectedGroups.map((g: number) => ({
+                                    name: g.toString(),
+                                    value: g,
+                                    type: "group" as const,
+                                  })),
+                                ].find(item => item.name === name);
+                                
+                                if (option) {
+                                  if (option.type === "user") {
                                     setFieldValue(
                                       "selectedUsers",
                                       values.selectedUsers.filter(
-                                        (u: MinimalUserSnapshot) =>
-                                          u.id !== user.id
+                                        (u: MinimalUserSnapshot) => u.id !== option.value
                                       )
                                     );
-                                  }}
-                                  title={user.email}
-                                  icon={<UserIcon size={12} />}
-                                />
-                              )
-                            )}
-                            {values.selectedGroups.map((groupId: number) => {
-                              const group = (userGroups || []).find(
-                                (g: UserGroup) => g.id === groupId
-                              );
-                              return group ? (
-                                <SourceChip
-                                  key={group.id}
-                                  title={group.name}
-                                  onRemove={() => {
+                                  } else {
                                     setFieldValue(
                                       "selectedGroups",
                                       values.selectedGroups.filter(
-                                        (id: number) => id !== group.id
+                                        (g: number) => g !== option.value
                                       )
                                     );
-                                  }}
-                                  icon={<GroupsIconSkeleton size={12} />}
-                                />
-                              ) : null;
-                            })}
+                                  }
+                                }
+                              }}
+                            />
                           </div>
                         </>
                       )}
+                    </div>
+
+                    <Separator />
+
+                    <div className="flex gap-x-2 items-center ">
+                      <div className="block font-medium text-sm">Search Settings</div>
+                    </div>
+                    <SubLabel>
+                      Configure how this assistant performs searches
+                    </SubLabel>
+
+                    <div className="min-h-[100px]">
+                      <div className="flex items-center mb-2">
+                        <TooltipProvider delayDuration={0}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div>
+                                <SwitchField
+                                  name="pro_search_enabled"
+                                  size="md"
+                                  onCheckedChange={(checked) => {
+                                    setFieldValue("pro_search_enabled", checked);
+                                  }}
+                                />
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>Enable pro search for this assistant</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        <Label className="ml-2">Pro Search</Label>
+                      </div>
+                      <p className="text-sm text-text-dark">
+                        When enabled, this assistant will use AI agents to break down questions and run deep iterative research through promising pathways. This gives more thorough and accurate responses but takes slightly longer.
+                      </p>
                     </div>
                   </div>
 
@@ -1454,3 +1455,4 @@ export function AssistantEditor({
     </div>
   );
 }
+

@@ -136,8 +136,8 @@ class CreateChatMessageRequest(ChunkContext):
     structured_response_format: dict | None = None
 
     # If true, ignores most of the search options and uses pro search instead.
-    # TODO: decide how many of the above options we want to pass through to pro search
-    use_agentic_search: bool = False
+    # This is now determined by the assistant's pro_search_enabled setting
+    use_agentic_search: bool | None = None
 
     skip_gen_ai_answer_generation: bool = False
 

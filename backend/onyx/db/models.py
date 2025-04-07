@@ -1731,6 +1731,8 @@ class Persona(Base):
     recency_bias: Mapped[RecencyBiasSetting] = mapped_column(
         Enum(RecencyBiasSetting, native_enum=False)
     )
+    # Whether pro search is enabled for this assistant
+    pro_search_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Allows the Persona to specify a different LLM version than is controlled
     # globablly via env variables. For flexibility, validity is not currently enforced

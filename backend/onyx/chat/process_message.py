@@ -80,6 +80,7 @@ from onyx.db.milestone import update_user_assistant_milestone
 from onyx.db.models import SearchDoc as DbSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
+from onyx.db.models import Persona
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
 from onyx.document_index.factory import get_default_document_index
@@ -339,23 +340,37 @@ def stream_chat_message_objects(
     single_message_history: str | None = None,
 ) -> ChatPacketStream:
     """Streams in order:
-    1. [conditional] Retrieved documents if a search needs to be run
-    2. [conditional] LLM selected chunk indices if LLM chunk filtering is turned on
-    3. [always] A set of streamed LLM tokens or an error anywhere along the line if something fails
-    4. [always] Details on the final AI response message that is created
+
+    1. User message
+    2. Search results
+    3. AI response
+    4. Agentic search results (if enabled)
+    5. Agentic AI response (if enabled)
     """
-    tenant_id = get_current_tenant_id()
-    use_existing_user_message = new_msg_req.use_existing_user_message
-    existing_assistant_message_id = new_msg_req.existing_assistant_message_id
-
-    # Currently surrounding context is not supported for chat
-    # Chat is already token heavy and harder for the model to process plus it would roll history over much faster
-    new_msg_req.chunks_above = 0
-    new_msg_req.chunks_below = 0
-
-    llm: LLM
-
     try:
+        # Get the assistant's pro search setting
+        assistant = None
+        if new_msg_req.alternate_assistant_id:
+            assistant = db_session.query(Persona).filter(Persona.id == new_msg_req.alternate_assistant_id).first()
+        else:
+            chat_session = db_session.query(ChatSession).filter(ChatSession.id == new_msg_req.chat_session_id).first()
+            if chat_session:
+                assistant = db_session.query(Persona).filter(Persona.id == chat_session.persona_id).first()
+
+        # Use the assistant's pro search setting if available, otherwise use the request's setting
+        use_agentic_search = assistant.pro_search_enabled if assistant else new_msg_req.use_agentic_search
+
+        tenant_id = get_current_tenant_id()
+        use_existing_user_message = new_msg_req.use_existing_user_message
+        existing_assistant_message_id = new_msg_req.existing_assistant_message_id
+
+        # Currently surrounding context is not supported for chat
+        # Chat is already token heavy and harder for the model to process plus it would roll history over much faster
+        new_msg_req.chunks_above = 0
+        new_msg_req.chunks_below = 0
+
+        llm: LLM
+
         user_id = user.id if user is not None else None
 
         chat_session = get_chat_session_by_id(
@@ -633,7 +648,7 @@ def stream_chat_message_objects(
             db_session=db_session,
             commit=False,
             reserved_message_id=reserved_message_id,
-            is_agentic=new_msg_req.use_agentic_search,
+            is_agentic=use_agentic_search,
         )
 
         prompt_override = new_msg_req.prompt_override or chat_session.prompt_override
@@ -779,7 +794,7 @@ def stream_chat_message_objects(
             current_agent_message_id=reserved_message_id,
             tools=tools,
             db_session=db_session,
-            use_agentic_search=new_msg_req.use_agentic_search,
+            use_agentic_search=use_agentic_search,
         )
 
         # reference_db_search_docs = None

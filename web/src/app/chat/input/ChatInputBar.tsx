@@ -809,7 +809,7 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
-                {retrievalEnabled && settings?.settings.pro_search_enabled && (
+                {retrievalEnabled && settings?.settings.pro_search_enabled && selectedAssistant?.pro_search_enabled && (
                   <AgenticToggle
                     proSearchEnabled={proSearchEnabled}
                     setProSearchEnabled={setProSearchEnabled}

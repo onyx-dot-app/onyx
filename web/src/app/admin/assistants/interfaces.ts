@@ -36,6 +36,7 @@ export interface Persona {
   llm_filter_extraction?: boolean;
   llm_model_provider_override?: string;
   llm_model_version_override?: string;
+  pro_search_enabled?: boolean;
   starter_messages: StarterMessage[] | null;
   builtin_persona: boolean;
   is_default_persona: boolean;
