@@ -349,4 +349,5 @@ export const defaultPersona: Persona = {
   owner: null,
   icon_shape: 50910,
   icon_color: "#FF6F6F",
+  pro_search_enabled: false,
 };
