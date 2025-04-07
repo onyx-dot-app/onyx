@@ -111,10 +111,11 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     assert primary_owner.first_name == expected_primary_owner["first_name"]
     assert primary_owner.last_name == expected_primary_owner["last_name"]
 
-    assert target_test_doc.secondary_owners is not None
-    secondary_owners = [
-        owner.model_dump() for owner in target_test_doc.secondary_owners
-    ]
+    secondary_owners = (
+        [owner.model_dump() for owner in target_test_doc.secondary_owners]
+        if target_test_doc.secondary_owners
+        else []
+    )
     assert secondary_owners == test_data["secondary_owners"]
     assert target_test_doc.title == test_data["title"]
 

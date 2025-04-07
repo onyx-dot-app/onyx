@@ -420,7 +420,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         is_slim: bool,
         checkpoint: GoogleDriveCheckpoint,
         concurrent_drive_itr: Callable[[str], Iterator[str]],
-        filtered_folder_ids: set[str],
+        sorted_filtered_folder_ids: list[str],
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
@@ -536,7 +536,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 last_processed_folder = folder_id
 
             skipping_seen_folders = last_processed_folder is not None
-            for folder_id in sorted(filtered_folder_ids):
+            for folder_id in sorted_filtered_folder_ids:
                 if skipping_seen_folders:
                     skipping_seen_folders = folder_id != last_processed_folder
                     continue
@@ -597,6 +597,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             drive_ids_to_retrieve, checkpoint
         )
 
+        sorted_filtered_folder_ids = sorted(folder_ids_to_retrieve)
+
         # only process emails that we haven't already completed retrieval for
         non_completed_org_emails = [
             user_email
@@ -622,7 +624,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 is_slim,
                 checkpoint,
                 drive_id_iterator,
-                folder_ids_to_retrieve,
+                sorted_filtered_folder_ids,
                 start,
                 end,
             )

@@ -130,6 +130,7 @@ def crawl_folders_for_files(
                     parent_id=parent_id,
                     completion_stage=DriveRetrievalStage.FOLDER_FILES,
                 )
+            # Only mark a folder as done if it was fully traversed without errors
             if found_files:
                 update_traversed_ids_func(parent_id)
         except Exception as e:
