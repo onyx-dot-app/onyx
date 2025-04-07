@@ -509,6 +509,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 yield from _yield_from_drive(drive_id, start)
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
             resuming = False  # we are starting the next stage for the first time
+
         if curr_stage.stage == DriveRetrievalStage.FOLDER_FILES:
 
             def _yield_from_folder_crawl(
@@ -526,16 +527,28 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
                 )
 
             # resume from a checkpoint
+            last_processed_folder = None
             if resuming:
                 folder_id = curr_stage.completed_until_parent_id
                 assert folder_id is not None, "folder id not set in checkpoint"
                 resume_start = curr_stage.completed_until
                 yield from _yield_from_folder_crawl(folder_id, resume_start)
+                last_processed_folder = folder_id
 
-            remaining_folders = filtered_folder_ids - self._retrieved_ids
-            for folder_id in remaining_folders:
+            skipping_seen_folders = last_processed_folder is not None
+            for folder_id in sorted(filtered_folder_ids):
+                if skipping_seen_folders:
+                    skipping_seen_folders = folder_id != last_processed_folder
+                    continue
+
+                if folder_id in self._retrieved_ids:
+                    continue
+
+                curr_stage.completed_until = 0
+                curr_stage.completed_until_parent_id = folder_id
                 logger.info(f"Getting files in folder '{folder_id}' as '{user_email}'")
                 yield from _yield_from_folder_crawl(folder_id, start)
+
         curr_stage.stage = DriveRetrievalStage.DONE
 
     def _manage_service_account_retrieval(
@@ -587,8 +600,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         # only process emails that we haven't already completed retrieval for
         non_completed_org_emails = [
             user_email
-            for user_email, stage in checkpoint.completion_map.items()
-            if stage != DriveRetrievalStage.DONE
+            for user_email, stage_completion in checkpoint.completion_map.items()
+            if stage_completion.stage != DriveRetrievalStage.DONE
         ]
 
         # don't process too many emails before returning a checkpoint. This is

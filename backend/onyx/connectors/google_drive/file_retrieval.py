@@ -122,14 +122,16 @@ def crawl_folders_for_files(
                 start=start,
                 end=end,
             ):
-                found_files = True
                 logger.info(f"Found file: {file['name']}, user email: {user_email}")
+                found_files = True
                 yield RetrievedDriveFile(
                     drive_file=file,
                     user_email=user_email,
                     parent_id=parent_id,
                     completion_stage=DriveRetrievalStage.FOLDER_FILES,
                 )
+            if found_files:
+                update_traversed_ids_func(parent_id)
         except Exception as e:
             logger.error(f"Error getting files in parent {parent_id}: {e}")
             yield RetrievedDriveFile(
@@ -139,8 +141,6 @@ def crawl_folders_for_files(
                 completion_stage=DriveRetrievalStage.FOLDER_FILES,
                 error=e,
             )
-        if found_files:
-            update_traversed_ids_func(parent_id)
     else:
         logger.info(f"Skipping subfolder files since already traversed: {parent_id}")
 
