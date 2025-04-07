@@ -250,6 +250,7 @@ def create_update_persona(
             llm_relevance_filter=create_persona_request.llm_relevance_filter,
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             is_default_persona=is_default_persona,
+            pro_search_enabled=create_persona_request.pro_search_enabled,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -440,6 +441,7 @@ def upsert_persona(
     label_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
+    pro_search_enabled: bool = False,
 ) -> Persona:
     """
     NOTE: This operation cannot update persona configuration options that
@@ -536,6 +538,7 @@ def upsert_persona(
             if is_default_persona is not None
             else existing_persona.is_default_persona
         )
+        existing_persona.pro_search_enabled = pro_search_enabled
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
@@ -591,6 +594,7 @@ def upsert_persona(
             if is_default_persona is not None
             else False,
             labels=labels or [],
+            pro_search_enabled=pro_search_enabled,
         )
         db_session.add(new_persona)
         persona = new_persona

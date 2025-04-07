@@ -85,6 +85,7 @@ class PersonaUpsertRequest(BaseModel):
     label_ids: list[int] | None = None
     is_default_persona: bool = False
     display_priority: int | None = None
+    pro_search_enabled: bool = False
 
 
 class PersonaSnapshot(BaseModel):
