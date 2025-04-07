@@ -165,5 +165,6 @@ export const constructMiniFiedPersona = (
     is_default_persona: false,
     users: [],
     groups: [],
+    pro_search_enabled: false,
   };
 };
