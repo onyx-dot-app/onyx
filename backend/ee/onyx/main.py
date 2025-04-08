@@ -1,3 +1,6 @@
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
@@ -44,11 +47,26 @@ from onyx.configs.constants import AuthType
 from onyx.main import get_application as get_application_base
 from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
+from onyx.main import lifespan as lifespan_base
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Small wrapper around the lifespan of the MIT application.
+    Basically just calls the base lifespan, and then adds EE-only
+    steps after."""
+
+    async with lifespan_base(app):
+        # seed the Onyx environment with LLMs, Assistants, etc. based on an optional
+        # environment variable. Used to automate deployment for multiple environments.
+        seed_db()
+
+        yield
 
 
 def get_application() -> FastAPI:
@@ -58,7 +76,7 @@ def get_application() -> FastAPI:
 
     test_encryption()
 
-    application = get_application_base()
+    application = get_application_base(lifespan_override=lifespan)
 
     if MULTI_TENANT:
         add_tenant_id_middleware(application, logger)
@@ -165,10 +183,6 @@ def get_application() -> FastAPI:
 
     # Ensure all routes have auth enabled or are explicitly marked as public
     check_ee_router_auth(application)
-
-    # seed the Onyx environment with LLMs, Assistants, etc. based on an optional
-    # environment variable. Used to automate deployment for multiple environments.
-    seed_db()
 
     # for debugging discovered routes
     # for route in application.router.routes:

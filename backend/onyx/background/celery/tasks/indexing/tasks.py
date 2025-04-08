@@ -44,6 +44,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
+from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
@@ -1234,8 +1235,9 @@ def connector_indexing_proxy_task(
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
+    bind=True,
 )
-def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
+def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
     """Clean up old checkpoints that are older than 7 days."""
     locked = False
     redis_client = get_redis_client(tenant_id=tenant_id)
@@ -1256,14 +1258,15 @@ def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
                 task_logger.info(
                     f"Cleaning up checkpoint for index attempt {attempt.id}"
                 )
-                cleanup_checkpoint_task.apply_async(
+                self.app.send_task(
+                    OnyxCeleryTask.CLEANUP_CHECKPOINT,
                     kwargs={
                         "index_attempt_id": attempt.id,
                         "tenant_id": tenant_id,
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
+                    priority=OnyxCeleryPriority.MEDIUM,
                 )
-
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
         return None
@@ -1287,5 +1290,17 @@ def cleanup_checkpoint_task(
     self: Task, *, index_attempt_id: int, tenant_id: str | None
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
-    with get_session_with_current_tenant() as db_session:
-        cleanup_checkpoint(db_session, index_attempt_id)
+
+    start = time.monotonic()
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cleanup_checkpoint(db_session, index_attempt_id)
+    finally:
+        elapsed = time.monotonic() - start
+
+        task_logger.info(
+            f"cleanup_checkpoint_task completed: tenant_id={tenant_id} "
+            f"index_attempt_id={index_attempt_id} "
+            f"elapsed={elapsed:.2f}"
+        )

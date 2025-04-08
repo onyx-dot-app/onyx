@@ -21,6 +21,7 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy.orm import Session
+from starlette.types import Lifespan
 
 from onyx import __version__
 from onyx.auth.schemas import UserCreate
@@ -275,8 +276,12 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
     )
 
 
-def get_application() -> FastAPI:
-    application = FastAPI(title="Onyx Backend", version=__version__, lifespan=lifespan)
+def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
+    application = FastAPI(
+        title="Onyx Backend",
+        version=__version__,
+        lifespan=lifespan_override or lifespan,
+    )
     if SENTRY_DSN:
         sentry_sdk.init(
             dsn=SENTRY_DSN,
