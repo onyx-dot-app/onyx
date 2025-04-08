@@ -12,7 +12,7 @@ ddtrace==2.6.5
 discord.py==2.4.0
 distributed==2023.8.1
 fastapi==0.115.12
-fastapi-users==12.1.3
+fastapi-users==14.0.1
 fastapi-users-db-sqlalchemy==5.0.0
 filelock==3.15.4
 google-api-python-client==2.86.0
@@ -66,7 +66,7 @@ pytest-mock==3.12.0
 pytest-playwright==0.7.0
 python-docx==1.1.2
 python-dotenv==1.0.0
-python-multipart==0.0.7
+python-multipart==0.0.20
 pywikibot==9.0.0
 redis==5.0.8
 requests==2.32.2
