@@ -1290,5 +1290,17 @@ def cleanup_checkpoint_task(
     self: Task, *, index_attempt_id: int, tenant_id: str | None
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
-    with get_session_with_current_tenant() as db_session:
-        cleanup_checkpoint(db_session, index_attempt_id)
+
+    start = time.monotonic()
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cleanup_checkpoint(db_session, index_attempt_id)
+    finally:
+        elapsed = time.monotonic() - start
+
+        task_logger.info(
+            f"cleanup_checkpoint_task completed: tenant_id={tenant_id} "
+            f"index_attempt_id={index_attempt_id} "
+            f"elapsed={elapsed:.2f}"
+        )
