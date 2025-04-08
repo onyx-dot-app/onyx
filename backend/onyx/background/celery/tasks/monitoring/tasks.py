@@ -1037,7 +1037,11 @@ def cloud_monitor_celery_pidbox(
             continue
 
         r_celery.delete(key)
-        task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")
+        task_logger.info(
+            f"Deleted idle pidbox: pidbox={key_str} "
+            f"idletime={idletime} "
+            f"max_idletime={MAX_PIDBOX_IDLE}"
+        )
         num_deleted += 1
 
     # Enable later in case we want some aggregate metrics
