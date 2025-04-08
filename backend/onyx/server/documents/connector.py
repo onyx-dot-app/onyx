@@ -845,6 +845,10 @@ def create_connector_from_model(
     db_session: Session = Depends(get_session),
 ) -> ObjectCreationIdResponse:
     tenant_id = get_current_tenant_id()
+    print("Creating connector from model")
+    print("connector_data: ", connector_data)
+    print(connector_data.connector_specific_config)
+    print(connector_data.connector_specific_config)
 
     try:
         _validate_connector_allowed(connector_data.source)
