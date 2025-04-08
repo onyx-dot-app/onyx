@@ -5,6 +5,7 @@ This file contains tests for the following:
     - updates the document sets and user groups to remove the connector
 - Ensure that deleting a connector that is part of an overlapping document set and/or user group works as expected
 """
+
 import os
 from uuid import uuid4
 

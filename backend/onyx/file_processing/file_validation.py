@@ -1,6 +1,7 @@
 """
 Centralized file type validation utilities.
 """
+
 # Standard image MIME types supported by most vision LLMs
 IMAGE_MIME_TYPES = [
     "image/png",

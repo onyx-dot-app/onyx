@@ -1,6 +1,7 @@
 """
 This file tests the ability of different user types to set the role of other users.
 """
+
 import os
 
 import pytest

@@ -4,6 +4,7 @@ fetch. Port over the code in those files if we add an EE version of this worker.
 
 This is an app stub purely for sending tasks as a client.
 """
+
 from celery import Celery
 
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable

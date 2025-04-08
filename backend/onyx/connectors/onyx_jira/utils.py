@@ -1,4 +1,5 @@
 """Module with custom fields processing functions"""
+
 import os
 from typing import Any
 from typing import List
