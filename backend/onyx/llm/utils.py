@@ -498,14 +498,20 @@ def get_llm_contextual_cost(
     num_input_tokens += num_tokens + num_docs * DOCUMENT_SUMMARY_TOKEN_ESTIMATE
     num_output_tokens += num_docs * MAX_CONTEXT_TOKENS
 
-    usd_per_prompt, usd_per_completion = litellm.cost_per_token(
-        model=llm.config.model_name,
-        prompt_tokens=num_input_tokens,
-        completion_tokens=num_output_tokens,
-    )
+    try:
+        usd_per_prompt, usd_per_completion = litellm.cost_per_token(
+            model=llm.config.model_name,
+            prompt_tokens=num_input_tokens,
+            completion_tokens=num_output_tokens,
+        )
+    except Exception:
+        logger.exception(
+            f"An unexpected error occurred while calculating cost for model {llm.config.model_name} (potentially due to malformed name). Assuming cost is 0."
+        )
+        return 0
+
     # Costs are in USD dollars per million tokens
     return usd_per_prompt + usd_per_completion
-
 
 def get_llm_max_tokens(
     model_map: dict,
