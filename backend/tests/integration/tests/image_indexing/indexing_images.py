@@ -1,6 +1,6 @@
 import os
-import time
 from datetime import datetime
+from datetime import timezone
 
 import pytest
 
@@ -12,12 +12,14 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
+from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestChatSession
+from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def test_image_indexing(reset: None):
+def test_image_indexing(reset: None) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
         email="admin@onyx-test.com",
@@ -27,13 +29,6 @@ def test_image_indexing(reset: None):
     test_file_dir = "tests/integration/common_utils/test_data"
     os.makedirs(test_file_dir, exist_ok=True)
     test_file_path = os.path.join(test_file_dir, "sample.pdf")
-    if not os.path.exists(test_file_path):
-        # Create a minimal valid PDF file for testing
-        with open(test_file_path, "wb") as f:
-            f.write(
-                b"%PDF-1.7\n%\xe2\xe3\xcf\xd3\n1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n3 0 obj\n<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R/Resources<<>>/Contents 4 0 R>>\nendobj\n4 0 obj\n<</Length 21>>\nstream\nBT\n/F1 12 Tf\n100 700 Td\n(There are 5 dogs in this document) Tj\nET\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f\n0000000015 00000 n\n0000000061 00000 n\n0000000114 00000 n\n0000000214 00000 n\ntrailer\n<</Size 5/Root 1 0 R>>\nstartxref\n284\n%%EOF"  # noqa: E501
-            )
-
     print(f"Using test file: {test_file_path}")
 
     # Use our fixed upload_file function to upload the test file
@@ -45,6 +40,13 @@ def test_image_indexing(reset: None):
     LLMProviderManager.create(
         name="test_llm",
         user_performing_action=admin_user,
+    )
+    print("Created LLM provider")
+    SettingsManager.update_settings(
+        DATestSettings(
+            search_time_image_analysis_enabled=True,
+            image_extraction_and_analysis_enabled=True,
+        )
     )
 
     print(f"File upload response: {upload_response}")
@@ -95,12 +97,16 @@ def test_image_indexing(reset: None):
         from_beginning=True,
         user_performing_action=admin_user,
     )
+    CCPairManager.wait_for_indexing_completion(
+        cc_pair=cc_pair,
+        after=datetime.now(timezone.utc),
+        user_performing_action=admin_user,
+    )
 
     print("Started indexing")
 
     # Give the system some time to index the document
     print("Sleeping for 15 seconds to allow indexing to progress...")
-    time.sleep(15)
 
     # Create a chat session and ask about dogs
     print("Creating chat session to ask about dogs...")

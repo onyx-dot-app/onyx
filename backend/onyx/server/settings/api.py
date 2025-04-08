@@ -31,8 +31,8 @@ admin_router = APIRouter(prefix="/admin/settings")
 basic_router = APIRouter(prefix="/settings")
 
 
-@admin_router.put("")
-def put_settings(
+@admin_router.patch("")
+def patch_settings(
     settings: Settings, _: User | None = Depends(current_admin_user)
 ) -> None:
     store_settings(settings)

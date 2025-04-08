@@ -23,7 +23,7 @@ class SettingsManager:
         headers.pop("Content-Type", None)
 
         response = requests.get(
-            f"{API_SERVER_URL}/api/manage/admin/settings",
+            f"{API_SERVER_URL}/admin/settings",
             headers=headers,
         )
 
@@ -49,12 +49,14 @@ class SettingsManager:
 
         payload = settings.model_dump()
         response = requests.patch(
-            f"{API_SERVER_URL}/api/manage/admin/settings",
+            f"{API_SERVER_URL}/admin/settings",
             json=payload,
             headers=headers,
         )
 
         if not response.ok:
+            print("Failed to update settings")
+            print(response.json())
             return (
                 {},
                 f"Failed to update settings - {response.json().get('detail', 'Unknown error')}",
