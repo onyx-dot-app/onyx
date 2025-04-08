@@ -387,8 +387,10 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
                 context.add_cookies([cookie])  # type: ignore
             except Exception as e:
                 logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
-    except Exception as e:
-        logger.debug(f"Failed to handle cookies for {url}: {e}")
+    except Exception:
+        logger.exception(
+            f"Unexpected error while handling cookies for Web Connector with URL {url}"
+        )
 
 
 class WebConnector(LoadConnector):
