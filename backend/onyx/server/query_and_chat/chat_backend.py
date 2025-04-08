@@ -90,6 +90,7 @@ from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
+from onyx.utils.eea_utils import send_score_to_langfuse
 
 
 logger = setup_logger()
@@ -478,6 +479,7 @@ def create_chat_feedback(
 ) -> None:
     user_id = user.id if user else None
 
+    send_score_to_langfuse(feedback, db_session)
     create_chat_message_feedback(
         is_positive=feedback.is_positive,
         feedback_text=feedback.feedback_text,
