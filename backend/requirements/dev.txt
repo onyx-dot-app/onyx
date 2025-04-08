@@ -12,7 +12,7 @@ posthog==3.7.4
 pre-commit==3.2.2
 pytest-asyncio==0.22.0
 pytest==7.4.4
-reorder-python-imports==3.14.0
+reorder-python-imports-black==3.14.0
 ruff==0.0.286
 sentence-transformers==3.4.1
 trafilatura==1.12.2
