@@ -506,12 +506,15 @@ def get_llm_contextual_cost(
         )
     except Exception:
         logger.exception(
-            f"An unexpected error occurred while calculating cost for model {llm.config.model_name} (potentially due to malformed name). Assuming cost is 0."
+            "An unexpected error occurred while calculating cost for model "
+            f"{llm.config.model_name} (potentially due to malformed name). "
+            "Assuming cost is 0."
         )
         return 0
 
     # Costs are in USD dollars per million tokens
     return usd_per_prompt + usd_per_completion
+
 
 def get_llm_max_tokens(
     model_map: dict,
