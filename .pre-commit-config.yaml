@@ -5,7 +5,8 @@ repos:
     - id: black
       language_version: python3.11
 
-  - repo: https://github.com/asottile/reorder_python_imports
+  # this is a fork which keeps compatibility with black
+  - repo: https://github.com/wimglenn/reorder-python-imports-black
     rev: v3.14.0
     hooks:
     - id: reorder-python-imports
