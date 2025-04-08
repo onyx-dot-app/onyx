@@ -59,8 +59,9 @@ class SearchPipeline:
         retrieval_metrics_callback: (
             Callable[[RetrievalMetricsContainer], None] | None
         ) = None,
-        retrieved_sections_callback: Callable[[list[InferenceSection]], None]
-        | None = None,
+        retrieved_sections_callback: (
+            Callable[[list[InferenceSection]], None] | None
+        ) = None,
         rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
         prompt_config: PromptConfig | None = None,
         contextual_pruning_config: ContextualPruningConfig | None = None,

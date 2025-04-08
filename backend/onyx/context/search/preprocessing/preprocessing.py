@@ -257,9 +257,9 @@ def retrieval_preprocessing(
         # Should match the LLM filtering to the same as the reranked, it's understood as this is the number of results
         # the user wants to do heavier processing on, so do the same for the LLM if reranking is on
         # if no reranking settings are set, then use the global default
-        max_llm_filter_sections=rerank_settings.num_rerank
-        if rerank_settings
-        else NUM_POSTPROCESSED_RESULTS,
+        max_llm_filter_sections=(
+            rerank_settings.num_rerank if rerank_settings else NUM_POSTPROCESSED_RESULTS
+        ),
         chunks_above=chunks_above,
         chunks_below=chunks_below,
         full_doc=search_request.full_doc,

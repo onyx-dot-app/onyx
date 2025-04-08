@@ -36,9 +36,9 @@ class ActionValuesEphemeralMessageChannelConfig(BaseModel):
     respond_to_bots: bool | None
     is_ephemeral: bool
     respond_member_group_list: list[str] | None
-    answer_filters: list[
-        Literal["well_answered_postfilter", "questionmark_prefilter"]
-    ] | None
+    answer_filters: (
+        list[Literal["well_answered_postfilter", "questionmark_prefilter"]] | None
+    )
     follow_up_tags: list[str] | None
     show_continue_in_web_ui: bool
 

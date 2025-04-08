@@ -173,11 +173,13 @@ class CompareAnalysis:
                     changes.append(
                         {
                             "previous_rank": pos,
-                            "new_rank": pos
-                            if content_key == "score"
-                            else {
-                                "x": k for k, v in new_content.items() if v == data
-                            }.get("x", "not_ranked"),
+                            "new_rank": (
+                                pos
+                                if content_key == "score"
+                                else {
+                                    "x": k for k, v in new_content.items() if v == data
+                                }.get("x", "not_ranked")
+                            ),
                             "document_id": self._previous_content[pos]["document_id"],
                             "previous_score": self._previous_content[pos]["score"],
                             "new_score": self._new_content[pos]["score"],

@@ -61,8 +61,9 @@ def litellm_exception_to_error_msg(
     e: Exception,
     llm: LLM,
     fallback_to_error_msg: bool = False,
-    custom_error_msg_mappings: dict[str, str]
-    | None = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
 ) -> str:
     error_msg = str(e)
 
@@ -252,7 +253,7 @@ def message_to_prompt_and_imgs(message: BaseMessage) -> tuple[str, list[str]]:
 
 
 def dict_based_prompt_to_langchain_prompt(
-    messages: list[dict[str, str]]
+    messages: list[dict[str, str]],
 ) -> list[BaseMessage]:
     prompt: list[BaseMessage] = []
     for message in messages:

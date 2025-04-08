@@ -163,6 +163,7 @@ class SearchRequest(ChunkContext):
 
 class SearchQuery(ChunkContext):
     "Processed Request that is directly passed to the SearchPipeline"
+
     query: str
     processed_keywords: list[str]
     search_type: SearchType

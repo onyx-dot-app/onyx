@@ -265,9 +265,9 @@ class CCPairFullInfo(BaseModel):
             deletion_failure_message=cc_pair_model.deletion_failure_message,
             indexing=indexing,
             creator=cc_pair_model.creator_id,
-            creator_email=cc_pair_model.creator.email
-            if cc_pair_model.creator
-            else None,
+            creator_email=(
+                cc_pair_model.creator.email if cc_pair_model.creator else None
+            ),
         )
 
 

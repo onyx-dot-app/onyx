@@ -85,9 +85,9 @@ class BookstackConnector(LoadConnector, PollConnector):
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Book: " + title,
             title=title,
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "book"},
         )
 
@@ -114,9 +114,9 @@ class BookstackConnector(LoadConnector, PollConnector):
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Chapter: " + title,
             title=title,
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "chapter"},
         )
 
@@ -138,9 +138,9 @@ class BookstackConnector(LoadConnector, PollConnector):
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Shelf: " + title,
             title=title,
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "shelf"},
         )
 
@@ -171,9 +171,9 @@ class BookstackConnector(LoadConnector, PollConnector):
             source=DocumentSource.BOOKSTACK,
             semantic_identifier="Page: " + str(title),
             title=str(title),
-            doc_updated_at=time_str_to_utc(updated_at_str)
-            if updated_at_str is not None
-            else None,
+            doc_updated_at=(
+                time_str_to_utc(updated_at_str) if updated_at_str is not None else None
+            ),
             metadata={"type": "page"},
         )
 

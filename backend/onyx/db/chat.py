@@ -1044,13 +1044,15 @@ def translate_db_message_to_chat_message_detail(
         time_sent=chat_message.time_sent,
         citations=chat_message.citations,
         files=chat_message.files or [],
-        tool_call=ToolCallFinalResult(
-            tool_name=chat_message.tool_call.tool_name,
-            tool_args=chat_message.tool_call.tool_arguments,
-            tool_result=chat_message.tool_call.tool_result,
-        )
-        if chat_message.tool_call
-        else None,
+        tool_call=(
+            ToolCallFinalResult(
+                tool_name=chat_message.tool_call.tool_name,
+                tool_args=chat_message.tool_call.tool_arguments,
+                tool_result=chat_message.tool_call.tool_result,
+            )
+            if chat_message.tool_call
+            else None
+        ),
         alternate_assistant_id=chat_message.alternate_assistant_id,
         overridden_model=chat_message.overridden_model,
         sub_questions=translate_db_sub_questions_to_server_objects(
@@ -1086,9 +1088,9 @@ def log_agent_metrics(
         full_duration_s=agent_timings.full_duration_s,
         base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
         refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
-        all_metrics=vars(agent_additional_metrics)
-        if agent_additional_metrics
-        else None,
+        all_metrics=(
+            vars(agent_additional_metrics) if agent_additional_metrics else None
+        ),
     )
 
     db_session.add(agent_metric_tracking)

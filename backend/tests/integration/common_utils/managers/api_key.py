@@ -25,9 +25,11 @@ class APIKeyManager:
         api_key_response = requests.post(
             f"{API_SERVER_URL}/admin/api-key",
             json=api_key_request.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         api_key_response.raise_for_status()
         api_key = api_key_response.json()
@@ -50,9 +52,11 @@ class APIKeyManager:
     ) -> None:
         api_key_response = requests.delete(
             f"{API_SERVER_URL}/admin/api-key/{api_key.api_key_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         api_key_response.raise_for_status()
 
@@ -62,9 +66,11 @@ class APIKeyManager:
     ) -> list[DATestAPIKey]:
         api_key_response = requests.get(
             f"{API_SERVER_URL}/admin/api-key",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         api_key_response.raise_for_status()
         return [DATestAPIKey(**api_key) for api_key in api_key_response.json()]

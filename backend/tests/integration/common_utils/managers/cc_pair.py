@@ -41,9 +41,11 @@ def _cc_pair_creator(
     response = requests.put(
         url=f"{API_SERVER_URL}/manage/connector/{connector_id}/credential/{credential_id}",
         json=request,
-        headers=user_performing_action.headers
-        if user_performing_action
-        else GENERAL_HEADERS,
+        headers=(
+            user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS
+        ),
     )
     response.raise_for_status()
     return DATestCCPair(
@@ -122,9 +124,11 @@ class CCPairManager:
         result = requests.put(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/status",
             json={"status": "PAUSED"},
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         result.raise_for_status()
 
@@ -140,9 +144,11 @@ class CCPairManager:
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/deletion-attempt",
             json=cc_pair_identifier.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         result.raise_for_status()
 
@@ -153,9 +159,11 @@ class CCPairManager:
     ) -> CCPairFullInfo | None:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         cc_pair_json = response.json()
@@ -168,9 +176,11 @@ class CCPairManager:
     ) -> ConnectorIndexingStatus | None:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         for cc_pair_json in response.json():
@@ -186,9 +196,11 @@ class CCPairManager:
     ) -> list[ConnectorIndexingStatus]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/admin/connector/indexing-status",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [ConnectorIndexingStatus(**cc_pair) for cc_pair in response.json()]
@@ -234,9 +246,11 @@ class CCPairManager:
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/connector/run-once",
             json=body,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         result.raise_for_status()
 
@@ -363,9 +377,11 @@ class CCPairManager:
     ) -> None:
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/prune",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         result.raise_for_status()
 
@@ -376,9 +392,11 @@ class CCPairManager:
     ) -> datetime | None:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/last_pruned",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         response_str = response.json()
@@ -429,18 +447,22 @@ class CCPairManager:
         """
         result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         if result.status_code != 409:
             result.raise_for_status()
 
         group_sync_result = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         if group_sync_result.status_code != 409:
             group_sync_result.raise_for_status()
@@ -453,9 +475,11 @@ class CCPairManager:
     ) -> datetime | None:
         doc_sync_response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-permissions",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         doc_sync_response.raise_for_status()
         doc_sync_response_str = doc_sync_response.json()
@@ -476,9 +500,11 @@ class CCPairManager:
     ) -> datetime | None:
         group_sync_response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/sync-groups",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         group_sync_response.raise_for_status()
         group_sync_response_str = group_sync_response.json()
@@ -499,9 +525,11 @@ class CCPairManager:
     ) -> list[DocumentSyncStatus]:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/admin/cc-pair/{cc_pair.id}/get-docs-sync-status",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         doc_sync_statuses: list[DocumentSyncStatus] = []

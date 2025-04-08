@@ -101,9 +101,11 @@ class IndexAttemptManager:
         )
         response = requests.get(
             url=url,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         data = response.json()
@@ -226,9 +228,11 @@ class IndexAttemptManager:
             url += "&include_resolved=true"
         response = requests.get(
             url=url,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         data = response.json()

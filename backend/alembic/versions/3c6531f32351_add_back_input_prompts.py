@@ -5,6 +5,7 @@ Revises: aeda5f2df4f6
 Create Date: 2025-01-13 12:49:51.705235
 
 """
+
 from alembic import op
 import sqlalchemy as sa
 import fastapi_users_db_sqlalchemy

@@ -197,9 +197,9 @@ def update_user_file_folder_metadata(
             # Create user fields object with file and folder IDs
             user_fields = VespaDocumentUserFields(
                 user_file_id=str(user_file_id) if user_file_id is not None else None,
-                user_folder_id=str(user_folder_id)
-                if user_folder_id is not None
-                else None,
+                user_folder_id=(
+                    str(user_folder_id) if user_folder_id is not None else None
+                ),
             )
 
             # Update Vespa. OK if doc doesn't exist. Raises exception otherwise.

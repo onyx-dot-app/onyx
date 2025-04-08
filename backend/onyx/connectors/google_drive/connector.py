@@ -355,9 +355,11 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
     ) -> Callable[[str], Iterator[str]]:
         cv = threading.Condition()
         drive_id_status = {
-            drive_id: DriveIdStatus.FINISHED
-            if drive_id in self._retrieved_ids
-            else DriveIdStatus.AVAILABLE
+            drive_id: (
+                DriveIdStatus.FINISHED
+                if drive_id in self._retrieved_ids
+                else DriveIdStatus.AVAILABLE
+            )
             for drive_id in drive_ids
         }
 

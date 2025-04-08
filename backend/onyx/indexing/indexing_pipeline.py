@@ -414,9 +414,11 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
             continue
 
         section_chars = sum(
-            len(section.text)
-            if isinstance(section, TextSection) and section.text is not None
-            else 0
+            (
+                len(section.text)
+                if isinstance(section, TextSection) and section.text is not None
+                else 0
+            )
             for section in document.sections
         )
         if (
@@ -467,9 +469,11 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                     Section(
                         text=section.text if isinstance(section, TextSection) else "",
                         link=section.link,
-                        image_file_name=section.image_file_name
-                        if isinstance(section, ImageSection)
-                        else None,
+                        image_file_name=(
+                            section.image_file_name
+                            if isinstance(section, ImageSection)
+                            else None
+                        ),
                     )
                     for section in document.sections
                 ],
