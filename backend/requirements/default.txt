@@ -50,6 +50,7 @@ Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
 openai==1.66.3
 openpyxl==3.1.2
+passlib==1.7.4
 playwright==1.41.2
 psutil==5.9.5
 psycopg2-binary==2.9.9
