@@ -35,7 +35,7 @@ _TENANT_PROVISIONING_TIME_LIMIT = 60 * 10  # 10 minutes
 
 
 @shared_task(
-    name=OnyxCeleryTask.CHECK_AVAILABLE_TENANTS,
+    name=OnyxCeleryTask.CLOUD_CHECK_AVAILABLE_TENANTS,
     queue=OnyxCeleryQueues.MONITORING,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,

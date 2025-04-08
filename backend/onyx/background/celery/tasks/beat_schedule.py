@@ -179,8 +179,18 @@ beat_cloud_tasks: list[dict] = [
     },
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants",
-        "task": OnyxCeleryTask.CHECK_AVAILABLE_TENANTS,
+        "task": OnyxCeleryTask.CLOUD_CHECK_AVAILABLE_TENANTS,
         "schedule": timedelta(minutes=10),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.HIGH,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-pidbox",
+        "task": OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX,
+        "schedule": timedelta(hours=4),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
