@@ -564,6 +564,7 @@ def upsert_persona(
             if is_default_persona is not None
             else existing_persona.is_default_persona
         )
+
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
