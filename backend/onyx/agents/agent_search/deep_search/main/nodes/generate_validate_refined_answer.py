@@ -244,9 +244,7 @@ def generate_validate_refined_answer(
     revision_question_efficiency = (
         len(total_answered_questions) / len(initial_answered_sub_questions)
         if initial_answered_sub_questions
-        else 10.0
-        if refined_answered_sub_questions
-        else 1.0
+        else 10.0 if refined_answered_sub_questions else 1.0
     )
 
     sub_question_answer_str = "\n\n------\n\n".join(

@@ -122,8 +122,7 @@ class IndexingPipelineProtocol(Protocol):
         self,
         document_batch: list[Document],
         index_attempt_metadata: IndexAttemptMetadata,
-    ) -> IndexingPipelineResult:
-        ...
+    ) -> IndexingPipelineResult: ...
 
 
 def _upsert_documents_in_db(
@@ -835,10 +834,10 @@ def index_doc_batch(
         doc_id_to_user_file_id: dict[str, int | None] = fetch_user_files_for_documents(
             document_ids=updatable_ids, db_session=db_session
         )
-        doc_id_to_user_folder_id: dict[
-            str, int | None
-        ] = fetch_user_folders_for_documents(
-            document_ids=updatable_ids, db_session=db_session
+        doc_id_to_user_folder_id: dict[str, int | None] = (
+            fetch_user_folders_for_documents(
+                document_ids=updatable_ids, db_session=db_session
+            )
         )
 
         doc_id_to_previous_chunk_cnt: dict[str, int | None] = {

@@ -423,9 +423,9 @@ def _run_indexing(
                 unresolved_only=True,
                 db_session=db_session_temp,
             )
-            doc_id_to_unresolved_errors: dict[
-                str, list[IndexAttemptError]
-            ] = defaultdict(list)
+            doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = (
+                defaultdict(list)
+            )
             for error in unresolved_errors:
                 if error.document_id:
                     doc_id_to_unresolved_errors[error.document_id].append(error)

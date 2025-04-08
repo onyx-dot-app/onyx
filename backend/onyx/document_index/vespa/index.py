@@ -177,9 +177,9 @@ class VespaIndex(DocumentIndex):
         self.index_to_large_chunks_enabled: dict[str, bool] = {}
         self.index_to_large_chunks_enabled[index_name] = large_chunks_enabled
         if secondary_index_name and secondary_large_chunks_enabled:
-            self.index_to_large_chunks_enabled[
-                secondary_index_name
-            ] = secondary_large_chunks_enabled
+            self.index_to_large_chunks_enabled[secondary_index_name] = (
+                secondary_large_chunks_enabled
+            )
 
     def ensure_indices_exist(
         self,
@@ -389,9 +389,9 @@ class VespaIndex(DocumentIndex):
         new_document_id_to_original_document_id: dict[str, str] = {}
         for ind, chunk in enumerate(cleaned_chunks):
             old_chunk = chunks[ind]
-            new_document_id_to_original_document_id[
-                chunk.source_document.id
-            ] = old_chunk.source_document.id
+            new_document_id_to_original_document_id[chunk.source_document.id] = (
+                old_chunk.source_document.id
+            )
 
         existing_docs: set[str] = set()
 

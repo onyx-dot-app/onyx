@@ -103,12 +103,10 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
             return self._dict.copy()
 
     @overload
-    def get(self, key: KT) -> VT | None:
-        ...
+    def get(self, key: KT) -> VT | None: ...
 
     @overload
-    def get(self, key: KT, default: VT | _T) -> VT | _T:
-        ...
+    def get(self, key: KT, default: VT | _T) -> VT | _T: ...
 
     def get(self, key: KT, default: Any = None) -> Any:
         """Get a value with a default, atomically."""
@@ -149,8 +147,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
 
 
 class CallableProtocol(Protocol):
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 def run_functions_tuples_in_parallel(
@@ -350,8 +347,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    future_to_index[
-                        executor.submit(_next_or_none, ind, gens[ind])
-                    ] = next_ind
+                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
+                        next_ind
+                    )
                     next_ind += 1
                 del future_to_index[future]

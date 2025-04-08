@@ -212,9 +212,9 @@ class Answer:
         return citations
 
     def citations_by_subquestion(self) -> dict[SubQuestionKey, list[CitationInfo]]:
-        citations_by_subquestion: dict[
-            SubQuestionKey, list[CitationInfo]
-        ] = defaultdict(list)
+        citations_by_subquestion: dict[SubQuestionKey, list[CitationInfo]] = (
+            defaultdict(list)
+        )
         basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
         for packet in self.processed_streamed_output:
             if isinstance(packet, CitationInfo):

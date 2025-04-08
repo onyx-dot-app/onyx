@@ -141,8 +141,7 @@ class CredentialedRetrievalMethod(Protocol):
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[RetrievedDriveFile]:
-        ...
+    ) -> Iterator[RetrievedDriveFile]: ...
 
 
 def add_retrieval_info(

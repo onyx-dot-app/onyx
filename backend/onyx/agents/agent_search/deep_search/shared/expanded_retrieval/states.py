@@ -44,9 +44,9 @@ class DocVerificationUpdate(LoggerUpdate, BaseModel):
 
 class DocRetrievalUpdate(LoggerUpdate, BaseModel):
     query_retrieval_results: Annotated[list[QueryRetrievalResult], add] = []
-    retrieved_documents: Annotated[
-        list[InferenceSection], dedup_inference_sections
-    ] = []
+    retrieved_documents: Annotated[list[InferenceSection], dedup_inference_sections] = (
+        []
+    )
 
 
 class DocRerankingUpdate(LoggerUpdate, BaseModel):
@@ -64,9 +64,9 @@ class ExpandedRetrievalUpdate(LoggerUpdate, BaseModel):
 class ExpandedRetrievalOutput(LoggerUpdate, BaseModel):
     expanded_retrieval_result: QuestionRetrievalResult = QuestionRetrievalResult()
     base_expanded_retrieval_result: QuestionRetrievalResult = QuestionRetrievalResult()
-    retrieved_documents: Annotated[
-        list[InferenceSection], dedup_inference_sections
-    ] = []
+    retrieved_documents: Annotated[list[InferenceSection], dedup_inference_sections] = (
+        []
+    )
 
 
 ## Graph State
