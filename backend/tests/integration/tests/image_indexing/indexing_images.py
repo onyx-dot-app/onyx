@@ -4,6 +4,7 @@ from datetime import timezone
 
 import pytest
 
+from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.connectors import upload_file
@@ -65,7 +66,7 @@ def test_image_indexing(reset: None) -> None:
     connector = ConnectorManager.create(
         name=connector_name,
         source=DocumentSource.FILE,
-        input_type="load_state",
+        input_type=InputType.LOAD_STATE,
         connector_specific_config={"file_locations": file_paths},
         access_type=AccessType.PUBLIC,
         groups=[],
