@@ -77,6 +77,8 @@ class ChatSessionManager:
             alternate_assistant_id=alternate_assistant_id,
             use_existing_user_message=use_existing_user_message,
         )
+        print(user_performing_action.headers)
+        print(user_performing_action.cookies)
 
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
@@ -87,6 +89,7 @@ class ChatSessionManager:
                 else GENERAL_HEADERS
             ),
             stream=True,
+            cookies=user_performing_action.cookies,
         )
 
         return ChatSessionManager.analyze_response(response)

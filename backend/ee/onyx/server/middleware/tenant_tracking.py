@@ -32,7 +32,10 @@ def add_api_server_tenant_id_middleware(
         """
         try:
             if MULTI_TENANT:
+                print("Getting tenant id")
                 tenant_id = await _get_tenant_id_from_request(request, logger)
+                print("Tenant id", tenant_id)
+                print("Request cookies", request.cookies)
             else:
                 tenant_id = POSTGRES_DEFAULT_SCHEMA
 
