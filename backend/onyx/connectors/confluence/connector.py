@@ -463,6 +463,10 @@ class ConfluenceConnector(
                 yield doc_or_failure
                 continue
 
+            checkpoint.last_updated = datetime_from_string(
+                page["version"]["when"]
+            ).timestamp()
+
             # Now get attachments for that page:
             doc_or_failure = self._fetch_page_attachments(page, doc_or_failure)
 
