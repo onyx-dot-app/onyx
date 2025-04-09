@@ -337,6 +337,14 @@ def _next_or_none(ind: int, gen: Iterator[R]) -> tuple[int, R | None]:
 
 
 def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R]:
+    """
+    Runs the list of generators with thread-level parallelism, yielding
+    results as available. The asynchronous nature of this yielding means
+    that stopping the returned iterator early DOES NOT GUARANTEE THAT NO
+    FURTHER ITEMS WERE PRODUCED by the input gens. Only use this function
+    if you are consuming all elements from the generators OR it is acceptable
+    for some extra generator code to run and not have the result(s) yielded.
+    """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
             executor.submit(_next_or_none, ind, gen): ind
