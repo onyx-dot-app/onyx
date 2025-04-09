@@ -1,3 +1,4 @@
+import time
 import traceback
 from collections import defaultdict
 from collections.abc import Callable
@@ -914,6 +915,7 @@ def stream_chat_message_objects(
                     retrieval_options.filters.user_folder_ids = user_folder_ids
 
                     # Create override kwargs for the search tool
+
                     override_kwargs = SearchToolOverrideKwargs(
                         force_no_rerank=search_for_ordering_only,  # Skip reranking for ordering-only
                         alternate_db_session=None,
@@ -1109,9 +1111,6 @@ def stream_chat_message_objects(
                         logger.info(
                             f"ORDERING: Processing search results for ordering {len(user_files)} user files"
                         )
-                        import time
-
-                        ordering_start = time.time()
 
                         # Extract document order from search results
                         doc_order = []
@@ -1146,8 +1145,6 @@ def stream_chat_message_objects(
                             for f_id in doc_order
                             if f_id in file_id_to_user_file
                         ]
-
-                        time.time() - ordering_start
 
                         yield UserKnowledgeFilePacket(
                             user_files=[
@@ -1440,6 +1437,7 @@ def stream_chat_message(
     custom_tool_additional_headers: dict[str, str] | None = None,
     is_connected: Callable[[], bool] | None = None,
 ) -> Iterator[str]:
+    start_time = time.time()
     with get_session_context_manager() as db_session:
         objects = stream_chat_message_objects(
             new_msg_req=new_msg_req,
@@ -1450,6 +1448,11 @@ def stream_chat_message(
             is_connected=is_connected,
         )
         for obj in objects:
+            # Check if this is a QADocsResponse with document results
+            if isinstance(obj, QADocsResponse):
+                document_retrieval_latency = time.time() - start_time
+                logger.debug(f"First doc time: {document_retrieval_latency}")
+
             yield get_json_line(obj.model_dump())
 
 

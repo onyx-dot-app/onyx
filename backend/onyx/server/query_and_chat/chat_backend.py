@@ -448,7 +448,7 @@ def handle_new_chat_message(
                 ),
                 is_connected=is_connected_func,
             ):
-                yield json.dumps(packet) if isinstance(packet, dict) else packet
+                yield packet
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
