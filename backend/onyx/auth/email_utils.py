@@ -50,7 +50,7 @@ HTML_EMAIL_TEMPLATE = """\
       border: 1px solid #eaeaea;
     }}
     .header {{
-      background-color: #000000;
+      background-color: #ffffff;
       padding: 20px;
       text-align: center;
     }}
@@ -97,8 +97,8 @@ HTML_EMAIL_TEMPLATE = """\
       <td class="header">
         <img
           style="background-color: #ffffff; border-radius: 8px;"
-          src="https://www.onyx.app/logos/customer/onyx.png"
-          alt="Onyx Logo"
+          src="https://www.eea.europa.eu/en/newsroom/branding-materials/eea_logo_compact_en.png/@@download/image/eea_logo_compact_en.png"
+          alt="EEA GPT Lab Logo"
         >
       </td>
     </tr>
@@ -113,9 +113,7 @@ HTML_EMAIL_TEMPLATE = """\
     </tr>
     <tr>
       <td class="footer">
-        © {year} Onyx. All rights reserved.
-        <br>
-        Have questions? Join our Slack community <a href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA">here</a>.
+        EEA GPT Lab is powered by open source LLMs, and software such as Onyx, Litellm, Langfuse, vLLM, Vespa.
       </td>
     </tr>
   </table>
@@ -147,6 +145,7 @@ def send_email(
     text_body: str,
     mail_from: str = EMAIL_FROM,
 ) -> None:
+    import pdb; pdb.set_trace()
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
 
@@ -175,6 +174,7 @@ def send_email(
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:
+    import pdb; pdb.set_trace()
     # Example usage of the reusable HTML
     subject = "Your Onyx Subscription Has Been Canceled"
     heading = "Subscription Canceled"
@@ -197,11 +197,19 @@ def send_subscription_cancellation_email(user_email: str) -> None:
 def send_user_email_invite(
     user_email: str, current_user: User, auth_type: AuthType
 ) -> None:
-    subject = "Invitation to Join Onyx Organization"
-    heading = "You've Been Invited!"
+    subject = "Invitation to Join EEA GPT Lab"
+    heading = "You've been invited to EEA GPT Lab!"
 
     # the exact action taken by the user, and thus the message, depends on the auth type
-    message = f"<p>You have been invited by {current_user.email} to join an organization on Onyx.</p>"
+    message = f"<p>You have been invited by {current_user.email} (admin) to join the EEA GPT Lab.</p>"
+
+
+
+    message += ("<p>The EEA GPT Lab is a restricted-access application designed as a safe environment to explore the potential benefits and risks of using EEA's public content with state-of-the-art Large Language Models (LLMs). The application is for experimental purposes only, with access limited to users with EEA email addresses and selected partners. GPT Lab is built with a robust privacy architecture to ensure that sensitive and personal information is not sent to third-party LLM AI providers.<br/>"
+        "See <a href='https://gptlab.eea.europa.eu/pages/privacy'>Privacy Architecture</a>.<p>")
+
+
+
     if auth_type == AuthType.CLOUD:
         message += (
             "<p>To join the organization, please click the button below to set a password "
@@ -209,7 +217,7 @@ def send_user_email_invite(
         )
     elif auth_type == AuthType.BASIC:
         message += (
-            "<p>To join the organization, please click the button below to set a password "
+            "<p>To join the EEA GPT Lab, please click the button below to set a password "
             "and complete your registration.</p>"
         )
     elif auth_type == AuthType.GOOGLE_OAUTH:
@@ -225,15 +233,16 @@ def send_user_email_invite(
     else:
         raise ValueError(f"Invalid auth type: {auth_type}")
 
-    cta_text = "Join Organization"
+    cta_text = "Join EEA GPT Lab"
     cta_link = f"{WEB_DOMAIN}/auth/signup?email={user_email}"
     html_content = build_html_email(heading, message, cta_text, cta_link)
 
     # text content is the fallback for clients that don't support HTML
     # not as critical, so not having special cases for each auth type
     text_content = (
-        f"You have been invited by {current_user.email} to join an organization on Onyx.\n"
-        "To join the organization, please visit the following link:\n"
+        f"You have been invited by {current_user.email} (admin) to join the EEA GPT Lab.\n"
+        "The EEA GPT Lab is a restricted-access application designed as a safe environment to explore the potential benefits and risks of using EEA's public content with state-of-the-art Large Language Models (LLMs). The application is for experimental purposes only, with access limited to users with EEA email addresses and selected contractors. GPT Lab is built with a robust privacy architecture to ensure that sensitive and personal information is not sent to third-party LLM AI providers.\n"
+        "To join the EEA GPT Lab, please visit the following link:\n"
         f"{WEB_DOMAIN}/auth/signup?email={user_email}\n"
     )
     if auth_type == AuthType.CLOUD:
@@ -249,7 +258,7 @@ def send_forgot_password_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a forgot password email with or without fancy HTML
-    subject = "Onyx Forgot Password"
+    subject = "EEA GPT Lab Forgot Password"
     link = f"{WEB_DOMAIN}/auth/reset-password?token={token}"
     if MULTI_TENANT:
         link += f"&{TENANT_ID_COOKIE_NAME}={tenant_id}"
@@ -265,7 +274,7 @@ def send_user_verification_email(
     mail_from: str = EMAIL_FROM,
 ) -> None:
     # Builds a verification email
-    subject = "Onyx Email Verification"
+    subject = "EEA GPT Lab Email Verification"
     link = f"{WEB_DOMAIN}/auth/verify-email?token={token}"
     message = (
         f"<p>Click the following link to verify your email address:</p><p>{link}</p>"
