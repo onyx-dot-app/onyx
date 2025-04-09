@@ -92,7 +92,7 @@ export function CustomLLMProviderUpdateForm({
     deployment_name: Yup.string().nullable(),
   });
 
-  const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
+  const arePaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   return (
     <Formik
@@ -425,7 +425,7 @@ export function CustomLLMProviderUpdateForm({
               />
             )}
 
-            {isPaidEnterpriseFeaturesEnabled && (
+            {arePaidEnterpriseFeaturesEnabled && (
               <>
                 <Separator />
                 <AdvancedOptionsToggle
