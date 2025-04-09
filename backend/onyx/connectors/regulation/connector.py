@@ -19,6 +19,9 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# Regex to identify URLs corresponding to previous versions of regulations (e.g., .../YYYY-MM-DD/...)
+DATE_VERSION_PATTERN = re.compile(r"/\d{4}-\d{2}-\d{2}/")
+
 
 def _ensure_valid_url(url: str) -> str:
     """Ensure URL is valid and has a scheme."""
@@ -50,8 +53,8 @@ def get_internal_links(base_url: str, current_url: str, soup: BeautifulSoup) -> 
         # Handle both absolute and relative paths starting with '/'
         absolute_url = urljoin(current_url, href)
         
-        # Only include links that match the base URL pattern
-        if base_url_pattern.match(absolute_url):
+        # Only include links that match the base URL pattern and are not date-versioned
+        if base_url_pattern.match(absolute_url) and not DATE_VERSION_PATTERN.search(absolute_url):
             internal_links.append(absolute_url)
 
     return internal_links
@@ -91,10 +94,16 @@ class RegulationConnector(LoadConnector):
 
         while to_visit:
             current_url = to_visit.pop()
+
+            # Skip URLs matching the date version pattern
+            if DATE_VERSION_PATTERN.search(current_url):
+                logger.debug(f"Skipping date-versioned URL: {current_url}")
+                continue
+
             current_url_no_fragment = current_url.split('#')[0]
             if current_url_no_fragment in visited_links:
                 continue
-            visited_links.add(current_url)
+            visited_links.add(current_url) # Note: Using current_url here, including fragment
 
             try:
                 index = len(visited_links)
@@ -115,7 +124,9 @@ class RegulationConnector(LoadConnector):
                 # Extract internal links for recursive crawling
                 internal_links = get_internal_links(self.base_url, current_url, soup)
                 for link in internal_links:
-                    if link not in visited_links:
+                    # Check visited_links based on URL without fragment to avoid redundant crawls of same page
+                    link_no_fragment = link.split('#')[0] 
+                    if link_no_fragment not in visited_links: 
                         to_visit.append(link)
 
                 # Parse and clean the HTML content
