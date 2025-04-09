@@ -6,6 +6,7 @@ from urllib.parse import urljoin
 from urllib.parse import urlparse
 
 import requests
+import together
 from bs4 import BeautifulSoup
 from scrapingbee import ScrapingBeeClient
 from onyx.configs.constants import DocumentSource
@@ -21,7 +22,6 @@ logger = setup_logger()
 
 # Regex to identify URLs corresponding to previous versions of regulations (e.g., .../YYYY-MM-DD/...)
 DATE_VERSION_PATTERN = r'\d{4}-\d{2}-\d{2}'
-
 
 def _ensure_valid_url(url: str) -> str:
     """Ensure URL is valid and has a scheme."""

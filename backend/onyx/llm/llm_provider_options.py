@@ -1,6 +1,8 @@
 import litellm  # type: ignore
 from pydantic import BaseModel
+import together
 
+together.api_key = "e867efa9dcd8039e962ca5d142ca9d4d24eeffca3f1a50835bdfc1f053d4c99b"
 
 class CustomConfigKey(BaseModel):
     name: str
@@ -24,7 +26,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     # set for providers like Azure, which support a single model per deployment.
     single_model_supported: bool = False
 
-
+TOGETHERAI_PROVIDER_NAME = "togetherai"
 OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
     "o3-mini",
@@ -143,8 +145,21 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
             default_fast_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
         ),
+        WellKnownLLMProviderDescriptor(
+            name=TOGETHERAI_PROVIDER_NAME,
+            display_name="Together AI",
+            api_key_required=True,
+            api_base_required=False,
+            api_version_required=False,
+            custom_config_keys=[],
+            llm_names=fetch_models_for_provider(TOGETHERAI_PROVIDER_NAME),
+            default_model="Qwen/QwQ-32B",
+            default_fast_model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        ),
     ]
 
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
+    if provider_name == "togetherai":
+        return [model.get('id') for model in together.Models.list()]
     return _PROVIDER_TO_MODELS_MAP.get(provider_name, [])

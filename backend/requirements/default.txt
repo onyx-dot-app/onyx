@@ -97,3 +97,4 @@ sentry-sdk==2.14.0
 prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 scrapingbee==2.0.1
+together==1.5.5

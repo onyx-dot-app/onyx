@@ -20,6 +20,7 @@ from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
+from onyx.llm.chat_llm import TogetherLLM
 
 logger = setup_logger()
 
@@ -211,6 +212,20 @@ def get_llm(
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
+
+    if provider == "togetherai":
+        return TogetherLLM(
+            model_provider=provider,
+            model_name=model,
+            deployment_name=deployment_name,
+            api_key=api_key,
+            api_base=api_base,
+            api_version=api_version,
+            timeout=timeout,
+            temperature=temperature,
+            custom_config=custom_config,
+        )
+
     return DefaultMultiLLM(
         model_provider=provider,
         model_name=model,

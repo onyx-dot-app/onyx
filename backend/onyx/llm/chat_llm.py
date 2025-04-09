@@ -1,5 +1,6 @@
 import json
 import os
+import together
 import traceback
 from collections.abc import Iterator
 from collections.abc import Sequence
@@ -235,6 +236,271 @@ def _prompt_to_dict(
     if isinstance(prompt, PromptValue):
         return [_convert_message_to_dict(message) for message in prompt.to_messages()]
 
+class TogetherLLM(LLM):
+    def __init__(self,
+        api_key: str | None,
+        model_provider: str,
+        model_name: str,
+        timeout: int | None = None,
+        api_base: str | None = None,
+        api_version: str | None = None,
+        deployment_name: str | None = None,
+        max_output_tokens: int | None = None,
+        custom_llm_provider: str | None = None,
+        temperature: float | None = None,
+        custom_config: dict[str, str] | None = None,
+        extra_headers: dict[str, str] | None = None,
+        extra_body: dict | None = LITELLM_EXTRA_BODY,
+        model_kwargs: dict[str, Any] | None = None,
+        long_term_logger: LongTermLogger | None = None):
+            self._timeout = timeout
+            if timeout is None:
+                if model_is_reasoning_model(model_name):
+                    self._timeout = QA_TIMEOUT * 10  # Reasoning models are slow
+                else:
+                    self._timeout = QA_TIMEOUT
+
+            self._temperature = GEN_AI_TEMPERATURE if temperature is None else temperature
+
+            self._model_provider = model_provider
+            self._model_name = model_name
+            self._api_key = api_key
+            self._deployment_name = deployment_name
+            self._api_base = api_base
+            self._api_version = api_version
+            self._custom_llm_provider = custom_llm_provider
+            self._long_term_logger = long_term_logger
+            self._custom_config = custom_config
+            self._client = together.Together(
+                api_key=self._api_key,
+                base_url=self._api_base,
+            )
+            self._model_kwargs = model_kwargs
+            self._max_output_tokens = max_output_tokens
+
+    def log_model_configs(self) -> None:
+        logger.debug(f"Config: {self.config}")
+
+    def _safe_model_config(self) -> dict:
+        dump = self.config.model_dump()
+        dump["api_key"] = mask_string(dump.get("api_key", ""))
+        return dump
+
+    def _record_call(self, prompt: LanguageModelInput) -> None:
+        if self._long_term_logger:
+            self._long_term_logger.record(
+                {"prompt": _prompt_to_dict(prompt), "model": self._safe_model_config()},
+                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
+            )
+        
+    def _record_result(
+        self, prompt: LanguageModelInput, model_output: BaseMessage
+    ) -> None:
+        if self._long_term_logger:
+            self._long_term_logger.record(
+                {
+                    "prompt": _prompt_to_dict(prompt),
+                    "content": model_output.content,
+                    "tool_calls": (
+                        model_output.tool_calls
+                        if hasattr(model_output, "tool_calls")
+                        else []
+                    ),
+                    "model": self._safe_model_config(),
+                },
+                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
+            )
+
+    def _record_error(self, prompt: LanguageModelInput, error: Exception) -> None:
+        if self._long_term_logger:
+            self._long_term_logger.record(
+                {
+                    "prompt": _prompt_to_dict(prompt),
+                    "error": str(error),
+                    "traceback": "".join(
+                        traceback.format_exception(
+                            type(error), error, error.__traceback__
+                        )
+                    ),
+                    "model": self._safe_model_config(),
+                },
+                category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
+            )
+
+    def _completion(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None,
+        tool_choice: ToolChoiceOptions | None,
+        stream: bool,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
+        # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
+        # to a dict representation
+        processed_prompt = _prompt_to_dict(prompt)
+        self._record_call(processed_prompt)
+
+        try:
+            return self._client.chat.completions.create(
+                mock_response=MOCK_LLM_RESPONSE,
+                api_key=self._api_key,
+                base_url=self._api_base,
+                model=self._model_name,
+                messages=processed_prompt,
+                tools=tools,
+                tool_choice=tool_choice if tools else None,
+                temperature=self._temperature,
+                timeout=timeout_override or self._timeout,
+                max_tokens=max_tokens,
+                stream = stream,
+                **(
+                    {"response_format": structured_response_format}
+                    if structured_response_format
+                    else {}
+                ),
+                **(self._model_kwargs if self._model_kwargs else {}),
+            )
+        except Exception as e:
+            self._record_error(processed_prompt, e)
+            # for break pointing
+            if isinstance(e, litellm.Timeout):
+                raise LLMTimeoutError(e)
+
+            elif isinstance(e, litellm.RateLimitError):
+                raise LLMRateLimitError(e)
+
+            raise e
+
+    @property
+    def config(self) -> LLMConfig:
+        return LLMConfig(
+            model_provider=self._model_provider,
+            model_name=self._model_name,
+            temperature=self._temperature,
+            api_key=self._api_key,
+            api_base=self._api_base,
+            api_version=self._api_version,
+            deployment_name=self._deployment_name,
+        )
+
+    def _invoke_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> BaseMessage:
+        if LOG_DANSWER_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        response = cast(
+            litellm.ModelResponse,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=False,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+            ),
+        )
+        choice = response.choices[0]
+        if hasattr(choice, "message"):
+            output = _convert_litellm_message_to_langchain_message(choice.message)
+            if output:
+                self._record_result(prompt, output)
+            return output
+        else:
+            raise ValueError("Unexpected response choice type")
+
+    def _stream_implementation(
+        self,
+        prompt: LanguageModelInput,
+        tools: list[dict] | None = None,
+        tool_choice: ToolChoiceOptions | None = None,
+        structured_response_format: dict | None = None,
+        timeout_override: int | None = None,
+        max_tokens: int | None = None,
+    ) -> Iterator[BaseMessage]:
+        if LOG_DANSWER_MODEL_INTERACTIONS:
+            self.log_model_configs()
+
+        if DISABLE_LITELLM_STREAMING:
+            yield self.invoke(
+                prompt,
+                tools,
+                tool_choice,
+                structured_response_format,
+                timeout_override,
+            )
+            return
+
+        output = None
+        response = cast(
+            litellm.CustomStreamWrapper,
+            self._completion(
+                prompt=prompt,
+                tools=tools,
+                tool_choice=tool_choice,
+                stream=True,
+                structured_response_format=structured_response_format,
+                timeout_override=timeout_override,
+                max_tokens=max_tokens,
+            ),
+        )
+        try:
+            for part in response:
+                if not part.choices:
+                    continue
+
+                choice = part.choices[0]
+                message_chunk = _convert_delta_to_message_chunk(
+                    choice.delta.__dict__,
+                    output,
+                    stop_reason=choice.finish_reason,
+                )
+
+                if output is None:
+                    output = message_chunk
+                else:
+                    output += message_chunk
+
+                yield message_chunk
+
+        except RemoteProtocolError:
+            raise RuntimeError(
+                "The AI model failed partway through generation, please try again."
+            )
+
+        if output:
+            self._record_result(prompt, output)
+
+        if LOG_DANSWER_MODEL_INTERACTIONS and output:
+            content = output.content or ""
+            if isinstance(output, AIMessage):
+                if content:
+                    log_msg = content
+                elif output.tool_calls:
+                    log_msg = "Tool Calls: " + str(
+                        [
+                            {
+                                key: value
+                                for key, value in tool_call.items()
+                                if key != "index"
+                            }
+                            for tool_call in output.tool_calls
+                        ]
+                    )
+                else:
+                    log_msg = ""
+                logger.debug(f"Raw Model Output:\n{log_msg}")
+            else:
+                logger.debug(f"Raw Model Output:\n{content}")
 
 class DefaultMultiLLM(LLM):
     """Uses Litellm library to allow easy configuration to use a multitude of LLMs
