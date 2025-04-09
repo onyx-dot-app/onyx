@@ -201,6 +201,7 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                     title_embedding = self.embedding_model.encode(
                         [title],
                         text_type=EmbedTextType.PASSAGE,
+                        tenant_id=tenant_id,
                         request_id=request_id,
                     )[0]
                     title_embed_dict[title] = title_embedding
