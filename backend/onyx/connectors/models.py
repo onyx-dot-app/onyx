@@ -272,9 +272,14 @@ class SlimDocument(BaseModel):
 
 
 class IndexAttemptMetadata(BaseModel):
-    batch_num: int | None = None
     connector_id: int
     credential_id: int
+    batch_num: int | None = None
+    attempt_id: int | None = None
+    request_id: str | None = None
+
+    # Work in progress: will likely contain metadata about cc pair / index attempt
+    structured_id: str | None = None
 
 
 class ConnectorCheckpoint(BaseModel):

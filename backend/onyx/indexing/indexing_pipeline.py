@@ -791,6 +791,8 @@ def index_doc_batch(
         embed_chunks_with_failure_handling(
             chunks=chunks,
             embedder=embedder,
+            tenant_id=tenant_id,
+            request_id=index_attempt_metadata.request_id,
         )
         if chunks
         else ([], [])
