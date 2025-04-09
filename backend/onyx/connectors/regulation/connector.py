@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
-
+from scrapingbee import ScrapingBeeClient
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
@@ -20,7 +20,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # Regex to identify URLs corresponding to previous versions of regulations (e.g., .../YYYY-MM-DD/...)
-DATE_VERSION_PATTERN = re.compile(r"/\d{4}-\d{2}-\d{2}/")
+DATE_VERSION_PATTERN = r'\d{4}-\d{2}-\d{2}'
 
 
 def _ensure_valid_url(url: str) -> str:
@@ -54,7 +54,7 @@ def get_internal_links(base_url: str, current_url: str, soup: BeautifulSoup) -> 
         absolute_url = urljoin(current_url, href)
         
         # Only include links that match the base URL pattern and are not date-versioned
-        if base_url_pattern.match(absolute_url) and not DATE_VERSION_PATTERN.search(absolute_url):
+        if base_url_pattern.match(absolute_url) and not re.search(DATE_VERSION_PATTERN, absolute_url):
             internal_links.append(absolute_url)
 
     return internal_links
@@ -70,6 +70,7 @@ class RegulationConnector(LoadConnector):
         self.base_url = _ensure_valid_url(base_url)
         self.batch_size = batch_size
         self.to_visit_list = [self.base_url]
+        self.scrapingbee_client = ScrapingBeeClient(api_key="1XZ23AFCDZBCETJEL1ISDI0ZC92LGVBHBAACDT68BJP3EZWGZZ4906V76BTTEY1AVZO5VQOD5VC3JIHQ")
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         if credentials:
@@ -96,7 +97,7 @@ class RegulationConnector(LoadConnector):
             current_url = to_visit.pop()
 
             # Skip URLs matching the date version pattern
-            if DATE_VERSION_PATTERN.search(current_url):
+            if re.search(DATE_VERSION_PATTERN, current_url):
                 logger.debug(f"Skipping date-versioned URL: {current_url}")
                 continue
 
@@ -109,13 +110,11 @@ class RegulationConnector(LoadConnector):
                 index = len(visited_links)
                 logger.info(f"{index}: Visiting {current_url}")
 
-                headers = {
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                    "Accept": "text/html,application/xhtml+xml,application/xml"
-                }
-            
-                response = requests.get(current_url, timeout=5, headers=headers)
-                response.raise_for_status()
+                response = self.scrapingbee_client.get(current_url, params={
+                    "render_js": False,
+                    "return_page_source": True,
+                    "wait": 0,
+                })
 
                 last_modified = response.headers.get("Last-Modified")
                 content = response.text
