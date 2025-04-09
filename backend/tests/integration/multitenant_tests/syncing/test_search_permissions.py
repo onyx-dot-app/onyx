@@ -1,3 +1,5 @@
+from typing import Any
+
 from onyx.db.models import UserRole
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
@@ -11,7 +13,7 @@ from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestUser
 
 
-def setup_test_tenants(reset_multitenant: None):
+def setup_test_tenants(reset_multitenant: None) -> dict[str, Any]:
     """Helper function to set up test tenants with documents and users."""
     # Creating an admin user for Tenant 1
     admin_user1: DATestUser = UserManager.create(
