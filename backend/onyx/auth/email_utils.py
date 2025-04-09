@@ -145,7 +145,6 @@ def send_email(
     text_body: str,
     mail_from: str = EMAIL_FROM,
 ) -> None:
-    import pdb; pdb.set_trace()
     if not EMAIL_CONFIGURED:
         raise ValueError("Email is not configured.")
 
@@ -174,7 +173,6 @@ def send_email(
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:
-    import pdb; pdb.set_trace()
     # Example usage of the reusable HTML
     subject = "Your Onyx Subscription Has Been Canceled"
     heading = "Subscription Canceled"
