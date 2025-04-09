@@ -29,7 +29,6 @@ def test_image_indexing(reset: None) -> None:
     test_file_dir = "tests/integration/common_utils/test_data"
     os.makedirs(test_file_dir, exist_ok=True)
     test_file_path = os.path.join(test_file_dir, "sample.pdf")
-    print(f"Using test file: {test_file_path}")
 
     # Use our fixed upload_file function to upload the test file
     file_name = "sample.pdf"
@@ -41,7 +40,7 @@ def test_image_indexing(reset: None) -> None:
         name="test_llm",
         user_performing_action=admin_user,
     )
-    print("Created LLM provider")
+
     SettingsManager.update_settings(
         DATestSettings(
             search_time_image_analysis_enabled=True,
@@ -49,7 +48,6 @@ def test_image_indexing(reset: None) -> None:
         )
     )
 
-    print(f"File upload response: {upload_response}")
     file_paths = upload_response.get("file_paths", [])
 
     if not file_paths:
@@ -62,11 +60,6 @@ def test_image_indexing(reset: None) -> None:
         user_performing_action=admin_user,
     )
 
-    print("Created credential")
-
-    print("Creating connector")
-    print("file_paths: ", file_paths)
-    print({"file_locations": file_paths})
     # Create the connector
     connector_name = f"FileConnector-{int(datetime.now().timestamp())}"
     connector = ConnectorManager.create(
@@ -79,8 +72,6 @@ def test_image_indexing(reset: None) -> None:
         user_performing_action=admin_user,
     )
 
-    print(f"Created connector with ID: {connector.id}")
-
     # Link the credential to the connector
     cc_pair = CCPairManager.create(
         credential_id=credential.id,
@@ -88,8 +79,6 @@ def test_image_indexing(reset: None) -> None:
         access_type=AccessType.PUBLIC,
         user_performing_action=admin_user,
     )
-
-    print(f"Created CC pair with ID: {cc_pair.id}")
 
     # Explicitly run the connector to start indexing
     CCPairManager.run_once(
@@ -103,25 +92,16 @@ def test_image_indexing(reset: None) -> None:
         user_performing_action=admin_user,
     )
 
-    print("Started indexing")
-
-    # Give the system some time to index the document
-    print("Sleeping for 15 seconds to allow indexing to progress...")
-
     # Create a chat session and ask about dogs
-    print("Creating chat session to ask about dogs...")
     chat_session: DATestChatSession = ChatSessionManager.create(
         user_performing_action=admin_user
     )
 
     # Ask about dogs in the document
-    response = ChatSessionManager.send_message(
+    ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message="How many dogs?",
         user_performing_action=admin_user,
     )
 
-    print(f"Response to 'How many dogs?': {response}")
-
     # Test passed if we were able to complete the workflow
-    print("Test successful - file uploaded and chat query completed")

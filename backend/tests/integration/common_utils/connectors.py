@@ -37,10 +37,6 @@ def upload_file(
     if "Content-Type" in headers:
         del headers["Content-Type"]
 
-    # Print debug info
-    print(f"Uploading file: {file_path} with name: {file_name}")
-    print(f"Headers: {headers}")
-
     # Make the request
     response = requests.post(
         f"{API_SERVER_URL}/manage/admin/connector/file/upload",
@@ -48,22 +44,15 @@ def upload_file(
         headers=headers,
     )
 
-    # Print detailed response for debugging
-    print(f"Response status: {response.status_code}")
-    print(f"Response text: {response.text}")
-
     if not response.ok:
         try:
             error_detail = response.json().get("detail", "Unknown error")
-            print(f"Error detail: {error_detail}")
-        except Exception as e:
+        except Exception:
             error_detail = response.text
-            print(f"Failed to parse error as JSON: {e}")
 
         raise Exception(
             f"Unable to upload files - {error_detail} (Status code: {response.status_code})"
         )
 
     response_json = response.json()
-    print(f"Response JSON: {response_json}")
     return response_json

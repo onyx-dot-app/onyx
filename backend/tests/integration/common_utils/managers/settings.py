@@ -55,8 +55,6 @@ class SettingsManager:
         )
 
         if not response.ok:
-            print("Failed to update settings")
-            print(response.json())
             return (
                 {},
                 f"Failed to update settings - {response.json().get('detail', 'Unknown error')}",
