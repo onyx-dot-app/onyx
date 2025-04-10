@@ -21,7 +21,7 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "sample.pdf"
-FILE_PATH = "tests/integration/common_utils/test_filesg/sample.pdf"
+FILE_PATH = "tests/integration/common_utils/test_files"
 
 
 def test_image_indexing(
