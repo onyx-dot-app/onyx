@@ -22,6 +22,9 @@ from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
+FILE_NAME = "sample.pdf"
+FILE_PATH = "tests/integration/common_utils/test_data/sample.pdf"
+
 
 def test_image_indexing(
     reset: None,
@@ -32,14 +35,12 @@ def test_image_indexing(
         email="admin@onyx-test.com",
     )
 
-    test_file_dir = "tests/integration/common_utils/test_data"
-    os.makedirs(test_file_dir, exist_ok=True)
-    test_file_path = os.path.join(test_file_dir, "sample.pdf")
+    os.makedirs(FILE_PATH, exist_ok=True)
+    test_file_path = os.path.join(FILE_PATH, FILE_NAME)
 
     # Use our fixed upload_file function to upload the test file
-    file_name = "sample.pdf"
     upload_response = upload_file(
-        file_path=test_file_path, file_name=file_name, user_performing_action=admin_user
+        file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
     )
 
     LLMProviderManager.create(
@@ -110,9 +111,7 @@ def test_image_indexing(
         message="How many dogs?",
         user_performing_action=admin_user,
     )
-    # Fetch documents for the connector-credential pair
 
-    # Verify results: doc1 should be indexed and doc2 should have an error entry
     with get_session_context_manager() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
@@ -120,10 +119,10 @@ def test_image_indexing(
             vespa_client=vespa_client,
         )
 
-        # Check if at least one document has an image file name containing "sample.pdf"
+        # Ensure we indexed an image from the sample.pdf file
         has_sample_pdf_image = False
         for doc in documents:
-            if doc.image_file_name and "sample.pdf" in doc.image_file_name:
+            if doc.image_file_name and FILE_NAME in doc.image_file_name:
                 has_sample_pdf_image = True
 
         # Assert that at least one document has an image file name containing "sample.pdf"

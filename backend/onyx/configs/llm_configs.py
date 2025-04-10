@@ -6,13 +6,10 @@ def get_image_extraction_and_analysis_enabled() -> bool:
     """Get image extraction and analysis enabled setting from workspace settings or fallback to False"""
     try:
         settings = load_settings()
-        print("SETTINGS")
-        print(settings.image_extraction_and_analysis_enabled)
         if settings.image_extraction_and_analysis_enabled is not None:
             return settings.image_extraction_and_analysis_enabled
     except Exception:
-        print("ERROR GETTING IMAGE EXTRACTION AND ANALYSIS ENABLED")
-        print(settings)
+        pass
 
     return False
 
@@ -21,13 +18,10 @@ def get_search_time_image_analysis_enabled() -> bool:
     """Get search time image analysis enabled setting from workspace settings or fallback to False"""
     try:
         settings = load_settings()
-        print("SETTINGS")
-        print(settings.search_time_image_analysis_enabled)
         if settings.search_time_image_analysis_enabled is not None:
             return settings.search_time_image_analysis_enabled
     except Exception:
-        print("ERROR GETTING SEARCH TIME IMAGE ANALYSIS ENABLED")
-        print(settings)
+        pass
 
     return False
 

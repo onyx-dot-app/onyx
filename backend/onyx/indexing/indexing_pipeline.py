@@ -456,13 +456,10 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
     if not get_image_extraction_and_analysis_enabled():
         llm = None
     else:
-        logger.error("TRYING TO GET")
         # Only get the vision LLM if image processing is enabled
         llm = get_default_llm_with_vision()
 
     if not llm:
-        print("NAM NAM")
-        logger.error("NAM NAM")
         # Even without LLM, we still convert to IndexingDocument with base Sections
         return [
             IndexingDocument(
@@ -484,8 +481,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         ]
 
     indexed_documents: list[IndexingDocument] = []
-    print("NEM NEM")
-    logger.error("NEM NEM   ")
 
     for document in documents:
         processed_sections: list[Section] = []
@@ -493,14 +488,6 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
         for section in document.sections:
             # For ImageSection, process and create base Section with both text and image_file_name
             if isinstance(section, ImageSection):
-                print("NOM ONOM")
-                print("PROCESSING IMAGE SECTION")
-                print(section.image_file_name)
-                logger.info(f"Processing image section: {section.image_file_name}")
-                logger.info(f"Document: {document.id}")
-                logger.error("NEM NEM")
-                logger.error(section.image_file_name)
-                logger.error(document.id)
                 # Default section with image path preserved - ensure text is always a string
                 processed_section = Section(
                     link=section.link,
