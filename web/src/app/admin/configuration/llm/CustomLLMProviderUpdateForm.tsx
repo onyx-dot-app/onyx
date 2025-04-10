@@ -15,8 +15,8 @@ import { FiPlus, FiTrash, FiX } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   Label,
+  MultiTextArrayField,
   SubLabel,
-  TextArrayField,
   TextFormField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
@@ -66,7 +66,7 @@ export function CustomLLMProviderUpdateForm({
     default_model_name: existingLlmProvider?.default_model_name ?? null,
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ?? null,
-    model_names: existingLlmProvider?.model_names ?? [],
+    model_configurations: existingLlmProvider?.model_configurations ?? [],
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],
@@ -82,7 +82,12 @@ export function CustomLLMProviderUpdateForm({
     api_key: Yup.string(),
     api_base: Yup.string(),
     api_version: Yup.string(),
-    model_names: Yup.array(Yup.string().required("Model name is required")),
+    model_configurations: Yup.array(
+      Yup.object({
+        model_name: Yup.string().required("Model name is required"),
+        max_input_tokens: Yup.number().optional(),
+      })
+    ),
     default_model_name: Yup.string().required("Model name is required"),
     fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
@@ -101,7 +106,7 @@ export function CustomLLMProviderUpdateForm({
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
-        if (values.model_names.length === 0) {
+        if (values.model_configurations.length === 0) {
           const fullErrorMsg = "At least one model name is required";
           if (setPopup) {
             setPopup({
@@ -146,7 +151,9 @@ export function CustomLLMProviderUpdateForm({
           body: JSON.stringify({
             ...values,
             // For custom llm providers, all model names are displayed
-            display_model_names: values.model_names,
+            display_model_names: values.model_configurations.map(
+              (model_configuration) => model_configuration.model_name
+            ),
             custom_config: customConfigProcessing(values.custom_config_list),
           }),
         });
@@ -376,11 +383,10 @@ export function CustomLLMProviderUpdateForm({
             />
 
             <Separator />
-
             {!existingLlmProvider?.deployment_name && (
-              <TextArrayField
-                name="model_names"
-                label="Model Names"
+              <MultiTextArrayField
+                name="model_configurations"
+                label="Model Configurations"
                 values={formikProps.values}
                 subtext={
                   <>
@@ -399,11 +405,11 @@ export function CustomLLMProviderUpdateForm({
                     .
                   </>
                 }
+                placeholders={["Model Name", "Maximum Input Tokens"]}
               />
             )}
 
             <Separator />
-
             <TextFormField
               name="default_model_name"
               subtext={`
