@@ -8,11 +8,11 @@ from onyx.connectors.models import InputType
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
-from tests.integration.common_utils.connectors import upload_file
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
@@ -21,7 +21,7 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "sample.pdf"
-FILE_PATH = "tests/integration/common_utils/test_data/sample.pdf"
+FILE_PATH = "tests/integration/common_utils/test_files/sample.pdf"
 
 
 def test_image_indexing(
@@ -36,8 +36,8 @@ def test_image_indexing(
     os.makedirs(FILE_PATH, exist_ok=True)
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
 
-    # Use our fixed upload_file function to upload the test file
-    upload_response = upload_file(
+    # Use FileManager to upload the test file
+    upload_response = FileManager.upload_file(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
     )
 
