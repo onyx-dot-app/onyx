@@ -41,7 +41,7 @@ def generate_sub_answers_graph_builder() -> StateGraph:
     # Decompose the original question into sub-questions
     graph.add_node(
         node="decompose_orig_question",
-        action=decompose_orig_question,
+        action=decompose_orig_question
     )
 
     # The sub-graph that executes the initial sub-question answering for

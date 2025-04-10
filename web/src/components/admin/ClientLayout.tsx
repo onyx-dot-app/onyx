@@ -442,6 +442,15 @@ export function ClientLayout({
                               },
                             ]
                           : []),
+                        {
+                          name: (
+                            <div className="flex">
+                              <SettingsIconSkeleton className="text-text-700" size={18} />
+                              <div className="ml-1">Prompts</div>
+                            </div>
+                          ),
+                          link: "/admin/prompts",
+                        },
                       ],
                     },
                   ]

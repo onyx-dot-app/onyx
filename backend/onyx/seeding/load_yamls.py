@@ -5,12 +5,14 @@ from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import PERSONAS_YAML
 from onyx.configs.chat_configs import PROMPTS_YAML
+from onyx.configs.chat_configs import SYSTEM_PROMPTS_YAML
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.document_set import get_or_create_document_set_by_name
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
 from onyx.db.models import DocumentSet as DocumentSetDBModel
 from onyx.db.models import Persona
 from onyx.db.models import Prompt as PromptDBModel
+from onyx.db.models import SystemPrompt
 from onyx.db.models import Tool as ToolDBModel
 from onyx.db.persona import upsert_persona
 from onyx.db.prompts import get_prompt_by_name
@@ -170,12 +172,44 @@ def load_personas_from_yaml(
         )
 
 
+def load_system_prompts_from_yaml(
+    db_session: Session, system_prompts_yaml: str = SYSTEM_PROMPTS_YAML
+) -> None:
+    with open(system_prompts_yaml, "r") as file:
+        data = yaml.safe_load(file)
+
+    all_system_prompts = data.get("system_prompts", [])
+    for system_prompt in all_system_prompts:
+        # Check if system prompt already exists
+        existing_prompt = (
+            db_session.query(SystemPrompt)
+            .filter(SystemPrompt.name == system_prompt["name"])
+            .first()
+        )
+
+        if existing_prompt:
+            # Update existing prompt
+            existing_prompt.contents = system_prompt["prompt"].strip()
+        else:
+            # Create new prompt
+            new_prompt = SystemPrompt(
+                id=system_prompt.get("id"),
+                name=system_prompt["name"],
+                contents=system_prompt["prompt"].strip(),
+            )
+            db_session.add(new_prompt)
+
+        db_session.commit()
+
+
 def load_chat_yamls(
     db_session: Session,
     prompt_yaml: str = PROMPTS_YAML,
     personas_yaml: str = PERSONAS_YAML,
     input_prompts_yaml: str = INPUT_PROMPT_YAML,
+    system_prompts_yaml: str = SYSTEM_PROMPTS_YAML,
 ) -> None:
     load_prompts_from_yaml(db_session, prompt_yaml)
     load_personas_from_yaml(db_session, personas_yaml)
     load_input_prompts_from_yaml(db_session, input_prompts_yaml)
+    load_system_prompts_from_yaml(db_session, system_prompts_yaml)

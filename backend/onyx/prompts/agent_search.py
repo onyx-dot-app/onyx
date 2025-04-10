@@ -168,44 +168,7 @@ History summary:
 # Sub-question
 # Intentionally left a copy in case we want to modify this one differently
 INITIAL_QUESTION_DECOMPOSITION_PROMPT = f"""
-Please create a list of no more than 3 sub-questions whose answers would help to inform the answer \
-to the initial question.
-
-The purpose for these sub-questions could be:
-  1) decomposition to isolate individual entities (i.e., 'compare sales of company A and company B' -> \
-['what are sales for company A', 'what are sales for company B'])
-
-  2) clarification and/or disambiguation of ambiguous terms (i.e., 'what is our success with company A' -> \
-['what are our sales with company A','what is our market share with company A', \
-'is company A a reference customer for us', etc.])
-
-  3) if a term or a metric is essentially clear, but it could relate to various aspects of an entity and you \
-are generally familiar with the entity, then you can create sub-questions that are more \
-specific (i.e.,  'what do we do to improve product X' -> 'what do we do to improve scalability of product X', \
-'what do we do to improve performance of product X', 'what do we do to improve stability of product X', ...)
-
-  4) research individual questions and areas that should really help to ultimately answer the question.
-
-Important:
-
- - Each sub-question should lend itself to be answered by a RAG system. Correspondingly, phrase the question \
-in a way that is amenable to that. An example set of sub-questions based on an initial question could look like this:
-'what can I do to improve the performance of workflow X' -> \
-'what are the settings affecting performance for workflow X', 'are there complaints and bugs related to \
-workflow X performance', 'what are performance benchmarks for workflow X', ...
-
- - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
- 'I', etc.
-
- - Do not(!) use your existing knowledge or introduce knowledge in sub-questions which is not available in the initial question.
- 
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
-
+{{prompt_base}}
 
 And here is the initial question to create sub-questions for, so that you have the full context:
 {SEPARATOR_LINE}
@@ -225,6 +188,42 @@ add any explanations or other text!):
 
 Answer:
 """.strip()
+
+
+# TODO: combine shared pieces with INITIAL_QUESTION_DECOMPOSITION_PROMPT
+INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH = f"""
+{{prompt_base}}
+
+To give you some context, you will see below also some documents that may relate to the question. Please only \
+use this information to learn what the question is approximately asking about, but do not focus on the details \
+to construct the sub-questions! Also, some of the entities, relationships and terms that are in the dataset may \
+not be in these few documents, so DO NOT focus too much on the documents when constructing the sub-questions! \
+Decomposition and disambiguations are most important!
+
+Here are the sample docs to give you some context:
+{SEPARATOR_LINE}
+{{sample_doc_str}}
+{SEPARATOR_LINE}
+
+And here is the initial question to create sub-questions for, so that you have the full context:
+{SEPARATOR_LINE}
+{{question}}
+{SEPARATOR_LINE}
+
+{{history}}
+
+Do NOT include any text in your answer outside of the list of sub-questions!\
+Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
+add any explanations or other text!):
+
+ <sub-question>
+ <sub-question>
+ <sub-question>
+ ...
+
+Answer:
+""".strip()
+
 
 # INITIAL PHASE - AWARE OF REFINEMENT
 # Sub-question
@@ -285,76 +284,6 @@ And here is the initial question to create sub-questions for:
 {{history}}
 
 Do NOT include any text in your answer outside of the list of sub-questions!
-Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
-
- <sub-question>
- <sub-question>
- <sub-question>
- ...
-
-Answer:
-""".strip()
-
-
-# TODO: combine shared pieces with INITIAL_QUESTION_DECOMPOSITION_PROMPT
-INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH = f"""
-Please create a list of no more than 3 sub-questions whose answers would help to inform the answer \
-to the initial question.
-
-The purpose for these sub-questions could be:
-  1) decomposition to isolate individual entities (i.e., 'compare sales of company A and company B' -> \
-['what are sales for company A', 'what are sales for company B'])
-
-  2) clarification and/or disambiguation of ambiguous terms (i.e., 'what is our success with company A' -> \
-['what are our sales with company A','what is our market share with company A', \
-'is company A a reference customer for us', etc.])
-
-  3) if a term or a metric is essentially clear, but it could relate to various aspects of an entity and you \
-are generally familiar with the entity, then you can create sub-questions that are more \
-specific (i.e.,  'what do we do to improve product X' -> 'what do we do to improve scalability of product X', \
-'what do we do to improve performance of product X', 'what do we do to improve stability of product X', ...)
-
-  4) research individual questions and areas that should really help to ultimately answer the question.
-
-Important:
-
- - Each sub-question should lend itself to be answered by a RAG system. Correspondingly, phrase the question \
-in a way that is amenable to that. An example set of sub-questions based on an initial question could look like this:
-'what can I do to improve the performance of workflow X' -> \
-'what are the settings affecting performance for workflow X', 'are there complaints and bugs related to \
-workflow X performance', 'what are performance benchmarks for workflow X', ...
-
- - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
- 'I', etc.
-
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
-
-
-To give you some context, you will see below also some documents that may relate to the question. Please only \
-use this information to learn what the question is approximately asking about, but do not focus on the details \
-to construct the sub-questions! Also, some of the entities, relationships and terms that are in the dataset may \
-not be in these few documents, so DO NOT focus too much on the documents when constructing the sub-questions! \
-Decomposition and disambiguations are most important!
-
-Here are the sample docs to give you some context:
-{SEPARATOR_LINE}
-{{sample_doc_str}}
-{SEPARATOR_LINE}
-
-And here is the initial question to create sub-questions for, so that you have the full context:
-{SEPARATOR_LINE}
-{{question}}
-{SEPARATOR_LINE}
-
-{{history}}
-
-Do NOT include any text in your answer outside of the list of sub-questions!\
 Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
 add any explanations or other text!):
 
@@ -564,8 +493,6 @@ Does the suggested answer address the question? Please answer with "{YES}" or "{
 
 # Initial Answer Generation
 INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS = f"""
-{{persona_specification}}
-
 Use the information provided below - and only the provided information - to answer the provided main question.
 
 The information provided below consists of:
@@ -609,6 +536,11 @@ And here is the question I want you to answer based on the information above:
 Please keep your answer brief and concise, and focus on facts and data. (Again, only state what you see in the documents for \
 sure and communicate if/in what way this may or may not relate to the question you need to answer! Use the answered \
 sub-questions as well, but be cautious and reconsider the docments again for validation.)
+
+When answering the question, please use the following persona specification:
+{SEPARATOR_LINE}
+{{persona_specification}}
+{SEPARATOR_LINE}
 
 Answer:
 """.strip()

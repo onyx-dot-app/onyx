@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Any
 from typing import cast
 
@@ -39,8 +40,9 @@ def fetch_no_auth_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=UserRole.BASIC if anonymous_user_enabled else UserRole.ADMIN,
+        role=UserRole.DEMO if anonymous_user_enabled else UserRole.ADMIN,
         preferences=load_no_auth_user_preferences(store),
         is_anonymous_user=anonymous_user_enabled,
         password_configured=False,
+        created_at=datetime.now(),
     )

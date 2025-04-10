@@ -2385,3 +2385,15 @@ class TenantAnonymousUserPath(Base):
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
     )
+
+
+class SystemPrompt(Base):
+    __tablename__ = "system_prompt"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, unique=True)
+    contents: Mapped[str] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_system_prompt_name"),
+    )

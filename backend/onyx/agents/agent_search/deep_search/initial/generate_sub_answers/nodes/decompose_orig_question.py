@@ -1,10 +1,12 @@
 from datetime import datetime
 from typing import cast
 
+from fastapi import Depends
 from langchain_core.messages import HumanMessage
 from langchain_core.messages import merge_content
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
+from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.deep_search.initial.generate_initial_answer.states import (
     SubQuestionRetrievalState,
@@ -42,14 +44,14 @@ from onyx.configs.agent_configs import (
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_LLM_SUBQUESTION_GENERATION,
 )
+from onyx.db.engine import get_session
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.prompts.agent_search import (
-    INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH_ASSUMING_REFINEMENT,
+    INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH,
+    INITIAL_QUESTION_DECOMPOSITION_PROMPT
 )
-from onyx.prompts.agent_search import (
-    INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT,
-)
+from onyx.server.features.prompts.api import get_system_prompt
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.timing import log_function_time
@@ -82,6 +84,10 @@ def decompose_orig_question(
     # Get the rewritten queries in a defined format
     model = graph_config.tooling.fast_llm
 
+    # Get the system prompt for initial decomposition
+    db_session = next(get_session())
+    initial_decomposition_prompt = get_system_prompt("initial_decomposition_prompt", db_session=db_session)
+
     history = build_history_prompt(graph_config, question)
 
     # Use the initial search results to inform the decomposition
@@ -105,14 +111,14 @@ def decompose_orig_question(
             ]
         )
 
-        decomposition_prompt = INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH_ASSUMING_REFINEMENT.format(
-            question=question, sample_doc_str=sample_doc_str, history=history
+        decomposition_prompt = INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH.format(
+            prompt_base=initial_decomposition_prompt, question=question, sample_doc_str=sample_doc_str, history=history
         )
 
     else:
         decomposition_prompt = (
-            INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT.format(
-                question=question, history=history
+            INITIAL_QUESTION_DECOMPOSITION_PROMPT.format(
+                prompt_base=initial_decomposition_prompt, question=question, history=history
             )
         )
 
