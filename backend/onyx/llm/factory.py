@@ -126,16 +126,13 @@ def get_default_llm_with_vision(
     with get_session_with_current_tenant() as db_session:
         # Try the default vision provider first
         default_provider = fetch_default_vision_provider(db_session)
-        if (
-            default_provider
-            and default_provider.default_vision_model
-            and model_supports_image_input(
+        if default_provider and default_provider.default_vision_model:
+            if model_supports_image_input(
                 default_provider.default_vision_model, default_provider.provider
-            )
-        ):
-            return create_vision_llm(
-                default_provider, default_provider.default_vision_model
-            )
+            ):
+                return create_vision_llm(
+                    default_provider, default_provider.default_vision_model
+                )
 
         # Fall back to searching all providers
         providers = fetch_existing_llm_providers(db_session)
@@ -143,44 +140,36 @@ def get_default_llm_with_vision(
     if not providers:
         return None
 
-    # Find the first provider that supports image input
+    # Check all providers for viable vision models
     for provider in providers:
+        provider_view = LLMProviderView.from_model(provider)
+
+        # First priority: Check if provider has a default_vision_model
         if provider.default_vision_model and model_supports_image_input(
             provider.default_vision_model, provider.provider
         ):
-            return create_vision_llm(
-                LLMProviderView.from_model(provider), provider.default_vision_model
-            )
-    for provider in providers:
-        # Check if model_names is empty, use default models if so
+            return create_vision_llm(provider_view, provider.default_vision_model)
+
+        # If no model_names are specified, try default models in priority order
         if not provider.model_names:
-            # Try default_vision_model first if available
-            if provider.default_vision_model and model_supports_image_input(
-                provider.default_vision_model, provider.provider
-            ):
-                return create_vision_llm(
-                    LLMProviderView.from_model(provider), provider.default_vision_model
-                )
             # Try default_model_name
-            elif provider.default_model_name and model_supports_image_input(
+            if provider.default_model_name and model_supports_image_input(
                 provider.default_model_name, provider.provider
             ):
-                return create_vision_llm(
-                    LLMProviderView.from_model(provider), provider.default_model_name
-                )
+                return create_vision_llm(provider_view, provider.default_model_name)
+
             # Try fast_default_model_name
-            elif provider.fast_default_model_name and model_supports_image_input(
+            if provider.fast_default_model_name and model_supports_image_input(
                 provider.fast_default_model_name, provider.provider
             ):
                 return create_vision_llm(
-                    LLMProviderView.from_model(provider),
-                    provider.fast_default_model_name,
+                    provider_view, provider.fast_default_model_name
                 )
         else:
-            # If model_names is not empty, check each model
-            for llm in provider.model_names:
-                if model_supports_image_input(llm, provider.provider):
-                    return create_vision_llm(LLMProviderView.from_model(provider), llm)
+            # If model_names is specified, check each model
+            for model_name in provider.model_names:
+                if model_supports_image_input(model_name, provider.provider):
+                    return create_vision_llm(provider_view, model_name)
 
     return None
 
