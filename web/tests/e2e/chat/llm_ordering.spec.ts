@@ -9,8 +9,6 @@ import {
 } from "../utils/chatActions";
 
 test("LLM Ordering and Model Switching", async ({ page }) => {
-  test.fail();
-
   // Setup: Clear cookies and log in as a random user
   await page.context().clearCookies();
   await loginAsRandomUser(page);
