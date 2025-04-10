@@ -139,7 +139,7 @@ def crawl_folders_for_files(
             if found_files:
                 update_traversed_ids_func(parent_id)
         except Exception as e:
-            if isinstance(e, HttpError) and 403 <= e.status_code <= 404:
+            if isinstance(e, HttpError) and e.status_code == 403:
                 # don't yield an error here because this is expected behavior
                 # when a user doesn't have access to a folder
                 logger.debug(f"Error getting files in parent {parent_id}: {e}")
