@@ -22,9 +22,9 @@ pruning_ctx: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "pruning_ctx", default=dict()
 )
 
-doc_permission_sync_ctx: contextvars.ContextVar[
-    dict[str, Any]
-] = contextvars.ContextVar("doc_permission_sync_ctx", default=dict())
+doc_permission_sync_ctx: contextvars.ContextVar[dict[str, Any]] = (
+    contextvars.ContextVar("doc_permission_sync_ctx", default=dict())
+)
 
 
 class LoggerContextVars:

@@ -86,9 +86,11 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
         # updated_at is UTC time but is timezone unaware, explicitly add UTC
         # as there is logic in indexing to prevent wrong timestamped docs
         # due to local time discrepancies with UTC
-        doc_updated_at=pull_request.updated_at.replace(tzinfo=timezone.utc)
-        if pull_request.updated_at
-        else None,
+        doc_updated_at=(
+            pull_request.updated_at.replace(tzinfo=timezone.utc)
+            if pull_request.updated_at
+            else None
+        ),
         metadata={
             "merged": str(pull_request.merged),
             "state": pull_request.state,

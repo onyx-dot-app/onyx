@@ -381,8 +381,9 @@ def delete_persona(
 
 @basic_router.get("/image-generation-tool")
 def get_image_generation_tool(
-    _: User
-    | None = Depends(current_user),  # User param not used but kept for consistency
+    _: User | None = Depends(
+        current_user
+    ),  # User param not used but kept for consistency
     db_session: Session = Depends(get_session),
 ) -> ImageGenerationToolStatus:  # Use bool instead of str for boolean values
     is_available = is_image_generation_available(db_session=db_session)

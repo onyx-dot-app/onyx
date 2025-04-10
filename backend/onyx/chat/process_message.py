@@ -173,9 +173,9 @@ def _translate_citations(
     citation_to_saved_doc_id_map: dict[int, int] = {}
     for citation in citations_list:
         if citation.citation_num not in citation_to_saved_doc_id_map:
-            citation_to_saved_doc_id_map[
-                citation.citation_num
-            ] = doc_id_to_saved_doc_id_map[citation.document_id]
+            citation_to_saved_doc_id_map[citation.citation_num] = (
+                doc_id_to_saved_doc_id_map[citation.document_id]
+            )
 
     return MessageSpecificCitations(citation_map=citation_to_saved_doc_id_map)
 
@@ -731,9 +731,9 @@ def stream_chat_message_objects(
             else reserve_message_id(
                 db_session=db_session,
                 chat_session_id=chat_session_id,
-                parent_message=user_message.id
-                if user_message is not None
-                else parent_message.id,
+                parent_message=(
+                    user_message.id if user_message is not None else parent_message.id
+                ),
                 message_type=MessageType.ASSISTANT,
             )
         )
@@ -1097,9 +1097,9 @@ def stream_chat_message_objects(
                             and retrieval_options.dedupe_docs
                         ),
                         user_files=user_file_files if search_for_ordering_only else [],
-                        loaded_user_files=user_files
-                        if search_for_ordering_only
-                        else [],
+                        loaded_user_files=(
+                            user_files if search_for_ordering_only else []
+                        ),
                     )
 
                     # If we're using search just for ordering user files
@@ -1357,16 +1357,18 @@ def stream_chat_message_objects(
             error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
             tool_call=(
                 ToolCall(
-                    tool_id=tool_name_to_tool_id.get(info.tool_result.tool_name, 0)
-                    if info.tool_result
-                    else None,
+                    tool_id=(
+                        tool_name_to_tool_id.get(info.tool_result.tool_name, 0)
+                        if info.tool_result
+                        else None
+                    ),
                     tool_name=info.tool_result.tool_name if info.tool_result else None,
-                    tool_arguments=info.tool_result.tool_args
-                    if info.tool_result
-                    else None,
-                    tool_result=info.tool_result.tool_result
-                    if info.tool_result
-                    else None,
+                    tool_arguments=(
+                        info.tool_result.tool_args if info.tool_result else None
+                    ),
+                    tool_result=(
+                        info.tool_result.tool_result if info.tool_result else None
+                    ),
                 )
                 if info.tool_result
                 else None
@@ -1396,9 +1398,11 @@ def stream_chat_message_objects(
                 db_session=db_session,
                 files=info.ai_message_files,
                 reference_docs=info.reference_db_search_docs,
-                citations=info.message_specific_citations.citation_map
-                if info.message_specific_citations
-                else None,
+                citations=(
+                    info.message_specific_citations.citation_map
+                    if info.message_specific_citations
+                    else None
+                ),
                 error=ERROR_TYPE_CANCELLED if answer.is_cancelled() else None,
                 refined_answer_improvement=refined_answer_improvement,
                 is_agentic=True,

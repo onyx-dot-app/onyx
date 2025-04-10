@@ -27,6 +27,7 @@ Example:
   python vespa_debug_tool.py --action list_docs --tenant-id my_tenant --connector-id 1 --n 5
   python vespa_debug_tool.py --action list_connector --tenant-id my_tenant --cc-pair-id 1 --n 5
 """
+
 import argparse
 import json
 from datetime import datetime

@@ -54,9 +54,11 @@ class FileManager:
     ) -> bytes:
         response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return response.content

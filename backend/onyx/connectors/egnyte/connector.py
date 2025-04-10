@@ -100,9 +100,9 @@ def _process_egnyte_file(
 
     # Add lock info if present
     if lock_info := file_metadata.get("lock_info"):
-        metadata[
-            "lock_owner"
-        ] = f"{lock_info.get('first_name', '')} {lock_info.get('last_name', '')}"
+        metadata["lock_owner"] = (
+            f"{lock_info.get('first_name', '')} {lock_info.get('last_name', '')}"
+        )
 
     # Create the document owners
     primary_owner = None

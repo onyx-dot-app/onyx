@@ -119,9 +119,11 @@ class GoogleSitesConnector(LoadConnector):
                     semantic_identifier=title,
                     sections=[
                         TextSection(
-                            link=(self.base_url.rstrip("/") + "/" + path.lstrip("/"))
-                            if path
-                            else "",
+                            link=(
+                                (self.base_url.rstrip("/") + "/" + path.lstrip("/"))
+                                if path
+                                else ""
+                            ),
                             text=parsed_html.cleaned_text,
                         )
                     ],

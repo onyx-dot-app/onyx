@@ -137,14 +137,16 @@ class LLMProviderView(LLMProvider):
                 or fetch_models_for_provider(llm_provider_model.provider)
                 or [llm_provider_model.default_model_name]
             ),
-            model_token_limits={
-                model_name: get_max_input_tokens(
-                    model_name, llm_provider_model.provider
-                )
-                for model_name in llm_provider_model.model_names
-            }
-            if llm_provider_model.model_names is not None
-            else None,
+            model_token_limits=(
+                {
+                    model_name: get_max_input_tokens(
+                        model_name, llm_provider_model.provider
+                    )
+                    for model_name in llm_provider_model.model_names
+                }
+                if llm_provider_model.model_names is not None
+                else None
+            ),
             is_public=llm_provider_model.is_public,
             groups=[group.id for group in llm_provider_model.groups],
             deployment_name=llm_provider_model.deployment_name,

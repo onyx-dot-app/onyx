@@ -88,14 +88,18 @@ def test_default_indexing_embedder_embed_chunks(
     )
     assert result[0].title_embedding == [7.0, 8.0, 9.0]
 
-    # Verify the embedding model was called correctly
+    # Verify the embedding model was called exactly as follows
     mock_embedding_model.return_value.encode.assert_any_call(
         texts=[f"Title: {doc_summary}Test chunk{chunk_context}"],
         text_type=EmbedTextType.PASSAGE,
         large_chunks_present=False,
+        tenant_id=None,
+        request_id=None,
     )
-    # title only embedding call
+    # Same for title only embedding call
     mock_embedding_model.return_value.encode.assert_any_call(
         ["Test Document"],
         text_type=EmbedTextType.PASSAGE,
+        tenant_id=None,
+        request_id=None,
     )

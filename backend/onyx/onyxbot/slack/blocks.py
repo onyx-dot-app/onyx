@@ -358,10 +358,12 @@ def _build_sources_blocks(
                     else []
                 )
                 + [
-                    MarkdownTextObject(text=f"{document_title}")
-                    if d.link == ""
-                    else MarkdownTextObject(
-                        text=f"*<{d.link}|[{citation_num}] {document_title}>*\n{final_metadata_str}"
+                    (
+                        MarkdownTextObject(text=f"{document_title}")
+                        if d.link == ""
+                        else MarkdownTextObject(
+                            text=f"*<{d.link}|[{citation_num}] {document_title}>*\n{final_metadata_str}"
+                        )
                     ),
                 ]
             )

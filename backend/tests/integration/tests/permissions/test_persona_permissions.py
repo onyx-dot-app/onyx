@@ -4,6 +4,7 @@ This file tests the permissions for creating and editing personas for different 
 - Curators can edit personas that belong exclusively to groups they curate
 - Admins can edit all personas
 """
+
 import os
 
 import pytest

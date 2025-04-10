@@ -100,16 +100,18 @@ def _convert_litellm_message_to_langchain_message(
     elif role == "assistant":
         return AIMessage(
             content=content,
-            tool_calls=[
-                {
-                    "name": tool_call.function.name or "",
-                    "args": json.loads(tool_call.function.arguments),
-                    "id": tool_call.id,
-                }
-                for tool_call in tool_calls
-            ]
-            if tool_calls
-            else [],
+            tool_calls=(
+                [
+                    {
+                        "name": tool_call.function.name or "",
+                        "args": json.loads(tool_call.function.arguments),
+                        "id": tool_call.id,
+                    }
+                    for tool_call in tool_calls
+                ]
+                if tool_calls
+                else []
+            ),
         )
     elif role == "system":
         return SystemMessage(content=content)

@@ -103,12 +103,10 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
             return self._dict.copy()
 
     @overload
-    def get(self, key: KT) -> VT | None:
-        ...
+    def get(self, key: KT) -> VT | None: ...
 
     @overload
-    def get(self, key: KT, default: VT | _T) -> VT | _T:
-        ...
+    def get(self, key: KT, default: VT | _T) -> VT | _T: ...
 
     def get(self, key: KT, default: Any = None) -> Any:
         """Get a value with a default, atomically."""
@@ -149,8 +147,7 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
 
 
 class CallableProtocol(Protocol):
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 def run_functions_tuples_in_parallel(
@@ -337,6 +334,14 @@ def _next_or_none(ind: int, gen: Iterator[R]) -> tuple[int, R | None]:
 
 
 def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R]:
+    """
+    Runs the list of generators with thread-level parallelism, yielding
+    results as available. The asynchronous nature of this yielding means
+    that stopping the returned iterator early DOES NOT GUARANTEE THAT NO
+    FURTHER ITEMS WERE PRODUCED by the input gens. Only use this function
+    if you are consuming all elements from the generators OR it is acceptable
+    for some extra generator code to run and not have the result(s) yielded.
+    """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
             executor.submit(_next_or_none, ind, gen): ind
@@ -350,8 +355,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    future_to_index[
-                        executor.submit(_next_or_none, ind, gens[ind])
-                    ] = next_ind
+                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
+                        next_ind
+                    )
                     next_ind += 1
                 del future_to_index[future]

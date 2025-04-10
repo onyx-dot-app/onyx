@@ -122,8 +122,7 @@ class IndexingPipelineProtocol(Protocol):
         self,
         document_batch: list[Document],
         index_attempt_metadata: IndexAttemptMetadata,
-    ) -> IndexingPipelineResult:
-        ...
+    ) -> IndexingPipelineResult: ...
 
 
 def _upsert_documents_in_db(
@@ -414,9 +413,11 @@ def filter_documents(document_batch: list[Document]) -> list[Document]:
             continue
 
         section_chars = sum(
-            len(section.text)
-            if isinstance(section, TextSection) and section.text is not None
-            else 0
+            (
+                len(section.text)
+                if isinstance(section, TextSection) and section.text is not None
+                else 0
+            )
             for section in document.sections
         )
         if (
@@ -467,9 +468,11 @@ def process_image_sections(documents: list[Document]) -> list[IndexingDocument]:
                     Section(
                         text=section.text if isinstance(section, TextSection) else "",
                         link=section.link,
-                        image_file_name=section.image_file_name
-                        if isinstance(section, ImageSection)
-                        else None,
+                        image_file_name=(
+                            section.image_file_name
+                            if isinstance(section, ImageSection)
+                            else None
+                        ),
                     )
                     for section in document.sections
                 ],
@@ -791,6 +794,8 @@ def index_doc_batch(
         embed_chunks_with_failure_handling(
             chunks=chunks,
             embedder=embedder,
+            tenant_id=tenant_id,
+            request_id=index_attempt_metadata.request_id,
         )
         if chunks
         else ([], [])
@@ -831,10 +836,10 @@ def index_doc_batch(
         doc_id_to_user_file_id: dict[str, int | None] = fetch_user_files_for_documents(
             document_ids=updatable_ids, db_session=db_session
         )
-        doc_id_to_user_folder_id: dict[
-            str, int | None
-        ] = fetch_user_folders_for_documents(
-            document_ids=updatable_ids, db_session=db_session
+        doc_id_to_user_folder_id: dict[str, int | None] = (
+            fetch_user_folders_for_documents(
+                document_ids=updatable_ids, db_session=db_session
+            )
         )
 
         doc_id_to_previous_chunk_cnt: dict[str, int | None] = {

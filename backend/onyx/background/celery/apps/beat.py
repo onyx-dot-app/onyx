@@ -41,7 +41,6 @@ class DynamicTenantScheduler(PersistentScheduler):
 
         # Let the parent class handle store initialization
         self.setup_schedule()
-        self._try_updating_schedule()
         task_logger.info(
             f"DynamicTenantScheduler initialized: reload_interval={self._reload_interval}"
         )

@@ -11,7 +11,21 @@ from fastapi import FastAPI
 from fastapi import Request
 from fastapi import Response
 
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from shared_configs.contextvars import ONYX_REQUEST_ID_CONTEXTVAR
+
+
+def add_onyx_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> None:
+    @app.middleware("http")
+    async def set_tenant_id(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        """Captures and sets the context var for the tenant."""
+
+        onyx_tenant_id = request.headers.get("X-Onyx-Tenant-ID")
+        if onyx_tenant_id:
+            CURRENT_TENANT_ID_CONTEXTVAR.set(onyx_tenant_id)
+        return await call_next(request)
 
 
 def add_onyx_request_id_middleware(

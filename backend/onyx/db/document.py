@@ -516,8 +516,9 @@ def mark_document_as_synced(document_id: str, db_session: Session) -> None:
 def delete_document_by_connector_credential_pair__no_commit(
     db_session: Session,
     document_id: str,
-    connector_credential_pair_identifier: ConnectorCredentialPairIdentifier
-    | None = None,
+    connector_credential_pair_identifier: (
+        ConnectorCredentialPairIdentifier | None
+    ) = None,
 ) -> None:
     """Deletes a single document by cc pair relationship entry.
     Foreign key rows are left in place.
@@ -534,8 +535,9 @@ def delete_document_by_connector_credential_pair__no_commit(
 def delete_documents_by_connector_credential_pair__no_commit(
     db_session: Session,
     document_ids: list[str],
-    connector_credential_pair_identifier: ConnectorCredentialPairIdentifier
-    | None = None,
+    connector_credential_pair_identifier: (
+        ConnectorCredentialPairIdentifier | None
+    ) = None,
 ) -> None:
     """This deletes just the document by cc pair entries for a particular cc pair.
     Foreign key rows are left in place.
