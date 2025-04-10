@@ -50,13 +50,15 @@ def basic_use_tool_response(
 
     final_search_results = []
     initial_search_results = []
+    initial_search_document_ids: set[str] = set()
     for yield_item in tool_call_responses:
         if yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID:
             final_search_results = cast(list[LlmDoc], yield_item.response)
         elif yield_item.id == SEARCH_RESPONSE_SUMMARY_ID:
             search_response_summary = cast(SearchResponseSummary, yield_item.response)
             for section in search_response_summary.top_sections:
-                if section.center_chunk.document_id not in initial_search_results:
+                if section.center_chunk.document_id not in initial_search_document_ids:
+                    initial_search_document_ids.add(section.center_chunk.document_id)
                     initial_search_results.append(section_to_llm_doc(section))
 
     new_tool_call_chunk = AIMessageChunk(content="")
