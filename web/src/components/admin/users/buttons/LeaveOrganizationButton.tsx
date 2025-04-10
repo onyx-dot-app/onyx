@@ -22,19 +22,19 @@ export const LeaveOrganizationButton = ({
 }) => {
   const router = useRouter();
   const { trigger, isMutating } = useSWRMutation(
-    "/api/tenants/leave-organization",
+    "/api/tenants/leave-team",
     userMutationFetcher,
     {
       onSuccess: () => {
         mutate();
         setPopup({
-          message: "Successfully left the organization!",
+          message: "Successfully left the team!",
           type: "success",
         });
       },
       onError: (errorMsg) =>
         setPopup({
-          message: `Unable to leave organization - ${errorMsg}`,
+          message: `Unable to leave team - ${errorMsg}`,
           type: "error",
         }),
     }
@@ -53,11 +53,11 @@ export const LeaveOrganizationButton = ({
         <ConfirmEntityModal
           variant="action"
           actionButtonText="Leave"
-          entityType="organization"
-          entityName="your organization"
+          entityType="team"
+          entityName="your team"
           onClose={() => setShowLeaveModal(false)}
           onSubmit={handleLeaveOrganization}
-          additionalDetails="You will lose access to all organization data and resources."
+          additionalDetails="You will lose access to all team data and resources."
         />
       )}
 

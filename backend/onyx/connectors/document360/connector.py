@@ -19,7 +19,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -158,7 +158,7 @@ class Document360Connector(LoadConnector, PollConnector):
 
             document = Document(
                 id=article_details["id"],
-                sections=[Section(link=doc_link, text=doc_text)],
+                sections=[TextSection(link=doc_link, text=doc_text)],
                 source=DocumentSource.DOCUMENT360,
                 semantic_identifier=article_details["title"],
                 doc_updated_at=updated_at,

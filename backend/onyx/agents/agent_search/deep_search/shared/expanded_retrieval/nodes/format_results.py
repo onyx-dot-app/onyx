@@ -56,8 +56,8 @@ def format_results(
         relevance_list = relevance_from_docs(reranked_documents)
         for tool_response in yield_search_responses(
             query=state.question,
-            reranked_sections=state.retrieved_documents,
-            final_context_sections=reranked_documents,
+            get_retrieved_sections=lambda: reranked_documents,
+            get_final_context_sections=lambda: reranked_documents,
             search_query_info=query_info,
             get_section_relevance=lambda: relevance_list,
             search_tool=graph_config.tooling.search_tool,

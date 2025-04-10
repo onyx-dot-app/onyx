@@ -1,4 +1,5 @@
 import base64
+import time
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timedelta
@@ -7,6 +8,8 @@ from typing import Any
 from typing import cast
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util import Retry
 
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import GONG_CONNECTOR_START_TIME
@@ -18,16 +21,17 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
-
 
 logger = setup_logger()
 
-GONG_BASE_URL = "https://us-34014.api.gong.io"
-
 
 class GongConnector(LoadConnector, PollConnector):
+    BASE_URL = "https://api.gong.io"
+    MAX_CALL_DETAILS_ATTEMPTS = 6
+    CALL_DETAILS_DELAY = 30  # in seconds
+
     def __init__(
         self,
         workspaces: list[str] | None = None,
@@ -41,15 +45,23 @@ class GongConnector(LoadConnector, PollConnector):
         self.auth_token_basic: str | None = None
         self.hide_user_info = hide_user_info
 
-    def _get_auth_header(self) -> dict[str, str]:
-        if self.auth_token_basic is None:
-            raise ConnectorMissingCredentialError("Gong")
+        retry_strategy = Retry(
+            total=5,
+            backoff_factor=2,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
 
-        return {"Authorization": f"Basic {self.auth_token_basic}"}
+        session = requests.Session()
+        session.mount(GongConnector.BASE_URL, HTTPAdapter(max_retries=retry_strategy))
+        self._session = session
+
+    @staticmethod
+    def make_url(endpoint: str) -> str:
+        url = f"{GongConnector.BASE_URL}{endpoint}"
+        return url
 
     def _get_workspace_id_map(self) -> dict[str, str]:
-        url = f"{GONG_BASE_URL}/v2/workspaces"
-        response = requests.get(url, headers=self._get_auth_header())
+        response = self._session.get(GongConnector.make_url("/v2/workspaces"))
         response.raise_for_status()
 
         workspaces_details = response.json().get("workspaces")
@@ -66,7 +78,6 @@ class GongConnector(LoadConnector, PollConnector):
     def _get_transcript_batches(
         self, start_datetime: str | None = None, end_datetime: str | None = None
     ) -> Generator[list[dict[str, Any]], None, None]:
-        url = f"{GONG_BASE_URL}/v2/calls/transcript"
         body: dict[str, dict] = {"filter": {}}
         if start_datetime:
             body["filter"]["fromDateTime"] = start_datetime
@@ -94,8 +105,8 @@ class GongConnector(LoadConnector, PollConnector):
                     del body["filter"]["workspaceId"]
 
             while True:
-                response = requests.post(
-                    url, headers=self._get_auth_header(), json=body
+                response = self._session.post(
+                    GongConnector.make_url("/v2/calls/transcript"), json=body
                 )
                 # If no calls in the range, just break out
                 if response.status_code == 404:
@@ -125,14 +136,14 @@ class GongConnector(LoadConnector, PollConnector):
             yield transcripts
 
     def _get_call_details_by_ids(self, call_ids: list[str]) -> dict:
-        url = f"{GONG_BASE_URL}/v2/calls/extensive"
-
         body = {
             "filter": {"callIds": call_ids},
             "contentSelector": {"exposedFields": {"parties": True}},
         }
 
-        response = requests.post(url, headers=self._get_auth_header(), json=body)
+        response = self._session.post(
+            GongConnector.make_url("/v2/calls/extensive"), json=body
+        )
         response.raise_for_status()
 
         calls = response.json().get("calls")
@@ -165,24 +176,74 @@ class GongConnector(LoadConnector, PollConnector):
     def _fetch_calls(
         self, start_datetime: str | None = None, end_datetime: str | None = None
     ) -> GenerateDocumentsOutput:
+        num_calls = 0
+
         for transcript_batch in self._get_transcript_batches(
             start_datetime, end_datetime
         ):
             doc_batch: list[Document] = []
 
-            call_ids = cast(
+            transcript_call_ids = cast(
                 list[str],
                 [t.get("callId") for t in transcript_batch if t.get("callId")],
             )
-            call_details_map = self._get_call_details_by_ids(call_ids)
 
+            call_details_map: dict[str, Any] = {}
+
+            # There's a likely race condition in the API where a transcript will have a
+            # call id but the call to v2/calls/extensive will not return all of the id's
+            # retry with exponential backoff has been observed to mitigate this
+            # in ~2 minutes
+            current_attempt = 0
+            while True:
+                current_attempt += 1
+                call_details_map = self._get_call_details_by_ids(transcript_call_ids)
+                if set(transcript_call_ids) == set(call_details_map.keys()):
+                    # we got all the id's we were expecting ... break and continue
+                    break
+
+                # we are missing some id's. Log and retry with exponential backoff
+                missing_call_ids = set(transcript_call_ids) - set(
+                    call_details_map.keys()
+                )
+                logger.warning(
+                    f"_get_call_details_by_ids is missing call id's: "
+                    f"current_attempt={current_attempt} "
+                    f"missing_call_ids={missing_call_ids}"
+                )
+                if current_attempt >= self.MAX_CALL_DETAILS_ATTEMPTS:
+                    raise RuntimeError(
+                        f"Attempt count exceeded for _get_call_details_by_ids: "
+                        f"missing_call_ids={missing_call_ids} "
+                        f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
+                    )
+
+                wait_seconds = self.CALL_DETAILS_DELAY * pow(2, current_attempt - 1)
+                logger.warning(
+                    f"_get_call_details_by_ids waiting to retry: "
+                    f"wait={wait_seconds}s "
+                    f"current_attempt={current_attempt} "
+                    f"next_attempt={current_attempt+1} "
+                    f"max_attempts={self.MAX_CALL_DETAILS_ATTEMPTS}"
+                )
+                time.sleep(wait_seconds)
+
+            # now we can iterate per call/transcript
             for transcript in transcript_batch:
                 call_id = transcript.get("callId")
 
                 if not call_id or call_id not in call_details_map:
+                    # NOTE(rkuo): seeing odd behavior where call_ids from the transcript
+                    # don't have call details. adding error debugging logs to trace.
                     logger.error(
                         f"Couldn't get call information for Call ID: {call_id}"
                     )
+                    if call_id:
+                        logger.error(
+                            f"Call debug info: call_id={call_id} "
+                            f"call_ids={transcript_call_ids} "
+                            f"call_details_map={call_details_map.keys()}"
+                        )
                     if not self.continue_on_fail:
                         raise RuntimeError(
                             f"Couldn't get call information for Call ID: {call_id}"
@@ -195,7 +256,8 @@ class GongConnector(LoadConnector, PollConnector):
                 call_time_str = call_metadata["started"]
                 call_title = call_metadata["title"]
                 logger.info(
-                    f"Indexing Gong call from {call_time_str.split('T', 1)[0]}: {call_title}"
+                    f"{num_calls+1}: Indexing Gong call id {call_id} "
+                    f"from {call_time_str.split('T', 1)[0]}: {call_title}"
                 )
 
                 call_parties = cast(list[dict] | None, call_details.get("parties"))
@@ -218,9 +280,9 @@ class GongConnector(LoadConnector, PollConnector):
                     speaker_id = segment.get("speakerId", "")
                     if speaker_id not in speaker_to_name:
                         if self.hide_user_info:
-                            speaker_to_name[
-                                speaker_id
-                            ] = f"User {len(speaker_to_name) + 1}"
+                            speaker_to_name[speaker_id] = (
+                                f"User {len(speaker_to_name) + 1}"
+                            )
                         else:
                             speaker_to_name[speaker_id] = id_to_name_map.get(
                                 speaker_id, "Unknown"
@@ -243,7 +305,7 @@ class GongConnector(LoadConnector, PollConnector):
                     Document(
                         id=call_id,
                         sections=[
-                            Section(link=call_metadata["url"], text=transcript_text)
+                            TextSection(link=call_metadata["url"], text=transcript_text)
                         ],
                         source=DocumentSource.GONG,
                         # Should not ever be Untitled as a call cannot be made without a Title
@@ -254,7 +316,12 @@ class GongConnector(LoadConnector, PollConnector):
                         metadata={"client": call_metadata.get("system")},
                     )
                 )
+
+                num_calls += 1
+
             yield doc_batch
+
+        logger.info(f"_fetch_calls finished: num_calls={num_calls}")
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         combined = (
@@ -262,6 +329,13 @@ class GongConnector(LoadConnector, PollConnector):
         )
         self.auth_token_basic = base64.b64encode(combined.encode("utf-8")).decode(
             "utf-8"
+        )
+
+        if self.auth_token_basic is None:
+            raise ConnectorMissingCredentialError("Gong")
+
+        self._session.headers.update(
+            {"Authorization": f"Basic {self.auth_token_basic}"}
         )
         return None
 

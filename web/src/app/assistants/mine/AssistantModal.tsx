@@ -61,13 +61,9 @@ const useAssistantFilter = () => {
 
 interface AssistantModalProps {
   hideModal: () => void;
-  modalHeight?: string;
 }
 
-export function AssistantModal({
-  hideModal,
-  modalHeight,
-}: AssistantModalProps) {
+export function AssistantModal({ hideModal }: AssistantModalProps) {
   const { assistants, pinnedAssistants } = useAssistants();
   const { assistantFilters, toggleAssistantFilter } = useAssistantFilter();
   const router = useRouter();

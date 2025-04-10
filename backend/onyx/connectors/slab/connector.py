@@ -19,8 +19,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.models import TextSection
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -212,7 +212,7 @@ class SlabConnector(LoadConnector, PollConnector, SlimConnector):
             doc_batch.append(
                 Document(
                     id=post_id,  # can't be url as this changes with the post title
-                    sections=[Section(link=page_url, text=content_text)],
+                    sections=[TextSection(link=page_url, text=content_text)],
                     source=DocumentSource.SLAB,
                     semantic_identifier=post["title"],
                     metadata={},

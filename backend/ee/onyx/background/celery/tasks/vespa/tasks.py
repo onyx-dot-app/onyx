@@ -18,7 +18,7 @@ logger = setup_logger()
 
 
 def monitor_usergroup_taskset(
-    tenant_id: str | None, key_bytes: bytes, r: Redis, db_session: Session
+    tenant_id: str, key_bytes: bytes, r: Redis, db_session: Session
 ) -> None:
     """This function is likely to move in the worker refactor happening next."""
     fence_key = key_bytes.decode("utf-8")

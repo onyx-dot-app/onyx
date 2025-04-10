@@ -19,7 +19,6 @@ from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import OnyxAnswerPiece
-from onyx.chat.models import OnyxContexts
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
@@ -33,7 +32,6 @@ from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
 from onyx.tools.models import ToolCallKickoff
 from onyx.tools.models import ToolResponse
-from onyx.tools.tool_implementations.search.search_tool import SEARCH_DOC_CONTENT_ID
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
@@ -50,7 +48,7 @@ def answer_instance(
     mocker: MockerFixture,
 ) -> Answer:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
     return _answer_fixture_impl(mock_llm, answer_style_config, prompt_config)
@@ -70,7 +68,7 @@ def _answer_fixture_impl(
                 files=[],
                 single_message_history=None,
             ),
-            system_message=default_build_system_message(prompt_config),
+            system_message=default_build_system_message(prompt_config, mock_llm.config),
             message_history=[],
             llm_config=mock_llm.config,
             raw_user_query=QUERY,
@@ -141,7 +139,6 @@ def test_basic_answer(answer_instance: Answer, mocker: MockerFixture) -> None:
 def test_answer_with_search_call(
     answer_instance: Answer,
     mock_search_results: list[LlmDoc],
-    mock_contexts: OnyxContexts,
     mock_search_tool: MagicMock,
     force_use_tool: ForceUseTool,
     expected_tool_args: dict,
@@ -197,25 +194,21 @@ def test_answer_with_search_call(
         tool_name="search", tool_args=expected_tool_args
     )
     assert output[1] == ToolResponse(
-        id=SEARCH_DOC_CONTENT_ID,
-        response=mock_contexts,
-    )
-    assert output[2] == ToolResponse(
         id="final_context_documents",
         response=mock_search_results,
     )
-    assert output[3] == ToolCallFinalResult(
+    assert output[2] == ToolCallFinalResult(
         tool_name="search",
         tool_args=expected_tool_args,
         tool_result=[json.loads(doc.model_dump_json()) for doc in mock_search_results],
     )
-    assert output[4] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
+    assert output[3] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
     expected_citation = CitationInfo(citation_num=1, document_id="doc1")
-    assert output[5] == expected_citation
-    assert output[6] == OnyxAnswerPiece(
+    assert output[4] == expected_citation
+    assert output[5] == OnyxAnswerPiece(
         answer_piece="the answer is abc[[1]](https://example.com/doc1). "
     )
-    assert output[7] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
+    assert output[6] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
 
     expected_answer = (
         "Based on the search results, "
@@ -268,7 +261,6 @@ def test_answer_with_search_call(
 def test_answer_with_search_no_tool_calling(
     answer_instance: Answer,
     mock_search_results: list[LlmDoc],
-    mock_contexts: OnyxContexts,
     mock_search_tool: MagicMock,
 ) -> None:
     answer_instance.graph_config.tooling.tools = [mock_search_tool]
@@ -288,30 +280,26 @@ def test_answer_with_search_no_tool_calling(
     output = list(answer_instance.processed_streamed_output)
 
     # Assertions
-    assert len(output) == 8
+    assert len(output) == 7
     assert output[0] == ToolCallKickoff(
         tool_name="search", tool_args=DEFAULT_SEARCH_ARGS
     )
     assert output[1] == ToolResponse(
-        id=SEARCH_DOC_CONTENT_ID,
-        response=mock_contexts,
-    )
-    assert output[2] == ToolResponse(
         id=FINAL_CONTEXT_DOCUMENTS_ID,
         response=mock_search_results,
     )
-    assert output[3] == ToolCallFinalResult(
+    assert output[2] == ToolCallFinalResult(
         tool_name="search",
         tool_args=DEFAULT_SEARCH_ARGS,
         tool_result=[json.loads(doc.model_dump_json()) for doc in mock_search_results],
     )
-    assert output[4] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
+    assert output[3] == OnyxAnswerPiece(answer_piece="Based on the search results, ")
     expected_citation = CitationInfo(citation_num=1, document_id="doc1")
-    assert output[5] == expected_citation
-    assert output[6] == OnyxAnswerPiece(
+    assert output[4] == expected_citation
+    assert output[5] == OnyxAnswerPiece(
         answer_piece="the answer is abc[[1]](https://example.com/doc1). "
     )
-    assert output[7] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
+    assert output[6] == OnyxAnswerPiece(answer_piece="This is some other stuff.")
 
     expected_answer = (
         "Based on the search results, "
@@ -335,9 +323,10 @@ def test_answer_with_search_no_tool_calling(
         == mock_search_tool.build_next_prompt.return_value.build.return_value
     )
 
+    prev_messages = answer_instance.graph_inputs.prompt_builder.get_message_history()
     # Verify that get_args_for_non_tool_calling_llm was called on the mock_search_tool
     mock_search_tool.get_args_for_non_tool_calling_llm.assert_called_once_with(
-        QUERY, [], answer_instance.graph_config.tooling.primary_llm
+        QUERY, prev_messages, answer_instance.graph_config.tooling.primary_llm
     )
 
     # Verify that the search tool's run method was called
@@ -400,7 +389,7 @@ def test_no_slow_reranking(
     mocker: MockerFixture,
 ) -> None:
     mocker.patch(
-        "onyx.chat.answer.gpu_status_request",
+        "onyx.chat.answer.fast_gpu_status_request",
         return_value=gpu_enabled,
     )
     rerank_settings = (

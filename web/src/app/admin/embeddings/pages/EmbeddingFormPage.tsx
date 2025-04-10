@@ -3,10 +3,16 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 
 import { EmbeddingModelSelection } from "../EmbeddingModelSelectionForm";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ArrowRight, WarningCircle } from "@phosphor-icons/react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  WarningCircle,
+  CaretDown,
+  Warning,
+} from "@phosphor-icons/react";
 import {
   CloudEmbeddingModel,
   EmbeddingProvider,
@@ -19,16 +25,35 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import AdvancedEmbeddingFormPage from "./AdvancedEmbeddingFormPage";
 import {
   AdvancedSearchConfiguration,
+  EmbeddingPrecision,
   RerankingDetails,
   SavedSearchSettings,
 } from "../interfaces";
 import RerankingDetailsForm from "../RerankingFormPage";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { Modal } from "@/components/Modal";
+import { InstantSwitchConfirmModal } from "../modals/InstantSwitchConfirmModal";
 
 import { useRouter } from "next/navigation";
 import CardSection from "@/components/admin/CardSection";
 import { combineSearchSettings } from "./utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+
+enum ReindexType {
+  REINDEX = "reindex",
+  INSTANT = "instant",
+}
 
 export default function EmbeddingForm() {
   const { formStep, nextFormStep, prevFormStep } = useEmbeddingFormContext();
@@ -39,10 +64,15 @@ export default function EmbeddingForm() {
     useState<AdvancedSearchConfiguration>({
       index_name: "",
       multipass_indexing: true,
+      enable_contextual_rag: false,
+      contextual_rag_llm_name: null,
+      contextual_rag_llm_provider: null,
       multilingual_expansion: [],
       disable_rerank_for_streaming: false,
       api_url: null,
       num_rerank: 0,
+      embedding_precision: EmbeddingPrecision.FLOAT,
+      reduced_dimension: null,
     });
 
   const [rerankingDetails, setRerankingDetails] = useState<RerankingDetails>({
@@ -51,6 +81,19 @@ export default function EmbeddingForm() {
     rerank_model_name: "",
     rerank_api_url: null,
   });
+
+  const [reindexType, setReindexType] = useState<ReindexType>(
+    ReindexType.REINDEX
+  );
+
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [isFormValid, setIsFormValid] = useState(true);
+  const [rerankFormErrors, setRerankFormErrors] = useState<
+    Record<string, string>
+  >({});
+  const [isRerankFormValid, setIsRerankFormValid] = useState(true);
+  const advancedFormRef = useRef(null);
+  const rerankFormRef = useRef(null);
 
   const updateAdvancedEmbeddingDetails = (
     key: keyof AdvancedSearchConfiguration,
@@ -82,6 +125,8 @@ export default function EmbeddingForm() {
   };
   const [displayPoorModelName, setDisplayPoorModelName] = useState(true);
   const [showPoorModel, setShowPoorModel] = useState(false);
+  const [showInstantSwitchConfirm, setShowInstantSwitchConfirm] =
+    useState(false);
   const [modelTab, setModelTab] = useState<"open" | "cloud" | null>(null);
 
   const {
@@ -110,11 +155,16 @@ export default function EmbeddingForm() {
       setAdvancedEmbeddingDetails({
         index_name: searchSettings.index_name,
         multipass_indexing: searchSettings.multipass_indexing,
+        enable_contextual_rag: searchSettings.enable_contextual_rag,
+        contextual_rag_llm_name: searchSettings.contextual_rag_llm_name,
+        contextual_rag_llm_provider: searchSettings.contextual_rag_llm_provider,
         multilingual_expansion: searchSettings.multilingual_expansion,
         disable_rerank_for_streaming:
           searchSettings.disable_rerank_for_streaming,
         num_rerank: searchSettings.num_rerank,
         api_url: null,
+        embedding_precision: searchSettings.embedding_precision,
+        reduced_dimension: searchSettings.reduced_dimension,
       });
 
       setRerankingDetails({
@@ -146,17 +196,16 @@ export default function EmbeddingForm() {
     }
   }, [currentEmbeddingModel]);
 
-  const handleReindex = async () => {
-    const update = await updateSearch();
-    if (update) {
-      await onConfirm();
-    }
-  };
-
   const needsReIndex =
     currentEmbeddingModel != selectedProvider ||
     searchSettings?.multipass_indexing !=
-      advancedEmbeddingDetails.multipass_indexing;
+      advancedEmbeddingDetails.multipass_indexing ||
+    searchSettings?.embedding_precision !=
+      advancedEmbeddingDetails.embedding_precision ||
+    searchSettings?.reduced_dimension !=
+      advancedEmbeddingDetails.reduced_dimension ||
+    searchSettings?.enable_contextual_rag !=
+      advancedEmbeddingDetails.enable_contextual_rag;
 
   const updateSearch = useCallback(async () => {
     if (!selectedProvider) {
@@ -166,17 +215,43 @@ export default function EmbeddingForm() {
       selectedProvider,
       advancedEmbeddingDetails,
       rerankingDetails,
-      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null
+      selectedProvider.provider_type?.toLowerCase() as EmbeddingProvider | null,
+      reindexType === ReindexType.REINDEX
     );
 
     const response = await updateSearchSettings(searchSettings);
     if (response.ok) {
       return true;
     } else {
-      setPopup({ message: "Failed to update search settings", type: "error" });
+      setPopup({
+        message: "Failed to update search settings",
+        type: "error",
+      });
       return false;
     }
   }, [selectedProvider, advancedEmbeddingDetails, rerankingDetails, setPopup]);
+
+  const handleValidationChange = useCallback(
+    (isValid: boolean, errors: Record<string, string>) => {
+      setIsFormValid(isValid);
+      setFormErrors(errors);
+    },
+    []
+  );
+
+  const handleRerankValidationChange = useCallback(
+    (isValid: boolean, errors: Record<string, string>) => {
+      setIsRerankFormValid(isValid);
+      setRerankFormErrors(errors);
+    },
+    []
+  );
+
+  // Combine validation states for both forms
+  const isOverallFormValid = isFormValid && isRerankFormValid;
+  const combinedFormErrors = useMemo(() => {
+    return { ...formErrors, ...rerankFormErrors };
+  }, [formErrors, rerankFormErrors]);
 
   const ReIndexingButton = useMemo(() => {
     const ReIndexingButtonComponent = ({
@@ -186,47 +261,212 @@ export default function EmbeddingForm() {
     }) => {
       return needsReIndex ? (
         <div className="flex mx-auto gap-x-1 ml-auto items-center">
-          <button
-            className="enabled:cursor-pointer disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-            onClick={handleReindex}
-          >
-            Re-index
-          </button>
-          <div className="relative group">
-            <WarningCircle
-              className="text-text-800 cursor-help"
-              size={20}
-              weight="fill"
-            />
-            <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
-              <p className="font-semibold mb-2">Needs re-indexing due to:</p>
-              <ul className="list-disc pl-5">
-                {currentEmbeddingModel != selectedProvider && (
-                  <li>Changed embedding provider</li>
-                )}
-                {searchSettings?.multipass_indexing !=
-                  advancedEmbeddingDetails.multipass_indexing && (
-                  <li>Multipass indexing modification</li>
-                )}
-              </ul>
-            </div>
+          <div className="flex items-center">
+            <button
+              onClick={() => {
+                if (reindexType == ReindexType.INSTANT) {
+                  setShowInstantSwitchConfirm(true);
+                } else {
+                  handleReIndex();
+                  navigateToEmbeddingPage("search settings");
+                }
+              }}
+              disabled={!isOverallFormValid}
+              className="
+                enabled:cursor-pointer 
+                disabled:bg-accent/50 
+                disabled:cursor-not-allowed 
+                bg-agent 
+                flex 
+                items-center 
+                justify-center
+                text-white 
+                text-sm 
+                font-regular 
+                rounded-l-sm
+                py-2.5 
+                px-3.5
+                transition-colors
+                hover:bg-white/10
+                text-center
+                w-32"
+            >
+              {reindexType == ReindexType.REINDEX
+                ? "Re-index"
+                : "Instant Switch"}
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  disabled={!isOverallFormValid}
+                  className="
+                    enabled:cursor-pointer 
+                    disabled:bg-accent/50 
+                    disabled:cursor-not-allowed 
+                    bg-agent 
+                    flex 
+                    items-center 
+                    justify-center
+                    text-white 
+                    text-sm 
+                    font-regular 
+                    rounded-r-sm
+                    border-l
+                    border-white/20
+                    py-2.5 
+                    px-2
+                    h-[40px]
+                    w-[34px]
+                    transition-colors
+                    hover:bg-white/10"
+                >
+                  <CaretDown className="h-4 w-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setReindexType(ReindexType.REINDEX);
+                  }}
+                >
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="w-full text-left">
+                        (Recommended) Re-index
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Re-runs all connectors in the background before
+                          switching over. Takes longer but ensures no
+                          degredation of search during the switch.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setReindexType(ReindexType.INSTANT);
+                  }}
+                >
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger className="w-full text-left">
+                        Instant Switch
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>
+                          Immediately switches to new settings without
+                          re-indexing. Searches will be degraded until the
+                          re-indexing is complete.
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
+          {isOverallFormValid && (
+            <div className="relative group">
+              <WarningCircle
+                className="text-text-800 cursor-help"
+                size={20}
+                weight="fill"
+              />
+              <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
+                <p className="font-semibold mb-2">Needs re-indexing due to:</p>
+                <ul className="list-disc pl-5">
+                  {currentEmbeddingModel != selectedProvider && (
+                    <li>Changed embedding provider</li>
+                  )}
+                  {searchSettings?.multipass_indexing !=
+                    advancedEmbeddingDetails.multipass_indexing && (
+                    <li>Multipass indexing modification</li>
+                  )}
+                  {searchSettings?.embedding_precision !=
+                    advancedEmbeddingDetails.embedding_precision && (
+                    <li>Embedding precision modification</li>
+                  )}
+                  {searchSettings?.reduced_dimension !=
+                    advancedEmbeddingDetails.reduced_dimension && (
+                    <li>Reduced dimension modification</li>
+                  )}
+                  {(searchSettings?.enable_contextual_rag !=
+                    advancedEmbeddingDetails.enable_contextual_rag ||
+                    searchSettings?.contextual_rag_llm_name !=
+                      advancedEmbeddingDetails.contextual_rag_llm_name ||
+                    searchSettings?.contextual_rag_llm_provider !=
+                      advancedEmbeddingDetails.contextual_rag_llm_provider) && (
+                    <li>Contextual RAG modification</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+          {!isOverallFormValid &&
+            Object.keys(combinedFormErrors).length > 0 && (
+              <div className="relative group">
+                <Warning
+                  className="text-red-500 cursor-help"
+                  size={20}
+                  weight="fill"
+                />
+                <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
+                  <p className="font-semibold mb-2">Validation Errors:</p>
+                  <ul className="list-disc pl-5">
+                    {Object.entries(combinedFormErrors).map(
+                      ([field, error]) => (
+                        <li key={field}>
+                          {field}: {error}
+                        </li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
         </div>
       ) : (
-        <button
-          className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
-          onClick={async () => {
-            updateSearch();
-            navigateToEmbeddingPage("search settings");
-          }}
-        >
-          Update Search
-        </button>
+        <div className="flex mx-auto gap-x-1 ml-auto items-center">
+          <button
+            className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
+            onClick={() => {
+              updateSearch();
+              navigateToEmbeddingPage("search settings");
+            }}
+            disabled={!isOverallFormValid}
+          >
+            Update Search
+          </button>
+          {!isOverallFormValid &&
+            Object.keys(combinedFormErrors).length > 0 && (
+              <div className="relative group">
+                <Warning
+                  className="text-red-500 cursor-help"
+                  size={20}
+                  weight="fill"
+                />
+                <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
+                  <p className="font-semibold mb-2 text-red-400">
+                    Validation Errors:
+                  </p>
+                  <ul className="list-disc pl-5">
+                    {Object.entries(combinedFormErrors).map(
+                      ([field, error]) => (
+                        <li key={field}>{error}</li>
+                      )
+                    )}
+                  </ul>
+                </div>
+              </div>
+            )}
+        </div>
       );
     };
     ReIndexingButtonComponent.displayName = "ReIndexingButton";
     return ReIndexingButtonComponent;
-  }, [needsReIndex, updateSearch]);
+  }, [needsReIndex, reindexType, isOverallFormValid, combinedFormErrors]);
 
   if (!selectedProvider) {
     return <ThreeDotsLoader />;
@@ -246,7 +486,7 @@ export default function EmbeddingForm() {
     router.push("/admin/configuration/search?message=search-settings");
   };
 
-  const onConfirm = async () => {
+  const handleReIndex = async () => {
     if (!selectedProvider) {
       return;
     }
@@ -260,7 +500,8 @@ export default function EmbeddingForm() {
         rerankingDetails,
         selectedProvider.provider_type
           ?.toLowerCase()
-          .split(" ")[0] as EmbeddingProvider | null
+          .split(" ")[0] as EmbeddingProvider | null,
+        reindexType === ReindexType.REINDEX
       );
     } else {
       // This is a locally hosted model
@@ -268,7 +509,8 @@ export default function EmbeddingForm() {
         selectedProvider,
         advancedEmbeddingDetails,
         rerankingDetails,
-        null
+        null,
+        reindexType === ReindexType.REINDEX
       );
     }
 
@@ -381,6 +623,17 @@ export default function EmbeddingForm() {
           </Modal>
         )}
 
+        {showInstantSwitchConfirm && (
+          <InstantSwitchConfirmModal
+            onClose={() => setShowInstantSwitchConfirm(false)}
+            onConfirm={() => {
+              setShowInstantSwitchConfirm(false);
+              handleReIndex();
+              navigateToEmbeddingPage("search settings");
+            }}
+          />
+        )}
+
         {formStep == 1 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
@@ -395,6 +648,7 @@ export default function EmbeddingForm() {
 
             <CardSection>
               <RerankingDetailsForm
+                ref={rerankFormRef}
                 setModelTab={setModelTab}
                 modelTab={
                   originalRerankingDetails.rerank_model_name
@@ -404,6 +658,7 @@ export default function EmbeddingForm() {
                 currentRerankingDetails={rerankingDetails}
                 originalRerankingDetails={originalRerankingDetails}
                 setRerankingDetails={setRerankingDetails}
+                onValidationChange={handleRerankValidationChange}
               />
             </CardSection>
 
@@ -444,8 +699,11 @@ export default function EmbeddingForm() {
 
             <CardSection>
               <AdvancedEmbeddingFormPage
+                ref={advancedFormRef}
                 advancedEmbeddingDetails={advancedEmbeddingDetails}
                 updateAdvancedEmbeddingDetails={updateAdvancedEmbeddingDetails}
+                embeddingProviderType={selectedProvider.provider_type}
+                onValidationChange={handleValidationChange}
               />
             </CardSection>
 

@@ -59,7 +59,7 @@ def _process_model_list_response(model_list_json: Any) -> list[str]:
     trail=False,
     bind=True,
 )
-def check_for_llm_model_update(self: Task, *, tenant_id: str | None) -> bool | None:
+def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
     if not LLM_MODEL_UPDATE_API_URL:
         raise ValueError("LLM model update API URL not configured")
 

@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timedelta
 from typing import Any
 from typing import cast
+from typing import Tuple
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -11,6 +12,7 @@ from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import nullsfirst
 from sqlalchemy import or_
+from sqlalchemy import Row
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.exc import MultipleResultsFound
@@ -24,6 +26,7 @@ from onyx.agents.agent_search.shared_graph_utils.models import (
 from onyx.auth.schemas import UserRole
 from onyx.chat.models import DocumentRelevance
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
+from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RetrievalDocs
@@ -42,9 +45,11 @@ from onyx.db.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.models import ToolCall
 from onyx.db.models import User
+from onyx.db.models import UserFile
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.db.pg_file_store import delete_lobj_by_name
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.server.query_and_chat.models import ChatMessageDetail
@@ -168,7 +173,7 @@ def get_chat_sessions_by_user(
     if not include_onyxbot_flows:
         stmt = stmt.where(ChatSession.onyxbot_flow.is_(False))
 
-    stmt = stmt.order_by(desc(ChatSession.time_created))
+    stmt = stmt.order_by(desc(ChatSession.time_updated))
 
     if deleted is not None:
         stmt = stmt.where(ChatSession.deleted == deleted)
@@ -375,24 +380,33 @@ def delete_chat_session(
     db_session.commit()
 
 
-def delete_chat_sessions_older_than(days_old: int, db_session: Session) -> None:
+def get_chat_sessions_older_than(
+    days_old: int, db_session: Session
+) -> list[tuple[UUID | None, UUID]]:
+    """
+    Retrieves chat sessions older than a specified number of days.
+
+    Args:
+        days_old: The number of days to consider as "old".
+        db_session: The database session.
+
+    Returns:
+        A list of tuples, where each tuple contains the user_id (can be None) and the chat_session_id of an old chat session.
+    """
+
     cutoff_time = datetime.utcnow() - timedelta(days=days_old)
-    old_sessions = db_session.execute(
+    old_sessions: Sequence[Row[Tuple[UUID | None, UUID]]] = db_session.execute(
         select(ChatSession.user_id, ChatSession.id).where(
             ChatSession.time_created < cutoff_time
         )
     ).fetchall()
 
-    for user_id, session_id in old_sessions:
-        try:
-            delete_chat_session(
-                user_id, session_id, db_session, include_deleted=True, hard_delete=True
-            )
-        except Exception:
-            logger.exception(
-                "delete_chat_session exceptioned. "
-                f"user_id={user_id} session_id={session_id}"
-            )
+    # convert old_sessions to a conventional list of tuples
+    returned_sessions: list[tuple[UUID | None, UUID]] = [
+        (user_id, session_id) for user_id, session_id in old_sessions
+    ]
+
+    return returned_sessions
 
 
 def get_chat_message(
@@ -843,6 +857,87 @@ def get_db_search_doc_by_id(doc_id: int, db_session: Session) -> DBSearchDoc | N
     return search_doc
 
 
+def create_search_doc_from_user_file(
+    db_user_file: UserFile, associated_chat_file: InMemoryChatFile, db_session: Session
+) -> SearchDoc:
+    """Create a SearchDoc in the database from a UserFile and return it.
+    This ensures proper ID generation by SQLAlchemy and prevents duplicate key errors.
+    """
+    blurb = ""
+    if associated_chat_file and associated_chat_file.content:
+        try:
+            # Try to decode as UTF-8, but handle errors gracefully
+            content_sample = associated_chat_file.content[:100]
+            # Remove null bytes which can cause SQL errors
+            content_sample = content_sample.replace(b"\x00", b"")
+            blurb = content_sample.decode("utf-8", errors="replace")
+        except Exception:
+            # If decoding fails completely, provide a generic description
+            blurb = f"[Binary file: {db_user_file.name}]"
+
+    db_search_doc = SearchDoc(
+        document_id=db_user_file.document_id,
+        chunk_ind=0,  # Default to 0 for user files
+        semantic_id=db_user_file.name,
+        link=db_user_file.link_url,
+        blurb=blurb,
+        source_type=DocumentSource.FILE,  # Assuming internal source for user files
+        boost=0,  # Default boost
+        hidden=False,  # Default visibility
+        doc_metadata={},  # Empty metadata
+        score=0.0,  # Default score of 0.0 instead of None
+        is_relevant=None,  # No relevance initially
+        relevance_explanation=None,  # No explanation initially
+        match_highlights=[],  # No highlights initially
+        updated_at=db_user_file.created_at,  # Use created_at as updated_at
+        primary_owners=[],  # Empty list instead of None
+        secondary_owners=[],  # Empty list instead of None
+        is_internet=False,  # Not from internet
+    )
+
+    db_session.add(db_search_doc)
+    db_session.flush()  # Get the ID but don't commit yet
+
+    return db_search_doc
+
+
+def translate_db_user_file_to_search_doc(
+    db_user_file: UserFile, associated_chat_file: InMemoryChatFile
+) -> SearchDoc:
+    blurb = ""
+    if associated_chat_file and associated_chat_file.content:
+        try:
+            # Try to decode as UTF-8, but handle errors gracefully
+            content_sample = associated_chat_file.content[:100]
+            # Remove null bytes which can cause SQL errors
+            content_sample = content_sample.replace(b"\x00", b"")
+            blurb = content_sample.decode("utf-8", errors="replace")
+        except Exception:
+            # If decoding fails completely, provide a generic description
+            blurb = f"[Binary file: {db_user_file.name}]"
+
+    return SearchDoc(
+        # Don't set ID - let SQLAlchemy auto-generate it
+        document_id=db_user_file.document_id,
+        chunk_ind=0,  # Default to 0 for user files
+        semantic_id=db_user_file.name,
+        link=db_user_file.link_url,
+        blurb=blurb,
+        source_type=DocumentSource.FILE,  # Assuming internal source for user files
+        boost=0,  # Default boost
+        hidden=False,  # Default visibility
+        doc_metadata={},  # Empty metadata
+        score=0.0,  # Default score of 0.0 instead of None
+        is_relevant=None,  # No relevance initially
+        relevance_explanation=None,  # No explanation initially
+        match_highlights=[],  # No highlights initially
+        updated_at=db_user_file.created_at,  # Use created_at as updated_at
+        primary_owners=[],  # Empty list instead of None
+        secondary_owners=[],  # Empty list instead of None
+        is_internet=False,  # Not from internet
+    )
+
+
 def translate_db_search_doc_to_server_search_doc(
     db_search_doc: SearchDoc,
     remove_doc_content: bool = False,
@@ -949,19 +1044,22 @@ def translate_db_message_to_chat_message_detail(
         time_sent=chat_message.time_sent,
         citations=chat_message.citations,
         files=chat_message.files or [],
-        tool_call=ToolCallFinalResult(
-            tool_name=chat_message.tool_call.tool_name,
-            tool_args=chat_message.tool_call.tool_arguments,
-            tool_result=chat_message.tool_call.tool_result,
-        )
-        if chat_message.tool_call
-        else None,
+        tool_call=(
+            ToolCallFinalResult(
+                tool_name=chat_message.tool_call.tool_name,
+                tool_args=chat_message.tool_call.tool_arguments,
+                tool_result=chat_message.tool_call.tool_result,
+            )
+            if chat_message.tool_call
+            else None
+        ),
         alternate_assistant_id=chat_message.alternate_assistant_id,
         overridden_model=chat_message.overridden_model,
         sub_questions=translate_db_sub_questions_to_server_objects(
             chat_message.sub_questions
         ),
         refined_answer_improvement=chat_message.refined_answer_improvement,
+        is_agentic=chat_message.is_agentic,
         error=chat_message.error,
     )
 
@@ -990,9 +1088,9 @@ def log_agent_metrics(
         full_duration_s=agent_timings.full_duration_s,
         base_metrics=vars(agent_base_metrics) if agent_base_metrics else None,
         refined_metrics=vars(agent_refined_metrics) if agent_refined_metrics else None,
-        all_metrics=vars(agent_additional_metrics)
-        if agent_additional_metrics
-        else None,
+        all_metrics=(
+            vars(agent_additional_metrics) if agent_additional_metrics else None
+        ),
     )
 
     db_session.add(agent_metric_tracking)
@@ -1077,3 +1175,20 @@ def log_agent_sub_question_results(
             db_session.commit()
 
     return None
+
+
+def update_chat_session_updated_at_timestamp(
+    chat_session_id: UUID, db_session: Session
+) -> None:
+    """
+    Explicitly update the timestamp on a chat session without modifying other fields.
+    This is useful when adding messages to a chat session to reflect recent activity.
+    """
+
+    # Direct SQL update to avoid loading the entire object if it's not already loaded
+    db_session.execute(
+        update(ChatSession)
+        .where(ChatSession.id == chat_session_id)
+        .values(time_updated=func.now())
+    )
+    # No commit - the caller is responsible for committing the transaction

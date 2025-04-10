@@ -7,7 +7,8 @@ import pytest
 from jira.resources import Issue
 from pytest_mock import MockFixture
 
-from onyx.connectors.onyx_jira.connector import fetch_jira_issues_batch
+from onyx.connectors.onyx_jira.connector import _perform_jql_search
+from onyx.connectors.onyx_jira.connector import process_jira_issue
 
 
 @pytest.fixture
@@ -79,13 +80,22 @@ def test_fetch_jira_issues_batch_small_ticket(
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_small]
 
-    docs = list(fetch_jira_issues_batch(mock_jira_client, "project = TEST", 50))
+    # First get the issues via pagination
+    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    assert len(issues) == 1
+
+    # Then process each issue
+    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 1
-    assert docs[0].id.endswith("/SMALL-1")
-    assert "Small description" in docs[0].sections[0].text
-    assert "Small comment 1" in docs[0].sections[0].text
-    assert "Small comment 2" in docs[0].sections[0].text
+    doc = docs[0]
+    assert doc is not None  # Type assertion for mypy
+    assert doc.id.endswith("/SMALL-1")
+    assert doc.sections[0].text is not None
+    assert "Small description" in doc.sections[0].text
+    assert "Small comment 1" in doc.sections[0].text
+    assert "Small comment 2" in doc.sections[0].text
 
 
 def test_fetch_jira_issues_batch_large_ticket(
@@ -95,7 +105,13 @@ def test_fetch_jira_issues_batch_large_ticket(
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_large]
 
-    docs = list(fetch_jira_issues_batch(mock_jira_client, "project = TEST", 50))
+    # First get the issues via pagination
+    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    assert len(issues) == 1
+
+    # Then process each issue
+    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 0  # The large ticket should be skipped
 
@@ -108,10 +124,18 @@ def test_fetch_jira_issues_batch_mixed_tickets(
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
 
-    docs = list(fetch_jira_issues_batch(mock_jira_client, "project = TEST", 50))
+    # First get the issues via pagination
+    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    assert len(issues) == 2
+
+    # Then process each issue
+    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 1  # Only the small ticket should be included
-    assert docs[0].id.endswith("/SMALL-1")
+    doc = docs[0]
+    assert doc is not None  # Type assertion for mypy
+    assert doc.id.endswith("/SMALL-1")
 
 
 @patch("onyx.connectors.onyx_jira.connector.JIRA_CONNECTOR_MAX_TICKET_SIZE", 50)
@@ -123,6 +147,12 @@ def test_fetch_jira_issues_batch_custom_size_limit(
 ) -> None:
     mock_jira_client.search_issues.return_value = [mock_issue_small, mock_issue_large]
 
-    docs = list(fetch_jira_issues_batch(mock_jira_client, "project = TEST", 50))
+    # First get the issues via pagination
+    issues = list(_perform_jql_search(mock_jira_client, "project = TEST", 0, 50))
+    assert len(issues) == 2
+
+    # Then process each issue
+    docs = [process_jira_issue(mock_jira_client, issue) for issue in issues]
+    docs = [doc for doc in docs if doc is not None]  # Filter out None values
 
     assert len(docs) == 0  # Both tickets should be skipped due to the low size limit

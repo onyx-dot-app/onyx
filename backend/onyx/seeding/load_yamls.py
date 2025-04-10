@@ -5,6 +5,7 @@ from onyx.configs.chat_configs import INPUT_PROMPT_YAML
 from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
 from onyx.configs.chat_configs import PERSONAS_YAML
 from onyx.configs.chat_configs import PROMPTS_YAML
+from onyx.configs.chat_configs import USER_FOLDERS_YAML
 from onyx.context.search.enums import RecencyBiasSetting
 from onyx.db.document_set import get_or_create_document_set_by_name
 from onyx.db.input_prompt import insert_input_prompt_if_not_exists
@@ -15,6 +16,29 @@ from onyx.db.models import Tool as ToolDBModel
 from onyx.db.persona import upsert_persona
 from onyx.db.prompts import get_prompt_by_name
 from onyx.db.prompts import upsert_prompt
+from onyx.db.user_documents import upsert_user_folder
+
+
+def load_user_folders_from_yaml(
+    db_session: Session,
+    user_folders_yaml: str = USER_FOLDERS_YAML,
+) -> None:
+    with open(user_folders_yaml, "r") as file:
+        data = yaml.safe_load(file)
+
+    all_user_folders = data.get("user_folders", [])
+    for user_folder in all_user_folders:
+        upsert_user_folder(
+            db_session=db_session,
+            id=user_folder.get("id"),
+            name=user_folder.get("name"),
+            description=user_folder.get("description"),
+            created_at=user_folder.get("created_at"),
+            user=user_folder.get("user"),
+            files=user_folder.get("files"),
+            assistants=user_folder.get("assistants"),
+        )
+    db_session.flush()
 
 
 def load_prompts_from_yaml(
@@ -134,9 +158,11 @@ def load_personas_from_yaml(
             persona_id=(-1 * p_id) if p_id is not None else None,
             name=persona["name"],
             description=persona["description"],
-            num_chunks=persona.get("num_chunks")
-            if persona.get("num_chunks") is not None
-            else default_chunks,
+            num_chunks=(
+                persona.get("num_chunks")
+                if persona.get("num_chunks") is not None
+                else default_chunks
+            ),
             llm_relevance_filter=persona.get("llm_relevance_filter"),
             starter_messages=persona.get("starter_messages", []),
             llm_filter_extraction=persona.get("llm_filter_extraction"),
@@ -179,3 +205,4 @@ def load_chat_yamls(
     load_prompts_from_yaml(db_session, prompt_yaml)
     load_personas_from_yaml(db_session, personas_yaml)
     load_input_prompts_from_yaml(db_session, input_prompts_yaml)
+    load_user_folders_from_yaml(db_session)

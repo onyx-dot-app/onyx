@@ -23,9 +23,11 @@ INDEXING_MODEL_SERVER_PORT = int(
 # Onyx custom Deep Learning Models
 CONNECTOR_CLASSIFIER_MODEL_REPO = "Danswer/filter-extraction-model"
 CONNECTOR_CLASSIFIER_MODEL_TAG = "1.0.0"
-INTENT_MODEL_VERSION = "danswer/hybrid-intent-token-classifier"
-INTENT_MODEL_TAG = "v1.0.3"
-
+INTENT_MODEL_VERSION = "onyx-dot-app/hybrid-intent-token-classifier"
+# INTENT_MODEL_TAG = "v1.0.3"
+INTENT_MODEL_TAG: str | None = None
+INFORMATION_CONTENT_MODEL_VERSION = "onyx-dot-app/information-content-model"
+INFORMATION_CONTENT_MODEL_TAG: str | None = None
 
 # Bi-Encoder, other details
 DOC_EMBEDDING_CONTEXT_SIZE = 512
@@ -56,6 +58,7 @@ INDEXING_ONLY = os.environ.get("INDEXING_ONLY", "").lower() == "true"
 
 # The process needs to have this for the log file to write to
 # otherwise, it will not create additional log files
+# This should just be the filename base without extension or path.
 LOG_FILE_NAME = os.environ.get("LOG_FILE_NAME") or "onyx"
 
 # Enable generating persistent log files for local dev environments
@@ -67,6 +70,12 @@ LOG_LEVEL = os.environ.get("LOG_LEVEL", "info")
 # NOTE: does not apply for Google VertexAI, since the python client doesn't
 # allow us to specify a custom timeout
 API_BASED_EMBEDDING_TIMEOUT = int(os.environ.get("API_BASED_EMBEDDING_TIMEOUT", "600"))
+
+# Local batch size for VertexAI embedding models currently calibrated for item size of 512 tokens
+# NOTE: increasing this value may lead to API errors due to token limit exhaustion per call.
+VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
+    os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "25")
+)
 
 # Only used for OpenAI
 OPENAI_EMBEDDING_TIMEOUT = int(
@@ -91,6 +100,7 @@ PRESERVED_SEARCH_FIELDS = [
     "api_url",
     "index_name",
     "multipass_indexing",
+    "enable_contextual_rag",
     "model_dim",
     "normalize",
     "passage_prefix",
@@ -200,12 +210,12 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_text_embedding_3_small",
     ),
     SupportedEmbeddingModel(
-        name="google/text-embedding-004",
+        name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_google_text_embedding_004",
     ),
     SupportedEmbeddingModel(
-        name="google/text-embedding-004",
+        name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_text_embedding_004",
     ),
@@ -271,3 +281,20 @@ SUPPORTED_EMBEDDING_MODELS = [
         index_name="danswer_chunk_intfloat_multilingual_e5_small",
     ),
 ]
+# Maximum (least severe) downgrade factor for chunks above the cutoff
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MAX") or 1.0
+)
+# Minimum (most severe) downgrade factor for short chunks below the cutoff if no content
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_MIN") or 0.7
+)
+# Temperature for the information content classification model
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE = float(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_TEMPERATURE") or 4.0
+)
+# Cutoff below which we start using the information content classification model
+# (cutoff length number itself is still considered 'short'))
+INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH = int(
+    os.environ.get("INDEXING_INFORMATION_CONTENT_CLASSIFICATION_CUTOFF_LENGTH") or 10
+)

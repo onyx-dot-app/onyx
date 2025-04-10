@@ -11,7 +11,7 @@ import { CopyButton } from "@/components/CopyButton";
 import { SEARCH_PARAM_NAMES } from "../searchParams";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { structureValue } from "@/lib/llm/utils";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { Separator } from "@/components/ui/separator";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 
@@ -38,7 +38,7 @@ async function generateShareLink(chatSessionId: string) {
 async function generateSeedLink(
   message?: string,
   assistantId?: number,
-  modelOverride?: LlmOverride
+  modelOverride?: LlmDescriptor
 ) {
   const baseUrl = `${window.location.protocol}//${window.location.host}`;
   const model = modelOverride
@@ -92,7 +92,7 @@ export function ShareChatSessionModal({
   onClose: () => void;
   message?: string;
   assistantId?: number;
-  modelOverride?: LlmOverride;
+  modelOverride?: LlmDescriptor;
 }) {
   const [shareLink, setShareLink] = useState<string>(
     existingSharedStatus === ChatSessionSharedStatus.Public
@@ -117,9 +117,8 @@ export function ShareChatSessionModal({
             {shareLink ? (
               <div>
                 <Text>
-                  This chat session is currently shared. Anyone in your
-                  organization can view the message history using the following
-                  link:
+                  This chat session is currently shared. Anyone in your team can
+                  view the message history using the following link:
                 </Text>
 
                 <div className="flex mt-2">
@@ -160,7 +159,7 @@ export function ShareChatSessionModal({
               <div>
                 <Callout type="warning" title="Warning" className="mb-4">
                   Please make sure that all content in this chat is safe to
-                  share with the whole organization.
+                  share with the whole team.
                 </Callout>
                 <div className="flex w-full justify-between">
                   <Button

@@ -3,7 +3,7 @@
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useContext, useState, useRef, useLayoutEffect } from "react";
 import { ChevronDownIcon } from "@/components/icons/icons";
-import { MinimalMarkdown } from "@/components/chat/MinimalMarkdown";
+import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 export function ChatBanner() {
   const settings = useContext(SettingsContext);

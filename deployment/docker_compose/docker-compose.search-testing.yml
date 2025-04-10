@@ -62,6 +62,8 @@ services:
       - ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=True
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    volumes:
+      - log_store:/var/log
     logging:
       driver: json-file
       options:
@@ -221,3 +223,4 @@ volumes:
       type: none
       o: bind
       device: ${DANSWER_VESPA_DATA_DIR:-./vespa_data}
+  log_store:  # for logs that we don't want to lose on container restarts

@@ -17,12 +17,12 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
-import { SearchSummary } from "./SearchSummary";
 import {
-  markdownToHtml,
-  getMarkdownForSelection,
-} from "@/app/chat/message/codeUtils";
+  OnyxDocument,
+  FilteredOnyxDocument,
+  MinimalOnyxDocument,
+} from "@/lib/search/interfaces";
+import { SearchSummary, UserKnowledgeFiles } from "./SearchSummary";
 import { SkippedSearch } from "./SkippedSearch";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
@@ -47,7 +47,6 @@ import {
   CustomTooltip,
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
-import { ValidSources } from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
@@ -58,17 +57,31 @@ import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import GeneratingImageDisplay from "../tools/GeneratingImageDisplay";
 import RegenerateOption from "../RegenerateOption";
-import { LlmOverride } from "@/lib/hooks";
+import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
 import ToolResult from "../../../components/tools/ToolResult";
 import CsvContent from "../../../components/tools/CSVContent";
-import { SeeMoreBlock } from "@/components/chat/sources/SourceCard";
-import { SourceCard } from "./SourcesDisplay";
+import {
+  FilesSeeMoreBlock,
+  SeeMoreBlock,
+} from "@/components/chat/sources/SourceCard";
+import { FileSourceCard, SourceCard } from "./SourcesDisplay";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import { copyAll, handleCopy } from "./copyingUtils";
+import { transformLinkUri } from "@/lib/utils";
+import { ThinkingBox } from "./thinkingBox/ThinkingBox";
+import {
+  hasCompletedThinkingTokens,
+  hasPartialThinkingTokens,
+  extractThinkingContent,
+  isThinkingComplete,
+  removeThinkingTokens,
+} from "../utils/thinkingTokens";
+import { FileResponse } from "../my-documents/DocumentsContext";
 
 const TOOLS_WITH_CUSTOM_HANDLING = [
   SEARCH_TOOL_NAME,
@@ -79,27 +92,30 @@ const TOOLS_WITH_CUSTOM_HANDLING = [
 function FileDisplay({
   files,
   alignBubble,
+  setPresentingDocument,
 }: {
   files: FileDescriptor[];
   alignBubble?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) {
   const [close, setClose] = useState(true);
+  const [expandedKnowledge, setExpandedKnowledge] = useState(false);
   const imageFiles = files.filter((file) => file.type === ChatFileType.IMAGE);
-  const nonImgFiles = files.filter(
-    (file) => file.type !== ChatFileType.IMAGE && file.type !== ChatFileType.CSV
+  const textFiles = files.filter(
+    (file) => file.type == ChatFileType.PLAIN_TEXT
   );
 
   const csvImgFiles = files.filter((file) => file.type == ChatFileType.CSV);
 
   return (
     <>
-      {nonImgFiles && nonImgFiles.length > 0 && (
+      {textFiles && textFiles.length > 0 && (
         <div
           id="onyx-file"
           className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}
         >
           <div className="flex flex-col gap-2">
-            {nonImgFiles.map((file) => {
+            {textFiles.map((file) => {
               return (
                 <div key={file.id} className="w-fit">
                   <DocumentPreview
@@ -125,7 +141,6 @@ function FileDisplay({
           </div>
         </div>
       )}
-
       {csvImgFiles && csvImgFiles.length > 0 && (
         <div className={` ${alignBubble && "ml-auto"} mt-2 auto mb-4`}>
           <div className="flex flex-col gap-2">
@@ -158,7 +173,48 @@ function FileDisplay({
   );
 }
 
+function FileResponseDisplay({
+  files,
+  alignBubble,
+  setPresentingDocument,
+}: {
+  files: FileResponse[];
+  alignBubble?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
+}) {
+  if (!files || files.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      id="onyx-file-response"
+      className={`${alignBubble && "ml-auto"} mt-2 auto mb-4`}
+    >
+      <div className="flex flex-col gap-2">
+        {files.map((file) => {
+          return (
+            <div key={file.id} className="w-fit">
+              <DocumentPreview
+                fileName={file.name || file.document_id}
+                alignBubble={alignBubble}
+                open={() =>
+                  setPresentingDocument({
+                    document_id: file.document_id,
+                    semantic_identifier: file.name || file.document_id,
+                  })
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export const AIMessage = ({
+  userKnowledgeFiles = [],
   regenerate,
   overriddenModel,
   continueGenerating,
@@ -188,6 +244,7 @@ export const AIMessage = ({
   documentSidebarVisible,
   removePadding,
 }: {
+  userKnowledgeFiles?: FileResponse[];
   index?: number;
   shared?: boolean;
   isActive?: boolean;
@@ -213,11 +270,54 @@ export const AIMessage = ({
   handleForceSearch?: () => void;
   retrievalDisabled?: boolean;
   overriddenModel?: string;
-  regenerate?: (modelOverRide: LlmOverride) => Promise<void>;
-  setPresentingDocument: (document: OnyxDocument) => void;
+  regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
   removePadding?: boolean;
 }) => {
   const toolCallGenerating = toolCall && !toolCall.tool_result;
+
+  // Check if content contains thinking tokens (complete or partial)
+  const hasThinkingTokens = useMemo(() => {
+    return (
+      hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content)
+    );
+  }, [content]);
+
+  // Extract thinking content
+  const thinkingContent = useMemo(() => {
+    if (!hasThinkingTokens) return "";
+    return extractThinkingContent(content);
+  }, [content, hasThinkingTokens]);
+
+  // Track if thinking is complete
+  const isThinkingTokenComplete = useMemo(() => {
+    return isThinkingComplete(thinkingContent);
+  }, [thinkingContent]);
+
+  // Extract final content (remove thinking tokens)
+  const finalContent = useMemo(() => {
+    if (!hasThinkingTokens) return content;
+    return removeThinkingTokens(content);
+  }, [content, hasThinkingTokens]);
+
+  // Only show the message content when we've completed the thinking section
+  // or there are no thinking tokens to begin with
+  const shouldShowContent = useMemo(() => {
+    if (!hasThinkingTokens) return true;
+
+    // If the message is complete, we always show the content
+    if (isComplete) return true;
+
+    // If thinking is not complete, we don't show the content yet
+    if (!isThinkingTokenComplete) return false;
+
+    // If thinking is complete but we're not done with the message yet,
+    // only show the content if there's actually something to show
+    const cleanedContent =
+      typeof finalContent === "string" ? finalContent.trim() : finalContent;
+
+    return !!cleanedContent && cleanedContent !== "";
+  }, [hasThinkingTokens, isComplete, isThinkingTokenComplete, finalContent]);
 
   const processContent = (content: string | JSX.Element) => {
     if (typeof content !== "string") {
@@ -240,16 +340,18 @@ export const AIMessage = ({
         return preprocessLaTeX(content);
       }
     }
+    const processed = preprocessLaTeX(content);
+
+    // Escape $ that are preceded by a space and followed by a non-$ character
+    const escapedDollarSigns = processed.replace(/([\s])\$([^\$])/g, "$1\\$$2");
 
     return (
-      preprocessLaTeX(content) +
-      (!isComplete && !toolCallGenerating ? " [*]() " : "")
+      escapedDollarSigns + (!isComplete && !toolCallGenerating ? " [*]() " : "")
     );
   };
 
-  const finalContent = processContent(content as string);
+  const finalContentProcessed = processContent(finalContent as string);
 
-  const [isRegenerateHovered, setIsRegenerateHovered] = useState(false);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
   const { isHovering, trackedElementRef, hoverElementRef } = useMouseTracking();
@@ -314,6 +416,7 @@ export const AIMessage = ({
       <MemoizedAnchor
         updatePresentingDocument={setPresentingDocument!}
         docs={docs}
+        userFiles={userKnowledgeFiles}
         href={props.href}
       >
         {props.children}
@@ -346,12 +449,12 @@ export const AIMessage = ({
       a: anchorCallback,
       p: paragraphCallback,
       b: ({ node, className, children }: any) => {
-        return <span className={className}>||||{children}</span>;
+        return <span className={className}>{children}</span>;
       },
       code: ({ node, className, children }: any) => {
         const codeText = extractCodeText(
           node,
-          finalContent as string,
+          finalContentProcessed as string,
           children
         );
 
@@ -362,38 +465,29 @@ export const AIMessage = ({
         );
       },
     }),
-    [anchorCallback, paragraphCallback, finalContent]
+    [anchorCallback, paragraphCallback, finalContentProcessed]
   );
+  const markdownRef = useRef<HTMLDivElement>(null);
+
+  // Process selection copying with HTML formatting
 
   const renderedMarkdown = useMemo(() => {
-    if (typeof finalContent !== "string") {
-      return finalContent;
+    if (typeof finalContentProcessed !== "string") {
+      return finalContentProcessed;
     }
 
-    // Create a hidden div with the HTML content for copying
-    const htmlContent = markdownToHtml(finalContent);
-
     return (
-      <>
-        <div
-          style={{
-            position: "absolute",
-            left: "-9999px",
-            display: "none",
-          }}
-          dangerouslySetInnerHTML={{ __html: htmlContent }}
-        />
-        <ReactMarkdown
-          className="prose dark:prose-invert max-w-full text-base"
-          components={markdownComponents}
-          remarkPlugins={[remarkGfm, remarkMath]}
-          rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
-        >
-          {finalContent}
-        </ReactMarkdown>
-      </>
+      <ReactMarkdown
+        className="prose dark:prose-invert max-w-full text-base"
+        components={markdownComponents}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[[rehypePrism, { ignoreMissing: true }], rehypeKatex]}
+        urlTransform={transformLinkUri}
+      >
+        {finalContentProcessed}
+      </ReactMarkdown>
     );
-  }, [finalContent, markdownComponents]);
+  }, [finalContentProcessed, markdownComponents]);
 
   const includeMessageSwitcher =
     currentMessageInd !== undefined &&
@@ -428,35 +522,46 @@ export const AIMessage = ({
               <div className="max-w-message-max break-words">
                 <div className="w-full desktop:ml-4">
                   <div className="max-w-message-max break-words">
-                    {!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
-                      <>
-                        {query !== undefined && !retrievalDisabled && (
-                          <div className="mb-1">
-                            <SearchSummary
-                              index={index || 0}
-                              query={query}
-                              finished={toolCall?.tool_result != undefined}
-                              handleSearchQueryEdit={handleSearchQueryEdit}
-                              docs={docs || []}
-                              toggleDocumentSelection={toggleDocumentSelection!}
-                            />
-                          </div>
-                        )}
-                        {handleForceSearch &&
-                          content &&
-                          query === undefined &&
-                          !hasDocs &&
-                          !retrievalDisabled && (
+                    {userKnowledgeFiles.length == 0 &&
+                      (!toolCall || toolCall.tool_name === SEARCH_TOOL_NAME ? (
+                        <>
+                          {query !== undefined && (
                             <div className="mb-1">
-                              <SkippedSearch
-                                handleForceSearch={handleForceSearch}
+                              <SearchSummary
+                                index={index || 0}
+                                query={query}
+                                finished={toolCall?.tool_result != undefined}
+                                handleSearchQueryEdit={handleSearchQueryEdit}
+                                docs={docs || []}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                userFileSearch={retrievalDisabled ?? false}
                               />
                             </div>
                           )}
-                      </>
-                    ) : null}
 
-                    {toolCall &&
+                          {handleForceSearch &&
+                            content &&
+                            query === undefined &&
+                            !hasDocs &&
+                            !retrievalDisabled && (
+                              <div className="mb-1">
+                                <SkippedSearch
+                                  handleForceSearch={handleForceSearch}
+                                />
+                              </div>
+                            )}
+                        </>
+                      ) : null)}
+                    {userKnowledgeFiles && (
+                      <UserKnowledgeFiles
+                        userKnowledgeFiles={userKnowledgeFiles}
+                      />
+                    )}
+
+                    {!userKnowledgeFiles &&
+                      toolCall &&
                       !TOOLS_WITH_CUSTOM_HANDLING.includes(
                         toolCall.tool_name
                       ) && (
@@ -472,12 +577,10 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result || !content}
                         />
                       )}
-
                     {toolCall &&
                       (!files || files.length == 0) &&
                       toolCall.tool_name === IMAGE_GENERATION_TOOL_NAME &&
                       !toolCall.tool_result && <GeneratingImageDisplay />}
-
                     {toolCall &&
                       toolCall.tool_name === INTERNET_SEARCH_TOOL_NAME && (
                         <ToolRunDisplay
@@ -492,9 +595,51 @@ export const AIMessage = ({
                           isRunning={!toolCall.tool_result}
                         />
                       )}
+                    {userKnowledgeFiles.length == 0 &&
+                      docs &&
+                      docs.length > 0 && (
+                        <div
+                          className={`mobile:hidden ${
+                            (query ||
+                              toolCall?.tool_name ===
+                                INTERNET_SEARCH_TOOL_NAME) &&
+                            "mt-2"
+                          }  -mx-8 w-full mb-4 flex relative`}
+                        >
+                          <div className="w-full">
+                            <div className="px-8 flex gap-x-2">
+                              {!settings?.isMobile &&
+                                docs.length > 0 &&
+                                docs
+                                  .slice(0, 2)
+                                  .map((doc: OnyxDocument, ind: number) => (
+                                    <SourceCard
+                                      document={doc}
+                                      key={ind}
+                                      setPresentingDocument={() =>
+                                        setPresentingDocument({
+                                          document_id: doc.document_id,
+                                          semantic_identifier: doc.document_id,
+                                        })
+                                      }
+                                    />
+                                  ))}
+                              <SeeMoreBlock
+                                toggled={documentSidebarVisible!}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                docs={docs}
+                                webSourceDomains={webSourceDomains}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
-                    {docs && docs.length > 0 && (
+                    {userKnowledgeFiles && userKnowledgeFiles.length > 0 && (
                       <div
+                        key={10}
                         className={`mobile:hidden ${
                           (query ||
                             toolCall?.tool_name ===
@@ -505,94 +650,68 @@ export const AIMessage = ({
                         <div className="w-full">
                           <div className="px-8 flex gap-x-2">
                             {!settings?.isMobile &&
-                              docs.length > 0 &&
-                              docs
+                              userKnowledgeFiles.length > 0 &&
+                              userKnowledgeFiles
                                 .slice(0, 2)
-                                .map((doc: OnyxDocument, ind: number) => (
-                                  <SourceCard
-                                    document={doc}
+                                .map((file: FileResponse, ind: number) => (
+                                  <FileSourceCard
+                                    relevantDocument={docs?.find(
+                                      (doc) =>
+                                        doc.document_id ===
+                                          `FILE_CONNECTOR__${file.file_id}` ||
+                                        doc.document_id ===
+                                          `USER_FILE_CONNECTOR__${file.file_id}`
+                                    )}
                                     key={ind}
-                                    setPresentingDocument={
-                                      setPresentingDocument
+                                    document={file}
+                                    setPresentingDocument={() =>
+                                      setPresentingDocument({
+                                        document_id: file.document_id,
+                                        semantic_identifier: file.name,
+                                      })
                                     }
                                   />
                                 ))}
-                            <SeeMoreBlock
-                              toggled={documentSidebarVisible!}
-                              toggleDocumentSelection={toggleDocumentSelection!}
-                              docs={docs}
-                              webSourceDomains={webSourceDomains}
-                            />
+
+                            {userKnowledgeFiles.length > 2 && (
+                              <FilesSeeMoreBlock
+                                key={10}
+                                toggled={documentSidebarVisible!}
+                                toggleDocumentSelection={
+                                  toggleDocumentSelection!
+                                }
+                                files={userKnowledgeFiles}
+                              />
+                            )}
                           </div>
                         </div>
                       </div>
                     )}
 
-                    {content || files ? (
-                      <>
-                        <FileDisplay files={files || []} />
+                    {/* Render thinking box if thinking tokens exist */}
+                    {hasThinkingTokens && thinkingContent && (
+                      <div className="mb-2">
+                        <ThinkingBox
+                          content={thinkingContent}
+                          isComplete={isComplete || false}
+                          isStreaming={!isThinkingTokenComplete || !isComplete}
+                        />
+                      </div>
+                    )}
 
+                    {/* Only show the message content once thinking is complete or if there's no thinking */}
+                    {shouldShowContent && (content || files) ? (
+                      <>
+                        <FileDisplay
+                          setPresentingDocument={setPresentingDocument}
+                          files={files || []}
+                        />
                         {typeof content === "string" ? (
                           <div className="overflow-x-visible max-w-content-max">
                             <div
-                              contentEditable="true"
-                              suppressContentEditableWarning
+                              ref={markdownRef}
                               className="focus:outline-none cursor-text select-text"
-                              style={{
-                                MozUserModify: "read-only",
-                                WebkitUserModify: "read-only",
-                              }}
-                              onCopy={(e) => {
-                                e.preventDefault();
-                                const selection = window.getSelection();
-                                const selectedPlainText =
-                                  selection?.toString() || "";
-                                if (!selectedPlainText) {
-                                  // If no text is selected, copy the full content
-                                  const contentStr =
-                                    typeof content === "string"
-                                      ? content
-                                      : (
-                                          content as JSX.Element
-                                        ).props?.children?.toString() || "";
-                                  const clipboardItem = new ClipboardItem({
-                                    "text/html": new Blob(
-                                      [
-                                        typeof content === "string"
-                                          ? markdownToHtml(content)
-                                          : contentStr,
-                                      ],
-                                      { type: "text/html" }
-                                    ),
-                                    "text/plain": new Blob([contentStr], {
-                                      type: "text/plain",
-                                    }),
-                                  });
-                                  navigator.clipboard.write([clipboardItem]);
-                                  return;
-                                }
-
-                                const contentStr =
-                                  typeof content === "string"
-                                    ? content
-                                    : (
-                                        content as JSX.Element
-                                      ).props?.children?.toString() || "";
-                                const markdownText = getMarkdownForSelection(
-                                  contentStr,
-                                  selectedPlainText
-                                );
-                                const clipboardItem = new ClipboardItem({
-                                  "text/html": new Blob(
-                                    [markdownToHtml(markdownText)],
-                                    { type: "text/html" }
-                                  ),
-                                  "text/plain": new Blob([selectedPlainText], {
-                                    type: "text/plain",
-                                  }),
-                                });
-                                navigator.clipboard.write([clipboardItem]);
-                              }}
+                              onCopy={(e) => handleCopy(e, markdownRef)}
                             >
                               {renderedMarkdown}
                             </div>
@@ -643,13 +762,11 @@ export const AIMessage = ({
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
-                              content={
-                                typeof content === "string"
-                                  ? {
-                                      html: markdownToHtml(content),
-                                      plainText: content,
-                                    }
-                                  : content.toString()
+                              copyAllFn={() =>
+                                copyAll(
+                                  finalContentProcessed as string,
+                                  markdownRef
+                                )
                               }
                             />
                           </CustomTooltip>
@@ -677,7 +794,6 @@ export const AIMessage = ({
                                 onDropdownVisibleChange={
                                   setIsRegenerateDropdownVisible
                                 }
-                                onHoverChange={setIsRegenerateHovered}
                                 selectedAssistant={currentPersona!}
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
@@ -693,16 +809,10 @@ export const AIMessage = ({
                         absolute -bottom-5
                         z-10
                         invisible ${
-                          (isHovering ||
-                            isRegenerateHovered ||
-                            settings?.isMobile) &&
-                          "!visible"
+                          (isHovering || settings?.isMobile) && "!visible"
                         }
                         opacity-0 ${
-                          (isHovering ||
-                            isRegenerateHovered ||
-                            settings?.isMobile) &&
-                          "!opacity-100"
+                          (isHovering || settings?.isMobile) && "!opacity-100"
                         }
                         flex md:flex-row gap-x-0.5 bg-background-125/40 -mx-1.5 p-1.5 rounded-lg
                         `}
@@ -734,13 +844,11 @@ export const AIMessage = ({
                           </div>
                           <CustomTooltip showTick line content="Copy">
                             <CopyButton
-                              content={
-                                typeof content === "string"
-                                  ? {
-                                      html: markdownToHtml(content),
-                                      plainText: content,
-                                    }
-                                  : content.toString()
+                              copyAllFn={() =>
+                                copyAll(
+                                  finalContentProcessed as string,
+                                  markdownRef
+                                )
                               }
                             />
                           </CustomTooltip>
@@ -772,7 +880,6 @@ export const AIMessage = ({
                                 }
                                 regenerate={regenerate}
                                 overriddenModel={overriddenModel}
-                                onHoverChange={setIsRegenerateHovered}
                               />
                             </CustomTooltip>
                           )}
@@ -874,6 +981,7 @@ export const HumanMessage = ({
   shared,
   stopGenerating = () => null,
   disableSwitchingForStreaming = false,
+  setPresentingDocument,
 }: {
   shared?: boolean;
   content: string;
@@ -884,6 +992,7 @@ export const HumanMessage = ({
   onMessageSelection?: (messageId: number) => void;
   stopGenerating?: () => void;
   disableSwitchingForStreaming?: boolean;
+  setPresentingDocument: (document: MinimalOnyxDocument) => void;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -931,7 +1040,11 @@ export const HumanMessage = ({
       >
         <div className="xl:ml-8">
           <div className="flex flex-col desktop:mr-4">
-            <FileDisplay alignBubble files={files || []} />
+            <FileDisplay
+              alignBubble
+              setPresentingDocument={setPresentingDocument}
+              files={files || []}
+            />
 
             <div className="flex justify-end">
               <div className="w-full ml-8 flex w-full w-[800px] break-words">
@@ -1044,7 +1157,7 @@ export const HumanMessage = ({
                   </div>
                 ) : typeof content === "string" ? (
                   <>
-                    <div className="ml-auto flex items-center mr-1 h-fit my-auto">
+                    <div className="ml-auto flex items-center mr-1 mt-2 h-fit mb-auto">
                       {onEdit &&
                       isHovered &&
                       !isEditing &&

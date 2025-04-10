@@ -44,7 +44,7 @@ jobs:
     - name: Check import order with reorder-python-imports
       run: |
         cd backend
-        find ./danswer -name "*.py" | xargs reorder-python-imports --py311-plus
+        find ./onyx -name "*.py" | xargs reorder-python-imports --py311-plus
 
     - name: Check code formatting with Black
       run: |

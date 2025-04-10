@@ -360,18 +360,18 @@ export const useUsers = ({ includeApiKeys }: UseUsersParams) => {
   };
 };
 
-export interface LlmOverride {
+export interface LlmDescriptor {
   name: string;
   provider: string;
   modelName: string;
 }
 
-export interface LlmOverrideManager {
-  llmOverride: LlmOverride;
-  updateLLMOverride: (newOverride: LlmOverride) => void;
+export interface LlmManager {
+  currentLlm: LlmDescriptor;
+  updateCurrentLlm: (newOverride: LlmDescriptor) => void;
   temperature: number;
   updateTemperature: (temperature: number) => void;
-  updateModelOverrideForChatSession: (chatSession?: ChatSession) => void;
+  updateModelOverrideBasedOnChatSession: (chatSession?: ChatSession) => void;
   imageFilesPresent: boolean;
   updateImageFilesPresent: (present: boolean) => void;
   liveAssistant: Persona | null;
@@ -400,7 +400,7 @@ Thus, the input should be
 
 Changes take place as
 - liveAssistant or currentChatSession changes (and the associated model override is set)
-- (uploadLLMOverride) User explicitly setting a model override (and we explicitly override and set the userSpecifiedOverride which we'll use in place of the user preferences unless overridden by an assistant)
+- (updateCurrentLlm) User explicitly setting a model override (and we explicitly override and set the userSpecifiedOverride which we'll use in place of the user preferences unless overridden by an assistant)
 
 If we have a live assistant, we should use that model override
 
@@ -408,66 +408,89 @@ Relevant test: `llm_ordering.spec.ts`.
 
 Temperature override is set as follows:
 - For existing chat sessions:
-  - If the user has previously overridden the temperature for a specific chat session, 
+  - If the user has previously overridden the temperature for a specific chat session,
     that value is persisted and used when the user returns to that chat.
   - This persistence applies even if the temperature was set before sending the first message in the chat.
 - For new chat sessions:
   - If the search tool is available, the default temperature is set to 0.
   - If the search tool is not available, the default temperature is set to 0.5.
 
-This approach ensures that user preferences are maintained for existing chats while 
+This approach ensures that user preferences are maintained for existing chats while
 providing appropriate defaults for new conversations based on the available tools.
 */
 
-export function useLlmOverride(
+export function useLlmManager(
   llmProviders: LLMProviderDescriptor[],
   currentChatSession?: ChatSession,
   liveAssistant?: Persona
-): LlmOverrideManager {
+): LlmManager {
   const { user } = useUser();
 
+  const [userHasManuallyOverriddenLLM, setUserHasManuallyOverriddenLLM] =
+    useState(false);
   const [chatSession, setChatSession] = useState<ChatSession | null>(null);
+  const [currentLlm, setCurrentLlm] = useState<LlmDescriptor>({
+    name: "",
+    provider: "",
+    modelName: "",
+  });
 
-  const llmOverrideUpdate = () => {
-    if (liveAssistant?.llm_model_version_override) {
-      setLlmOverride(
-        getValidLlmOverride(liveAssistant.llm_model_version_override)
-      );
-    } else if (currentChatSession?.current_alternate_model) {
-      setLlmOverride(
-        getValidLlmOverride(currentChatSession.current_alternate_model)
-      );
-    } else if (user?.preferences?.default_model) {
-      setLlmOverride(getValidLlmOverride(user.preferences.default_model));
-      return;
-    } else {
-      const defaultProvider = llmProviders.find(
-        (provider) => provider.is_default_provider
-      );
+  const llmUpdate = () => {
+    /* Should be called when the live assistant or current chat session changes */
 
-      if (defaultProvider) {
-        setLlmOverride({
-          name: defaultProvider.name,
-          provider: defaultProvider.provider,
-          modelName: defaultProvider.default_model_name,
-        });
+    // separate function so we can `return` to break out
+    const _llmUpdate = () => {
+      // if the user has overridden in this session and just switched to a brand
+      // new session, use their manually specified model
+      if (userHasManuallyOverriddenLLM && !currentChatSession) {
+        return;
       }
-    }
+
+      if (currentChatSession?.current_alternate_model) {
+        setCurrentLlm(
+          getValidLlmDescriptor(currentChatSession.current_alternate_model)
+        );
+      } else if (liveAssistant?.llm_model_version_override) {
+        setCurrentLlm(
+          getValidLlmDescriptor(liveAssistant.llm_model_version_override)
+        );
+      } else if (userHasManuallyOverriddenLLM) {
+        // if the user has an override and there's nothing special about the
+        // current chat session, use the override
+        return;
+      } else if (user?.preferences?.default_model) {
+        setCurrentLlm(getValidLlmDescriptor(user.preferences.default_model));
+      } else {
+        const defaultProvider = llmProviders.find(
+          (provider) => provider.is_default_provider
+        );
+
+        if (defaultProvider) {
+          setCurrentLlm({
+            name: defaultProvider.name,
+            provider: defaultProvider.provider,
+            modelName: defaultProvider.default_model_name,
+          });
+        }
+      }
+    };
+
+    _llmUpdate();
     setChatSession(currentChatSession || null);
   };
 
-  const getValidLlmOverride = (
-    overrideModel: string | null | undefined
-  ): LlmOverride => {
-    if (overrideModel) {
-      const model = destructureValue(overrideModel);
+  const getValidLlmDescriptor = (
+    modelName: string | null | undefined
+  ): LlmDescriptor => {
+    if (modelName) {
+      const model = destructureValue(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
-          p.model_names.includes(overrideModel)
+          p.model_names.includes(modelName)
         );
         if (provider) {
           return {
-            modelName: overrideModel,
+            modelName: modelName,
             name: provider.name,
             provider: provider.provider,
           };
@@ -491,38 +514,32 @@ export function useLlmOverride(
     setImageFilesPresent(present);
   };
 
-  const [llmOverride, setLlmOverride] = useState<LlmOverride>({
-    name: "",
-    provider: "",
-    modelName: "",
-  });
-
-  // Manually set the override
-  const updateLLMOverride = (newOverride: LlmOverride) => {
+  // Manually set the LLM
+  const updateCurrentLlm = (newLlm: LlmDescriptor) => {
     const provider =
-      newOverride.provider ||
-      findProviderForModel(llmProviders, newOverride.modelName);
+      newLlm.provider || findProviderForModel(llmProviders, newLlm.modelName);
     const structuredValue = structureValue(
-      newOverride.name,
+      newLlm.name,
       provider,
-      newOverride.modelName
+      newLlm.modelName
     );
-    setLlmOverride(getValidLlmOverride(structuredValue));
+    setCurrentLlm(getValidLlmDescriptor(structuredValue));
+    setUserHasManuallyOverriddenLLM(true);
   };
 
-  const updateModelOverrideForChatSession = (chatSession?: ChatSession) => {
+  const updateModelOverrideBasedOnChatSession = (chatSession?: ChatSession) => {
     if (chatSession && chatSession.current_alternate_model?.length > 0) {
-      setLlmOverride(getValidLlmOverride(chatSession.current_alternate_model));
+      setCurrentLlm(getValidLlmDescriptor(chatSession.current_alternate_model));
     }
   };
 
   const [temperature, setTemperature] = useState<number>(() => {
-    llmOverrideUpdate();
+    llmUpdate();
 
     if (currentChatSession?.current_temperature_override != null) {
       return Math.min(
         currentChatSession.current_temperature_override,
-        isAnthropic(llmOverride.provider, llmOverride.modelName) ? 1.0 : 2.0
+        isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0
       );
     } else if (
       liveAssistant?.tools.some((tool) => tool.name === SEARCH_TOOL_ID)
@@ -533,22 +550,23 @@ export function useLlmOverride(
   });
 
   const maxTemperature = useMemo(() => {
-    return isAnthropic(llmOverride.provider, llmOverride.modelName) ? 1.0 : 2.0;
-  }, [llmOverride]);
+    return isAnthropic(currentLlm.provider, currentLlm.modelName) ? 1.0 : 2.0;
+  }, [currentLlm]);
 
   useEffect(() => {
-    if (isAnthropic(llmOverride.provider, llmOverride.modelName)) {
+    if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
       const newTemperature = Math.min(temperature, 1.0);
       setTemperature(newTemperature);
       if (chatSession?.id) {
         updateTemperatureOverrideForChatSession(chatSession.id, newTemperature);
       }
     }
-  }, [llmOverride]);
+  }, [currentLlm]);
 
   useEffect(() => {
+    llmUpdate();
+
     if (!chatSession && currentChatSession) {
-      setChatSession(currentChatSession || null);
       if (temperature) {
         updateTemperatureOverrideForChatSession(
           currentChatSession.id,
@@ -570,7 +588,7 @@ export function useLlmOverride(
   }, [liveAssistant, currentChatSession]);
 
   const updateTemperature = (temperature: number) => {
-    if (isAnthropic(llmOverride.provider, llmOverride.modelName)) {
+    if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
       setTemperature((prevTemp) => Math.min(temperature, 1.0));
     } else {
       setTemperature(temperature);
@@ -581,9 +599,9 @@ export function useLlmOverride(
   };
 
   return {
-    updateModelOverrideForChatSession,
-    llmOverride,
-    updateLLMOverride,
+    updateModelOverrideBasedOnChatSession,
+    currentLlm,
+    updateCurrentLlm,
     temperature,
     updateTemperature,
     imageFilesPresent,
@@ -610,7 +628,7 @@ export function useAuthType(): AuthType | null {
   return data.auth_type;
 }
 
-/* 
+/*
 EE Only APIs
 */
 
@@ -688,6 +706,10 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "phi-3.5-mini-instruct": "Phi 3.5 Mini",
   "phi-3.5-moe-instruct": "Phi 3.5 MoE",
   "phi-3.5-vision-instruct": "Phi 3.5 Vision",
+  "phi-4": "Phi 4",
+
+  // Deepseek Models
+  "deepseek-r1": "DeepSeek R1",
 
   // Anthropic models
   "claude-3-opus-20240229": "Claude 3 Opus",
@@ -696,26 +718,53 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "claude-2.1": "Claude 2.1",
   "claude-2.0": "Claude 2.0",
   "claude-instant-1.2": "Claude Instant 1.2",
-  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet",
-  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet (New)",
-  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
-  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet (New)",
+  "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
+  "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
+  "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
+  "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
+  "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
   "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
   "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
   "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
+  "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
+  "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
 
   // Google Models
-  "gemini-1.5-pro": "Gemini 1.5 Pro",
-  "gemini-1.5-flash": "Gemini 1.5 Flash",
-  "gemini-1.5-pro-001": "Gemini 1.5 Pro",
-  "gemini-1.5-flash-001": "Gemini 1.5 Flash",
-  "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
-  "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
+
+  // 2.5 pro models
+  "gemini-2.5-pro-exp-03-25": "Gemini 2.5 Pro (Experimental March 25th)",
+
+  // 2.0 flash lite models
+  "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
+  "gemini-2.0-flash-lite-001": "Gemini 2.0 Flash Lite (v1)",
+  // "gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite (Prv)",
+  // "gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Exp)",
+
+  // 2.0 flash models
+  "gemini-2.0-flash": "Gemini 2.0 Flash",
+  "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
   "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+  // "gemini-2.0-flash-thinking-exp-01-02":
+  //   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
+  // "gemini-2.0-flash-thinking-exp-01-21":
+  //   "Gemini 2.0 Flash Thinking (Experimental January 21st)",
+
+  // 1.5 pro models
+  "gemini-1.5-pro": "Gemini 1.5 Pro",
+  "gemini-1.5-pro-latest": "Gemini 1.5 Pro (Latest)",
+  "gemini-1.5-pro-001": "Gemini 1.5 Pro (v1)",
+  "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
+
+  // 1.5 flash models
+  "gemini-1.5-flash": "Gemini 1.5 Flash",
+  "gemini-1.5-flash-latest": "Gemini 1.5 Flash (Latest)",
+  "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
+  "gemini-1.5-flash-001": "Gemini 1.5 Flash (v1)",
 
   // Mistral Models
   "mistral-large-2411": "Mistral Large 24.11",
   "mistral-large@2411": "Mistral Large 24.11",
+  "ministral-3b": "Ministral 3B",
 
   // Bedrock models
   "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",
@@ -736,6 +785,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "anthropic.claude-v2:1": "Claude v2.1",
   "anthropic.claude-v2": "Claude v2",
   "anthropic.claude-v1": "Claude v1",
+  "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
+  "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
   "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
   "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
   "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet",
@@ -752,6 +803,12 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
 };
 
 export function getDisplayNameForModel(modelName: string): string {
+  if (modelName.startsWith("bedrock/")) {
+    const parts = modelName.split("/");
+    const lastPart = parts[parts.length - 1];
+    return MODEL_DISPLAY_NAMES[lastPart] || lastPart;
+  }
+
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
 }
 
@@ -763,6 +820,7 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "anthropic.claude-3-opus-20240229-v1:0",
     "mistral.mistral-large-2402-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
+    "anthropic.claude-3-7-sonnet-20250219-v1:0",
   ],
   anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
 };

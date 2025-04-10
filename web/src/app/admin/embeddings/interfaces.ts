@@ -18,21 +18,39 @@ export interface RerankingDetails {
 export enum RerankerProvider {
   COHERE = "cohere",
   LITELLM = "litellm",
+  BEDROCK = "bedrock",
+}
+
+export enum EmbeddingPrecision {
+  FLOAT = "float",
+  BFLOAT16 = "bfloat16",
+}
+
+export interface LLMContextualCost {
+  provider: string;
+  model_name: string;
+  cost: number;
 }
 
 export interface AdvancedSearchConfiguration {
   index_name: string | null;
   multipass_indexing: boolean;
+  enable_contextual_rag: boolean;
+  contextual_rag_llm_name: string | null;
+  contextual_rag_llm_provider: string | null;
   multilingual_expansion: string[];
   disable_rerank_for_streaming: boolean;
   api_url: string | null;
   num_rerank: number;
+  embedding_precision: EmbeddingPrecision;
+  reduced_dimension: number | null;
 }
 
 export interface SavedSearchSettings
   extends RerankingDetails,
     AdvancedSearchConfiguration {
   provider_type: EmbeddingProvider | null;
+  background_reindex_enabled: boolean;
 }
 
 export interface RerankingModel {
@@ -91,6 +109,15 @@ export const rerankingModels: RerankingModel[] = [
     displayName: "Cohere Multilingual",
     description: "Powerful multilingual reranking model.",
     link: "https://docs.cohere.com/v2/reference/rerank",
+  },
+  {
+    cloud: true,
+    rerank_provider_type: RerankerProvider.BEDROCK,
+    modelName: "cohere.rerank-v3-5:0",
+    displayName: "Cohere Rerank 3.5",
+    description:
+      "Powerful multilingual reranking model invoked through AWS Bedrock.",
+    link: "https://aws.amazon.com/blogs/machine-learning/cohere-rerank-3-5-is-now-available-in-amazon-bedrock-through-rerank-api",
   },
 ];
 

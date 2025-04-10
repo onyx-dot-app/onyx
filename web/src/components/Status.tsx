@@ -11,6 +11,12 @@ import {
 } from "react-icons/fi";
 import { HoverPopup } from "./HoverPopup";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function IndexAttemptStatus({
   status,
@@ -29,14 +35,14 @@ export function IndexAttemptStatus({
     );
     if (errorMsg) {
       badge = (
-        <HoverPopup
-          mainContent={<div className="cursor-pointer">{icon}</div>}
-          popupContent={
-            <div className="w-64 p-2 break-words overflow-hidden whitespace-normal">
-              {errorMsg}
-            </div>
-          }
-        />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="cursor-pointer">{icon}</div>
+            </TooltipTrigger>
+            <TooltipContent>{errorMsg}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       );
     } else {
       badge = icon;

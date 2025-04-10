@@ -36,6 +36,7 @@ from onyx.configs.model_configs import LITELLM_EXTRA_BODY
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
+from onyx.llm.llm_provider_options import CREDENTIALS_FILE_CUSTOM_CONFIG_KEY
 from onyx.llm.utils import model_is_reasoning_model
 from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
@@ -99,16 +100,18 @@ def _convert_litellm_message_to_langchain_message(
     elif role == "assistant":
         return AIMessage(
             content=content,
-            tool_calls=[
-                {
-                    "name": tool_call.function.name or "",
-                    "args": json.loads(tool_call.function.arguments),
-                    "id": tool_call.id,
-                }
-                for tool_call in tool_calls
-            ]
-            if tool_calls
-            else [],
+            tool_calls=(
+                [
+                    {
+                        "name": tool_call.function.name or "",
+                        "args": json.loads(tool_call.function.arguments),
+                        "id": tool_call.id,
+                    }
+                    for tool_call in tool_calls
+                ]
+                if tool_calls
+                else []
+            ),
         )
     elif role == "system":
         return SystemMessage(content=content)
@@ -167,7 +170,7 @@ def _convert_delta_to_message_chunk(
     stop_reason: str | None = None,
 ) -> BaseMessageChunk:
     """Adapted from langchain_community.chat_models.litellm._convert_delta_to_message_chunk"""
-    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else None)
+    role = _dict.get("role") or (_base_msg_to_role(curr_msg) if curr_msg else "unknown")
     content = _dict.get("content") or ""
     additional_kwargs = {}
     if _dict.get("function_call"):
@@ -402,6 +405,7 @@ class DefaultMultiLLM(LLM):
         stream: bool,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> litellm.ModelResponse | litellm.CustomStreamWrapper:
         # litellm doesn't accept LangChain BaseMessage objects, so we need to convert them
         # to a dict representation
@@ -424,10 +428,11 @@ class DefaultMultiLLM(LLM):
                 messages=processed_prompt,
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
+                max_tokens=max_tokens,
                 # streaming choice
                 stream=stream,
                 # model params
-                temperature=0,
+                temperature=self._temperature,
                 timeout=timeout_override or self._timeout,
                 # For now, we don't support parallel tool calls
                 # NOTE: we can't pass this in if tools are not specified
@@ -452,6 +457,13 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
+                **(
+                    {
+                        "vertex_credentials": self.config.credentials_file,
+                    }
+                    if self.config.model_provider == "vertex_ai"
+                    else {}
+                ),
                 **self._model_kwargs,
             )
         except Exception as e:
@@ -467,6 +479,12 @@ class DefaultMultiLLM(LLM):
 
     @property
     def config(self) -> LLMConfig:
+        credentials_file: str | None = (
+            self._custom_config.get(CREDENTIALS_FILE_CUSTOM_CONFIG_KEY, None)
+            if self._custom_config
+            else None
+        )
+
         return LLMConfig(
             model_provider=self._model_provider,
             model_name=self._model_version,
@@ -475,6 +493,7 @@ class DefaultMultiLLM(LLM):
             api_base=self._api_base,
             api_version=self._api_version,
             deployment_name=self._deployment_name,
+            credentials_file=credentials_file,
         )
 
     def _invoke_implementation(
@@ -484,6 +503,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -497,6 +517,7 @@ class DefaultMultiLLM(LLM):
                 stream=False,
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
+                max_tokens=max_tokens,
             ),
         )
         choice = response.choices[0]
@@ -515,6 +536,7 @@ class DefaultMultiLLM(LLM):
         tool_choice: ToolChoiceOptions | None = None,
         structured_response_format: dict | None = None,
         timeout_override: int | None = None,
+        max_tokens: int | None = None,
     ) -> Iterator[BaseMessage]:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
@@ -526,6 +548,7 @@ class DefaultMultiLLM(LLM):
                 tool_choice,
                 structured_response_format,
                 timeout_override,
+                max_tokens,
             )
             return
 
@@ -539,6 +562,7 @@ class DefaultMultiLLM(LLM):
                 stream=True,
                 structured_response_format=structured_response_format,
                 timeout_override=timeout_override,
+                max_tokens=max_tokens,
             ),
         )
         try:

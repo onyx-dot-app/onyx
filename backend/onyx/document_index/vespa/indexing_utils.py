@@ -22,16 +22,20 @@ from onyx.document_index.vespa.shared_utils.utils import (
     replace_invalid_doc_id_characters,
 )
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
+from onyx.document_index.vespa_constants import AGGREGATED_CHUNK_BOOST_FACTOR
 from onyx.document_index.vespa_constants import BLURB
 from onyx.document_index.vespa_constants import BOOST
+from onyx.document_index.vespa_constants import CHUNK_CONTEXT
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOC_SUMMARY
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import EMBEDDINGS
+from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import METADATA
 from onyx.document_index.vespa_constants import METADATA_LIST
@@ -47,6 +51,8 @@ from onyx.document_index.vespa_constants import SOURCE_TYPE
 from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import TITLE
 from onyx.document_index.vespa_constants import TITLE_EMBEDDING
+from onyx.document_index.vespa_constants import USER_FILE
+from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from onyx.utils.logger import setup_logger
 
@@ -172,7 +178,7 @@ def _index_vespa_chunk(
         # For the BM25 index, the keyword suffix is used, the vector is already generated with the more
         # natural language representation of the metadata section
         CONTENT: remove_invalid_unicode_chars(
-            f"{chunk.title_prefix}{chunk.content}{chunk.metadata_suffix_keyword}"
+            f"{chunk.title_prefix}{chunk.doc_summary}{chunk.content}{chunk.chunk_context}{chunk.metadata_suffix_keyword}"
         ),
         # This duplication of `content` is needed for keyword highlighting
         # Note that it's not exactly the same as the actual content
@@ -187,6 +193,8 @@ def _index_vespa_chunk(
         # Save as a list for efficient extraction as an Attribute
         METADATA_LIST: metadata_list,
         METADATA_SUFFIX: remove_invalid_unicode_chars(chunk.metadata_suffix_keyword),
+        CHUNK_CONTEXT: chunk.chunk_context,
+        DOC_SUMMARY: chunk.doc_summary,
         EMBEDDINGS: embeddings_name_vector_map,
         TITLE_EMBEDDING: chunk.title_embedding,
         DOC_UPDATED_AT: _vespa_get_updated_at_attribute(document.doc_updated_at),
@@ -198,13 +206,16 @@ def _index_vespa_chunk(
         # which only calls VespaIndex.update
         ACCESS_CONTROL_LIST: {acl_entry: 1 for acl_entry in chunk.access.to_acl()},
         DOCUMENT_SETS: {document_set: 1 for document_set in chunk.document_sets},
+        IMAGE_FILE_NAME: chunk.image_file_name,
+        USER_FILE: chunk.user_file if chunk.user_file is not None else None,
+        USER_FOLDER: chunk.user_folder if chunk.user_folder is not None else None,
         BOOST: chunk.boost,
+        AGGREGATED_CHUNK_BOOST_FACTOR: chunk.aggregated_chunk_boost_factor,
     }
 
     if multitenant:
         if chunk.tenant_id:
             vespa_document_fields[TENANT_ID] = chunk.tenant_id
-
     vespa_url = f"{DOCUMENT_ID_ENDPOINT.format(index_name=index_name)}/{vespa_chunk_id}"
     logger.debug(f'Indexing to URL "{vespa_url}"')
     res = http_client.post(

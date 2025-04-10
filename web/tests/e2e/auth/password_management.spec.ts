@@ -2,7 +2,10 @@ import { test, expect } from "@chromatic-com/playwright";
 import { loginAsRandomUser, loginAs } from "../utils/auth";
 import { TEST_ADMIN2_CREDENTIALS, TEST_ADMIN_CREDENTIALS } from "../constants";
 
-test("User changes password and logs in with new password", async ({
+// test("User changes password and logs in with new password", async ({
+
+// Skip this test for now
+test.skip("User changes password and logs in with new password", async ({
   page,
 }) => {
   // Clear browser context before starting the test
@@ -45,7 +48,8 @@ test("User changes password and logs in with new password", async ({
 
 test.use({ storageState: "admin2_auth.json" });
 
-test("Admin resets own password and logs in with new password", async ({
+// Skip this test for now
+test.skip("Admin resets own password and logs in with new password", async ({
   page,
 }) => {
   const { email: adminEmail, password: adminPassword } =

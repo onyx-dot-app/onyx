@@ -19,6 +19,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import User
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
@@ -53,6 +54,16 @@ class UserPreferences(BaseModel):
     temperature_override_enabled: bool | None = None
 
 
+class TenantSnapshot(BaseModel):
+    tenant_id: str
+    number_of_users: int
+
+
+class TenantInfo(BaseModel):
+    invitation: TenantSnapshot | None = None
+    new_tenant: TenantSnapshot | None = None
+
+
 class UserInfo(BaseModel):
     id: str
     email: str
@@ -65,9 +76,10 @@ class UserInfo(BaseModel):
     current_token_created_at: datetime | None = None
     current_token_expiry_length: int | None = None
     is_cloud_superuser: bool = False
-    organization_name: str | None = None
+    team_name: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
+    tenant_info: TenantInfo | None = None
 
     @classmethod
     def from_model(
@@ -76,8 +88,9 @@ class UserInfo(BaseModel):
         current_token_created_at: datetime | None = None,
         expiry_length: int | None = None,
         is_cloud_superuser: bool = False,
-        organization_name: str | None = None,
+        team_name: str | None = None,
         is_anonymous_user: bool | None = None,
+        tenant_info: TenantInfo | None = None,
     ) -> "UserInfo":
         return cls(
             id=str(user.id),
@@ -99,7 +112,7 @@ class UserInfo(BaseModel):
                     temperature_override_enabled=user.temperature_override_enabled,
                 )
             ),
-            organization_name=organization_name,
+            team_name=team_name,
             # set to None if TRACK_EXTERNAL_IDP_EXPIRY is False so that we avoid cases
             # where they previously had this set + used OIDC, and now they switched to
             # basic auth are now constantly getting redirected back to the login page
@@ -109,6 +122,7 @@ class UserInfo(BaseModel):
             current_token_expiry_length=expiry_length,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
+            tenant_info=tenant_info,
         )
 
 
@@ -119,6 +133,7 @@ class UserByEmail(BaseModel):
 class UserRoleUpdateRequest(BaseModel):
     user_email: str
     new_role: UserRole
+    explicit_override: bool = False
 
 
 class UserRoleResponse(BaseModel):
@@ -181,6 +196,7 @@ class SlackChannelConfigCreationRequest(BaseModel):
     channel_name: str
     respond_tag_only: bool = False
     respond_to_bots: bool = False
+    is_ephemeral: bool = False
     show_continue_in_web_ui: bool = False
     enable_auto_filters: bool = False
     # If no team members, assume respond in the channel to everyone
@@ -230,7 +246,7 @@ class SlackChannelConfig(BaseModel):
             id=slack_channel_config_model.id,
             slack_bot_id=slack_channel_config_model.slack_bot_id,
             persona=(
-                PersonaSnapshot.from_model(
+                FullPersonaSnapshot.from_model(
                     slack_channel_config_model.persona, allow_deleted=True
                 )
                 if slack_channel_config_model.persona

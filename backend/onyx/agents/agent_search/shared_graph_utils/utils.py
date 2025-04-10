@@ -42,6 +42,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.agent_configs import AGENT_MAX_TOKENS_HISTORY_SUMMARY
 from onyx.configs.agent_configs import (
     AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
 )
@@ -61,6 +62,7 @@ from onyx.db.persona import Persona
 from onyx.llm.chat_llm import LLMRateLimitError
 from onyx.llm.chat_llm import LLMTimeoutError
 from onyx.llm.interfaces import LLM
+from onyx.llm.interfaces import LLMConfig
 from onyx.prompts.agent_search import (
     ASSISTANT_SYSTEM_PROMPT_DEFAULT,
 )
@@ -319,8 +321,10 @@ def dispatch_separated(
     sep: str = DISPATCH_SEP_CHAR,
 ) -> list[BaseMessage_Content]:
     num = 1
+    accumulated_tokens = ""
     streamed_tokens: list[BaseMessage_Content] = []
     for token in tokens:
+        accumulated_tokens += cast(str, token.content)
         content = cast(str, token.content)
         if sep in content:
             sub_question_parts = content.split(sep)
@@ -402,6 +406,7 @@ def summarize_history(
             llm.invoke,
             history_context_prompt,
             timeout_override=AGENT_TIMEOUT_CONNECT_LLM_HISTORY_SUMMARY_GENERATION,
+            max_tokens=AGENT_MAX_TOKENS_HISTORY_SUMMARY,
         )
     except (LLMTimeoutError, TimeoutError):
         logger.error("LLM Timeout Error - summarize history")
@@ -504,4 +509,10 @@ def get_deduplicated_structured_subquestion_documents(
     return StructuredSubquestionDocuments(
         cited_documents=dedup_inference_section_list(cited_docs),
         context_documents=dedup_inference_section_list(context_docs),
+    )
+
+
+def _should_restrict_tokens(llm_config: LLMConfig) -> bool:
+    return not (
+        llm_config.model_provider == "openai" and llm_config.model_name.startswith("o")
     )

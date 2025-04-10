@@ -20,7 +20,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.connectors.zulip.schemas import GetMessagesResponse
 from onyx.connectors.zulip.schemas import Message
 from onyx.connectors.zulip.utils import build_search_narrow
@@ -161,7 +161,7 @@ class ZulipConnector(LoadConnector, PollConnector):
         return Document(
             id=f"{message.stream_id}__{message.id}",
             sections=[
-                Section(
+                TextSection(
                     link=self._message_to_narrow_link(message),
                     text=text,
                 )

@@ -10,7 +10,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -82,7 +82,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         logger.debug(f"Converting Asana task {task.id} to Document")
         return Document(
             id=task.id,
-            sections=[Section(link=task.link, text=task.text)],
+            sections=[TextSection(link=task.link, text=task.text)],
             doc_updated_at=task.last_modified,
             source=DocumentSource.ASANA,
             semantic_identifier=task.title,

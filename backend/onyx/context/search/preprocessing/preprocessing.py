@@ -117,8 +117,12 @@ def retrieval_preprocessing(
         else None
     )
 
+    # Sometimes this is pre-computed in parallel with other heavy tasks to improve
+    # latency, and in that case we don't need to run the model again
     run_query_analysis = (
-        None if skip_query_analysis else FunctionCall(query_analysis, (query,), {})
+        None
+        if (skip_query_analysis or search_request.precomputed_is_keyword is not None)
+        else FunctionCall(query_analysis, (query,), {})
     )
 
     functions_to_run = [
@@ -143,11 +147,12 @@ def retrieval_preprocessing(
 
     # The extracted keywords right now are not very reliable, not using for now
     # Can maybe use for highlighting
-    is_keyword, extracted_keywords = (
-        parallel_results[run_query_analysis.result_id]
-        if run_query_analysis
-        else (False, None)
-    )
+    is_keyword, _extracted_keywords = False, None
+    if search_request.precomputed_is_keyword is not None:
+        is_keyword = search_request.precomputed_is_keyword
+        _extracted_keywords = search_request.precomputed_keywords
+    elif run_query_analysis:
+        is_keyword, _extracted_keywords = parallel_results[run_query_analysis.result_id]
 
     all_query_terms = query.split()
     processed_keywords = (
@@ -160,7 +165,18 @@ def retrieval_preprocessing(
     user_acl_filters = (
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
+    user_file_ids = preset_filters.user_file_ids or []
+    user_folder_ids = preset_filters.user_folder_ids or []
+    if persona and persona.user_files:
+        user_file_ids = user_file_ids + [
+            file.id
+            for file in persona.user_files
+            if file.id not in (preset_filters.user_file_ids or [])
+        ]
+
     final_filters = IndexFilters(
+        user_file_ids=user_file_ids,
+        user_folder_ids=user_folder_ids,
         source_type=preset_filters.source_type or predicted_source_filters,
         document_set=preset_filters.document_set,
         time_cutoff=time_filter or predicted_time_cutoff,
@@ -241,10 +257,11 @@ def retrieval_preprocessing(
         # Should match the LLM filtering to the same as the reranked, it's understood as this is the number of results
         # the user wants to do heavier processing on, so do the same for the LLM if reranking is on
         # if no reranking settings are set, then use the global default
-        max_llm_filter_sections=rerank_settings.num_rerank
-        if rerank_settings
-        else NUM_POSTPROCESSED_RESULTS,
+        max_llm_filter_sections=(
+            rerank_settings.num_rerank if rerank_settings else NUM_POSTPROCESSED_RESULTS
+        ),
         chunks_above=chunks_above,
         chunks_below=chunks_below,
         full_doc=search_request.full_doc,
+        precomputed_query_embedding=search_request.precomputed_query_embedding,
     )

@@ -17,7 +17,7 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.html_utils import strip_excessive_newlines_and_spaces
 from onyx.utils.logger import setup_logger
@@ -162,7 +162,7 @@ class LoopioConnector(LoadConnector, PollConnector):
                 doc_batch.append(
                     Document(
                         id=str(entry["id"]),
-                        sections=[Section(link=link, text=content_text)],
+                        sections=[TextSection(link=link, text=content_text)],
                         source=DocumentSource.LOOPIO,
                         semantic_identifier=questions[0],
                         doc_updated_at=latest_time,

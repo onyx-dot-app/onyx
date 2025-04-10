@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.app_configs import API_KEY_HASH_ROUNDS
+from shared_configs.configs import MULTI_TENANT
 
 
 _API_KEY_HEADER_NAME = "Authorization"
@@ -35,8 +36,7 @@ class ApiKeyDescriptor(BaseModel):
 
 
 def generate_api_key(tenant_id: str | None = None) -> str:
-    # For backwards compatibility, if no tenant_id, generate old style key
-    if not tenant_id:
+    if not MULTI_TENANT or not tenant_id:
         return _API_KEY_PREFIX + secrets.token_urlsafe(_API_KEY_LEN)
 
     encoded_tenant = quote(tenant_id)  # URL encode the tenant ID

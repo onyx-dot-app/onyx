@@ -114,8 +114,8 @@ function Main() {
       <ul className="list-disc mt-2 ml-4 mb-2">
         <li>
           <Text>
-            Set a global rate limit to control your organization&apos;s overall
-            token spend.
+            Set a global rate limit to control your team&apos;s overall token
+            spend.
           </Text>
         </li>
         {isPaidEnterpriseFeaturesEnabled && (

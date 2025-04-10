@@ -91,7 +91,7 @@ def retrieve_documents(
     retrieved_docs = retrieved_docs[:AGENT_MAX_QUERY_RETRIEVAL_RESULTS]
 
     if AGENT_RETRIEVAL_STATS:
-        pre_rerank_docs = callback_container[0]
+        pre_rerank_docs = callback_container[0] if callback_container else []
         fit_scores = get_fit_scores(
             pre_rerank_docs,
             retrieved_docs,

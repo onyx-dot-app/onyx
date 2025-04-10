@@ -32,21 +32,17 @@ export function ChatSessionDisplay({
   chatSession,
   search,
   isSelected,
-  skipGradient,
   closeSidebar,
   showShareModal,
   showDeleteModal,
-  foldersExisting,
   isDragging,
 }: {
   chatSession: ChatSession;
   isSelected: boolean;
   search?: boolean;
-  skipGradient?: boolean;
   closeSidebar?: () => void;
   showShareModal?: (chatSession: ChatSession) => void;
   showDeleteModal?: (chatSession: ChatSession) => void;
-  foldersExisting?: boolean;
   isDragging?: boolean;
 }) {
   const router = useRouter();
@@ -238,8 +234,12 @@ export function ChatSessionDisplay({
                           e.preventDefault();
                           e.stopPropagation();
                         }}
-                        onChange={(e) => setChatName(e.target.value)}
+                        onChange={(e) => {
+                          setChatName(e.target.value);
+                        }}
                         onKeyDown={(event) => {
+                          event.stopPropagation();
+
                           if (event.key === "Enter") {
                             onRename();
                             event.preventDefault();

@@ -1,9 +1,9 @@
-import { Persona } from "@/app/admin/assistants/interfaces";
+import { FullPersona, Persona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
 import { fetchSS } from "../utilsSS";
 import {
-  FullLLMProvider,
+  LLMProviderView,
   getProviderIcon,
 } from "@/app/admin/configuration/llm/interfaces";
 import { ToolSnapshot } from "../tools/interfaces";
@@ -16,9 +16,9 @@ export async function fetchAssistantEditorInfoSS(
       {
         ccPairs: CCPairBasicInfo[];
         documentSets: DocumentSet[];
-        llmProviders: FullLLMProvider[];
+        llmProviders: LLMProviderView[];
         user: User | null;
-        existingPersona: Persona | null;
+        existingPersona: FullPersona | null;
         tools: ToolSnapshot[];
       },
       null,
@@ -83,7 +83,7 @@ export async function fetchAssistantEditorInfoSS(
     ];
   }
 
-  const llmProviders = (await llmProvidersResponse.json()) as FullLLMProvider[];
+  const llmProviders = (await llmProvidersResponse.json()) as LLMProviderView[];
 
   if (personaId && personaResponse && !personaResponse.ok) {
     return [null, `Failed to fetch Persona - ${await personaResponse.text()}`];
@@ -94,7 +94,7 @@ export async function fetchAssistantEditorInfoSS(
   }
 
   const existingPersona = personaResponse
-    ? ((await personaResponse.json()) as Persona)
+    ? ((await personaResponse.json()) as FullPersona)
     : null;
 
   let error: string | null = null;

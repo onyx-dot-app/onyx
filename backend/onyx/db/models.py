@@ -7,6 +7,7 @@ from typing import Optional
 from uuid import uuid4
 
 from pydantic import BaseModel
+from sqlalchemy.orm import validates
 from typing_extensions import TypedDict  # noreorder
 from uuid import UUID
 
@@ -25,6 +26,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import func
 from sqlalchemy import Index
 from sqlalchemy import Integer
+
 from sqlalchemy import Sequence
 from sqlalchemy import String
 from sqlalchemy import Text
@@ -44,7 +46,13 @@ from onyx.configs.constants import DEFAULT_BOOST, MilestoneRecordType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
-from onyx.db.enums import AccessType, IndexingMode, SyncType, SyncStatus
+from onyx.db.enums import (
+    AccessType,
+    EmbeddingPrecision,
+    IndexingMode,
+    SyncType,
+    SyncStatus,
+)
 from onyx.configs.constants import NotificationType
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.constants import TokenRateLimitScope
@@ -133,6 +141,7 @@ Auth/Authz (users, permissions, access) Tables
 class OAuthAccount(SQLAlchemyBaseOAuthAccountTableUUID, Base):
     # even an almost empty token from keycloak will not fit the default 1024 bytes
     access_token: Mapped[str] = mapped_column(Text, nullable=False)  # type: ignore
+    refresh_token: Mapped[str] = mapped_column(Text, nullable=False)  # type: ignore
 
 
 class User(SQLAlchemyBaseUserTableUUID, Base):
@@ -204,6 +213,14 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="creator",
         primaryjoin="User.id == foreign(ConnectorCredentialPair.creator_id)",
     )
+    folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder", back_populates="user"
+    )
+    files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
+
+    @validates("email")
+    def validate_email(self, key: str, value: str) -> str:
+        return value.lower() if value else value
 
     @property
     def password_configured(self) -> bool:
@@ -407,6 +424,7 @@ class ConnectorCredentialPair(Base):
     """
 
     __tablename__ = "connector_credential_pair"
+    is_user_file: Mapped[bool] = mapped_column(Boolean, default=False)
     # NOTE: this `id` column has to use `Sequence` instead of `autoincrement=True`
     # due to some SQLAlchemy quirks + this not being a primary key column
     id: Mapped[int] = mapped_column(
@@ -491,6 +509,10 @@ class ConnectorCredentialPair(Base):
         "User",
         back_populates="cc_pairs",
         primaryjoin="foreign(ConnectorCredentialPair.creator_id) == remote(User.id)",
+    )
+
+    user_file: Mapped["UserFile"] = relationship(
+        "UserFile", back_populates="cc_pair", uselist=False
     )
 
     background_errors: Mapped[list["BackgroundError"]] = relationship(
@@ -579,6 +601,55 @@ class Document(Base):
     )
 
 
+class ChunkStats(Base):
+    __tablename__ = "chunk_stats"
+    # NOTE: if more sensitive data is added here for display, make sure to add user/group permission
+
+    # this should correspond to the ID of the document
+    # (as is passed around in Onyx)
+    id: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        default=lambda context: (
+            f"{context.get_current_parameters()['document_id']}"
+            f"__{context.get_current_parameters()['chunk_in_doc_id']}"
+        ),
+        index=True,
+    )
+
+    # Reference to parent document
+    document_id: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=False, index=True
+    )
+
+    chunk_in_doc_id: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+    )
+
+    information_content_boost: Mapped[float | None] = mapped_column(
+        Float, nullable=True
+    )
+
+    last_modified: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True, default=func.now()
+    )
+    last_synced: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_chunk_sync_status",
+            last_modified,
+            last_synced,
+        ),
+        UniqueConstraint(
+            "document_id", "chunk_in_doc_id", name="uq_chunk_stats_doc_chunk"
+        ),
+    )
+
+
 class Tag(Base):
     __tablename__ = "tag"
 
@@ -631,9 +702,13 @@ class Connector(Base):
         back_populates="connector",
         cascade="all, delete-orphan",
     )
-    documents_by_connector: Mapped[
-        list["DocumentByConnectorCredentialPair"]
-    ] = relationship("DocumentByConnectorCredentialPair", back_populates="connector")
+    documents_by_connector: Mapped[list["DocumentByConnectorCredentialPair"]] = (
+        relationship(
+            "DocumentByConnectorCredentialPair",
+            back_populates="connector",
+            passive_deletes=True,
+        )
+    )
 
     # synchronize this validation logic with RefreshFrequencySchema etc on front end
     # until we have a centralized validation schema
@@ -685,9 +760,13 @@ class Credential(Base):
         back_populates="credential",
         cascade="all, delete-orphan",
     )
-    documents_by_credential: Mapped[
-        list["DocumentByConnectorCredentialPair"]
-    ] = relationship("DocumentByConnectorCredentialPair", back_populates="credential")
+    documents_by_credential: Mapped[list["DocumentByConnectorCredentialPair"]] = (
+        relationship(
+            "DocumentByConnectorCredentialPair",
+            back_populates="credential",
+            passive_deletes=True,
+        )
+    )
 
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
 
@@ -710,8 +789,34 @@ class SearchSettings(Base):
         ForeignKey("embedding_provider.provider_type"), nullable=True
     )
 
+    # Whether switching to this model should re-index all connectors in the background
+    # if no re-index is needed, will be ignored. Only used during the switch-over process.
+    background_reindex_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # allows for quantization -> less memory usage for a small performance hit
+    embedding_precision: Mapped[EmbeddingPrecision] = mapped_column(
+        Enum(EmbeddingPrecision, native_enum=False)
+    )
+
+    # can be used to reduce dimensionality of vectors and save memory with
+    # a small performance hit. More details in the `Reducing embedding dimensions`
+    # section here:
+    # https://platform.openai.com/docs/guides/embeddings#embedding-models
+    # If not specified, will just use the model_dim without any reduction.
+    # NOTE: this is only currently available for OpenAI models
+    reduced_dimension: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     # Mini and Large Chunks (large chunk also checks for model max context)
     multipass_indexing: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # Contextual RAG
+    enable_contextual_rag: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Contextual RAG LLM
+    contextual_rag_llm_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    contextual_rag_llm_provider: Mapped[str | None] = mapped_column(
+        String, nullable=True
+    )
 
     multilingual_expansion: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), default=[]
@@ -790,6 +895,12 @@ class SearchSettings(Base):
         return SearchSettings.can_use_large_chunks(
             self.multipass_indexing, self.model_name, self.provider_type
         )
+
+    @property
+    def final_embedding_dim(self) -> int:
+        if self.reduced_dimension:
+            return self.reduced_dimension
+        return self.model_dim
 
     @staticmethod
     def can_use_large_chunks(
@@ -1008,10 +1119,10 @@ class DocumentByConnectorCredentialPair(Base):
     id: Mapped[str] = mapped_column(ForeignKey("document.id"), primary_key=True)
     # TODO: transition this to use the ConnectorCredentialPair id directly
     connector_id: Mapped[int] = mapped_column(
-        ForeignKey("connector.id"), primary_key=True
+        ForeignKey("connector.id", ondelete="CASCADE"), primary_key=True
     )
     credential_id: Mapped[int] = mapped_column(
-        ForeignKey("credential.id"), primary_key=True
+        ForeignKey("credential.id", ondelete="CASCADE"), primary_key=True
     )
 
     # used to better keep track of document counts at a connector level
@@ -1021,10 +1132,10 @@ class DocumentByConnectorCredentialPair(Base):
     has_been_indexed: Mapped[bool] = mapped_column(Boolean)
 
     connector: Mapped[Connector] = relationship(
-        "Connector", back_populates="documents_by_connector"
+        "Connector", back_populates="documents_by_connector", passive_deletes=True
     )
     credential: Mapped[Credential] = relationship(
-        "Credential", back_populates="documents_by_credential"
+        "Credential", back_populates="documents_by_credential", passive_deletes=True
     )
 
     __table_args__ = (
@@ -1454,6 +1565,8 @@ class LLMProvider(Base):
 
     # should only be set for a single provider
     is_default_provider: Mapped[bool | None] = mapped_column(Boolean, unique=True)
+    is_default_vision_provider: Mapped[bool | None] = mapped_column(Boolean)
+    default_vision_model: Mapped[str | None] = mapped_column(String, nullable=True)
     # EE only
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     groups: Mapped[list["UserGroup"]] = relationship(
@@ -1546,8 +1659,8 @@ class Prompt(Base):
     )
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(String)
-    system_prompt: Mapped[str] = mapped_column(Text)
-    task_prompt: Mapped[str] = mapped_column(Text)
+    system_prompt: Mapped[str] = mapped_column(String(length=8000))
+    task_prompt: Mapped[str] = mapped_column(String(length=8000))
     include_citations: Mapped[bool] = mapped_column(Boolean, default=True)
     datetime_aware: Mapped[bool] = mapped_column(Boolean, default=True)
     # Default prompts are configured via backend during deployment
@@ -1713,6 +1826,17 @@ class Persona(Base):
         secondary="persona__user_group",
         viewonly=True,
     )
+    # Relationship to UserFile
+    user_files: Mapped[list["UserFile"]] = relationship(
+        "UserFile",
+        secondary="persona__user_file",
+        back_populates="assistants",
+    )
+    user_folders: Mapped[list["UserFolder"]] = relationship(
+        "UserFolder",
+        secondary="persona__user_folder",
+        back_populates="assistants",
+    )
     labels: Mapped[list["PersonaLabel"]] = relationship(
         "PersonaLabel",
         secondary=Persona__PersonaLabel.__table__,
@@ -1726,6 +1850,24 @@ class Persona(Base):
             unique=True,
             postgresql_where=(builtin_persona == True),  # noqa: E712
         ),
+    )
+
+
+class Persona__UserFolder(Base):
+    __tablename__ = "persona__user_folder"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_folder_id: Mapped[int] = mapped_column(
+        ForeignKey("user_folder.id"), primary_key=True
+    )
+
+
+class Persona__UserFile(Base):
+    __tablename__ = "persona__user_file"
+
+    persona_id: Mapped[int] = mapped_column(ForeignKey("persona.id"), primary_key=True)
+    user_file_id: Mapped[int] = mapped_column(
+        ForeignKey("user_file.id"), primary_key=True
     )
 
 
@@ -1755,6 +1897,7 @@ class ChannelConfig(TypedDict):
     channel_name: str | None  # None for default channel config
     respond_tag_only: NotRequired[bool]  # defaults to False
     respond_to_bots: NotRequired[bool]  # defaults to False
+    is_ephemeral: NotRequired[bool]  # defaults to False
     respond_member_group_list: NotRequired[list[str]]
     answer_filters: NotRequired[list[AllowedAnswerFilters]]
     # If None then no follow up
@@ -2051,11 +2194,11 @@ class UserGroup(Base):
         secondary=UserGroup__ConnectorCredentialPair.__table__,
         viewonly=True,
     )
-    cc_pair_relationships: Mapped[
-        list[UserGroup__ConnectorCredentialPair]
-    ] = relationship(
-        "UserGroup__ConnectorCredentialPair",
-        viewonly=True,
+    cc_pair_relationships: Mapped[list[UserGroup__ConnectorCredentialPair]] = (
+        relationship(
+            "UserGroup__ConnectorCredentialPair",
+            viewonly=True,
+        )
     )
     personas: Mapped[list[Persona]] = relationship(
         "Persona",
@@ -2250,6 +2393,64 @@ class InputPrompt__User(Base):
     disabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
 
+class UserFolder(Base):
+    __tablename__ = "user_folder"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
+    name: Mapped[str] = mapped_column(nullable=False)
+    description: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    user: Mapped["User"] = relationship(back_populates="folders")
+    files: Mapped[list["UserFile"]] = relationship(back_populates="folder")
+    assistants: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__UserFolder.__table__,
+        back_populates="user_folders",
+    )
+
+
+class UserDocument(str, Enum):
+    CHAT = "chat"
+    RECENT = "recent"
+    FILE = "file"
+
+
+class UserFile(Base):
+    __tablename__ = "user_file"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("user.id"), nullable=False)
+    assistants: Mapped[list["Persona"]] = relationship(
+        "Persona",
+        secondary=Persona__UserFile.__table__,
+        back_populates="user_files",
+    )
+    folder_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_folder.id"), nullable=True
+    )
+
+    file_id: Mapped[str] = mapped_column(nullable=False)
+    document_id: Mapped[str] = mapped_column(nullable=False)
+    name: Mapped[str] = mapped_column(nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        default=datetime.datetime.utcnow
+    )
+    user: Mapped["User"] = relationship(back_populates="files")
+    folder: Mapped["UserFolder"] = relationship(back_populates="files")
+    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    cc_pair_id: Mapped[int | None] = mapped_column(
+        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
+    )
+    cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
+        "ConnectorCredentialPair", back_populates="user_file"
+    )
+    link_url: Mapped[str | None] = mapped_column(String, nullable=True)
+
+
 """
 Multi-tenancy related tables
 """
@@ -2259,15 +2460,29 @@ class PublicBase(DeclarativeBase):
     __abstract__ = True
 
 
+# Strictly keeps track of the tenant that a given user will authenticate to.
 class UserTenantMapping(Base):
     __tablename__ = "user_tenant_mapping"
-    __table_args__ = (
-        UniqueConstraint("email", "tenant_id", name="uq_user_tenant"),
-        {"schema": "public"},
-    )
+    __table_args__ = ({"schema": "public"},)
 
     email: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
-    tenant_id: Mapped[str] = mapped_column(String, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String, nullable=False, primary_key=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    @validates("email")
+    def validate_email(self, key: str, value: str) -> str:
+        return value.lower() if value else value
+
+
+class AvailableTenant(Base):
+    __tablename__ = "available_tenant"
+    """
+    These entries will only exist ephemerally and are meant to be picked up by new users on registration.
+    """
+
+    tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
+    alembic_version: Mapped[str] = mapped_column(String, nullable=False)
+    date_created: Mapped[datetime.datetime] = mapped_column(DateTime, nullable=False)
 
 
 # This is a mapping from tenant IDs to anonymous user paths

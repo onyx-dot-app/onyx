@@ -1,12 +1,19 @@
+import base64
 from collections.abc import Callable
 from collections.abc import Iterator
 from typing import cast
 
 import numpy
+from langchain_core.messages import BaseMessage
+from langchain_core.messages import HumanMessage
+from langchain_core.messages import SystemMessage
 
 from onyx.chat.models import SectionRelevancePiece
 from onyx.configs.app_configs import BLURB_SIZE
+from onyx.configs.app_configs import IMAGE_ANALYSIS_SYSTEM_PROMPT
+from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from onyx.configs.constants import RETURN_SEPARATOR
+from onyx.configs.llm_configs import get_search_time_image_analysis_enabled
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MAX
 from onyx.configs.model_configs import CROSS_ENCODER_RANGE_MIN
 from onyx.context.search.enums import LLMEvaluationType
@@ -18,10 +25,13 @@ from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RerankMetricsContainer
 from onyx.context.search.models import SearchQuery
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.document_index.document_index_utils import (
     translate_boost_count_to_multiplier,
 )
+from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.interfaces import LLM
+from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import RerankingModel
 from onyx.secondary_llm_flows.chunk_usefulness import llm_batch_eval_sections
 from onyx.utils.logger import setup_logger
@@ -30,14 +40,134 @@ from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 
 
+def update_image_sections_with_query(
+    sections: list[InferenceSection],
+    query: str,
+    llm: LLM,
+) -> None:
+    """
+    For each chunk in each section that has an image URL, call an LLM to produce
+    a new 'content' string that directly addresses the user's query about that image.
+    This implementation uses parallel processing for efficiency.
+    """
+    logger = setup_logger()
+    logger.debug(f"Starting image section update with query: {query}")
+
+    chunks_with_images = []
+    for section in sections:
+        for chunk in section.chunks:
+            if chunk.image_file_name:
+                chunks_with_images.append(chunk)
+
+    if not chunks_with_images:
+        logger.debug("No images to process in the sections")
+        return  # No images to process
+
+    logger.info(f"Found {len(chunks_with_images)} chunks with images to process")
+
+    def process_image_chunk(chunk: InferenceChunk) -> tuple[str, str]:
+        try:
+            logger.debug(
+                f"Processing image chunk with ID: {chunk.unique_id}, image: {chunk.image_file_name}"
+            )
+            with get_session_with_current_tenant() as db_session:
+                file_record = get_default_file_store(db_session).read_file(
+                    cast(str, chunk.image_file_name), mode="b"
+                )
+                if not file_record:
+                    logger.error(f"Image file not found: {chunk.image_file_name}")
+                    raise Exception("File not found")
+                file_content = file_record.read()
+                image_base64 = base64.b64encode(file_content).decode()
+                logger.debug(
+                    f"Successfully loaded image data for {chunk.image_file_name}"
+                )
+
+            messages: list[BaseMessage] = [
+                SystemMessage(content=IMAGE_ANALYSIS_SYSTEM_PROMPT),
+                HumanMessage(
+                    content=[
+                        {
+                            "type": "text",
+                            "text": (
+                                f"The user's question is: '{query}'. "
+                                "Please analyze the following image in that context:\n"
+                            ),
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}",
+                            },
+                        },
+                    ]
+                ),
+            ]
+
+            raw_response = llm.invoke(messages)
+
+            answer_text = message_to_string(raw_response).strip()
+            return (
+                chunk.unique_id,
+                answer_text if answer_text else "No relevant info found.",
+            )
+
+        except Exception:
+            logger.exception(
+                f"Error updating image section with query source image url: {chunk.image_file_name}"
+            )
+            return chunk.unique_id, "Error analyzing image."
+
+    image_processing_tasks = [
+        FunctionCall(process_image_chunk, (chunk,)) for chunk in chunks_with_images
+    ]
+
+    logger.info(
+        f"Starting parallel processing of {len(image_processing_tasks)} image tasks"
+    )
+    image_processing_results = run_functions_in_parallel(image_processing_tasks)
+    logger.info(
+        f"Completed parallel processing with {len(image_processing_results)} results"
+    )
+
+    # Create a mapping of chunk IDs to their processed content
+    chunk_id_to_content = {}
+    success_count = 0
+    for task_id, result in image_processing_results.items():
+        if result:
+            chunk_id, content = result
+            chunk_id_to_content[chunk_id] = content
+            success_count += 1
+        else:
+            logger.error(f"Task {task_id} failed to return a valid result")
+
+    logger.info(
+        f"Successfully processed {success_count}/{len(image_processing_results)} images"
+    )
+
+    # Update the chunks with the processed content
+    updated_count = 0
+    for section in sections:
+        for chunk in section.chunks:
+            if chunk.unique_id in chunk_id_to_content:
+                chunk.content = chunk_id_to_content[chunk.unique_id]
+                updated_count += 1
+
+    logger.info(
+        f"Updated content for {updated_count} chunks with image analysis results"
+    )
+
+
 logger = setup_logger()
 
 
 def _log_top_section_links(search_flow: str, sections: list[InferenceSection]) -> None:
     top_links = [
-        section.center_chunk.source_links[0]
-        if section.center_chunk.source_links is not None
-        else "No Link"
+        (
+            section.center_chunk.source_links[0]
+            if section.center_chunk.source_links is not None
+            else "No Link"
+        )
         for section in sections
     ]
     logger.debug(f"Top links from {search_flow} search: {', '.join(top_links)}")
@@ -69,9 +199,21 @@ def cleanup_chunks(chunks: list[InferenceChunkUncleaned]) -> list[InferenceChunk
             RETURN_SEPARATOR
         )
 
+    def _remove_contextual_rag(chunk: InferenceChunkUncleaned) -> str:
+        # remove document summary
+        if chunk.content.startswith(chunk.doc_summary):
+            chunk.content = chunk.content[len(chunk.doc_summary) :].lstrip()
+        # remove chunk context
+        if chunk.content.endswith(chunk.chunk_context):
+            chunk.content = chunk.content[
+                : len(chunk.content) - len(chunk.chunk_context)
+            ].rstrip()
+        return chunk.content
+
     for chunk in chunks:
         chunk.content = _remove_title(chunk)
         chunk.content = _remove_metadata_suffix(chunk)
+        chunk.content = _remove_contextual_rag(chunk)
 
     return [chunk.to_inference_chunk() for chunk in chunks]
 
@@ -227,6 +369,13 @@ def filter_sections(
 
     Returns a list of the unique chunk IDs that were marked as relevant
     """
+    # Log evaluation type to help with debugging
+    logger.info(f"filter_sections called with evaluation_type={query.evaluation_type}")
+
+    # Fast path: immediately return empty list for SKIP evaluation type (ordering-only mode)
+    if query.evaluation_type == LLMEvaluationType.SKIP:
+        return []
+
     sections_to_filter = sections_to_filter[: query.max_llm_filter_sections]
 
     contents = [
@@ -259,6 +408,16 @@ def search_postprocessing(
     llm: LLM,
     rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
 ) -> Iterator[list[InferenceSection] | list[SectionRelevancePiece]]:
+    # Fast path for ordering-only: detect it by checking if evaluation_type is SKIP
+    if search_query.evaluation_type == LLMEvaluationType.SKIP:
+        logger.info(
+            "Fast path: Detected ordering-only mode, bypassing all post-processing"
+        )
+        # Immediately yield the sections without any processing and an empty relevance list
+        yield retrieved_sections
+        yield cast(list[SectionRelevancePiece], [])
+        return
+
     post_processing_tasks: list[FunctionCall] = []
 
     if not retrieved_sections:
@@ -286,15 +445,21 @@ def search_postprocessing(
         # NOTE: if we don't rerank, we can return the chunks immediately
         # since we know this is the final order.
         # This way the user experience isn't delayed by the LLM step
+        if get_search_time_image_analysis_enabled():
+            update_image_sections_with_query(
+                retrieved_sections, search_query.query, llm
+            )
         _log_top_section_links(search_query.search_type.value, retrieved_sections)
         yield retrieved_sections
         sections_yielded = True
 
     llm_filter_task_id = None
-    if search_query.evaluation_type in [
+    # Only add LLM filtering if not in SKIP mode and if LLM doc relevance is not disabled
+    if not DISABLE_LLM_DOC_RELEVANCE and search_query.evaluation_type in [
         LLMEvaluationType.BASIC,
         LLMEvaluationType.UNSPECIFIED,
     ]:
+        logger.info("Adding LLM filtering task for document relevance evaluation")
         post_processing_tasks.append(
             FunctionCall(
                 filter_sections,
@@ -306,6 +471,8 @@ def search_postprocessing(
             )
         )
         llm_filter_task_id = post_processing_tasks[-1].result_id
+    elif DISABLE_LLM_DOC_RELEVANCE:
+        logger.info("Skipping LLM filtering task because LLM doc relevance is disabled")
 
     post_processing_results = (
         run_functions_in_parallel(post_processing_tasks)
@@ -323,6 +490,13 @@ def search_postprocessing(
             )
         else:
             _log_top_section_links(search_query.search_type.value, reranked_sections)
+
+            # Add the image processing step here
+            if get_search_time_image_analysis_enabled():
+                update_image_sections_with_query(
+                    reranked_sections, search_query.query, llm
+                )
+
             yield reranked_sections
 
     llm_selected_section_ids = (

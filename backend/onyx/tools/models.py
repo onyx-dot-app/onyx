@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
@@ -6,9 +7,11 @@ from pydantic import BaseModel
 from pydantic import model_validator
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import DocumentSource
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceSection
+from shared_configs.model_server_models import Embedding
 
 
 class ToolResponse(BaseModel):
@@ -60,11 +63,22 @@ class SearchQueryInfo(BaseModel):
     recency_bias_multiplier: float
 
 
+# None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
-    force_no_rerank: bool
-    alternate_db_session: Session | None
-    retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None
-    skip_query_analysis: bool
+    force_no_rerank: bool | None = None
+    alternate_db_session: Session | None = None
+    retrieved_sections_callback: Callable[[list[InferenceSection]], None] | None = None
+    skip_query_analysis: bool | None = None
+    precomputed_query_embedding: Embedding | None = None
+    precomputed_is_keyword: bool | None = None
+    precomputed_keywords: list[str] | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
+    ordering_only: bool | None = (
+        None  # Flag for fast path when search is only needed for ordering
+    )
+    document_sources: list[DocumentSource] | None = None
+    time_cutoff: datetime | None = None
 
     class Config:
         arbitrary_types_allowed = True

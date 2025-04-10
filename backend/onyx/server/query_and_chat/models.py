@@ -24,6 +24,7 @@ from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.tools.models import ToolCallFinalResult
 
+
 if TYPE_CHECKING:
     pass
 
@@ -91,6 +92,8 @@ class CreateChatMessageRequest(ChunkContext):
     message: str
     # Files that we should attach to this message
     file_descriptors: list[FileDescriptor]
+    user_file_ids: list[int] = []
+    user_folder_ids: list[int] = []
 
     # If no prompt provided, uses the largest prompt of the chat session
     # but really this should be explicitly specified, only in the simplified APIs is this inferred
@@ -117,7 +120,7 @@ class CreateChatMessageRequest(ChunkContext):
     # this does persist in the chat thread details
     temperature_override: float | None = None
 
-    # allow user to specify an alternate assistnat
+    # allow user to specify an alternate assistant
     alternate_assistant_id: int | None = None
 
     # This takes the priority over the prompt_override
@@ -133,6 +136,8 @@ class CreateChatMessageRequest(ChunkContext):
     # forces the LLM to return a structured response, see
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
+
+    force_user_file_search: bool = False
 
     # If true, ignores most of the search options and uses pro search instead.
     # TODO: decide how many of the above options we want to pass through to pro search
@@ -180,6 +185,7 @@ class ChatSessionDetails(BaseModel):
     name: str | None
     persona_id: int | None = None
     time_created: str
+    time_updated: str
     shared_status: ChatSessionSharedStatus
     folder_id: int | None = None
     current_alternate_model: str | None = None
@@ -240,6 +246,7 @@ class ChatMessageDetail(BaseModel):
     files: list[FileDescriptor]
     tool_call: ToolCallFinalResult | None
     refined_answer_improvement: bool | None = None
+    is_agentic: bool | None = None
     error: str | None = None
 
     def model_dump(self, *args: list, **kwargs: dict[str, Any]) -> dict[str, Any]:  # type: ignore
@@ -282,3 +289,35 @@ class AdminSearchRequest(BaseModel):
 
 class AdminSearchResponse(BaseModel):
     documents: list[SearchDoc]
+
+
+class ChatSessionSummary(BaseModel):
+    id: UUID
+    name: str | None = None
+    persona_id: int | None = None
+    time_created: datetime
+    shared_status: ChatSessionSharedStatus
+    folder_id: int | None = None
+    current_alternate_model: str | None = None
+    current_temperature_override: float | None = None
+
+
+class ChatSessionGroup(BaseModel):
+    title: str
+    chats: list[ChatSessionSummary]
+
+
+class ChatSearchResponse(BaseModel):
+    groups: list[ChatSessionGroup]
+    has_more: bool
+    next_page: int | None = None
+
+
+class ChatSearchRequest(BaseModel):
+    query: str | None = None
+    page: int = 1
+    page_size: int = 10
+
+
+class CreateChatResponse(BaseModel):
+    chat_session_id: str

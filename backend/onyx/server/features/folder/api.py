@@ -18,9 +18,9 @@ from onyx.db.models import User
 from onyx.server.features.folder.models import DeleteFolderOptions
 from onyx.server.features.folder.models import FolderChatSessionRequest
 from onyx.server.features.folder.models import FolderCreationRequest
-from onyx.server.features.folder.models import FolderResponse
 from onyx.server.features.folder.models import FolderUpdateRequest
 from onyx.server.features.folder.models import GetUserFoldersResponse
+from onyx.server.features.folder.models import UserFolderSnapshot
 from onyx.server.models import DisplayPriorityRequest
 from onyx.server.query_and_chat.models import ChatSessionDetails
 
@@ -39,7 +39,7 @@ def get_folders(
     folders.sort()
     return GetUserFoldersResponse(
         folders=[
-            FolderResponse(
+            UserFolderSnapshot(
                 folder_id=folder.id,
                 folder_name=folder.name,
                 display_priority=folder.display_priority,
@@ -49,6 +49,7 @@ def get_folders(
                         name=chat_session.description,
                         persona_id=chat_session.persona_id,
                         time_created=chat_session.time_created.isoformat(),
+                        time_updated=chat_session.time_updated.isoformat(),
                         shared_status=chat_session.shared_status,
                         folder_id=folder.id,
                     )

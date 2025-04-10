@@ -3,10 +3,11 @@ from shared_configs.enums import EmbedTextType
 
 
 MODEL_WARM_UP_STRING = "hi " * 512
+INFORMATION_CONTENT_MODEL_WARM_UP_STRING = "hi " * 16
 DEFAULT_OPENAI_MODEL = "text-embedding-3-small"
 DEFAULT_COHERE_MODEL = "embed-english-light-v3.0"
 DEFAULT_VOYAGE_MODEL = "voyage-large-2-instruct"
-DEFAULT_VERTEX_MODEL = "text-embedding-004"
+DEFAULT_VERTEX_MODEL = "text-embedding-005"
 
 
 class EmbeddingModelTextType:

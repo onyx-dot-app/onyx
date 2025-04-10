@@ -171,6 +171,7 @@ export interface SalesforceCredentialJson {
   sf_username: string;
   sf_password: string;
   sf_security_token: string;
+  is_sandbox: boolean;
 }
 
 export interface SharepointCredentialJson {
@@ -225,6 +226,12 @@ export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
+export interface HighspotCredentialJson {
+  highspot_url: string;
+  highspot_key: string;
+  highspot_secret: string;
+}
+
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
   gitlab: {
@@ -270,6 +277,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
     sf_username: "",
     sf_password: "",
     sf_security_token: "",
+    is_sandbox: false,
   } as SalesforceCredentialJson,
   sharepoint: {
     sp_client_id: "",
@@ -351,6 +359,11 @@ export const credentialTemplates: Record<ValidSources, any> = {
   gitbook: {
     gitbook_api_key: "",
   } as GitbookCredentialJson,
+  highspot: {
+    highspot_url: "",
+    highspot_key: "",
+    highspot_secret: "",
+  } as HighspotCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {
@@ -452,6 +465,7 @@ export const credentialDisplayNames: Record<string, string> = {
   sf_username: "Salesforce Username",
   sf_password: "Salesforce Password",
   sf_security_token: "Salesforce Security Token",
+  is_sandbox: "Is Sandbox Environment",
 
   // Sharepoint
   sp_client_id: "SharePoint Client ID",
@@ -485,6 +499,11 @@ export const credentialDisplayNames: Record<string, string> = {
   // GitBook
   gitbook_space_id: "GitBook Space ID",
   gitbook_api_key: "GitBook API Key",
+
+  //Highspot
+  highspot_url: "Highspot URL",
+  highspot_key: "Highspot Key",
+  highspot_secret: "Highspot Secret",
 };
 
 export function getDisplayNameForCredentialKey(key: string): string {

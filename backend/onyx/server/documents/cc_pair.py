@@ -21,12 +21,12 @@ from onyx.background.celery.tasks.external_group_syncing.tasks import (
 from onyx.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
-from onyx.background.celery.versioned_apps.primary import app as primary_app
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.connectors.exceptions import ValidationError
 from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.connectors.interfaces import ConnectorValidationError
 from onyx.db.connector import delete_connector
 from onyx.db.connector_credential_pair import add_credential_to_connector
 from onyx.db.connector_credential_pair import (
@@ -123,15 +123,15 @@ def get_cc_pair_full_info(
     )
     is_editable_for_current_user = editable_cc_pair is not None
 
-    cc_pair_identifier = ConnectorCredentialPairIdentifier(
-        connector_id=cc_pair.connector_id,
-        credential_id=cc_pair.credential_id,
-    )
-
     document_count_info_list = list(
         get_document_counts_for_cc_pairs(
             db_session=db_session,
-            cc_pair_identifiers=[cc_pair_identifier],
+            cc_pairs=[
+                ConnectorCredentialPairIdentifier(
+                    connector_id=cc_pair.connector_id,
+                    credential_id=cc_pair.credential_id,
+                )
+            ],
         )
     )
     documents_indexed = (
@@ -219,7 +219,7 @@ def update_cc_pair_status(
                     continue
 
                 # Revoke the task to prevent it from running
-                primary_app.control.revoke(index_payload.celery_task_id)
+                client_app.control.revoke(index_payload.celery_task_id)
 
                 # If it is running, then signaling for termination will get the
                 # watchdog thread to kill the spawned task
@@ -238,7 +238,7 @@ def update_cc_pair_status(
     db_session.commit()
 
     # this speeds up the start of indexing by firing the check immediately
-    primary_app.send_task(
+    client_app.send_task(
         OnyxCeleryTask.CHECK_FOR_INDEXING,
         kwargs=dict(tenant_id=tenant_id),
         priority=OnyxCeleryPriority.HIGH,
@@ -376,7 +376,7 @@ def prune_cc_pair(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_prune_generator_task(
-        primary_app, cc_pair, db_session, r, tenant_id
+        client_app, cc_pair, db_session, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -450,7 +450,7 @@ def sync_cc_pair(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_permissions_sync_task(
-        primary_app, cc_pair_id, r, tenant_id
+        client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -524,7 +524,7 @@ def sync_cc_pair_groups(
         f"{cc_pair.connector.name} connector."
     )
     payload_id = try_creating_external_group_sync_task(
-        primary_app, cc_pair_id, r, tenant_id
+        client_app, cc_pair_id, r, tenant_id
     )
     if not payload_id:
         raise HTTPException(
@@ -620,9 +620,7 @@ def associate_credential_to_connector(
     )
 
     try:
-        validate_ccpair_for_user(
-            connector_id, credential_id, db_session, user, tenant_id
-        )
+        validate_ccpair_for_user(connector_id, credential_id, db_session)
 
         response = add_credential_to_connector(
             db_session=db_session,
@@ -636,7 +634,7 @@ def associate_credential_to_connector(
         )
 
         # trigger indexing immediately
-        primary_app.send_task(
+        client_app.send_task(
             OnyxCeleryTask.CHECK_FOR_INDEXING,
             priority=OnyxCeleryPriority.HIGH,
             kwargs={"tenant_id": tenant_id},
@@ -648,8 +646,7 @@ def associate_credential_to_connector(
         )
 
         return response
-
-    except ConnectorValidationError as e:
+    except ValidationError as e:
         # If validation fails, delete the connector and commit the changes
         # Ensures we don't leave invalid connectors in the database
         # NOTE: consensus is that it makes sense to unify connector and ccpair creation flows
@@ -660,13 +657,16 @@ def associate_credential_to_connector(
         raise HTTPException(
             status_code=400, detail="Connector validation error: " + str(e)
         )
-
     except IntegrityError as e:
         logger.error(f"IntegrityError: {e}")
+        delete_connector(db_session, connector_id)
+        db_session.commit()
+
         raise HTTPException(status_code=400, detail="Name must be unique")
 
     except Exception as e:
         logger.exception(f"Unexpected error: {e}")
+
         raise HTTPException(status_code=500, detail="Unexpected error")
 
 

@@ -1,5 +1,5 @@
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
-import { FullLLMProvider, WellKnownLLMProviderDescriptor } from "./interfaces";
+import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { Modal } from "@/components/Modal";
 import { LLMProviderUpdateForm } from "./LLMProviderUpdateForm";
 import { CustomLLMProviderUpdateForm } from "./CustomLLMProviderUpdateForm";
@@ -19,7 +19,7 @@ function LLMProviderUpdateModal({
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
   onClose: () => void;
-  existingLlmProvider?: FullLLMProvider;
+  existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
 }) {
@@ -28,6 +28,9 @@ function LLMProviderUpdateModal({
     : llmProviderDescriptor?.display_name ||
       llmProviderDescriptor?.name ||
       "Custom LLM Provider";
+
+  const hasAdvancedOptions = llmProviderDescriptor?.name != "azure";
+
   return (
     <Modal
       title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
@@ -41,6 +44,7 @@ function LLMProviderUpdateModal({
             existingLlmProvider={existingLlmProvider}
             shouldMarkAsDefault={shouldMarkAsDefault}
             setPopup={setPopup}
+            hasAdvancedOptions={hasAdvancedOptions}
           />
         ) : (
           <CustomLLMProviderUpdateForm
@@ -61,7 +65,7 @@ function LLMProviderDisplay({
   shouldMarkAsDefault,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor | null | undefined;
-  existingLlmProvider: FullLLMProvider;
+  existingLlmProvider: LLMProviderView;
   shouldMarkAsDefault?: boolean;
 }) {
   const [formIsVisible, setFormIsVisible] = useState(false);
@@ -146,7 +150,7 @@ export function ConfiguredLLMProviderDisplay({
   existingLlmProviders,
   llmProviderDescriptors,
 }: {
-  existingLlmProviders: FullLLMProvider[];
+  existingLlmProviders: LLMProviderView[];
   llmProviderDescriptors: WellKnownLLMProviderDescriptor[];
 }) {
   existingLlmProviders = existingLlmProviders.sort((a, b) => {

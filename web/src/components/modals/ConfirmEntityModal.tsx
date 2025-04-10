@@ -8,8 +8,11 @@ export const ConfirmEntityModal = ({
   entityName,
   additionalDetails,
   actionButtonText,
+  actionText,
   includeCancelButton = true,
   variant = "delete",
+  accent = false,
+  removeConfirmationText = false,
 }: {
   entityType: string;
   entityName: string;
@@ -17,36 +20,36 @@ export const ConfirmEntityModal = ({
   onSubmit: () => void;
   additionalDetails?: string;
   actionButtonText?: string;
+  actionText?: string;
   includeCancelButton?: boolean;
   variant?: "delete" | "action";
+  accent?: boolean;
+  removeConfirmationText?: boolean;
 }) => {
   const isDeleteVariant = variant === "delete";
   const defaultButtonText = isDeleteVariant ? "Delete" : "Confirm";
   const buttonText = actionButtonText || defaultButtonText;
 
   const getActionText = () => {
-    if (isDeleteVariant) {
-      return "delete";
+    if (actionText) {
+      return actionText;
     }
-    switch (entityType) {
-      case "Default Persona":
-        return "change the default status of";
-      default:
-        return "modify";
-    }
+    return isDeleteVariant ? "delete" : "modify";
   };
 
   return (
-    <Modal width="rounded max-w-sm w-full" onOutsideClick={onClose}>
+    <Modal width="rounded max-w-md w-full" onOutsideClick={onClose}>
       <>
         <div className="flex mb-4">
           <h2 className="my-auto text-2xl font-bold">
             {buttonText} {entityType}
           </h2>
         </div>
-        <p className="mb-4">
-          Are you sure you want to {getActionText()} <b>{entityName}</b>?
-        </p>
+        {!removeConfirmationText && (
+          <p className="mb-4">
+            Are you sure you want to {getActionText()} <b>{entityName}</b>?
+          </p>
+        )}
         {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
         <div className="flex justify-end gap-2">
           {includeCancelButton && (
@@ -56,7 +59,9 @@ export const ConfirmEntityModal = ({
           )}
           <Button
             onClick={onSubmit}
-            variant={isDeleteVariant ? "destructive" : "default"}
+            variant={
+              accent ? "agent" : isDeleteVariant ? "destructive" : "default"
+            }
           >
             {buttonText}
           </Button>

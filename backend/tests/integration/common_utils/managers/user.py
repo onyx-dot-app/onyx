@@ -9,7 +9,9 @@ from requests import HTTPError
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.server.documents.models import PaginatedReturn
+from onyx.server.manage.models import UserInfo
 from onyx.server.models import FullUserSnapshot
+from onyx.server.models import InvitedUserSnapshot
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.test_models import DATestUser
@@ -88,8 +90,6 @@ class UserManager:
         if not session_cookie:
             raise Exception("Failed to login")
 
-        print(f"Logged in as {test_user.email}")
-
         # Set cookies in the headers
         test_user.headers["Cookie"] = f"fastapiusersauth={session_cookie}; "
         test_user.cookies = {"fastapiusersauth": session_cookie}
@@ -125,10 +125,15 @@ class UserManager:
         user_to_set: DATestUser,
         target_role: UserRole,
         user_performing_action: DATestUser,
+        explicit_override: bool = False,
     ) -> DATestUser:
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/set-user-role",
-            json={"user_email": user_to_set.email, "new_role": target_role.value},
+            json={
+                "user_email": user_to_set.email,
+                "new_role": target_role.value,
+                "explicit_override": explicit_override,
+            },
             headers=user_performing_action.headers,
         )
         response.raise_for_status()
@@ -230,9 +235,11 @@ class UserManager:
 
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/users/accepted?{urlencode(query_params, doseq=True)}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -242,3 +249,69 @@ class UserManager:
             total_items=data["total_items"],
         )
         return paginated_result
+
+    @staticmethod
+    def invite_user(
+        user_to_invite_email: str, user_performing_action: DATestUser
+    ) -> None:
+        """Invite a user by email to join the organization.
+
+        Args:
+            user_to_invite_email: Email of the user to invite
+            user_performing_action: User with admin permissions performing the invitation
+        """
+        response = requests.put(
+            url=f"{API_SERVER_URL}/manage/admin/users",
+            headers=user_performing_action.headers,
+            json={"emails": [user_to_invite_email]},
+        )
+        response.raise_for_status()
+
+    @staticmethod
+    def accept_invitation(tenant_id: str, user_performing_action: DATestUser) -> None:
+        """Accept an invitation to join the organization.
+
+        Args:
+            tenant_id: ID of the tenant/organization to accept invitation for
+            user_performing_action: User accepting the invitation
+        """
+        response = requests.post(
+            url=f"{API_SERVER_URL}/tenants/users/invite/accept",
+            headers=user_performing_action.headers,
+            json={"tenant_id": tenant_id},
+        )
+        response.raise_for_status()
+
+    @staticmethod
+    def get_invited_users(
+        user_performing_action: DATestUser,
+    ) -> list[InvitedUserSnapshot]:
+        """Get a list of all invited users.
+
+        Args:
+            user_performing_action: User with admin permissions performing the action
+
+        Returns:
+            List of invited user snapshots
+        """
+        response = requests.get(
+            url=f"{API_SERVER_URL}/manage/users/invited",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+
+        return [InvitedUserSnapshot(**user) for user in response.json()]
+
+    @staticmethod
+    def get_user_info(user_performing_action: DATestUser) -> UserInfo:
+        """Get user info for the current user.
+
+        Args:
+            user_performing_action: User performing the action
+        """
+        response = requests.get(
+            url=f"{API_SERVER_URL}/me",
+            headers=user_performing_action.headers,
+        )
+        response.raise_for_status()
+        return UserInfo(**response.json())

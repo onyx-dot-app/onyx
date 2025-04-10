@@ -37,7 +37,7 @@ schema DANSWER_CHUNK_NAME {
             summary: dynamic
         }
         # Title embedding (x1)
-        field title_embedding type tensor<float>(x[VARIABLE_DIM]) {
+        field title_embedding type tensor<EMBEDDING_PRECISION>(x[VARIABLE_DIM]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
@@ -45,7 +45,7 @@ schema DANSWER_CHUNK_NAME {
         }
         # Content embeddings (chunk + optional mini chunks embeddings)
         # "t" and "x" are arbitrary names, not special keywords
-        field embeddings type tensor<float>(t{},x[VARIABLE_DIM]) {
+        field embeddings type tensor<EMBEDDING_PRECISION>(t{},x[VARIABLE_DIM]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
@@ -53,6 +53,9 @@ schema DANSWER_CHUNK_NAME {
         }
         # Starting section of the doc, currently unused as it has been replaced by match highlighting
         field blurb type string {
+            indexing: summary | attribute
+        }
+        field image_file_name type string {
             indexing: summary | attribute
         }
         # https://docs.vespa.ai/en/attributes.html potential enum store for speed, but probably not worth it
@@ -77,6 +80,11 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
             rank: filter
         }
+        # Field to indicate whether a short chunk is a low content chunk
+        field aggregated_chunk_boost_factor type float {
+            indexing: attribute
+        }
+
         # Needs to have a separate Attribute list for efficient filtering
         field metadata_list type array<string> {
             indexing: summary | attribute
@@ -88,6 +96,12 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
         }
         field metadata type string {
+            indexing: summary | attribute
+        }
+        field chunk_context type string {
+            indexing: summary | attribute
+        }
+        field doc_summary type string {
             indexing: summary | attribute
         }
         field metadata_suffix type string {
@@ -106,8 +120,18 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search
-        }
+        } 
         field document_sets type weightedset<string> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field user_file type int {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field user_folder type int {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search
@@ -137,6 +161,11 @@ schema DANSWER_CHUNK_NAME {
         function inline document_age() {
             # Time in years (91.3 days ~= 3 Months ~= 1 fiscal quarter if no age found)
             expression: max(if(isNan(attribute(doc_updated_at)) == 1, 7890000, now() - attribute(doc_updated_at)) / 31536000, 0)
+        }
+
+        function inline aggregated_chunk_boost() {
+            # Aggregated boost factor, currently only used for information content classification
+            expression: if(isNan(attribute(aggregated_chunk_boost_factor)) == 1, 1.0, attribute(aggregated_chunk_boost_factor))
         }
 
         # Document score decays from 1 to 0.75 as age of last updated time increases
@@ -196,6 +225,8 @@ schema DANSWER_CHUNK_NAME {
                 * document_boost
                 # Decay factor based on time document was last updated
                 * recency_bias
+                # Boost based on aggregated boost calculation
+                * aggregated_chunk_boost
             }
             rerank-count: 1000
         }
@@ -207,6 +238,7 @@ schema DANSWER_CHUNK_NAME {
             closeness(field, embeddings)
             document_boost
             recency_bias
+            aggregated_chunk_boost
             closest(embeddings)
         }
     }

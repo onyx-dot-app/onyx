@@ -219,6 +219,7 @@ class SqlEngine:
             final_engine_kwargs.update(engine_kwargs)
 
         logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+        # echo=True here for inspecting all emitted db queries
         engine = create_engine(connection_string, **final_engine_kwargs)
 
         if USE_IAM_AUTH:
@@ -227,17 +228,62 @@ class SqlEngine:
         return engine
 
     @classmethod
-    def init_engine(cls, **engine_kwargs: Any) -> None:
+    def init_engine(
+        cls,
+        pool_size: int,
+        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
+        max_overflow: int,
+        **extra_engine_kwargs: Any,
+    ) -> None:
+        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
+        important args, and if incorrectly specified, we have run into hitting the pool
+        limit / using too many connections and overwhelming the database."""
         with cls._lock:
-            if not cls._engine:
-                cls._engine = cls._init_engine(**engine_kwargs)
+            if cls._engine:
+                return
+
+            connection_string = build_connection_string(
+                db_api=SYNC_DB_API,
+                app_name=cls._app_name + "_sync",
+                use_iam=USE_IAM_AUTH,
+            )
+
+            # Start with base kwargs that are valid for all pool types
+            final_engine_kwargs: dict[str, Any] = {}
+
+            if POSTGRES_USE_NULL_POOL:
+                # if null pool is specified, then we need to make sure that
+                # we remove any passed in kwargs related to pool size that would
+                # cause the initialization to fail
+                final_engine_kwargs.update(extra_engine_kwargs)
+
+                final_engine_kwargs["poolclass"] = pool.NullPool
+                if "pool_size" in final_engine_kwargs:
+                    del final_engine_kwargs["pool_size"]
+                if "max_overflow" in final_engine_kwargs:
+                    del final_engine_kwargs["max_overflow"]
+            else:
+                final_engine_kwargs["pool_size"] = pool_size
+                final_engine_kwargs["max_overflow"] = max_overflow
+                final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
+                final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
+
+                # any passed in kwargs override the defaults
+                final_engine_kwargs.update(extra_engine_kwargs)
+
+            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+            # echo=True here for inspecting all emitted db queries
+            engine = create_engine(connection_string, **final_engine_kwargs)
+
+            if USE_IAM_AUTH:
+                event.listen(engine, "do_connect", provide_iam_token)
+
+            cls._engine = engine
 
     @classmethod
     def get_engine(cls) -> Engine:
         if not cls._engine:
-            with cls._lock:
-                if not cls._engine:
-                    cls._engine = cls._init_engine()
+            raise RuntimeError("Engine not initialized. Must call init_engine first.")
         return cls._engine
 
     @classmethod
@@ -258,11 +304,11 @@ class SqlEngine:
                 cls._engine = None
 
 
-def get_all_tenant_ids() -> list[str] | list[None]:
+def get_all_tenant_ids() -> list[str]:
     """Returning [None] means the only tenant is the 'public' or self hosted tenant."""
 
     if not MULTI_TENANT:
-        return [None]
+        return [POSTGRES_DEFAULT_SCHEMA]
 
     with get_session_with_shared_schema() as session:
         result = session.execute(
@@ -417,7 +463,7 @@ def get_session_with_shared_schema() -> Generator[Session, None, None]:
 
 
 @contextmanager
-def get_session_with_tenant(*, tenant_id: str | None) -> Generator[Session, None, None]:
+def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]:
     """
     Generate a database session for a specific tenant.
     """

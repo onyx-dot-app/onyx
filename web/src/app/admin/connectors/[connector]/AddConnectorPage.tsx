@@ -193,13 +193,15 @@ export default function AddConnector({
   // Check if there are no credentials
   const noCredentials = credentialTemplate == null;
 
-  if (noCredentials && 1 != formStep) {
-    setFormStep(Math.max(1, formStep));
-  }
+  useEffect(() => {
+    if (noCredentials && 1 != formStep) {
+      setFormStep(Math.max(1, formStep));
+    }
 
-  if (!noCredentials && !credentialActivated && formStep != 0) {
-    setFormStep(Math.min(formStep, 0));
-  }
+    if (!noCredentials && !credentialActivated && formStep != 0) {
+      setFormStep(Math.min(formStep, 0));
+    }
+  }, [noCredentials, formStep, setFormStep]);
 
   const convertStringToDateTime = (indexingStart: string | null) => {
     return indexingStart ? new Date(indexingStart) : null;
@@ -279,7 +281,7 @@ export default function AddConnector({
   return (
     <Formik
       initialValues={{
-        ...createConnectorInitialValues(connector),
+        ...createConnectorInitialValues(connector, currentCredential),
         ...Object.fromEntries(
           connectorConfigs[connector].advanced_values.map((field) => [
             field.name,
@@ -300,11 +302,17 @@ export default function AddConnector({
           ...connector_specific_config
         } = values;
 
-        // Apply transforms from connectors.ts configuration
+        // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
           connector_specific_config
         ).reduce(
           (acc, [key, value]) => {
+            // Filter out empty strings from arrays
+            if (Array.isArray(value)) {
+              value = (value as any[]).filter(
+                (item) => typeof item !== "string" || item.trim() !== ""
+              );
+            }
             const matchingConfigValue = configuration.values.find(
               (configValue) => configValue.name === key
             );
@@ -432,7 +440,7 @@ export default function AddConnector({
     >
       {(formikProps) => {
         return (
-          <div className="mx-auto mb-8 w-full">
+          <div className="mx-auto w-full">
             {popup}
 
             {uploading && (

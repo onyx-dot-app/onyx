@@ -36,6 +36,7 @@ services:
       - OPENID_CONFIG_URL=${OPENID_CONFIG_URL:-}
       - TRACK_EXTERNAL_IDP_EXPIRY=${TRACK_EXTERNAL_IDP_EXPIRY:-}
       - CORS_ALLOWED_ORIGIN=${CORS_ALLOWED_ORIGIN:-}
+      - INTEGRATION_TESTS_MODE=${INTEGRATION_TESTS_MODE:-}
       # Gen AI Settings
       - GEN_AI_MAX_TOKENS=${GEN_AI_MAX_TOKENS:-}
       - QA_TIMEOUT=${QA_TIMEOUT:-}
@@ -62,6 +63,10 @@ services:
       - POSTGRES_HOST=relational_db
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
+      - POSTGRES_API_SERVER_POOL_SIZE=${POSTGRES_API_SERVER_POOL_SIZE:-}
+      - POSTGRES_API_SERVER_POOL_OVERFLOW=${POSTGRES_API_SERVER_POOL_OVERFLOW:-}
+      - POSTGRES_IDLE_SESSIONS_TIMEOUT=${POSTGRES_IDLE_SESSIONS_TIMEOUT:-}
+      - POSTGRES_POOL_RECYCLE=${POSTGRES_POOL_RECYCLE:-}
       - VESPA_HOST=index
       - REDIS_HOST=cache
       - WEB_DOMAIN=${WEB_DOMAIN:-} # For frontend redirect auth purpose
@@ -117,6 +122,7 @@ services:
       - API_KEY_HASH_ROUNDS=${API_KEY_HASH_ROUNDS:-}
       # Seeding configuration
       - USE_IAM_AUTH=${USE_IAM_AUTH:-}
+      - ONYX_QUERY_HISTORY_TYPE=${ONYX_QUERY_HISTORY_TYPE:-}
     # Uncomment the line below to use if IAM_AUTH is true and you are using iam auth for postgres
     # volumes:
     #   - ./bundle.pem:/app/bundle.pem:ro
@@ -127,6 +133,9 @@ services:
       options:
         max-size: "50m"
         max-file: "6"
+    # optional, only for debugging purposes
+    volumes:
+      - api_server_logs:/var/log
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -252,6 +261,9 @@ services:
     #   - ./bundle.pem:/app/bundle.pem:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # optional, only for debugging purposes
+    volumes:
+      - background_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -320,6 +332,8 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - model_cache_huggingface:/root/.cache/huggingface/
+      # optional, only for debugging purposes
+      - inference_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -352,6 +366,8 @@ services:
     volumes:
       # Not necessary, this is just to reduce download time during startup
       - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      # optional, only for debugging purposes
+      - indexing_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -429,3 +445,8 @@ volumes:
 
   model_cache_huggingface:
   indexing_huggingface_model_cache:
+  # for logs that we don't want to lose on container restarts
+  api_server_logs:
+  background_logs:
+  inference_model_server_logs:
+  indexing_model_server_logs:

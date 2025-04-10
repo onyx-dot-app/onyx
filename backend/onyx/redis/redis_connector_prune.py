@@ -52,8 +52,8 @@ class RedisConnectorPrune:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = CELERY_PRUNING_LOCK_TIMEOUT * 2
 
-    def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
-        self.tenant_id: str | None = tenant_id
+    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+        self.tenant_id: str = tenant_id
         self.id = id
         self.redis = redis
 

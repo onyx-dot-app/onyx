@@ -38,6 +38,7 @@ router = APIRouter(prefix="/auth/saml")
 
 
 async def upsert_saml_user(email: str) -> User:
+    logger.debug(f"Attempting to upsert SAML user with email: {email}")
     get_async_session_context = contextlib.asynccontextmanager(
         get_async_session
     )  # type:ignore
@@ -48,9 +49,13 @@ async def upsert_saml_user(email: str) -> User:
         async with get_user_db_context(session) as user_db:
             async with get_user_manager_context(user_db) as user_manager:
                 try:
-                    return await user_manager.get_by_email(email)
+                    user = await user_manager.get_by_email(email)
+                    # If user has a non-authenticated role, treat as non-existent
+                    if not user.role.is_web_login():
+                        raise exceptions.UserNotExists()
+                    return user
                 except exceptions.UserNotExists:
-                    logger.notice("Creating user from SAML login")
+                    logger.info("Creating user from SAML login")
 
                 user_count = await get_user_count()
                 role = UserRole.ADMIN if user_count == 0 else UserRole.BASIC
@@ -59,11 +64,10 @@ async def upsert_saml_user(email: str) -> User:
                 password = fastapi_users_pw_helper.generate()
                 hashed_pass = fastapi_users_pw_helper.hash(password)
 
-                user: User = await user_manager.create(
+                user = await user_manager.create(
                     UserCreate(
                         email=email,
                         password=hashed_pass,
-                        is_verified=True,
                         role=role,
                     )
                 )

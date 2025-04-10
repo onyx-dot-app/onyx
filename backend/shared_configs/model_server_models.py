@@ -4,6 +4,7 @@ from shared_configs.enums import EmbeddingProvider
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 
+
 Embedding = list[float]
 
 
@@ -30,6 +31,12 @@ class EmbedRequest(BaseModel):
     manual_passage_prefix: str | None = None
     api_url: str | None = None
     api_version: str | None = None
+
+    # allows for the truncation of the vector to a lower dimension
+    # to reduce memory usage. Currently only supported for OpenAI models.
+    # will be ignored for other providers.
+    reduced_dimension: int | None = None
+
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
 
@@ -67,7 +74,20 @@ class IntentResponse(BaseModel):
     keywords: list[str]
 
 
+class InformationContentClassificationRequests(BaseModel):
+    queries: list[str]
+
+
 class SupportedEmbeddingModel(BaseModel):
     name: str
     dim: int
     index_name: str
+
+
+class ContentClassificationPrediction(BaseModel):
+    predicted_label: int
+    content_boost_factor: float
+
+
+class InformationContentClassificationResponses(BaseModel):
+    information_content_classifications: list[ContentClassificationPrediction]

@@ -8,7 +8,7 @@ Edition features outside of personal development or testing purposes. Please rea
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
-ARG ONYX_VERSION=0.8-dev
+ARG ONYX_VERSION=0.0.0-dev
 # DO_NOT_TRACK is used to disable telemetry for Unstructured
 ENV ONYX_VERSION=${ONYX_VERSION} \
     DANSWER_RUNNING_IN_DOCKER="true" \
@@ -102,6 +102,7 @@ COPY ./alembic /app/alembic
 COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic.ini /app/alembic.ini
 COPY supervisord.conf /usr/etc/supervisord.conf
+COPY ./static /app/static
 
 # Escape hatch scripts
 COPY ./scripts/debugging /app/scripts/debugging

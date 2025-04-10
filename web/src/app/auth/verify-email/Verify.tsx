@@ -7,7 +7,7 @@ import Text from "@/components/ui/text";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
 import { Logo } from "@/components/logo/Logo";
-
+import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 export function Verify({ user }: { user: User | null }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -15,7 +15,9 @@ export function Verify({ user }: { user: User | null }) {
   const [error, setError] = useState("");
 
   const verify = useCallback(async () => {
-    const token = searchParams.get("token");
+    const token = searchParams?.get("token");
+    const firstUser =
+      searchParams?.get("first_user") && NEXT_PUBLIC_CLOUD_ENABLED;
     if (!token) {
       setError(
         "Missing verification token. Try requesting a new verification email."
@@ -35,7 +37,7 @@ export function Verify({ user }: { user: User | null }) {
       // Use window.location.href to force a full page reload,
       // ensuring app re-initializes with the new state (including
       // server-side provider values)
-      window.location.href = "/";
+      window.location.href = firstUser ? "/chat?new_team=true" : "/chat";
     } else {
       const errorDetail = (await response.json()).detail;
       setError(

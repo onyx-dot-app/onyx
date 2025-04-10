@@ -110,37 +110,38 @@ export default function LogoWithText({
           </Tooltip>
         </TooltipProvider>
       )}
-
-      {showArrow && toggleSidebar && (
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                className="mr-2  my-auto ml-auto"
-                onClick={() => {
-                  toggleSidebar();
-                  if (toggled) {
-                    explicitlyUntoggle();
-                  }
-                }}
-              >
-                {!toggled && !combinedSettings?.isMobile ? (
-                  <RightToLineIcon className="mobile:hidden text-sidebar-toggle" />
-                ) : (
-                  <LeftToLineIcon className="mobile:hidden text-sidebar-toggle" />
-                )}
-                <FiSidebar
-                  size={20}
-                  className="hidden mobile:block text-text-mobile-sidebar"
-                />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent className="!border-none">
-              {toggled ? `Unpin sidebar` : "Pin sidebar"}
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      )}
+      <div className="flex ml-auto gap-x-4">
+        {showArrow && toggleSidebar && (
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  className="mr-2 my-auto"
+                  onClick={() => {
+                    toggleSidebar();
+                    if (toggled) {
+                      explicitlyUntoggle();
+                    }
+                  }}
+                >
+                  {!toggled && !combinedSettings?.isMobile ? (
+                    <RightToLineIcon className="mobile:hidden text-sidebar-toggle" />
+                  ) : (
+                    <LeftToLineIcon className="mobile:hidden text-sidebar-toggle" />
+                  )}
+                  <FiSidebar
+                    size={20}
+                    className="hidden mobile:block text-text-mobile-sidebar"
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="!border-none">
+                {toggled ? `Unpin sidebar` : "Pin sidebar"}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
+      </div>
     </div>
   );
 }

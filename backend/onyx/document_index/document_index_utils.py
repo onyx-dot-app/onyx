@@ -81,7 +81,7 @@ def translate_boost_count_to_multiplier(boost: int) -> float:
 # Vespa's Document API.
 def get_document_chunk_ids(
     enriched_document_info_list: list[EnrichedDocumentIndexingInfo],
-    tenant_id: str | None,
+    tenant_id: str,
     large_chunks_enabled: bool,
 ) -> list[UUID]:
     doc_chunk_ids = []
@@ -139,7 +139,7 @@ def get_uuid_from_chunk_info(
     *,
     document_id: str,
     chunk_id: int,
-    tenant_id: str | None,
+    tenant_id: str,
     large_chunk_id: int | None = None,
 ) -> UUID:
     """NOTE: be VERY carefuly about changing this function. If changed without a migration,
@@ -154,7 +154,7 @@ def get_uuid_from_chunk_info(
         "large_" + str(large_chunk_id) if large_chunk_id is not None else str(chunk_id)
     )
     unique_identifier_string = "_".join([doc_str, chunk_index])
-    if tenant_id and MULTI_TENANT:
+    if MULTI_TENANT:
         unique_identifier_string += "_" + tenant_id
 
     uuid_value = uuid.uuid5(uuid.NAMESPACE_X500, unique_identifier_string)

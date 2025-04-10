@@ -2,7 +2,7 @@ FROM python:3.11.7-slim-bookworm
 
 WORKDIR /app
 
-RUN pip install fastapi uvicorn
+RUN pip install "pydantic-core>=2.28.0" fastapi uvicorn
 
 COPY ./main.py /app/main.py
 

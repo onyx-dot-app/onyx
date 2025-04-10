@@ -13,6 +13,7 @@ import { set } from "lodash";
 import { NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED } from "@/lib/constants";
 import Link from "next/link";
 import { useUser } from "@/components/user/UserProvider";
+import { useRouter } from "next/navigation";
 
 export function EmailPasswordForm({
   isSignup = false,
@@ -20,15 +21,18 @@ export function EmailPasswordForm({
   referralSource,
   nextUrl,
   defaultEmail,
+  isJoin = false,
 }: {
   isSignup?: boolean;
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
   defaultEmail?: string | null;
+  isJoin?: boolean;
 }) {
   const { user } = useUser();
   const { popup, setPopup } = usePopup();
+  const router = useRouter();
   const [isWorking, setIsWorking] = useState(false);
   return (
     <>
@@ -36,25 +40,32 @@ export function EmailPasswordForm({
       {popup}
       <Formik
         initialValues={{
-          email: defaultEmail || "",
+          email: defaultEmail ? defaultEmail.toLowerCase() : "",
           password: "",
         }}
         validationSchema={Yup.object().shape({
-          email: Yup.string().email().required(),
+          email: Yup.string()
+            .email()
+            .required()
+            .transform((value) => value.toLowerCase()),
           password: Yup.string().required(),
         })}
         onSubmit={async (values) => {
+          // Ensure email is lowercase
+          const email = values.email.toLowerCase();
+
           if (isSignup) {
             // login is fast, no need to show a spinner
             setIsWorking(true);
             const response = await basicSignup(
-              values.email,
+              email,
               values.password,
               referralSource
             );
 
             if (!response.ok) {
               setIsWorking(false);
+
               const errorDetail = (await response.json()).detail;
               let errorMsg = "Unknown error";
               if (typeof errorDetail === "object" && errorDetail.reason) {
@@ -72,30 +83,41 @@ export function EmailPasswordForm({
               });
               setIsWorking(false);
               return;
+            } else {
+              setPopup({
+                type: "success",
+                message: "Account created successfully. Please log in.",
+              });
             }
           }
 
-          const loginResponse = await basicLogin(values.email, values.password);
+          const loginResponse = await basicLogin(email, values.password);
           if (loginResponse.ok) {
             if (isSignup && shouldVerify) {
-              await requestEmailVerification(values.email);
+              await requestEmailVerification(email);
               // Use window.location.href to force a full page reload,
               // ensuring app re-initializes with the new state (including
               // server-side provider values)
               window.location.href = "/auth/waiting-on-verification";
             } else {
-              // See above comment
-              window.location.href = nextUrl ? encodeURI(nextUrl) : "/";
+              // The searchparam is purely for multi tenant developement purposes.
+              // It replicates the behavior of the case where a user
+              // has signed up with email / password as the only user to an instance
+              // and has just completed verification
+              window.location.href = nextUrl
+                ? encodeURI(nextUrl)
+                : `/chat${isSignup && !isJoin ? "?new_team=true" : ""}`;
             }
           } else {
             setIsWorking(false);
             const errorDetail = (await loginResponse.json()).detail;
-
             let errorMsg = "Unknown error";
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
               errorMsg = "Invalid email or password";
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
               errorMsg = "Create an account to set a password";
+            } else if (typeof errorDetail === "string") {
+              errorMsg = errorDetail;
             }
             if (loginResponse.status === 429) {
               errorMsg = "Too many requests. Please try again later.";
@@ -127,11 +149,12 @@ export function EmailPasswordForm({
             />
 
             <Button
+              variant="agent"
               type="submit"
               disabled={isSubmitting}
               className="mx-auto  !py-4 w-full"
             >
-              {isSignup ? "Sign Up" : "Log In"}
+              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
             </Button>
             {user?.is_anonymous_user && (
               <Link

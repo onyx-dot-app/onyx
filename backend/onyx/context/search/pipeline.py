@@ -5,11 +5,13 @@ from typing import cast
 
 from sqlalchemy.orm import Session
 
+from onyx.chat.models import ContextualPruningConfig
 from onyx.chat.models import PromptConfig
 from onyx.chat.models import SectionRelevancePiece
 from onyx.chat.prune_and_merge import _merge_sections
 from onyx.chat.prune_and_merge import ChunkRange
 from onyx.chat.prune_and_merge import merge_chunk_intervals
+from onyx.chat.prune_and_merge import prune_and_merge_sections
 from onyx.configs.chat_configs import DISABLE_LLM_DOC_RELEVANCE
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import QueryFlow
@@ -57,10 +59,12 @@ class SearchPipeline:
         retrieval_metrics_callback: (
             Callable[[RetrievalMetricsContainer], None] | None
         ) = None,
-        retrieved_sections_callback: Callable[[list[InferenceSection]], None]
-        | None = None,
+        retrieved_sections_callback: (
+            Callable[[list[InferenceSection]], None] | None
+        ) = None,
         rerank_metrics_callback: Callable[[RerankMetricsContainer], None] | None = None,
         prompt_config: PromptConfig | None = None,
+        contextual_pruning_config: ContextualPruningConfig | None = None,
     ):
         # NOTE: The Search Request contains a lot of fields that are overrides, many of them can be None
         # and typically are None. The preprocessing will fetch default values to replace these empty overrides.
@@ -77,6 +81,9 @@ class SearchPipeline:
         self.search_settings = get_current_search_settings(db_session)
         self.document_index = get_default_document_index(self.search_settings, None)
         self.prompt_config: PromptConfig | None = prompt_config
+        self.contextual_pruning_config: ContextualPruningConfig | None = (
+            contextual_pruning_config
+        )
 
         # Preprocessing steps generate this
         self._search_query: SearchQuery | None = None
@@ -158,6 +165,47 @@ class SearchPipeline:
 
         return cast(list[InferenceChunk], self._retrieved_chunks)
 
+    def get_ordering_only_chunks(
+        self,
+        query: str,
+        user_file_ids: list[int] | None = None,
+        user_folder_ids: list[int] | None = None,
+    ) -> list[InferenceChunk]:
+        """Optimized method that only retrieves chunks for ordering purposes.
+        Skips all extra processing and uses minimal configuration to speed up retrieval.
+        """
+        logger.info("Fast path: Using optimized chunk retrieval for ordering-only mode")
+
+        # Create minimal filters with just user file/folder IDs
+        filters = IndexFilters(
+            user_file_ids=user_file_ids or [],
+            user_folder_ids=user_folder_ids or [],
+            access_control_list=None,
+        )
+
+        # Use a simplified query that skips all unnecessary processing
+        minimal_query = SearchQuery(
+            query=query,
+            search_type=SearchType.SEMANTIC,
+            filters=filters,
+            # Set minimal options needed for retrieval
+            evaluation_type=LLMEvaluationType.SKIP,
+            recency_bias_multiplier=1.0,
+            chunks_above=0,  # No need for surrounding context
+            chunks_below=0,  # No need for surrounding context
+            processed_keywords=[],  # Empty list instead of None
+            rerank_settings=None,
+            hybrid_alpha=0.0,
+            max_llm_filter_sections=0,
+        )
+
+        # Retrieve chunks using the minimal configuration
+        return retrieve_chunks(
+            query=minimal_query,
+            document_index=self.document_index,
+            db_session=self.db_session,
+        )
+
     @log_function_time(print_only=True)
     def _get_sections(self) -> list[InferenceSection]:
         """Returns an expanded section from each of the chunks.
@@ -180,7 +228,7 @@ class SearchPipeline:
 
         # If ee is enabled, censor the chunk sections based on user access
         # Otherwise, return the retrieved chunks
-        censored_chunks = fetch_ee_implementation_or_noop(
+        censored_chunks: list[InferenceChunk] = fetch_ee_implementation_or_noop(
             "onyx.external_permissions.post_query_censoring",
             "_post_query_chunk_censoring",
             retrieved_chunks,
@@ -332,6 +380,20 @@ class SearchPipeline:
         return expanded_inference_sections
 
     @property
+    def retrieved_sections(self) -> list[InferenceSection]:
+        if self._retrieved_sections is not None:
+            return self._retrieved_sections
+
+        self._retrieved_sections = self._get_sections()
+        return self._retrieved_sections
+
+    @property
+    def merged_retrieved_sections(self) -> list[InferenceSection]:
+        """Should be used to display in the UI in order to prevent displaying
+        multiple sections for the same document as separate "documents"."""
+        return _merge_sections(sections=self.retrieved_sections)
+
+    @property
     def reranked_sections(self) -> list[InferenceSection]:
         """Reranking is always done at the chunk level since section merging could create arbitrarily
         long sections which could be:
@@ -343,7 +405,7 @@ class SearchPipeline:
         if self._reranked_sections is not None:
             return self._reranked_sections
 
-        retrieved_sections = self._get_sections()
+        retrieved_sections = self.retrieved_sections
         if self.retrieved_sections_callback is not None:
             self.retrieved_sections_callback(retrieved_sections)
 
@@ -365,7 +427,26 @@ class SearchPipeline:
         if self._final_context_sections is not None:
             return self._final_context_sections
 
-        self._final_context_sections = _merge_sections(sections=self.reranked_sections)
+        if (
+            self.contextual_pruning_config is not None
+            and self.prompt_config is not None
+        ):
+            self._final_context_sections = prune_and_merge_sections(
+                sections=self.reranked_sections,
+                section_relevance_list=None,
+                prompt_config=self.prompt_config,
+                llm_config=self.llm.config,
+                question=self.search_query.query,
+                contextual_pruning_config=self.contextual_pruning_config,
+            )
+
+        else:
+            logger.error(
+                "Contextual pruning or prompt config not set, using default merge"
+            )
+            self._final_context_sections = _merge_sections(
+                sections=self.reranked_sections
+            )
         return self._final_context_sections
 
     @property
@@ -377,6 +458,10 @@ class SearchPipeline:
             self.search_query.evaluation_type == LLMEvaluationType.SKIP
             or DISABLE_LLM_DOC_RELEVANCE
         ):
+            if self.search_query.evaluation_type == LLMEvaluationType.SKIP:
+                logger.info(
+                    "Fast path: Skipping section relevance evaluation for ordering-only mode"
+                )
             return None
 
         if self.search_query.evaluation_type == LLMEvaluationType.UNSPECIFIED:
@@ -407,6 +492,10 @@ class SearchPipeline:
                 raise ValueError(
                     "Basic search evaluation operation called while DISABLE_LLM_DOC_RELEVANCE is enabled."
                 )
+            # NOTE: final_context_sections must be accessed before accessing self._postprocessing_generator
+            # since the property sets the generator. DO NOT REMOVE.
+            _ = self.final_context_sections
+
             self._section_relevance = next(
                 cast(
                     Iterator[list[SectionRelevancePiece]],

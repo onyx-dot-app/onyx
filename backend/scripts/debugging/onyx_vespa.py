@@ -5,17 +5,19 @@ Usage:
   python vespa_debug_tool.py --action <action> [options]
 
 Actions:
-  config      : Print Vespa configuration
-  connect     : Check Vespa connectivity
-  list_docs   : List documents
-  search      : Search documents
-  update      : Update a document
-  delete      : Delete a document
-  get_acls    : Get document ACLs
+  config          : Print Vespa configuration
+  connect         : Check Vespa connectivity
+  list_docs       : List documents
+  list_connector  : List documents for a specific connector-credential pair
+  search          : Search documents
+  update          : Update a document
+  delete          : Delete a document
+  get_acls        : Get document ACLs
 
 Options:
   --tenant-id     : Tenant ID
   --connector-id  : Connector ID
+  --cc-pair-id    : Connector-Credential Pair ID
   --n             : Number of documents (default 10)
   --query         : Search query
   --doc-id        : Document ID
@@ -23,7 +25,9 @@ Options:
 
 Example:
   python vespa_debug_tool.py --action list_docs --tenant-id my_tenant --connector-id 1 --n 5
+  python vespa_debug_tool.py --action list_connector --tenant-id my_tenant --cc-pair-id 1 --n 5
 """
+
 import argparse
 import json
 from datetime import datetime
@@ -59,7 +63,6 @@ from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import METADATA_LIST
 from onyx.document_index.vespa_constants import SEARCH_ENDPOINT
 from onyx.document_index.vespa_constants import SOURCE_TYPE
-from onyx.document_index.vespa_constants import TENANT_ID
 from onyx.document_index.vespa_constants import VESPA_APP_CONTAINER_URL
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
 from onyx.utils.logger import setup_logger
@@ -108,8 +111,8 @@ def build_vespa_filters(
     if not include_hidden:
         filter_str += f"AND !({HIDDEN}=true) "
 
-    if filters.tenant_id and MULTI_TENANT:
-        filter_str += f'AND ({TENANT_ID} contains "{filters.tenant_id}") '
+    # if filters.tenant_id and MULTI_TENANT:
+    #     filter_str += f'AND ({TENANT_ID} contains "{filters.tenant_id}") '
 
     if filters.access_control_list is not None:
         acl_str = _build_or_filters(ACCESS_CONTROL_LIST, filters.access_control_list)
@@ -207,7 +210,7 @@ def query_vespa(
     yql: str, tenant_id: Optional[str] = None, limit: int = 10
 ) -> List[Dict[str, Any]]:
     # Perform a Vespa query using YQL syntax.
-    filters = IndexFilters(tenant_id=tenant_id, access_control_list=[])
+    filters = IndexFilters(tenant_id=None, access_control_list=[])
     filter_string = build_vespa_filters(filters, remove_trailing_and=True)
     full_yql = yql.strip()
     if filter_string:
@@ -260,7 +263,7 @@ def get_documents_for_tenant_connector(
 def search_for_document(
     index_name: str,
     document_id: str | None = None,
-    tenant_id: str | None = None,
+    tenant_id: str = POSTGRES_DEFAULT_SCHEMA,
     max_hits: int | None = 10,
 ) -> List[Dict[str, Any]]:
     yql_query = f"select * from sources {index_name}"
@@ -269,8 +272,8 @@ def search_for_document(
     if document_id is not None:
         conditions.append(f'document_id contains "{document_id}"')
 
-    if tenant_id is not None:
-        conditions.append(f'tenant_id contains "{tenant_id}"')
+    # if tenant_id is not None:
+    #     conditions.append(f'tenant_id contains "{tenant_id}"')
 
     if conditions:
         yql_query += " where " + " and ".join(conditions)
@@ -336,8 +339,8 @@ def list_documents(n: int = 10, tenant_id: Optional[str] = None) -> None:
     # List documents from any source, filtered by tenant if provided.
     logger.info(f"Listing up to {n} documents for tenant={tenant_id or 'ALL'}")
     yql = "select * from sources * where true"
-    if tenant_id:
-        yql += f" and tenant_id contains '{tenant_id}'"
+    # if tenant_id:
+    #     yql += f" and tenant_id contains '{tenant_id}'"
     documents = query_vespa(yql, tenant_id=tenant_id, limit=n)
     print(f"Total documents found: {len(documents)}")
     logger.info(f"Total documents found: {len(documents)}")
@@ -444,12 +447,15 @@ def get_document_acls(
         response = vespa_client.get(document_url)
         if response.status_code == 200:
             fields = response.json().get("fields", {})
+
             document_id = fields.get("document_id") or fields.get(
                 "documentid", "Unknown"
             )
             acls = fields.get("access_control_list", {})
             title = fields.get("title", "")
             source_type = fields.get("source_type", "")
+            doc_sets = fields.get("document_sets", [])
+            user_file = fields.get("user_file", None)
             source_links_raw = fields.get("source_links", "{}")
             try:
                 source_links = json.loads(source_links_raw)
@@ -462,6 +468,8 @@ def get_document_acls(
             print(f"Source Links: {source_links}")
             print(f"Title: {title}")
             print(f"Source Type: {source_type}")
+            print(f"Document Sets: {doc_sets}")
+            print(f"User File: {user_file}")
             if MULTI_TENANT:
                 print(f"Tenant ID: {fields.get('tenant_id', 'N/A')}")
             print("-" * 80)
@@ -472,9 +480,7 @@ def get_document_acls(
             print("-" * 80)
 
 
-def get_current_chunk_count(
-    document_id: str, index_name: str, tenant_id: str
-) -> int | None:
+def get_current_chunk_count(document_id: str) -> int | None:
     with get_session_with_current_tenant() as session:
         return (
             session.query(Document.chunk_count)
@@ -486,7 +492,7 @@ def get_current_chunk_count(
 def get_number_of_chunks_we_think_exist(
     document_id: str, index_name: str, tenant_id: str
 ) -> int:
-    current_chunk_count = get_current_chunk_count(document_id, index_name, tenant_id)
+    current_chunk_count = get_current_chunk_count(document_id)
     print(f"Current chunk count: {current_chunk_count}")
 
     doc_info = VespaIndex.enrich_basic_chunk_info(
@@ -507,8 +513,9 @@ def get_number_of_chunks_we_think_exist(
 
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
-    def __init__(self, tenant_id: str | None = None):
-        self.tenant_id = POSTGRES_DEFAULT_SCHEMA if not tenant_id else tenant_id
+    def __init__(self, tenant_id: str = POSTGRES_DEFAULT_SCHEMA):
+        CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        self.tenant_id = tenant_id
         self.index_name = get_index_name(self.tenant_id)
 
     def sample_document_counts(self) -> None:
@@ -577,6 +584,90 @@ class VespaDebugging:
         # List documents for a tenant.
         list_documents(n, self.tenant_id)
 
+    def list_connector(self, cc_pair_id: int, n: int = 10) -> None:
+        # List documents for a specific connector-credential pair in the tenant
+        logger.info(
+            f"Listing documents for tenant={self.tenant_id}, cc_pair_id={cc_pair_id}"
+        )
+
+        # Get document IDs for this connector-credential pair
+        with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+            # First get the connector_id from the cc_pair_id
+            cc_pair = (
+                session.query(ConnectorCredentialPair)
+                .filter(ConnectorCredentialPair.id == cc_pair_id)
+                .first()
+            )
+
+            if not cc_pair:
+                print(f"No connector-credential pair found with ID {cc_pair_id}")
+                return
+
+            connector_id = cc_pair.connector_id
+
+            # Now get document IDs for this connector
+            doc_ids_data = (
+                session.query(DocumentByConnectorCredentialPair.id)
+                .filter(DocumentByConnectorCredentialPair.connector_id == connector_id)
+                .distinct()
+                .all()
+            )
+
+            doc_ids = [doc_id[0] for doc_id in doc_ids_data]
+
+        if not doc_ids:
+            print(f"No documents found for connector-credential pair ID {cc_pair_id}")
+            return
+
+        print(
+            f"Found {len(doc_ids)} documents for connector-credential pair ID {cc_pair_id}"
+        )
+
+        # Limit to the first n document IDs
+        target_doc_ids = doc_ids[:n]
+        print(f"Retrieving details for first {len(target_doc_ids)} documents")
+        # Search for each document in Vespa
+        for doc_id in target_doc_ids:
+            docs = search_for_document(self.index_name, doc_id, self.tenant_id)
+            if not docs:
+                print(f"No chunks found in Vespa for document ID: {doc_id}")
+                continue
+
+            print(f"Document ID: {doc_id}")
+            print(f"Found {len(docs)} chunks in Vespa")
+
+            # Print each chunk with all fields except embeddings
+            for i, doc in enumerate(docs):
+                print(f"  Chunk {i+1}:")
+                fields = doc.get("fields", {})
+
+                # Print all fields except embeddings
+                for field_name, field_value in sorted(fields.items()):
+                    # Skip embedding fields
+                    if "embedding" in field_name:
+                        continue
+
+                    # Format the output based on field type
+                    if isinstance(field_value, dict) or isinstance(field_value, list):
+                        # Truncate dictionaries and lists
+                        truncated = (
+                            str(field_value)[:50] + "..."
+                            if len(str(field_value)) > 50
+                            else str(field_value)
+                        )
+                        print(f"    {field_name}: {truncated}")
+                    else:
+                        # Truncate strings and other values
+                        str_value = str(field_value)
+                        truncated = (
+                            str_value[:50] + "..." if len(str_value) > 50 else str_value
+                        )
+                        print(f"    {field_name}: {truncated}")
+
+                print("-" * 40)  # Separator between chunks
+
+            print("=" * 80)  # Separator between documents
+
     def compare_chunk_count(self, document_id: str) -> tuple[int, int]:
         docs = search_for_document(self.index_name, document_id, max_hits=None)
         number_of_chunks_we_think_exist = get_number_of_chunks_we_think_exist(
@@ -602,7 +693,7 @@ class VespaDebugging:
         delete_documents_for_tenant(self.index_name, self.tenant_id, count=count)
 
     def search_for_document(
-        self, document_id: str | None = None, tenant_id: str | None = None
+        self, document_id: str | None = None, tenant_id: str = POSTGRES_DEFAULT_SCHEMA
     ) -> List[Dict[str, Any]]:
         return search_for_document(self.index_name, document_id, tenant_id)
 
@@ -634,6 +725,7 @@ def delete_where(
     """
     Removes visited documents in `cluster` where the given selection
     is true, using Vespa's 'delete where' endpoint.
+
 
     :param index_name: Typically <namespace>/<document-type> from your schema
     :param selection:  The selection string, e.g., "true" or "foo contains 'bar'"
@@ -770,6 +862,7 @@ def main() -> None:
             "config",
             "connect",
             "list_docs",
+            "list_connector",
             "search",
             "update",
             "delete",
@@ -781,6 +874,7 @@ def main() -> None:
     )
     parser.add_argument("--tenant-id", help="Tenant ID")
     parser.add_argument("--connector-id", type=int, help="Connector ID")
+    parser.add_argument("--cc-pair-id", type=int, help="Connector-Credential Pair ID")
     parser.add_argument(
         "--n", type=int, default=10, help="Number of documents to retrieve"
     )
@@ -794,11 +888,12 @@ def main() -> None:
         type=int,
         help="Maximum number of documents to delete (for delete-all-documents)",
     )
+    parser.add_argument("--link", help="Document link (for get_acls filter)")
 
     args = parser.parse_args()
     vespa_debug = VespaDebugging(args.tenant_id)
 
-    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id)
+    CURRENT_TENANT_ID_CONTEXTVAR.set(args.tenant_id or "public")
     if args.action == "delete-all-documents":
         if not args.tenant_id:
             parser.error("--tenant-id is required for delete-all-documents action")
@@ -809,6 +904,10 @@ def main() -> None:
         vespa_debug.check_connectivity()
     elif args.action == "list_docs":
         vespa_debug.list_documents(args.n)
+    elif args.action == "list_connector":
+        if args.cc_pair_id is None:
+            parser.error("--cc-pair-id is required for list_connector action")
+        vespa_debug.list_connector(args.cc_pair_id, args.n)
     elif args.action == "search":
         if not args.query or args.connector_id is None:
             parser.error("--query and --connector-id are required for search action")
@@ -825,9 +924,13 @@ def main() -> None:
             parser.error("--doc-id and --connector-id are required for delete action")
         vespa_debug.delete_document(args.connector_id, args.doc_id)
     elif args.action == "get_acls":
-        if args.connector_id is None:
-            parser.error("--connector-id is required for get_acls action")
-        vespa_debug.acls(args.connector_id, args.n)
+        if args.cc_pair_id is None:
+            parser.error("--cc-pair-id is required for get_acls action")
+
+        if args.link is None:
+            vespa_debug.acls(args.cc_pair_id, args.n)
+        else:
+            vespa_debug.acls_by_link(args.cc_pair_id, args.link)
 
 
 if __name__ == "__main__":

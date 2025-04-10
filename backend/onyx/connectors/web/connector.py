@@ -1,6 +1,8 @@
 import io
 import ipaddress
+import random
 import socket
+import time
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
@@ -25,14 +27,14 @@ from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_CONNECTOR_OAUTH_TOKEN_URL
 from onyx.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.interfaces import ConnectorValidationError
-from onyx.connectors.interfaces import CredentialExpiredError
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialExpiredError
+from onyx.connectors.exceptions import InsufficientPermissionsError
+from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import InsufficientPermissionsError
 from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import UnexpectedError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.utils.logger import setup_logger
@@ -42,6 +44,44 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
+# Threshold for determining when to replace vs append iframe content
+IFRAME_TEXT_LENGTH_THRESHOLD = 700
+# Message indicating JavaScript is disabled, which often appears when scraping fails
+JAVASCRIPT_DISABLED_MESSAGE = "You have JavaScript disabled in your browser"
+
+# Define common headers that mimic a real browser
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
+)
+DEFAULT_HEADERS = {
+    "User-Agent": DEFAULT_USER_AGENT,
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,"
+        "image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+    ),
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "none",
+    "Sec-Fetch-User": "?1",
+    "Sec-CH-UA": '"Google Chrome";v="123", "Not:A-Brand";v="8"',
+    "Sec-CH-UA-Mobile": "?0",
+    "Sec-CH-UA-Platform": '"macOS"',
+}
+
+# Common PDF MIME types
+PDF_MIME_TYPES = [
+    "application/pdf",
+    "application/x-pdf",
+    "application/acrobat",
+    "application/vnd.pdf",
+    "text/pdf",
+    "text/x-pdf",
+]
 
 
 class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
@@ -91,11 +131,29 @@ def protected_url_check(url: str) -> None:
 
 def check_internet_connection(url: str) -> None:
     try:
-        response = requests.get(url, timeout=3)
+        # Use a more realistic browser-like request
+        session = requests.Session()
+        session.headers.update(DEFAULT_HEADERS)
+
+        # Add a random delay to mimic human behavior
+        time.sleep(random.uniform(0.1, 0.5))
+
+        response = session.get(url, timeout=5, allow_redirects=True)
+
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         # Extract status code from the response, defaulting to -1 if response is None
         status_code = e.response.status_code if e.response is not None else -1
+
+        # For 403 errors, we do have internet connection, but the request is blocked by the server
+        # this is usually due to bot detection. Future calls (via Playwright) will usually get
+        # around this.
+        if status_code == 403:
+            logger.warning(
+                f"Received 403 Forbidden for {url}, will retry with browser automation"
+            )
+            return
+
         error_msg = {
             400: "Bad Request",
             401: "Unauthorized",
@@ -138,7 +196,8 @@ def get_internal_links(
         # Account for malformed backslashes in URLs
         href = href.replace("\\", "/")
 
-        if should_ignore_pound and "#" in href:
+        # "#!" indicates the page is using a hashbang URL, which is a client-side routing technique
+        if should_ignore_pound and "#" in href and "#!" not in href:
             href = href.split("#")[0]
 
         if not is_valid_url(href):
@@ -150,11 +209,71 @@ def get_internal_links(
     return internal_links
 
 
+def is_pdf_content(response: requests.Response) -> bool:
+    """Check if the response contains PDF content based on content-type header"""
+    content_type = response.headers.get("content-type", "").lower()
+    return any(pdf_type in content_type for pdf_type in PDF_MIME_TYPES)
+
+
 def start_playwright() -> Tuple[Playwright, BrowserContext]:
     playwright = sync_playwright().start()
-    browser = playwright.chromium.launch(headless=True)
 
-    context = browser.new_context()
+    # Launch browser with more realistic settings
+    browser = playwright.chromium.launch(
+        headless=True,
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-site-isolation-trials",
+        ],
+    )
+
+    # Create a context with realistic browser properties
+    context = browser.new_context(
+        user_agent=DEFAULT_USER_AGENT,
+        viewport={"width": 1440, "height": 900},
+        device_scale_factor=2.0,
+        locale="en-US",
+        timezone_id="America/Los_Angeles",
+        has_touch=False,
+        java_script_enabled=True,
+        color_scheme="light",
+        # Add more realistic browser properties
+        bypass_csp=True,
+        ignore_https_errors=True,
+    )
+
+    # Set additional headers to mimic a real browser
+    context.set_extra_http_headers(
+        {
+            "Accept": DEFAULT_HEADERS["Accept"],
+            "Accept-Language": DEFAULT_HEADERS["Accept-Language"],
+            "Sec-Fetch-Dest": DEFAULT_HEADERS["Sec-Fetch-Dest"],
+            "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
+            "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
+            "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
+            "Sec-CH-UA": DEFAULT_HEADERS["Sec-CH-UA"],
+            "Sec-CH-UA-Mobile": DEFAULT_HEADERS["Sec-CH-UA-Mobile"],
+            "Sec-CH-UA-Platform": DEFAULT_HEADERS["Sec-CH-UA-Platform"],
+            "Cache-Control": "max-age=0",
+            "DNT": "1",
+        }
+    )
+
+    # Add a script to modify navigator properties to avoid detection
+    context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5]
+        });
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en']
+        });
+    """
+    )
 
     if (
         WEB_CONNECTOR_OAUTH_CLIENT_ID
@@ -177,7 +296,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
     try:
-        response = requests.get(sitemap_url)
+        response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
         soup = BeautifulSoup(response.content, "html.parser")
@@ -231,6 +350,47 @@ def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | No
         )
     except (ValueError, TypeError):
         return None
+
+
+def _handle_cookies(context: BrowserContext, url: str) -> None:
+    """Handle cookies for the given URL to help with bot detection"""
+    try:
+        # Parse the URL to get the domain
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+
+        # Add some common cookies that might help with bot detection
+        cookies: list[dict[str, str]] = [
+            {
+                "name": "cookieconsent",
+                "value": "accepted",
+                "domain": domain,
+                "path": "/",
+            },
+            {
+                "name": "consent",
+                "value": "true",
+                "domain": domain,
+                "path": "/",
+            },
+            {
+                "name": "session",
+                "value": "random_session_id",
+                "domain": domain,
+                "path": "/",
+            },
+        ]
+
+        # Add cookies to the context
+        for cookie in cookies:
+            try:
+                context.add_cookies([cookie])  # type: ignore
+            except Exception as e:
+                logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
+    except Exception:
+        logger.exception(
+            f"Unexpected error while handling cookies for Web Connector with URL {url}"
+        )
 
 
 class WebConnector(LoadConnector):
@@ -288,12 +448,16 @@ class WebConnector(LoadConnector):
         and converts them into documents"""
         visited_links: set[str] = set()
         to_visit: list[str] = self.to_visit_list
+        content_hashes = set()
 
         if not to_visit:
             raise ValueError("No URLs to visit")
 
         base_url = to_visit[0]  # For the recursive case
         doc_batch: list[Document] = []
+
+        # make sure we can connect to the base url
+        check_internet_connection(base_url)
 
         # Needed to report error
         at_least_one_doc = False
@@ -302,119 +466,217 @@ class WebConnector(LoadConnector):
         playwright, context = start_playwright()
         restart_playwright = False
         while to_visit:
-            current_url = to_visit.pop()
-            if current_url in visited_links:
+            initial_url = to_visit.pop()
+            if initial_url in visited_links:
                 continue
-            visited_links.add(current_url)
+            visited_links.add(initial_url)
 
             try:
-                protected_url_check(current_url)
+                protected_url_check(initial_url)
             except Exception as e:
-                last_error = f"Invalid URL {current_url} due to {e}"
+                last_error = f"Invalid URL {initial_url} due to {e}"
                 logger.warning(last_error)
                 continue
 
-            logger.info(f"Visiting {current_url}")
+            index = len(visited_links)
+            logger.info(f"{index}: Visiting {initial_url}")
 
-            try:
-                check_internet_connection(current_url)
-                if restart_playwright:
-                    playwright, context = start_playwright()
-                    restart_playwright = False
+            # Add retry mechanism with exponential backoff
+            max_retries = 3
+            retry_count = 0
+            retry_success = False
 
-                if current_url.split(".")[-1] == "pdf":
-                    # PDF files are not checked for links
-                    response = requests.get(current_url)
-                    page_text, metadata = read_pdf_file(
-                        file=io.BytesIO(response.content)
+            while retry_count < max_retries and not retry_success:
+                try:
+                    if retry_count > 0:
+                        # Add a random delay between retries (exponential backoff)
+                        delay = min(2**retry_count + random.uniform(0, 1), 10)
+                        logger.info(
+                            f"Retry {retry_count}/{max_retries} for {initial_url} after {delay:.2f}s delay"
+                        )
+                        time.sleep(delay)
+
+                    if restart_playwright:
+                        playwright, context = start_playwright()
+                        restart_playwright = False
+
+                    # Handle cookies for the URL
+                    _handle_cookies(context, initial_url)
+
+                    # First do a HEAD request to check content type without downloading the entire content
+                    head_response = requests.head(
+                        initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
                     )
-                    last_modified = response.headers.get("Last-Modified")
+                    is_pdf = is_pdf_content(head_response)
+
+                    if is_pdf or initial_url.lower().endswith(".pdf"):
+                        # PDF files are not checked for links
+                        response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+                        page_text, metadata, images = read_pdf_file(
+                            file=io.BytesIO(response.content)
+                        )
+                        last_modified = response.headers.get("Last-Modified")
+
+                        doc_batch.append(
+                            Document(
+                                id=initial_url,
+                                sections=[
+                                    TextSection(link=initial_url, text=page_text)
+                                ],
+                                source=DocumentSource.WEB,
+                                semantic_identifier=initial_url.split("/")[-1],
+                                metadata=metadata,
+                                doc_updated_at=(
+                                    _get_datetime_from_last_modified_header(
+                                        last_modified
+                                    )
+                                    if last_modified
+                                    else None
+                                ),
+                            )
+                        )
+                        retry_success = True
+                        continue
+
+                    page = context.new_page()
+
+                    # Add random mouse movements and scrolling to mimic human behavior
+                    page.mouse.move(random.randint(100, 700), random.randint(100, 500))
+
+                    # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+                    page_response = page.goto(
+                        initial_url,
+                        timeout=30000,  # 30 seconds
+                        wait_until="domcontentloaded",  # Wait for DOM to be ready
+                    )
+
+                    # Add a small random delay to mimic human behavior
+                    time.sleep(random.uniform(0.5, 2.0))
+
+                    # Check if we got a 403 error
+                    if page_response and page_response.status == 403:
+                        logger.warning(
+                            f"Received 403 Forbidden for {initial_url}, retrying..."
+                        )
+                        page.close()
+                        retry_count += 1
+                        continue
+
+                    last_modified = (
+                        page_response.header_value("Last-Modified")
+                        if page_response
+                        else None
+                    )
+                    final_url = page.url
+                    if final_url != initial_url:
+                        protected_url_check(final_url)
+                        initial_url = final_url
+                        if initial_url in visited_links:
+                            logger.info(
+                                f"{index}: {initial_url} redirected to {final_url} - already indexed"
+                            )
+                            page.close()
+                            retry_success = True
+                            continue
+                        logger.info(f"{index}: {initial_url} redirected to {final_url}")
+                        visited_links.add(initial_url)
+
+                    # If we got here, the request was successful
+                    retry_success = True
+
+                    if self.scroll_before_scraping:
+                        scroll_attempts = 0
+                        previous_height = page.evaluate("document.body.scrollHeight")
+                        while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                            page.evaluate(
+                                "window.scrollTo(0, document.body.scrollHeight)"
+                            )
+                            page.wait_for_load_state("networkidle", timeout=30000)
+                            new_height = page.evaluate("document.body.scrollHeight")
+                            if new_height == previous_height:
+                                break  # Stop scrolling when no more content is loaded
+                            previous_height = new_height
+                            scroll_attempts += 1
+
+                    content = page.content()
+                    soup = BeautifulSoup(content, "html.parser")
+
+                    if self.recursive:
+                        internal_links = get_internal_links(base_url, initial_url, soup)
+                        for link in internal_links:
+                            if link not in visited_links:
+                                to_visit.append(link)
+
+                    if page_response and str(page_response.status)[0] in ("4", "5"):
+                        last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
+                        logger.info(last_error)
+                        continue
+
+                    parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
+
+                    """For websites containing iframes that need to be scraped,
+                    the code below can extract text from within these iframes.
+                    """
+                    logger.debug(
+                        f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
+                    )
+                    if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
+                        iframe_count = (
+                            page.frame_locator("iframe").locator("html").count()
+                        )
+                        if iframe_count > 0:
+                            iframe_texts = (
+                                page.frame_locator("iframe")
+                                .locator("html")
+                                .all_inner_texts()
+                            )
+                            document_text = "\n".join(iframe_texts)
+                            """ 700 is the threshold value for the length of the text extracted
+                            from the iframe based on the issue faced """
+                            if (
+                                len(parsed_html.cleaned_text)
+                                < IFRAME_TEXT_LENGTH_THRESHOLD
+                            ):
+                                parsed_html.cleaned_text = document_text
+                            else:
+                                parsed_html.cleaned_text += "\n" + document_text
+
+                    # Sometimes pages with #! will serve duplicate content
+                    # There are also just other ways this can happen
+                    hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
+                    if hashed_text in content_hashes:
+                        logger.info(
+                            f"{index}: Skipping duplicate title + content for {initial_url}"
+                        )
+                        continue
+                    content_hashes.add(hashed_text)
 
                     doc_batch.append(
                         Document(
-                            id=current_url,
-                            sections=[Section(link=current_url, text=page_text)],
+                            id=initial_url,
+                            sections=[
+                                TextSection(
+                                    link=initial_url, text=parsed_html.cleaned_text
+                                )
+                            ],
                             source=DocumentSource.WEB,
-                            semantic_identifier=current_url.split("/")[-1],
-                            metadata=metadata,
-                            doc_updated_at=_get_datetime_from_last_modified_header(
-                                last_modified
-                            )
-                            if last_modified
-                            else None,
+                            semantic_identifier=parsed_html.title or initial_url,
+                            metadata={},
+                            doc_updated_at=(
+                                _get_datetime_from_last_modified_header(last_modified)
+                                if last_modified
+                                else None
+                            ),
                         )
                     )
+
+                    page.close()
+                except Exception as e:
+                    last_error = f"Failed to fetch '{initial_url}': {e}"
+                    logger.exception(last_error)
+                    playwright.stop()
+                    restart_playwright = True
                     continue
-
-                page = context.new_page()
-                page_response = page.goto(current_url)
-                last_modified = (
-                    page_response.header_value("Last-Modified")
-                    if page_response
-                    else None
-                )
-                final_page = page.url
-                if final_page != current_url:
-                    logger.info(f"Redirected to {final_page}")
-                    protected_url_check(final_page)
-                    current_url = final_page
-                    if current_url in visited_links:
-                        logger.info("Redirected page already indexed")
-                        continue
-                    visited_links.add(current_url)
-
-                if self.scroll_before_scraping:
-                    scroll_attempts = 0
-                    previous_height = page.evaluate("document.body.scrollHeight")
-                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                        page.wait_for_load_state("networkidle", timeout=30000)
-                        new_height = page.evaluate("document.body.scrollHeight")
-                        if new_height == previous_height:
-                            break  # Stop scrolling when no more content is loaded
-                        previous_height = new_height
-                        scroll_attempts += 1
-
-                content = page.content()
-                soup = BeautifulSoup(content, "html.parser")
-
-                if self.recursive:
-                    internal_links = get_internal_links(base_url, current_url, soup)
-                    for link in internal_links:
-                        if link not in visited_links:
-                            to_visit.append(link)
-
-                if page_response and str(page_response.status)[0] in ("4", "5"):
-                    last_error = f"Skipped indexing {current_url} due to HTTP {page_response.status} response"
-                    logger.info(last_error)
-                    continue
-
-                parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
-
-                doc_batch.append(
-                    Document(
-                        id=current_url,
-                        sections=[
-                            Section(link=current_url, text=parsed_html.cleaned_text)
-                        ],
-                        source=DocumentSource.WEB,
-                        semantic_identifier=parsed_html.title or current_url,
-                        metadata={},
-                        doc_updated_at=_get_datetime_from_last_modified_header(
-                            last_modified
-                        )
-                        if last_modified
-                        else None,
-                    )
-                )
-
-                page.close()
-            except Exception as e:
-                last_error = f"Failed to fetch '{current_url}': {e}"
-                logger.exception(last_error)
-                playwright.stop()
-                restart_playwright = True
-                continue
 
             if len(doc_batch) >= self.batch_size:
                 playwright.stop()
@@ -440,7 +702,10 @@ class WebConnector(LoadConnector):
                 "No URL configured. Please provide at least one valid URL."
             )
 
-        if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value:
+        if (
+            self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SITEMAP.value
+            or self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value
+        ):
             return None
 
         # We'll just test the first URL for connectivity and correctness
@@ -478,7 +743,9 @@ class WebConnector(LoadConnector):
                 )
             else:
                 # Could be a 5xx or another error, treat as unexpected
-                raise UnexpectedError(f"Unexpected error validating '{test_url}': {e}")
+                raise UnexpectedValidationError(
+                    f"Unexpected error validating '{test_url}': {e}"
+                )
 
 
 if __name__ == "__main__":

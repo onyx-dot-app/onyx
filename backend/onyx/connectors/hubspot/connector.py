@@ -13,7 +13,7 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 HUBSPOT_BASE_URL = "https://app.hubspot.com/contacts/"
@@ -87,16 +87,18 @@ class HubSpotConnector(LoadConnector, PollConnector):
                         contact = api_client.crm.contacts.basic_api.get_by_id(
                             contact_id=contact.id
                         )
-                        associated_emails.append(contact.properties["email"])
+                        email = contact.properties.get("email")
+                        if email is not None:
+                            associated_emails.append(email)
 
                 if notes:
                     for note in notes.results:
                         note = api_client.crm.objects.notes.basic_api.get_by_id(
                             note_id=note.id, properties=["content", "hs_body_preview"]
                         )
-                        if note.properties["hs_body_preview"] is None:
-                            continue
-                        associated_notes.append(note.properties["hs_body_preview"])
+                        preview = note.properties.get("hs_body_preview")
+                        if preview is not None:
+                            associated_notes.append(preview)
 
             associated_emails_str = " ,".join(associated_emails)
             associated_notes_str = " ".join(associated_notes)
@@ -106,7 +108,7 @@ class HubSpotConnector(LoadConnector, PollConnector):
             doc_batch.append(
                 Document(
                     id=ticket.id,
-                    sections=[Section(link=link, text=content_text)],
+                    sections=[TextSection(link=link, text=content_text)],
                     source=DocumentSource.HUBSPOT,
                     semantic_identifier=title,
                     # Is already in tzutc, just replacing the timezone format

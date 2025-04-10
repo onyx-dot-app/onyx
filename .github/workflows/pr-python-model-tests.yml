@@ -1,18 +1,29 @@
-name: Connector Tests
+name: Model Server Tests
 
 on:
   schedule:
     # This cron expression runs the job daily at 16:00 UTC (9am PT)
     - cron: "0 16 * * *"
-
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to run the workflow on'
+        required: false
+        default: 'main'
+        
 env:
   # Bedrock
   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   AWS_REGION_NAME: ${{ secrets.AWS_REGION_NAME }}
 
-  # OpenAI
+  # API keys for testing
+  COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+  LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+  LITELLM_API_URL: ${{ secrets.LITELLM_API_URL }}
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
+  AZURE_API_URL: ${{ secrets.AZURE_API_URL }}
 
 jobs:
   model-check:
@@ -26,6 +37,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      # tag every docker image with "test" so that we can spin up the correct set
+      # of images during testing
+
+      # We don't need to build the Web Docker image since it's not yet used
+      # in the integration tests. We have a separate action to verify that it builds
+      # successfully.
+      - name: Pull Model Server Docker image
+        run: |
+          docker pull onyxdotapp/onyx-model-server:latest
+          docker tag onyxdotapp/onyx-model-server:latest onyxdotapp/onyx-model-server:test
+          
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -41,6 +69,49 @@ jobs:
           pip install --retries 5 --timeout 30 -r backend/requirements/default.txt
           pip install --retries 5 --timeout 30 -r backend/requirements/dev.txt
 
+      - name: Start Docker containers
+        run: |
+          cd deployment/docker_compose
+          ENABLE_PAID_ENTERPRISE_EDITION_FEATURES=true \
+          AUTH_TYPE=basic \
+          REQUIRE_EMAIL_VERIFICATION=false \
+          DISABLE_TELEMETRY=true \
+          IMAGE_TAG=test \
+          docker compose -f docker-compose.model-server-test.yml -p onyx-stack up -d indexing_model_server
+        id: start_docker
+
+      - name: Wait for service to be ready
+        run: |
+          echo "Starting wait-for-service script..."
+
+          start_time=$(date +%s)
+          timeout=300  # 5 minutes in seconds
+
+          while true; do
+            current_time=$(date +%s)
+            elapsed_time=$((current_time - start_time))
+            
+            if [ $elapsed_time -ge $timeout ]; then
+              echo "Timeout reached. Service did not become ready in 5 minutes."
+              exit 1
+            fi
+            
+            # Use curl with error handling to ignore specific exit code 56
+            response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9000/api/health || echo "curl_error")
+            
+            if [ "$response" = "200" ]; then
+              echo "Service is ready!"
+              break
+            elif [ "$response" = "curl_error" ]; then
+              echo "Curl encountered an error, possibly exit code 56. Continuing to retry..."
+            else
+              echo "Service not ready yet (HTTP status $response). Retrying in 5 seconds..."
+            fi
+            
+            sleep 5
+          done
+          echo "Finished waiting for service."
+          
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
@@ -56,3 +127,23 @@ jobs:
             -H 'Content-type: application/json' \
             --data '{"text":"Scheduled Model Tests failed! Check the run at: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"}' \
             $SLACK_WEBHOOK
+            
+      - name: Dump all-container logs (optional)
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.model-server-test.yml -p onyx-stack logs --no-color > $GITHUB_WORKSPACE/docker-compose.log || true
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-all-logs
+          path: ${{ github.workspace }}/docker-compose.log
+          
+      - name: Stop Docker containers
+        if: always()
+        run: |
+          cd deployment/docker_compose
+          docker compose -f docker-compose.model-server-test.yml -p onyx-stack down -v
+          

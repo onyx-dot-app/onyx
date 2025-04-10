@@ -6,6 +6,7 @@ from typing import Any
 from onyx.access.models import DocumentAccess
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.db.enums import EmbeddingPrecision
 from onyx.indexing.models import DocMetadataAwareIndexChunk
 from shared_configs.model_server_models import Embedding
 
@@ -43,7 +44,7 @@ class IndexBatchParams:
 
     doc_id_to_previous_chunk_cnt: dict[str, int | None]
     doc_id_to_new_chunk_cnt: dict[str, int]
-    tenant_id: str | None
+    tenant_id: str
     large_chunks_enabled: bool
 
 
@@ -100,6 +101,17 @@ class VespaDocumentFields:
     document_sets: set[str] | None = None
     boost: float | None = None
     hidden: bool | None = None
+    aggregated_chunk_boost_factor: float | None = None
+
+
+@dataclass
+class VespaDocumentUserFields:
+    """
+    Fields that are specific to the user who is indexing the document.
+    """
+
+    user_file_id: str | None = None
+    user_folder_id: str | None = None
 
 
 @dataclass
@@ -145,17 +157,21 @@ class Verifiable(abc.ABC):
     @abc.abstractmethod
     def ensure_indices_exist(
         self,
-        index_embedding_dim: int,
+        primary_embedding_dim: int,
+        primary_embedding_precision: EmbeddingPrecision,
         secondary_index_embedding_dim: int | None,
+        secondary_index_embedding_precision: EmbeddingPrecision | None,
     ) -> None:
         """
         Verify that the document index exists and is consistent with the expectations in the code.
 
         Parameters:
-        - index_embedding_dim: Vector dimensionality for the vector similarity part of the search
+        - primary_embedding_dim: Vector dimensionality for the vector similarity part of the search
+        - primary_embedding_precision: Precision of the vector similarity part of the search
         - secondary_index_embedding_dim: Vector dimensionality of the secondary index being built
                 behind the scenes. The secondary index should only be built when switching
                 embedding models therefore this dim should be different from the primary index.
+        - secondary_index_embedding_precision: Precision of the vector similarity part of the secondary index
         """
         raise NotImplementedError
 
@@ -164,6 +180,7 @@ class Verifiable(abc.ABC):
     def register_multitenant_indices(
         indices: list[str],
         embedding_dims: list[int],
+        embedding_precisions: list[EmbeddingPrecision],
     ) -> None:
         """
         Register multitenant indices with the document index.
@@ -222,7 +239,7 @@ class Deletable(abc.ABC):
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
     ) -> int:
         """
@@ -249,9 +266,10 @@ class Updatable(abc.ABC):
         self,
         doc_id: str,
         *,
-        tenant_id: str | None,
+        tenant_id: str,
         chunk_count: int | None,
-        fields: VespaDocumentFields,
+        fields: VespaDocumentFields | None,
+        user_fields: VespaDocumentUserFields | None,
     ) -> int:
         """
         Updates all chunks for a document with the specified fields.
@@ -270,9 +288,7 @@ class Updatable(abc.ABC):
         raise NotImplementedError
 
     @abc.abstractmethod
-    def update(
-        self, update_requests: list[UpdateRequest], *, tenant_id: str | None
-    ) -> None:
+    def update(self, update_requests: list[UpdateRequest], *, tenant_id: str) -> None:
         """
         Updates some set of chunks. The document and fields to update are specified in the update
         requests. Each update request in the list applies its changes to a list of document ids.

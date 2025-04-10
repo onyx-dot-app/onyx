@@ -2,24 +2,37 @@ from collections.abc import Sequence
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
+from typing import TypeVarTuple
 
 from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import desc
 from sqlalchemy import func
+from sqlalchemy import Select
 from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.orm import contains_eager
+from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import Session
 
 from onyx.connectors.models import ConnectorFailure
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.enums import IndexingStatus
+from onyx.db.enums import IndexModelStatus
+from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexAttemptError
-from onyx.db.models import IndexingStatus
-from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
-from onyx.server.documents.models import ConnectorCredentialPair
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
+from onyx.utils.telemetry import optional_telemetry
+from onyx.utils.telemetry import RecordType
+
+# Comment out unused imports that cause mypy errors
+# from onyx.auth.models import UserRole
+# from onyx.configs.constants import MAX_LAST_VALID_CHECKPOINT_AGE_SECONDS
+# from onyx.db.connector_credential_pair import ConnectorCredentialPairIdentifier
+# from onyx.db.engine import async_query_for_dms
 
 logger = setup_logger()
 
@@ -196,6 +209,16 @@ def mark_attempt_in_progress(
         attempt.status = IndexingStatus.IN_PROGRESS
         attempt.time_started = index_attempt.time_started or func.now()  # type: ignore
         db_session.commit()
+
+        # Add telemetry for index attempt status change
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt.id,
+                "status": IndexingStatus.IN_PROGRESS.value,
+                "cc_pair_id": index_attempt.connector_credential_pair_id,
+            },
+        )
     except Exception:
         db_session.rollback()
         raise
@@ -214,6 +237,16 @@ def mark_attempt_succeeded(
 
         attempt.status = IndexingStatus.SUCCESS
         db_session.commit()
+
+        # Add telemetry for index attempt status change
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.SUCCESS.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
     except Exception:
         db_session.rollback()
         raise
@@ -232,6 +265,16 @@ def mark_attempt_partially_succeeded(
 
         attempt.status = IndexingStatus.COMPLETED_WITH_ERRORS
         db_session.commit()
+
+        # Add telemetry for index attempt status change
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.COMPLETED_WITH_ERRORS.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
     except Exception:
         db_session.rollback()
         raise
@@ -254,6 +297,16 @@ def mark_attempt_canceled(
         attempt.status = IndexingStatus.CANCELED
         attempt.error_msg = reason
         db_session.commit()
+
+        # Add telemetry for index attempt status change
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.CANCELED.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
     except Exception:
         db_session.rollback()
         raise
@@ -278,6 +331,16 @@ def mark_attempt_failed(
         attempt.error_msg = failure_reason
         attempt.full_exception_trace = full_exception_trace
         db_session.commit()
+
+        # Add telemetry for index attempt status change
+        optional_telemetry(
+            record_type=RecordType.INDEX_ATTEMPT_STATUS,
+            data={
+                "index_attempt_id": index_attempt_id,
+                "status": IndexingStatus.FAILED.value,
+                "cc_pair_id": attempt.connector_credential_pair_id,
+            },
+        )
     except Exception:
         db_session.rollback()
         raise
@@ -368,19 +431,33 @@ def get_latest_index_attempts_by_status(
     return db_session.execute(stmt).scalars().all()
 
 
+T = TypeVarTuple("T")
+
+
+def _add_only_finished_clause(stmt: Select[tuple[*T]]) -> Select[tuple[*T]]:
+    return stmt.where(
+        IndexAttempt.status.not_in(
+            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
+        ),
+    )
+
+
 def get_latest_index_attempts(
     secondary_index: bool,
     db_session: Session,
+    eager_load_cc_pair: bool = False,
+    only_finished: bool = False,
 ) -> Sequence[IndexAttempt]:
     ids_stmt = select(
         IndexAttempt.connector_credential_pair_id,
         func.max(IndexAttempt.id).label("max_id"),
     ).join(SearchSettings, IndexAttempt.search_settings_id == SearchSettings.id)
 
-    if secondary_index:
-        ids_stmt = ids_stmt.where(SearchSettings.status == IndexModelStatus.FUTURE)
-    else:
-        ids_stmt = ids_stmt.where(SearchSettings.status == IndexModelStatus.PRESENT)
+    status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    ids_stmt = ids_stmt.where(SearchSettings.status == status)
+
+    if only_finished:
+        ids_stmt = _add_only_finished_clause(ids_stmt)
 
     ids_stmt = ids_stmt.group_by(IndexAttempt.connector_credential_pair_id)
     ids_subquery = ids_stmt.subquery()
@@ -395,7 +472,53 @@ def get_latest_index_attempts(
         .where(IndexAttempt.id == ids_subquery.c.max_id)
     )
 
-    return db_session.execute(stmt).scalars().all()
+    if only_finished:
+        stmt = _add_only_finished_clause(stmt)
+
+    if eager_load_cc_pair:
+        stmt = stmt.options(
+            joinedload(IndexAttempt.connector_credential_pair),
+            joinedload(IndexAttempt.error_rows),
+        )
+
+    return db_session.execute(stmt).scalars().unique().all()
+
+
+# For use with our thread-level parallelism utils. Note that any relationships
+# you wish to use MUST be eagerly loaded, as the session will not be available
+# after this function to allow lazy loading.
+def get_latest_index_attempts_parallel(
+    secondary_index: bool,
+    eager_load_cc_pair: bool = False,
+    only_finished: bool = False,
+) -> Sequence[IndexAttempt]:
+    with get_session_with_current_tenant() as db_session:
+        return get_latest_index_attempts(
+            secondary_index,
+            db_session,
+            eager_load_cc_pair,
+            only_finished,
+        )
+
+
+def get_latest_index_attempt_for_cc_pair_id(
+    db_session: Session,
+    connector_credential_pair_id: int,
+    secondary_index: bool,
+    only_finished: bool = True,
+) -> IndexAttempt | None:
+    stmt = select(IndexAttempt)
+    stmt = stmt.where(
+        IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
+    )
+    if only_finished:
+        stmt = _add_only_finished_clause(stmt)
+
+    status = IndexModelStatus.FUTURE if secondary_index else IndexModelStatus.PRESENT
+    stmt = stmt.join(SearchSettings).where(SearchSettings.status == status)
+    stmt = stmt.order_by(desc(IndexAttempt.time_created))
+    stmt = stmt.limit(1)
+    return db_session.execute(stmt).scalar_one_or_none()
 
 
 def count_index_attempts_for_connector(
@@ -453,37 +576,12 @@ def get_paginated_index_attempts_for_cc_pair_id(
 
     # Apply pagination
     stmt = stmt.offset(page * page_size).limit(page_size)
-
-    return list(db_session.execute(stmt).scalars().all())
-
-
-def get_latest_index_attempt_for_cc_pair_id(
-    db_session: Session,
-    connector_credential_pair_id: int,
-    secondary_index: bool,
-    only_finished: bool = True,
-) -> IndexAttempt | None:
-    stmt = select(IndexAttempt)
-    stmt = stmt.where(
-        IndexAttempt.connector_credential_pair_id == connector_credential_pair_id,
+    stmt = stmt.options(
+        contains_eager(IndexAttempt.connector_credential_pair),
+        joinedload(IndexAttempt.error_rows),
     )
-    if only_finished:
-        stmt = stmt.where(
-            IndexAttempt.status.not_in(
-                [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-            ),
-        )
-    if secondary_index:
-        stmt = stmt.join(SearchSettings).where(
-            SearchSettings.status == IndexModelStatus.FUTURE
-        )
-    else:
-        stmt = stmt.join(SearchSettings).where(
-            SearchSettings.status == IndexModelStatus.PRESENT
-        )
-    stmt = stmt.order_by(desc(IndexAttempt.time_created))
-    stmt = stmt.limit(1)
-    return db_session.execute(stmt).scalar_one_or_none()
+
+    return list(db_session.execute(stmt).scalars().unique().all())
 
 
 def get_index_attempts_for_cc_pair(
@@ -607,6 +705,25 @@ def cancel_indexing_attempts_past_model(
             ),
             IndexAttempt.search_settings_id == SearchSettings.id,
             SearchSettings.status == IndexModelStatus.PAST,
+        )
+        .values(status=IndexingStatus.FAILED)
+    )
+
+
+def cancel_indexing_attempts_for_search_settings(
+    search_settings_id: int,
+    db_session: Session,
+) -> None:
+    """Stops all indexing attempts that are in progress or not started for
+    the specified search settings."""
+
+    db_session.execute(
+        update(IndexAttempt)
+        .where(
+            IndexAttempt.status.in_(
+                [IndexingStatus.IN_PROGRESS, IndexingStatus.NOT_STARTED]
+            ),
+            IndexAttempt.search_settings_id == search_settings_id,
         )
         .values(status=IndexingStatus.FAILED)
     )

@@ -16,7 +16,7 @@ export default function OpenEmbeddingPage({
   onSelectOpenSource,
   selectedProvider,
 }: {
-  onSelectOpenSource: (model: HostedEmbeddingModel) => Promise<void>;
+  onSelectOpenSource: (model: HostedEmbeddingModel) => void;
   selectedProvider: HostedEmbeddingModel | CloudEmbeddingModel;
 }) {
   const [configureModel, setConfigureModel] = useState(false);

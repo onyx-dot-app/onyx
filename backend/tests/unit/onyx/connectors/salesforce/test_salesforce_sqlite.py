@@ -113,15 +113,18 @@ _VALID_SALESFORCE_IDS = [
 ]
 
 
-def _clear_sf_db() -> None:
+def _clear_sf_db(directory: str) -> None:
     """
     Clears the SF DB by deleting all files in the data directory.
     """
-    shutil.rmtree(BASE_DATA_PATH, ignore_errors=True)
+    shutil.rmtree(directory, ignore_errors=True)
 
 
 def _create_csv_file(
-    object_type: str, records: list[dict], filename: str = "test_data.csv"
+    directory: str,
+    object_type: str,
+    records: list[dict],
+    filename: str = "test_data.csv",
 ) -> None:
     """
     Creates a CSV file for the given object type and records.
@@ -149,10 +152,10 @@ def _create_csv_file(
             writer.writerow(record)
 
     # Update the database with the CSV
-    update_sf_db_with_csv(object_type, csv_path)
+    update_sf_db_with_csv(directory, object_type, csv_path)
 
 
-def _create_csv_with_example_data() -> None:
+def _create_csv_with_example_data(directory: str) -> None:
     """
     Creates CSV files with example data, organized by object type.
     """
@@ -342,10 +345,10 @@ def _create_csv_with_example_data() -> None:
 
     # Create CSV files for each object type
     for object_type, records in example_data.items():
-        _create_csv_file(object_type, records)
+        _create_csv_file(directory, object_type, records)
 
 
-def _test_query() -> None:
+def _test_query(directory: str) -> None:
     """
     Tests querying functionality by verifying:
     1. All expected Account IDs are found
@@ -401,7 +404,7 @@ def _test_query() -> None:
     }
 
     # Get all Account IDs
-    account_ids = find_ids_by_type("Account")
+    account_ids = find_ids_by_type(directory, "Account")
 
     # Verify we found all expected accounts
     assert len(account_ids) == len(
@@ -413,7 +416,7 @@ def _test_query() -> None:
 
     # Verify each account's data
     for acc_id in account_ids:
-        combined = get_record(acc_id)
+        combined = get_record(directory, acc_id)
         assert combined is not None, f"Could not find account {acc_id}"
 
         expected = expected_accounts[acc_id]
@@ -428,7 +431,7 @@ def _test_query() -> None:
     print("All query tests passed successfully!")
 
 
-def _test_upsert() -> None:
+def _test_upsert(directory: str) -> None:
     """
     Tests upsert functionality by:
     1. Updating an existing account
@@ -453,10 +456,10 @@ def _test_upsert() -> None:
         },
     ]
 
-    _create_csv_file("Account", update_data, "update_data.csv")
+    _create_csv_file(directory, "Account", update_data, "update_data.csv")
 
     # Verify the update worked
-    updated_record = get_record(_VALID_SALESFORCE_IDS[0])
+    updated_record = get_record(directory, _VALID_SALESFORCE_IDS[0])
     assert updated_record is not None, "Updated record not found"
     assert updated_record.data["Name"] == "Acme Inc. Updated", "Name not updated"
     assert (
@@ -464,7 +467,7 @@ def _test_upsert() -> None:
     ), "Description not added"
 
     # Verify the new record was created
-    new_record = get_record(_VALID_SALESFORCE_IDS[2])
+    new_record = get_record(directory, _VALID_SALESFORCE_IDS[2])
     assert new_record is not None, "New record not found"
     assert new_record.data["Name"] == "New Company Inc.", "New record name incorrect"
     assert new_record.data["AnnualRevenue"] == "1000000", "New record revenue incorrect"
@@ -472,7 +475,7 @@ def _test_upsert() -> None:
     print("All upsert tests passed successfully!")
 
 
-def _test_relationships() -> None:
+def _test_relationships(directory: str) -> None:
     """
     Tests relationship shelf updates and queries by:
     1. Creating test data with relationships
@@ -513,11 +516,11 @@ def _test_relationships() -> None:
 
     # Create and update CSV files for each object type
     for object_type, records in test_data.items():
-        _create_csv_file(object_type, records, "relationship_test.csv")
+        _create_csv_file(directory, object_type, records, "relationship_test.csv")
 
     # Test relationship queries
     # All these objects should be children of Acme Inc.
-    child_ids = get_child_ids(_VALID_SALESFORCE_IDS[0])
+    child_ids = get_child_ids(directory, _VALID_SALESFORCE_IDS[0])
     assert len(child_ids) == 4, f"Expected 4 child objects, found {len(child_ids)}"
     assert _VALID_SALESFORCE_IDS[13] in child_ids, "Case 1 not found in relationship"
     assert _VALID_SALESFORCE_IDS[14] in child_ids, "Case 2 not found in relationship"
@@ -527,7 +530,7 @@ def _test_relationships() -> None:
     ), "Opportunity not found in relationship"
 
     # Test querying relationships for a different account (should be empty)
-    other_account_children = get_child_ids(_VALID_SALESFORCE_IDS[1])
+    other_account_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[1])
     assert (
         len(other_account_children) == 0
     ), "Expected no children for different account"
@@ -535,7 +538,7 @@ def _test_relationships() -> None:
     print("All relationship tests passed successfully!")
 
 
-def _test_account_with_children() -> None:
+def _test_account_with_children(directory: str) -> None:
     """
     Tests querying all accounts and retrieving their child objects.
     This test verifies that:
@@ -544,16 +547,16 @@ def _test_account_with_children() -> None:
     3. Child object data is complete and accurate
     """
     # First get all account IDs
-    account_ids = find_ids_by_type("Account")
+    account_ids = find_ids_by_type(directory, "Account")
     assert len(account_ids) > 0, "No accounts found"
 
     # For each account, get its children and verify the data
     for account_id in account_ids:
-        account = get_record(account_id)
+        account = get_record(directory, account_id)
         assert account is not None, f"Could not find account {account_id}"
 
         # Get all child objects
-        child_ids = get_child_ids(account_id)
+        child_ids = get_child_ids(directory, account_id)
 
         # For Acme Inc., verify specific relationships
         if account_id == _VALID_SALESFORCE_IDS[0]:  # Acme Inc.
@@ -564,7 +567,7 @@ def _test_account_with_children() -> None:
             # Get all child records
             child_records = []
             for child_id in child_ids:
-                child_record = get_record(child_id)
+                child_record = get_record(directory, child_id)
                 if child_record is not None:
                     child_records.append(child_record)
             # Verify Cases
@@ -599,7 +602,7 @@ def _test_account_with_children() -> None:
     print("All account with children tests passed successfully!")
 
 
-def _test_relationship_updates() -> None:
+def _test_relationship_updates(directory: str) -> None:
     """
     Tests that relationships are properly updated when a child object's parent reference changes.
     This test verifies:
@@ -616,10 +619,10 @@ def _test_relationship_updates() -> None:
             "LastName": "Contact",
         }
     ]
-    _create_csv_file("Contact", initial_contact, "initial_contact.csv")
+    _create_csv_file(directory, "Contact", initial_contact, "initial_contact.csv")
 
     # Verify initial relationship
-    acme_children = get_child_ids(_VALID_SALESFORCE_IDS[0])
+    acme_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[0])
     assert (
         _VALID_SALESFORCE_IDS[40] in acme_children
     ), "Initial relationship not created"
@@ -633,22 +636,22 @@ def _test_relationship_updates() -> None:
             "LastName": "Contact",
         }
     ]
-    _create_csv_file("Contact", updated_contact, "updated_contact.csv")
+    _create_csv_file(directory, "Contact", updated_contact, "updated_contact.csv")
 
     # Verify old relationship is removed
-    acme_children = get_child_ids(_VALID_SALESFORCE_IDS[0])
+    acme_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[0])
     assert (
         _VALID_SALESFORCE_IDS[40] not in acme_children
     ), "Old relationship not removed"
 
     # Verify new relationship is created
-    globex_children = get_child_ids(_VALID_SALESFORCE_IDS[1])
+    globex_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[1])
     assert _VALID_SALESFORCE_IDS[40] in globex_children, "New relationship not created"
 
     print("All relationship update tests passed successfully!")
 
 
-def _test_get_affected_parent_ids() -> None:
+def _test_get_affected_parent_ids(directory: str) -> None:
     """
     Tests get_affected_parent_ids functionality by verifying:
     1. IDs that are directly in the parent_types list are included
@@ -683,13 +686,13 @@ def _test_get_affected_parent_ids() -> None:
 
     # Create and update CSV files for test data
     for object_type, records in test_data.items():
-        _create_csv_file(object_type, records)
+        _create_csv_file(directory, object_type, records)
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
     parent_types = ["Account"]
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(updated_ids, parent_types)
+        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
     )
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
@@ -700,7 +703,7 @@ def _test_get_affected_parent_ids() -> None:
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
     parent_types = ["Account"]
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(updated_ids, parent_types)
+        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
     )
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
@@ -711,7 +714,7 @@ def _test_get_affected_parent_ids() -> None:
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
     parent_types = ["Account"]
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(updated_ids, parent_types)
+        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
     )
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     affected_ids = affected_ids_by_type["Account"]
@@ -726,7 +729,7 @@ def _test_get_affected_parent_ids() -> None:
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
     parent_types = ["Opportunity"]  # Wrong type
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(updated_ids, parent_types)
+        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
     )
     assert len(affected_ids_by_type) == 0, "Should return empty dict when no matches"
 
@@ -734,13 +737,15 @@ def _test_get_affected_parent_ids() -> None:
 
 
 def test_salesforce_sqlite() -> None:
-    _clear_sf_db()
-    init_db()
-    _create_csv_with_example_data()
-    _test_query()
-    _test_upsert()
-    _test_relationships()
-    _test_account_with_children()
-    _test_relationship_updates()
-    _test_get_affected_parent_ids()
-    _clear_sf_db()
+    directory = BASE_DATA_PATH
+
+    _clear_sf_db(directory)
+    init_db(directory)
+    _create_csv_with_example_data(directory)
+    _test_query(directory)
+    _test_upsert(directory)
+    _test_relationships(directory)
+    _test_account_with_children(directory)
+    _test_relationship_updates(directory)
+    _test_get_affected_parent_ids(directory)
+    _clear_sf_db(directory)

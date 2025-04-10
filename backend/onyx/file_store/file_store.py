@@ -1,7 +1,9 @@
 from abc import ABC
 from abc import abstractmethod
+from typing import cast
 from typing import IO
 
+import puremagic
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
@@ -12,6 +14,7 @@ from onyx.db.pg_file_store import delete_pgfilestore_by_file_name
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.db.pg_file_store import read_lobj
 from onyx.db.pg_file_store import upsert_pgfilestore
+from onyx.utils.file import FileWithMimeType
 
 
 class FileStore(ABC):
@@ -28,6 +31,7 @@ class FileStore(ABC):
         file_origin: FileOrigin,
         file_type: str,
         file_metadata: dict | None = None,
+        commit: bool = True,
     ) -> None:
         """
         Save a file to the blob store
@@ -39,6 +43,8 @@ class FileStore(ABC):
         - display_name: Display name of the file
         - file_origin: Origin of the file
         - file_type: Type of the file
+        - file_metadata: Additional metadata for the file
+        - commit: Whether to commit the transaction after saving the file
         """
         raise NotImplementedError
 
@@ -87,6 +93,7 @@ class PostgresBackedFileStore(FileStore):
         file_origin: FileOrigin,
         file_type: str,
         file_metadata: dict | None = None,
+        commit: bool = True,
     ) -> None:
         try:
             # The large objects in postgres are saved as special objects can be listed with
@@ -101,7 +108,8 @@ class PostgresBackedFileStore(FileStore):
                 db_session=self.db_session,
                 file_metadata=file_metadata,
             )
-            self.db_session.commit()
+            if commit:
+                self.db_session.commit()
         except Exception:
             self.db_session.rollback()
             raise
@@ -139,6 +147,18 @@ class PostgresBackedFileStore(FileStore):
         except Exception:
             self.db_session.rollback()
             raise
+
+    def get_file_with_mime_type(self, filename: str) -> FileWithMimeType | None:
+        mime_type: str = "application/octet-stream"
+        try:
+            file_io = self.read_file(filename, mode="b")
+            file_content = file_io.read()
+            matches = puremagic.magic_string(file_content)
+            if matches:
+                mime_type = cast(str, matches[0].mime_type)
+            return FileWithMimeType(data=file_content, mime_type=mime_type)
+        except Exception:
+            return None
 
 
 def get_default_file_store(db_session: Session) -> FileStore:

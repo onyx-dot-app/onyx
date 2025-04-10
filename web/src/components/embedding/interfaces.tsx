@@ -55,6 +55,7 @@ export interface EmbeddingModelDescriptor {
   api_version?: string | null;
   deployment_name?: string | null;
   index_name: string | null;
+  background_reindex_enabled?: boolean;
 }
 
 export interface CloudEmbeddingModel extends EmbeddingModelDescriptor {
@@ -267,7 +268,7 @@ export const AVAILABLE_CLOUD_PROVIDERS: CloudEmbeddingProvider[] = [
     embedding_models: [
       {
         provider_type: EmbeddingProvider.GOOGLE,
-        model_name: "text-embedding-004",
+        model_name: "text-embedding-005",
         description: "Google's most recent text embedding model.",
         pricePerMillion: 0.025,
         model_dim: 768,

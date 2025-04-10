@@ -3,6 +3,10 @@ import socket
 from enum import auto
 from enum import Enum
 
+ONYX_DEFAULT_APPLICATION_NAME = "Onyx"
+ONYX_SLACK_URL = "https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
+ONYX_EMAILABLE_LOGO_MAX_DIM = 512
+
 SOURCE_TYPE = "source_type"
 # stored in the `metadata` of a chunk. Used to signify that this chunk should
 # not be used for QA. For example, Google Drive file types which can't be parsed
@@ -40,6 +44,7 @@ DISABLED_GEN_AI_MSG = (
     "You can still use Onyx as a search engine."
 )
 
+
 DEFAULT_PERSONA_ID = 0
 
 DEFAULT_CC_PAIR_ID = 1
@@ -76,6 +81,7 @@ KV_REINDEX_KEY = "needs_reindexing"
 KV_SEARCH_SETTINGS = "search_settings"
 KV_UNSTRUCTURED_API_KEY = "unstructured_api_key"
 KV_USER_STORE_KEY = "INVITED_USERS"
+KV_PENDING_USERS_KEY = "PENDING_USERS"
 KV_NO_AUTH_USER_PREFERENCES_KEY = "no_auth_user_preferences"
 KV_CRED_KEY = "credential_id_{}"
 KV_GMAIL_CRED_KEY = "gmail_app_credential"
@@ -95,6 +101,8 @@ KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
+
+CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
@@ -173,6 +181,7 @@ class DocumentSource(str, Enum):
     FIREFLIES = "fireflies"
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
+    HIGHSPOT = "highspot"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -211,6 +220,12 @@ class AuthType(str, Enum):
 
     # google auth and basic
     CLOUD = "cloud"
+
+
+class QueryHistoryType(str, Enum):
+    DISABLED = "disabled"
+    ANONYMIZED = "anonymized"
+    NORMAL = "normal"
 
 
 # Special characters for password validation
@@ -256,6 +271,7 @@ class FileOrigin(str, Enum):
     CONNECTOR = "connector"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
+    PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
 
 
@@ -296,6 +312,7 @@ class OnyxCeleryQueues:
 
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"
+    USER_FILES_INDEXING = "user_files_indexing"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -314,7 +331,10 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
+    CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
+    CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
+    PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
         "da_lock:connector_doc_permissions_sync"
@@ -342,6 +362,9 @@ class OnyxRedisSignals:
     BLOCK_PRUNING = "signal:block_pruning"
     BLOCK_VALIDATE_PRUNING_FENCES = "signal:block_validate_pruning_fences"
     BLOCK_BUILD_FENCE_LOOKUP_TABLE = "signal:block_build_fence_lookup_table"
+    BLOCK_VALIDATE_CONNECTOR_DELETION_FENCES = (
+        "signal:block_validate_connector_deletion_fences"
+    )
 
 
 class OnyxRedisConstants:
@@ -364,6 +387,7 @@ ONYX_CLOUD_TENANT_ID = "cloud"
 
 # the redis namespace for runtime variables
 ONYX_CLOUD_REDIS_RUNTIME = "runtime"
+CLOUD_BUILD_FENCE_LOOKUP_TABLE_INTERVAL_DEFAULT = 600
 
 
 class OnyxCeleryTask:
@@ -374,6 +398,16 @@ class OnyxCeleryTask:
     CLOUD_MONITOR_CELERY_QUEUES = (
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
     )
+    CLOUD_CHECK_AVAILABLE_TENANTS = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
+    )
+    CLOUD_MONITOR_CELERY_PIDBOX = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
+    )
+
+    # Tenant pre-provisioning
+    PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
+    UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
@@ -382,6 +416,7 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+    CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
@@ -389,6 +424,7 @@ class OnyxCeleryTask:
 
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
+    MONITOR_PROCESS_MEMORY = "monitor_process_memory"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (

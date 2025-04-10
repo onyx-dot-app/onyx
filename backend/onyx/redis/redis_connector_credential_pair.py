@@ -31,7 +31,7 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
     PREFIX = "connectorsync"
     TASKSET_PREFIX = PREFIX + "_taskset"
 
-    def __init__(self, tenant_id: str | None, id: int) -> None:
+    def __init__(self, tenant_id: str, id: int) -> None:
         super().__init__(tenant_id, str(id))
 
         # documents that should be skipped
@@ -60,7 +60,7 @@ class RedisConnectorCredentialPair(RedisObjectHelper):
         db_session: Session,
         redis_client: Redis,
         lock: RedisLock,
-        tenant_id: str | None,
+        tenant_id: str,
     ) -> tuple[int, int] | None:
         """We can limit the number of tasks generated here, which is useful to prevent
         one tenant from overwhelming the sync queue.

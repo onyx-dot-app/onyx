@@ -59,275 +59,82 @@ export function extractCodeText(
 
   return codeText || "";
 }
-
 // We must preprocess LaTeX in the LLM output to avoid improper formatting
+
 export const preprocessLaTeX = (content: string) => {
-  // 1) Escape dollar signs used outside of LaTeX context
-  const escapedCurrencyContent = content.replace(
+  // First detect if content is within a code block
+  const codeBlockRegex = /^```[\s\S]*?```$/;
+  const isCodeBlock = codeBlockRegex.test(content.trim());
+
+  // If the entire content is a code block, don't process LaTeX
+  if (isCodeBlock) {
+    return content;
+  }
+
+  // Extract code blocks and replace with placeholders
+  const codeBlocks: string[] = [];
+  const withCodeBlocksReplaced = content.replace(/```[\s\S]*?```/g, (match) => {
+    const placeholder = `___CODE_BLOCK_${codeBlocks.length}___`;
+    codeBlocks.push(match);
+    return placeholder;
+  });
+
+  // First, protect code-like expressions where $ is used for variables
+  const codeProtected = withCodeBlocksReplaced.replace(
+    /\b(\w+(?:\s*-\w+)*\s*(?:'[^']*')?)\s*\{[^}]*?\$\d+[^}]*?\}/g,
+    (match) => {
+      // Replace $ with a temporary placeholder in code contexts
+      return match.replace(/\$/g, "___DOLLAR_PLACEHOLDER___");
+    }
+  );
+
+  // Also protect common shell variable patterns like $1, $2, etc.
+  const shellProtected = codeProtected.replace(
+    /\b(?:print|echo|awk|sed|grep)\s+.*?\$\d+/g,
+    (match) => match.replace(/\$/g, "___DOLLAR_PLACEHOLDER___")
+  );
+
+  // Protect inline code blocks with backticks
+  const inlineCodeProtected = shellProtected.replace(/`[^`]+`/g, (match) => {
+    return match.replace(/\$/g, "___DOLLAR_PLACEHOLDER___");
+  });
+
+  // Process LaTeX expressions now that code is protected
+  // Valid LaTeX should have matching dollar signs with non-space chars surrounding content
+  const processedForLatex = inlineCodeProtected.replace(
+    /\$([^\s$][^$]*?[^\s$])\$/g,
+    (_, equation) => `$${equation}$`
+  );
+
+  // Escape currency mentions
+  const currencyEscaped = processedForLatex.replace(
     /\$(\d+(?:\.\d*)?)/g,
     (_, p1) => `\\$${p1}`
   );
 
-  // 2) Replace block-level LaTeX delimiters \[ \] with $$ $$
-  const blockProcessedContent = escapedCurrencyContent.replace(
+  // Replace block-level LaTeX delimiters \[ \] with $$ $$
+  const blockProcessed = currencyEscaped.replace(
     /\\\[([\s\S]*?)\\\]/g,
     (_, equation) => `$$${equation}$$`
   );
 
-  // 3) Replace inline LaTeX delimiters \( \) with $ $
-  const inlineProcessedContent = blockProcessedContent.replace(
+  // Replace inline LaTeX delimiters \( \) with $ $
+  const inlineProcessed = blockProcessed.replace(
     /\\\(([\s\S]*?)\\\)/g,
     (_, equation) => `$${equation}$`
   );
 
-  return inlineProcessedContent;
+  // Restore original dollar signs in code contexts
+  const restoredDollars = inlineProcessed.replace(
+    /___DOLLAR_PLACEHOLDER___/g,
+    "$"
+  );
+
+  // Restore code blocks
+  const restoredCodeBlocks = restoredDollars.replace(
+    /___CODE_BLOCK_(\d+)___/g,
+    (_, index) => codeBlocks[parseInt(index)]
+  );
+
+  return restoredCodeBlocks;
 };
-
-export const markdownToHtml = (content: string): string => {
-  if (!content || !content.trim()) {
-    return "";
-  }
-
-  // Basic markdown to HTML conversion for common patterns
-  const processedContent = content
-    .replace(/(\*\*|__)((?:(?!\1).)*?)\1/g, "<strong>$2</strong>") // Bold with ** or __, non-greedy and no nesting
-    .replace(/(\*|_)([^*_\n]+?)\1(?!\*|_)/g, "<em>$2</em>"); // Italic with * or _
-
-  // Handle code blocks and links
-  const withCodeAndLinks = processedContent
-    .replace(/`([^`]+)`/g, "<code>$1</code>") // Inline code
-    .replace(
-      /```(\w*)\n([\s\S]*?)```/g,
-      (_, lang, code) =>
-        `<pre><code class="language-${lang}">${code.trim()}</code></pre>`
-    ) // Code blocks
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>'); // Links
-
-  // Handle paragraphs
-  return withCodeAndLinks
-    .split(/\n\n+/)
-    .map((para) => para.trim())
-    .filter((para) => para.length > 0)
-    .map((para) => `<p>${para}</p>`)
-    .join("\n");
-};
-
-interface MarkdownSegment {
-  type: "text" | "link" | "code" | "bold" | "italic" | "codeblock";
-  text: string; // The visible/plain text
-  raw: string; // The raw markdown including syntax
-  length: number; // Length of the visible text
-}
-
-export function parseMarkdownToSegments(markdown: string): MarkdownSegment[] {
-  if (!markdown) {
-    return [];
-  }
-
-  const segments: MarkdownSegment[] = [];
-  let currentIndex = 0;
-  const maxIterations = markdown.length * 2; // Prevent infinite loops
-  let iterations = 0;
-
-  while (currentIndex < markdown.length && iterations < maxIterations) {
-    iterations++;
-    let matched = false;
-
-    // Check for code blocks first (they take precedence)
-    const codeBlockMatch = markdown
-      .slice(currentIndex)
-      .match(/^```(\w*)\n([\s\S]*?)```/);
-    if (codeBlockMatch && codeBlockMatch[0]) {
-      const [fullMatch, , code] = codeBlockMatch;
-      segments.push({
-        type: "codeblock",
-        text: code || "",
-        raw: fullMatch,
-        length: (code || "").length,
-      });
-      currentIndex += fullMatch.length;
-      matched = true;
-      continue;
-    }
-
-    // Check for inline code
-    const inlineCodeMatch = markdown.slice(currentIndex).match(/^`([^`]+)`/);
-    if (inlineCodeMatch && inlineCodeMatch[0]) {
-      const [fullMatch, code] = inlineCodeMatch;
-      segments.push({
-        type: "code",
-        text: code || "",
-        raw: fullMatch,
-        length: (code || "").length,
-      });
-      currentIndex += fullMatch.length;
-      matched = true;
-      continue;
-    }
-
-    // Check for links
-    const linkMatch = markdown
-      .slice(currentIndex)
-      .match(/^\[([^\]]+)\]\(([^)]+)\)/);
-    if (linkMatch && linkMatch[0]) {
-      const [fullMatch, text] = linkMatch;
-      segments.push({
-        type: "link",
-        text: text || "",
-        raw: fullMatch,
-        length: (text || "").length,
-      });
-      currentIndex += fullMatch.length;
-      matched = true;
-      continue;
-    }
-
-    // Check for bold
-    const boldMatch = markdown
-      .slice(currentIndex)
-      .match(/^(\*\*|__)([^*_\n]*?)\1/);
-    if (boldMatch && boldMatch[0]) {
-      const [fullMatch, , text] = boldMatch;
-      segments.push({
-        type: "bold",
-        text: text || "",
-        raw: fullMatch,
-        length: (text || "").length,
-      });
-      currentIndex += fullMatch.length;
-      matched = true;
-      continue;
-    }
-
-    // Check for italic
-    const italicMatch = markdown
-      .slice(currentIndex)
-      .match(/^(\*|_)([^*_\n]+?)\1(?!\*|_)/);
-    if (italicMatch && italicMatch[0]) {
-      const [fullMatch, , text] = italicMatch;
-      segments.push({
-        type: "italic",
-        text: text || "",
-        raw: fullMatch,
-        length: (text || "").length,
-      });
-      currentIndex += fullMatch.length;
-      matched = true;
-      continue;
-    }
-
-    // If no matches were found, handle regular text
-    if (!matched) {
-      let nextSpecialChar = markdown.slice(currentIndex).search(/[`\[*_]/);
-      if (nextSpecialChar === -1) {
-        // No more special characters, add the rest as text
-        const text = markdown.slice(currentIndex);
-        if (text) {
-          segments.push({
-            type: "text",
-            text: text,
-            raw: text,
-            length: text.length,
-          });
-        }
-        break;
-      } else {
-        // Add the text up to the next special character
-        const text = markdown.slice(
-          currentIndex,
-          currentIndex + nextSpecialChar
-        );
-        if (text) {
-          segments.push({
-            type: "text",
-            text: text,
-            raw: text,
-            length: text.length,
-          });
-        }
-        currentIndex += nextSpecialChar;
-      }
-    }
-  }
-
-  return segments;
-}
-
-export function getMarkdownForSelection(
-  content: string,
-  selectedText: string
-): string {
-  const segments = parseMarkdownToSegments(content);
-
-  // Build plain text and create mapping to markdown segments
-  let plainText = "";
-  const markdownPieces: string[] = [];
-  let currentPlainIndex = 0;
-
-  segments.forEach((segment) => {
-    plainText += segment.text;
-    markdownPieces.push(segment.raw);
-    currentPlainIndex += segment.length;
-  });
-
-  // Find the selection in the plain text
-  const startIndex = plainText.indexOf(selectedText);
-  if (startIndex === -1) {
-    return selectedText;
-  }
-
-  const endIndex = startIndex + selectedText.length;
-
-  // Find which segments the selection spans
-  let currentIndex = 0;
-  let result = "";
-  let selectionStart = startIndex;
-  let selectionEnd = endIndex;
-
-  segments.forEach((segment) => {
-    const segmentStart = currentIndex;
-    const segmentEnd = segmentStart + segment.length;
-
-    // Check if this segment overlaps with the selection
-    if (segmentEnd > selectionStart && segmentStart < selectionEnd) {
-      // Calculate how much of this segment to include
-      const overlapStart = Math.max(0, selectionStart - segmentStart);
-      const overlapEnd = Math.min(segment.length, selectionEnd - segmentStart);
-
-      if (segment.type === "text") {
-        const textPortion = segment.text.slice(overlapStart, overlapEnd);
-        result += textPortion;
-      } else {
-        // For markdown elements, wrap just the selected portion with the appropriate markdown
-        const selectedPortion = segment.text.slice(overlapStart, overlapEnd);
-
-        switch (segment.type) {
-          case "bold":
-            result += `**${selectedPortion}**`;
-            break;
-          case "italic":
-            result += `*${selectedPortion}*`;
-            break;
-          case "code":
-            result += `\`${selectedPortion}\``;
-            break;
-          case "link":
-            // For links, we need to preserve the URL if it exists in the raw markdown
-            const urlMatch = segment.raw.match(/\]\((.*?)\)/);
-            const url = urlMatch ? urlMatch[1] : "";
-            result += `[${selectedPortion}](${url})`;
-            break;
-          case "codeblock":
-            result += `\`\`\`\n${selectedPortion}\n\`\`\``;
-            break;
-          default:
-            result += selectedPortion;
-        }
-      }
-    }
-
-    currentIndex += segment.length;
-  });
-
-  return result;
-}

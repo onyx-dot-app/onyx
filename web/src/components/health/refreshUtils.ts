@@ -25,8 +25,8 @@ export function mockedRefreshToken(): CustomRefreshTokenResponse {
    */
   const mockExp = Date.now() + 3600000; // 1 hour from now in milliseconds
   const data: CustomRefreshTokenResponse = {
-    access_token: "asdf Mock access token",
-    refresh_token: "asdf Mock refresh token",
+    access_token: "Mock access token",
+    refresh_token: "Mock refresh token",
     session: { exp: mockExp },
     userinfo: {
       sub: "Mock email",

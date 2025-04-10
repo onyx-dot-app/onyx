@@ -76,7 +76,7 @@ export const ChatProvider: React.FC<{
       const { sessions } = await response.json();
       setChatSessions(sessions);
 
-      const currentSessionId = searchParams.get("chatId");
+      const currentSessionId = searchParams?.get("chatId");
       if (
         currentSessionId &&
         !sessions.some(

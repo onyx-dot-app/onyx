@@ -99,7 +99,8 @@ def test_get_doc_from_page(site: pywikibot.Site) -> None:
         doc.sections, test_page._sections_helper + [test_page.header]
     ):
         assert (
-            section.text.strip() == expected_section.strip()
+            section.text is not None
+            and section.text.strip() == expected_section.strip()
         )  # Extra whitespace before/after is okay
         assert section.link and section.link.startswith(test_page.full_url())
     assert doc.semantic_identifier == test_page.title()

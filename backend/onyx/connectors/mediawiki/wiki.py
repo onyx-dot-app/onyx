@@ -6,6 +6,7 @@ import tempfile
 from collections.abc import Generator
 from collections.abc import Iterator
 from typing import Any
+from typing import cast
 from typing import ClassVar
 
 import pywikibot.time  # type: ignore[import-untyped]
@@ -20,7 +21,8 @@ from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.mediawiki.family import family_class_dispatch
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
 
@@ -60,14 +62,14 @@ def get_doc_from_page(
     sections_extracted: textlib.Content = textlib.extract_sections(page_text, site)
 
     sections = [
-        Section(
+        TextSection(
             link=f"{page.full_url()}#" + section.heading.replace(" ", "_"),
             text=section.title + section.content,
         )
         for section in sections_extracted.sections
     ]
     sections.append(
-        Section(
+        TextSection(
             link=page.full_url(),
             text=sections_extracted.header,
         )
@@ -79,7 +81,7 @@ def get_doc_from_page(
         doc_updated_at=pywikibot_timestamp_to_utc_datetime(
             page.latest_revision.timestamp
         ),
-        sections=sections,
+        sections=cast(list[TextSection | ImageSection], sections),
         semantic_identifier=page.title(),
         metadata={"categories": [category.title() for category in page.categories()]},
         id=f"MEDIAWIKI_{page.pageid}_{page.full_url()}",
@@ -170,9 +172,9 @@ class MediaWikiConnector(LoadConnector, PollConnector):
                     pagegenerators.CategorizedPageGenerator(
                         category, recurse=self.recurse_depth
                     ),
-                    last_edit_start=datetime.datetime.fromtimestamp(start)
-                    if start
-                    else None,
+                    last_edit_start=(
+                        datetime.datetime.fromtimestamp(start) if start else None
+                    ),
                     last_edit_end=datetime.datetime.fromtimestamp(end) if end else None,
                 ),
                 groupsize=self.batch_size,

@@ -1,8 +1,8 @@
-# Override log format to include request latency
+# Log format to include request latency
 log_format custom_main '$remote_addr - $remote_user [$time_local] "$request" '
-                      '$status $body_bytes_sent "$http_referer" '
-                      '"$http_user_agent" "$http_x_forwarded_for" '
-                      'rt=$request_time';
+                '$status $body_bytes_sent "$http_referer" '
+                '"$http_user_agent" "$http_x_forwarded_for" '
+                'rt=$request_time';
 
 upstream api_server {
     # fail_timeout=0 means we always retry an upstream even if it failed
@@ -13,17 +13,17 @@ upstream api_server {
 
     # for a TCP configuration
     # TODO: use gunicorn to manage multiple processes
-    server api_server:8080 fail_timeout=0;
+    server ${ONYX_BACKEND_API_HOST}:8080 fail_timeout=0;
 }
 
 upstream web_server {
-    server web_server:3000 fail_timeout=0;
+    server ${ONYX_WEB_SERVER_HOST}:3000 fail_timeout=0;
 }
 
 server {
     listen 80 default_server;
 
-    client_max_body_size 5G;    # Maximum upload size    
+    client_max_body_size 5G;    # Maximum upload size
 
     access_log /var/log/nginx/access.log custom_main;
 
@@ -66,5 +66,5 @@ server {
         proxy_redirect off;
         proxy_pass http://web_server;
     }
-}
 
+}

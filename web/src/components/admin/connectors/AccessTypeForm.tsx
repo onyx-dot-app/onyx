@@ -29,20 +29,24 @@ export function AccessTypeForm({
   const isAutoSyncSupported = isValidAutoSyncSource(connector);
   const { isAdmin } = useUser();
 
-  useEffect(() => {
-    if (!isPaidEnterpriseEnabled) {
-      access_type_helpers.setValue("public");
-    } else if (isAutoSyncSupported) {
-      access_type_helpers.setValue("sync");
-    } else {
-      access_type_helpers.setValue("private");
-    }
-  }, [
-    isAutoSyncSupported,
-    isAdmin,
-    isPaidEnterpriseEnabled,
-    access_type_helpers,
-  ]);
+  useEffect(
+    () => {
+      // Only set default value if access_type.value is not already set
+      if (!access_type.value) {
+        if (!isPaidEnterpriseEnabled) {
+          access_type_helpers.setValue("public");
+        } else if (isAutoSyncSupported) {
+          access_type_helpers.setValue("sync");
+        } else {
+          access_type_helpers.setValue("private");
+        }
+      }
+    },
+    [
+      // Only run this effect once when the component mounts
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    ]
+  );
 
   const options = [
     {
@@ -81,7 +85,6 @@ export function AccessTypeForm({
               Control who has access to the documents indexed by this connector.
             </p>
           </div>
-
           <DefaultDropdown
             options={options}
             selected={access_type.value}
@@ -90,7 +93,6 @@ export function AccessTypeForm({
             }
             includeDefault={false}
           />
-
           {access_type.value === "sync" && isAutoSyncSupported && (
             <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
           )}

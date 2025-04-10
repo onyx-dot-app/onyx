@@ -38,6 +38,7 @@ export enum ChatFileType {
   DOCUMENT = "document",
   PLAIN_TEXT = "plain_text",
   CSV = "csv",
+  USER_KNOWLEDGE = "user_knowledge",
 }
 
 export interface FileDescriptor {
@@ -47,6 +48,10 @@ export interface FileDescriptor {
 
   // FE only
   isUploading?: boolean;
+}
+
+export interface FileDescriptorWithHighlights extends FileDescriptor {
+  match_highlights: string[];
 }
 
 export interface LLMRelevanceFilterPacket {
@@ -70,6 +75,7 @@ export interface ChatSession {
   name: string;
   persona_id: number;
   time_created: string;
+  time_updated: string;
   shared_status: ChatSessionSharedStatus;
   folder_id: number | null;
   current_alternate_model: string;
@@ -103,6 +109,7 @@ export interface Message {
   overridden_model?: string;
   stopReason?: StreamStopReason | null;
   sub_questions?: SubQuestionDetail[] | null;
+  is_agentic?: boolean | null;
 
   // Streaming only
   second_level_generating?: boolean;
@@ -122,6 +129,7 @@ export interface BackendChatSession {
   persona_icon_shape: number | null;
   messages: BackendMessage[];
   time_created: string;
+  time_updated: string;
   shared_status: ChatSessionSharedStatus;
   current_temperature_override: number | null;
   current_alternate_model?: string;
@@ -148,6 +156,7 @@ export interface BackendMessage {
   comments: any;
   parentMessageId: number | null;
   refined_answer_improvement: boolean | null;
+  is_agentic: boolean | null;
 }
 
 export interface MessageResponseIDInfo {
@@ -162,6 +171,10 @@ export interface AgentMessageIDInfo {
 
 export interface AgenticMessageResponseIDInfo {
   agentic_message_ids: AgentMessageIDInfo[];
+}
+
+export interface UserKnowledgeFilePacket {
+  user_files: FileDescriptor[];
 }
 
 export interface DocumentsResponse {

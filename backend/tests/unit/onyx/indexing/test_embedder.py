@@ -6,7 +6,7 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
-from onyx.connectors.models import Section
+from onyx.connectors.models import TextSection
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import DocAwareChunk
@@ -21,7 +21,13 @@ def mock_embedding_model() -> Generator[Mock, None, None]:
         yield mock
 
 
-def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> None:
+@pytest.mark.parametrize(
+    "chunk_context, doc_summary",
+    [("Test chunk context", "Test document summary"), ("", "")],
+)
+def test_default_indexing_embedder_embed_chunks(
+    mock_embedding_model: Mock, chunk_context: str, doc_summary: str
+) -> None:
     # Setup
     embedder = DefaultIndexingEmbedder(
         model_name="test-model",
@@ -45,7 +51,7 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
         metadata={"tags": ["tag1", "tag2"]},
         doc_updated_at=None,
         sections=[
-            Section(text="This is a short section.", link="link1"),
+            TextSection(text="This is a short section.", link="link1"),
         ],
     )
     chunks: list[DocAwareChunk] = [
@@ -62,6 +68,10 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
             mini_chunk_texts=None,
             large_chunk_reference_ids=[],
             large_chunk_id=None,
+            image_file_name=None,
+            chunk_context=chunk_context,
+            doc_summary=doc_summary,
+            contextual_rag_reserved_tokens=200,
         )
     ]
 
@@ -78,14 +88,18 @@ def test_default_indexing_embedder_embed_chunks(mock_embedding_model: Mock) -> N
     )
     assert result[0].title_embedding == [7.0, 8.0, 9.0]
 
-    # Verify the embedding model was called correctly
+    # Verify the embedding model was called exactly as follows
     mock_embedding_model.return_value.encode.assert_any_call(
-        texts=["Title: Test chunk"],
+        texts=[f"Title: {doc_summary}Test chunk{chunk_context}"],
         text_type=EmbedTextType.PASSAGE,
         large_chunks_present=False,
+        tenant_id=None,
+        request_id=None,
     )
-    # title only embedding call
+    # Same for title only embedding call
     mock_embedding_model.return_value.encode.assert_any_call(
         ["Test Document"],
         text_type=EmbedTextType.PASSAGE,
+        tenant_id=None,
+        request_id=None,
     )

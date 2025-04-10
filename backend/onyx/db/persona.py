@@ -33,10 +33,12 @@ from onyx.db.models import StarterMessage
 from onyx.db.models import Tool
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.db.models import UserFile
+from onyx.db.models import UserFolder
 from onyx.db.models import UserGroup
 from onyx.db.notification import create_notification
+from onyx.server.features.persona.models import FullPersonaSnapshot
 from onyx.server.features.persona.models import PersonaSharedNotificationData
-from onyx.server.features.persona.models import PersonaSnapshot
 from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -100,9 +102,14 @@ def _add_user_filters(
             .correlate(Persona)
         )
     else:
-        where_clause |= Persona.is_public == True  # noqa: E712
-        where_clause &= Persona.is_visible == True  # noqa: E712
+        # Group the public persona conditions
+        public_condition = (Persona.is_public == True) & (  # noqa: E712
+            Persona.is_visible == True  # noqa: E712
+        )
+
+        where_clause |= public_condition
         where_clause |= Persona__User.user_id == user.id
+
     where_clause |= Persona.user_id == user.id
 
     return stmt.where(where_clause)
@@ -194,7 +201,7 @@ def create_update_persona(
     create_persona_request: PersonaUpsertRequest,
     user: User | None,
     db_session: Session,
-) -> PersonaSnapshot:
+) -> FullPersonaSnapshot:
     """Higher level function than upsert_persona, although either is valid to use."""
     # Permission to actually use these is checked later
 
@@ -209,8 +216,15 @@ def create_update_persona(
             if not create_persona_request.is_public:
                 raise ValueError("Cannot make a default persona non public")
 
-            if user and user.role != UserRole.ADMIN:
-                raise ValueError("Only admins can make a default persona")
+            if user:
+                # Curators can edit default personas, but not make them
+                if (
+                    user.role == UserRole.CURATOR
+                    or user.role == UserRole.GLOBAL_CURATOR
+                ):
+                    pass
+                elif user.role != UserRole.ADMIN:
+                    raise ValueError("Only admins can make a default persona")
 
         persona = upsert_persona(
             persona_id=persona_id,
@@ -237,6 +251,8 @@ def create_update_persona(
             llm_relevance_filter=create_persona_request.llm_relevance_filter,
             llm_filter_extraction=create_persona_request.llm_filter_extraction,
             is_default_persona=create_persona_request.is_default_persona,
+            user_file_ids=create_persona_request.user_file_ids,
+            user_folder_ids=create_persona_request.user_folder_ids,
         )
 
         versioned_make_persona_private = fetch_versioned_implementation(
@@ -255,7 +271,7 @@ def create_update_persona(
         logger.exception("Failed to create persona")
         raise HTTPException(status_code=400, detail=str(e))
 
-    return PersonaSnapshot.from_model(persona)
+    return FullPersonaSnapshot.from_model(persona)
 
 
 def update_persona_shared_users(
@@ -331,6 +347,8 @@ def get_personas_for_user(
             selectinload(Persona.groups),
             selectinload(Persona.users),
             selectinload(Persona.labels),
+            selectinload(Persona.user_files),
+            selectinload(Persona.user_folders),
         )
 
     results = db_session.execute(stmt).scalars().all()
@@ -423,8 +441,10 @@ def upsert_persona(
     remove_image: bool | None = None,
     search_start_date: datetime | None = None,
     builtin_persona: bool = False,
-    is_default_persona: bool = False,
+    is_default_persona: bool | None = None,
     label_ids: list[int] | None = None,
+    user_file_ids: list[int] | None = None,
+    user_folder_ids: list[int] | None = None,
     chunks_above: int = CONTEXT_CHUNKS_ABOVE,
     chunks_below: int = CONTEXT_CHUNKS_BELOW,
 ) -> Persona:
@@ -450,6 +470,7 @@ def upsert_persona(
             user=user,
             get_editable=True,
         )
+
     # Fetch and attach tools by IDs
     tools = None
     if tool_ids is not None:
@@ -467,6 +488,26 @@ def upsert_persona(
         )
         if not document_sets and document_set_ids:
             raise ValueError("document_sets not found")
+
+    # Fetch and attach user_files by IDs
+    user_files = None
+    if user_file_ids is not None:
+        user_files = (
+            db_session.query(UserFile).filter(UserFile.id.in_(user_file_ids)).all()
+        )
+        if not user_files and user_file_ids:
+            raise ValueError("user_files not found")
+
+    # Fetch and attach user_folders by IDs
+    user_folders = None
+    if user_folder_ids is not None:
+        user_folders = (
+            db_session.query(UserFolder)
+            .filter(UserFolder.id.in_(user_folder_ids))
+            .all()
+        )
+        if not user_folders and user_folder_ids:
+            raise ValueError("user_folders not found")
 
     # Fetch and attach prompts by IDs
     prompts = None
@@ -518,7 +559,12 @@ def upsert_persona(
         existing_persona.is_visible = is_visible
         existing_persona.search_start_date = search_start_date
         existing_persona.labels = labels or []
-        existing_persona.is_default_persona = is_default_persona
+        existing_persona.is_default_persona = (
+            is_default_persona
+            if is_default_persona is not None
+            else existing_persona.is_default_persona
+        )
+
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
@@ -531,6 +577,14 @@ def upsert_persona(
 
         if tools is not None:
             existing_persona.tools = tools or []
+
+        if user_file_ids is not None:
+            existing_persona.user_files.clear()
+            existing_persona.user_files = user_files or []
+
+        if user_folder_ids is not None:
+            existing_persona.user_folders.clear()
+            existing_persona.user_folders = user_folders or []
 
         # We should only update display priority if it is not already set
         if existing_persona.display_priority is None:
@@ -570,7 +624,11 @@ def upsert_persona(
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,
-            is_default_persona=is_default_persona,
+            is_default_persona=(
+                is_default_persona if is_default_persona is not None else False
+            ),
+            user_folders=user_folders or [],
+            user_files=user_files or [],
             labels=labels or [],
         )
         db_session.add(new_persona)

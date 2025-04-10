@@ -37,6 +37,7 @@ const nextConfig = {
         pathname: "/s2/favicons/**",
       },
     ],
+    unoptimized: true, // Disable image optimization to avoid requiring Sharp
   },
   async headers() {
     return [
@@ -65,6 +66,28 @@ const nextConfig = {
               "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
           },
         ],
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/api/docs/:path*", // catch /api/docs and /api/docs/...
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/docs/:path*`,
+      },
+      {
+        source: "/api/docs", // if you also need the exact /api/docs
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/docs`,
+      },
+      {
+        source: "/openapi.json",
+        destination: `${
+          process.env.INTERNAL_URL || "http://localhost:8080"
+        }/openapi.json`,
       },
     ];
   },

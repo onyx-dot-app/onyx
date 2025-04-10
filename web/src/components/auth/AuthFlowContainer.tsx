@@ -6,7 +6,7 @@ export default function AuthFlowContainer({
   authState,
 }: {
   children: React.ReactNode;
-  authState?: "signup" | "login";
+  authState?: "signup" | "login" | "join";
 }) {
   return (
     <div className="p-4 flex flex-col items-center justify-center min-h-screen bg-background">

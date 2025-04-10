@@ -91,7 +91,7 @@ export function AgenticToggle({
         >
           <div className="flex items-center space-x-2 mb-3">
             <h3 className="text-sm font-semibold text-neutral-900">
-              Agent Search (BETA)
+              Agent Search
             </h3>
           </div>
           <p className="text-xs text-neutral-600  dark:text-neutral-700 mb-2">

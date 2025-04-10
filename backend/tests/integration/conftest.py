@@ -4,6 +4,7 @@ import pytest
 
 from onyx.auth.schemas import UserRole
 from onyx.db.engine import get_session_context_manager
+from onyx.db.engine import SqlEngine
 from onyx.db.search_settings import get_current_search_settings
 from tests.integration.common_utils.constants import ADMIN_USER_NAME
 from tests.integration.common_utils.constants import GENERAL_HEADERS
@@ -46,6 +47,15 @@ instantiate the session directly within the test.
 # def db_session() -> Generator[Session, None, None]:
 #     with get_session_context_manager() as session:
 #         yield session
+
+
+@pytest.fixture(scope="session", autouse=True)
+def initialize_db() -> None:
+    # Make sure that the db engine is initialized before any tests are run
+    SqlEngine.init_engine(
+        pool_size=10,
+        max_overflow=5,
+    )
 
 
 @pytest.fixture
@@ -108,3 +118,13 @@ def admin_user() -> DATestUser:
 @pytest.fixture
 def reset_multitenant() -> None:
     reset_all_multitenant()
+
+
+def pytest_runtest_logstart(nodeid: str, location: tuple[str, int | None, str]) -> None:
+    print(f"\nTest start: {nodeid}")
+
+
+def pytest_runtest_logfinish(
+    nodeid: str, location: tuple[str, int | None, str]
+) -> None:
+    print(f"\nTest end: {nodeid}")

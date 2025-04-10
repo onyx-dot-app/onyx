@@ -52,8 +52,8 @@ class RedisConnectorPermissionSync:
     ACTIVE_PREFIX = PREFIX + "_active"
     ACTIVE_TTL = CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT * 2
 
-    def __init__(self, tenant_id: str | None, id: int, redis: redis.Redis) -> None:
-        self.tenant_id: str | None = tenant_id
+    def __init__(self, tenant_id: str, id: int, redis: redis.Redis) -> None:
+        self.tenant_id: str = tenant_id
         self.id = id
         self.redis = redis
 
@@ -195,7 +195,7 @@ class RedisConnectorPermissionSync:
                 ),
                 queue=OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
                 task_id=custom_task_id,
-                priority=OnyxCeleryPriority.HIGH,
+                priority=OnyxCeleryPriority.MEDIUM,
                 ignore_result=True,
             )
             async_results.append(result)

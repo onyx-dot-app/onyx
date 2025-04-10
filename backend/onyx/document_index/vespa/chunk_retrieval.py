@@ -24,13 +24,16 @@ from onyx.document_index.vespa.shared_utils.vespa_request_builders import (
 from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BLURB
 from onyx.document_index.vespa_constants import BOOST
+from onyx.document_index.vespa_constants import CHUNK_CONTEXT
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import CONTENT
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
+from onyx.document_index.vespa_constants import DOC_SUMMARY
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import HIDDEN
+from onyx.document_index.vespa_constants import IMAGE_FILE_NAME
 from onyx.document_index.vespa_constants import LARGE_CHUNK_REFERENCE_IDS
 from onyx.document_index.vespa_constants import MAX_ID_SEARCH_QUERY_SIZE
 from onyx.document_index.vespa_constants import MAX_OR_CONDITIONS
@@ -125,11 +128,13 @@ def _vespa_hit_to_inference_chunk(
     return InferenceChunkUncleaned(
         chunk_id=fields[CHUNK_ID],
         blurb=fields.get(BLURB, ""),  # Unused
-        content=fields[CONTENT],  # Includes extra title prefix and metadata suffix
+        content=fields[CONTENT],  # Includes extra title prefix and metadata suffix;
+        # also sometimes context for contextual rag
         source_links=source_links_dict or {0: ""},
         section_continuation=fields[SECTION_CONTINUATION],
         document_id=fields[DOCUMENT_ID],
         source_type=fields[SOURCE_TYPE],
+        image_file_name=fields.get(IMAGE_FILE_NAME),
         title=fields.get(TITLE),
         semantic_identifier=fields[SEMANTIC_IDENTIFIER],
         boost=fields.get(BOOST, 1),
@@ -141,6 +146,8 @@ def _vespa_hit_to_inference_chunk(
         large_chunk_reference_ids=fields.get(LARGE_CHUNK_REFERENCE_IDS, []),
         metadata=metadata,
         metadata_suffix=fields.get(METADATA_SUFFIX),
+        doc_summary=fields.get(DOC_SUMMARY, ""),
+        chunk_context=fields.get(CHUNK_CONTEXT, ""),
         match_highlights=match_highlights,
         updated_at=updated_at,
     )
@@ -211,6 +218,7 @@ def _get_chunks_via_visit_api(
 
         # Check if the response contains any documents
         response_data = response.json()
+
         if "documents" in response_data:
             for document in response_data["documents"]:
                 if filters.access_control_list:
@@ -284,18 +292,20 @@ def parallel_visit_api_retrieval(
 
 @retry(tries=3, delay=1, backoff=2)
 def query_vespa(
-    query_params: Mapping[str, str | int | float]
+    query_params: Mapping[str, str | int | float],
 ) -> list[InferenceChunkUncleaned]:
     if "query" in query_params and not cast(str, query_params["query"]).strip():
         raise ValueError("No/empty query received")
 
     params = dict(
         **query_params,
-        **{
-            "presentation.timing": True,
-        }
-        if LOG_VESPA_TIMING_INFORMATION
-        else {},
+        **(
+            {
+                "presentation.timing": True,
+            }
+            if LOG_VESPA_TIMING_INFORMATION
+            else {}
+        ),
     )
 
     try:
@@ -310,6 +320,11 @@ def query_vespa(
             f"Request Headers: {e.request.headers}\n"
             f"Request Payload: {params}\n"
             f"Exception: {str(e)}"
+            + (
+                f"\nResponse: {e.response.text}"
+                if isinstance(e, httpx.HTTPStatusError)
+                else ""
+            )
         )
         raise httpx.HTTPError(error_base) from e
 
@@ -337,6 +352,19 @@ def query_vespa(
     filtered_hits = [hit for hit in hits if hit["fields"].get(CONTENT) is not None]
 
     inference_chunks = [_vespa_hit_to_inference_chunk(hit) for hit in filtered_hits]
+
+    try:
+        num_retrieved_inference_chunks = len(inference_chunks)
+        num_retrieved_document_ids = len(
+            set([chunk.document_id for chunk in inference_chunks])
+        )
+        logger.debug(
+            f"Retrieved {num_retrieved_inference_chunks} inference chunks for {num_retrieved_document_ids} documents"
+        )
+    except Exception as e:
+        # Debug logging only, should not fail the retrieval
+        logger.error(f"Error logging retrieval statistics: {e}")
+
     # Good Debugging Spot
     return inference_chunks
 

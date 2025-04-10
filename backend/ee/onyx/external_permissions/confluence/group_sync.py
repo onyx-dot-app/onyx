@@ -1,9 +1,11 @@
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
 from onyx.background.error_logging import emit_background_error
-from onyx.connectors.confluence.onyx_confluence import build_confluence_client
+from onyx.connectors.confluence.onyx_confluence import (
+    get_user_email_from_username__server,
+)
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
-from onyx.connectors.confluence.utils import get_user_email_from_username__server
+from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -61,13 +63,27 @@ def _build_group_member_email_map(
 
 
 def confluence_group_sync(
+    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
-    confluence_client = build_confluence_client(
-        credentials=cc_pair.credential.credential_json,
-        is_cloud=cc_pair.connector.connector_specific_config.get("is_cloud", False),
-        wiki_base=cc_pair.connector.connector_specific_config["wiki_base"],
-    )
+    provider = OnyxDBCredentialsProvider(tenant_id, "confluence", cc_pair.credential_id)
+    is_cloud = cc_pair.connector.connector_specific_config.get("is_cloud", False)
+    wiki_base: str = cc_pair.connector.connector_specific_config["wiki_base"]
+    url = wiki_base.rstrip("/")
+
+    probe_kwargs = {
+        "max_backoff_retries": 6,
+        "max_backoff_seconds": 10,
+    }
+
+    final_kwargs = {
+        "max_backoff_retries": 10,
+        "max_backoff_seconds": 60,
+    }
+
+    confluence_client = OnyxConfluence(is_cloud, url, provider)
+    confluence_client._probe_connection(**probe_kwargs)
+    confluence_client._initialize_connection(**final_kwargs)
 
     group_member_email_map = _build_group_member_email_map(
         confluence_client=confluence_client,
