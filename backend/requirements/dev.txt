@@ -5,7 +5,7 @@ cohere==5.6.1
 lxml==5.3.0
 lxml_html_clean==0.2.2
 mypy-extensions==1.0.0
-mypy==1.8.0
+mypy==1.15.0
 pandas-stubs==2.2.3.241009
 pandas==2.2.3
 posthog==3.7.4
@@ -14,7 +14,7 @@ pytest-asyncio==0.22.0
 pytest==8.3.5
 reorder-python-imports-black==3.14.0
 ruff==0.0.286
-sentence-transformers==3.4.1
+sentence-transformers==4.0.2
 trafilatura==1.12.2
 types-beautifulsoup4==4.12.0.3
 types-html5lib==1.1.11.13
