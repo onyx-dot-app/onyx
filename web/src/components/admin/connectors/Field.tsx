@@ -632,6 +632,105 @@ interface TextArrayFieldProps<T extends Yup.AnyObject> {
   placeholder?: string;
 }
 
+export function MultiTextArrayField<T extends Yup.AnyObject>({
+  name,
+  label,
+  values,
+  subtext,
+  tooltip,
+  minFields = 0,
+  placeholders,
+}: {
+  name: string;
+  label: string | JSX.Element;
+  values: T;
+  subtext?: string | JSX.Element;
+  tooltip?: string;
+  minFields?: number;
+  placeholders?: string[];
+}) {
+  return (
+    <div className="mb-4">
+      <div className="flex gap-x-2 items-center">
+        <Label>{label}</Label>
+        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+      </div>
+      {subtext && <SubLabel>{subtext}</SubLabel>}
+
+      <FieldArray
+        name={name}
+        render={(arrayHelpers: ArrayHelpers) => (
+          <div>
+            {values[name] &&
+              values[name].length > 0 &&
+              (values[name] as object[]).map((obj, index) => {
+                return (
+                  <div key={index} className="flex flex-row">
+                    <div className="mt-2 flex flex-grow gap-x-2 w-full">
+                      {Object.keys(obj).map((key, key_index) => {
+                        const subname = `${name}.${index}.${key}`;
+                        return (
+                          <div key={subname} className="w-full">
+                            <Field
+                              name={subname}
+                              id={subname}
+                              className={`
+                                border
+                                border-border
+                                bg-background
+                                rounded
+                                w-full
+                                py-2
+                                px-3
+                                mr-4
+                              `}
+                              autoComplete="off"
+                              placeholder={
+                                placeholders && placeholders[key_index]
+                              }
+                            />
+                            <ErrorMessage
+                              name={subname}
+                              component="div"
+                              className="text-error text-sm mt-1"
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div className="my-auto flex flex-shrink">
+                      {index >= minFields ? (
+                        <FiX
+                          className="my-auto w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
+                          onClick={() => arrayHelpers.remove(index)}
+                        />
+                      ) : (
+                        <div className="w-10 h-10" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+            <Button
+              onClick={() => {
+                arrayHelpers.push({ model_name: "", max_input_tokens: null });
+              }}
+              className="mt-3"
+              variant="update"
+              size="sm"
+              type="button"
+              icon={FiPlus}
+            >
+              Add New
+            </Button>
+          </div>
+        )}
+      />
+    </div>
+  );
+}
+
 export function TextArrayField<T extends Yup.AnyObject>({
   name,
   label,
