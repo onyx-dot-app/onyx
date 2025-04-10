@@ -21,7 +21,7 @@ from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "sample.pdf"
-FILE_PATH = "tests/integration/common_utils/test_files/sample.pdf"
+FILE_PATH = "tests/integration/common_utils/test_filesg/sample.pdf"
 
 
 def test_image_indexing(
@@ -37,7 +37,7 @@ def test_image_indexing(
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
 
     # Use FileManager to upload the test file
-    upload_response = FileManager.upload_file(
+    upload_response = FileManager.upload_file_for_connector(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
     )
 
