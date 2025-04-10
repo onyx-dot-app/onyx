@@ -20,6 +20,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
+from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -38,15 +39,18 @@ def generate_answer(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
     state.entities_types_str
-    query_results_data_str = state.query_results_data_str
+    introductory_answer = state.query_results_data_str
     state.reference_results
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
         raise ValueError("Search tool is not set")
 
+    consolidated_research_object_results_str = (
+        state.consolidated_research_object_results_str
+    )
+
     question = graph_config.inputs.search_request.query
-    state.entities_types_str
-    state.query_results
+
     output_format = state.output_format
     if state.reference_results:
         examples = (
@@ -54,50 +58,34 @@ def generate_answer(
             or state.reference_results.general_entities
             or []
         )
-        example_str = "\n".join([f"- {example}" for example in examples])
+        research_results = "\n".join([f"- {example}" for example in examples])
+    elif consolidated_research_object_results_str:
+        research_results = consolidated_research_object_results_str
     else:
-        example_str = ""
+        research_results = ""
 
-    # if reference_results and reference_results.citations:
-    #     aaa = yield_search_responses(
-    #         query=question,
-    #         get_retrieved_sections=lambda: reference_results.citations,
-    #         get_final_context_sections=lambda: reference_results.citations[:10],
-    #         search_query_info=SearchQueryInfo(
-    #         predicted_search=SearchType.SEMANTIC,
-    #         final_filters=IndexFilters(access_control_list=None),
-    #         recency_bias_multiplier=1.0,
-    #     ),
-    #     get_section_relevance=lambda: None,
-    #     search_tool=search_tool,
-    # )
-
-    #     for aa in aaa:
-    #         write_custom_event(
-    #             "tool_response",
-    #             ToolResponse(
-    #                 id=SEARCH_RESPONSE_SUMMARY_ID,
-    #                 response=aa,
-    #             ),
-    #             writer,
-    #         )
-
-    assert query_results_data_str is not None
-
-    if example_str:
+    if research_results and introductory_answer:
         output_format_prompt = (
             OUTPUT_FORMAT_PROMPT.replace("---question---", question)
-            .replace("---results_data_str---", query_results_data_str)
+            .replace("---introductory_answer---", introductory_answer)
             .replace("---output_format---", str(output_format) if output_format else "")
-            .replace("---examples---", example_str)
+            .replace("---research_results---", research_results)
         )
 
-    else:
+    elif not research_results and introductory_answer:
         output_format_prompt = (
             OUTPUT_FORMAT_NO_EXAMPLES_PROMPT.replace("---question---", question)
-            .replace("---results_data_str---", query_results_data_str)
+            .replace("---introductory_answer---", introductory_answer)
             .replace("---output_format---", str(output_format) if output_format else "")
         )
+    elif research_results and not introductory_answer:
+        output_format_prompt = (
+            OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT.replace("---question---", question)
+            .replace("---output_format---", str(output_format) if output_format else "")
+            .replace("---research_results---", research_results)
+        )
+    else:
+        raise ValueError("No research results or introductory answer provided")
 
     msg = [
         HumanMessage(
@@ -112,7 +100,7 @@ def generate_answer(
         for message in fast_llm.stream(
             prompt=msg,
             timeout_override=30,
-            max_tokens=300,
+            max_tokens=1000,
         ):
             # TODO: in principle, the answer here COULD contain images, but we don't support that yet
             content = message.content
@@ -131,7 +119,7 @@ def generate_answer(
                 ),
                 writer,
             )
-            logger.debug(f"Answer piece: {content}")
+            # logger.debug(f"Answer piece: {content}")
             end_stream_token = datetime.now()
             dispatch_timings.append(
                 (end_stream_token - start_stream_token).microseconds

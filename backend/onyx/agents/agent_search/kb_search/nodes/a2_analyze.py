@@ -82,7 +82,7 @@ def analyze(
     # Grader
     try:
         llm_response = run_with_timeout(
-            5,
+            20,
             # fast_llm.invoke,
             primary_llm.invoke,
             prompt=msg,

@@ -353,7 +353,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if time_cutoff:
                 retrieval_options.filters.time_cutoff = time_cutoff
 
-        # Initialize retrieval options and filters with all provided values
+        # Initialize kg filters in retrieval options and filters with all provided values
         retrieval_options = retrieval_options or RetrievalDetails()
         retrieval_options.filters = retrieval_options.filters or BaseFilters()
         if kg_entities:
@@ -362,6 +362,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             retrieval_options.filters.kg_relationships = kg_relationships
         if kg_terms:
             retrieval_options.filters.kg_terms = kg_terms
+
+        logger.info(f"SEARCH OVERWRITE retrieval_options: {retrieval_options}")
 
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(

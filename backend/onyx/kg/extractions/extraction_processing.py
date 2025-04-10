@@ -7,6 +7,7 @@ from typing import Dict
 from langchain_core.messages import HumanMessage
 
 from onyx.db.connector import get_unprocessed_connector_ids
+from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_unprocessed_kg_documents_for_connector
 from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
@@ -30,6 +31,8 @@ from onyx.kg.models import KGClassificationInstructionStrings
 from onyx.kg.utils.chunk_preprocessing import prepare_llm_content
 from onyx.kg.utils.chunk_preprocessing import prepare_llm_document_content
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
+from onyx.kg.utils.formatting_utils import generalize_entities
+from onyx.kg.utils.formatting_utils import generalize_relationships
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
 from onyx.kg.vespa.vespa_interactions import (
     get_document_classification_content_for_kg_processing,
@@ -71,38 +74,6 @@ def _get_classification_instructions() -> Dict[str, KGClassificationInstructionS
     return classification_instructions_dict
 
 
-def _generalize_entities(entities: list[str]) -> set[str]:
-    """
-    Generalize entities to their superclass.
-    """
-    return set([f"{entity.split(':')[0]}:*" for entity in entities])
-
-
-def _generalize_relationships(relationships: list[str]) -> set[str]:
-    """
-    Generalize relationships to their superclass.
-    """
-    generalized_relationships: set[str] = set()
-    for relationship in relationships:
-        assert (
-            len(relationship.split("__")) == 3
-        ), "Relationship is not in the correct format"
-        source_entity, relationship_type, target_entity = relationship.split("__")
-        generalized_source_entity = list(_generalize_entities([source_entity]))[0]
-        generalized_target_entity = list(_generalize_entities([target_entity]))[0]
-        generalized_relationships.add(
-            f"{generalized_source_entity}__{relationship_type}__{target_entity}"
-        )
-        generalized_relationships.add(
-            f"{source_entity}__{relationship_type}__{generalized_target_entity}"
-        )
-        generalized_relationships.add(
-            f"{generalized_source_entity}__{relationship_type}__{generalized_target_entity}"
-        )
-
-    return generalized_relationships
-
-
 def get_entity_types_str(active: bool | None = None) -> str:
     """
     Get the entity types from the KGChunkExtraction model.
@@ -114,11 +85,18 @@ def get_entity_types_str(active: bool | None = None) -> str:
         entity_types_list = []
         for entity_type in active_entity_types:
             if entity_type.description:
-                entity_types_list.append(
-                    f"{entity_type.id_name}: {entity_type.description}"
+                entity_description = "\n  - Description: " + entity_type.description
+            else:
+                entity_description = ""
+            if entity_type.ge_determine_instructions:
+                allowed_options = "\n  - Allowed Options: " + ", ".join(
+                    entity_type.ge_determine_instructions
                 )
             else:
-                entity_types_list.append(entity_type.id_name)
+                allowed_options = ""
+            entity_types_list.append(
+                entity_type.id_name + entity_description + allowed_options
+            )
 
     return "\n".join(entity_types_list)
 
@@ -215,7 +193,7 @@ def kg_extraction(
             )
 
             # TODO: restricted for testing only
-            unprocessed_documents_list = list(unprocessed_documents)[:3]
+            unprocessed_documents_list = list(unprocessed_documents)[:6]
 
         document_classification_content_list = (
             get_document_classification_content_for_kg_processing(
@@ -429,6 +407,10 @@ def kg_extraction(
                         cluster_count=extraction_count,
                     )
                 else:
+                    event_time = get_document_updated_at(
+                        entity,
+                        db_session,
+                    )
                     add_entity(
                         db_session=db_session,
                         entity_type=entity_type,
@@ -437,6 +419,7 @@ def kg_extraction(
                         document_id=aggregated_kg_extractions.grounded_entities_document_ids[
                             entity
                         ],
+                        event_time=event_time,
                     )
 
                 db_session.commit()
@@ -610,17 +593,34 @@ def _kg_chunk_batch_extraction(
                 extracted_terms = parsed_result.get("terms", [])
 
                 implied_extracted_relationships = [
-                    llm_preprocessing.core_entity + "__" + "relates_to" + "__" + entity
+                    llm_preprocessing.core_entity
+                    + "__"
+                    + "relates_neutrally_to"
+                    + "__"
+                    + entity
                     for entity in extracted_entities
                 ]
 
-                all_entities = _generalize_entities(
-                    extracted_entities + llm_preprocessing.implied_entities
+                all_entities = set(
+                    list(extracted_entities)
+                    + list(llm_preprocessing.implied_entities)
+                    + list(
+                        generalize_entities(
+                            extracted_entities + llm_preprocessing.implied_entities
+                        )
+                    )
                 )
-                all_relationships = _generalize_relationships(
+
+                logger.info(f"All entities: {all_entities}")
+
+                all_relationships = (
                     extracted_relationships
                     + llm_preprocessing.implied_relationships
                     + implied_extracted_relationships
+                )
+                all_relationships = set(
+                    list(all_relationships)
+                    + list(generalize_relationships(all_relationships))
                 )
 
                 kg_updates = [

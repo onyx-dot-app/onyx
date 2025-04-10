@@ -84,7 +84,7 @@ def build_vespa_filters(
         ]:
             if values:
                 filter_parts.append(
-                    " ".join(f'({filter_type} contains "{val}") ' for val in values)
+                    " and ".join(f'({filter_type} contains "{val}") ' for val in values)
                 )
 
         return f"({' and '.join(filter_parts)}) and "

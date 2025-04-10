@@ -12,6 +12,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entities import get_entity_types_with_grounded_source_name
 from onyx.prompts.kg_prompts import SEARCH_FILTER_CONSTRUCTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -112,18 +114,40 @@ def construct_deep_search_filters(
         div_con_entities = [
             x["id_name"]
             for x in state.individualized_query_results
-            if x["id_name"] is not None
+            if x["id_name"] is not None and "*" not in x["id_name"]
         ]
     elif state.query_results and len(state.query_results) > 0:
         div_con_entities = [
-            x["id_name"] for x in state.query_results if x["id_name"] is not None
+            x["id_name"]
+            for x in state.query_results
+            if x["id_name"] is not None and "*" not in x["id_name"]
         ]
     else:
         div_con_entities = []
 
+    div_con_entities = list(set(div_con_entities))
+
+    logger.info(f"div_con_entities: {div_con_entities}")
+
+    with get_session_with_current_tenant() as db_session:
+        double_grounded_entity_types = get_entity_types_with_grounded_source_name(
+            db_session
+        )
+
+    source_division = False
+
+    if div_con_entities:
+        for entity_type in double_grounded_entity_types:
+            if entity_type.grounded_source_name.lower() in div_con_entities[0].lower():
+                source_division = True
+                break
+    else:
+        raise ValueError("No div_con_entities found")
+
     return DeepSearchFilterUpdate(
         vespa_filter_results=vespa_filter_results,
         div_con_entities=div_con_entities,
+        source_division=source_division,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

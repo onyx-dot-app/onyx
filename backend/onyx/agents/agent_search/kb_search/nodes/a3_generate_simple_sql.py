@@ -207,6 +207,8 @@ def generate_simple_sql(
 
     # dispatch_main_answer_stop_info(0, writer)
 
+    logger.info(f"query_results: {query_results}")
+
     return SQLSimpleGenerationUpdate(
         sql_query=sql_statement,
         query_results=query_results,

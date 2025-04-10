@@ -15,7 +15,7 @@ from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import delete_entities_by_id_names
-from onyx.db.entities import get_determined_grounded_entities
+from onyx.db.entities import get_determined_grounded_entity_types
 from onyx.db.entities import get_entity_types_with_grounding_signature
 from onyx.db.entities import get_ge_entities_by_types
 from onyx.db.entities import get_grounded_entities
@@ -49,7 +49,7 @@ def _create_ge_determined_entity_map() -> Dict[str, List[str]]:
     ge_determined_entity_map: Dict[str, List[str]] = defaultdict(list)
 
     with get_session_with_current_tenant() as db_session:
-        determined_entities = get_determined_grounded_entities(db_session)
+        determined_entities = get_determined_grounded_entity_types(db_session)
 
         for entity_type in determined_entities:
             if entity_type.ge_determine_instructions:  # Extra safety check
@@ -80,7 +80,7 @@ def _get_entity_type_grounding_signatures() -> dict[str, str]:
 
 
 def _cluster_relationships(
-    relationship_data: List[dict], n_clusters: int = 2, batch_size: int = 12
+    relationship_data: List[dict], n_clusters: int = 3, batch_size: int = 12
 ) -> Dict[int, List[str]]:
     """
     Cluster relationships using their embeddings.
@@ -94,6 +94,8 @@ def _cluster_relationships(
         Dictionary mapping cluster IDs to lists of relationship names
     """
 
+    # TODO: This is TEMP for the pre-defined relationships.
+    # if len(relationship_data) < n_clusters:
     if len(relationship_data) < n_clusters:
         logger.warning(
             "Not enough relationships to cluster. Returning each relationship as its own cluster."

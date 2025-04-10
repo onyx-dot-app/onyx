@@ -988,3 +988,27 @@ def get_base_llm_doc_information(
 
         inference_sections.append(inference_section)
     return inference_sections
+
+
+def get_document_updated_at(
+    document_id: str,
+    db_session: Session,
+) -> datetime | None:
+    """Retrieves the doc_updated_at timestamp for a given document ID.
+
+    Args:
+        document_id (str): The ID of the document to query
+        db_session (Session): The database session to use
+
+    Returns:
+        Optional[datetime]: The doc_updated_at timestamp if found, None if document doesn't exist
+    """
+    if len(document_id.split(":")) == 2:
+        document_id = document_id.split(":")[1]
+    elif len(document_id.split(":")) > 2:
+        raise ValueError(f"Invalid document ID: {document_id}")
+    else:
+        pass
+
+    stmt = select(DbDocument.doc_updated_at).where(DbDocument.id == document_id)
+    return db_session.execute(stmt).scalar_one_or_none()

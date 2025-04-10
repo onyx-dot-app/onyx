@@ -89,3 +89,35 @@ def kg_email_processing(email: str) -> KGPerson:
         company = company_domain.capitalize()
 
     return KGPerson(name=name, company=company, employee=employee)
+
+
+def generalize_entities(entities: list[str]) -> set[str]:
+    """
+    Generalize entities to their superclass.
+    """
+    return set([f"{entity.split(':')[0]}:*" for entity in entities])
+
+
+def generalize_relationships(relationships: list[str]) -> set[str]:
+    """
+    Generalize relationships to their superclass.
+    """
+    generalized_relationships: set[str] = set()
+    for relationship in relationships:
+        assert (
+            len(relationship.split("__")) == 3
+        ), "Relationship is not in the correct format"
+        source_entity, relationship_type, target_entity = relationship.split("__")
+        generalized_source_entity = list(generalize_entities([source_entity]))[0]
+        generalized_target_entity = list(generalize_entities([target_entity]))[0]
+        generalized_relationships.add(
+            f"{generalized_source_entity}__{relationship_type}__{target_entity}"
+        )
+        generalized_relationships.add(
+            f"{source_entity}__{relationship_type}__{generalized_target_entity}"
+        )
+        generalized_relationships.add(
+            f"{generalized_source_entity}__{relationship_type}__{generalized_target_entity}"
+        )
+
+    return generalized_relationships

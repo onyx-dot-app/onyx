@@ -10,7 +10,7 @@ NO = "no"
 # Framing/Support/Template Prompts
 ENTITY_TYPE_SETTING_PROMPT = f"""
 Here are the entity types that are available for extraction. Please only extract entities \
-of these types and relationships between objects of these types (or 'any' object of a type).
+of these types (or 'any' object of a type, indicated by a '*').
 {SEPARATOR_LINE}
 {{entity_types}}
 {SEPARATOR_LINE}
@@ -25,11 +25,17 @@ Here are the types of relationships:
 
 EXTRACTION_FORMATTING_PROMPT = r"""
 {{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
-formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization)>],
+formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization). If allowed options \
+are provided above, you can only extract those types of entities! Again, there should be an 'Other' \
+option. Pick this if non of the others apply.>],
 "relationships": [<a list of relationship between the identified entities, formatted as \
-'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
-of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc. Use spaces here \
-for word separation.)>\
+'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<one of three options: 'relates_positively_to', \
+'relates_negatively_to', or 'relates_neutrally_to'. Pick the most appropriate option based on the \
+relationship between the entities implied by the text. 'relates_neutrally_to' should generally be \
+chosen if in doubt, or if the proper term may be 'interested_in', 'has', 'uses', 'wants', etc. \
+Pick 'relates_positively_to', or 'relates_negatively_to' only of it is clear. The positive option \
+could for example apply of something is now solved, value was delievered, a sales was made, someone \
+is happy, etc. The negative option would apply of a problem is reported, someone is unhappy, etc.>\
 __<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
 identify in the text, each formatted simply as '<term>'>]
@@ -51,34 +57,42 @@ but only use the information provided to infer whether there should be a time_fi
 
 QUERY_RELATIONSHIP_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"relationships": [<a list of relationship between the identified entities, formatted as \
-'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
-of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
+'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<one of three options: 'relates_positively_to', \
+'relates_negatively_to', or 'relates_neutrally_to'. Pick the most appropriate option based on the \
+relationship between the entities implied by the text. 'relates_neutrally_to' should generally be \
+chosen if in doubt, or if the proper term may be 'interested_in', 'has', 'uses', 'wants', etc. \
+Pick 'relates_positively_to', or 'relates_negatively_to' only of it is clear. The positive option \
+could for example apply of something is now solved, value was delievered, a sales was made, someone \
+is happy, etc. The negative option would apply of a problem is reported, someone is unhappy, etc. \
+If the 'natural' relationship is of a very different nature (like: 'participated_in', choose \
+'relates_neutrally_to'. It is MOST IMPORTANT THAT THE RELATIONSHIP IS BETWEEN THE TWO ENTITIES \
+IS CAPTURED, the type is less important. But again, if in doubt, pick 'relates_neutrally_to'.\
 __<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>]
 }}
 """.strip()
 
 EXAMPLE_1 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:*"],
-    "relationships": ["ACCOUNT:Nike__had__CONCERN:*"], "terms": []}}
+    "relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*"], "terms": []}}
 """.strip()
 
 EXAMPLE_2 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:performance"],
-    "relationships": ["ACCOUNT:*__had_issues__CONCERN:performance"], "terms": ["performance issue"]}}
+    "relationships": ["ACCOUNT:*__relates_negatively_to__CONCERN:performance"], "terms": ["performance issue"]}}
 """.strip()
 
 EXAMPLE_3 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:performance", "CONCERN:user_experience"],
-    "relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
-                      "ACCOUNT:Nike__solved__CONCERN:user_experience"],
+    "relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
+                      "ACCOUNT:Nike__relates_positively_to__CONCERN:user_experience"],
     "terms": ["performance", "user experience"]}}
 """.strip()
 
 EXAMPLE_4 = r"""
 {{"entities": ["ACCOUNT:Nike", "FEATURE:dashboard", "CONCERN:performance"],
-    "relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
-                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__gets_value_from__FEATURE:dashboard"],
+    "relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
+                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__relates_positively_to__FEATURE:dashboard"],
     "terms": ["value", "performance"]}}
 """.strip()
 
@@ -89,7 +103,7 @@ RELATIONSHIP_EXAMPLE_1 = r"""
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*"]}}
+{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_2 = r"""
@@ -99,7 +113,7 @@ RELATIONSHIP_EXAMPLE_2 = r"""
 
 then a much more suitable relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:*__had_issues__CONCERN:performance"]}}
+{{"relationships": ["ACCOUNT:*__relates_negatively_to__CONCERN:performance"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_3 = r"""
@@ -110,8 +124,8 @@ and the extracted entities were found to be:
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
-                      "ACCOUNT:Nike__solved__CONCERN:user_experience"]}}
+{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
+                      "ACCOUNT:Nike__relates_positively_to__CONCERN:user_experience"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_4 = r"""
@@ -123,9 +137,9 @@ and the extracted entities were found to be:
 then a valid relationship extraction could be:
 Example 4:
 
-{{"relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
-                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__gets_value_from__FEATURE:dashboard"]}}
+{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
+                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__relates_positively_to__FEATURE:dashboard"]}}
 
 Explanation:
  - Nike did report performance concerns
@@ -142,11 +156,11 @@ and the extracted entities were found to be:
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*",
-                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__in__EMAIL:*",
-                      "EMAIL:*__discusses__FEATURE:dashboard",
-                      "EMAIL:*Nike__had__CONCERN:* "]}}
+{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*",
+                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__relates_neutrally_to__EMAIL:*",
+                      "EMAIL:*__relates_neutrally_to__FEATURE:dashboard",
+                      "EMAIL:*__relates_negatively_to__CONCERN:* "]}}
 Explanation:
  - Nike did report unspecified concerns
  - Nike had problems with the dashboard, which is a feature
@@ -161,9 +175,9 @@ and the extracted entities were found to be:
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*",
-                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__in__EMAIL:*"]}}
+{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*",
+                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__relates_neutrally_to__EMAIL:*"]}}
 Explanation:
  - Nike did report unspecified concerns
  - Nike had problems with the dashboard, which is a feature
@@ -184,7 +198,11 @@ You are an expert in the area of knowledge extraction in order to construct a kn
 and asked to extract entities, relationships, and terms from it that you can reliably identify.
 
 Here are the entity types that are available for extraction. Some of them may have a description, others \
-should be obvious. You can ONLY extract entities of these types and relationships between objects of these types:
+should be obvious. Also, for a given entity allowed options may be provided. If allowed options are provided, \
+you can only extract those types of entities! If no allowed options are provided, take your best guess.
+
+
+You can ONLY extract entities of these types and relationships between objects of these types:
 {SEPARATOR_LINE}
 {ENTITY_TYPE_SETTING_PROMPT}
 {SEPARATOR_LINE}
@@ -196,7 +214,8 @@ Please format your answer in this format:
 The list above here is the exclusive, only list of entities you can chose from!
 
 Here are some important additional instructions. (For the purpose of illustration, assume that ]
- "ACCOUNT", "CONCERN", and "FEATURE" are all in the list of entity types above. Note that this \
+ "ACCOUNT", "CONCERN", and "FEATURE" are all in the list of entity types above, and shown actual \
+entities fall into allowed options. Note that this \
 is just assumed for these examples, but you MUST use only the entities above for the actual extraction!)
 
 - You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
@@ -347,6 +366,14 @@ These types are formated as <SOURCE_ENTITY_TYPE>__<RELATIONSHIP_SHORTHAND>__<TAR
 limit the allowed relationships that you can extract. You would then though use the actual full entities as in:
 
 <SOURCE_ENTITY_TYPE>:<SOURCE_ENTITY_NAME>__<RELATIONSHIP_SHORTHAND>__<TARGET_ENTITY_TYPE>:<TARGET_ENTITY_NAME>.
+
+NOTE: <RELATIONSHIP_SHORTHAND> can only take one of three values: 'relates_neutrally_to', 'relates_positively_to', \
+or 'relates_negatively_to'. Pick the most appropriate option based on the \
+relationship between the entities implied by the question. 'relates_neutrally_to' should generally be \
+chosen if in doubt, or if the proper term may be 'interested_in', 'has', 'uses', 'wants', etc. \
+Pick 'relates_positively_to', or 'relates_negatively_to' only of it is clear. The positive option \
+could for example apply of something is now solved, value was delievered, a sales was made, someone \
+is happy, etc. The negative option would apply of a problem is reported, someone is unhappy, etc.
 
 Please format your answer in this format:
 {SEPARATOR_LINE}
@@ -590,9 +617,11 @@ Query relationships (id_name):
 {SEPARATOR_LINE}
 
 EXCEPTIONS:
-  - if you see an entity of the form <entity_type>:* in the entities or the relationships, you should use \
+  - if you see an *entity* of the form <entity_type>:* in the entities or the relationships, you should use \
 the entity type, not the entity itself, appropriately in the SQL statement!! These refer effectively to \
 'any entity of type <entity_type>', and it is not an actual entity!
+  - DO NOT include entities of the type <entity>:* in counts or lists! These are not actual entities but \
+rather refer to any entity of that type!
 
 
 Note:
@@ -612,6 +641,11 @@ you should count the entities of entity_type_id_name 'ACCOUNT'.
 - Try to be as efficient as possible.
 - for actual counts or lists DO NOT include entities of the type <entity>:*! These are not actual entities but \
 rather refer to any entity of that type!
+- the SQL statement MUST ultimately only return entities (by id_name), or aggregations (count, avg, max, min, etc.). \
+DO NOT compose a SQL statement that returns relationships.
+- in the response, do not include entities that end on ':*', as these are not actual entities but rather refer to any entity \
+so the final list should have a filter of type .... 'where <>. of that type!
+
 
 Approach:
 Please think through this step by step. Then, when you have it say 'SQL:' followed ONLY by the SQL statement. The SQL statement \
@@ -702,10 +736,11 @@ Please answer in the following json dictionary format:
 }}
 """.strip()
 
+
 OUTPUT_FORMAT_NO_EXAMPLES_PROMPT = f"""
-You need to format the return of a SQL query. The results will be given to you as a string. You will \
-also see what the desired output is, as well as the original question. Your purpose is to generate the \
-answer respecting the desired format.
+You need to format an answer to a research question. \
+You will see what the desired output is, the original question, and the answer to the research question. \
+Your purpose is to generate the answer respecting the desired format.
 
 Notes:
  - Note that you are a language model and that answers may or may not be perfect. To communicate \
@@ -713,9 +748,9 @@ this to the user, consider phrases like 'I found [10 accounts]...', or 'Here are
 I found...]
 - Please DO NOT mention the explicit output format in your answer. Just use it to inform the formatting.
 
-Here is the data:
+Here is the unformatted answer to the research question:
 {SEPARATOR_LINE}
----results_data_str---
+---introductory_answer---
 {SEPARATOR_LINE}
 
 Here is the original question:
@@ -728,6 +763,49 @@ And finally, here is the desired output format:
 ---output_format---
 {SEPARATOR_LINE}
 
+Please start generating the answer, without any explanation. There should be no real modifications to \
+the text, after all, all you need to do here is formatting. \
+
+Your Answer:
+""".strip()
+
+
+OUTPUT_FORMAT_PROMPT = f"""
+You need to format the answers to a research question that targeted one or more objects. \
+An overall introductory answer may be provided to you, as well as the research results for each individual object. \
+You will also be provided with the original question as background, and the desired format. \
+
+Your purpose is to generate a consolidated and FORMATTED answer that starts of with the introductory \
+answer, and then formats the research results for each individual object in the desired format. \
+Do not add any other text please!
+
+Notes:
+ - Note that you are a language model and that answers may or may not be perfect. To communicate \
+this to the user, consider phrases like 'I found [10 accounts]...', or 'Here are a number of [goals] that \
+I found...]
+- Please DO NOT mention the explicit output format in your answer. Just use it to inform the formatting.
+- DO NOT add any content to the introductory answer!
+
+
+Here is the original question for your background:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+Here is the desired output format:
+{SEPARATOR_LINE}
+---output_format---
+{SEPARATOR_LINE}
+
+Here is the introductory answer:
+{SEPARATOR_LINE}
+---introductory_answer---
+{SEPARATOR_LINE}
+
+Here are the research results that you should - respecting the target format- return in a formatted way:
+{SEPARATOR_LINE}
+---research_results---
+{SEPARATOR_LINE}
 
 Please start generating the answer, without any explanation. After all, all you need to do here is formatting. \
 
@@ -735,10 +813,11 @@ Please start generating the answer, without any explanation. After all, all you 
 Your Answer:
 """.strip()
 
-OUTPUT_FORMAT_PROMPT = f"""
-You need to format the return of a SQL query. The results will be given to you as a string. You will \
-also see what the desired output is, as well as the original question. Your purpose is to generate the \
-answer respecting the desired format.
+
+OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT = f"""
+You need to format the return of research on multiple objects. The research results will be given \
+to you as a string. You will also see what the desired output is, as well as the original question. \
+Your purpose is to generate the answer respecting the desired format.
 
 Notes:
  - Note that you are a language model and that answers may or may not be perfect. To communicate \
@@ -753,12 +832,10 @@ Here are some examples of what I found:
 ...'
  - Again if the list of examples is and empty string then skip this section! Do not use the \
 results data for this purpose instead! (They will already be handled in the answer.)
+- Even if the desired output format is 'text', make sure that you keep the individual research results \
+separated by bullet points, and mention the object name first, followed by a new line. The object name \
+is at the beginning of the research result, and should be in the format <object_type>:<object_name>.
 
-
-Here is the data:
-{SEPARATOR_LINE}
----results_data_str---
-{SEPARATOR_LINE}
 
 Here is the original question:
 {SEPARATOR_LINE}
@@ -770,10 +847,9 @@ And finally, here is the desired output format:
 ---output_format---
 {SEPARATOR_LINE}
 
-Here are the examples that you should - in bullet points - list at the end of your answer as \
-examples you found:
+Here are the research results that you should properly format:
 {SEPARATOR_LINE}
----examples---
+---research_results---
 {SEPARATOR_LINE}
 
 Please start generating the answer, without any explanation. After all, all you need to do here is formatting. \
@@ -883,7 +959,7 @@ number from the provided context documents. This is very important!
 Please address the task in the following format:
 
 REASONING:
- -- <your reasoning for the classification>
+<your reasoning for the classification>
 RESEARCH RESULTS:
 {{format}}
 

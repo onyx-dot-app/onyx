@@ -1,3 +1,6 @@
+import copy
+import random
+import time
 from datetime import datetime
 from typing import cast
 
@@ -35,16 +38,34 @@ def process_individual_deep_search(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     search_tool = graph_config.tooling.search_tool
     question = state.broken_down_question
+    source_division = state.source_division
+
     if not search_tool:
         raise ValueError("search_tool is not provided")
 
-    object = state.entity
+    object = state.entity.replace(":", ": ").lower()
 
-    kg_entity_filters = state.vespa_filter_results.entity_filters
-    kg_relationship_filters = state.vespa_filter_results.relationship_filters
+    if source_division:
+        extended_question = question
+    else:
+        extended_question = f"{question} in regards to {object}"
+
+    kg_entity_filters = copy.deepcopy(
+        state.vespa_filter_results.entity_filters + [state.entity]
+    )
+    kg_relationship_filters = copy.deepcopy(
+        state.vespa_filter_results.relationship_filters
+    )
+
+    logger.info("Research for object: " + object)
+    logger.info(f"kg_entity_filters: {kg_entity_filters}")
+    logger.info(f"kg_relationship_filters: {kg_relationship_filters}")
+
+    # Add random wait between 1-3 seconds
+    time.sleep(random.uniform(1, 5))
 
     retrieved_docs = research(
-        question=question,
+        question=extended_question,
         kg_entities=kg_entity_filters,
         kg_relationships=kg_relationship_filters,
         search_tool=search_tool,
@@ -52,7 +73,7 @@ def process_individual_deep_search(
 
     document_texts_list = []
     for doc_num, doc in enumerate(retrieved_docs):
-        chunk_text = "Document " + str(doc_num) + ":\n" + doc.content
+        chunk_text = "Document " + str(doc_num + 1) + ":\n" + doc.content
         document_texts_list.append(chunk_text)
 
     document_texts = "\n\n".join(document_texts_list)
@@ -62,7 +83,7 @@ def process_individual_deep_search(
     datetime.now().strftime("%A, %Y-%m-%d")
 
     kg_object_source_research_prompt = KG_OBJECT_SOURCE_RESEARCH_PROMPT.format(
-        question=question,
+        question=extended_question,
         document_text=document_texts,
     )
 
@@ -99,7 +120,10 @@ def process_individual_deep_search(
 
     return ResearchObjectUpdate(
         research_object_results=[
-            {"object": object, "results": object_research_results}
+            {
+                "object": object.replace(":", ": ").capitalize(),
+                "results": object_research_results,
+            }
         ],
         log_messages=[
             get_langgraph_node_log_string(

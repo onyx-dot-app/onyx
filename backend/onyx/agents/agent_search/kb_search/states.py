@@ -59,9 +59,14 @@ class SQLSimpleGenerationUpdate(LoggerUpdate):
     individualized_query_results: list[Dict[Any, Any]] | None = None
 
 
+class ConsolidatedResearchUpdate(LoggerUpdate):
+    consolidated_research_object_results_str: str | None = None
+
+
 class DeepSearchFilterUpdate(LoggerUpdate):
     vespa_filter_results: KGVespaFilterResults | None = None
     div_con_entities: list[str] | None = None
+    source_division: bool | None = None
 
 
 class ResearchObjectOutput(LoggerUpdate):
@@ -105,6 +110,7 @@ class MainState(
     ResearchObjectOutput,
     DeepSearchFilterUpdate,
     ResearchObjectUpdate,
+    ConsolidatedResearchUpdate,
 ):
     pass
 
@@ -118,3 +124,4 @@ class ResearchObjectInput(LoggerUpdate):
     entity: str
     broken_down_question: str
     vespa_filter_results: KGVespaFilterResults
+    source_division: bool | None

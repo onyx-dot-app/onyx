@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List
 
 from sqlalchemy import literal_column
@@ -33,6 +34,7 @@ def add_entity(
     name: str,
     document_id: str | None = None,
     cluster_count: int = 0,
+    event_time: datetime | None = None,
 ) -> "KGEntity | None":
     """Add a new entity to the database.
 
@@ -58,6 +60,7 @@ def add_entity(
             document_id=document_id,
             name=name,
             cluster_count=cluster_count,
+            event_time=event_time,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
@@ -69,6 +72,7 @@ def add_entity(
                 entity_type_id_name=entity_type,
                 document_id=document_id,
                 name=name,
+                event_time=event_time,
             ),
         )
         .returning(KGEntity)
@@ -128,7 +132,7 @@ def get_grounded_entities(db_session: Session) -> List[KGEntity]:
     )
 
 
-def get_determined_grounded_entities(db_session: Session) -> List[KGEntityType]:
+def get_determined_grounded_entity_types(db_session: Session) -> List[KGEntityType]:
     """Get all entity types that have non-null ge_determine_instructions.
 
     Args:
@@ -140,6 +144,24 @@ def get_determined_grounded_entities(db_session: Session) -> List[KGEntityType]:
     return (
         db_session.query(KGEntityType)
         .filter(KGEntityType.ge_determine_instructions.isnot(None))
+        .all()
+    )
+
+
+def get_entity_types_with_grounded_source_name(
+    db_session: Session,
+) -> List[KGEntityType]:
+    """Get all entity types that have non-null grounded_source_name.
+
+    Args:
+        db_session: SQLAlchemy session
+
+    Returns:
+        List of KGEntityType objects that have grounded_source_name defined
+    """
+    return (
+        db_session.query(KGEntityType)
+        .filter(KGEntityType.grounded_source_name.isnot(None))
         .all()
     )
 

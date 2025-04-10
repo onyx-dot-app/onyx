@@ -12,7 +12,7 @@ from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
 def simple_vs_search(
     state: MainState,
 ) -> Literal["process_kg_only_answers", "construct_deep_search_filters"]:
-    if state.strategy == KGAnswerStrategy.SIMPLE or len(state.relationships) > 0:
+    if state.strategy == KGAnswerStrategy.DEEP or len(state.relationships) > 0:
         return "construct_deep_search_filters"
     else:
         return "process_kg_only_answers"
@@ -44,6 +44,7 @@ def research_individual_object(
                 entity=entity,
                 broken_down_question=state.broken_down_question,
                 vespa_filter_results=state.vespa_filter_results,
+                source_division=state.source_division,
                 log_messages=[
                     f"{edge_start_time} -- Main Edge - Parallelize Initial Sub-question Answering"
                 ],
