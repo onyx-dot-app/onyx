@@ -18,11 +18,18 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 
-def add_tenant_id_middleware(app: FastAPI, logger: logging.LoggerAdapter) -> None:
+def add_api_server_tenant_id_middleware(
+    app: FastAPI, logger: logging.LoggerAdapter
+) -> None:
     @app.middleware("http")
     async def set_tenant_id(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
+        """Extracts the tenant id from multiple locations and sets the context var.
+
+        This is very specific to the api server and probably not something you'd want
+        to use elsewhere.
+        """
         try:
             if MULTI_TENANT:
                 tenant_id = await _get_tenant_id_from_request(request, logger)

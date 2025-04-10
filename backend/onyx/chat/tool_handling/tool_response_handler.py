@@ -165,7 +165,6 @@ def get_tool_call_for_non_tool_calling_llm_impl(
     user_query = prompt_builder.raw_user_query
     history = prompt_builder.raw_message_history
     if isinstance(prompt_builder, AnswerPromptBuilder):
-        user_query = prompt_builder.get_user_message_content()
         history = prompt_builder.get_message_history()
 
     if force_use_tool.force_use:

@@ -24,6 +24,7 @@ from onyx import __version__
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import setup_uvicorn_logger
 from onyx.utils.middleware import add_onyx_request_id_middleware
+from onyx.utils.middleware import add_onyx_tenant_id_middleware
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MIN_THREADS_ML_MODELS
 from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
@@ -126,6 +127,7 @@ def get_model_app() -> FastAPI:
     if INDEXING_ONLY:
         request_id_prefix = "IDX"
 
+    add_onyx_tenant_id_middleware(application, logger)
     add_onyx_request_id_middleware(application, request_id_prefix, logger)
 
     # Initialize and instrument the app
