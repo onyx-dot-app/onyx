@@ -25,7 +25,7 @@ FILE_FIELDS = (
     "shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
-    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type), "
+    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type, domain), "
     "permissionIds, webViewLink, owners(emailAddress))"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
