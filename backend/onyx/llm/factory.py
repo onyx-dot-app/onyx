@@ -151,6 +151,36 @@ def get_default_llm_with_vision(
             return create_vision_llm(
                 LLMProviderView.from_model(provider), provider.default_vision_model
             )
+    for provider in providers:
+        # Check if model_names is empty, use default models if so
+        if not provider.model_names:
+            # Try default_vision_model first if available
+            if provider.default_vision_model and model_supports_image_input(
+                provider.default_vision_model, provider.provider
+            ):
+                return create_vision_llm(
+                    LLMProviderView.from_model(provider), provider.default_vision_model
+                )
+            # Try default_model_name
+            elif provider.default_model_name and model_supports_image_input(
+                provider.default_model_name, provider.provider
+            ):
+                return create_vision_llm(
+                    LLMProviderView.from_model(provider), provider.default_model_name
+                )
+            # Try fast_default_model_name
+            elif provider.fast_default_model_name and model_supports_image_input(
+                provider.fast_default_model_name, provider.provider
+            ):
+                return create_vision_llm(
+                    LLMProviderView.from_model(provider),
+                    provider.fast_default_model_name,
+                )
+        else:
+            # If model_names is not empty, check each model
+            for llm in provider.model_names:
+                if model_supports_image_input(llm, provider.provider):
+                    return create_vision_llm(LLMProviderView.from_model(provider), llm)
 
     return None
 

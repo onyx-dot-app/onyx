@@ -19,6 +19,8 @@ class vespa_fixture:
             "selection": selection,
             "wantedDocumentCount": wanted_doc_count,
         }
+        print(self.vespa_document_url)
+        print(params)
         response = requests.get(
             self.vespa_document_url,
             params=params,  # type: ignore

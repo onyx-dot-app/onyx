@@ -5,6 +5,7 @@ from datetime import timezone
 import pytest
 
 from onyx.connectors.models import InputType
+from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.connectors import upload_file
@@ -12,21 +13,25 @@ from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
+from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.vespa import vespa_fixture
 
 
-def test_image_indexing(reset: None) -> None:
+def test_image_indexing(
+    reset: None,
+    vespa_client: vespa_fixture,
+) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(
         email="admin@onyx-test.com",
     )
 
-    # Create a test PDF file if it doesn't exist
     test_file_dir = "tests/integration/common_utils/test_data"
     os.makedirs(test_file_dir, exist_ok=True)
     test_file_path = os.path.join(test_file_dir, "sample.pdf")
@@ -99,10 +104,24 @@ def test_image_indexing(reset: None) -> None:
     )
 
     # Ask about dogs in the document
-    ChatSessionManager.send_message(
+    response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message="How many dogs?",
         user_performing_action=admin_user,
     )
+    # Fetch documents for the connector-credential pair
 
-    # Test passed if we were able to complete the workflow
+    # Verify results: doc1 should be indexed and doc2 should have an error entry
+    with get_session_context_manager() as db_session:
+        documents = DocumentManager.fetch_documents_for_cc_pair(
+            cc_pair_id=cc_pair.id,
+            db_session=db_session,
+            vespa_client=vespa_client,
+        )
+        for doc in documents:
+            print("--------------------------------")
+            print(doc.id)
+            print(doc.content)
+            print(doc.image_file_name)
+
+    print(response)
