@@ -10,14 +10,12 @@ from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.connectors import upload_file
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
 from tests.integration.common_utils.managers.document import DocumentManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestChatSession
 from tests.integration.common_utils.test_models import DATestSettings
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
@@ -100,18 +98,6 @@ def test_image_indexing(
         user_performing_action=admin_user,
     )
 
-    # Create a chat session and ask about dogs
-    chat_session: DATestChatSession = ChatSessionManager.create(
-        user_performing_action=admin_user
-    )
-
-    # Ask about dogs in the document
-    response = ChatSessionManager.send_message(
-        chat_session_id=chat_session.id,
-        message="How many dogs?",
-        user_performing_action=admin_user,
-    )
-
     with get_session_context_manager() as db_session:
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
@@ -129,5 +115,3 @@ def test_image_indexing(
         assert (
             has_sample_pdf_image
         ), "No document found with an image file name containing 'sample.pdf'"
-
-    print(response)
