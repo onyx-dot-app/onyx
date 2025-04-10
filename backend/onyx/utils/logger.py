@@ -69,7 +69,7 @@ def get_log_level_from_str(log_level_str: str = LOG_LEVEL) -> int:
         "NOTSET": logging.NOTSET,
     }
 
-    return log_level_dict.get(log_level_str.upper(), logging.getLevelName("NOTICE"))
+    return log_level_dict.get(log_level_str.upper(), logging.INFO)
 
 
 class OnyxRequestIDFilter(logging.Filter):

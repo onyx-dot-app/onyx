@@ -1556,13 +1556,13 @@ class LLMProvider(Base):
     # If nulled out, we assume in the application logic we should present all
     display_model_names: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
-    )
+    )  # ["gpt-4o"]    ->   "gpt-4o" -> "GPT-4o"
     # The LLMs that are available for this provider. Only required if not a default provider.
     # If a default provider, then the LLM options are pulled from the `options.py` file.
     # If needed, can be pulled out as a separate table in the future.
     model_names: Mapped[list[str] | None] = mapped_column(
         postgresql.ARRAY(String), nullable=True
-    )
+    )  # ["gpt-4o", "gpt-4o-mini"]
 
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
