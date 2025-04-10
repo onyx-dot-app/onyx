@@ -487,6 +487,8 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
                         f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
                     )
                 )
+        except Exception:
+            raise RuntimeError(f"search_path not set for {tenant_id}")
         finally:
             cursor.close()
 
