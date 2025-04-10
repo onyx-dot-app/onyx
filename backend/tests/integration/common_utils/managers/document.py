@@ -220,7 +220,6 @@ class DocumentManager:
         )
         documents = db_session.execute(stmt).scalars().all()
         if not documents:
-            print("NO DOCS")
             return []
 
         doc_ids = [document.id for document in documents]
@@ -229,12 +228,10 @@ class DocumentManager:
         final_docs: list[SimpleTestDocument] = []
         # NOTE: they are really chunks, but we're assuming that for these tests
         # we only have one chunk per document for now
-        print("RETRIEVED DOCS")
-        print(retrieved_docs_dict)
         for doc_dict in retrieved_docs_dict:
             doc_id = doc_dict["fields"]["document_id"]
             doc_content = doc_dict["fields"]["content"]
-            image_file_name = doc_dict["fields"]["image_file_name"]
+            image_file_name = doc_dict["fields"].get("image_file_name", None)
             final_docs.append(
                 SimpleTestDocument(
                     id=doc_id, content=doc_content, image_file_name=image_file_name

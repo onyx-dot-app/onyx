@@ -51,7 +51,8 @@ def test_image_indexing(
         DATestSettings(
             search_time_image_analysis_enabled=True,
             image_extraction_and_analysis_enabled=True,
-        )
+        ),
+        user_performing_action=admin_user,
     )
 
     file_paths = upload_response.get("file_paths", [])
@@ -118,10 +119,16 @@ def test_image_indexing(
             db_session=db_session,
             vespa_client=vespa_client,
         )
+
+        # Check if at least one document has an image file name containing "sample.pdf"
+        has_sample_pdf_image = False
         for doc in documents:
-            print("--------------------------------")
-            print(doc.id)
-            print(doc.content)
-            print(doc.image_file_name)
+            if doc.image_file_name and "sample.pdf" in doc.image_file_name:
+                has_sample_pdf_image = True
+
+        # Assert that at least one document has an image file name containing "sample.pdf"
+        assert (
+            has_sample_pdf_image
+        ), "No document found with an image file name containing 'sample.pdf'"
 
     print(response)

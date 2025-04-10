@@ -48,7 +48,7 @@ class SettingsManager:
         headers.pop("Content-Type", None)
 
         payload = settings.model_dump()
-        response = requests.patch(
+        response = requests.put(
             f"{API_SERVER_URL}/admin/settings",
             json=payload,
             headers=headers,
