@@ -20,7 +20,6 @@ from sqlalchemy import pool
 from sqlalchemy import text
 from sqlalchemy.engine import create_engine
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -494,7 +493,7 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
         with Session(bind=connection, expire_on_commit=False) as session:
             try:
                 yield session
-            except SQLAlchemyError:
+            except Exception:
                 session.rollback()
                 raise
             finally:
