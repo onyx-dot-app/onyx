@@ -78,15 +78,19 @@ class ChatSessionManager:
             use_existing_user_message=use_existing_user_message,
         )
 
+        headers = (
+            user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS
+        )
+        cookies = user_performing_action.cookies if user_performing_action else None
+
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
             json=chat_message_req.model_dump(),
-            headers=(
-                user_performing_action.headers
-                if user_performing_action
-                else GENERAL_HEADERS
-            ),
+            headers=headers,
             stream=True,
+            cookies=cookies,
         )
 
         return ChatSessionManager.analyze_response(response)

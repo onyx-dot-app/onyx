@@ -29,7 +29,6 @@ export function LLMProviderUpdateForm({
   setPopup,
   hideSuccess,
   firstTimeConfiguration = false,
-  hasAdvancedOptions = false,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor;
   onClose: () => void;
@@ -40,7 +39,6 @@ export function LLMProviderUpdateForm({
 
   // Set this when this is the first time the user is setting Onyx up.
   firstTimeConfiguration?: boolean;
-  hasAdvancedOptions?: boolean;
 }) {
   const { mutate } = useSWRConfig();
 
@@ -130,6 +128,7 @@ export function LLMProviderUpdateForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
+        alert("onSubmit");
         setSubmitting(true);
 
         values.api_key_changed = values.api_key !== initialValues.api_key;
@@ -302,7 +301,7 @@ export function LLMProviderUpdateForm({
             }
           })}
 
-          {hasAdvancedOptions && !firstTimeConfiguration && (
+          {!firstTimeConfiguration && (
             <>
               <Separator />
 
@@ -364,52 +363,49 @@ export function LLMProviderUpdateForm({
                   />
                 ))}
 
-              {hasAdvancedOptions && (
-                <>
-                  <Separator />
-                  <AdvancedOptionsToggle
-                    showAdvancedOptions={showAdvancedOptions}
-                    setShowAdvancedOptions={setShowAdvancedOptions}
-                  />
-                  {showAdvancedOptions && (
-                    <>
-                      {llmProviderDescriptor.llm_names.length > 0 && (
-                        <div className="w-full">
-                          <MultiSelectField
-                            selectedInitially={
-                              formikProps.values.display_model_names
-                            }
-                            name="display_model_names"
-                            label="Display Models"
-                            subtext="Select the models to make available to users. Unselected models will not be available."
-                            options={llmProviderDescriptor.llm_names.map(
-                              (name) => ({
-                                value: name,
-                                // don't clean up names here to give admins descriptive names / handle duplicates
-                                // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                                label: name,
-                              })
-                            )}
-                            onChange={(selected) =>
-                              formikProps.setFieldValue(
-                                "display_model_names",
-                                selected
-                              )
-                            }
-                          />
-                        </div>
-                      )}
-
-                      <IsPublicGroupSelector
-                        formikProps={formikProps}
-                        objectName="LLM Provider"
-                        publicToWhom="all users"
-                        enforceGroupSelection={true}
-                      />
-                    </>
-                  )}
-                </>
-              )}
+              <>
+                <Separator />
+                <AdvancedOptionsToggle
+                  showAdvancedOptions={showAdvancedOptions}
+                  setShowAdvancedOptions={setShowAdvancedOptions}
+                />
+                {showAdvancedOptions && (
+                  <>
+                    {llmProviderDescriptor.llm_names.length > 0 && (
+                      <div className="w-full">
+                        <MultiSelectField
+                          selectedInitially={
+                            formikProps.values.display_model_names
+                          }
+                          name="display_model_names"
+                          label="Display Models"
+                          subtext="Select the models to make available to users. Unselected models will not be available."
+                          options={llmProviderDescriptor.llm_names.map(
+                            (name) => ({
+                              value: name,
+                              // don't clean up names here to give admins descriptive names / handle duplicates
+                              // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                              label: name,
+                            })
+                          )}
+                          onChange={(selected) =>
+                            formikProps.setFieldValue(
+                              "display_model_names",
+                              selected
+                            )
+                          }
+                        />
+                      </div>
+                    )}
+                    <IsPublicGroupSelector
+                      formikProps={formikProps}
+                      objectName="LLM Provider"
+                      publicToWhom="Users"
+                      enforceGroupSelection={true}
+                    />
+                  </>
+                )}
+              </>
             </>
           )}
 
@@ -417,7 +413,11 @@ export function LLMProviderUpdateForm({
           {testError && <Text className="text-error mt-2">{testError}</Text>}
 
           <div className="flex w-full mt-4">
-            <Button type="submit" variant="submit">
+            <Button
+              onClick={() => alert(JSON.stringify(formikProps.errors))}
+              type="submit"
+              variant="submit"
+            >
               {isTesting ? (
                 <LoadingAnimation text="Testing" />
               ) : existingLlmProvider ? (
