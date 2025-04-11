@@ -73,32 +73,58 @@ def test_repeated_error_state_detection_and_recovery(
     # Wait for the required number of failed indexing attempts
     # This shouldn't take long, since we keep retrying while we haven't
     # succeeded yet
-    failed_attempts = IndexAttemptManager.wait_for_n_completed_index_attempts(
-        cc_pair_id=cc_pair.id,
-        count=NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
-        user_performing_action=admin_user,
-        timeout=180,
-    )
+    start_time = time.monotonic()
+    while True:
+        index_attempts_page = IndexAttemptManager.get_index_attempt_page(
+            cc_pair_id=cc_pair.id,
+            page=0,
+            page_size=100,
+            user_performing_action=admin_user,
+        )
+        index_attempts = [
+            ia for ia in index_attempts_page.items if ia.status.is_terminal()
+        ]
+        if len(index_attempts) == NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE:
+            break
+
+        if time.monotonic() - start_time > 180:
+            raise TimeoutError(
+                "Did not get required number of failed attempts within 180 seconds"
+            )
+
+        # make sure that we don't mark the connector as in repeated error state
+        # before we have the required number of failed attempts
+        with get_session_context_manager() as db_session:
+            cc_pair_obj = get_connector_credential_pair_from_id(
+                db_session=db_session,
+                cc_pair_id=cc_pair.id,
+            )
+            assert cc_pair_obj is not None
+        assert not cc_pair_obj.in_repeated_error_state
+
+        time.sleep(2)
 
     # Verify we have the correct number of failed attempts
-    assert len(failed_attempts) == NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
-    for attempt in failed_attempts:
+    assert len(index_attempts) == NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+    for attempt in index_attempts:
         assert attempt.status == IndexingStatus.FAILED
 
-    # wait a little bit to make sure we have marked the connector
-    # as in repeated error state
-    time.sleep(5)
-
     # Check if the connector is in a repeated error state
-    with get_session_context_manager() as db_session:
-        cc_pair_obj = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=cc_pair.id,
-        )
-        assert cc_pair_obj is not None
-        assert (
-            cc_pair_obj.in_repeated_error_state
-        ), "CC pair should be in repeated error state"
+    start_time = time.monotonic()
+    while True:
+        with get_session_context_manager() as db_session:
+            cc_pair_obj = get_connector_credential_pair_from_id(
+                db_session=db_session,
+                cc_pair_id=cc_pair.id,
+            )
+            assert cc_pair_obj is not None
+            if cc_pair_obj.in_repeated_error_state:
+                break
+
+        if time.monotonic() - start_time > 30:
+            assert False, "CC pair did not enter repeated error state within 30 seconds"
+
+        time.sleep(2)
 
     # Reset the mock server state
     response = mock_server_client.post("/reset")
@@ -124,6 +150,7 @@ def test_repeated_error_state_detection_and_recovery(
 
     recovery_index_attempt = IndexAttemptManager.wait_for_index_attempt_start(
         cc_pair_id=cc_pair.id,
+        index_attempts_to_ignore=[index_attempt.id for index_attempt in index_attempts],
         user_performing_action=admin_user,
     )
 
@@ -152,12 +179,24 @@ def test_repeated_error_state_detection_and_recovery(
     assert documents[0].id == test_doc.id
 
     # Verify the CC pair is no longer in a repeated error state
-    with get_session_context_manager() as db_session:
-        cc_pair_obj = get_connector_credential_pair_from_id(
-            db_session=db_session,
-            cc_pair_id=cc_pair.id,
+    start = time.monotonic()
+    while True:
+        with get_session_context_manager() as db_session:
+            cc_pair_obj = get_connector_credential_pair_from_id(
+                db_session=db_session,
+                cc_pair_id=cc_pair.id,
+            )
+            assert cc_pair_obj is not None
+            if not cc_pair_obj.in_repeated_error_state:
+                break
+
+        elapsed = time.monotonic() - start
+        if elapsed > 30:
+            raise TimeoutError(
+                "CC pair did not exit repeated error state within 30 seconds"
+            )
+
+        print(
+            f"Waiting for CC pair to exit repeated error state. elapsed={elapsed:.2f}"
         )
-        assert cc_pair_obj is not None
-        assert (
-            not cc_pair_obj.in_repeated_error_state
-        ), "CC pair should no longer be in repeated error state"
+        time.sleep(1)
