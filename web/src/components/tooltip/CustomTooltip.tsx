@@ -174,7 +174,6 @@ export const CustomTooltip = ({
                   : {}
               }
             >
-              lll
               {content}
             </div>
           </div>,

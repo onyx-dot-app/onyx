@@ -346,8 +346,6 @@ export const DocumentList: React.FC<DocumentListProps> = ({
             // Get the hostname (domain) from the URL
             const url = new URL(uploadingFile.name);
             const hostname = url.hostname;
-            alert("checking for " + hostname);
-            alert(JSON.stringify(files));
 
             // Look for recently added files that might match this URL
             const isUploaded = files.some(

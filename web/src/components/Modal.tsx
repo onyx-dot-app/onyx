@@ -24,6 +24,7 @@ interface ModalProps {
   removeBottomPadding?: boolean;
   removePadding?: boolean;
   increasedPadding?: boolean;
+  hideOverflow?: boolean;
 }
 
 export function Modal({
@@ -43,6 +44,7 @@ export function Modal({
   removeBottomPadding,
   removePadding,
   increasedPadding,
+  hideOverflow,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -92,7 +94,7 @@ export function Modal({
           flex
           flex-col
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
-          overflow-auto
+          ${hideOverflow ? "overflow-hidden" : "overflow-auto"}
         `}
       >
         {onOutsideClick && !hideCloseButton && (
