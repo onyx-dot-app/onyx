@@ -159,9 +159,6 @@ border border-border dark:border-neutral-700
       </TableCell>
       <TableCell>
         <CCPairStatus
-          status={
-            ccPairsIndexingStatus.latest_index_attempt?.status || "not_started"
-          }
           ccPairStatus={ccPairsIndexingStatus.cc_pair_status}
           inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
         />

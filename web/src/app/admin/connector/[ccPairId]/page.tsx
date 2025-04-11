@@ -568,12 +568,40 @@ function Main({ ccPairId }: { ccPairId: number }) {
         )}
 
       {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
-        <div className="mt-2">
+        <div className="mt-6">
           <Callout type="warning" title="Invalid Connector State">
             This connector is in an invalid state. Please update your
             credentials or create a new connector before re-indexing.
           </Callout>
         </div>
+      )}
+
+      {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
+        <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2 mt-6">
+          <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
+          <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
+            Some documents failed to index
+          </AlertTitle>
+          <AlertDescription className="text-yellow-900 dark:text-yellow-300">
+            {isResolvingErrors ? (
+              <span>
+                <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
+                  Resolving failures
+                </span>
+              </span>
+            ) : (
+              <>
+                We ran into some issues while processing some documents.{" "}
+                <b
+                  className="text-link cursor-pointer dark:text-blue-300"
+                  onClick={() => setShowIndexAttemptErrors(true)}
+                >
+                  View details.
+                </b>
+              </>
+            )}
+          </AlertDescription>
+        </Alert>
       )}
 
       <Title className="mb-2 mt-6" size="md">
@@ -585,7 +613,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <div className="w-[200px]">
             <div className="text-sm font-medium mb-1">Status</div>
             <CCPairStatus
-              status={ccPair.last_index_attempt_status || "not_started"}
               ccPairStatus={ccPair.status}
               inRepeatedErrorState={ccPair.in_repeated_error_state}
             />
@@ -689,33 +716,6 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <Title size="md" className="mt-6 mb-2">
               Indexing Attempts
             </Title>
-            {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
-              <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2">
-                <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
-                <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
-                  Some documents failed to index
-                </AlertTitle>
-                <AlertDescription className="text-yellow-900 dark:text-yellow-300">
-                  {isResolvingErrors ? (
-                    <span>
-                      <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
-                        Resolving failures
-                      </span>
-                    </span>
-                  ) : (
-                    <>
-                      We ran into some issues while processing some documents.{" "}
-                      <b
-                        className="text-link cursor-pointer dark:text-blue-300"
-                        onClick={() => setShowIndexAttemptErrors(true)}
-                      >
-                        View details.
-                      </b>
-                    </>
-                  )}
-                </AlertDescription>
-              </Alert>
-            )}
             {indexAttempts && (
               <IndexingAttemptsTable
                 ccPair={ccPair}

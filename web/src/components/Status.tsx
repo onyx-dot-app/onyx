@@ -95,12 +95,10 @@ export function IndexAttemptStatus({
 }
 
 export function CCPairStatus({
-  status,
   ccPairStatus,
   inRepeatedErrorState,
   size = "md",
 }: {
-  status: ValidStatuses;
   ccPairStatus: ConnectorCredentialPairStatus;
   inRepeatedErrorState: boolean;
   size?: "xs" | "sm" | "md" | "lg";
@@ -145,12 +143,6 @@ export function CCPairStatus({
         variant="invalid"
       >
         Invalid
-      </Badge>
-    );
-  } else if (status === "failed") {
-    badge = (
-      <Badge variant="destructive" icon={FiAlertTriangle}>
-        Error
       </Badge>
     );
   } else {
