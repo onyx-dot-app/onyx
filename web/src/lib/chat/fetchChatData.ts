@@ -176,10 +176,15 @@ export async function fetchChatData(searchParams: {
     DOCUMENT_SIDEBAR_WIDTH_COOKIE_NAME
   );
   const sidebarToggled = requestCookies.get(SIDEBAR_TOGGLED_COOKIE_NAME);
+  console.log("Pro search override");
+
+  console.log(searchParams);
+  const proSearchOverriden = searchParams["agent"];
 
   const proSearchToggled =
+    proSearchOverriden === "true" ||
     requestCookies.get(PRO_SEARCH_TOGGLED_COOKIE_NAME)?.value.toLowerCase() ===
-    "true";
+      "true";
 
   // IF user is an anoymous user, we don't want to show the sidebar (they have no access to chat history)
   const sidebarInitiallyVisible =

@@ -16,7 +16,13 @@ import { AnonymousUserPath } from "./AnonymousUserPath";
 import { useChatContext } from "@/components/context/ChatContext";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
-
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 export function Checkbox({
   label,
   sublabel,
@@ -196,6 +202,9 @@ export function SettingsForm() {
       updateSettingField(updates);
     }
   }
+  function handleToggleDefaultPage(value: "search" | "chat") {
+    updateSettingField([{ fieldName: "default_page", newValue: value }]);
+  }
 
   function handleConfirmAnonymousUsers() {
     const updates: { fieldName: keyof Settings; newValue: any }[] = [
@@ -260,6 +269,39 @@ export function SettingsForm() {
         }
       />
 
+      <Checkbox
+        label="Disable Search Page"
+        sublabel="If set, users will not be able to access the search page."
+        checked={settings.search_page_disabled ?? false}
+        onChange={(e) =>
+          handleToggleSettingsField("search_page_disabled", e.target.checked)
+        }
+      />
+
+      {/* Place to ad a default page (search or chat), if search is not disabled */}
+      {settings.search_page_disabled && (
+        <div className="max-w-sm mt-4">
+          <Label>Default Page</Label>
+          <SubLabel>
+            Select the default page to open when a user navigates to the search
+            page.
+          </SubLabel>
+          <Select
+            value={settings.default_page ?? "search"}
+            onValueChange={(value) =>
+              handleToggleDefaultPage(value as "search" | "chat")
+            }
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select default page" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="search">Search</SelectItem>
+              <SelectItem value="chat">Chat</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {NEXT_PUBLIC_CLOUD_ENABLED && settings.anonymous_user_enabled && (
         <AnonymousUserPath setPopup={setPopup} />
       )}

@@ -168,6 +168,32 @@ export function ChatPage({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const transitionQuery = searchParams?.get("transitionQuery");
+
+  // Add a new state to track transition status
+  const [isMessagesVisible, setIsMessagesVisible] = useState(!transitionQuery);
+
+  // Handle the transition from search to chat if there's a transitionQuery
+  useEffect(() => {
+    if (transitionQuery) {
+      setMessage(transitionQuery);
+
+      // Start with messages hidden
+      setIsMessagesVisible(false);
+
+      // After the input bar has moved into position, fade in the messages
+      setTimeout(() => {
+        setIsMessagesVisible(true);
+      }, 800); // Slightly longer than the input animation (700ms)
+    }
+  }, [transitionQuery]);
+
+  // This class will be used to control message visibility
+  const messagesVisibilityClass = isMessagesVisible
+    ? "opacity-100"
+    : "opacity-0";
+
+  const proSearchOverriden = searchParams?.get("agentic") === "true";
 
   const {
     chatSessions,
@@ -178,8 +204,10 @@ export function ChatPage({
     folders,
     shouldShowWelcomeModal,
     refreshChatSessions,
-    proSearchToggled,
+    proSearchToggled: proSearchToggledFromContext,
   } = useChatContext();
+
+  const proSearchToggled = proSearchOverriden || proSearchToggledFromContext;
 
   const {
     selectedFiles,
@@ -324,10 +352,6 @@ export function ChatPage({
             (assistant) => assistant.id === defaultAssistantId
           )
         : undefined
-  );
-  // Gather default temperature settings
-  const search_param_temperature = searchParams?.get(
-    SEARCH_PARAM_NAMES.TEMPERATURE
   );
 
   const setSelectedAssistantFromId = (assistantId: number) => {
@@ -2582,7 +2606,9 @@ export function ChatPage({
                             currentSessionChatState == "input" &&
                             !loadingError &&
                             !submittedMessage && (
-                              <div className="h-full  w-[95%] mx-auto flex flex-col justify-center items-center">
+                              <div
+                                className={`h-full w-[95%] mx-auto flex flex-col justify-center items-center transition-opacity duration-700 ${messagesVisibilityClass}`}
+                              >
                                 <ChatIntro selectedPersona={liveAssistant} />
 
                                 <StarterMessages
@@ -2598,17 +2624,14 @@ export function ChatPage({
                           <div
                             style={{ overflowAnchor: "none" }}
                             key={currentSessionId()}
-                            className={
-                              (hasPerformedInitialScroll ? "" : " hidden ") +
-                              "desktop:-ml-4 w-full mx-auto " +
-                              "absolute mobile:top-0 desktop:top-0 left-0 " +
-                              (settings?.enterpriseSettings
+                            className={`transition-opacity duration-700 ${messagesVisibilityClass} ${
+                              hasPerformedInitialScroll ? "" : "hidden"
+                            } desktop:-ml-4 w-full mx-auto absolute mobile:top-0 desktop:top-0 left-0 ${
+                              settings?.enterpriseSettings
                                 ?.two_lines_for_chat_header
-                                ? "pt-20 "
-                                : "pt-4 ")
-                            }
-                            // NOTE: temporarily removing this to fix the scroll bug
-                            // (hasPerformedInitialScroll ? "" : "invisible")
+                                ? "pt-20"
+                                : "pt-4"
+                            }`}
                           >
                             {messageHistory.map((message, i) => {
                               const messageMap = currentMessageMap(

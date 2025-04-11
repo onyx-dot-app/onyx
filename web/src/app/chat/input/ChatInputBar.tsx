@@ -35,14 +35,11 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { useDocumentSelection } from "../useDocumentSelection";
-import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/interfaces";
-import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
-import { FidgetSpinner } from "react-loader-spinner";
-import { LoadingAnimation } from "@/components/Loading";
-import { useDocumentsContext } from "../my-documents/DocumentsContext";
+import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
+import { SearchModeDropdown } from "@/app/chat/search/components/SearchInput";
+import { useRouter, useSearchParams } from "next/navigation";
 
 const MAX_INPUT_HEIGHT = 200;
 export const SourceChip2 = ({
@@ -240,7 +237,13 @@ export function ChatInputBar({
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
-
+  const [mode, setMode] = useState<"search" | "chat">("chat");
+  const searchParams = useSearchParams();
+  const transitionQuery = searchParams?.get("transitionQuery");
+  const fromPosition = searchParams?.get("fromPosition");
+  const isFromMiddle = fromPosition === "middle";
+  const [isTransitioning, setIsTransitioning] = useState(!!transitionQuery);
+  const router = useRouter();
   const settings = useContext(SettingsContext);
   useEffect(() => {
     const textarea = textAreaRef.current;
@@ -252,6 +255,15 @@ export function ChatInputBar({
       )}px`;
     }
   }, [message, textAreaRef]);
+
+  useEffect(() => {
+    if (isTransitioning) {
+      const timer = setTimeout(() => {
+        setIsTransitioning(false);
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isTransitioning]);
 
   const handlePaste = (event: React.ClipboardEvent) => {
     const items = event.clipboardData?.items;
@@ -427,9 +439,36 @@ export function ChatInputBar({
     }
   };
 
+  // Use different translation based on starting position
+  const transitionClass = isTransitioning
+    ? isFromMiddle
+      ? "translate-y-[-45vh]"
+      : "translate-y-[-90vh]"
+    : "translate-y-0";
+
+  // Handler for mode switching
+  const handleModeSwitch = (newMode: string) => {
+    if (newMode === "search") {
+      // When switching to search, navigate with parameters
+      const params = new URLSearchParams();
+      if (message.trim()) {
+      }
+
+      // Add parameter to indicate we're coming from chat
+      params.append("query", message);
+      params.append("fromChat", "true");
+      router.push(`/chat/search?${params.toString()}`);
+    } else {
+      setMode(newMode as "search" | "chat");
+    }
+  };
+
   return (
-    <div id="onyx-chat-input">
-      <div className="flex  justify-center mx-auto">
+    <div
+      id="onyx-chat-input"
+      className={`transition-transform duration-700 ease-out transform ${transitionClass}`}
+    >
+      <div className="flex justify-center mx-auto">
         <div
           className="
             max-w-full
@@ -847,12 +886,11 @@ export function ChatInputBar({
                 )}
               </div>
               <div className="flex items-center my-auto">
-                {retrievalEnabled && settings?.settings.pro_search_enabled && (
-                  <AgenticToggle
-                    proSearchEnabled={proSearchEnabled}
-                    setProSearchEnabled={setProSearchEnabled}
-                  />
-                )}
+                <SearchModeDropdown
+                  mode={mode}
+                  setMode={handleModeSwitch}
+                  query={message}
+                />
                 <button
                   id="onyx-chat-input-send-button"
                   className={`cursor-pointer ${
