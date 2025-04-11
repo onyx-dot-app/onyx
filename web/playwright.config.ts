@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   globalSetup: require.resolve("./tests/e2e/global-setup"),
-  timeout: 60000, // 60 seconds timeout
+  timeout: 3000, // 3 seconds timeout
   reporter: [
     ["list"],
     // Warning: uncommenting the html reporter may cause the chromatic-archives
