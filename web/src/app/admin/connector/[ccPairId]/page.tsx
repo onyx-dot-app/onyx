@@ -59,6 +59,7 @@ import { FiSettings } from "react-icons/fi";
 import { timeAgo } from "@/lib/time";
 import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
+import { Button } from "@/components/ui/button";
 
 // synchronize these validations with the SQLAlchemy connector class until we have a
 // centralized schema for both frontend and backend
@@ -456,17 +457,14 @@ function Main({ ccPairId }: { ccPairId: number }) {
           {ccPair.is_editable_for_current_user && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Card
-                  className="p-2
-                  flex
-                  items-center
-                  gap-x-1
-                  cursor-pointer
-                  hover:bg-neutral-50"
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex items-center gap-x-1"
                 >
                   <FiSettings className="h-4 w-4" />
                   <span className="text-sm ml-1">Manage</span>
-                </Card>
+                </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItemWithTooltip
