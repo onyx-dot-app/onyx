@@ -72,12 +72,14 @@ class OnyxConfluence:
 
     CREDENTIAL_PREFIX = "connector:confluence:credential"
     CREDENTIAL_TTL = 300  # 5 min
+    PROBE_TIMEOUT = 5  # 5 seconds
 
     def __init__(
         self,
         is_cloud: bool,
         url: str,
         credentials_provider: CredentialsProviderInterface,
+        timeout: int | None = None,
     ) -> None:
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
@@ -100,11 +102,13 @@ class OnyxConfluence:
 
         self._kwargs: Any = None
 
-        self.shared_base_kwargs = {
+        self.shared_base_kwargs: dict[str, str | int | bool] = {
             "api_version": "cloud" if is_cloud else "latest",
             "backoff_and_retry": True,
             "cloud": is_cloud,
         }
+        if timeout:
+            self.shared_base_kwargs["timeout"] = timeout
 
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
@@ -191,6 +195,8 @@ class OnyxConfluence:
         **kwargs: Any,
     ) -> None:
         merged_kwargs = {**self.shared_base_kwargs, **kwargs}
+        # add special timeout to make sure that we don't hang indefinitely
+        merged_kwargs["timeout"] = self.PROBE_TIMEOUT
 
         with self._credentials_provider:
             credentials, _ = self._renew_credentials()

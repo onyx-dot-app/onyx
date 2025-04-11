@@ -119,6 +119,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       asChild = false,
       icon: Icon,
       tooltip,
+      disabled,
       ...props
     },
     ref
@@ -134,6 +135,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           })
         )}
         ref={ref}
+        disabled={disabled}
         {...props}
       >
         {Icon && <Icon />}
@@ -145,8 +147,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       return (
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger>
-              <div>{button}</div>
+            <TooltipTrigger asChild>
+              <div className={disabled ? "cursor-not-allowed" : ""}>
+                {button}
+              </div>
             </TooltipTrigger>
             <TooltipContent showTick={true}>
               <p>{tooltip}</p>

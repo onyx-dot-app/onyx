@@ -170,6 +170,7 @@ export interface ConnectorIndexingStatus<
   last_status: ValidStatuses | null;
   last_finished_status: ValidStatuses | null;
   cc_pair_status: ConnectorCredentialPairStatus;
+  in_repeated_error_state: boolean;
   latest_index_attempt: IndexAttemptSnapshot | null;
   docs_indexed: number;
 }

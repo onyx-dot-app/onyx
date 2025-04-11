@@ -7,6 +7,7 @@ from sqlalchemy import desc
 from sqlalchemy import exists
 from sqlalchemy import Select
 from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.orm import aliased
 from sqlalchemy.orm import joinedload
 from sqlalchemy.orm import selectinload
@@ -394,6 +395,20 @@ def update_connector_credential_pair(
     )
 
 
+def set_cc_pair_repeated_error_state(
+    db_session: Session,
+    cc_pair_id: int,
+    in_repeated_error_state: bool,
+) -> None:
+    stmt = (
+        update(ConnectorCredentialPair)
+        .where(ConnectorCredentialPair.id == cc_pair_id)
+        .values(in_repeated_error_state=in_repeated_error_state)
+    )
+    db_session.execute(stmt)
+    db_session.commit()
+
+
 def delete_connector_credential_pair__no_commit(
     db_session: Session,
     connector_id: int,
@@ -457,7 +472,7 @@ def add_credential_to_connector(
     access_type: AccessType,
     groups: list[int] | None,
     auto_sync_options: dict | None = None,
-    initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.ACTIVE,
+    initial_status: ConnectorCredentialPairStatus = ConnectorCredentialPairStatus.SCHEDULED,
     last_successful_index_time: datetime | None = None,
     seeding_flow: bool = False,
     is_user_file: bool = False,

@@ -95,12 +95,12 @@ export function IndexAttemptStatus({
 }
 
 export function CCPairStatus({
-  status,
   ccPairStatus,
+  inRepeatedErrorState,
   size = "md",
 }: {
-  status: ValidStatuses;
   ccPairStatus: ConnectorCredentialPairStatus;
+  inRepeatedErrorState: boolean;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
   let badge;
@@ -117,22 +117,38 @@ export function CCPairStatus({
         Paused
       </Badge>
     );
-  } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
-    badge = (
-      <Badge variant="invalid" icon={FiAlertTriangle}>
-        Invalid
-      </Badge>
-    );
-  } else if (status === "failed") {
+  } else if (inRepeatedErrorState) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
         Error
       </Badge>
     );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.SCHEDULED) {
+    badge = (
+      <Badge variant="not_started" icon={FiClock}>
+        Scheduled
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.INITIAL_INDEXING) {
+    badge = (
+      <Badge variant="in_progress" icon={FiClock}>
+        Initial Indexing
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
+    badge = (
+      <Badge
+        tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
+        circle
+        variant="invalid"
+      >
+        Invalid
+      </Badge>
+    );
   } else {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Active
+        Indexed
       </Badge>
     );
   }

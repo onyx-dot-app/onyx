@@ -4,7 +4,6 @@ from datetime import timedelta
 from datetime import timezone
 
 import httpx
-import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.mock_connector.connector import MockConnectorCheckpoint
@@ -24,19 +23,6 @@ from tests.integration.common_utils.test_document_utils import (
 )
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
-
-
-@pytest.fixture
-def mock_server_client() -> httpx.Client:
-    print(
-        f"Initializing mock server client with host: "
-        f"{MOCK_CONNECTOR_SERVER_HOST} and port: "
-        f"{MOCK_CONNECTOR_SERVER_PORT}"
-    )
-    return httpx.Client(
-        base_url=f"http://{MOCK_CONNECTOR_SERVER_HOST}:{MOCK_CONNECTOR_SERVER_PORT}",
-        timeout=5.0,
-    )
 
 
 def test_mock_connector_basic_flow(
