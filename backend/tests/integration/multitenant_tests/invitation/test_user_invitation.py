@@ -52,13 +52,12 @@ def test_user_can_accept_invitation(reset_multitenant: None) -> None:
     # Create a user to be invited
     invited_user_email = "invited_user@test.com"
 
-    # Admin user invites the user
-    UserManager.invite_user(invited_user_email, admin_user)
-
     # User registers with the same email as the invitation
     invited_user: DATestUser = UserManager.create(
         name="invited_user", email=invited_user_email
     )
+    # Admin user invites the user
+    UserManager.invite_user(invited_user_email, admin_user)
 
     # Get user info to check tenant information
     user_info = UserManager.get_user_info(invited_user)
