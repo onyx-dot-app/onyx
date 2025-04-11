@@ -99,14 +99,7 @@ def upsert_llm_provider(
     model_names: set[str] = (
         set(llm_provider.model_names) if llm_provider.model_names else set()
     )
-
-    diff = display_model_names - model_names
-    if diff:
-        raise ValueError(
-            f"""The display model names should be a subset of the model names;
-            instead received {display_model_names=}, {model_names=},
-            where the display model names contains {diff} extra names"""
-        )
+    model_names = model_names.union(display_model_names)
 
     model_configurations = []
     for model_name in model_names:
