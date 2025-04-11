@@ -1,10 +1,12 @@
 import os
+import time
 
 import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
 @pytest.fixture
@@ -34,8 +36,10 @@ def test_confluence_connector_permissions(
 ) -> None:
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
-    for doc_batch in confluence_connector.load_from_state():
-        all_full_doc_ids.update([doc.id for doc in doc_batch])
+    doc_batch = load_all_docs_from_checkpoint_connector(
+        confluence_connector, 0, time.time()
+    )
+    all_full_doc_ids.update([doc.id for doc in doc_batch])
 
     # Get all doc IDs from the slim connector
     all_slim_doc_ids = set()

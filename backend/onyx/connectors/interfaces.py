@@ -201,7 +201,7 @@ class EventConnector(BaseConnector):
 CheckpointOutput: TypeAlias = Generator[Document | ConnectorFailure, None, CT]
 
 
-class CheckpointConnector(BaseConnector[CT]):
+class CheckpointedConnector(BaseConnector[CT]):
     @abc.abstractmethod
     def load_from_checkpoint(
         self,

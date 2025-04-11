@@ -25,7 +25,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import ConnectorFailure
@@ -143,7 +143,7 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     cached_repo: SerializedRepository | None = None
 
 
-class GithubConnector(CheckpointConnector[GithubConnectorCheckpoint]):
+class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
     def __init__(
         self,
         repo_owner: str,

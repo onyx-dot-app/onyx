@@ -34,7 +34,7 @@ from onyx.connectors.guru.connector import GuruConnector
 from onyx.connectors.highspot.connector import HighspotConnector
 from onyx.connectors.hubspot.connector import HubSpotConnector
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import EventConnector
 from onyx.connectors.interfaces import LoadConnector
@@ -148,7 +148,7 @@ def identify_connector_class(
                 # all connectors should be checkpoint connectors
                 and (
                     not issubclass(connector, PollConnector)
-                    and not issubclass(connector, CheckpointConnector)
+                    and not issubclass(connector, CheckpointedConnector)
                 )
             ),
             (

@@ -4,7 +4,7 @@ import httpx
 from pydantic import BaseModel
 from typing_extensions import override
 
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
@@ -27,7 +27,7 @@ class SingleConnectorYield(BaseModel):
     unhandled_exception: str | None = None
 
 
-class MockConnector(CheckpointConnector[MockConnectorCheckpoint]):
+class MockConnector(CheckpointedConnector[MockConnectorCheckpoint]):
     def __init__(
         self,
         mock_server_host: str,

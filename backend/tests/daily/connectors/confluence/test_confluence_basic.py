@@ -11,6 +11,7 @@ from onyx.connectors.confluence.connector import ConfluenceConnector
 from onyx.connectors.confluence.utils import AttachmentProcessingResult
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
+from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
 
 @pytest.fixture
@@ -43,11 +44,9 @@ def test_confluence_connector_basic(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
     confluence_connector.set_allow_images(False)
-    doc_batch_generator = confluence_connector.poll_source(0, time.time())
-
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
+    doc_batch = load_all_docs_from_checkpoint_connector(
+        confluence_connector, 0, time.time()
+    )
 
     assert len(doc_batch) == 2
 
@@ -105,11 +104,9 @@ def test_confluence_connector_skip_images(
     mock_get_api_key: MagicMock, confluence_connector: ConfluenceConnector
 ) -> None:
     confluence_connector.set_allow_images(False)
-    doc_batch_generator = confluence_connector.poll_source(0, time.time())
-
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
+    doc_batch = load_all_docs_from_checkpoint_connector(
+        confluence_connector, 0, time.time()
+    )
 
     assert len(doc_batch) == 8
     assert sum(len(doc.sections) for doc in doc_batch) == 8
@@ -144,11 +141,9 @@ def test_confluence_connector_allow_images(
 ) -> None:
     confluence_connector.set_allow_images(True)
 
-    doc_batch_generator = confluence_connector.poll_source(0, time.time())
-
-    doc_batch = next(doc_batch_generator)
-    with pytest.raises(StopIteration):
-        next(doc_batch_generator)
+    doc_batch = load_all_docs_from_checkpoint_connector(
+        confluence_connector, 0, time.time()
+    )
 
     assert len(doc_batch) == 8
     assert sum(len(doc.sections) for doc in doc_batch) == 12
