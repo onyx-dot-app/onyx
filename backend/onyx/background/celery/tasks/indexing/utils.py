@@ -22,6 +22,7 @@ from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
+from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_db_current_time
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -354,15 +355,31 @@ def is_in_repeated_error_state(
     cc_pair_id: int, search_settings_id: int, db_session: Session
 ) -> bool:
     """Checks if the cc pair / search setting combination is in a repeated error state."""
+    cc_pair = get_connector_credential_pair_from_id(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
+    if not cc_pair:
+        raise RuntimeError(
+            f"is_in_repeated_error_state - could not find cc_pair with id={cc_pair_id}"
+        )
+
+    # if the connector doesn't have a refresh_freq, a single failed attempt is enough
+    number_of_failed_attempts_in_a_row_needed = (
+        NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE
+        if cc_pair.connector.refresh_freq is not None
+        else 1
+    )
+
     most_recent_index_attempts = get_recent_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
         search_settings_id=search_settings_id,
-        limit=NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
+        limit=number_of_failed_attempts_in_a_row_needed,
         db_session=db_session,
     )
     return len(
         most_recent_index_attempts
-    ) >= NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE and all(
+    ) >= number_of_failed_attempts_in_a_row_needed and all(
         attempt.status == IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
     )

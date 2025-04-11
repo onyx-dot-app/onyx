@@ -120,7 +120,7 @@ export function CCPairStatus({
   } else if (inRepeatedErrorState) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Repeated Errors
+        Error
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.SCHEDULED) {
