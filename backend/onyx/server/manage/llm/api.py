@@ -14,6 +14,7 @@ from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_llm_providers_for_user
+from onyx.db.llm import fetch_model_configurations
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
@@ -146,7 +147,12 @@ def list_llm_providers(
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(db_session):
         from_model_start = datetime.now(timezone.utc)
-        full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        model_configurations = fetch_model_configurations(
+            db_session, llm_provider_model.id
+        )
+        full_llm_provider = LLMProviderView.from_model(
+            llm_provider_model, model_configurations
+        )
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -184,6 +190,11 @@ def put_llm_provider(
         raise HTTPException(
             status_code=400,
             detail=f"LLM Provider with name {llm_provider.name} already exists",
+        )
+    elif not existing_provider and not is_creation:
+        raise HTTPException(
+            status_code=400,
+            detail=f"LLM Provider with name {llm_provider.name} does not exist",
         )
 
     if llm_provider.display_model_names is not None:
@@ -263,13 +274,10 @@ def get_vision_capable_providers(
         vision_models = []
 
         # Check model names in priority order
-        model_names_to_check = []
-        if provider.model_names:
-            model_names_to_check = provider.model_names
-        elif provider.display_model_names:
-            model_names_to_check = provider.display_model_names
-        elif provider.default_model_name:
-            model_names_to_check = [provider.default_model_name]
+        model_names_to_check = map(
+            lambda model_configuration: model_configuration.name,
+            fetch_model_configurations(db_session, provider.id),
+        )
 
         # Check each model for vision capability
         for model_name in model_names_to_check:
@@ -279,7 +287,10 @@ def get_vision_capable_providers(
 
         # Only include providers with at least one vision-capable model
         if vision_models:
-            provider_dict = LLMProviderView.from_model(provider).model_dump()
+            model_configuration = fetch_model_configurations(db_session, provider.id)
+            provider_dict = LLMProviderView.from_model(
+                provider, model_configuration
+            ).model_dump()
             provider_dict["vision_models"] = vision_models
             logger.info(
                 f"Vision provider: {provider.provider} with models: {vision_models}"
@@ -304,7 +315,12 @@ def list_llm_provider_basics(
     llm_provider_list: list[LLMProviderDescriptor] = []
     for llm_provider_model in fetch_existing_llm_providers_for_user(db_session, user):
         from_model_start = datetime.now(timezone.utc)
-        full_llm_provider = LLMProviderDescriptor.from_model(llm_provider_model)
+        model_configurations = fetch_model_configurations(
+            db_session, llm_provider_model.id
+        )
+        full_llm_provider = LLMProviderDescriptor.from_model(
+            llm_provider_model, model_configurations
+        )
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -337,10 +353,11 @@ def get_provider_contextual_cost(
     providers = fetch_existing_llm_providers(db_session)
     costs = []
     for provider in providers:
-        for model_name in provider.display_model_names or provider.model_names or []:
+        model_configurations = fetch_model_configurations(db_session, provider.id)
+        for model_configuration in model_configurations:
             llm = get_llm(
                 provider=provider.provider,
-                model=model_name,
+                model=model_configuration.name,
                 deployment_name=provider.deployment_name,
                 api_key=provider.api_key,
                 api_base=provider.api_base,
@@ -349,6 +366,11 @@ def get_provider_contextual_cost(
             )
             cost = get_llm_contextual_cost(llm)
             costs.append(
-                LLMCost(provider=provider.name, model_name=model_name, cost=cost)
+                LLMCost(
+                    provider=provider.name,
+                    model_name=model_configuration.name,
+                    cost=cost,
+                )
             )
+
     return costs

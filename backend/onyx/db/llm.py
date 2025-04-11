@@ -9,6 +9,7 @@ from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import LLMProvider__UserGroup
+from onyx.db.models import ModelConfiguration
 from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
@@ -83,14 +84,39 @@ def upsert_llm_provider(
     existing_llm_provider.custom_config = llm_provider.custom_config
     existing_llm_provider.default_model_name = llm_provider.default_model_name
     existing_llm_provider.fast_default_model_name = llm_provider.fast_default_model_name
-    existing_llm_provider.model_names = llm_provider.model_names
     existing_llm_provider.is_public = llm_provider.is_public
-    existing_llm_provider.display_model_names = llm_provider.display_model_names
     existing_llm_provider.deployment_name = llm_provider.deployment_name
 
     if not existing_llm_provider.id:
         # If its not already in the db, we need to generate an ID by flushing
         db_session.flush()
+
+    display_model_names: set[str] = (
+        set(llm_provider.display_model_names)
+        if llm_provider.display_model_names
+        else set()
+    )
+    model_names: set[str] = (
+        set(llm_provider.model_names) if llm_provider.model_names else set()
+    )
+
+    diff = display_model_names - model_names
+    if diff:
+        raise ValueError(
+            f"""The display model names should be a subset of the model names;
+            instead received {display_model_names=}, {model_names=},
+            where the display model names contains {diff} extra names"""
+        )
+
+    model_configurations = []
+    for model_name in model_names:
+        model_configuration = ModelConfiguration(
+            llm_provider_id=existing_llm_provider.id,
+            name=model_name,
+            is_visible=model_name in display_model_names,
+            max_input_tokens=None,
+        )
+        db_session.add(model_configuration)
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
@@ -98,7 +124,9 @@ def upsert_llm_provider(
         group_ids=llm_provider.groups,
         db_session=db_session,
     )
-    full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
+    full_llm_provider = LLMProviderView.from_model(
+        existing_llm_provider, model_configurations
+    )
 
     db_session.commit()
 
@@ -195,7 +223,8 @@ def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
     )
     if not provider_model:
         return None
-    return LLMProviderView.from_model(provider_model)
+    model_configurations = fetch_model_configurations(db_session, provider_model.id)
+    return LLMProviderView.from_model(provider_model, model_configurations)
 
 
 def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
@@ -206,7 +235,8 @@ def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None
     )
     if not provider_model:
         return None
-    return LLMProviderView.from_model(provider_model)
+    model_configurations = fetch_model_configurations(db_session, provider_model.id)
+    return LLMProviderView.from_model(provider_model, model_configurations)
 
 
 def fetch_llm_provider_view(
@@ -217,7 +247,19 @@ def fetch_llm_provider_view(
     )
     if not provider_model:
         return None
-    return LLMProviderView.from_model(provider_model)
+    model_configurations = fetch_model_configurations(db_session, provider_model.id)
+    return LLMProviderView.from_model(provider_model, model_configurations)
+
+
+def fetch_model_configurations(
+    db_session: Session,
+    llm_provider_id: int,
+) -> list[ModelConfiguration]:
+    return list(
+        db_session.scalars(
+            select(ModelConfiguration).where(ModelConfiguration.id == llm_provider_id)
+        ).all()
+    )
 
 
 def remove_embedding_provider(

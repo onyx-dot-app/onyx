@@ -1549,18 +1549,6 @@ class LLMProvider(Base):
     default_model_name: Mapped[str] = mapped_column(String)
     fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Models to actually display to users
-    # If nulled out, we assume in the application logic we should present all
-    display_model_names: Mapped[list[str] | None] = mapped_column(
-        postgresql.ARRAY(String), nullable=True
-    )
-    # The LLMs that are available for this provider. Only required if not a default provider.
-    # If a default provider, then the LLM options are pulled from the `options.py` file.
-    # If needed, can be pulled out as a separate table in the future.
-    model_names: Mapped[list[str] | None] = mapped_column(
-        postgresql.ARRAY(String), nullable=True
-    )
-
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # should only be set for a single provider
@@ -1574,6 +1562,19 @@ class LLMProvider(Base):
         secondary="llm_provider__user_group",
         viewonly=True,
     )
+
+
+class ModelConfiguration(Base):
+    __tablename__ = "model_configuration"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    llm_provider_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_provider.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class CloudEmbeddingProvider(Base):
