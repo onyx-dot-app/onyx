@@ -102,7 +102,7 @@ class OnyxConfluence:
 
         self._kwargs: Any = None
 
-        self.shared_base_kwargs = {
+        self.shared_base_kwargs: dict[str, str | int | bool] = {
             "api_version": "cloud" if is_cloud else "latest",
             "backoff_and_retry": True,
             "cloud": is_cloud,

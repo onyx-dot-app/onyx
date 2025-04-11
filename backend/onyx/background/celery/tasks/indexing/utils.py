@@ -360,7 +360,9 @@ def is_in_repeated_error_state(
         limit=NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE,
         db_session=db_session,
     )
-    return all(
+    return len(
+        most_recent_index_attempts
+    ) >= NUM_REPEAT_ERRORS_BEFORE_REPEATED_ERROR_STATE and all(
         attempt.status == IndexingStatus.FAILED
         for attempt in most_recent_index_attempts
     )

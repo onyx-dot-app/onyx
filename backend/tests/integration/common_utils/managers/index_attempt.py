@@ -237,3 +237,83 @@ class IndexAttemptManager:
         response.raise_for_status()
         data = response.json()
         return [IndexAttemptErrorPydantic(**item) for item in data["items"]]
+
+    @staticmethod
+    def wait_for_n_completed_index_attempts(
+        cc_pair_id: int,
+        count: int,
+        timeout: float = MAX_DELAY,
+        user_performing_action: DATestUser | None = None,
+    ) -> list[IndexAttemptSnapshot]:
+        """Wait for a specific number of distinct indexing attempts to complete.
+
+        Args:
+            cc_pair_id: The ID of the connector credential pair
+            count: The number of distinct indexing attempts to wait for
+            status: Optional status to filter attempts by
+            timeout: Maximum time to wait for the attempts (seconds)
+            user_performing_action: Optional user performing the action
+
+        Returns:
+            The list of indexing attempts that match the criteria
+
+        Raises:
+            TimeoutError: If the required number of attempts isn't reached within timeout
+        """
+        start = time.monotonic()
+        completed_attempt_ids = set()
+
+        while True:
+            # Get all index attempts for the CC pair, paginating if needed
+            all_attempts: list[IndexAttemptSnapshot] = []
+            page_num = 0
+            page_size = 50  # Larger page size to reduce API calls
+
+            while True:
+                page = IndexAttemptManager.get_index_attempt_page(
+                    cc_pair_id=cc_pair_id,
+                    page=page_num,
+                    page_size=page_size,
+                    user_performing_action=user_performing_action,
+                )
+                all_attempts.extend(page.items)
+
+                if len(page.items) < page_size:
+                    break
+
+                page_num += 1
+
+            # Filter attempts
+            filtered_attempts = [
+                a for a in all_attempts if a.status and a.status.is_terminal()
+            ]
+
+            # Track completed attempts
+            for attempt in filtered_attempts:
+                completed_attempt_ids.add(attempt.id)
+
+            # Check if we have enough attempts
+            if len(completed_attempt_ids) >= count:
+                return [
+                    a
+                    for a in filtered_attempts
+                    if a.id in list(completed_attempt_ids)[:count]
+                ]
+
+            # Check timeout
+            elapsed = time.monotonic() - start
+            if elapsed > timeout:
+                num_found = len(completed_attempt_ids)
+                raise TimeoutError(
+                    f"Only found {num_found}/{count} index attempts with "
+                    f"terminal status for CC pair {cc_pair_id} within {timeout} seconds"
+                )
+
+            print(
+                f"Waiting for {count} index attempts for CC pair {cc_pair_id}. "
+                f"Found {len(completed_attempt_ids)} so far. "
+                f"elapsed={elapsed:.2f} timeout={timeout}"
+            )
+
+            # Sleep to avoid hammering the API
+            time.sleep(1)

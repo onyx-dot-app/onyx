@@ -18,6 +18,12 @@ class IndexingStatus(str, PyEnum):
         }
         return self in terminal_states
 
+    def is_successful(self) -> bool:
+        return (
+            self == IndexingStatus.SUCCESS
+            or self == IndexingStatus.COMPLETED_WITH_ERRORS
+        )
+
 
 class IndexingMode(str, PyEnum):
     UPDATE = "update"

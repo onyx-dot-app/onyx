@@ -97,17 +97,29 @@ export function IndexAttemptStatus({
 export function CCPairStatus({
   status,
   ccPairStatus,
-  size = "md",
   inRepeatedErrorState,
+  size = "md",
 }: {
   status: ValidStatuses;
   ccPairStatus: ConnectorCredentialPairStatus;
+  inRepeatedErrorState: boolean;
   size?: "xs" | "sm" | "md" | "lg";
-  inRepeatedErrorState?: boolean;
 }) {
   let badge;
 
-  if (inRepeatedErrorState) {
+  if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
+    badge = (
+      <Badge variant="destructive" icon={FiAlertTriangle}>
+        Deleting
+      </Badge>
+    );
+  } else if (ccPairStatus == ConnectorCredentialPairStatus.PAUSED) {
+    badge = (
+      <Badge variant="paused" icon={FiPauseCircle}>
+        Paused
+      </Badge>
+    );
+  } else if (inRepeatedErrorState) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
         Repeated Errors
@@ -123,18 +135,6 @@ export function CCPairStatus({
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
         Initial Indexing
-      </Badge>
-    );
-  } else if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
-    badge = (
-      <Badge variant="destructive" icon={FiAlertTriangle}>
-        Deleting
-      </Badge>
-    );
-  } else if (ccPairStatus == ConnectorCredentialPairStatus.PAUSED) {
-    badge = (
-      <Badge variant="paused" icon={FiPauseCircle}>
-        Paused
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {

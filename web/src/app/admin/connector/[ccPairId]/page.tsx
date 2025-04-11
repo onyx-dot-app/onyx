@@ -13,17 +13,13 @@ import {
 } from "@/lib/connector";
 import { credentialTemplates } from "@/lib/connectors/credentials";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { ValidSources } from "@/lib/types";
 import Title from "@/components/ui/title";
-import { Separator } from "@/components/ui/separator";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, use } from "react";
 import useSWR, { mutate } from "swr";
 import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
-import { DeletionButton } from "./DeletionButton";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
-import { ModifyStatusButtonCluster } from "./ModifyStatusButtonCluster";
 
 import { buildCCPairInfoUrl, triggerIndexing } from "./lib";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -34,7 +30,6 @@ import {
   statusIsNotCurrentlyActive,
 } from "./types";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
-import { Button } from "@/components/ui/button";
 import EditPropertyModal from "@/components/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
@@ -62,7 +57,7 @@ import {
 import { DropdownMenuItemWithTooltip } from "@/components/ui/dropdown-menu-with-tooltip";
 import { FiSettings } from "react-icons/fi";
 import { timeAgo } from "@/lib/time";
-import { useStatusChange } from "./ModifyStatusButtonCluster";
+import { useStatusChange } from "./useStatusChange";
 import { useReIndexModal } from "./ReIndexModal";
 
 // synchronize these validations with the SQLAlchemy connector class until we have a
@@ -205,7 +200,9 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       if (result.success) {
         setPopup({
-          message: `${fromBeginning ? "Complete re-indexing" : "Indexing update"} started successfully`,
+          message: `${
+            fromBeginning ? "Complete re-indexing" : "Indexing update"
+          } started successfully`,
           type: "success",
         });
       } else {
@@ -544,12 +541,10 @@ function Main({ ccPairId }: { ccPairId: number }) {
                         console.error("Error deleting connector:", error);
                       }
                     }}
-                    disabled={
-                      ccPair.status === ConnectorCredentialPairStatus.ACTIVE
-                    }
+                    disabled={!statusIsNotCurrentlyActive(ccPair.status)}
                     className="flex items-center gap-x-2 cursor-pointer px-3 py-2 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
                     tooltip={
-                      ccPair.status === ConnectorCredentialPairStatus.ACTIVE
+                      !statusIsNotCurrentlyActive(ccPair.status)
                         ? "Pause the connector before deleting"
                         : undefined
                     }
@@ -636,19 +631,21 @@ function Main({ ccPairId }: { ccPairId: number }) {
         </div>
       </Card>
 
-      <Title size="md" className="mt-10 mb-2">
-        Credential
-      </Title>
-
       {credentialTemplates[ccPair.connector.source] &&
         ccPair.is_editable_for_current_user && (
-          <div className="mt-2">
-            <CredentialSection
-              ccPair={ccPair}
-              sourceType={ccPair.connector.source}
-              refresh={() => refresh()}
-            />
-          </div>
+          <>
+            <Title size="md" className="mt-10 mb-2">
+              Credential
+            </Title>
+
+            <div className="mt-2">
+              <CredentialSection
+                ccPair={ccPair}
+                sourceType={ccPair.connector.source}
+                refresh={() => refresh()}
+              />
+            </div>
+          </>
         )}
 
       <Title size="md" className="mt-10 mb-2">

@@ -26,6 +26,7 @@ from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
+from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.indexing.utils import should_index
 from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
@@ -54,6 +55,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
@@ -241,7 +243,8 @@ def monitor_ccpair_indexing_taskset(
     if not payload:
         return
 
-    # if the CC Pair is `SCHEDULED`, moved it to `INITIAL_INDEXING`
+    # if the CC Pair is `SCHEDULED`, moved it to `INITIAL_INDEXING`. A CC Pair
+    # should only ever be `SCHEDULED` if it's a new connector.
     cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
     assert cc_pair is not None, f"CC Pair {cc_pair_id} not found"
     if cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED:
@@ -371,6 +374,13 @@ def monitor_ccpair_indexing_taskset(
         cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
         db_session.commit()
 
+    # if the index attempt is successful, clear the repeated error state
+    if cc_pair.in_repeated_error_state:
+        index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
+        if index_attempt and index_attempt.status.is_successful():
+            cc_pair.in_repeated_error_state = False
+            db_session.commit()
+
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -456,6 +466,21 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             )
             for cc_pair_entry in cc_pairs:
                 cc_pair_ids.append(cc_pair_entry.id)
+
+        # mark CC Pairs that are repeatedly failing as in repeated error state
+        with get_session_with_current_tenant() as db_session:
+            current_search_settings = get_current_search_settings(db_session)
+            for cc_pair_id in cc_pair_ids:
+                if is_in_repeated_error_state(
+                    cc_pair_id=cc_pair_id,
+                    search_settings_id=current_search_settings.id,
+                    db_session=db_session,
+                ):
+                    set_cc_pair_repeated_error_state(
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
+                        in_repeated_error_state=True,
+                    )
 
         # kick off index attempts
         for cc_pair_id in cc_pair_ids:

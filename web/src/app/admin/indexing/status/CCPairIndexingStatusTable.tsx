@@ -163,6 +163,7 @@ border border-border dark:border-neutral-700
             ccPairsIndexingStatus.latest_index_attempt?.status || "not_started"
           }
           ccPairStatus={ccPairsIndexingStatus.cc_pair_status}
+          inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
         />
       </TableCell>
       {isPaidEnterpriseFeaturesEnabled && (
@@ -513,6 +514,7 @@ export function CCPairIndexingStatusTable({
               last_finished_status: "success",
               latest_index_attempt: null,
               groups: [], // Add this line
+              in_repeated_error_state: false,
             }}
             isEditable={false}
           />
