@@ -10,6 +10,7 @@ from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
+from onyx.db.llm import fetch_model_configurations
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
@@ -148,8 +149,10 @@ def get_default_llm_with_vision(
         if provider.default_vision_model and model_supports_image_input(
             provider.default_vision_model, provider.provider
         ):
+            model_configuration = fetch_model_configurations(db_session, provider.id)
             return create_vision_llm(
-                LLMProviderView.from_model(provider), provider.default_vision_model
+                LLMProviderView.from_model(provider, model_configuration),
+                provider.default_vision_model,
             )
 
     return None
