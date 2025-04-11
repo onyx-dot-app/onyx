@@ -1,3 +1,4 @@
+import copy
 import json
 import time
 from collections.abc import Callable
@@ -320,7 +321,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             return
 
         # Create a copy of the retrieval options with user_file_ids if provided
-        retrieval_options = self.retrieval_options
+        retrieval_options = copy.deepcopy(self.retrieval_options)
         if (user_file_ids or user_folder_ids) and retrieval_options:
             # Create a copy to avoid modifying the original
             filters = (
@@ -362,8 +363,6 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             retrieval_options.filters.kg_relationships = kg_relationships
         if kg_terms:
             retrieval_options.filters.kg_terms = kg_terms
-
-        logger.info(f"SEARCH OVERWRITE retrieval_options: {retrieval_options}")
 
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(

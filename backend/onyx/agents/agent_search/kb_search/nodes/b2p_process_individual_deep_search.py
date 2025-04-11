@@ -1,6 +1,4 @@
 import copy
-import random
-import time
 from datetime import datetime
 from typing import cast
 
@@ -62,7 +60,7 @@ def process_individual_deep_search(
     logger.info(f"kg_relationship_filters: {kg_relationship_filters}")
 
     # Add random wait between 1-3 seconds
-    time.sleep(random.uniform(1, 5))
+    # time.sleep(random.uniform(0, 3))
 
     retrieved_docs = research(
         question=extended_question,

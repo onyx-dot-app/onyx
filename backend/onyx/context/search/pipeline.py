@@ -65,8 +65,6 @@ class SearchPipeline:
         # NOTE: The Search Request contains a lot of fields that are overrides, many of them can be None
         # and typically are None. The preprocessing will fetch default values to replace these empty overrides.
 
-        logger.info(f"SEARCH REQUEST AAAI search_request: {search_request}")
-
         self.search_request = search_request
         self.user = user
         self.llm = llm
@@ -105,14 +103,6 @@ class SearchPipeline:
 
         # No longer computed but keeping around in case it's reintroduced later
         self._predicted_flow: QueryFlow | None = QueryFlow.QUESTION_ANSWER
-
-        logger.info(
-            f"SEARCH PIPELINE AAI initialized with search request: {search_request.human_selected_filters}"
-        )
-        logger.info(
-            f"SEARCH PIPELINE AAII initialized with search request: {self.search_request.human_selected_filters}"
-        )
-        logger.info(f"SEARCH PIPELINE AAIII self: {self}")
 
     """Pre-processing"""
 
