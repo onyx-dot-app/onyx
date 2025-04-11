@@ -41,9 +41,11 @@ class ConnectorManager:
         response = requests.post(
             url=f"{API_SERVER_URL}/manage/admin/connector",
             json=connector_update_request.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -66,9 +68,11 @@ class ConnectorManager:
         response = requests.patch(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
             json=connector.model_dump(exclude={"id"}),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -79,9 +83,11 @@ class ConnectorManager:
     ) -> None:
         response = requests.delete(
             url=f"{API_SERVER_URL}/manage/admin/connector/{connector.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -91,9 +97,11 @@ class ConnectorManager:
     ) -> list[DATestConnector]:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [
@@ -113,9 +121,11 @@ class ConnectorManager:
     ) -> DATestConnector:
         response = requests.get(
             url=f"{API_SERVER_URL}/manage/connector/{connector_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         conn = response.json()

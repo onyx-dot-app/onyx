@@ -17,7 +17,9 @@ from ee.onyx.server.enterprise_settings.api import (
     basic_router as enterprise_settings_router,
 )
 from ee.onyx.server.manage.standard_answer import router as standard_answer_router
-from ee.onyx.server.middleware.tenant_tracking import add_tenant_id_middleware
+from ee.onyx.server.middleware.tenant_tracking import (
+    add_api_server_tenant_id_middleware,
+)
 from ee.onyx.server.oauth.api import router as ee_oauth_router
 from ee.onyx.server.query_and_chat.chat_backend import (
     router as chat_router,
@@ -79,7 +81,7 @@ def get_application() -> FastAPI:
     application = get_application_base(lifespan_override=lifespan)
 
     if MULTI_TENANT:
-        add_tenant_id_middleware(application, logger)
+        add_api_server_tenant_id_middleware(application, logger)
 
     if AUTH_TYPE == AuthType.CLOUD:
         # For Google OAuth, refresh tokens are requested by:

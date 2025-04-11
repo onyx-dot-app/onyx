@@ -219,9 +219,11 @@ class Document(DocumentBase):
     @classmethod
     def from_base(cls, base: DocumentBase) -> "Document":
         return cls(
-            id=make_url_compatible(base.id)
-            if base.id
-            else "ingestion_api_" + make_url_compatible(base.semantic_identifier),
+            id=(
+                make_url_compatible(base.id)
+                if base.id
+                else "ingestion_api_" + make_url_compatible(base.semantic_identifier)
+            ),
             sections=base.sections,
             source=base.source or DocumentSource.INGESTION_API,
             semantic_identifier=base.semantic_identifier,
@@ -257,9 +259,11 @@ class IndexingDocument(Document):
             )
         else:
             section_len = sum(
-                len(section.text)
-                if isinstance(section, TextSection) and section.text is not None
-                else 0
+                (
+                    len(section.text)
+                    if isinstance(section, TextSection) and section.text is not None
+                    else 0
+                )
                 for section in self.sections
             )
 
@@ -272,9 +276,14 @@ class SlimDocument(BaseModel):
 
 
 class IndexAttemptMetadata(BaseModel):
-    batch_num: int | None = None
     connector_id: int
     credential_id: int
+    batch_num: int | None = None
+    attempt_id: int | None = None
+    request_id: str | None = None
+
+    # Work in progress: will likely contain metadata about cc pair / index attempt
+    structured_id: str | None = None
 
 
 class ConnectorCheckpoint(BaseModel):

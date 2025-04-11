@@ -201,8 +201,10 @@ class DATestIndexAttempt:
             total_docs_indexed=index_attempt.total_docs_indexed,
             docs_removed_from_index=index_attempt.docs_removed_from_index,
             error_msg=index_attempt.error_msg,
-            time_started=datetime.fromisoformat(index_attempt.time_started)
-            if index_attempt.time_started
-            else None,
+            time_started=(
+                datetime.fromisoformat(index_attempt.time_started)
+                if index_attempt.time_started
+                else None
+            ),
             time_updated=datetime.fromisoformat(index_attempt.time_updated),
         )

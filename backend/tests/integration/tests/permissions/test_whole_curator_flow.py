@@ -1,6 +1,7 @@
 """
 This test tests the happy path for curator permissions
 """
+
 import os
 
 import pytest

@@ -46,7 +46,7 @@ spec:
 
       # Optional volume for CA certificate
       # volumes:
-      #   - name: my-cas-cert-volume
+      #   - name: my-ca-cert-volume
       #     secret:
       #       secretName: my-ca-cert
       #       items:

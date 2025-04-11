@@ -141,8 +141,7 @@ class CredentialedRetrievalMethod(Protocol):
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[RetrievedDriveFile]:
-        ...
+    ) -> Iterator[RetrievedDriveFile]: ...
 
 
 def add_retrieval_info(
@@ -339,7 +338,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             retrieval_function=primary_drive_service.drives().list,
             list_key="drives",
             useDomainAdminAccess=is_service_account,
-            fields="drives(id)",
+            fields="drives(id),nextPageToken",
         ):
             all_drive_ids.add(drive["id"])
 
@@ -355,9 +354,11 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
     ) -> Callable[[str], Iterator[str]]:
         cv = threading.Condition()
         drive_id_status = {
-            drive_id: DriveIdStatus.FINISHED
-            if drive_id in self._retrieved_ids
-            else DriveIdStatus.AVAILABLE
+            drive_id: (
+                DriveIdStatus.FINISHED
+                if drive_id in self._retrieved_ids
+                else DriveIdStatus.AVAILABLE
+            )
             for drive_id in drive_ids
         }
 

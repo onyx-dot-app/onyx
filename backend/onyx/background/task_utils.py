@@ -95,7 +95,7 @@ def build_apply_async_wrapper(build_name_fn: Callable[..., str]) -> Callable[[AA
 
 
 def build_celery_task_wrapper(
-    build_name_fn: Callable[..., str]
+    build_name_fn: Callable[..., str],
 ) -> Callable[[Task], Task]:
     """Utility meant to wrap celery task functions in order to automatically
     update our custom `task_queue_jobs` table appropriately.

@@ -2,6 +2,7 @@
 Rules defined here:
 https://confluence.atlassian.com/conf85/check-who-can-view-a-page-1283360557.html
 """
+
 from collections.abc import Generator
 from typing import Any
 

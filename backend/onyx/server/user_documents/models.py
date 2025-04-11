@@ -35,9 +35,11 @@ class UserFileSnapshot(BaseModel):
     def from_model(cls, model: UserFile) -> "UserFileSnapshot":
         return cls(
             id=model.id,
-            name=model.name[:-4]
-            if model.link_url and model.name.endswith(".txt")
-            else model.name,
+            name=(
+                model.name[:-4]
+                if model.link_url and model.name.endswith(".txt")
+                else model.name
+            ),
             folder_id=model.folder_id,
             document_id=model.document_id,
             user_id=model.user_id,
@@ -51,19 +53,25 @@ class UserFileSnapshot(BaseModel):
                 and len(model.cc_pair.index_attempts) > 0
                 and model.cc_pair.last_successful_index_time is None
                 and model.cc_pair.status == ConnectorCredentialPairStatus.PAUSED
-                else UserFileStatus.INDEXED
-                if model.cc_pair
-                and model.cc_pair.last_successful_index_time is not None
-                else UserFileStatus.REINDEXING
-                if model.cc_pair
-                and len(model.cc_pair.index_attempts) > 1
-                and model.cc_pair.last_successful_index_time is None
-                and model.cc_pair.status != ConnectorCredentialPairStatus.PAUSED
-                else UserFileStatus.INDEXING
+                else (
+                    UserFileStatus.INDEXED
+                    if model.cc_pair
+                    and model.cc_pair.last_successful_index_time is not None
+                    else (
+                        UserFileStatus.REINDEXING
+                        if model.cc_pair
+                        and len(model.cc_pair.index_attempts) > 1
+                        and model.cc_pair.last_successful_index_time is None
+                        and model.cc_pair.status != ConnectorCredentialPairStatus.PAUSED
+                        else UserFileStatus.INDEXING
+                    )
+                )
             ),
-            indexed=model.cc_pair.last_successful_index_time is not None
-            if model.cc_pair
-            else False,
+            indexed=(
+                model.cc_pair.last_successful_index_time is not None
+                if model.cc_pair
+                else False
+            ),
             link_url=model.link_url,
         )
 

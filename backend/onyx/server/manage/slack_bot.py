@@ -96,13 +96,13 @@ def _form_channel_config(
     if follow_up_tags is not None:
         channel_config["follow_up_tags"] = follow_up_tags
 
-    channel_config[
-        "show_continue_in_web_ui"
-    ] = slack_channel_config_creation_request.show_continue_in_web_ui
+    channel_config["show_continue_in_web_ui"] = (
+        slack_channel_config_creation_request.show_continue_in_web_ui
+    )
 
-    channel_config[
-        "respond_to_bots"
-    ] = slack_channel_config_creation_request.respond_to_bots
+    channel_config["respond_to_bots"] = (
+        slack_channel_config_creation_request.respond_to_bots
+    )
 
     channel_config["is_ephemeral"] = slack_channel_config_creation_request.is_ephemeral
 

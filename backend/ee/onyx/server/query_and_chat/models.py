@@ -106,7 +106,7 @@ class AgentSubQuery(SubQuestionIdentifier):
 
     @staticmethod
     def make_dict_by_level_and_question_index(
-        original_dict: dict[tuple[int, int, int], "AgentSubQuery"]
+        original_dict: dict[tuple[int, int, int], "AgentSubQuery"],
     ) -> dict[int, dict[int, list["AgentSubQuery"]]]:
         """Takes a dict of tuple(level, question num, query_id) to sub queries.
 

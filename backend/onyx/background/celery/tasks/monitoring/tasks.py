@@ -82,7 +82,9 @@ def _has_metric_been_emitted(redis_std: Redis, key: str) -> bool:
 
 
 class Metric(BaseModel):
-    key: str | None  # only required if we need to store that we have emitted this metric
+    key: (
+        str | None
+    )  # only required if we need to store that we have emitted this metric
     name: str
     value: Any
     tags: dict[str, str]

@@ -397,9 +397,9 @@ class OnyxConfluence:
             return attr
 
         # wrap the method with our retry handler
-        rate_limited_method: Callable[
-            ..., Any
-        ] = self._make_rate_limited_confluence_method(name, self._credentials_provider)
+        rate_limited_method: Callable[..., Any] = (
+            self._make_rate_limited_confluence_method(name, self._credentials_provider)
+        )
 
         def wrapped_method(*args: Any, **kwargs: Any) -> Any:
             return rate_limited_method(*args, **kwargs)

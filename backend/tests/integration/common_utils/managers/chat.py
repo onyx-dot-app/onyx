@@ -32,9 +32,11 @@ class ChatSessionManager:
         response = requests.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -79,9 +81,11 @@ class ChatSessionManager:
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
             json=chat_message_req.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
             stream=True,
         )
 
@@ -126,9 +130,11 @@ class ChatSessionManager:
     ) -> list[DATestChatMessage]:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -158,8 +164,10 @@ class ChatSessionManager:
                 "feedback_text": feedback_text,
                 "predefined_feedback": predefined_feedback,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()

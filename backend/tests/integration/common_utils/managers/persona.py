@@ -67,9 +67,11 @@ class PersonaManager:
         response = requests.post(
             f"{API_SERVER_URL}/persona",
             json=persona_creation_request.model_dump(mode="json"),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         persona_data = response.json()
@@ -148,9 +150,11 @@ class PersonaManager:
         response = requests.patch(
             f"{API_SERVER_URL}/persona/{persona.id}",
             json=persona_update_request.model_dump(mode="json"),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         updated_persona_data = response.json()
@@ -184,9 +188,11 @@ class PersonaManager:
     ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/admin/persona",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [FullPersonaSnapshot(**persona) for persona in response.json()]
@@ -198,9 +204,11 @@ class PersonaManager:
     ) -> list[FullPersonaSnapshot]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/{persona_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [FullPersonaSnapshot(**response.json())]
@@ -255,9 +263,11 @@ class PersonaManager:
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/persona/{persona.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         return response.ok
 
@@ -273,9 +283,11 @@ class PersonaLabelManager:
             json={
                 "name": label.name,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         response_data = response.json()
@@ -288,9 +300,11 @@ class PersonaLabelManager:
     ) -> list[DATestPersonaLabel]:
         response = requests.get(
             f"{API_SERVER_URL}/persona/labels",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [DATestPersonaLabel(**label) for label in response.json()]
@@ -305,9 +319,11 @@ class PersonaLabelManager:
             json={
                 "label_name": label.name,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return label
@@ -319,9 +335,11 @@ class PersonaLabelManager:
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/admin/persona/label/{label.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         return response.ok
 

@@ -58,6 +58,7 @@ from onyx.natural_language_processing.search_nlp_models import (
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
+from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -379,6 +380,7 @@ def _run_indexing(
     memory_tracer.start()
 
     index_attempt_md = IndexAttemptMetadata(
+        attempt_id=index_attempt_id,
         connector_id=ctx.connector_id,
         credential_id=ctx.credential_id,
     )
@@ -423,9 +425,9 @@ def _run_indexing(
                 unresolved_only=True,
                 db_session=db_session_temp,
             )
-            doc_id_to_unresolved_errors: dict[
-                str, list[IndexAttemptError]
-            ] = defaultdict(list)
+            doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = (
+                defaultdict(list)
+            )
             for error in unresolved_errors:
                 if error.document_id:
                     doc_id_to_unresolved_errors[error.document_id].append(error)
@@ -481,6 +483,8 @@ def _run_indexing(
 
                 batch_description = []
 
+                # Generate an ID that can be used to correlate activity between here
+                # and the embedding model server
                 doc_batch_cleaned = strip_null_characters(document_batch)
                 for doc in doc_batch_cleaned:
                     batch_description.append(doc.to_short_descriptor())
@@ -502,6 +506,10 @@ def _run_indexing(
 
                 logger.debug(f"Indexing batch of documents: {batch_description}")
 
+                index_attempt_md.request_id = make_randomized_onyx_request_id("CIX")
+                index_attempt_md.structured_id = (
+                    f"{tenant_id}:{ctx.cc_pair_id}:{index_attempt_id}:{batch_num}"
+                )
                 index_attempt_md.batch_num = batch_num + 1  # use 1-index for this
 
                 # real work happens here!

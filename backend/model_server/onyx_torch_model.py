@@ -118,9 +118,11 @@ class ConnectorClassifier(nn.Module):
         device = (
             torch.device("cuda")
             if torch.cuda.is_available()
-            else torch.device("mps")
-            if torch.backends.mps.is_available()
-            else torch.device("cpu")
+            else (
+                torch.device("mps")
+                if torch.backends.mps.is_available()
+                else torch.device("cpu")
+            )
         )
         state_dict = torch.load(
             os.path.join(repo_dir, "pytorch_model.pt"),

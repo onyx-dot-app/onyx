@@ -79,9 +79,11 @@ def default_build_user_message(
     user_prompt = user_prompt.strip()
     tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
-        content=build_content_with_imgs(tag_handled_prompt, files)
-        if files
-        else tag_handled_prompt
+        content=(
+            build_content_with_imgs(tag_handled_prompt, files)
+            if files
+            else tag_handled_prompt
+        )
     )
     return user_msg
 

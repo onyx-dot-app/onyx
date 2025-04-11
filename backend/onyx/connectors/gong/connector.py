@@ -280,9 +280,9 @@ class GongConnector(LoadConnector, PollConnector):
                     speaker_id = segment.get("speakerId", "")
                     if speaker_id not in speaker_to_name:
                         if self.hide_user_info:
-                            speaker_to_name[
-                                speaker_id
-                            ] = f"User {len(speaker_to_name) + 1}"
+                            speaker_to_name[speaker_id] = (
+                                f"User {len(speaker_to_name) + 1}"
+                            )
                         else:
                             speaker_to_name[speaker_id] = id_to_name_map.get(
                                 speaker_id, "Unknown"

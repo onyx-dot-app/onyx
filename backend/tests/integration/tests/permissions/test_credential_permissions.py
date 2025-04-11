@@ -2,6 +2,7 @@
 This file takes the happy path to adding a curator to a user group and then tests
 the permissions of the curator manipulating credentials.
 """
+
 import os
 
 import pytest

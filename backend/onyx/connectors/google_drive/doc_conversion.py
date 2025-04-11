@@ -381,9 +381,9 @@ def convert_drive_item_to_document(
         return ConnectorFailure(
             failed_document=DocumentFailure(
                 document_id=doc_id,
-                document_link=sections[0].link
-                if sections
-                else None,  # TODO: see if this is the best way to get a link
+                document_link=(
+                    sections[0].link if sections else None
+                ),  # TODO: see if this is the best way to get a link
             ),
             failed_entity=None,
             failure_message=error_str,

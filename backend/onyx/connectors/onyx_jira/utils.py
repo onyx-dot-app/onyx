@@ -1,4 +1,5 @@
 """Module with custom fields processing functions"""
+
 import os
 from typing import Any
 from typing import List
@@ -198,14 +199,14 @@ class CommonFieldExtractor:
     def get_issue_common_fields(jira: Issue) -> dict:
         return {
             "Priority": jira.fields.priority.name if jira.fields.priority else None,
-            "Reporter": jira.fields.reporter.displayName
-            if jira.fields.reporter
-            else None,
-            "Assignee": jira.fields.assignee.displayName
-            if jira.fields.assignee
-            else None,
+            "Reporter": (
+                jira.fields.reporter.displayName if jira.fields.reporter else None
+            ),
+            "Assignee": (
+                jira.fields.assignee.displayName if jira.fields.assignee else None
+            ),
             "Status": jira.fields.status.name if jira.fields.status else None,
-            "Resolution": jira.fields.resolution.name
-            if jira.fields.resolution
-            else None,
+            "Resolution": (
+                jira.fields.resolution.name if jira.fields.resolution else None
+            ),
         }

@@ -113,9 +113,9 @@ def chunks_or_sections_to_search_docs(
     search_docs = [
         SearchDoc(
             document_id=(
-                chunk := item.center_chunk
-                if isinstance(item, InferenceSection)
-                else item
+                chunk := (
+                    item.center_chunk if isinstance(item, InferenceSection) else item
+                )
             ).document_id,
             chunk_ind=chunk.chunk_id,
             semantic_identifier=chunk.semantic_identifier or "Unknown",

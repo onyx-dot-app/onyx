@@ -10,7 +10,7 @@ from simple_salesforce.bulk2 import SFBulk2Handler
 from simple_salesforce.bulk2 import SFBulk2Type
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.sqlite_functions import has_at_least_one_object_of_type
+from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -184,6 +184,7 @@ def _bulk_retrieve_from_salesforce(
 
 
 def fetch_all_csvs_in_parallel(
+    sf_db: OnyxSalesforceSQLite,
     sf_client: Salesforce,
     object_types: set[str],
     start: SecondsSinceUnixEpoch | None,
@@ -225,7 +226,7 @@ def fetch_all_csvs_in_parallel(
         """Only add time filter if there is at least one object of the type
         in the database. We aren't worried about partially completed object update runs
         because this occurs after we check for existing csvs which covers this case"""
-        if has_at_least_one_object_of_type(target_dir, sf_type):
+        if sf_db.has_at_least_one_object_of_type(sf_type):
             if sf_type in created_date_types:
                 time_filter_for_each_object_type[sf_type] = created_date_time_filter
             else:

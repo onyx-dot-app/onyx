@@ -8,6 +8,7 @@ This tests the deletion of a user group with the following foreign key constrain
 - token_rate_limit (Not Implemented)
 - persona
 """
+
 import os
 
 import pytest

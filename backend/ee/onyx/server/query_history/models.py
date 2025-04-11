@@ -127,9 +127,9 @@ class ChatSessionMinimal(BaseModel):
             ),
             time_created=chat_session.time_created,
             feedback_type=session_feedback_type,
-            flow_type=SessionType.SLACK
-            if chat_session.onyxbot_flow
-            else SessionType.CHAT,
+            flow_type=(
+                SessionType.SLACK if chat_session.onyxbot_flow else SessionType.CHAT
+            ),
             conversation_length=len(
                 [
                     message

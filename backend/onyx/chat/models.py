@@ -56,7 +56,7 @@ class SubQuestionIdentifier(BaseModel):
 
     @staticmethod
     def make_dict_by_level(
-        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"]
+        original_dict: Mapping[tuple[int, int], "SubQuestionIdentifier"],
     ) -> dict[int, list["SubQuestionIdentifier"]]:
         """returns a dict of level to object list (sorted by level_question_num)
         Ordering is asc for readability.

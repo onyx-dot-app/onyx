@@ -88,9 +88,7 @@ class ConnectorRunner(Generic[CT]):
 
         self.doc_batch: list[Document] = []
 
-    def run(
-        self, checkpoint: CT
-    ) -> Generator[
+    def run(self, checkpoint: CT) -> Generator[
         tuple[list[Document] | None, ConnectorFailure | None, CT | None],
         None,
         None,

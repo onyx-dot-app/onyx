@@ -1,3 +1,5 @@
+from googleapiclient.errors import HttpError  # type: ignore
+
 from ee.onyx.db.external_perm import ExternalUserGroup
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
@@ -12,6 +14,7 @@ logger = setup_logger()
 
 def _get_drive_members(
     google_drive_connector: GoogleDriveConnector,
+    admin_service: AdminService,
 ) -> dict[str, tuple[set[str], set[str]]]:
     """
     This builds a map of drive ids to their members (group and user emails).
@@ -20,6 +23,8 @@ def _get_drive_members(
         "drive_id_2": ({"group_email_3"}, {"user_email_3"}),
     }
     """
+
+    # fetches shared drives only
     drive_ids = google_drive_connector.get_all_drive_ids()
 
     drive_id_to_members_map: dict[str, tuple[set[str], set[str]]] = {}
@@ -28,20 +33,44 @@ def _get_drive_members(
         google_drive_connector.primary_admin_email,
     )
 
+    admin_user_info = (
+        admin_service.users()
+        .get(userKey=google_drive_connector.primary_admin_email)
+        .execute()
+    )
+    is_admin = admin_user_info.get("isAdmin", False) or admin_user_info.get(
+        "isDelegatedAdmin", False
+    )
+
     for drive_id in drive_ids:
         group_emails: set[str] = set()
         user_emails: set[str] = set()
-        for permission in execute_paginated_retrieval(
-            drive_service.permissions().list,
-            list_key="permissions",
-            fileId=drive_id,
-            fields="permissions(emailAddress, type)",
-            supportsAllDrives=True,
-        ):
-            if permission["type"] == "group":
-                group_emails.add(permission["emailAddress"])
-            elif permission["type"] == "user":
-                user_emails.add(permission["emailAddress"])
+
+        try:
+            for permission in execute_paginated_retrieval(
+                drive_service.permissions().list,
+                list_key="permissions",
+                fileId=drive_id,
+                fields="permissions(emailAddress, type)",
+                supportsAllDrives=True,
+                # can only set `useDomainAdminAccess` to true if the user
+                # is an admin
+                useDomainAdminAccess=is_admin,
+            ):
+                if permission["type"] == "group":
+                    group_emails.add(permission["emailAddress"])
+                elif permission["type"] == "user":
+                    user_emails.add(permission["emailAddress"])
+        except HttpError as e:
+            if e.status_code == 404:
+                logger.warning(
+                    f"Error getting permissions for drive id {drive_id}. "
+                    f"User '{google_drive_connector.primary_admin_email}' likely "
+                    f"does not have access to this drive. Exception: {e}"
+                )
+            else:
+                raise e
+
         drive_id_to_members_map[drive_id] = (group_emails, user_emails)
     return drive_id_to_members_map
 
@@ -132,7 +161,7 @@ def gdrive_group_sync(
     )
 
     # Get all drive members
-    drive_id_to_members_map = _get_drive_members(google_drive_connector)
+    drive_id_to_members_map = _get_drive_members(google_drive_connector, admin_service)
 
     # Get all group emails
     all_group_emails = _get_all_groups(

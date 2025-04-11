@@ -177,9 +177,9 @@ class VespaIndex(DocumentIndex):
         self.index_to_large_chunks_enabled: dict[str, bool] = {}
         self.index_to_large_chunks_enabled[index_name] = large_chunks_enabled
         if secondary_index_name and secondary_large_chunks_enabled:
-            self.index_to_large_chunks_enabled[
-                secondary_index_name
-            ] = secondary_large_chunks_enabled
+            self.index_to_large_chunks_enabled[secondary_index_name] = (
+                secondary_large_chunks_enabled
+            )
 
     def ensure_indices_exist(
         self,
@@ -389,9 +389,9 @@ class VespaIndex(DocumentIndex):
         new_document_id_to_original_document_id: dict[str, str] = {}
         for ind, chunk in enumerate(cleaned_chunks):
             old_chunk = chunks[ind]
-            new_document_id_to_original_document_id[
-                chunk.source_document.id
-            ] = old_chunk.source_document.id
+            new_document_id_to_original_document_id[chunk.source_document.id] = (
+                old_chunk.source_document.id
+            )
 
         existing_docs: set[str] = set()
 
@@ -724,9 +724,10 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with self.httpx_client_context as http_client, concurrent.futures.ThreadPoolExecutor(
-            max_workers=NUM_THREADS
-        ) as executor:
+        with (
+            self.httpx_client_context as http_client,
+            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
+        ):
             for (
                 index_name,
                 large_chunks_enabled,
@@ -824,9 +825,11 @@ class VespaIndex(DocumentIndex):
             "input.query(query_embedding)": str(query_embedding),
             "input.query(decay_factor)": str(DOC_TIME_DECAY * time_decay_multiplier),
             "input.query(alpha)": hybrid_alpha,
-            "input.query(title_content_ratio)": title_content_ratio
-            if title_content_ratio is not None
-            else TITLE_CONTENT_RATIO,
+            "input.query(title_content_ratio)": (
+                title_content_ratio
+                if title_content_ratio is not None
+                else TITLE_CONTENT_RATIO
+            ),
             "hits": num_to_retrieve,
             "offset": offset,
             "ranking.profile": f"hybrid_search{len(query_embedding)}",
