@@ -5,71 +5,71 @@ import { TEST_ADMIN2_CREDENTIALS, TEST_ADMIN_CREDENTIALS } from "../constants";
 // test("User changes password and logs in with new password", async ({
 
 // Skip this test for now
-// test("User changes password and logs in with new password", async ({
-//   page,
-// }) => {
-//   console.log("Starting password change test");
-//   // Clear browser context before starting the test
-//   await page.context().clearCookies();
-//   await page.context().clearPermissions();
+test("User changes password and logs in with new password", async ({
+  page,
+}) => {
+  console.log("Starting password change test");
+  // Clear browser context before starting the test
+  await page.context().clearCookies();
+  await page.context().clearPermissions();
 
-//   const { email: uniqueEmail, password: initialPassword } =
-//     await loginAsRandomUser(page);
-//   console.log(`Logged in as random user: ${uniqueEmail}`);
-//   const newPassword = "newPassword456!";
+  const { email: uniqueEmail, password: initialPassword } =
+    await loginAsRandomUser(page);
+  console.log(`Logged in as random user: ${uniqueEmail}`);
+  const newPassword = "newPassword456!";
 
-//   // Navigate to user settings
-//   console.log("Navigating to user settings");
-//   await page.click("#onyx-user-dropdown");
-//   await page.getByText("User Settings").click();
-//   await page.getByRole("button", { name: "Password" }).click();
+  // Navigate to user settings
+  console.log("Navigating to user settings");
+  await page.click("#onyx-user-dropdown");
+  await page.getByText("User Settings").click();
+  await page.getByRole("button", { name: "Password" }).click();
 
-//   // Change password
-//   console.log("Changing password");
-//   await page.getByLabel("Current Password").fill(initialPassword);
-//   await page.getByLabel("New Password", { exact: true }).fill(newPassword);
-//   await page.getByLabel("Confirm New Password").fill(newPassword);
-//   await page.getByRole("button", { name: "Change Password" }).click();
+  // Change password
+  console.log("Changing password");
+  await page.getByLabel("Current Password").fill(initialPassword);
+  await page.getByLabel("New Password", { exact: true }).fill(newPassword);
+  await page.getByLabel("Confirm New Password").fill(newPassword);
+  await page.getByRole("button", { name: "Change Password" }).click();
 
-//   // Verify password change success message
-//   console.log("Verifying password change success");
-//   await expect(page.getByText("Password changed successfully")).toBeVisible();
+  // Verify password change success message
+  console.log("Verifying password change success");
+  await expect(page.getByText("Password changed successfully")).toBeVisible();
 
-//   // Log out
-//   console.log("Logging out");
-//   await page.getByRole("button", { name: "Close modal", exact: true }).click();
-//   await page.click("#onyx-user-dropdown");
-//   await page.getByText("Log out").click();
+  // Log out
+  console.log("Logging out");
+  await page.getByRole("button", { name: "Close modal", exact: true }).click();
+  await page.click("#onyx-user-dropdown");
+  await page.getByText("Log out").click();
 
-//   // Log in with new password
-//   console.log("Logging in with new password");
-//   await page.goto("http://localhost:3000/auth/login");
-//   await page.getByTestId("email").fill(uniqueEmail);
-//   await page.getByTestId("password").fill(newPassword);
-//   await page.getByRole("button", { name: "Log In" }).click();
+  // Log in with new password
+  console.log("Logging in with new password");
+  await page.goto("http://localhost:3000/auth/login");
+  await page.getByTestId("email").fill(uniqueEmail);
+  await page.getByTestId("password").fill(newPassword);
+  await page.getByRole("button", { name: "Log In" }).click();
 
-//   // Verify successful login
-//   console.log("Verifying successful login");
-//   await expect(page).toHaveURL("http://localhost:3000/chat");
-//   await expect(page.getByText("Explore Assistants")).toBeVisible();
+  // Verify successful login
+  console.log("Verifying successful login");
+  await expect(page).toHaveURL("http://localhost:3000/chat");
+  await expect(page.getByText("Explore Assistants")).toBeVisible();
 
-//   // Reset password back to initial password
-//   console.log("Resetting password back to initial password");
-//   await page.click("#onyx-user-dropdown");
-//   await page.getByText("User Settings").click();
-//   await page.getByRole("button", { name: "Password" }).click();
+  // Reset password back to initial password
+  console.log("Resetting password back to initial password");
+  await page.click("#onyx-user-dropdown");
+  await page.getByText("User Settings").click();
+  await page.getByRole("button", { name: "Password" }).click();
 
-//   // Change password back to original
-//   console.log("Changing password back to original");
-//   await page.getByLabel("Current Password").fill(newPassword);
-//   await page.getByLabel("New Password", { exact: true }).fill(initialPassword);
-//   await page.getByLabel("Confirm New Password").fill(initialPassword);
-//   await page.getByRole("button", { name: "Change Password" }).click();
+  // Change password back to original
+  console.log("Changing password back to original");
+  await page.getByLabel("Current Password").fill(newPassword);
+  await page.getByLabel("New Password", { exact: true }).fill(initialPassword);
+  await page.getByLabel("Confirm New Password").fill(initialPassword);
+  await page.getByRole("button", { name: "Change Password" }).click();
 
-//   // Verify password change success message
-//   console.log("Verifying final password change success");
-//   await expect(page.getByText("Password changed successfully")).toBeVisible();
-// });
+  // Verify password change success message
+  console.log("Verifying final password change success");
+  await expect(page.getByText("Password changed successfully")).toBeVisible();
+});
 
 test.use({ storageState: "admin2_auth.json" });
 
