@@ -184,7 +184,7 @@ class ConfluenceConnector(
             is_cloud=self.is_cloud,
             url=self.wiki_base,
             credentials_provider=credentials_provider,
-            timeout=1,
+            timeout=3,
         )
         low_timeout_confluence_client._probe_connection(**self.probe_kwargs)
         low_timeout_confluence_client._initialize_connection(**self.final_kwargs)
