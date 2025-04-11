@@ -2336,7 +2336,7 @@ class User__ExternalUserGroupId(Base):
     # These group ids have been prefixed by the source type
     external_user_group_id: Mapped[str] = mapped_column(String, primary_key=True)
     cc_pair_id: Mapped[int] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), primary_key=True
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -2443,7 +2443,9 @@ class UserFile(Base):
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     cc_pair_id: Mapped[int | None] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), nullable=True, unique=True
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
     )
     cc_pair: Mapped["ConnectorCredentialPair"] = relationship(
         "ConnectorCredentialPair", back_populates="user_file"
