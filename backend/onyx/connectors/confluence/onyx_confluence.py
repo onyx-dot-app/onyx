@@ -488,6 +488,16 @@ class OnyxConfluence:
             old_url_suffix = url_suffix
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
 
+            # we've observed that Confluence sometimes returns a next link despite giving
+            # 0 results. This is a bug with Confluence, so we need to check for it and
+            # stop paginating.
+            if url_suffix and not results:
+                logger.info(
+                    f"No results found for call '{old_url_suffix}' despite next link "
+                    "being present. Stopping pagination."
+                )
+                break
+
             # make sure we don't update the start by more than the amount
             # of results we were able to retrieve. The Confluence API has a
             # weird behavior where if you pass in a limit that is too large for
