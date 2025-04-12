@@ -246,7 +246,9 @@ def monitor_ccpair_indexing_taskset(
     # if the CC Pair is `SCHEDULED`, moved it to `INITIAL_INDEXING`. A CC Pair
     # should only ever be `SCHEDULED` if it's a new connector.
     cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
-    assert cc_pair is not None, f"CC Pair {cc_pair_id} not found"
+    if cc_pair is not None:
+        raise RuntimeError(f"CC Pair {cc_pair_id} not found")
+
     if cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED:
         cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
         db_session.commit()
