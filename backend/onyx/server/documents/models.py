@@ -291,7 +291,7 @@ class CCPairFullInfo(BaseModel):
             last_indexed=(
                 last_index_attempt.time_started if last_index_attempt else None
             ),
-            last_pruned=last_index_attempt.time_started if last_index_attempt else None,
+            last_pruned=cc_pair_model.last_pruned,
             last_permission_sync=(
                 last_index_attempt.time_started if last_index_attempt else None
             ),

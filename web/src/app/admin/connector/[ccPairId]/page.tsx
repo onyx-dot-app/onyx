@@ -615,6 +615,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
             <CCPairStatus
               ccPairStatus={ccPair.status}
               inRepeatedErrorState={ccPair.in_repeated_error_state}
+              lastIndexAttemptStatus={latestIndexAttempt?.status}
             />
           </div>
 

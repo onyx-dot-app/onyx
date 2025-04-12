@@ -161,6 +161,9 @@ border border-border dark:border-neutral-700
         <CCPairStatus
           ccPairStatus={ccPairsIndexingStatus.cc_pair_status}
           inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
+          lastIndexAttemptStatus={
+            ccPairsIndexingStatus.latest_index_attempt?.status
+          }
         />
       </TableCell>
       {isPaidEnterpriseFeaturesEnabled && (

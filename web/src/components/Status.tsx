@@ -97,10 +97,12 @@ export function IndexAttemptStatus({
 export function CCPairStatus({
   ccPairStatus,
   inRepeatedErrorState,
+  lastIndexAttemptStatus,
   size = "md",
 }: {
   ccPairStatus: ConnectorCredentialPairStatus;
   inRepeatedErrorState: boolean;
+  lastIndexAttemptStatus: ValidStatuses | undefined | null;
   size?: "xs" | "sm" | "md" | "lg";
 }) {
   let badge;
@@ -146,11 +148,19 @@ export function CCPairStatus({
       </Badge>
     );
   } else {
-    badge = (
-      <Badge variant="success" icon={FiCheckCircle}>
-        Indexed
-      </Badge>
-    );
+    if (lastIndexAttemptStatus && lastIndexAttemptStatus === "in_progress") {
+      badge = (
+        <Badge variant="in_progress" icon={FiClock}>
+          Indexing
+        </Badge>
+      );
+    } else {
+      badge = (
+        <Badge variant="success" icon={FiCheckCircle}>
+          Indexed
+        </Badge>
+      );
+    }
   }
 
   return <div>{badge}</div>;

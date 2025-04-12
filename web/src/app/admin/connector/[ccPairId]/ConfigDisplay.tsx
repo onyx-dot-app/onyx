@@ -163,7 +163,7 @@ export function AdvancedConfigDisplay({
   return (
     <div>
       <ul className="w-full divide-y divide-neutral-200 dark:divide-neutral-700">
-        {pruneFreq && (
+        {pruneFreq !== null && (
           <ConfigItem
             label="Pruning Frequency"
             value={formatPruneFrequency(pruneFreq)}
