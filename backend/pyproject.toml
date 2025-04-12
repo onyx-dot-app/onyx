@@ -15,9 +15,9 @@ module = "alembic_tenants.versions.*"
 disable_error_code = ["var-annotated"]
 
 [tool.ruff]
-ignore = []
+lint.ignore = []
 line-length = 130
-select = [
+lint.select = [
     "E",
     "F",
     "W",
