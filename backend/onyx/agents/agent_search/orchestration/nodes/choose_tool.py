@@ -66,12 +66,16 @@ def _expand_query(
             base_prompt = QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
         elif type == "semantic":
             base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+        else:
+            raise ValueError(f"Invalid query type: {type}")
         expansion_prompt = base_prompt.format(question=query, history=history_str)
     else:
         if type == "keyword":
             base_prompt = QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
         elif type == "semantic":
             base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
+        else:
+            raise ValueError(f"Invalid query type: {type}")
         expansion_prompt = base_prompt.format(question=query)
 
     msg = HumanMessage(content=expansion_prompt)

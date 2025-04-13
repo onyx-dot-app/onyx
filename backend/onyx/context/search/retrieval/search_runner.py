@@ -53,7 +53,7 @@ def _get_top_chunks(
     num_to_retrieve: int,
     ranking_profile_type: Literal["keyword", "semantic"],
     offset: int,
-) -> list[InferenceChunk]:
+) -> list[InferenceChunkUncleaned]:
 
     return document_index.hybrid_retrieval(
         query=query,
@@ -66,6 +66,23 @@ def _get_top_chunks(
         ranking_profile_type=ranking_profile_type,
         offset=offset,
     )
+
+
+def _dedupe_chunks(
+    chunks: list[InferenceChunkUncleaned],
+) -> list[InferenceChunkUncleaned]:
+    used_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {}
+    for chunk in chunks:
+        key = (chunk.document_id, chunk.chunk_id)
+        if key not in used_chunks:
+            used_chunks[key] = chunk
+        else:
+            stored_chunk_score = used_chunks[key].score or 0
+            this_chunk_score = chunk.score or 0
+            if stored_chunk_score < this_chunk_score:
+                used_chunks[key] = chunk
+
+    return list(used_chunks.values())
 
 
 def download_nltk_data() -> None:
@@ -257,24 +274,24 @@ def doc_index_retrieval(
             )
 
         top_base_chunks = wait_on_background(top_base_chunks_thread)
-
+        # cleaned_top_base_chunks = [top_base_chunk.to_inference_chunk() for top_base_chunk in top_base_chunks]
         top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
+
         if query.search_type == SearchType.SEMANTIC:
             top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
 
         # use all three retrieval methods to retrieve top chunks
         if query.search_type == SearchType.SEMANTIC:
-            top_chunks = combine_retrieval_results(
-                [top_base_chunks, top_keyword_chunks, top_semantic_chunks]
+            top_chunks = _dedupe_chunks(
+                top_base_chunks + top_keyword_chunks + top_semantic_chunks
             )
         else:
-            top_chunks = combine_retrieval_results(
-                [top_base_chunks, top_keyword_chunks]
-            )
+            top_chunks = _dedupe_chunks(top_base_chunks + top_keyword_chunks)
 
     else:
 
-        top_chunks = wait_on_background(top_base_chunks_thread)
+        top_base_chunks = wait_on_background(top_base_chunks_thread)
+        top_chunks = _dedupe_chunks(top_base_chunks)
 
     retrieval_requests: list[VespaChunkRequest] = []
     normal_chunks: list[InferenceChunkUncleaned] = []
