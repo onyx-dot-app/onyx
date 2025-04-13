@@ -9,6 +9,7 @@ from onyx.agents.agent_search.basic.states import BasicState
 from onyx.agents.agent_search.basic.utils import process_llm_stream
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.chat.models import LlmDoc
+from onyx.context.search.utils import dedupe_documents
 from onyx.tools.tool_implementations.search.search_tool import (
     SEARCH_RESPONSE_SUMMARY_ID,
 )
@@ -50,16 +51,16 @@ def basic_use_tool_response(
 
     final_search_results = []
     initial_search_results = []
-    initial_search_document_ids: set[str] = set()
     for yield_item in tool_call_responses:
         if yield_item.id == FINAL_CONTEXT_DOCUMENTS_ID:
             final_search_results = cast(list[LlmDoc], yield_item.response)
         elif yield_item.id == SEARCH_RESPONSE_SUMMARY_ID:
             search_response_summary = cast(SearchResponseSummary, yield_item.response)
-            for section in search_response_summary.top_sections:
-                if section.center_chunk.document_id not in initial_search_document_ids:
-                    initial_search_document_ids.add(section.center_chunk.document_id)
-                    initial_search_results.append(section_to_llm_doc(section))
+            # use same function from _handle_search_tool_response_summary
+            initial_search_results = [
+                section_to_llm_doc(section)
+                for section in dedupe_documents(search_response_summary.top_sections)[0]
+            ]
 
     new_tool_call_chunk = AIMessageChunk(content="")
     if not agent_config.behavior.skip_gen_ai_answer_generation:
