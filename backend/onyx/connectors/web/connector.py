@@ -401,6 +401,7 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        add_randomness: bool = True,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -408,7 +409,7 @@ class WebConnector(LoadConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-
+        self.add_randomness = add_randomness
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -540,8 +541,11 @@ class WebConnector(LoadConnector):
 
                     page = context.new_page()
 
-                    # Add random mouse movements and scrolling to mimic human behavior
-                    page.mouse.move(random.randint(100, 700), random.randint(100, 500))
+                    if self.add_randomness:
+                        # Add random mouse movements and scrolling to mimic human behavior
+                        page.mouse.move(
+                            random.randint(100, 700), random.randint(100, 500)
+                        )
 
                     # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
                     page_response = page.goto(
