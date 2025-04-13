@@ -21,8 +21,10 @@ from onyx.chat.tool_handling.tool_response_handler import (
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
 from onyx.llm.factory import get_default_llms
-from onyx.prompts.chat_prompts import QUERY_EXPANSION_WITH_HISTORY_PROMPT
-from onyx.prompts.chat_prompts import QUERY_EXPANSION_WITHOUT_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
 from onyx.tools.models import QueryExpansions
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
@@ -60,13 +62,17 @@ def _expand_query(
     history_str = _create_history_str(prompt_builder)
 
     if history_str:
-        expansion_prompt = QUERY_EXPANSION_WITH_HISTORY_PROMPT.format(
-            question=query, type=type, history=history_str
-        )
+        if type == "keyword":
+            base_prompt = QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
+        elif type == "semantic":
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+        expansion_prompt = base_prompt.format(question=query, history=history_str)
     else:
-        expansion_prompt = QUERY_EXPANSION_WITHOUT_HISTORY_PROMPT.format(
-            question=query, type=type
-        )
+        if type == "keyword":
+            base_prompt = QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
+        elif type == "semantic":
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
+        expansion_prompt = base_prompt.format(question=query)
 
     msg = HumanMessage(content=expansion_prompt)
     primary_llm, _ = get_default_llms()
@@ -98,6 +104,8 @@ def choose_tool(
 
     embedding_thread: TimeoutThread[Embedding] | None = None
     keyword_thread: TimeoutThread[tuple[bool, list[str]]] | None = None
+    expanded_keyword_thread: TimeoutThread[str] | None = None
+    expanded_semantic_thread: TimeoutThread[str] | None = None
     override_kwargs: SearchToolOverrideKwargs | None = None
 
     using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
@@ -125,13 +133,13 @@ def choose_tool(
             agent_config.inputs.search_request.query,
         )
 
-        expanded_keyword_query = run_in_background(
+        expanded_keyword_thread = run_in_background(
             _expand_query,
             agent_config.inputs.search_request.query,
             "keyword",
             prompt_builder,
         )
-        expanded_semantic_query = run_in_background(
+        expanded_semantic_thread = run_in_background(
             _expand_query,
             agent_config.inputs.search_request.query,
             "semantic",
@@ -269,9 +277,13 @@ def choose_tool(
         override_kwargs.precomputed_is_keyword = is_keyword
         override_kwargs.precomputed_keywords = keywords
 
-    if selected_tool.name == SearchTool._NAME:
-        keyword_expansion = wait_on_background(expanded_keyword_query)
-        semantic_expansion = wait_on_background(expanded_semantic_query)
+    if (
+        selected_tool.name == SearchTool._NAME
+        and expanded_keyword_thread
+        and expanded_semantic_thread
+    ):
+        keyword_expansion = wait_on_background(expanded_keyword_thread)
+        semantic_expansion = wait_on_background(expanded_semantic_thread)
         assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.expanded_queries = QueryExpansions(
             keywords_expansions=[keyword_expansion],

@@ -7,6 +7,7 @@ from nltk.corpus import stopwords  # type:ignore
 from nltk.tokenize import word_tokenize  # type:ignore
 from sqlalchemy.orm import Session
 
+from onyx.context.search.enums import SearchType
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -184,6 +185,21 @@ def doc_index_retrieval(
         query.query, db_session
     )
 
+    # original retrieveal method
+    top_base_chunks_thread = run_in_background(
+        _get_top_chunks,
+        document_index,
+        query.query,
+        query_embedding,
+        query.processed_keywords,
+        query.filters,
+        query.hybrid_alpha,
+        query.recency_bias_multiplier,
+        query.num_hits,
+        "semantic",
+        query.offset,
+    )
+
     if (
         query.expanded_queries
         and query.expanded_queries.keywords_expansions
@@ -195,14 +211,22 @@ def doc_index_retrieval(
             query.expanded_queries.keywords_expansions,
             db_session,
         )
-        semantic_embeddings_thread = run_in_background(
-            get_query_embeddings,
-            query.expanded_queries.semantic_expansions,
-            db_session,
-        )
-        keyword_embeddings = wait_on_background(keyword_embeddings_thread)
-        semantic_embeddings = wait_on_background(semantic_embeddings_thread)
 
+        if query.search_type == SearchType.SEMANTIC:
+            semantic_embeddings_thread = run_in_background(
+                get_query_embeddings,
+                query.expanded_queries.semantic_expansions,
+                db_session,
+            )
+
+        keyword_embeddings = wait_on_background(keyword_embeddings_thread)
+        if query.search_type == SearchType.SEMANTIC:
+            semantic_embeddings = wait_on_background(semantic_embeddings_thread)
+
+        # Use original query embedding for keyword retrieval embedding
+        keyword_embeddings = [query_embedding]
+
+        # Note: we generally prepped earlietrfor multiple expansions, but for now we only use one.
         top_keyword_chunks_thread = run_in_background(
             _get_top_chunks,
             document_index,
@@ -217,40 +241,40 @@ def doc_index_retrieval(
             query.offset,
         )
 
-        top_semantic_chunks_thread = run_in_background(
-            _get_top_chunks,
-            document_index,
-            query.expanded_queries.semantic_expansions[0],
-            semantic_embeddings[0],
-            query.processed_keywords,
-            query.filters,
-            HYBRID_ALPHA,
-            query.recency_bias_multiplier,
-            query.num_hits,
-            "semantic",
-            query.offset,
-        )
+        if query.search_type == SearchType.SEMANTIC:
+            top_semantic_chunks_thread = run_in_background(
+                _get_top_chunks,
+                document_index,
+                query.expanded_queries.semantic_expansions[0],
+                semantic_embeddings[0],
+                query.processed_keywords,
+                query.filters,
+                HYBRID_ALPHA,
+                query.recency_bias_multiplier,
+                query.num_hits,
+                "semantic",
+                query.offset,
+            )
+
+        top_base_chunks = wait_on_background(top_base_chunks_thread)
 
         top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
-        top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
+        if query.search_type == SearchType.SEMANTIC:
+            top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
 
-        top_chunks = combine_retrieval_results(
-            [top_keyword_chunks, top_semantic_chunks]
-        )
+        # use all three retrieval methods to retrieve top chunks
+        if query.search_type == SearchType.SEMANTIC:
+            top_chunks = combine_retrieval_results(
+                [top_base_chunks, top_keyword_chunks, top_semantic_chunks]
+            )
+        else:
+            top_chunks = combine_retrieval_results(
+                [top_base_chunks, top_keyword_chunks]
+            )
 
     else:
 
-        top_chunks = document_index.hybrid_retrieval(
-            query=query.query,
-            query_embedding=query_embedding,
-            final_keywords=query.processed_keywords,
-            filters=query.filters,
-            hybrid_alpha=query.hybrid_alpha,
-            time_decay_multiplier=query.recency_bias_multiplier,
-            num_to_retrieve=query.num_hits,
-            ranking_profile_type="semantic",
-            offset=query.offset,
-        )
+        top_chunks = wait_on_background(top_base_chunks_thread)
 
     retrieval_requests: list[VespaChunkRequest] = []
     normal_chunks: list[InferenceChunkUncleaned] = []
