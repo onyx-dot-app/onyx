@@ -68,7 +68,7 @@ export default function MyDocuments() {
   const [sortDirection, setSortDirection] = useState<SortDirection>(
     SortDirection.Descending
   );
-  const pageLimit = 10;
+
   const searchParams = useSearchParams();
 
   const router = useRouter();
@@ -151,95 +151,6 @@ export default function MyDocuments() {
             type: "error",
           });
         }
-      }
-    }
-
-    // If it's a folder, the SharedFolderItem component will handle it
-  };
-
-  const handleMoveItem = async (
-    itemId: number,
-    currentFolderId: number | null,
-    isFolder: boolean
-  ) => {
-    const availableFolders = folders
-      .filter((folder) => folder.id !== itemId)
-      .map((folder) => `${folder.id}: ${folder.name}`)
-      .join("\n");
-
-    const promptMessage = `Enter the ID of the destination folder:\n\nAvailable folders:\n${availableFolders}\n\nEnter 0 to move to the root folder.`;
-    const destinationFolderId = prompt(promptMessage);
-
-    if (destinationFolderId !== null) {
-      const newFolderId = parseInt(destinationFolderId, 10);
-      if (isNaN(newFolderId)) {
-        setPopup({
-          message: "Invalid folder ID",
-          type: "error",
-        });
-        return;
-      }
-
-      try {
-        await moveItem(
-          itemId,
-          newFolderId === 0 ? null : newFolderId,
-          isFolder
-        );
-        setPopup({
-          message: `${
-            isFolder ? "Knowledge Group" : "File"
-          } moved successfully`,
-          type: "success",
-        });
-        await refreshFolders();
-      } catch (error) {
-        console.error("Error moving item:", error);
-        setPopup({
-          message: "Failed to move item",
-          type: "error",
-        });
-      }
-    }
-  };
-
-  const handleDownloadItem = async (documentId: string) => {
-    try {
-      await downloadItem(documentId);
-    } catch (error) {
-      console.error("Error downloading file:", error);
-      setPopup({
-        message: "Failed to download file",
-        type: "error",
-      });
-    }
-  };
-
-  const onRenameItem = async (
-    itemId: number,
-    currentName: string,
-    isFolder: boolean
-  ) => {
-    const newName = prompt(
-      `Enter new name for ${isFolder ? "Knowledge Group" : "File"}:`,
-      currentName
-    );
-    if (newName && newName !== currentName) {
-      try {
-        await renameItem(itemId, newName, isFolder);
-        setPopup({
-          message: `${
-            isFolder ? "Knowledge Group" : "File"
-          } renamed successfully`,
-          type: "success",
-        });
-        await refreshFolders();
-      } catch (error) {
-        console.error("Error renaming item:", error);
-        setPopup({
-          message: `Failed to rename ${isFolder ? "Knowledge Group" : "File"}`,
-          type: "error",
-        });
       }
     }
   };
@@ -450,11 +361,7 @@ export default function MyDocuments() {
                     onClick={handleFolderClick}
                     description={folder.description}
                     lastUpdated={folder.created_at}
-                    onRename={() => onRenameItem(folder.id, folder.name, true)}
                     onDelete={() => handleDeleteItem(folder.id, true)}
-                    onMove={() =>
-                      handleMoveItem(folder.id, currentFolder, true)
-                    }
                   />
                 ))}
               </div>

@@ -26,9 +26,7 @@ interface SharedFolderItemProps {
   onClick: (folderId: number) => void;
   description?: string;
   lastUpdated?: string;
-  onRename: () => void;
   onDelete: () => void;
-  onMove: () => void;
 }
 
 export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
@@ -36,9 +34,7 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
   onClick,
   description,
   lastUpdated,
-  onRename,
   onDelete,
-  onMove,
 }) => {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
