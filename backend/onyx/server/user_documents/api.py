@@ -90,8 +90,25 @@ def get_folders(
     db_session: Session = Depends(get_session),
 ) -> list[UserFolderSnapshot]:
     user_id = user.id if user else None
-    folders = db_session.query(UserFolder).filter(UserFolder.user_id == user_id).all()
-    return [UserFolderSnapshot.from_model(folder) for folder in folders]
+    # Get folders that belong to the user or have the RECENT_DOCS_FOLDER_ID
+    folders = (
+        db_session.query(UserFolder)
+        .filter(
+            (UserFolder.user_id == user_id) | (UserFolder.id == RECENT_DOCS_FOLDER_ID)
+        )
+        .all()
+    )
+
+    # For each folder, filter files to only include those belonging to the current user
+    result = []
+    for folder in folders:
+        folder_snapshot = UserFolderSnapshot.from_model(folder)
+        folder_snapshot.files = [
+            file for file in folder_snapshot.files if file.user_id == user_id
+        ]
+        result.append(folder_snapshot)
+
+    return result
 
 
 @router.get("/user/folder/{folder_id}")
@@ -103,13 +120,25 @@ def get_folder(
     user_id = user.id if user else None
     folder = (
         db_session.query(UserFolder)
-        .filter(UserFolder.id == folder_id, UserFolder.user_id == user_id)
+        .filter(
+            UserFolder.id == folder_id,
+            (
+                (UserFolder.user_id == user_id)
+                | (UserFolder.id == RECENT_DOCS_FOLDER_ID)
+            ),
+        )
         .first()
     )
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    return UserFolderSnapshot.from_model(folder)
+    folder_snapshot = UserFolderSnapshot.from_model(folder)
+    # Filter files to only include those belonging to the current user
+    folder_snapshot.files = [
+        file for file in folder_snapshot.files if file.user_id == user_id
+    ]
+
+    return folder_snapshot
 
 
 RECENT_DOCS_FOLDER_ID = -1

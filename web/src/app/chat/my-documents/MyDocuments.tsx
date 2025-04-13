@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -70,9 +70,21 @@ export default function MyDocuments() {
   );
   const pageLimit = 10;
   const searchParams = useSearchParams();
+
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+
+  useEffect(() => {
+    const createFolder = searchParams.get("createFolder");
+    if (createFolder) {
+      setIsCreateFolderOpen(true);
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete("createFolder");
+      router.replace(`?${newSearchParams.toString()}`);
+    }
+  }, [searchParams]);
+
   const [isPending, startTransition] = useTransition();
   const [hoveredColumn, setHoveredColumn] = useState<SortType | null>(null);
 

@@ -18,6 +18,7 @@ export default async function Layout({
   );
 
   if ("redirect" in data) {
+    console.log("redirect", data.redirect);
     redirect(data.redirect);
   }
 

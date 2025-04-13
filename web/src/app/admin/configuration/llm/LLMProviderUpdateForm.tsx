@@ -144,7 +144,6 @@ export function LLMProviderUpdateForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
-        alert("onSubmit");
         setSubmitting(true);
 
         values.api_key_changed = values.api_key !== initialValues.api_key;
