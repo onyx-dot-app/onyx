@@ -176,7 +176,7 @@ schema DANSWER_CHUNK_NAME {
         match-features: recency_bias
     }
 
-    rank-profile hybrid_searchVARIABLE_DIM inherits default, default_rank {
+    rank-profile hybrid_search_semantic_base_VARIABLE_DIM inherits default, default_rank {
         inputs {
             query(query_embedding) tensor<float>(x[VARIABLE_DIM])
         }
@@ -192,7 +192,75 @@ schema DANSWER_CHUNK_NAME {
 
         # First phase must be vector to allow hits that have no keyword matches
         first-phase {
-            expression: closeness(field, embeddings)
+            expression: query(title_content_ratio) * closeness(field, title_embedding) + (1 - query(title_content_ratio)) * closeness(field, embeddings)
+        }
+
+        # Weighted average between Vector Search and BM-25
+        global-phase {
+            expression {
+                (
+                    # Weighted Vector Similarity Score
+                    (
+                        query(alpha) * (
+                            (query(title_content_ratio) * normalize_linear(title_vector_score))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(closeness(field, embeddings)))
+                        )
+                    )
+
+                    +
+
+                    # Weighted Keyword Similarity Score
+                    # Note: for the BM25 Title score, it requires decent stopword removal in the query
+                    # This needs to be the case so there aren't irrelevant titles being normalized to a score of 1
+                    (
+                        (1 - query(alpha)) * (
+                            (query(title_content_ratio) * normalize_linear(bm25(title)))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(bm25(content)))
+                        )
+                    )
+                )
+                # Boost based on user feedback
+                * document_boost
+                # Decay factor based on time document was last updated
+                * recency_bias
+                # Boost based on aggregated boost calculation
+                * aggregated_chunk_boost
+            }
+            rerank-count: 1000
+        }
+
+        match-features {
+            bm25(title)
+            bm25(content)
+            closeness(field, title_embedding)
+            closeness(field, embeddings)
+            document_boost
+            recency_bias
+            aggregated_chunk_boost
+            closest(embeddings)
+        }
+    }
+
+
+    rank-profile hybrid_search_keyword_base_VARIABLE_DIM inherits default, default_rank {
+        inputs {
+            query(query_embedding) tensor<float>(x[VARIABLE_DIM])
+        }
+
+        function title_vector_score() {
+            expression {
+                # If no good matching titles, then it should use the context embeddings rather than having some
+                # irrelevant title have a vector score of 1. This way at least it will be the doc with the highest
+                # matching content score getting the full score
+                max(closeness(field, embeddings), closeness(field, title_embedding))
+            }
+        }
+
+        # First phase must be vector to allow hits that have no keyword matches
+        first-phase {
+            expression: query(title_content_ratio) * bm25(title) + (1 - query(title_content_ratio)) * bm25(content)
         }
 
         # Weighted average between Vector Search and BM-25

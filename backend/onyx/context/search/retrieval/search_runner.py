@@ -1,5 +1,6 @@
 import string
 from collections.abc import Callable
+from typing import Literal
 
 import nltk  # type:ignore
 from nltk.corpus import stopwords  # type:ignore
@@ -49,6 +50,7 @@ def _get_top_chunks(
     hybrid_alpha: float,
     time_decay_multiplier: float,
     num_to_retrieve: int,
+    ranking_profile_type: Literal["keyword", "semantic"],
     offset: int,
 ) -> list[InferenceChunk]:
 
@@ -60,6 +62,7 @@ def _get_top_chunks(
         hybrid_alpha=hybrid_alpha,
         time_decay_multiplier=time_decay_multiplier,
         num_to_retrieve=num_to_retrieve,
+        ranking_profile_type=ranking_profile_type,
         offset=offset,
     )
 
@@ -210,6 +213,7 @@ def doc_index_retrieval(
             HYBRID_ALPHA_KEYWORD,
             query.recency_bias_multiplier,
             query.num_hits,
+            "keyword",
             query.offset,
         )
 
@@ -223,6 +227,7 @@ def doc_index_retrieval(
             HYBRID_ALPHA,
             query.recency_bias_multiplier,
             query.num_hits,
+            "semantic",
             query.offset,
         )
 
@@ -243,6 +248,7 @@ def doc_index_retrieval(
             hybrid_alpha=query.hybrid_alpha,
             time_decay_multiplier=query.recency_bias_multiplier,
             num_to_retrieve=query.num_hits,
+            ranking_profile_type="semantic",
             offset=query.offset,
         )
 

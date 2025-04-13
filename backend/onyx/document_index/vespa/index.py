@@ -13,6 +13,7 @@ from datetime import timedelta
 from typing import BinaryIO
 from typing import cast
 from typing import List
+from typing import Literal
 from uuid import UUID
 
 import httpx  # type: ignore
@@ -800,6 +801,7 @@ class VespaIndex(DocumentIndex):
         hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
+        ranking_profile_type: Literal["keyword", "semantic"],
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunkUncleaned]:
@@ -818,6 +820,11 @@ class VespaIndex(DocumentIndex):
 
         final_query = " ".join(final_keywords) if final_keywords else query
 
+        if ranking_profile_type == "keyword":
+            ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
+        else:
+            ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
+
         logger.debug(f"Query YQL: {yql}")
 
         params: dict[str, str | int | float] = {
@@ -833,7 +840,7 @@ class VespaIndex(DocumentIndex):
             ),
             "hits": num_to_retrieve,
             "offset": offset,
-            "ranking.profile": f"hybrid_search{len(query_embedding)}",
+            "ranking.profile": ranking_profile,
             "timeout": VESPA_TIMEOUT,
         }
 
