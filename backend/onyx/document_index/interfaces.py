@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from onyx.access.models import DocumentAccess
+from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
 from onyx.db.enums import EmbeddingPrecision
@@ -352,6 +353,7 @@ class HybridCapable(abc.ABC):
         time_decay_multiplier: float,
         num_to_retrieve: int,
         offset: int = 0,
+        title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunkUncleaned]:
         """
         Run hybrid search and return a list of inference chunks.

@@ -806,6 +806,7 @@ class VespaIndex(DocumentIndex):
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the value set in Vespa schema config
         target_hits = max(10 * num_to_retrieve, 1000)
+
         yql = (
             YQL_BASE.format(index_name=self.index_name)
             + vespa_where_clauses

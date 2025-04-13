@@ -15,6 +15,8 @@ from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
+from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
+from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_multilingual_expansion
@@ -27,6 +29,8 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_in_background
+from onyx.utils.threadpool_concurrency import wait_on_background
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
@@ -34,6 +38,30 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
+
+
+def _get_top_chunks(
+    document_index: DocumentIndex,
+    query: str,
+    query_embedding: Embedding,
+    final_keywords: list[str],
+    filters: IndexFilters,
+    hybrid_alpha: float,
+    time_decay_multiplier: float,
+    num_to_retrieve: int,
+    offset: int,
+) -> list[InferenceChunk]:
+
+    return document_index.hybrid_retrieval(
+        query=query,
+        query_embedding=query_embedding,
+        final_keywords=final_keywords,
+        filters=filters,
+        hybrid_alpha=hybrid_alpha,
+        time_decay_multiplier=time_decay_multiplier,
+        num_to_retrieve=num_to_retrieve,
+        offset=offset,
+    )
 
 
 def download_nltk_data() -> None:
@@ -123,6 +151,20 @@ def get_query_embedding(query: str, db_session: Session) -> Embedding:
     return query_embedding
 
 
+def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedding]:
+    search_settings = get_current_search_settings(db_session)
+
+    model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
+        # The below are globally set, this flow always uses the indexing one
+        server_host=MODEL_SERVER_HOST,
+        server_port=MODEL_SERVER_PORT,
+    )
+
+    query_embedding = model.encode(queries, text_type=EmbedTextType.QUERY)
+    return query_embedding
+
+
 @log_function_time(print_only=True)
 def doc_index_retrieval(
     query: SearchQuery,
@@ -139,16 +181,70 @@ def doc_index_retrieval(
         query.query, db_session
     )
 
-    top_chunks = document_index.hybrid_retrieval(
-        query=query.query,
-        query_embedding=query_embedding,
-        final_keywords=query.processed_keywords,
-        filters=query.filters,
-        hybrid_alpha=query.hybrid_alpha,
-        time_decay_multiplier=query.recency_bias_multiplier,
-        num_to_retrieve=query.num_hits,
-        offset=query.offset,
-    )
+    if (
+        query.expanded_queries
+        and query.expanded_queries.keywords_expansions
+        and query.expanded_queries.semantic_expansions
+    ):
+
+        keyword_embeddings_thread = run_in_background(
+            get_query_embeddings,
+            query.expanded_queries.keywords_expansions,
+            db_session,
+        )
+        semantic_embeddings_thread = run_in_background(
+            get_query_embeddings,
+            query.expanded_queries.semantic_expansions,
+            db_session,
+        )
+        keyword_embeddings = wait_on_background(keyword_embeddings_thread)
+        semantic_embeddings = wait_on_background(semantic_embeddings_thread)
+
+        top_keyword_chunks_thread = run_in_background(
+            _get_top_chunks,
+            document_index,
+            query.expanded_queries.keywords_expansions[0],
+            keyword_embeddings[0],
+            query.processed_keywords,
+            query.filters,
+            HYBRID_ALPHA_KEYWORD,
+            query.recency_bias_multiplier,
+            query.num_hits,
+            query.offset,
+        )
+
+        top_semantic_chunks_thread = run_in_background(
+            _get_top_chunks,
+            document_index,
+            query.expanded_queries.semantic_expansions[0],
+            semantic_embeddings[0],
+            query.processed_keywords,
+            query.filters,
+            HYBRID_ALPHA,
+            query.recency_bias_multiplier,
+            query.num_hits,
+            query.offset,
+        )
+
+        top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
+        top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
+
+        top_chunks = combine_retrieval_results(
+            [top_keyword_chunks, top_semantic_chunks]
+        )
+
+    else:
+
+        top_chunks = document_index.hybrid_retrieval(
+            query=query.query,
+            query_embedding=query_embedding,
+            final_keywords=query.processed_keywords,
+            filters=query.filters,
+            hybrid_alpha=query.hybrid_alpha,
+            time_decay_multiplier=query.recency_bias_multiplier,
+            num_to_retrieve=query.num_hits,
+            offset=query.offset,
+        )
 
     retrieval_requests: list[VespaChunkRequest] = []
     normal_chunks: list[InferenceChunkUncleaned] = []

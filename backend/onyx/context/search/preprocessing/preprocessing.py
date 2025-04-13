@@ -36,7 +36,6 @@ from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
-
 logger = setup_logger()
 
 
@@ -264,4 +263,5 @@ def retrieval_preprocessing(
         chunks_below=chunks_below,
         full_doc=search_request.full_doc,
         precomputed_query_embedding=search_request.precomputed_query_embedding,
+        expanded_queries=search_request.expanded_queries,
     )

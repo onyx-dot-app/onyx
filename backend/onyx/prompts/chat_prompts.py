@@ -246,3 +246,35 @@ Please give a short succinct summary of the entire document. Answer only with th
 summary and nothing else. """
 
 DOCUMENT_SUMMARY_TOKEN_ESTIMATE = 29
+
+
+QUERY_EXPANSION_WITHOUT_HISTORY_PROMPT = """
+Please rephrase the following user question as a {type} query that would be appropraite for a \
+search engine.
+
+Here is the user question:
+{question}
+
+Respond with EXACTLY and ONLY one rephrased query.
+
+Rephrased query for search engine:
+""".strip()
+
+
+QUERY_EXPANSION_WITH_HISTORY_PROMPT = """
+Following a previous message history, a user created a follow-up question/query.
+Please rephrase that question/query as a {type} query \
+that would be appropraite for a SEARCH ENGINE. Only use the information provided \
+from the history that is relevant to provide the relevant context for the search query, \
+meaning that the repharsed search query should be a stuitable stand-alone search query.
+
+Here is the relevant previous message history:
+{history}
+
+Here is the user question:
+{question}
+
+Respond with EXACTLY and ONLY one rephrased query.
+
+Rephrased query for search engine:
+""".strip()
