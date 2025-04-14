@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { timeAgo } from "@/lib/time";
 import { MetadataBadge } from "../MetadataBadge";
 
@@ -11,7 +13,7 @@ export function DocumentUpdatedAtBadge({
   return (
     <MetadataBadge
       flexNone={modal}
-      value={(modal ? "" : "Updated ") + timeAgo(updatedAt)}
+      value={(modal ? "" : i18n.t(k.UPDATED)) + timeAgo(updatedAt)}
     />
   );
 }

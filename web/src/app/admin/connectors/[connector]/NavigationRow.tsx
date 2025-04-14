@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { useFormContext } from "@/components/context/FormContext";
 import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";
 import { FiPlus } from "react-icons/fi";
@@ -46,7 +48,7 @@ const NavigationRow = ({
             onClick={prevFormStep}
           >
             <ArrowLeft />
-            Previous
+            {i18n.t(k.PREVIOUS)}
           </SquareNavigationButton>
         )}
       </div>
@@ -57,7 +59,7 @@ const NavigationRow = ({
             disabled={!isValid}
             onClick={onSubmit}
           >
-            Create Connector
+            {i18n.t(k.CREATE_CONNECTOR)}
             <FiPlus className="h-4 w-4" />
           </SquareNavigationButton>
         )}
@@ -69,7 +71,7 @@ const NavigationRow = ({
             disabled={!activatedCredential}
             onClick={nextFormStep}
           >
-            Continue
+            {i18n.t(k.CONTINUE)}
             <ArrowRight />
           </SquareNavigationButton>
         )}
@@ -79,7 +81,7 @@ const NavigationRow = ({
             disabled={!isValid}
             onClick={nextFormStep}
           >
-            Advanced
+            {i18n.t(k.ADVANCED)}
             <ArrowRight />
           </SquareNavigationButton>
         )}

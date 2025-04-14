@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import {
   BasicClickable,
   EmphasizedClickable,
@@ -34,11 +36,11 @@ export function ShowHideDocsButton({
     >
       {isCurrentlyShowingRetrieved ? (
         <EmphasizedClickable>
-          <div className="w-24 text-xs">Hide Docs</div>
+          <div className="w-24 text-xs">{i18n.t(k.HIDE_DOCS)}</div>
         </EmphasizedClickable>
       ) : (
         <BasicClickable>
-          <div className="w-24 text-xs">Show Docs</div>
+          <div className="w-24 text-xs">{i18n.t(k.SHOW_DOCS)}</div>
         </BasicClickable>
       )}
     </div>
@@ -112,14 +114,15 @@ export function SearchSummary({
           ref={searchingForRef}
         >
           {userFileSearch ? (
-            "Reading context"
+            i18n.t(k.READING_CONTEXT)
           ) : (
             <>
-              {finished ? "Searched" : "Searching"} for:{" "}
+              {finished ? i18n.t(k.SEARCHED) : i18n.t(k.SEARCHING)}{" "}
+              {i18n.t(k.FOR)}{" "}
               <i>
                 {index === 1
                   ? finalQuery.length > 50
-                    ? `${finalQuery.slice(0, 50)}...`
+                    ? `${finalQuery.slice(0, 50)}${i18n.t(k._13)}`
                     : finalQuery
                   : finalQuery}
               </i>
@@ -146,13 +149,13 @@ export function SearchSummary({
               3 && (
               <div className="rounded-full bg-background-200 w-3.5 h-3.5 flex items-center justify-center">
                 <span className="text-[8px]">
-                  +
+                  {i18n.t(k._9)}
                   {Array.from(new Set(docs.map((doc) => doc.source_type)))
                     .length - 3}
                 </span>
               </div>
             )}
-            <span className="text-xs underline">View sources</span>
+            <span className="text-xs underline">{i18n.t(k.VIEW_SOURCES)}</span>
           </button>
         )}
       </div>
@@ -167,7 +170,7 @@ export function SearchSummary({
           value={finalQuery}
           onChange={(e) => setFinalQuery(e.target.value)}
           onKeyDown={(event) => {
-            if (event.key === "Enter") {
+            if (event.key === i18n.t(k.ENTER)) {
               setIsEditing(false);
               if (!finalQuery) {
                 setFinalQuery(query);
@@ -175,7 +178,7 @@ export function SearchSummary({
                 handleSearchQueryEdit(finalQuery);
               }
               event.preventDefault();
-            } else if (event.key === "Escape") {
+            } else if (event.key === i18n.t(k.ESCAPE)) {
               setFinalQuery(query);
               setIsEditing(false);
               event.preventDefault();
@@ -196,6 +199,7 @@ export function SearchSummary({
             setIsEditing(false);
           }}
         />
+
         <Hoverable
           icon={FiX}
           onClick={() => {
@@ -219,7 +223,7 @@ export function SearchSummary({
                 mainContent={searchingForDisplay}
                 popupContent={
                   <div>
-                    <b>Full query:</b>{" "}
+                    <b>{i18n.t(k.FULL_QUERY)}</b>{" "}
                     <div className="mt-1 italic">{query}</div>
                   </div>
                 }
@@ -243,7 +247,7 @@ export function SearchSummary({
                     <FiEdit2 />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Edit Search</TooltipContent>
+                <TooltipContent>{i18n.t(k.EDIT_SEARCH)}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           )}
@@ -267,8 +271,10 @@ export function UserKnowledgeFiles({
       <div className="flex items-center text-xs desktop:text-sm">
         <FiBook className="mobile:hidden flex-none mr-2" size={14} />
         <span className="text-xs desktop:text-sm">
-          Referenced {userKnowledgeFiles.length}{" "}
-          {userKnowledgeFiles.length === 1 ? "document" : "documents"}
+          {i18n.t(k.REFERENCED)} {userKnowledgeFiles.length}{" "}
+          {userKnowledgeFiles.length === 1
+            ? i18n.t(k.DOCUMENT1)
+            : i18n.t(k.DOCUMENTS)}
         </span>
       </div>
     </div>

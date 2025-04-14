@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 interface Props {
   onClick: () => void;
 }
@@ -14,7 +16,7 @@ export const IndexButtonForTable = ({ onClick }: Props) => {
       }
       onClick={onClick}
     >
-      Index
+      {i18n.t(k.INDEX)}
     </button>
   );
 };

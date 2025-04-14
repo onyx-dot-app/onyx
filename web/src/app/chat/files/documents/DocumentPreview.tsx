@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { FiFileText } from "react-icons/fi";
 import { useState, useRef, useEffect } from "react";
 import {
@@ -75,7 +77,7 @@ export function DocumentPreview({
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <div className="text-subtle text-xs">Document</div>
+        <div className="text-subtle text-xs">{i18n.t(k.DOCUMENT)}</div>
       </div>
       {open && (
         <button

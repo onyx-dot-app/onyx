@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { buildCCPairInfoUrl } from "@/app/admin/connector/[ccPairId]/lib";
 import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
@@ -36,26 +38,31 @@ export function FailedReIndexAttempts({
   return (
     <div className="mt-6 mb-8 p-4 border border-red-300 rounded-lg bg-red-50">
       <Text className="text-red-700 font-semibold mb-2">
-        Failed Re-indexing Attempts
+        {i18n.t(k.FAILED_RE_INDEXING_ATTEMPTS)}
       </Text>
       <Text className="text-red-600 mb-4">
-        The table below shows only the failed re-indexing attempts for existing
-        connectors. These failures require immediate attention. Once all
-        connectors have been re-indexed successfully, the new model will be used
-        for all search queries.
+        {i18n.t(k.THE_TABLE_BELOW_SHOWS_ONLY_THE)}
       </Text>
 
       <div>
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-1/8 sm:w-1/6">Connector Name</TableHead>
-              <TableHead className="w-1/8 sm:w-1/6">Status</TableHead>
-              <TableHead className="w-4/8 sm:w-2/6">Error Message</TableHead>
-              <TableHead className="w-1/8 sm:w-1/6">Visit Connector</TableHead>
+              <TableHead className="w-1/8 sm:w-1/6">
+                {i18n.t(k.CONNECTOR_NAME)}
+              </TableHead>
+              <TableHead className="w-1/8 sm:w-1/6">
+                {i18n.t(k.STATUS)}
+              </TableHead>
+              <TableHead className="w-4/8 sm:w-2/6">
+                {i18n.t(k.ERROR_MESSAGE)}
+              </TableHead>
+              <TableHead className="w-1/8 sm:w-1/6">
+                {i18n.t(k.VISIT_CONNECTOR)}
+              </TableHead>
               {anyDeletable && (
                 <TableHead className="w-1/8 sm:w-2/6">
-                  Delete Connector
+                  {i18n.t(k.DELETE_CONNECTOR)}
                 </TableHead>
               )}
             </TableRow>
@@ -92,7 +99,7 @@ export function FailedReIndexAttempts({
                         className="ctext-link cursor-pointer flex"
                       >
                         <FiLink className="my-auto mr-1" />
-                        Visit Connector
+                        {i18n.t(k.VISIT_CONNECTOR)}
                       </Link>
                     </TableCell>
                     <TableCell>
@@ -115,7 +122,7 @@ export function FailedReIndexAttempts({
                         icon={FiTrash}
                         disabled={reindexingProgress.is_deletable}
                       >
-                        Delete
+                        {i18n.t(k.DELETE)}
                       </Button>
                     </TableCell>
                   </TableRow>

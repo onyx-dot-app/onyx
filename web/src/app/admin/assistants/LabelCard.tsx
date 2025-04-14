@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useState } from "react";
 import {
   Card,
@@ -59,20 +61,20 @@ export function LabelCard({
         {isEditing ? (
           <>
             <Button type="button" variant="outline" onClick={handleSubmit}>
-              Save
+              {i18n.t(k.SAVE)}
             </Button>
             <Button
               type="button"
               onClick={() => setIsEditing(false)}
               variant="default"
             >
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
           </>
         ) : (
           <>
             <Button type="button" onClick={handleEdit} variant="outline">
-              Edit
+              {i18n.t(k.EDIT)}
             </Button>
             <Button
               type="button"
@@ -83,7 +85,7 @@ export function LabelCard({
                 await refreshLabels();
               }}
             >
-              Delete
+              {i18n.t(k.DELETE)}
             </Button>
           </>
         )}

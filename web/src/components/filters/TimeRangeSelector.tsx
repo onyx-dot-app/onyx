@@ -8,7 +8,6 @@ export function TimeRangeSelector({
   value: any;
   onValueChange: any;
   className: any;
-
   timeRangeValues: { label: string; value: Date }[];
 }) {
   return (

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { FiChevronDown, FiChevronUp, FiFile } from "react-icons/fi";
@@ -17,7 +19,7 @@ const DocumentsDisplay: React.FC<DocumentsDisplayProps> = ({ documents }) => {
         className="flex justify-between items-center p-4 bg-background-50 cursor-pointer"
         onClick={toggleExpand}
       >
-        <h3 className="text-lg font-semibold">Sources</h3>
+        <h3 className="text-lg font-semibold">{i18n.t(k.SOURCES)}</h3>
         {isExpanded ? <FiChevronUp /> : <FiChevronDown />}
       </div>
       {isExpanded && (

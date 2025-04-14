@@ -33,6 +33,7 @@ export async function checkLlmProvider(user: User | null) {
       ? fetch("/api/admin/llm/test/default", { method: "POST" })
       : (async () => null)(),
   ];
+
   const [providerResponse, optionsResponse, defaultCheckResponse] =
     await Promise.all(tasks);
 

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { FiCalendar, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../Dropdown";
@@ -47,11 +49,11 @@ export function DateRangeSelector({
           <FiCalendar className="flex-none my-auto mr-2" />{" "}
           <p className="line-clamp-1">
             {isHorizontal ? (
-              "Date"
+              i18n.t(k.DATE)
             ) : value?.selectValue ? (
               <div className="text-text-darker">{value.selectValue}</div>
             ) : (
-              "Any time..."
+              i18n.t(k.ANY_TIME)
             )}
           </p>
           {value?.selectValue ? (

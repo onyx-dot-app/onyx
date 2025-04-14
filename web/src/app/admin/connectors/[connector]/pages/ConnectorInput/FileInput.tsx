@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import { useField } from "formik";
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
 import CredentialSubText from "@/components/credentials/CredentialFields";
@@ -31,7 +33,9 @@ export default function FileInput({
           className="block text-sm font-medium text-text-700 mb-1"
         >
           {label}
-          {optional && <span className="text-text-500 ml-1">(optional)</span>}
+          {optional && (
+            <span className="text-text-500 ml-1">{i18n.t(k.OPTIONAL)}</span>
+          )}
         </label>
       )}
       {description && <CredentialSubText>{description}</CredentialSubText>}
@@ -51,7 +55,7 @@ export default function FileInput({
           }
         }}
         multiple={!isZip && multiple} // Allow multiple files if not a zip
-        accept={isZip ? ".zip" : undefined} // Only accept zip files if isZip is true
+        accept={isZip ? i18n.t(k.ZIP) : undefined} // Only accept zip files if isZip is true
       />
       {!hideError && meta.touched && meta.error && (
         <div className="text-red-500 text-sm mt-1">{meta.error}</div>

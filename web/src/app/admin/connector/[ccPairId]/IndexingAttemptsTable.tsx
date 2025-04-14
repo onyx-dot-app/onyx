@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { useState } from "react";
 import {
@@ -60,8 +62,7 @@ export function IndexingAttemptsTable({
         title="No indexing attempts scheduled yet"
         type="notice"
       >
-        Index attempts are scheduled in the background, and may take some time
-        to appear. Try refreshing the page in ~30 seconds!
+        {i18n.t(k.INDEX_ATTEMPTS_ARE_SCHEDULED_I)}
       </Callout>
     );
   }
@@ -82,28 +83,27 @@ export function IndexingAttemptsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Time Started</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>New Doc Cnt</TableHead>
+            <TableHead>{i18n.t(k.TIME_STARTED)}</TableHead>
+            <TableHead>{i18n.t(k.STATUS)}</TableHead>
+            <TableHead>{i18n.t(k.NEW_DOC_CNT)}</TableHead>
             <TableHead>
               <div className="w-fit">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help flex items-center">
-                        Total Doc Cnt
+                        {i18n.t(k.TOTAL_DOC_CNT)}
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
-                      Total number of documents replaced in the index during
-                      this indexing attempt
+                      {i18n.t(k.TOTAL_NUMBER_OF_DOCUMENTS_REPL)}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
               </div>
             </TableHead>
-            <TableHead>Error Message</TableHead>
+            <TableHead>{i18n.t(k.ERROR_MESSAGE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -115,20 +115,21 @@ export function IndexingAttemptsTable({
                 <TableCell>
                   {indexAttempt.time_started
                     ? localizeAndPrettify(indexAttempt.time_started)
-                    : "-"}
+                    : i18n.t(k._)}
                 </TableCell>
                 <TableCell>
                   <IndexAttemptStatus
                     status={indexAttempt.status || "not_started"}
                   />
+
                   {docsPerMinute ? (
                     <div className="text-xs mt-1">
-                      {docsPerMinute} docs / min
+                      {docsPerMinute} {i18n.t(k.DOCS_MIN)}
                     </div>
                   ) : (
-                    indexAttempt.status === "success" && (
+                    indexAttempt.status === i18n.t(k.SUCCESS) && (
                       <div className="text-xs mt-1">
-                        No additional docs processed
+                        {i18n.t(k.NO_ADDITIONAL_DOCS_PROCESSED)}
                       </div>
                     )
                   )}
@@ -139,8 +140,9 @@ export function IndexingAttemptsTable({
                       <div>{indexAttempt.new_docs_indexed}</div>
                       {indexAttempt.docs_removed_from_index > 0 && (
                         <div className="text-xs w-52 text-wrap flex italic overflow-hidden whitespace-normal px-1">
-                          (also removed {indexAttempt.docs_removed_from_index}{" "}
-                          docs that were detected as deleted in the source)
+                          {i18n.t(k.ALSO_REMOVED)}{" "}
+                          {indexAttempt.docs_removed_from_index}{" "}
+                          {i18n.t(k.DOCS_THAT_WERE_DETECTED_AS_DEL)}
                         </div>
                       )}
                     </div>
@@ -169,7 +171,7 @@ export function IndexingAttemptsTable({
                         }}
                         className="mt-2 text-link cursor-pointer select-none"
                       >
-                        View Full Trace
+                        {i18n.t(k.VIEW_FULL_TRACE)}
                       </div>
                     )}
                   </div>

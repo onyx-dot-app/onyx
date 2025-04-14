@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
@@ -65,16 +67,16 @@ export const Popup: React.FC<PopupSpec> = ({ message, type }) => (
       <p className="font-medium">{message}</p>
       {type === "error" && NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK && (
         <p className="text-xs">
-          Need help?{" "}
+          {i18n.t(k.NEED_HELP)}{" "}
           <a
             href="https://join.slack.com/t/onyx-dot-app/shared_invite/zt-2twesxdr6-5iQitKZQpgq~hYIZ~dv3KA"
             target="_blank"
             rel="noopener noreferrer"
             className="underline hover:text-red-100 dark:hover:text-red-200"
           >
-            Join our community
+            {i18n.t(k.JOIN_OUR_COMMUNITY)}
           </a>{" "}
-          for support!
+          {i18n.t(k.FOR_SUPPORT)}
         </p>
       )}
     </div>

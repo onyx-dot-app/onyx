@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { ErrorMessage, Field, useField } from "formik";
 
 import {
@@ -70,7 +72,9 @@ export function AdminTextField({
             className="block text-sm font-medium text-text-700"
           >
             {label}
-            {optional && <span className="text-text-500 ml-1">(optional)</span>}
+            {optional && (
+              <span className="text-text-500 ml-1">{i18n.t(k.OPTIONAL)}</span>
+            )}
           </label>
         )}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
@@ -162,6 +166,7 @@ export const AdminBooleanFormField = ({
             alignTop ? "mt-1" : "my-auto"
           }`}
         />
+
         {!noLabel && (
           <div>
             <Label small={small}>{label}</Label>

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import {
@@ -39,7 +41,7 @@ const IsVisibleSection = ({
             }}
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="select-none">Hidden</div>
+            <div className="select-none">{i18n.t(k.HIDDEN)}</div>
             <div className="ml-1 my-auto">
               <CustomCheckbox checked={false} />
             </div>
@@ -55,7 +57,7 @@ const IsVisibleSection = ({
             }}
             className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="my-auto select-none">Visible</div>
+            <div className="my-auto select-none">{i18n.t(k.VISIBLE)}</div>
             <div className="ml-1 my-auto">
               <CustomCheckbox checked={true} />
             </div>
@@ -66,12 +68,12 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto mr-1" /> Unhide
+              <FiEye className="my-auto mr-1" /> {i18n.t(k.UNHIDE)}
             </div>
           ) : (
             <div className="flex">
               <FiEyeOff className="my-auto mr-1" />
-              Hide
+              {i18n.t(k.HIDE)}
             </div>
           )}
         </div>
@@ -96,9 +98,9 @@ export const DocumentFeedbackTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Document Name</TableHead>
-            <TableHead>Is Searchable?</TableHead>
-            <TableHead>Score</TableHead>
+            <TableHead>{i18n.t(k.DOCUMENT_NAME)}</TableHead>
+            <TableHead>{i18n.t(k.IS_SEARCHABLE)}</TableHead>
+            <TableHead>{i18n.t(k.SCORE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -125,9 +127,9 @@ export const DocumentFeedbackTable = ({
                           refresh();
                         } else {
                           setPopup({
-                            message: `Error updating hidden status - ${getErrorMsg(
-                              response
-                            )}`,
+                            message: `${i18n.t(
+                              k.ERROR_UPDATING_HIDDEN_STATUS
+                            )} ${getErrorMsg(response)}`,
                             type: "error",
                           });
                         }

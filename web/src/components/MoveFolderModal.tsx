@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import React from "react";
 import { Button } from "@/components/ui/button";
 
@@ -26,8 +28,8 @@ export const MoveFolderModal: React.FC<MoveFolderModalProps> = ({
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
       <div className="bg-white p-6 rounded-lg shadow-lg w-96">
-        <h2 className="text-xl font-bold mb-4">Move Folder</h2>
-        <p className="mb-4">Select a destination folder:</p>
+        <h2 className="text-xl font-bold mb-4">{i18n.t(k.MOVE_FOLDER)}</h2>
+        <p className="mb-4">{i18n.t(k.SELECT_A_DESTINATION_FOLDER)}</p>
         <div className="max-h-60 overflow-y-auto mb-4">
           {folders
             .filter((folder) => folder.id !== currentFolderId)
@@ -44,7 +46,7 @@ export const MoveFolderModal: React.FC<MoveFolderModalProps> = ({
         </div>
         <div className="flex justify-end">
           <Button onClick={onClose} variant="outline">
-            Cancel
+            {i18n.t(k.CANCEL)}
           </Button>
         </div>
       </div>

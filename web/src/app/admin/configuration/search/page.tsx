@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -90,19 +92,24 @@ function Main() {
         <>
           {settings?.settings.needs_reindexing && (
             <p className="max-w-3xl">
-              Your search settings are currently out of date! We recommend
-              updating your search settings and re-indexing.
+              {i18n.t(k.YOUR_SEARCH_SETTINGS_ARE_CURRE)}
             </p>
           )}
-          <Title className="mb-6 mt-8 !text-2xl">Embedding Model</Title>
+          <Title className="mb-6 mt-8 !text-2xl">
+            {i18n.t(k.EMBEDDING_MODEL)}
+          </Title>
 
           {currentEmeddingModel ? (
             <ModelPreview model={currentEmeddingModel} display />
           ) : (
-            <Title className="mt-8 mb-4">Choose your Embedding Model</Title>
+            <Title className="mt-8 mb-4">
+              {i18n.t(k.CHOOSE_YOUR_EMBEDDING_MODEL)}
+            </Title>
           )}
 
-          <Title className="mb-2 mt-8 !text-2xl">Post-processing</Title>
+          <Title className="mb-2 mt-8 !text-2xl">
+            {i18n.t(k.POST_PROCESSING)}
+          </Title>
 
           <CardSection className="!mr-auto mt-8 !w-96">
             {searchSettings && (
@@ -110,14 +117,18 @@ function Main() {
                 <div className="px-1 w-full rounded-lg">
                   <div className="space-y-4">
                     <div>
-                      <Text className="font-semibold">Reranking Model</Text>
+                      <Text className="font-semibold">
+                        {i18n.t(k.RERANKING_MODEL)}
+                      </Text>
                       <Text className="text-text-700">
-                        {searchSettings.rerank_model_name || "Not set"}
+                        {searchSettings.rerank_model_name || i18n.t(k.NOT_SET)}
                       </Text>
                     </div>
 
                     <div>
-                      <Text className="font-semibold">Results to Rerank</Text>
+                      <Text className="font-semibold">
+                        {i18n.t(k.RESULTS_TO_RERANK)}
+                      </Text>
                       <Text className="text-text-700">
                         {searchSettings.num_rerank}
                       </Text>
@@ -125,41 +136,47 @@ function Main() {
 
                     <div>
                       <Text className="font-semibold">
-                        Multilingual Expansion
+                        {i18n.t(k.MULTILINGUAL_EXPANSION)}
                       </Text>
                       <Text className="text-text-700">
                         {searchSettings.multilingual_expansion.length > 0
-                          ? searchSettings.multilingual_expansion.join(", ")
-                          : "None"}
-                      </Text>
-                    </div>
-
-                    <div>
-                      <Text className="font-semibold">Multipass Indexing</Text>
-                      <Text className="text-text-700">
-                        {searchSettings.multipass_indexing
-                          ? "Enabled"
-                          : "Disabled"}
-                      </Text>
-                    </div>
-
-                    <div>
-                      <Text className="font-semibold">Contextual RAG</Text>
-                      <Text className="text-text-700">
-                        {searchSettings.enable_contextual_rag
-                          ? "Enabled"
-                          : "Disabled"}
+                          ? searchSettings.multilingual_expansion.join(
+                              i18n.t(k._3)
+                            )
+                          : i18n.t(k.NONE)}
                       </Text>
                     </div>
 
                     <div>
                       <Text className="font-semibold">
-                        Disable Reranking for Streaming
+                        {i18n.t(k.MULTIPASS_INDEXING)}
+                      </Text>
+                      <Text className="text-text-700">
+                        {searchSettings.multipass_indexing
+                          ? i18n.t(k.ENABLED)
+                          : i18n.t(k.DISABLED)}
+                      </Text>
+                    </div>
+
+                    <div>
+                      <Text className="font-semibold">
+                        {i18n.t(k.CONTEXTUAL_RAG)}
+                      </Text>
+                      <Text className="text-text-700">
+                        {searchSettings.enable_contextual_rag
+                          ? i18n.t(k.ENABLED)
+                          : i18n.t(k.DISABLED)}
+                      </Text>
+                    </div>
+
+                    <div>
+                      <Text className="font-semibold">
+                        {i18n.t(k.DISABLE_RERANKING_FOR_STREAMIN)}
                       </Text>
                       <Text className="text-text-700">
                         {searchSettings.disable_rerank_for_streaming
-                          ? "Yes"
-                          : "No"}
+                          ? i18n.t(k.YES)
+                          : i18n.t(k.NO)}
                       </Text>
                     </div>
                   </div>
@@ -170,7 +187,7 @@ function Main() {
 
           <Link href="/admin/embeddings">
             <Button variant="navigate" className="mt-8">
-              Update Search Settings
+              {i18n.t(k.UPDATE_SEARCH_SETTINGS)}
             </Button>
           </Link>
         </>
@@ -188,6 +205,7 @@ function Page() {
         title="Search Settings"
         icon={<EmbeddingIcon size={32} className="my-auto" />}
       />
+
       <Main />
     </div>
   );

@@ -11,6 +11,7 @@ interface AssistantData {
   hasAnyConnectors: boolean;
   hasImageCompatibleModel: boolean;
 }
+
 export async function fetchAssistantData(): Promise<AssistantData> {
   // Default state if anything fails
   const defaultState: AssistantData = {

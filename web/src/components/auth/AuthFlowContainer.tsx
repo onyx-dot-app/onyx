@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import Link from "next/link";
 import { Logo } from "../logo/Logo";
 
@@ -16,23 +18,23 @@ export default function AuthFlowContainer({
       </div>
       {authState === "login" && (
         <div className="text-sm mt-4 text-center w-full text-text-900 font-medium mx-auto">
-          Don&apos;t have an account?{" "}
+          {i18n.t(k.DON_T_HAVE_AN_ACCOUNT)}{" "}
           <Link
             href="/auth/signup"
             className=" underline transition-colors duration-200"
           >
-            Create one
+            {i18n.t(k.CREATE_ONE)}
           </Link>
         </div>
       )}
       {authState === "signup" && (
         <div className="text-sm mt-4 text-center w-full text-text-800 font-medium mx-auto">
-          Already have an account?{" "}
+          {i18n.t(k.ALREADY_HAVE_AN_ACCOUNT)}{" "}
           <Link
             href="/auth/login"
             className=" underline transition-colors duration-200"
           >
-            Log In
+            {i18n.t(k.LOG_IN)}
           </Link>
         </div>
       )}

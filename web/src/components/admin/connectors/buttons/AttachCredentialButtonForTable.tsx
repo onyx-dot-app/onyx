@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 interface Props {
   onClick: () => void;
 }
@@ -14,7 +16,7 @@ export const AttachCredentialButtonForTable = ({ onClick }: Props) => {
       }
       onClick={onClick}
     >
-      Attach Credential
+      {i18n.t(k.ATTACH_CREDENTIAL)}
     </button>
   );
 };

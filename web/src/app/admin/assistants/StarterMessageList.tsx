@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { ArrayHelpers, ErrorMessage, Field, useFormikContext } from "formik";
 import {
@@ -57,6 +59,7 @@ export default function StarterMessagesList({
             removeLabel
             small
           />
+
           <Button
             type="button"
             variant="ghost"
@@ -115,21 +118,21 @@ export default function StarterMessagesList({
                   ) : (
                     <SwapIcon className="w-4 h-4 text-white" />
                   )}
-                  Generate
+                  {i18n.t(k.GENERATE)}
                 </div>
               </Button>
             </TooltipTrigger>
             {!autoStarterMessageEnabled && (
               <TooltipContent side="top" align="center">
                 <p className="bg-background-950 max-w-[200px] text-sm p-1.5 text-white">
-                  No LLM providers configured. Generation is not available.
+                  {i18n.t(k.NO_LLM_PROVIDERS_CONFIGURED_G)}
                 </p>
               </TooltipContent>
             )}
             {values.filter((msg) => msg.message.trim() !== "").length >= 4 && (
               <TooltipContent side="top" align="center">
                 <p className="bg-background-950 max-w-[200px] text-sm p-1.5 text-white">
-                  Max four starter messages
+                  {i18n.t(k.MAX_FOUR_STARTER_MESSAGES)}
                 </p>
               </TooltipContent>
             )}

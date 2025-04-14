@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import React from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
@@ -26,7 +28,7 @@ export const NonSelectableConnectors = ({
       <div className="p-3 border border-dashed border-neutral-300 rounded-md bg-neutral-50">
         <div className="text-xs font-medium text-neutral-700 mb-2 flex items-center">
           <LockIcon className="h-3.5 w-3.5 mr-1.5 text-neutral-500" />
-          Unavailable connectors:
+          {i18n.t(k.UNAVAILABLE_CONNECTORS)}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {connectors.map((connector) => (

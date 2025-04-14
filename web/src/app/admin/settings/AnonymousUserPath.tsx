@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import useSWR from "swr";
 import { useContext, useState } from "react";
@@ -41,7 +43,7 @@ export function AnonymousUserPath({
     try {
       if (!customPath) {
         setPopup({
-          message: "Custom path cannot be empty",
+          message: i18n.t(k.CUSTOM_PATH_CANNOT_BE_EMPTY),
           type: "error",
         });
         return;
@@ -49,7 +51,7 @@ export function AnonymousUserPath({
       // Validate custom path
       if (!customPath.trim()) {
         setPopup({
-          message: "Custom path cannot be empty",
+          message: i18n.t(k.CUSTOM_PATH_CANNOT_BE_EMPTY),
           type: "error",
         });
         return;
@@ -57,7 +59,7 @@ export function AnonymousUserPath({
 
       if (!/^[a-zA-Z0-9-]+$/.test(customPath)) {
         setPopup({
-          message: "Custom path can only contain letters, numbers, and hyphens",
+          message: i18n.t(k.CUSTOM_PATH_CAN_ONLY_CONTAIN_L),
           type: "error",
         });
         return;
@@ -83,7 +85,7 @@ export function AnonymousUserPath({
       }
       mutate(); // Revalidate the SWR cache
       setPopup({
-        message: "Anonymous user path updated successfully!",
+        message: i18n.t(k.ANONYMOUS_USER_PATH_UPDATED_SU),
         type: "success",
       });
     } catch (error) {
@@ -98,17 +100,14 @@ export function AnonymousUserPath({
   return (
     <div className="mt-4 ml-6 max-w-xl p-6 bg-white shadow-lg border border-background-200 rounded-lg">
       <h4 className="font-semibold text-lg text-text-800 mb-3">
-        Anonymous User Access
+        {i18n.t(k.ANONYMOUS_USER_ACCESS)}
       </h4>
       <p className="text-text-600 text-sm mb-4">
-        Enable this to allow non-authenticated users to access all documents
-        indexed by public connectors in your workspace.
+        {i18n.t(k.ENABLE_THIS_TO_ALLOW_NON_AUTHE)}
         {anonymousUserPath
-          ? "Customize the access path for anonymous users."
-          : "Set a custom access path for anonymous users."}{" "}
-        Anonymous users will only be able to view and search public documents,
-        but cannot access private or restricted content. The path will always
-        start with &quot;/anonymous/&quot;.
+          ? i18n.t(k.CUSTOMIZE_THE_ACCESS_PATH_FOR)
+          : i18n.t(k.SET_A_CUSTOM_ACCESS_PATH_FOR_A)}{" "}
+        {i18n.t(k.ANONYMOUS_USERS_WILL_ONLY_BE_A)}
       </p>
       {isLoading ? (
         <ThreeDotsLoader />
@@ -133,7 +132,7 @@ export function AnonymousUserPath({
               size="sm"
               className="h-10 px-4"
             >
-              Update Path
+              {i18n.t(k.UPDATE_PATH)}
             </Button>
             <Button
               variant="outline"
@@ -144,13 +143,13 @@ export function AnonymousUserPath({
                   `${settings?.webDomain}/anonymous/${anonymousUserPath}`
                 );
                 setPopup({
-                  message: "Invite link copied!",
+                  message: i18n.t(k.INVITE_LINK_COPIED),
                   type: "success",
                 });
               }}
             >
               <ClipboardIcon className="h-4 w-4" />
-              Copy
+              {i18n.t(k.COPY)}
             </Button>
           </div>
         </div>

@@ -83,6 +83,7 @@ export default function FunctionalHeader({
           toggled={false}
           handleNewChat={handleNewChat}
         />
+
         <div className="mt-1 items-center flex w-full h-8">
           <div
             style={{ transition: "width 0.30s ease-out" }}
@@ -99,6 +100,7 @@ export default function FunctionalHeader({
             ${sidebarToggled ? "w-[250px]" : "w-[0px]"}
             `}
           />
+
           {page == "chat" && (
             <div
               className={`
@@ -186,6 +188,7 @@ export default function FunctionalHeader({
                 h-full
             `}
             />
+
             <div
               style={{ transition: "width 0.30s ease-out" }}
               className={`

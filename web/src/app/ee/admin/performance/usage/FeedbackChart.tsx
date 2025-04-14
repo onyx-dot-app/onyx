@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList, useQueryAnalytics } from "../lib";
 import Text from "@/components/ui/text";
@@ -28,7 +30,7 @@ export function FeedbackChart({
   } else if (!queryAnalyticsData || queryAnalyticsError) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch feedback data...</p>
+        <p className="m-auto">{i18n.t(k.FAILED_TO_FETCH_FEEDBACK_DATA)}</p>
       </div>
     );
   } else {
@@ -63,8 +65,8 @@ export function FeedbackChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Feedback</Title>
-      <Text>Thumbs Up / Thumbs Down over time</Text>
+      <Title>{i18n.t(k.FEEDBACK)}</Title>
+      <Text>{i18n.t(k.THUMBS_UP_THUMBS_DOWN_OVER_T)}</Text>
       {chart}
     </CardSection>
   );

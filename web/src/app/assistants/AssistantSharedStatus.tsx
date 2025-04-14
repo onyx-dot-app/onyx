@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { User } from "@/lib/types";
 import { Persona } from "../admin/assistants/interfaces";
 import { checkUserOwnsAssistant } from "@/lib/assistants/checkOwnership";
@@ -26,7 +28,7 @@ export function AssistantSharedStatusDisplay({
         } flex items-center`}
       >
         <FiUnlock className="mr-1" />
-        Public
+        {i18n.t(k.PUBLIC)}
       </div>
     );
   }
@@ -40,22 +42,26 @@ export function AssistantSharedStatusDisplay({
       >
         <FiUnlock className="mr-1" />
         {isOwnedByUser ? (
-          `Shared with: ${
+          `${i18n.t(k.SHARED_WITH)} ${
             assistantSharedUsersWithoutOwner.length <= 4
-              ? assistantSharedUsersWithoutOwner.map((u) => u.email).join(", ")
+              ? assistantSharedUsersWithoutOwner
+                  .map((u) => u.email)
+                  .join(i18n.t(k._3))
               : `${assistantSharedUsersWithoutOwner
                   .slice(0, 4)
                   .map((u) => u.email)
-                  .join(", ")} and ${assistant.users.length - 4} others...`
+                  .join(
+                    i18n.t(k._3)
+                  )} ${i18n.t(k.AND)} ${assistant.users.length - 4} ${i18n.t(k.OTHERS)}`
           }`
         ) : (
           <div>
             {assistant.owner ? (
               <div>
-                Shared with you by <i>{assistant.owner?.email}</i>
+                {i18n.t(k.SHARED_WITH_YOU_BY)} <i>{assistant.owner?.email}</i>
               </div>
             ) : (
-              "Shared with you"
+              i18n.t(k.SHARED_WITH_YOU)
             )}
           </div>
         )}
@@ -70,7 +76,7 @@ export function AssistantSharedStatusDisplay({
       } flex items-center`}
     >
       <FiLock className="mr-1" />
-      Private
+      {i18n.t(k.PRIVATE1)}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import React from "react";
 import NumberInput from "./ConnectorInput/NumberInput";
 import { TextFormField } from "@/components/admin/connectors/Field";
@@ -7,15 +9,12 @@ const AdvancedFormPage = () => {
   return (
     <div className="py-4 flex flex-col gap-y-6 rounded-lg max-w-2xl mx-auto">
       <h2 className="text-2xl font-bold mb-4 text-text-800">
-        Advanced Configuration
+        {i18n.t(k.ADVANCED_CONFIGURATION)}
       </h2>
 
       <NumberInput
         description={`
-          Checks all documents against the source to delete those that no longer exist.
-          Note: This process checks every document, so be cautious when increasing frequency.
-          Default is 30 days.
-          Enter 0 to disable pruning for this connector.
+          ${i18n.t(k.CHECKS_ALL_DOCUMENTS_AGAINST_T)}
         `}
         label="Prune Frequency (days)"
         name="pruneFreq"
@@ -34,10 +33,13 @@ const AdvancedFormPage = () => {
         label="Indexing Start Date"
         name="indexingStart"
       />
+
       <div className="mt-4 flex w-full mx-auto max-w-2xl justify-start">
         <button className="flex gap-x-1 bg-red-500 hover:bg-red-500/80 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded ">
           <TrashIcon size={20} className="text-white" />
-          <div className="w-full items-center gap-x-2 flex">Reset</div>
+          <div className="w-full items-center gap-x-2 flex">
+            {i18n.t(k.RESET)}
+          </div>
         </button>
       </div>
     </div>

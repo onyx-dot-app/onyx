@@ -210,6 +210,7 @@ export interface EditPromptModalProps {
     values: CreateInputPromptRequest
   ) => Promise<void>;
 }
+
 export interface CreateInputPromptRequest {
   prompt: string;
   content: string;
@@ -219,11 +220,13 @@ export interface AddPromptModalProps {
   onClose: () => void;
   onSubmit: (promptData: CreateInputPromptRequest) => void;
 }
+
 export interface PromptData {
   id: number;
   prompt: string;
   content: string;
 }
+
 // We need to update the constructSubQuestions function so it can take in either SubQueryDetail or SubQuestionDetail and given current state of subQuestions, build it up
 
 /**

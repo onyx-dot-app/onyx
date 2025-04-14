@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 import { File, Link as LinkIcon, Folder } from "lucide-react";
 import {
@@ -13,6 +15,7 @@ interface SearchResultItemProps {
     name: string;
     document_id: string;
   };
+
   view: "grid" | "list";
   onClick: (documentId: string, name: string) => void;
   isLink?: boolean;
@@ -24,14 +27,17 @@ interface SearchResultItemProps {
     id: number;
     name: string;
   };
+
   onParentFolderClick?: (folderId: number) => void;
   fileSize?: FileSize;
 }
+
 export enum FileSize {
   SMALL = "Small",
   MEDIUM = "Medium",
   LARGE = "Large",
 }
+
 export const fileSizeToDescription = {
   [FileSize.SMALL]: "Small",
   [FileSize.MEDIUM]: "Medium",
@@ -106,7 +112,9 @@ export const SearchResultItem: React.FC<SearchResultItemProps> = ({
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Parent Folder: {parentFolder.name}</p>
+                <p>
+                  {i18n.t(k.PARENT_FOLDER)} {parentFolder.name}
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

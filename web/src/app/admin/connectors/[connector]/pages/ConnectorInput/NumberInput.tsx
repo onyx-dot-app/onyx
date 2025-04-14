@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import { Label, SubLabel } from "@/components/admin/connectors/Field";
 import { ErrorMessage, useField } from "formik";
 
@@ -31,7 +33,9 @@ export default function NumberInput({
       <Label>
         <>
           {label}
-          {optional && <span className="text-text-500 ml-1">(optional)</span>}
+          {optional && (
+            <span className="text-text-500 ml-1">{i18n.t(k.OPTIONAL)}</span>
+          )}
         </>
       </Label>
       {description && <SubLabel>{description}</SubLabel>}
@@ -52,6 +56,7 @@ export default function NumberInput({
                 invalid:border-pink-500 invalid:text-pink-600
                 focus:invalid:border-pink-500 focus:invalid:ring-pink-500`}
       />
+
       <ErrorMessage
         name={name}
         component="div"

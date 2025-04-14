@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
@@ -64,13 +66,14 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
   return (
     <Modal onOutsideClick={onClose} width="rounded-lg w-full max-w-md">
       <div className="p- text-neutral-900 dark:text-neutral-100">
-        <h2 className="text-2xl font-bold mb-4">Reset Password</h2>
+        <h2 className="text-2xl font-bold mb-4">{i18n.t(k.RESET_PASSWORD)}</h2>
         <p className="mb-4">
-          Are you sure you want to reset the password for {user.email}?
+          {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_RESET)} {user.email}
+          {i18n.t(k._10)}
         </p>
         {newPassword ? (
           <div className="mb-4">
-            <p className="font-semibold">New Password:</p>
+            <p className="font-semibold">{i18n.t(k.NEW_PASSWORD)}</p>
             <div className="flex items-center bg-neutral-200 dark:bg-neutral-700 p-2 rounded">
               <p data-testid="new-password" className="flex-grow">
                 {newPassword}
@@ -89,7 +92,7 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
               </Button>
             </div>
             <p className="text-sm text-neutral-500 dark:text-neutral-400 mt-2">
-              Please securely communicate this password to the user.
+              {i18n.t(k.PLEASE_SECURELY_COMMUNICATE_TH)}
             </p>
           </div>
         ) : (
@@ -99,11 +102,11 @@ const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
             className="w-full bg-neutral-700 hover:bg-neutral-600 dark:bg-neutral-200 dark:hover:bg-neutral-300 dark:text-neutral-900"
           >
             {isLoading ? (
-              "Resetting..."
+              i18n.t(k.RESETTING)
             ) : (
               <>
                 <RefreshCcw className="w-4 h-4 mr-2" />
-                Reset Password
+                {i18n.t(k.RESET_PASSWORD)}
               </>
             )}
           </Button>

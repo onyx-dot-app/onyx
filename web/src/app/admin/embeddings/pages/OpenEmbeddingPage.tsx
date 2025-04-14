@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
@@ -22,13 +24,8 @@ export default function OpenEmbeddingPage({
   const [configureModel, setConfigureModel] = useState(false);
   return (
     <div>
-      <Title className="mt-8">
-        Here are some locally-hosted models to choose from.
-      </Title>
-      <Text className="mb-4">
-        These models can be used without any API keys, and can leverage a GPU
-        for faster inference.
-      </Text>
+      <Title className="mt-8">{i18n.t(k.HERE_ARE_SOME_LOCALLY_HOSTED_M)}</Title>
+      <Text className="mb-4">{i18n.t(k.THESE_MODELS_CAN_BE_USED_WITHO)}</Text>
       <ModelSelector
         modelOptions={AVAILABLE_MODELS}
         setSelectedModel={onSelectOpenSource}
@@ -36,30 +33,27 @@ export default function OpenEmbeddingPage({
       />
 
       <Text className="mt-6">
-        Alternatively, (if you know what you&apos;re doing) you can specify a{" "}
+        {i18n.t(k.ALTERNATIVELY_IF_YOU_KNOW_WH)}{" "}
         <a
           target="_blank"
           href="https://www.sbert.net/"
           className="text-link"
           rel="noreferrer"
         >
-          SentenceTransformers
+          {i18n.t(k.SENTENCETRANSFORMERS)}
         </a>
-        -compatible model of your choice below. The rough list of supported
-        models can be found{" "}
+        {i18n.t(k.COMPATIBLE_MODEL_OF_YOUR_CHOI)}{" "}
         <a
           target="_blank"
           href="https://huggingface.co/models?library=sentence-transformers&sort=trending"
           className="text-link"
           rel="noreferrer"
         >
-          here
+          {i18n.t(k.HERE)}
         </a>
-        .
+        {i18n.t(k._8)}
         <br />
-        <b>NOTE:</b> not all models listed will work with Onyx, since some have
-        unique interfaces or special requirements. If in doubt, reach out to the
-        Onyx team.
+        <b>{i18n.t(k.NOTE)}</b> {i18n.t(k.NOT_ALL_MODELS_LISTED_WILL_WOR)}
       </Text>
       {!configureModel && (
         <Button
@@ -67,7 +61,7 @@ export default function OpenEmbeddingPage({
           className="mt-4"
           variant="secondary"
         >
-          Configure custom model
+          {i18n.t(k.CONFIGURE_CUSTOM_MODEL)}
         </Button>
       )}
       {configureModel && (

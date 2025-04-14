@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React, { useState } from "react";
 import { Info, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,7 +39,7 @@ export function ContextLimitPanel({
         <div className="flex items-center">
           <Info className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
           <span className="text-sm font-medium leading-tight">
-            Context Limit
+            {i18n.t(k.CONTEXT_LIMIT)}
           </span>
         </div>
 
@@ -51,13 +53,9 @@ export function ContextLimitPanel({
       </div>
       {isOpen && (
         <div className="mt-3 mb-3 text-neutral-600 dark:text-neutral-400 text-sm">
-          <p className="mb-2">
-            Shows how much of each model&apos;s context window is used by these
-            documents. When exceeded, the model will search over content rather
-            than including all content in each prompt.
-          </p>
+          <p className="mb-2">{i18n.t(k.SHOWS_HOW_MUCH_OF_EACH_MODEL_S)}</p>
           <p className="font-medium">
-            Total tokens in this group:{" "}
+            {i18n.t(k.TOTAL_TOKENS_IN_THIS_GROUP)}{" "}
             <span className="text-neutral-900 dark:text-neutral-300">
               {totalTokens.toLocaleString()}
             </span>
@@ -79,7 +77,7 @@ export function ContextLimitPanel({
                     {getDisplayNameForModel(model.modelName)}
                   </span>
                   <span className="text-neutral-500 dark:text-neutral-500">
-                    {model.maxTokens.toLocaleString()} tokens
+                    {model.maxTokens.toLocaleString()} {i18n.t(k.TOKENS)}
                   </span>
                 </div>
                 <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2.5">
@@ -88,21 +86,22 @@ export function ContextLimitPanel({
                       tokenPercentage > 100
                         ? "bg-red-500 dark:bg-red-600"
                         : tokenPercentage > 80
-                          ? "bg-amber-500 dark:bg-amber-600"
-                          : "bg-emerald-500 dark:bg-emerald-600"
+                        ? "bg-amber-500 dark:bg-amber-600"
+                        : "bg-emerald-500 dark:bg-emerald-600"
                     }`}
                     style={{ width: `${Math.min(tokenPercentage, 100)}%` }}
                   ></div>
                 </div>
                 {tokenPercentage > 100 && (
                   <div className="mt-1.5 text-xs text-red-500 dark:text-red-400 flex items-center">
-                    <Info className="w-3 h-3 mr-1" /> Capacity exceeded | Search
-                    will be used
+                    <Info className="w-3 h-3 mr-1" />{" "}
+                    {i18n.t(k.CAPACITY_EXCEEDED_SEARCH)}
                   </div>
                 )}
                 {tokenPercentage > 80 && tokenPercentage <= 100 && (
                   <div className="mt-1.5 text-xs text-amber-600 dark:text-amber-400 flex items-center">
-                    <Info className="w-3 h-3 mr-1" /> Near capacity limit
+                    <Info className="w-3 h-3 mr-1" />{" "}
+                    {i18n.t(k.NEAR_CAPACITY_LIMIT)}
                   </div>
                 )}
               </div>
@@ -110,7 +109,7 @@ export function ContextLimitPanel({
           })}
           {modelDescriptors.length === 0 && (
             <div className="text-xs text-neutral-500 dark:text-neutral-400 py-2 text-center italic">
-              No models available
+              {i18n.t(k.NO_MODELS_AVAILABLE)}
             </div>
           )}
         </div>

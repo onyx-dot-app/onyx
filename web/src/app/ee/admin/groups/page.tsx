@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { GroupsIcon } from "@/components/icons/icons";
 import { UserGroupsTable } from "./UserGroupsTable";
@@ -38,15 +40,17 @@ const Main = () => {
   }
 
   if (error || !data) {
-    return <div className="text-red-600">Error loading users</div>;
+    return <div className="text-red-600">{i18n.t(k.ERROR_LOADING_USERS)}</div>;
   }
 
   if (ccPairsError || !ccPairs) {
-    return <div className="text-red-600">Error loading connectors</div>;
+    return (
+      <div className="text-red-600">{i18n.t(k.ERROR_LOADING_CONNECTORS)}</div>
+    );
   }
 
   if (usersError || !users) {
-    return <div className="text-red-600">Error loading users</div>;
+    return <div className="text-red-600">{i18n.t(k.ERROR_LOADING_USERS)}</div>;
   }
 
   return (

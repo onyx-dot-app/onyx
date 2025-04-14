@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { Modal } from "@/components/Modal";
 
 export const NoAssistantModal = ({ isAdmin }: { isAdmin: boolean }) => {
@@ -5,30 +7,28 @@ export const NoAssistantModal = ({ isAdmin }: { isAdmin: boolean }) => {
     <Modal width="bg-white max-w-2xl rounded-lg shadow-xl text-center">
       <>
         <h2 className="text-3xl font-bold text-text-800 mb-4">
-          No Assistant Available
+          {i18n.t(k.NO_ASSISTANT_AVAILABLE)}
         </h2>
         <p className="text-text-600 mb-6">
-          You currently have no assistant configured. To use this feature, you
-          need to take action.
+          {i18n.t(k.YOU_CURRENTLY_HAVE_NO_ASSISTAN)}
         </p>
         {isAdmin ? (
           <>
             <p className="text-text-600 mb-6">
-              As an administrator, you can create a new assistant by visiting
-              the admin panel.
+              {i18n.t(k.AS_AN_ADMINISTRATOR_YOU_CAN_C)}
             </p>
             <button
               onClick={() => {
-                window.location.href = "/admin/assistants";
+                window.location.href = i18n.t(k.ADMIN_ASSISTANTS);
               }}
               className="inline-flex flex justify-center items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-background-800 text-center focus:outline-none focus:ring-2 focus:ring-offset-2 "
             >
-              Go to Admin Panel
+              {i18n.t(k.GO_TO_ADMIN_PANEL)}
             </button>
           </>
         ) : (
           <p className="text-text-600 mb-2">
-            Please contact your administrator to configure an assistant for you.
+            {i18n.t(k.PLEASE_CONTACT_YOUR_ADMINISTRA)}
           </p>
         )}
       </>

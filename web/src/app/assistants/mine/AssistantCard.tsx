@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useRef, useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -167,7 +169,9 @@ const AssistantCard: React.FC<{
                   ))}
                   {persona.labels.length > 2 && (
                     <AssistantBadge
-                      text={`+${persona.labels.length - 2} more`}
+                      text={`${i18n.t(k._9)}${
+                        persona.labels.length - 2
+                      } ${i18n.t(k.MORE)}`}
                     />
                   )}
                 </>
@@ -201,7 +205,7 @@ const AssistantCard: React.FC<{
                           disabled={!isOwnedByUser}
                         >
                           <FiEdit size={12} className="inline mr-2" />
-                          Edit
+                          {i18n.t(k.EDIT)}
                         </button>
                         {isPaidEnterpriseFeaturesEnabled && isOwnedByUser && (
                           <button
@@ -222,7 +226,7 @@ const AssistantCard: React.FC<{
                             }`}
                           >
                             <FiBarChart size={12} className="inline mr-2" />
-                            Stats
+                            {i18n.t(k.STATS)}
                           </button>
                         )}
                         <button
@@ -235,14 +239,15 @@ const AssistantCard: React.FC<{
                           disabled={!isOwnedByUser}
                         >
                           <FiTrash size={12} className="inline mr-2" />
-                          Delete
+                          {i18n.t(k.DELETE)}
                         </button>
                       </div>
                     ) : (
                       <div className="w-full">
                         <p className="text-sm mb-3">
-                          Are you sure you want to delete assistant{" "}
-                          <b>{persona.name}</b>?
+                          {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET)}{" "}
+                          <b>{persona.name}</b>
+                          {i18n.t(k._10)}
                         </p>
                         <div className="flex justify-center gap-2">
                           <Button
@@ -250,14 +255,14 @@ const AssistantCard: React.FC<{
                             size="sm"
                             onClick={cancelDelete}
                           >
-                            Cancel
+                            {i18n.t(k.CANCEL)}
                           </Button>
                           <Button
                             variant="destructive"
                             size="sm"
                             onClick={confirmDelete}
                           >
-                            Delete
+                            {i18n.t(k.DELETE)}
                           </Button>
                         </div>
                       </div>
@@ -278,33 +283,33 @@ const AssistantCard: React.FC<{
                 {persona.owner?.email || persona.builtin_persona ? (
                   <>
                     <span className="truncate">
-                      By {persona.owner?.email || "Onyx"}
+                      {i18n.t(k.BY)} {persona.owner?.email || i18n.t(k.ONYX)}
                     </span>
 
-                    <span className="mx-2">•</span>
+                    <span className="mx-2">{i18n.t(k._11)}</span>
                   </>
                 ) : null}
                 <span className="flex-none truncate">
                   {persona.tools.length > 0 ? (
                     <>
                       {persona.tools.length}
-                      {" Action"}
-                      {persona.tools.length !== 1 ? "s" : ""}
+                      {i18n.t(k.ACTION)}
+                      {persona.tools.length !== 1 ? i18n.t(k.S) : ""}
                     </>
                   ) : (
-                    "No Actions"
+                    i18n.t(k.NO_ACTIONS)
                   )}
                 </span>
-                <span className="mx-2">•</span>
+                <span className="mx-2">{i18n.t(k._11)}</span>
                 {persona.is_public ? (
                   <>
                     <FiUnlock size={12} className="inline mr-1" />
-                    Public
+                    {i18n.t(k.PUBLIC)}
                   </>
                 ) : (
                   <>
                     <FiLock size={12} className="inline mr-1" />
-                    Private
+                    {i18n.t(k.PRIVATE1)}
                   </>
                 )}
               </p>
@@ -322,11 +327,11 @@ const AssistantCard: React.FC<{
                     className="hover:bg-neutral-100 dark:hover:bg-neutral-700 dark:bg-[#2E2E2D] hover:text-neutral-900 dark:hover:text-neutral-100 px-2 py-1 gap-x-1 rounded border border-neutral-400 dark:border-neutral-600 flex items-center"
                   >
                     <PencilIcon size={12} className="flex-none" />
-                    <span className="text-xs">Start Chat</span>
+                    <span className="text-xs">{i18n.t(k.START_CHAT)}</span>
                   </button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  Start a new chat with this assistant
+                  {i18n.t(k.START_A_NEW_CHAT_WITH_THIS_ASS)}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -346,17 +351,18 @@ const AssistantCard: React.FC<{
                     <PinnedIcon size={12} />
                     {!pinned ? (
                       <p className="absolute w-full left-0 group-hover:text-neutral-900 dark:group-hover:text-neutral-100 w-full text-center transform text-xs">
-                        Pin
+                        {i18n.t(k.PIN)}
                       </p>
                     ) : (
                       <p className="text-xs group-hover:text-neutral-900 dark:group-hover:text-neutral-100">
-                        Unpin
+                        {i18n.t(k.UNPIN)}
                       </p>
                     )}
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {pinned ? "Remove from" : "Add to"} your pinned list
+                  {pinned ? i18n.t(k.REMOVE_FROM) : i18n.t(k.ADD_TO)}{" "}
+                  {i18n.t(k.YOUR_PINNED_LIST)}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>

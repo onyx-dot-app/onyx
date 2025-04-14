@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { ChevronsDownIcon, ChevronsUpIcon } from "../icons/icons";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
@@ -77,12 +79,12 @@ const DocumentFeedback = ({
         );
         if (!errorMsg) {
           setPopup({
-            message: "Thanks for your feedback!",
+            message: i18n.t(k.THANKS_FOR_YOUR_FEEDBACK),
             type: "success",
           });
         } else {
           setPopup({
-            message: `Error giving feedback - ${errorMsg}`,
+            message: `${i18n.t(k.ERROR_GIVING_FEEDBACK)} ${errorMsg}`,
             type: "error",
           });
         }

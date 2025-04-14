@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 import { Input } from "@/components/ui/input";
 import { XIcon } from "lucide-react";
@@ -24,6 +26,7 @@ export function SearchInput({
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
+
         {searchQuery &&
           (isSearching ? (
             <div className="absolute right-2 top-1/2 -translate-y-1/2">

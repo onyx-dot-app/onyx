@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import {
   BooleanFormField,
   TextFormField,
@@ -63,6 +65,7 @@ export function CustomModelForm({
               autoCompleteDisabled={true}
               type="number"
             />
+
             <TextFormField
               min={-1}
               name="description"
@@ -77,24 +80,23 @@ export function CustomModelForm({
               label="[Optional] Query Prefix:"
               subtext={
                 <>
-                  The prefix specified by the model creators which should be
-                  prepended to <i>queries</i> before passing them to the model.
-                  Many models do not have this, in which case this should be
-                  left empty.
+                  {i18n.t(k.THE_PREFIX_SPECIFIED_BY_THE_MO)}
+                  <i>{i18n.t(k.QUERIES)}</i>{" "}
+                  {i18n.t(k.BEFORE_PASSING_THEM_TO_THE_MOD)}
                 </>
               }
               placeholder="E.g. 'query: '"
               autoCompleteDisabled={true}
             />
+
             <TextFormField
               name="passage_prefix"
               label="[Optional] Passage Prefix:"
               subtext={
                 <>
-                  The prefix specified by the model creators which should be
-                  prepended to <i>passages</i> before passing them to the model.
-                  Many models do not have this, in which case this should be
-                  left empty.
+                  {i18n.t(k.THE_PREFIX_SPECIFIED_BY_THE_MO)}
+                  <i>{i18n.t(k.PASSAGES)}</i>{" "}
+                  {i18n.t(k.BEFORE_PASSING_THEM_TO_THE_MOD)}
                 </>
               }
               placeholder="E.g. 'passage: '"
@@ -113,7 +115,7 @@ export function CustomModelForm({
               disabled={isSubmitting}
               className="w-64 mx-auto"
             >
-              Choose
+              {i18n.t(k.CHOOSE)}
             </Button>
           </Form>
         )}

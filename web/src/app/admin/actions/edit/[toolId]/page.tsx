@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
@@ -34,8 +36,8 @@ export default async function Page(props: {
               <ActionEditor tool={tool} />
             </CardSection>
 
-            <Title className="mt-12">Delete Tool</Title>
-            <Text>Click the button below to permanently delete this tool.</Text>
+            <Title className="mt-12">{i18n.t(k.DELETE_TOOL)}</Title>
+            <Text>{i18n.t(k.CLICK_THE_BUTTON_BELOW_TO_PERM)}</Text>
             <div className="flex mt-6">
               <DeleteToolButton toolId={tool.id} />
             </div>

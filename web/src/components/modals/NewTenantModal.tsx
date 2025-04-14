@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { useState } from "react";
 import { Dialog } from "@headlessui/react";
@@ -142,15 +144,18 @@ export default function NewTenantModal({
           <Dialog.Title className="text-xl font-semibold mb-4 flex items-center">
             {isInvite ? (
               <>
-                You have been invited to join {tenantInfo.number_of_users}
-                other teammate{tenantInfo.number_of_users === 1
-                  ? ""
-                  : "s"} of {APP_DOMAIN}.
+                {i18n.t(k.YOU_HAVE_BEEN_INVITED_TO_JOIN)}{" "}
+                {tenantInfo.number_of_users}
+                {i18n.t(k.OTHER_TEAMMATE)}
+                {tenantInfo.number_of_users === 1 ? "" : i18n.t(k.S)}{" "}
+                {i18n.t(k.OF)} {APP_DOMAIN}
+                {i18n.t(k._8)}
               </>
             ) : (
               <>
-                Your request to join {tenantInfo.number_of_users} other users of{" "}
-                {APP_DOMAIN} has been approved.
+                {i18n.t(k.YOUR_REQUEST_TO_JOIN)} {tenantInfo.number_of_users}{" "}
+                {i18n.t(k.OTHER_USERS_OF)} {APP_DOMAIN}{" "}
+                {i18n.t(k.HAS_BEEN_APPROVED)}
               </>
             )}
           </Dialog.Title>
@@ -163,16 +168,16 @@ export default function NewTenantModal({
             <p className="text-sm text-neutral-600 dark:text-neutral-400">
               {isInvite ? (
                 <>
-                  By accepting this invitation, you will join the existing{" "}
-                  {APP_DOMAIN} team and lose access to your current team.
+                  {i18n.t(k.BY_ACCEPTING_THIS_INVITATION)} {APP_DOMAIN}{" "}
+                  {i18n.t(k.TEAM_AND_LOSE_ACCESS_TO_YOUR_C)}
                   <br />
-                  Note: you will lose access to your current assistants,
-                  prompts, chats, and connected sources.
+                  {i18n.t(k.NOTE_YOU_WILL_LOSE_ACCESS_TO)}
                 </>
               ) : (
                 <>
-                  To finish joining your team, please reauthenticate with{" "}
-                  <em>{user?.email}</em>.
+                  {i18n.t(k.TO_FINISH_JOINING_YOUR_TEAM_P)}{" "}
+                  <em>{user?.email}</em>
+                  {i18n.t(k._8)}
                 </>
               )}
             </p>
@@ -190,11 +195,11 @@ export default function NewTenantModal({
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    <span className="animate-spin mr-2">⟳</span>
+                    <span className="animate-spin mr-2">{i18n.t(k._20)}</span>
                   ) : (
                     <X className="mr-2 h-4 w-4" />
                   )}
-                  Decline
+                  {i18n.t(k.DECLINE)}
                 </Button>
               )}
 
@@ -208,12 +213,14 @@ export default function NewTenantModal({
               >
                 {isLoading ? (
                   <span className="flex items-center">
-                    <span className="animate-spin mr-2">⟳</span>
-                    {isInvite ? "Accepting..." : "Joining..."}
+                    <span className="animate-spin mr-2">{i18n.t(k._20)}</span>
+                    {isInvite ? i18n.t(k.ACCEPTING) : i18n.t(k.JOINING)}
                   </span>
                 ) : (
                   <>
-                    {isInvite ? "Accept Invitation" : "Reauthenticate"}
+                    {isInvite
+                      ? i18n.t(k.ACCEPT_INVITATION)
+                      : i18n.t(k.REAUTHENTICATE)}
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}

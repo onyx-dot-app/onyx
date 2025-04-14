@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 import { cn, truncateString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -49,7 +51,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
     <div className="h-full w-full flex flex-col">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
-          Selected Items
+          {i18n.t(k.SELECTED_ITEMS)}
         </h3>
       </div>
 
@@ -91,7 +93,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                       "dark:active:bg-neutral-500 dark:active:text-white",
                       "transition-all duration-150 ease-in-out"
                     )}
-                    aria-label={`Remove folder ${folder.name}`}
+                    aria-label={`${i18n.t(k.REMOVE_FOLDER)} ${folder.name}`}
                   >
                     <X className="h-3 w-3 dark:text-neutral-200" />
                   </Button>
@@ -139,7 +141,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                       "dark:active:bg-neutral-500 dark:active:text-white",
                       "transition-all duration-150 ease-in-out"
                     )}
-                    aria-label={`Remove file ${file.name}`}
+                    aria-label={`${i18n.t(k.REMOVE_FILE)} ${file.name}`}
                   >
                     <X className="h-3 w-3 dark:text-neutral-200" />
                   </Button>
@@ -169,7 +171,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                   >
                     <div className="flex items-center min-w-0 flex-1">
                       <div className="flex items-center gap-2 min-w-0">
-                        {uploadingFile.name.startsWith("http") ? (
+                        {uploadingFile.name.startsWith(i18n.t(k.HTTP)) ? (
                           <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                         ) : (
                           <CircularProgress
@@ -179,9 +181,11 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
                           />
                         )}
                         <span className="truncate text-sm text-text-dark dark:text-text-dark">
-                          {uploadingFile.name.startsWith("http")
+                          {uploadingFile.name.startsWith(i18n.t(k.HTTP))
                             ? `${uploadingFile.name.substring(0, 30)}${
-                                uploadingFile.name.length > 30 ? "..." : ""
+                                uploadingFile.name.length > 30
+                                  ? i18n.t(k._13)
+                                  : ""
                               }`
                             : truncateString(uploadingFile.name, 34)}
                         </span>
@@ -210,7 +214,7 @@ export const SelectedItemsList: React.FC<SelectedItemsListProps> = ({
           </div>
           {!hasItems && (
             <div className="flex items-center justify-center h-24 text-sm text-neutral-500 dark:text-neutral-400 italic bg-neutral-50/50 dark:bg-neutral-800/30 rounded-md border border-neutral-200/50 dark:border-neutral-700/50">
-              No items selected
+              {i18n.t(k.NO_ITEMS_SELECTED)}
             </div>
           )}
         </div>

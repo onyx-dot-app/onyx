@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { Modal } from "@/components/Modal";
 import {
   Table,
@@ -18,6 +20,7 @@ interface IndexAttemptErrorsModalProps {
     items: IndexAttemptError[];
     total_items: number;
   };
+
   onClose: () => void;
   onResolveAll: () => void;
   isResolvingErrors?: boolean;
@@ -46,19 +49,15 @@ export default function IndexAttemptErrorsModal({
         <div className="flex flex-col gap-2">
           {isResolvingErrors ? (
             <div className="text-sm text-text-default">
-              Currently attempting to resolve all errors by performing a full
-              re-index. This may take some time to complete.
+              {i18n.t(k.CURRENTLY_ATTEMPTING_TO_RESOLV)}
             </div>
           ) : (
             <>
               <div className="text-sm text-text-default">
-                Below are the errors encountered during indexing. Each row
-                represents a failed document or entity.
+                {i18n.t(k.BELOW_ARE_THE_ERRORS_ENCOUNTER)}
               </div>
               <div className="text-sm text-text-default">
-                Click the button below to kick off a full re-index to try and
-                resolve these errors. This full re-index may take much longer
-                than a normal update.
+                {i18n.t(k.CLICK_THE_BUTTON_BELOW_TO_KICK)}
               </div>
             </>
           )}
@@ -67,10 +66,10 @@ export default function IndexAttemptErrorsModal({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Time</TableHead>
-              <TableHead>Document ID</TableHead>
-              <TableHead className="w-1/2">Error Message</TableHead>
-              <TableHead>Status</TableHead>
+              <TableHead>{i18n.t(k.TIME)}</TableHead>
+              <TableHead>{i18n.t(k.DOCUMENT_ID)}</TableHead>
+              <TableHead className="w-1/2">{i18n.t(k.ERROR_MESSAGE)}</TableHead>
+              <TableHead>{i18n.t(k.STATUS)}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -85,10 +84,12 @@ export default function IndexAttemptErrorsModal({
                       rel="noopener noreferrer"
                       className="text-link hover:underline"
                     >
-                      {error.document_id || error.entity_id || "Unknown"}
+                      {error.document_id ||
+                        error.entity_id ||
+                        i18n.t(k.UNKNOWN)}
                     </a>
                   ) : (
-                    error.document_id || error.entity_id || "Unknown"
+                    error.document_id || error.entity_id || i18n.t(k.UNKNOWN)
                   )}
                 </TableCell>
                 <TableCell className="whitespace-normal">
@@ -102,7 +103,9 @@ export default function IndexAttemptErrorsModal({
                         : "bg-red-100 text-red-800"
                     }`}
                   >
-                    {error.is_resolved ? "Resolved" : "Unresolved"}
+                    {error.is_resolved
+                      ? i18n.t(k.RESOLVED)
+                      : i18n.t(k.UNRESOLVED)}
                   </span>
                 </TableCell>
               </TableRow>
@@ -129,7 +132,7 @@ export default function IndexAttemptErrorsModal({
                   variant="default"
                   className="ml-4 whitespace-nowrap"
                 >
-                  Resolve All
+                  {i18n.t(k.RESOLVE_ALL)}
                 </Button>
               )}
             </div>

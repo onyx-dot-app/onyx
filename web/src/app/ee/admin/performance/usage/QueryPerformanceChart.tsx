@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import { getDatesList, useQueryAnalytics, useUserAnalytics } from "../lib";
@@ -39,7 +41,7 @@ export function QueryPerformanceChart({
   ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch query data...</p>
+        <p className="m-auto">{i18n.t(k.FAILED_TO_FETCH_QUERY_DATA)}</p>
       </div>
     );
   } else {
@@ -96,8 +98,8 @@ export function QueryPerformanceChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Usage</Title>
-      <Text>Usage over time</Text>
+      <Title>{i18n.t(k.USAGE)}</Title>
+      <Text>{i18n.t(k.USAGE_OVER_TIME)}</Text>
       {chart}
     </CardSection>
   );

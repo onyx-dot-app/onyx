@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
@@ -49,7 +51,7 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
           <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
             {document.boost > 1 && (
               <span className="text-xs bg-gray-100 px-2 py-0.5 rounded-full text-gray-500">
-                Matched
+                {i18n.t(k.MATCHED)}
               </span>
             )}
 
@@ -68,7 +70,7 @@ export function SearchResultItem({ document, onClick }: SearchResultItemProps) {
             {document.metadata?.helpful && (
               <span className="flex items-center gap-1">
                 <FiThumbsUp size={12} />
-                <span>Helpful</span>
+                <span>{i18n.t(k.HELPFUL)}</span>
               </span>
             )}
           </div>

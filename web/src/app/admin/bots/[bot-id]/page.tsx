@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { use } from "react";
 import { BackButton } from "@/components/BackButton";
@@ -50,7 +52,7 @@ function SlackBotEditPage({
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${unwrappedParams["bot-id"]}: ${errorMsg}`}
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_SLACK_BOT)} ${unwrappedParams["bot-id"]}${i18n.t(k._2)} ${errorMsg}`}
       />
     );
   }
@@ -63,7 +65,7 @@ function SlackBotEditPage({
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${unwrappedParams["bot-id"]}: ${errorMsg}`}
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_SLACK_BOT)} ${unwrappedParams["bot-id"]}${i18n.t(k._2)} ${errorMsg}`}
       />
     );
   }
@@ -78,6 +80,7 @@ function SlackBotEditPage({
         existingSlackBot={slackBot}
         refreshSlackBot={refreshSlackBot}
       />
+
       <Separator />
 
       <div className="mt-8">

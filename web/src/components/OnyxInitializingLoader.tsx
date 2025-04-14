@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import { Logo } from "./logo/Logo";
 import { useContext } from "react";
 import { SettingsContext } from "./settings/SettingsProvider";
@@ -9,7 +11,8 @@ export function OnyxInitializingLoader() {
     <div className="mx-auto my-auto animate-pulse">
       <Logo height={96} width={96} className="mx-auto mb-3" />
       <p className="text-lg text-text font-semibold">
-        Initializing {settings?.enterpriseSettings?.application_name ?? "Onyx"}
+        {i18n.t(k.INITIALIZING)}{" "}
+        {settings?.enterpriseSettings?.application_name ?? "Onyx"}
       </p>
     </div>
   );

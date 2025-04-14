@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
@@ -43,13 +45,10 @@ function ReIndexPopup({
             hide();
           }}
         >
-          Run Update
+          {i18n.t(k.RUN_UPDATE)}
         </Button>
 
-        <Text className="mt-2">
-          This will pull in and index all documents that have changed and/or
-          have been added since the last successful indexing run.
-        </Text>
+        <Text className="mt-2">{i18n.t(k.THIS_WILL_PULL_IN_AND_INDEX_AL)}</Text>
 
         <Separator />
 
@@ -67,17 +66,13 @@ function ReIndexPopup({
             hide();
           }}
         >
-          Run Complete Re-Indexing
+          {i18n.t(k.RUN_COMPLETE_RE_INDEXING)}
         </Button>
 
-        <Text className="mt-2">
-          This will cause a complete re-indexing of all documents from the
-          source.
-        </Text>
+        <Text className="mt-2">{i18n.t(k.THIS_WILL_CAUSE_A_COMPLETE_RE)}</Text>
 
         <Text className="mt-2">
-          <b>NOTE:</b> depending on the number of documents stored in the
-          source, this may take a long time.
+          <b>{i18n.t(k.NOTE)}</b> {i18n.t(k.DEPENDING_ON_THE_NUMBER_OF_DOC)}
         </Text>
       </div>
     </Modal>
@@ -128,7 +123,7 @@ export function ReIndexButton({
         }
         tooltip={getCCPairStatusMessage(isDisabled, isIndexing, ccPairStatus)}
       >
-        Re-Index
+        {i18n.t(k.RE_INDEX)}
       </Button>
     </>
   );

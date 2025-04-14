@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { LoadingAnimation } from "@/components/Loading";
 import { ThumbsUpIcon } from "@/components/icons/icons";
@@ -40,7 +42,7 @@ const Main = () => {
   ) {
     return (
       <div className="text-red-600">
-        Error loading documents -{" "}
+        {i18n.t(k.ERROR_LOADING_DOCUMENTS)}{" "}
         {mostDislikedDocumentsError || mostLikedDocumentsError}
       </div>
     );
@@ -48,10 +50,10 @@ const Main = () => {
 
   return (
     <div className="mb-8">
-      <Title className="mb-2">Most Liked Documents</Title>
+      <Title className="mb-2">{i18n.t(k.MOST_LIKED_DOCUMENTS)}</Title>
       <DocumentFeedbackTable documents={mostLikedDocuments} refresh={refresh} />
 
-      <Title className="mb-2 mt-6">Most Disliked Documents</Title>
+      <Title className="mb-2 mt-6">{i18n.t(k.MOST_DISLIKED_DOCUMENTS)}</Title>
       <DocumentFeedbackTable
         documents={mostDislikedDocuments}
         refresh={refresh}

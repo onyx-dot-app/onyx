@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useEmbeddingFormContext } from "@/components/context/EmbeddingContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 
@@ -16,7 +18,11 @@ export default function EmbeddingSidebar() {
   }
   const enterpriseSettings = combinedSettings.enterpriseSettings;
 
-  const settingSteps = ["Embedding Model", "Reranking Model", "Advanced"];
+  const settingSteps = [
+    i18n.t(k.EMBEDDING_MODEL),
+    i18n.t(k.RERANKING_MODEL),
+    i18n.t(k.ADVANCED),
+  ];
 
   return (
     <div className="flex bg-background-sidebar text-default">
@@ -40,7 +46,7 @@ export default function EmbeddingSidebar() {
               {enterpriseSettings && enterpriseSettings.application_name ? (
                 <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               ) : (
-                <HeaderTitle>Onyx</HeaderTitle>
+                <HeaderTitle>{i18n.t(k.ONYX)}</HeaderTitle>
               )}
             </div>
           </div>
@@ -52,7 +58,7 @@ export default function EmbeddingSidebar() {
             >
               <SettingsIcon className="flex-none " />
               <p className="my-auto flex items-center text-sm">
-                Search Settings
+                {i18n.t(k.SEARCH_SETTINGS)}
               </p>
             </Link>
           </div>

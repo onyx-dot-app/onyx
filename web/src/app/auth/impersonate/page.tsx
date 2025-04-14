@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useUser } from "@/components/user/UserProvider";
@@ -67,7 +69,7 @@ export default function ImpersonatePage() {
 
       <div className="flex flex-col w-full justify-center">
         <h2 className="text-center text-xl text-strong font-bold mb-8">
-          Impersonate User
+          {i18n.t(k.IMPERSONATE_USER)}
         </h2>
 
         <Formik
@@ -84,6 +86,7 @@ export default function ImpersonatePage() {
                   placeholder="Enter user email to impersonate"
                   className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
                 />
+
                 <div className="h-8">
                   {errors.email && touched.email && (
                     <div className="text-red-500 text-sm mt-1">
@@ -100,6 +103,7 @@ export default function ImpersonatePage() {
                   placeholder="Enter API Key"
                   className="w-full px-4 py-3 border border-border rounded-lg bg-input focus:outline-none focus:ring-2 focus:ring-primary transition-all duration-200"
                 />
+
                 <div className="h-8">
                   {errors.apiKey && touched.apiKey && (
                     <div className="text-red-500 text-sm mt-1">
@@ -113,14 +117,14 @@ export default function ImpersonatePage() {
                 type="submit"
                 className="w-full py-3 bg-agent text-white rounded-lg hover:bg-accent/90 transition-colors"
               >
-                Impersonate User
+                {i18n.t(k.IMPERSONATE_USER)}
               </button>
             </Form>
           )}
         </Formik>
 
         <div className="text-sm text-text-500 mt-4 text-center px-4 rounded-md">
-          Note: This feature is only available for @onyx.app administrators
+          {i18n.t(k.NOTE_THIS_FEATURE_IS_ONLY_AVA)}
         </div>
       </div>
     </AuthFlowContainer>

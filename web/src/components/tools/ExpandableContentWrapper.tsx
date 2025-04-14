@@ -1,4 +1,5 @@
-// ExpandableContentWrapper
+import i18n from "i18next";
+import k from "./../../i18n/keys"; // ExpandableContentWrapper
 import React, { useState, useEffect } from "react";
 import {
   CustomTooltip,
@@ -82,7 +83,7 @@ const ExpandableContentWrapper: React.FC<ExpandableContentWrapperProps> = ({
               <CustomTooltip
                 line
                 showTick
-                content={expanded ? "Minimize" : "Full screen"}
+                content={expanded ? i18n.t(k.MINIMIZE) : i18n.t(k.FULL_SCREEN)}
               >
                 <button onClick={toggleExpand}>
                   {!expanded ? (

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
@@ -17,18 +19,17 @@ export function SelectModelModal({
     <Modal
       width="max-w-3xl"
       onOutsideClick={onCancel}
-      title={`Select ${model.model_name}`}
+      title={`${i18n.t(k.SELECT)} ${model.model_name}`}
     >
       <div className="mb-4">
         <Text className="text-lg mb-2">
-          You&apos;re selecting a new embedding model, <b>{model.model_name}</b>
-          . If you update to this model, you will need to undergo a complete
-          re-indexing. Are you sure?
+          {i18n.t(k.YOU_RE_SELECTING_A_NEW_EMBEDDI)} <b>{model.model_name}</b>
+          {i18n.t(k.IF_YOU_UPDATE_TO_THIS_MODEL)}
         </Text>
         <div className="flex mt-8 justify-end gap-x-2">
-          <Button onClick={onConfirm}>Confirm</Button>
+          <Button onClick={onConfirm}>{i18n.t(k.CONFIRM)}</Button>
           <Button variant="outline" onClick={onCancel}>
-            Cancel
+            {i18n.t(k.CANCEL)}
           </Button>
         </div>
       </div>

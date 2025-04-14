@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 
 import { SettingsForm } from "./SettingsForm";
@@ -12,9 +14,7 @@ export default async function Page() {
         icon={<SettingsIcon size={32} className="my-auto" />}
       />
 
-      <Text className="mb-8">
-        Manage general Onyx settings applicable to all users in the workspace.
-      </Text>
+      <Text className="mb-8">{i18n.t(k.MANAGE_GENERAL_ONYX_SETTINGS_A)}</Text>
 
       <SettingsForm />
     </div>

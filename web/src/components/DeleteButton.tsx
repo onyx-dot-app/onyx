@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import { FiTrash } from "react-icons/fi";
 
 export function DeleteButton({
@@ -26,7 +28,7 @@ export function DeleteButton({
       onClick={onClick}
     >
       <FiTrash className="mr-1 my-auto" />
-      Delete
+      {i18n.t(k.DELETE)}
     </div>
   );
 }

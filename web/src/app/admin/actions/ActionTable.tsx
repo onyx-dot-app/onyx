@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import {
   Table,
@@ -29,10 +31,10 @@ export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Description</TableHead>
-            <TableHead>Built In?</TableHead>
-            <TableHead>Delete</TableHead>
+            <TableHead>{i18n.t(k.NAME)}</TableHead>
+            <TableHead>{i18n.t(k.DESCRIPTION)}</TableHead>
+            <TableHead>{i18n.t(k.BUILT_IN)}</TableHead>
+            <TableHead>{i18n.t(k.DELETE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -62,12 +64,12 @@ export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
                 {tool.in_code_tool_id === null ? (
                   <span>
                     <FiXCircle className="inline-block mr-1 my-auto" />
-                    No
+                    {i18n.t(k.NO)}
                   </span>
                 ) : (
                   <span>
                     <FiCheckCircle className="inline-block mr-1 my-auto" />
-                    Yes
+                    {i18n.t(k.YES)}
                   </span>
                 )}
               </TableCell>
@@ -83,7 +85,9 @@ export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
                             router.refresh();
                           } else {
                             setPopup({
-                              message: `Failed to delete tool - ${response.error}`,
+                              message: `${i18n.t(k.FAILED_TO_DELETE_TOOL)} ${
+                                response.error
+                              }`,
                               type: "error",
                             });
                           }
@@ -93,7 +97,7 @@ export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
                       </div>
                     </div>
                   ) : (
-                    "-"
+                    i18n.t(k._)
                   )}
                 </div>
               </TableCell>

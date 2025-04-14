@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { use } from "react";
 
 import { GroupsIcon } from "@/components/icons/icons";
@@ -46,13 +48,13 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
   }
 
   if (!userGroup || userGroupError) {
-    return <div>Error loading user group</div>;
+    return <div>{i18n.t(k.ERROR_LOADING_USER_GROUP)}</div>;
   }
   if (!users || usersError) {
-    return <div>Error loading users</div>;
+    return <div>{i18n.t(k.ERROR_LOADING_USERS)}</div>;
   }
   if (!ccPairs || ccPairsError) {
-    return <div>Error loading connectors</div>;
+    return <div>{i18n.t(k.ERROR_LOADING_CONNECTORS)}</div>;
   }
 
   return (
@@ -72,7 +74,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
           refreshUserGroup={refreshUserGroup}
         />
       ) : (
-        <div>Unable to fetch User Group :(</div>
+        <div>{i18n.t(k.UNABLE_TO_FETCH_USER_GROUP)}</div>
       )}
     </div>
   );
