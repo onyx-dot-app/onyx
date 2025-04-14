@@ -128,7 +128,6 @@ export function LLMProviderUpdateForm({
       initialValues={initialValues}
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
-        alert("onSubmit");
         setSubmitting(true);
 
         values.api_key_changed = values.api_key !== initialValues.api_key;
@@ -413,11 +412,7 @@ export function LLMProviderUpdateForm({
           {testError && <Text className="text-error mt-2">{testError}</Text>}
 
           <div className="flex w-full mt-4">
-            <Button
-              onClick={() => alert(JSON.stringify(formikProps.errors))}
-              type="submit"
-              variant="submit"
-            >
+            <Button type="submit" variant="submit">
               {isTesting ? (
                 <LoadingAnimation text="Testing" />
               ) : existingLlmProvider ? (
