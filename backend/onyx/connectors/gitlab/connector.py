@@ -101,7 +101,9 @@ def _convert_code_to_document(
         file_content = file_content_obj.decode().decode("latin-1")
 
     # Construct the file URL dynamically using the default branch
-    file_url = f"{url}/{projectOwner}/{projectName}/-/blob/{default_branch}/{file['path']}"
+    file_url = (
+        f"{url}/{projectOwner}/{projectName}/-/blob/{default_branch}/{file['path']}"
+    )
 
     # Create and return a Document object
     doc = Document(
@@ -114,7 +116,6 @@ def _convert_code_to_document(
         metadata={"type": "CodeFile"},
     )
     return doc
-
 
 
 def _should_exclude(path: str) -> bool:
