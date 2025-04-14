@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { ConfigurableSources } from "@/lib/types";
 import AddConnector from "./AddConnectorPage";
@@ -21,14 +23,18 @@ export default function ConnectorWrapper({
           {!isValidSource(connector) ? (
             <div className="mx-auto flex flex-col gap-y-2">
               <HeaderTitle>
-                <p>&lsquo;{connector}&lsquo; is not a valid Connector Type!</p>
+                <p>
+                  {i18n.t(k._7)}
+                  {connector}
+                  {i18n.t(k.IS_NOT_A_VALID_CONNECTOR_TYP)}
+                </p>
               </HeaderTitle>
               <Button
                 onClick={() => window.open("/admin/indexing/status", "_self")}
                 className="mr-auto"
               >
                 {" "}
-                Go home{" "}
+                {i18n.t(k.GO_HOME)}{" "}
               </Button>
             </div>
           ) : (

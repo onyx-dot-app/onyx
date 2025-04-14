@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { FiTag } from "react-icons/fi";
@@ -50,7 +52,9 @@ export function DocumentMetadataBlock({
                 />
               ))}
             {metadataEntries.length > MAX_METADATA_ITEMS && (
-              <span className="ml-1 text-xs text-text-500">...</span>
+              <span className="ml-1 text-xs text-text-500">
+                {i18n.t(k._13)}
+              </span>
             )}
           </div>
         </>
@@ -93,7 +97,7 @@ export function ChatDocumentDisplay({
           className="cursor-pointer text-left flex flex-col"
         >
           <div className="line-clamp-1 mb-1 flex h-6 items-center gap-2 text-xs">
-            {document.is_internet || document.source_type === "web" ? (
+            {document.is_internet || document.source_type === i18n.t(k.WEB) ? (
               <WebResultIcon url={document.link} />
             ) : (
               <SourceIcon sourceType={document.source_type} iconSize={18} />
@@ -103,7 +107,7 @@ export function ChatDocumentDisplay({
               (modal ? 30 : 40)
                 ? `${(document.semantic_identifier || document.document_id)
                     .slice(0, modal ? 30 : 40)
-                    .trim()}...`
+                    .trim()}${i18n.t(k._13)}`
                 : document.semantic_identifier || document.document_id}
             </div>
           </div>

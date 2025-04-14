@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { AuthType } from "@/lib/constants";
 import { FaGoogle } from "react-icons/fa";
 
@@ -15,14 +17,16 @@ export function SignInButton({
         <div className="my-auto mr-2">
           <FaGoogle />
         </div>
-        <p className="text-sm font-medium select-none">Continue with Google</p>
+        <p className="text-sm font-medium select-none">
+          {i18n.t(k.CONTINUE_WITH_GOOGLE)}
+        </p>
       </div>
     );
   } else if (authType === "oidc") {
     button = (
       <div className="mx-auto flex">
         <p className="text-sm font-medium select-none">
-          Continue with OIDC SSO
+          {i18n.t(k.CONTINUE_WITH_OIDC_SSO)}
         </p>
       </div>
     );
@@ -30,7 +34,7 @@ export function SignInButton({
     button = (
       <div className="mx-auto flex">
         <p className="text-sm font-medium select-none">
-          Continue with SAML SSO
+          {i18n.t(k.CONTINUE_WITH_SAML_SSO)}
         </p>
       </div>
     );

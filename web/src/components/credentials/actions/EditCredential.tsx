@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import Text from "@/components/ui/text";
@@ -50,9 +52,7 @@ const EditCredential = ({
 
   return (
     <div className="flex flex-col gap-y-6">
-      <Text>
-        Ensure that you update to a credential with the proper permissions!
-      </Text>
+      <Text>{i18n.t(k.ENSURE_THAT_YOU_UPDATE_TO_A_CR)}</Text>
 
       <Formik
         initialValues={initialValues}
@@ -87,7 +87,7 @@ const EditCredential = ({
               <Button type="button" onClick={() => resetForm()}>
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <FaTrash />
-                  <p>Reset Changes</p>
+                  <p>{i18n.t(k.RESET_CHANGES)}</p>
                 </div>
               </Button>
               <Button
@@ -97,7 +97,7 @@ const EditCredential = ({
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <FaNewspaper />
-                  <p>Update</p>
+                  <p>{i18n.t(k.UPDATE)}</p>
                 </div>
               </Button>
             </div>

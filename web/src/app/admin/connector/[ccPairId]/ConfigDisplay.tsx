@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import CardSection from "@/components/admin/CardSection";
 import { getNameFromPath } from "@/lib/fileUtils";
 import { ValidSources } from "@/lib/types";
@@ -68,7 +70,10 @@ function ConfigItem({ label, value }: { label: string; value: any }) {
         <div className="mt-2 overflow-x-auto">
           {Object.entries(value).map(([key, val]) => (
             <div key={key} className="mb-1">
-              <span className="font-semibold">{key}:</span>{" "}
+              <span className="font-semibold">
+                {key}
+                {i18n.t(k._2)}
+              </span>{" "}
               {convertObjectToString(val)}
             </div>
           ))}
@@ -93,12 +98,13 @@ function ConfigItem({ label, value }: { label: string; value: any }) {
               {isExpanded ? (
                 <>
                   <ChevronUpIcon className="h-4 w-4 mr-1" />
-                  Show less
+                  {i18n.t(k.SHOW_LESS)}
                 </>
               ) : (
                 <>
                   <ChevronDownIcon className="h-4 w-4 mr-1" />
-                  Show all ({value.length} items)
+                  {i18n.t(k.SHOW_ALL)}
+                  {value.length} {i18n.t(k.ITEMS)}
                 </>
               )}
             </button>
@@ -147,7 +153,7 @@ export function AdvancedConfigDisplay({
 
   return (
     <>
-      <Title className="mt-8 mb-2">Advanced Configuration</Title>
+      <Title className="mt-8 mb-2">{i18n.t(k.ADVANCED_CONFIGURATION)}</Title>
       <CardSection>
         <ul className="w-full text-sm divide-y divide-neutral-200 dark:divide-neutral-700">
           {pruneFreq && (
@@ -155,7 +161,7 @@ export function AdvancedConfigDisplay({
               key={0}
               className="w-full flex justify-between items-center py-2"
             >
-              <span>Pruning Frequency</span>
+              <span>{i18n.t(k.PRUNING_FREQUENCY)}</span>
               <span className="ml-auto w-24">
                 {formatPruneFrequency(pruneFreq)}
               </span>
@@ -171,7 +177,7 @@ export function AdvancedConfigDisplay({
               key={1}
               className="w-full flex justify-between items-center py-2"
             >
-              <span>Refresh Frequency</span>
+              <span>{i18n.t(k.REFRESH_FREQUENCY)}</span>
               <span className="ml-auto w-24">
                 {formatRefreshFrequency(refreshFreq)}
               </span>
@@ -187,7 +193,7 @@ export function AdvancedConfigDisplay({
               key={2}
               className="w-full flex justify-between items-center py-2"
             >
-              <span>Indexing Start</span>
+              <span>{i18n.t(k.INDEXING_START)}</span>
               <span>{formatDate(indexingStart)}</span>
             </li>
           )}
@@ -213,7 +219,7 @@ export function ConfigDisplay({
 
   return (
     <>
-      <Title className="mb-2">Configuration</Title>
+      <Title className="mb-2">{i18n.t(k.CONFIGURATION)}</Title>
       <CardSection>
         <ul className="w-full text-sm divide-y divide-background-200 dark:divide-background-700">
           {configEntries.map(([key, value]) => (

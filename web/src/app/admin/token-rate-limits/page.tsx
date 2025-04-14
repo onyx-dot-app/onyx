@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@/components/ui/button";
@@ -25,17 +27,11 @@ const GLOBAL_TOKEN_FETCH_URL = `${BASE_URL}/global`;
 const USER_TOKEN_FETCH_URL = `${BASE_URL}/users`;
 const USER_GROUP_FETCH_URL = `${BASE_URL}/user-groups`;
 
-const GLOBAL_DESCRIPTION =
-  "Global rate limits apply to all users, user groups, and API keys. When the global \
-  rate limit is reached, no more tokens can be spent.";
-const USER_DESCRIPTION =
-  "User rate limits apply to individual users. When a user reaches a limit, they will \
-  be temporarily blocked from spending tokens.";
-const USER_GROUP_DESCRIPTION =
-  "User group rate limits apply to all users in a group. When a group reaches a limit, \
-  all users in the group will be temporarily blocked from spending tokens, regardless \
-  of their individual limits. If a user is in multiple groups, the most lenient limit \
-  will apply.";
+const GLOBAL_DESCRIPTION = i18n.t(k.GLOBAL_RATE_LIMITS_APPLY_TO_AL);
+
+const USER_DESCRIPTION = i18n.t(k.USER_RATE_LIMITS_APPLY_TO_INDI);
+
+const USER_GROUP_DESCRIPTION = i18n.t(k.USER_GROUP_RATE_LIMITS_APPLY_T);
 
 const handleCreateTokenRateLimit = async (
   target_scope: Scope,
@@ -106,36 +102,24 @@ function Main() {
     <div>
       {popup}
 
-      <Text className="mb-2">
-        Token rate limits enable you control how many tokens can be spent in a
-        given time period. With token rate limits, you can:
-      </Text>
+      <Text className="mb-2">{i18n.t(k.TOKEN_RATE_LIMITS_ENABLE_YOU_C)}</Text>
 
       <ul className="list-disc mt-2 ml-4 mb-2">
         <li>
-          <Text>
-            Set a global rate limit to control your team&apos;s overall token
-            spend.
-          </Text>
+          <Text>{i18n.t(k.SET_A_GLOBAL_RATE_LIMIT_TO_CON)}</Text>
         </li>
         {isPaidEnterpriseFeaturesEnabled && (
           <>
             <li>
-              <Text>
-                Set rate limits for users to ensure that no single user can
-                spend too many tokens.
-              </Text>
+              <Text>{i18n.t(k.SET_RATE_LIMITS_FOR_USERS_TO_E)}</Text>
             </li>
             <li>
-              <Text>
-                Set rate limits for user groups to control token spend for your
-                teams.
-              </Text>
+              <Text>{i18n.t(k.SET_RATE_LIMITS_FOR_USER_GROUP)}</Text>
             </li>
           </>
         )}
         <li>
-          <Text>Enable and disable rate limits on the fly.</Text>
+          <Text>{i18n.t(k.ENABLE_AND_DISABLE_RATE_LIMITS)}</Text>
         </li>
       </ul>
 
@@ -143,6 +127,7 @@ function Main() {
         onClick={() => setModalIsOpen(true)}
         text="Create a Token Rate Limit"
       />
+
       {isPaidEnterpriseFeaturesEnabled && (
         <Tabs
           value={tabIndex.toString()}
@@ -151,15 +136,15 @@ function Main() {
           <TabsList>
             <TabsTrigger value="0" className="flex items-center gap-2">
               <FiGlobe />
-              Global
+              {i18n.t(k.GLOBAL)}
             </TabsTrigger>
             <TabsTrigger value="1" className="flex items-center gap-2">
               <FiUser />
-              User
+              {i18n.t(k.USER)}
             </TabsTrigger>
             <TabsTrigger value="2" className="flex items-center gap-2">
               <FiUsers />
-              User Groups
+              {i18n.t(k.USER_GROUPS)}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="0">
@@ -224,6 +209,7 @@ export default function Page() {
         title="Token Rate Limits"
         icon={<ShieldIcon size={32} />}
       />
+
       <Main />
     </div>
   );

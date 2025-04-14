@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { requestEmailVerification } from "../lib";
@@ -27,13 +29,15 @@ export function RequestNewVerificationEmail({
         if (response.ok) {
           setPopup({
             type: "success",
-            message: "A new verification email has been sent!",
+            message: i18n.t(k.A_NEW_VERIFICATION_EMAIL_HAS_B),
           });
         } else {
           const errorDetail = (await response.json()).detail;
           setPopup({
             type: "error",
-            message: `Failed to send a new verification email - ${errorDetail}`,
+            message: `${i18n.t(
+              k.FAILED_TO_SEND_A_NEW_VERIFICAT
+            )} ${errorDetail}`,
           });
         }
       }}

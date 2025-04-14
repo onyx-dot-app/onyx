@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";

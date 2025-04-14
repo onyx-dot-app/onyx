@@ -6,6 +6,7 @@ interface CalloutProps {
   type?: "default" | "warning" | "danger" | "notice";
   className?: string;
 }
+
 export function Callout({
   children,
   icon,

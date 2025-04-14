@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 
@@ -18,17 +20,16 @@ export const InstantSwitchConfirmModal = ({
     >
       <>
         <div>
-          Instant switching will immediately change the embedding model without
-          re-indexing. Searches will be over a partial set of documents
-          (starting with 0 documents) until re-indexing is complete.
+          {i18n.t(k.INSTANT_SWITCHING_WILL_IMMEDIA)}
+
           <br />
           <br />
-          <b>This is not reversible.</b>
+          <b>{i18n.t(k.THIS_IS_NOT_REVERSIBLE)}</b>
         </div>
         <div className="flex mt-4 gap-x-2 justify-end">
-          <Button onClick={onConfirm}>Confirm</Button>
+          <Button onClick={onConfirm}>{i18n.t(k.CONFIRM)}</Button>
           <Button variant="outline" onClick={onClose}>
-            Cancel
+            {i18n.t(k.CANCEL)}
           </Button>
         </div>
       </>

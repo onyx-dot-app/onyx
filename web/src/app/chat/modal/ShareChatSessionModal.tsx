@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
@@ -99,6 +101,7 @@ export function ShareChatSessionModal({
       ? buildShareLink(chatSessionId)
       : ""
   );
+
   const { popup, setPopup } = usePopup();
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
@@ -109,17 +112,14 @@ export function ShareChatSessionModal({
         <>
           <div className="flex mb-4">
             <h2 className="text-2xl text-text-darker font-bold flex my-auto">
-              Share link to Chat
+              {i18n.t(k.SHARE_LINK_TO_CHAT)}
             </h2>
           </div>
 
           <div className="flex mt-2">
             {shareLink ? (
               <div>
-                <Text>
-                  This chat session is currently shared. Anyone in your team can
-                  view the message history using the following link:
-                </Text>
+                <Text>{i18n.t(k.THIS_CHAT_SESSION_IS_CURRENTLY)}</Text>
 
                 <div className="flex mt-2">
                   <CopyButton content={shareLink} />
@@ -136,7 +136,7 @@ export function ShareChatSessionModal({
                 <Separator />
 
                 <Text className="mb-4">
-                  Click the button below to make the chat private again.
+                  {i18n.t(k.CLICK_THE_BUTTON_BELOW_TO_MAKE)}
                 </Text>
 
                 <Button
@@ -146,20 +146,19 @@ export function ShareChatSessionModal({
                       setShareLink("");
                       onShare && onShare(false);
                     } else {
-                      alert("Failed to delete share link");
+                      alert(i18n.t(k.FAILED_TO_DELETE_SHARE_LINK));
                     }
                   }}
                   size="sm"
                   variant="destructive"
                 >
-                  Delete Share Link
+                  {i18n.t(k.DELETE_SHARE_LINK)}
                 </Button>
               </div>
             ) : (
               <div>
                 <Callout type="warning" title="Warning" className="mb-4">
-                  Please make sure that all content in this chat is safe to
-                  share with the whole team.
+                  {i18n.t(k.PLEASE_MAKE_SURE_THAT_ALL_CONT)}
                 </Callout>
                 <div className="flex w-full justify-between">
                   <Button
@@ -168,10 +167,11 @@ export function ShareChatSessionModal({
                       // NOTE: for "insecure" non-https setup, the `navigator.clipboard.writeText` may fail
                       // as the browser may not allow the clipboard to be accessed.
                       try {
-                        const shareLink =
-                          await generateShareLink(chatSessionId);
+                        const shareLink = await generateShareLink(
+                          chatSessionId
+                        );
                         if (!shareLink) {
-                          alert("Failed to generate share link");
+                          alert(i18n.t(k.FAILED_TO_GENERATE_SHARE_LINK));
                         } else {
                           setShareLink(shareLink);
                           onShare && onShare(true);
@@ -184,7 +184,7 @@ export function ShareChatSessionModal({
                     size="sm"
                     variant="secondary"
                   >
-                    Generate and Copy Share Link
+                    {i18n.t(k.GENERATE_AND_COPY_SHARE_LINK)}
                   </Button>
                 </div>
               </div>
@@ -203,8 +203,7 @@ export function ShareChatSessionModal({
             <>
               <div className="mb-4">
                 <Callout type="notice" title="Seed New Chat">
-                  Generate a link to a new chat session with the same settings
-                  as this chat (including the assistant and model).
+                  {i18n.t(k.GENERATE_A_LINK_TO_A_NEW_CHAT)}
                 </Callout>
               </div>
               <div className="flex w-full justify-between">
@@ -219,13 +218,13 @@ export function ShareChatSessionModal({
                       );
                       if (!seedLink) {
                         setPopup({
-                          message: "Failed to generate seed link",
+                          message: i18n.t(k.FAILED_TO_GENERATE_SEED_LINK),
                           type: "error",
                         });
                       } else {
                         navigator.clipboard.writeText(seedLink);
                         setPopup({
-                          message: "Link copied to clipboard!",
+                          message: i18n.t(k.LINK_COPIED_TO_CLIPBOARD),
                           type: "success",
                         });
                       }
@@ -237,7 +236,7 @@ export function ShareChatSessionModal({
                   size="sm"
                   variant="secondary"
                 >
-                  Generate and Copy Seed Link
+                  {i18n.t(k.GENERATE_AND_COPY_SEED_LINK)}
                 </Button>
               </div>
             </>

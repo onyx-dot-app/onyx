@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useProviderStatus } from "./ProviderContext";
 
 export default function CredentialNotConfigured({
@@ -13,27 +15,26 @@ export default function CredentialNotConfigured({
     <>
       {noSources ? (
         <p className="text-base text-center w-full text-subtle">
-          You have not yet added any sources. Please add{" "}
+          {i18n.t(k.YOU_HAVE_NOT_YET_ADDED_ANY_SOU)}{" "}
           <a
             href="/admin/add-connector"
             className="text-link hover:underline cursor-pointer"
           >
-            a source
+            {i18n.t(k.A_SOURCE)}
           </a>{" "}
-          to continue.
+          {i18n.t(k.TO_CONTINUE)}
         </p>
       ) : (
         shouldShowConfigurationNeeded && (
           <p className="text-base text-center w-full text-subtle">
-            Please note that you have not yet configured an LLM provider. You
-            can configure one{" "}
+            {i18n.t(k.PLEASE_NOTE_THAT_YOU_HAVE_NOT)}{" "}
             <button
               onClick={showConfigureAPIKey}
               className="text-link hover:underline cursor-pointer"
             >
-              here
+              {i18n.t(k.HERE)}
             </button>
-            .
+            {i18n.t(k._8)}
           </p>
         )
       )}

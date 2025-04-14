@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React from "react";
 import { AlertTriangle } from "lucide-react";
 
@@ -15,8 +17,8 @@ export const UploadWarning: React.FC<UploadWarningProps> = ({ className }) => {
       <div className="flex items-center">
         <AlertTriangle className="h-6 w-6 mr-2" />
         <p>
-          <span className="font-bold">Warning:</span> This folder is shared. Any
-          documents you upload will be accessible to the shared assistants.
+          <span className="font-bold">{i18n.t(k.WARNING2)}</span>{" "}
+          {i18n.t(k.THIS_FOLDER_IS_SHARED_ANY)}
         </p>
       </div>
     </div>

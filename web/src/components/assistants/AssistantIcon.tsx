@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React from "react";
 import crypto from "crypto";
 import { Persona } from "@/app/admin/assistants/interfaces";

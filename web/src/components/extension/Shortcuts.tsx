@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useState, useEffect } from "react";
 import {
   Dialog,
@@ -83,7 +85,9 @@ export const AddShortCut = ({
       className="w-24 h-24 flex-none rounded-xl bg-[#fff]/10 hover:bg-[#fff]/20 backdrop-blur-sm transition-all duration-300 ease-in-out flex flex-col items-center justify-center"
     >
       <PlusIcon className="w-8 h-8 text-[#fff] mb-2" />
-      <h1 className="text-[#fff] text-xs font-medium">New Bookmark</h1>
+      <h1 className="text-[#fff] text-xs font-medium">
+        {i18n.t(k.NEW_BOOKMARK)}
+      </h1>
     </button>
   );
 };
@@ -148,12 +152,14 @@ export const NewShortCutModal = ({
       <DialogContent className="max-w-[95%] sm:max-w-[425px] bg-background-900 border-none text-[#fff]">
         <DialogHeader>
           <DialogTitle>
-            {editingShortcut ? "Edit Shortcut" : "Add New Shortcut"}
+            {editingShortcut
+              ? i18n.t(k.EDIT_SHORTCUT)
+              : i18n.t(k.ADD_NEW_SHORTCUT)}
           </DialogTitle>
           <DialogDescription>
             {editingShortcut
-              ? "Modify your existing shortcut."
-              : "Create a new shortcut for quick access to your favorite websites."}
+              ? i18n.t(k.MODIFY_YOUR_EXISTING_SHORTCUT)
+              : i18n.t(k.CREATE_A_NEW_SHORTCUT_FOR_QUIC)}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="w-full space-y-6">
@@ -163,7 +169,7 @@ export const NewShortCutModal = ({
                 htmlFor="name"
                 className="text-sm font-medium text-text-300"
               >
-                Name
+                {i18n.t(k.NAME)}
               </Label>
               <Input
                 id="name"
@@ -178,7 +184,7 @@ export const NewShortCutModal = ({
                 htmlFor="url"
                 className="text-sm font-medium text-text-300"
               >
-                URL
+                {i18n.t(k.URL)}
               </Label>
               <Input
                 id="url"
@@ -189,13 +195,16 @@ export const NewShortCutModal = ({
                 }`}
                 placeholder="https://example.com"
               />
+
               {!isValidUrl && url && (
-                <p className="text-red-500 text-sm">Please enter a valid URL</p>
+                <p className="text-red-500 text-sm">
+                  {i18n.t(k.PLEASE_ENTER_A_VALID_URL)}
+                </p>
               )}
             </div>
             <div className="flex items-center space-x-2">
               <Label className="text-sm font-medium text-text-300">
-                Favicon Preview:
+                {i18n.t(k.FAVICON_PREVIEW)}
               </Label>
               <div className="w-8 h-8 relative flex items-center justify-center">
                 {isValidUrl && !faviconError ? (
@@ -219,7 +228,9 @@ export const NewShortCutModal = ({
               className="bg-blue-600 hover:bg-blue-700 text-[#fff]"
               disabled={!isValidUrl || !name}
             >
-              {editingShortcut ? "Save Changes" : "Add Shortcut"}
+              {editingShortcut
+                ? i18n.t(k.SAVE_CHANGES)
+                : i18n.t(k.ADD_SHORTCUT)}
             </Button>
             {editingShortcut && (
               <Button
@@ -227,7 +238,7 @@ export const NewShortCutModal = ({
                 variant="destructive"
                 onClick={() => onDelete(editingShortcut)}
               >
-                Delete
+                {i18n.t(k.DELETE)}
               </Button>
             )}
           </DialogFooter>
@@ -250,10 +261,9 @@ export const MaxShortcutsReachedModal = ({
     >
       <div className="flex flex-col gap-4">
         <p className="text-left text-text-900">
-          You&apos;ve reached the maximum limit of 8 shortcuts. To add a new
-          shortcut, please remove an existing one.
+          {i18n.t(k.YOU_VE_REACHED_THE_MAXIMUM_LIM)}
         </p>
-        <Button onClick={onClose}>Close</Button>
+        <Button onClick={onClose}>{i18n.t(k.CLOSE)}</Button>
       </div>
     </Modal>
   );

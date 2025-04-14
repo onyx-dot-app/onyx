@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../i18n/keys";
 
 import { useRouter } from "next/navigation";
 
@@ -37,7 +39,7 @@ export function BackButton({
       }}
     >
       <FiChevronLeft className="mr-1 my-auto" />
-      Back
+      {i18n.t(k.BACK)}
     </div>
   );
 }

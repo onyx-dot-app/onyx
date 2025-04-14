@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -39,8 +41,7 @@ const PendingUsersTable = ({
   const [currentPageNum, setCurrentPageNum] = useState<number>(1);
   const [userToApprove, setUserToApprove] = useState<string | null>(null);
 
-  if (!users.length)
-    return <p>Users that have requested to join will show up here</p>;
+  if (!users.length) return <p>{i18n.t(k.USERS_THAT_HAVE_REQUESTED_TO_J)}</p>;
 
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
 
@@ -97,7 +98,9 @@ const PendingUsersTable = ({
           onSubmit={() => handleAcceptRequest(userToApprove)}
           actionButtonText="Approve"
           actionText="approve the join request of"
-          additionalDetails={`${userToApprove} has requested to join the team. Approving will add them as a user in this team.`}
+          additionalDetails={`${userToApprove} ${i18n.t(
+            k.HAS_REQUESTED_TO_JOIN_THE_TEAM
+          )}`}
           variant="action"
           accent
           removeConfirmationText
@@ -106,9 +109,9 @@ const PendingUsersTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Email</TableHead>
+            <TableHead>{i18n.t(k.EMAIL)}</TableHead>
             <TableHead>
-              <div className="flex justify-end">Actions</div>
+              <div className="flex justify-end">{i18n.t(k.ACTIONS)}</div>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -125,7 +128,7 @@ const PendingUsersTable = ({
                       onClick={() => setUserToApprove(user.email)}
                     >
                       <CheckIcon className="h-4 w-4" />
-                      Accept Join Request
+                      {i18n.t(k.ACCEPT_JOIN_REQUEST)}
                     </Button>
                   </div>
                 </TableCell>
@@ -134,7 +137,9 @@ const PendingUsersTable = ({
           ) : (
             <TableRow>
               <TableCell colSpan={2} className="h-24 text-center">
-                {`No pending users found matching "${q}"`}
+                {`${i18n.t(k.NO_PENDING_USERS_FOUND_MATCHIN)}${q}${i18n.t(
+                  k._17
+                )}`}
               </TableCell>
             </TableRow>
           )}

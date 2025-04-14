@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { FC } from "react";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "../admin/connectors/Field";
@@ -23,7 +25,7 @@ export const StandardAnswerCategoryDropdownField: FC<
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${standardAnswerCategoryResponse.error.message}`}
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_STANDARD_ANSWE)} ${standardAnswerCategoryResponse.error.message}`}
       />
     );
   }
@@ -35,7 +37,7 @@ export const StandardAnswerCategoryDropdownField: FC<
   return (
     <>
       <div>
-        <Label>Standard Answer Categories</Label>
+        <Label>{i18n.t(k.STANDARD_ANSWER_CATEGORIES)}</Label>
         <div className="w-64">
           <MultiSelectDropdown
             name="standard_answer_categories"

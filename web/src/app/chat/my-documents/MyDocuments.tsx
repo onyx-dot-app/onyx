@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import React, { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -187,6 +189,7 @@ export default function MyDocuments() {
           message: `${
             isFolder ? "Knowledge Group" : "File"
           } moved successfully`,
+
           type: "success",
         });
         await refreshFolders();
@@ -228,6 +231,7 @@ export default function MyDocuments() {
           message: `${
             isFolder ? "Knowledge Group" : "File"
           } renamed successfully`,
+
           type: "success",
         });
         await refreshFolders();
@@ -325,7 +329,7 @@ export default function MyDocuments() {
     <div className="min-h-full pt-20 w-full min-w-0 flex-1 mx-auto  w-full max-w-[90rem] flex-1 px-4 pb-20 md:pl-8  md:pr-8 2xl:pr-14">
       <header className="flex w-full items-center justify-between gap-4 -translate-y-px">
         <h1 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
-          My Documents
+          {i18n.t(k.MY_DOCUMENTS)}
         </h1>
         <div className="flex items-center gap-2">
           <CreateEntityModal
@@ -338,7 +342,7 @@ export default function MyDocuments() {
             trigger={
               <Button className="inline-flex items-center justify-center relative shrink-0 h-9 px-4 py-2 rounded-lg min-w-[5rem] active:scale-[0.985] whitespace-nowrap pl-2 pr-3 gap-1">
                 <Plus className="h-5 w-5" />
-                New Folder
+                {i18n.t(k.NEW_FOLDER)}
               </Button>
             }
             hideLabel
@@ -390,7 +394,7 @@ export default function MyDocuments() {
               className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-neutral-800"
             >
               <MessageSquare className="w-3 h-3" />
-              Chat with My Documents
+              {i18n.t(k.CHAT_WITH_MY_DOCUMENTS)}
             </Button>
             <TokenDisplay
               totalTokens={totalTokens}
@@ -413,7 +417,7 @@ export default function MyDocuments() {
                   onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[40%] flex items-center cursor-pointer transition-colors"
                 >
-                  Name {renderSortIndicator(SortType.Alphabetical)}
+                  {i18n.t(k.NAME)} {renderSortIndicator(SortType.Alphabetical)}
                   {renderHoverIndicator(SortType.Alphabetical)}
                 </button>
                 <button
@@ -422,7 +426,8 @@ export default function MyDocuments() {
                   onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[30%] flex items-center cursor-pointer transition-colors"
                 >
-                  Last Modified {renderSortIndicator(SortType.TimeCreated)}
+                  {i18n.t(k.LAST_MODIFIED)}{" "}
+                  {renderSortIndicator(SortType.TimeCreated)}
                   {renderHoverIndicator(SortType.TimeCreated)}
                 </button>
                 <button
@@ -431,7 +436,7 @@ export default function MyDocuments() {
                   onMouseLeave={() => setHoveredColumn(null)}
                   className="w-[30%] flex items-center cursor-pointer transition-colors"
                 >
-                  LLM Tokens {renderSortIndicator(SortType.Tokens)}
+                  {i18n.t(k.LLM_TOKENS)} {renderSortIndicator(SortType.Tokens)}
                   {renderHoverIndicator(SortType.Tokens)}
                 </button>
               </div>
@@ -464,8 +469,9 @@ export default function MyDocuments() {
                 className="w-20 h-20 text-orange-400 dark:text-orange-300 mb-4"
                 strokeWidth={1.5}
               />
+
               <p className="text-text-500 dark:text-neutral-400 text-lg font-normal">
-                No items found
+                {i18n.t(k.NO_ITEMS_FOUND)}
               </p>
             </div>
           )}

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { useRouter } from "next/navigation";
 import { EnterpriseSettings } from "@/app/admin/settings/interfaces";
@@ -104,7 +106,7 @@ export function WhitelabelingForm() {
             );
             if (!response.ok) {
               const errorMsg = (await response.json()).detail;
-              alert(`Failed to upload logo. ${errorMsg}`);
+              alert(`${i18n.t(k.FAILED_TO_UPLOAD_LOGO)} ${errorMsg}`);
               formikHelpers.setSubmitting(false);
               return;
             }
@@ -125,7 +127,7 @@ export function WhitelabelingForm() {
             );
             if (!response.ok) {
               const errorMsg = (await response.json()).detail;
-              alert(`Failed to upload logo. ${errorMsg}`);
+              alert(`${i18n.t(k.FAILED_TO_UPLOAD_LOGO)} ${errorMsg}`);
               formikHelpers.setSubmitting(false);
               return;
             }
@@ -140,16 +142,16 @@ export function WhitelabelingForm() {
             <TextFormField
               label="Application Name"
               name="application_name"
-              subtext={`The custom name you are giving Onyx for your team. This will replace 'Onyx' everywhere in the UI.`}
+              subtext={`${i18n.t(k.THE_CUSTOM_NAME_YOU_ARE_GIVING)}`}
               placeholder="Custom name which will replace 'Onyx'"
               disabled={isSubmitting}
             />
 
-            <Label className="mt-4">Custom Logo</Label>
+            <Label className="mt-4">{i18n.t(k.CUSTOM_LOGO)}</Label>
 
             {values.use_custom_logo ? (
               <div className="mt-3">
-                <SubLabel>Current Custom Logo: </SubLabel>
+                <SubLabel>{i18n.t(k.CURRENT_CUSTOM_LOGO)}</SubLabel>
                 <img
                   src={"/api/enterprise-settings/logo?u=" + Date.now()}
                   alt="logo"
@@ -171,18 +173,13 @@ export function WhitelabelingForm() {
                     setValues(valuesWithoutLogo);
                   }}
                 >
-                  Delete
+                  {i18n.t(k.DELETE)}
                 </Button>
 
-                <SubLabel>
-                  Override the current custom logo by uploading a new image
-                  below and clicking the Update button.
-                </SubLabel>
+                <SubLabel>{i18n.t(k.OVERRIDE_THE_CURRENT_CUSTOM_LO)}</SubLabel>
               </div>
             ) : (
-              <SubLabel>
-                Specify your own logo to replace the standard Onyx logo.
-              </SubLabel>
+              <SubLabel>{i18n.t(k.SPECIFY_YOUR_OWN_LOGO_TO_REPLA)}</SubLabel>
             )}
 
             <ImageUpload
@@ -200,20 +197,20 @@ export function WhitelabelingForm() {
             {showAdvancedOptions && (
               <div className="w-full flex flex-col gap-y-4">
                 <Text>
-                  Read{" "}
+                  {i18n.t(k.READ)}{" "}
                   <Link
                     href={"https://docs.onyx.app/enterprise_edition/theming"}
                     className="text-link cursor-pointer"
                   >
-                    the docs
+                    {i18n.t(k.THE_DOCS)}
                   </Link>{" "}
-                  to see whitelabeling examples in action.
+                  {i18n.t(k.TO_SEE_WHITELABELING_EXAMPLES)}
                 </Text>
 
                 <TextFormField
                   label="Chat Header Content"
                   name="custom_header_content"
-                  subtext={`Custom Markdown content that will be displayed as a banner at the top of the Chat page.`}
+                  subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W)}`}
                   placeholder="Your header content..."
                   disabled={isSubmitting}
                 />
@@ -229,21 +226,21 @@ export function WhitelabelingForm() {
                 <TextFormField
                   label={
                     values.enable_consent_screen
-                      ? "Consent Screen Header"
-                      : "Popup Header"
+                      ? i18n.t(k.CONSENT_SCREEN_HEADER)
+                      : i18n.t(k.POPUP_HEADER)
                   }
                   name="custom_popup_header"
                   subtext={
                     values.enable_consent_screen
-                      ? `The title for the consent screen that will be displayed for each user on their initial visit to the application. If left blank, title will default to "Terms of Use".`
-                      : `The title for the popup that will be displayed for each user on their initial visit to the application. If left blank AND Custom Popup Content is specified, will use "Welcome to ${
-                          values.application_name || "Onyx"
-                        }!".`
+                      ? `${i18n.t(k.THE_TITLE_FOR_THE_CONSENT_SCRE)}`
+                      : `${i18n.t(k.THE_TITLE_FOR_THE_POPUP_THAT_W)} ${
+                          values.application_name || i18n.t(k.ONYX)
+                        }${i18n.t(k._18)}`
                   }
                   placeholder={
                     values.enable_consent_screen
-                      ? "Consent Screen Header"
-                      : "Initial Popup Header"
+                      ? i18n.t(k.CONSENT_SCREEN_HEADER)
+                      : i18n.t(k.INITIAL_POPUP_HEADER)
                   }
                   disabled={isSubmitting}
                 />
@@ -251,19 +248,19 @@ export function WhitelabelingForm() {
                 <TextFormField
                   label={
                     values.enable_consent_screen
-                      ? "Consent Screen Content"
-                      : "Popup Content"
+                      ? i18n.t(k.CONSENT_SCREEN_CONTENT)
+                      : i18n.t(k.POPUP_CONTENT)
                   }
                   name="custom_popup_content"
                   subtext={
                     values.enable_consent_screen
-                      ? `Custom Markdown content that will be displayed as a consent screen on initial visit to the application. If left blank, will default to "By clicking 'I Agree', you acknowledge that you agree to the terms of use of this application and consent to proceed."`
-                      : `Custom Markdown content that will be displayed as a popup on initial visit to the application.`
+                      ? `${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W1)}`
+                      : `${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W2)}`
                   }
                   placeholder={
                     values.enable_consent_screen
-                      ? "Your consent screen content..."
-                      : "Your popup content..."
+                      ? i18n.t(k.YOUR_CONSENT_SCREEN_CONTENT)
+                      : i18n.t(k.YOUR_POPUP_CONTENT)
                   }
                   isTextArea
                   disabled={isSubmitting}
@@ -279,18 +276,18 @@ export function WhitelabelingForm() {
                 <TextFormField
                   label="Chat Footer Text"
                   name="custom_lower_disclaimer_content"
-                  subtext={`Custom Markdown content that will be displayed at the bottom of the Chat page.`}
+                  subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W3)}`}
                   placeholder="Your disclaimer content..."
                   isTextArea
                   disabled={isSubmitting}
                 />
 
                 <div>
-                  <Label>Chat Footer Logotype</Label>
+                  <Label>{i18n.t(k.CHAT_FOOTER_LOGOTYPE)}</Label>
 
                   {values.use_custom_logotype ? (
                     <div className="mt-3">
-                      <SubLabel>Current Custom Logotype: </SubLabel>
+                      <SubLabel>{i18n.t(k.CURRENT_CUSTOM_LOGOTYPE)}</SubLabel>
                       <img
                         src={
                           "/api/enterprise-settings/logotype?u=" + Date.now()
@@ -314,22 +311,16 @@ export function WhitelabelingForm() {
                           setValues(valuesWithoutLogotype);
                         }}
                       >
-                        Delete
+                        {i18n.t(k.DELETE)}
                       </Button>
 
                       <SubLabel>
-                        Override your uploaded custom logotype by uploading a
-                        new image below and clicking the Update button. This
-                        logotype is the text-based logo that will be rendered at
-                        the bottom right of the chat screen.
+                        {i18n.t(k.OVERRIDE_YOUR_UPLOADED_CUSTOM)}
                       </SubLabel>
                     </div>
                   ) : (
                     <SubLabel>
-                      Add a custom logotype by uploading a new image below and
-                      clicking the Update button. This logotype is the
-                      text-based logo that will be rendered at the bottom right
-                      of the chat screen.
+                      {i18n.t(k.ADD_A_CUSTOM_LOGOTYPE_BY_UPLOA)}
                     </SubLabel>
                   )}
                   <ImageUpload
@@ -341,7 +332,7 @@ export function WhitelabelingForm() {
             )}
 
             <Button type="submit" className="mt-4">
-              Update
+              {i18n.t(k.UPDATE)}
             </Button>
           </Form>
         )}

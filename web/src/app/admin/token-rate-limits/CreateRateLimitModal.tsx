@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import * as Yup from "yup";
 import { Button } from "@/components/ui/button";
@@ -122,9 +124,9 @@ export const CreateRateLimitModal = ({
                 name="target_scope"
                 label="Target Scope"
                 options={[
-                  { name: "Global", value: Scope.GLOBAL },
-                  { name: "User", value: Scope.USER },
-                  { name: "User Group", value: Scope.USER_GROUP },
+                  { name: i18n.t(k.GLOBAL), value: Scope.GLOBAL },
+                  { name: i18n.t(k.USER), value: Scope.USER },
+                  { name: i18n.t(k.USER_GROUP), value: Scope.USER_GROUP },
                 ]}
                 includeDefault={false}
                 onSelect={(selected) => {
@@ -150,19 +152,21 @@ export const CreateRateLimitModal = ({
               type="number"
               placeholder=""
             />
+
             <TextFormField
               name="token_budget"
               label="Token Budget (Thousands)"
               type="number"
               placeholder=""
             />
+
             <Button
               type="submit"
               variant="submit"
               size="sm"
               disabled={isSubmitting}
             >
-              Create!
+              {i18n.t(k.CREATE)}
             </Button>
           </Form>
         )}

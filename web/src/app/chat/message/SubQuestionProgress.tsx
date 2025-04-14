@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import { SubQuestionDetail } from "../interfaces";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -30,12 +32,16 @@ const SubQuestionProgress: React.FC<SubQuestionProgressProps> = ({
           {subQuestions.map((sq, index) => (
             <TableRow key={index}>
               <TableCell>
-                Level {sq.level}, Q{sq.level_question_num}
+                {i18n.t(k.LEVEL)} {sq.level}
+                {i18n.t(k.Q)}
+                {sq.level_question_num}
               </TableCell>
               <TableCell>
                 <Popover>
                   <PopoverTrigger>
-                    {sq.question ? "Generated" : "Not generated"}
+                    {sq.question
+                      ? i18n.t(k.GENERATED)
+                      : i18n.t(k.NOT_GENERATED)}
                   </PopoverTrigger>
                   <PopoverContent>
                     <p>{sq.question || "Question not generated yet"}</p>
@@ -45,7 +51,7 @@ const SubQuestionProgress: React.FC<SubQuestionProgressProps> = ({
               <TableCell>
                 <Popover>
                   <PopoverTrigger>
-                    {sq.answer ? "Answered" : "Not answered"}
+                    {sq.answer ? i18n.t(k.ANSWERED) : i18n.t(k.NOT_ANSWERED)}
                   </PopoverTrigger>
                   <PopoverContent>
                     <p>{sq.answer || "Answer not available yet"}</p>
@@ -56,8 +62,8 @@ const SubQuestionProgress: React.FC<SubQuestionProgressProps> = ({
                 <Popover>
                   <PopoverTrigger>
                     {sq.sub_queries
-                      ? `${sq.sub_queries.length} sub-queries`
-                      : "No sub-queries"}
+                      ? `${sq.sub_queries.length} ${i18n.t(k.SUB_QUERIES)}`
+                      : i18n.t(k.NO_SUB_QUERIES)}
                   </PopoverTrigger>
                   <PopoverContent>
                     <ul>
@@ -72,8 +78,8 @@ const SubQuestionProgress: React.FC<SubQuestionProgressProps> = ({
                 <Popover>
                   <PopoverTrigger>
                     {sq.context_docs
-                      ? `${sq.context_docs.top_documents.length} docs`
-                      : "No docs"}
+                      ? `${sq.context_docs.top_documents.length} ${i18n.t(k.DOCS)}`
+                      : i18n.t(k.NO_DOCS)}
                   </PopoverTrigger>
                   <PopoverContent>
                     <ul>
@@ -85,7 +91,7 @@ const SubQuestionProgress: React.FC<SubQuestionProgressProps> = ({
                 </Popover>
               </TableCell>
               <TableCell>
-                {sq.is_complete ? "Complete" : "Generating..."}
+                {sq.is_complete ? i18n.t(k.COMPLETE) : i18n.t(k.GENERATING)}
               </TableCell>
             </TableRow>
           ))}

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import { use } from "react";
 
 import Text from "@/components/ui/text";
@@ -19,12 +21,12 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
   return (
     <div>
       <p className="text-xs font-bold mb-1">
-        {message.message_type === "user" ? "User" : "AI"}
+        {message.message_type === "user" ? i18n.t(k.USER) : i18n.t(k.AI)}
       </p>
       <Text>{message.message}</Text>
       {message.documents.length > 0 && (
         <div className="flex flex-col gap-y-2 mt-2">
-          <p className="font-bold text-xs">Reference Documents</p>
+          <p className="font-bold text-xs">{i18n.t(k.REFERENCE_DOCUMENTS)}</p>
           {message.documents.slice(0, 5).map((document) => {
             return (
               <Text className="flex" key={document.document_id}>
@@ -33,6 +35,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
                     "my-auto mr-1" + (document.link ? " text-link" : " ")
                   }
                 />
+
                 {document.link ? (
                   <a
                     href={document.link}
@@ -52,7 +55,7 @@ function MessageDisplay({ message }: { message: MessageSnapshot }) {
       )}
       {message.feedback_type && (
         <div className="mt-2">
-          <p className="font-bold text-xs">Feedback</p>
+          <p className="font-bold text-xs">{i18n.t(k.FEEDBACK)}</p>
           {message.feedback_text && <Text>{message.feedback_text}</Text>}
           <div className="mt-1">
             <FeedbackBadge feedback={message.feedback_type} />
@@ -83,7 +86,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch chat session - ${error}`}
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_CHAT_SESSION)} ${error}`}
       />
     );
   }
@@ -93,13 +96,13 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
       <BackButton />
 
       <CardSection className="mt-4">
-        <Title>Chat Session Details</Title>
+        <Title>{i18n.t(k.CHAT_SESSION_DETAILS)}</Title>
 
         <Text className="flex flex-wrap whitespace-normal mt-1 text-xs">
           {chatSessionSnapshot.user_email &&
-            `${chatSessionSnapshot.user_email}, `}
-          {timestampToReadableDate(chatSessionSnapshot.time_created)},{" "}
-          {chatSessionSnapshot.flow_type}
+            `${chatSessionSnapshot.user_email}${i18n.t(k._3)} `}
+          {timestampToReadableDate(chatSessionSnapshot.time_created)}
+          {i18n.t(k._3)} {chatSessionSnapshot.flow_type}
         </Text>
 
         <Separator />

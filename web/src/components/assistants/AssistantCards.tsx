@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { Bubble } from "@/components/Bubble";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
@@ -25,16 +27,18 @@ export const AssistantCard = ({
         return (
           <>
             <FiSearch className="h-3 w-3 my-auto" />
-            <span>Search</span>
+            <span>{i18n.t(k.SEARCH)}</span>
           </>
         );
+
       case IIMAGE_GENERATION_TOOL_ID:
         return (
           <>
             <FiImage className="h-3 w-3 my-auto" />
-            <span>Image Gen</span>
+            <span>{i18n.t(k.IMAGE_GEN)}</span>
           </>
         );
+
       default:
         return tool.name;
     }

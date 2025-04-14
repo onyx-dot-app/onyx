@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { CircleAlert, Info } from "lucide-react";
@@ -57,8 +59,8 @@ export function BillingAlerts({
         )}
         <span>
           {variant === "destructive"
-            ? "Important Subscription Notice"
-            : "Subscription Notice"}
+            ? i18n.t(k.IMPORTANT_SUBSCRIPTION_NOTICE)
+            : i18n.t(k.SUBSCRIPTION_NOTICE)}
         </span>
       </AlertTitle>
       <AlertDescription>

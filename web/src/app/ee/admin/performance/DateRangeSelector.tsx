@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { memo, useMemo, useState } from "react";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -35,14 +37,14 @@ export const DateRangeSelector = memo(function DateRangeSelector({
 
   const presets = [
     {
-      label: "Last 30 days",
+      label: i18n.t(k.LAST_DAYS),
       value: {
         from: getXDaysAgo(30),
         to: getXDaysAgo(0),
       },
     },
     {
-      label: "Today",
+      label: i18n.t(k.TODAY),
       value: {
         from: getXDaysAgo(1),
         to: getXDaysAgo(0),
@@ -72,7 +74,7 @@ export const DateRangeSelector = memo(function DateRangeSelector({
                 format(value.from, "LLL dd, y")
               )
             ) : (
-              <span>Pick a date range</span>
+              <span>{i18n.t(k.PICK_A_DATE_RANGE)}</span>
             )}
           </Button>
         </PopoverTrigger>
@@ -97,6 +99,7 @@ export const DateRangeSelector = memo(function DateRangeSelector({
             }}
             numberOfMonths={2}
           />
+
           <div className="border-t p-3">
             {presets.map((preset) => (
               <Button

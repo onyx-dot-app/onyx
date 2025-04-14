@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -81,7 +83,7 @@ export function ModifyStatusButtonCluster({
       >
         {isUpdating ? (
           <LoadingAnimation
-            text={isNotActive ? "Resuming" : "Pausing"}
+            text={isNotActive ? i18n.t(k.RESUMING) : i18n.t(k.PAUSING)}
             size="text-md"
           />
         ) : (

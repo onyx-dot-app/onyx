@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
 import useSWR from "swr";
@@ -189,11 +191,9 @@ export const HealthCheckBanner = () => {
         title="You Have Been Logged Out"
       >
         <div className="flex flex-col gap-y-4">
-          <p className="text-sm">
-            Your session has expired. Please log in again to continue.
-          </p>
+          <p className="text-sm">{i18n.t(k.YOUR_SESSION_HAS_EXPIRED_PLEA)}</p>
           <div className="flex flex-row gap-x-2 justify-end mt-4">
-            <Button onClick={handleLogin}>Log In</Button>
+            <Button onClick={handleLogin}>{i18n.t(k.LOG_IN)}</Button>
           </div>
         </div>
       </Modal>
@@ -212,14 +212,11 @@ export const HealthCheckBanner = () => {
   } else {
     return (
       <div className="fixed top-0 left-0 z-[101] w-full text-xs mx-auto bg-gradient-to-r from-red-900 to-red-700 p-2 rounded-sm border-hidden text-text-200">
-        <p className="font-bold pb-1">The backend is currently unavailable.</p>
-
-        <p className="px-1">
-          If this is your initial setup or you just updated your Onyx
-          deployment, this is likely because the backend is still starting up.
-          Give it a minute or two, and then refresh the page. If that does not
-          work, make sure the backend is setup and/or contact an administrator.
+        <p className="font-bold pb-1">
+          {i18n.t(k.THE_BACKEND_IS_CURRENTLY_UNAVA)}
         </p>
+
+        <p className="px-1">{i18n.t(k.IF_THIS_IS_YOUR_INITIAL_SETUP)}</p>
       </div>
     );
   }

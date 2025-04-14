@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { useState } from "react";
 import {
@@ -20,17 +22,17 @@ const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
   const [referralSource, setReferralSource] = useState(defaultValue);
 
   const referralOptions = [
-    { value: "search", label: "Search Engine (Google/Bing)" },
-    { value: "friend", label: "Friend/Colleague" },
-    { value: "linkedin", label: "LinkedIn" },
-    { value: "twitter", label: "Twitter" },
-    { value: "hackernews", label: "HackerNews" },
-    { value: "reddit", label: "Reddit" },
-    { value: "youtube", label: "YouTube" },
-    { value: "podcast", label: "Podcast" },
-    { value: "blog", label: "Article/Blog" },
-    { value: "ads", label: "Advertisements" },
-    { value: "other", label: "Other" },
+    { value: "search", label: i18n.t(k.SEARCH_ENGINE_GOOGLE_BING) },
+    { value: "friend", label: i18n.t(k.FRIEND_COLLEAGUE) },
+    { value: "linkedin", label: i18n.t(k.LINKEDIN1) },
+    { value: "twitter", label: i18n.t(k.TWITTER1) },
+    { value: "hackernews", label: i18n.t(k.HACKERNEWS1) },
+    { value: "reddit", label: i18n.t(k.REDDIT1) },
+    { value: "youtube", label: i18n.t(k.YOUTUBE1) },
+    { value: "podcast", label: i18n.t(k.PODCAST1) },
+    { value: "blog", label: i18n.t(k.ARTICLE_BLOG) },
+    { value: "ads", label: i18n.t(k.ADVERTISEMENTS) },
+    { value: "other", label: i18n.t(k.OTHER1) },
   ];
 
   const handleChange = (value: string) => {
@@ -46,7 +48,7 @@ const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
   return (
     <div className="w-full max-w-sm gap-y-2 flex flex-col mx-auto">
       <Label className="text-text-950" small={false}>
-        How did you hear about us?
+        {i18n.t(k.HOW_DID_YOU_HEAR_ABOUT_US)}
       </Label>
       <Select value={referralSource} onValueChange={handleChange}>
         <SelectTrigger

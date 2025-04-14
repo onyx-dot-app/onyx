@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { HoverPopup } from "@/components/HoverPopup";
 import { useState } from "react";
 
@@ -51,10 +53,7 @@ export function DocumentSelector({
         <HoverPopup
           mainContent={Main()}
           popupContent={
-            <div className="w-48">
-              LLM context limit reached 😔 If you want to chat with this
-              document, please de-select others to free up space.
-            </div>
+            <div className="w-48">{i18n.t(k.LLM_CONTEXT_LIMIT_REACHED_I)}</div>
           }
           direction="left-top"
         />

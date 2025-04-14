@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -16,28 +18,27 @@ export function MakePublicAssistantModal({
     <Modal onOutsideClick={onClose} width="max-w-3xl">
       <div className="space-y-6">
         <h2 className="text-2xl font-bold text-text-darker">
-          {isPublic ? "Public Assistant" : "Make Assistant Public"}
+          {isPublic
+            ? i18n.t(k.PUBLIC_ASSISTANT)
+            : i18n.t(k.MAKE_ASSISTANT_PUBLIC)}
         </h2>
 
         <Text>
-          This assistant is currently{" "}
+          {i18n.t(k.THIS_ASSISTANT_IS_CURRENTLY)}{" "}
           <span className="font-semibold">
-            {isPublic ? "public" : "private"}
+            {isPublic ? i18n.t(k.PUBLIC1) : i18n.t(k.PRIVATE)}
           </span>
-          .
+          {i18n.t(k._8)}
           {isPublic
-            ? " Anyone can currently access this assistant."
-            : " Only you can access this assistant."}
+            ? i18n.t(k.ANYONE_CAN_CURRENTLY_ACCESS_TH)
+            : i18n.t(k.ONLY_YOU_CAN_ACCESS_THIS_ASSIS)}
         </Text>
 
         <Separator />
 
         {isPublic ? (
           <div className="space-y-4">
-            <Text>
-              To restrict access to this assistant, you can make it private
-              again.
-            </Text>
+            <Text>{i18n.t(k.TO_RESTRICT_ACCESS_TO_THIS_ASS1)}</Text>
             <Button
               onClick={async () => {
                 await onShare?.(false);
@@ -46,16 +47,12 @@ export function MakePublicAssistantModal({
               size="sm"
               variant="destructive"
             >
-              Make Assistant Private
+              {i18n.t(k.MAKE_ASSISTANT_PRIVATE)}
             </Button>
           </div>
         ) : (
           <div className="space-y-4">
-            <Text>
-              Making this assistant public will allow anyone with the link to
-              view and use it. Ensure that all content and capabilities of the
-              assistant are safe to share.
-            </Text>
+            <Text>{i18n.t(k.MAKING_THIS_ASSISTANT_PUBLIC_W1)}</Text>
             <Button
               onClick={async () => {
                 await onShare?.(true);
@@ -64,7 +61,7 @@ export function MakePublicAssistantModal({
               size="sm"
               variant="submit"
             >
-              Make Assistant Public
+              {i18n.t(k.MAKE_ASSISTANT_PUBLIC)}
             </Button>
           </div>
         )}

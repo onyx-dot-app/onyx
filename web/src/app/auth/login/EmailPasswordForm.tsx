@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -67,26 +69,25 @@ export function EmailPasswordForm({
               setIsWorking(false);
 
               const errorDetail = (await response.json()).detail;
-              let errorMsg = "Unknown error";
+              let errorMsg = i18n.t(k.UNKNOWN_ERROR);
               if (typeof errorDetail === "object" && errorDetail.reason) {
                 errorMsg = errorDetail.reason;
               } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
-                errorMsg =
-                  "An account already exists with the specified email.";
+                errorMsg = i18n.t(k.AN_ACCOUNT_ALREADY_EXISTS_WITH);
               }
               if (response.status === 429) {
-                errorMsg = "Too many requests. Please try again later.";
+                errorMsg = i18n.t(k.TOO_MANY_REQUESTS_PLEASE_TRY);
               }
               setPopup({
                 type: "error",
-                message: `Failed to sign up - ${errorMsg}`,
+                message: `${i18n.t(k.FAILED_TO_SIGN_UP)} ${errorMsg}`,
               });
               setIsWorking(false);
               return;
             } else {
               setPopup({
                 type: "success",
-                message: "Account created successfully. Please log in.",
+                message: i18n.t(k.ACCOUNT_CREATED_SUCCESSFULLY),
               });
             }
           }
@@ -111,20 +112,20 @@ export function EmailPasswordForm({
           } else {
             setIsWorking(false);
             const errorDetail = (await loginResponse.json()).detail;
-            let errorMsg = "Unknown error";
+            let errorMsg = i18n.t(k.UNKNOWN_ERROR);
             if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
-              errorMsg = "Invalid email or password";
+              errorMsg = i18n.t(k.INVALID_EMAIL_OR_PASSWORD);
             } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
-              errorMsg = "Create an account to set a password";
+              errorMsg = i18n.t(k.CREATE_AN_ACCOUNT_TO_SET_A_PAS);
             } else if (typeof errorDetail === "string") {
               errorMsg = errorDetail;
             }
             if (loginResponse.status === 429) {
-              errorMsg = "Too many requests. Please try again later.";
+              errorMsg = i18n.t(k.TOO_MANY_REQUESTS_PLEASE_TRY);
             }
             setPopup({
               type: "error",
-              message: `Failed to login - ${errorMsg}`,
+              message: `${i18n.t(k.FAILED_TO_LOGIN)} ${errorMsg}`,
             });
           }
         }}
@@ -154,7 +155,11 @@ export function EmailPasswordForm({
               disabled={isSubmitting}
               className="mx-auto  !py-4 w-full"
             >
-              {isJoin ? "Join" : isSignup ? "Sign Up" : "Log In"}
+              {isJoin
+                ? i18n.t(k.JOIN)
+                : isSignup
+                ? i18n.t(k.SIGN_UP)
+                : i18n.t(k.LOG_IN)}
             </Button>
             {user?.is_anonymous_user && (
               <Link
@@ -162,7 +167,7 @@ export function EmailPasswordForm({
                 className="text-xs text-blue-500  cursor-pointer text-center w-full text-link font-medium mx-auto"
               >
                 <span className="hover:border-b hover:border-dotted hover:border-blue-500">
-                  or continue as guest
+                  {i18n.t(k.OR_CONTINUE_AS_GUEST)}
                 </span>
               </Link>
             )}

@@ -1,10 +1,12 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { BasicClickable } from "@/components/BasicClickable";
 import { ControlledPopup, DefaultDropdownElement } from "@/components/Dropdown";
 import { useState } from "react";
 import { FiCpu, FiSearch } from "react-icons/fi";
 
-export const QA = "Question Answering";
-export const SEARCH = "Search Only";
+export const QA = i18n.t(k.QUESTION_ANSWERING);
+export const SEARCH = i18n.t(k.SEARCH_ONLY);
 
 function SearchTypeSelectorContent({
   selectedSearchType,
@@ -22,6 +24,7 @@ function SearchTypeSelectorContent({
         onSelect={() => setSelectedSearchType(QA)}
         isSelected={selectedSearchType === QA}
       />
+
       <DefaultDropdownElement
         key={SEARCH}
         name={SEARCH}
@@ -57,11 +60,11 @@ export function SearchTypeSelector({
         <div className="flex text-xs">
           {selectedSearchType === QA ? (
             <>
-              <FiCpu className="my-auto mr-1" /> QA
+              <FiCpu className="my-auto mr-1" /> {i18n.t(k.QA)}
             </>
           ) : (
             <>
-              <FiSearch className="my-auto mr-1" /> Search
+              <FiSearch className="my-auto mr-1" /> {i18n.t(k.SEARCH)}
             </>
           )}
         </div>

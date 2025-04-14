@@ -108,6 +108,7 @@ export const PageSelector = ({
           modifiedScrollUp();
         }}
       />
+
       {!paginationOptions.includes(1) && (
         <>
           <PageLink
@@ -118,6 +119,7 @@ export const PageSelector = ({
               modifiedScrollUp();
             }}
           />
+
           <PageLink linkText="..." unclickable={true} />
         </>
       )}

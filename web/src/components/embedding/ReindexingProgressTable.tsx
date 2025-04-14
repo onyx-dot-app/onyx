@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { PageSelector } from "@/components/PageSelector";
 import { IndexAttemptStatus } from "@/components/Status";
 import { ConnectorIndexingStatus } from "@/lib/types";
@@ -26,9 +28,13 @@ export function ReindexingProgressTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-1/7 sm:w-1/5">Connector Name</TableHead>
-            <TableHead className="w-3/7 sm:w-1/5">Status</TableHead>
-            <TableHead className="w-3/7 sm:w-1/5">Docs Re-Indexed</TableHead>
+            <TableHead className="w-1/7 sm:w-1/5">
+              {i18n.t(k.CONNECTOR_NAME)}
+            </TableHead>
+            <TableHead className="w-3/7 sm:w-1/5">{i18n.t(k.STATUS)}</TableHead>
+            <TableHead className="w-3/7 sm:w-1/5">
+              {i18n.t(k.DOCS_RE_INDEXED)}
+            </TableHead>
             <TableHead className="w-3/7 sm:w-1/5"></TableHead>
           </TableRow>
         </TableHeader>

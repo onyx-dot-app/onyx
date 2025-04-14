@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import {
   AuthTypeMetadata,
   getAuthTypeMetadataSS,
@@ -47,17 +49,17 @@ export default async function Page() {
 
           <div className="flex">
             <Text className="text-center font-medium text-lg mt-6 w-108">
-              Hey <i>{currentUser.email}</i> - it looks like you haven&apos;t
-              verified your email yet.
+              {i18n.t(k.HEY)} <i>{currentUser.email}</i>{" "}
+              {i18n.t(k.IT_LOOKS_LIKE_YOU_HAVEN_T)}
               <br />
-              Check your inbox for an email from us to get started!
+              {i18n.t(k.CHECK_YOUR_INBOX_FOR_AN_EMAIL)}
               <br />
               <br />
-              If you don&apos;t see anything, click{" "}
+              {i18n.t(k.IF_YOU_DON_T_SEE_ANYTHING_CLI)}{" "}
               <RequestNewVerificationEmail email={currentUser.email}>
-                here
+                {i18n.t(k.HERE)}
               </RequestNewVerificationEmail>{" "}
-              to request a new email.
+              {i18n.t(k.TO_REQUEST_A_NEW_EMAIL)}
             </Text>
           </div>
         </div>

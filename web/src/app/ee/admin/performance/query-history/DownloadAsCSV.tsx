@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { FiDownload } from "react-icons/fi";
 
 export function DownloadAsCSV() {
@@ -7,7 +9,7 @@ export function DownloadAsCSV() {
       className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer hover:bg-accent-background text-sm"
     >
       <FiDownload className="my-auto mr-2" />
-      Download as CSV
+      {i18n.t(k.DOWNLOAD_AS_CSV)}
     </a>
   );
 }

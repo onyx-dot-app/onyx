@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -58,6 +60,7 @@ function Calendar({
         IconLeft: ({ className, ...props }) => (
           <ChevronLeft className={cn("h-4 w-4", className)} {...props} />
         ),
+
         IconRight: ({ className, ...props }) => (
           <ChevronRight className={cn("h-4 w-4", className)} {...props} />
         ),

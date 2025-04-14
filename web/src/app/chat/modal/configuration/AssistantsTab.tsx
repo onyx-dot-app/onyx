@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import {
   DndContext,
   closestCenter,
@@ -66,7 +68,9 @@ export function AssistantsTab({
 
   return (
     <div className="py-4">
-      <h3 className="px-4 text-lg font-semibold">Change Assistant</h3>
+      <h3 className="px-4 text-lg font-semibold">
+        {i18n.t(k.CHANGE_ASSISTANT)}
+      </h3>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import { resetPassword } from "../forgot-password/utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
@@ -44,7 +46,9 @@ const ResetPasswordPage: React.FC = () => {
     <AuthFlowContainer>
       <div className="flex flex-col w-full justify-center">
         <div className="flex">
-          <Title className="mb-2 mx-auto font-bold">Reset Password</Title>
+          <Title className="mb-2 mx-auto font-bold">
+            {i18n.t(k.RESET_PASSWORD)}
+          </Title>
         </div>
         {isWorking && <Spinner />}
         {popup}
@@ -63,7 +67,7 @@ const ResetPasswordPage: React.FC = () => {
             if (!token) {
               setPopup({
                 type: "error",
-                message: "Invalid or missing reset token.",
+                message: i18n.t(k.INVALID_OR_MISSING_RESET_TOKEN),
               });
               return;
             }
@@ -72,7 +76,7 @@ const ResetPasswordPage: React.FC = () => {
               await resetPassword(token, values.password);
               setPopup({
                 type: "success",
-                message: "Password reset successfully. Redirecting to login...",
+                message: i18n.t(k.PASSWORD_RESET_SUCCESSFULLY_R),
               });
               setTimeout(() => {
                 redirect("/auth/login");
@@ -87,7 +91,7 @@ const ResetPasswordPage: React.FC = () => {
               } else {
                 setPopup({
                   type: "error",
-                  message: "An unexpected error occurred. Please try again.",
+                  message: i18n.t(k.AN_UNEXPECTED_ERROR_OCCURRED),
                 });
               }
             } finally {
@@ -103,6 +107,7 @@ const ResetPasswordPage: React.FC = () => {
                 type="password"
                 placeholder="Enter your new password"
               />
+
               <TextFormField
                 name="confirmPassword"
                 label="Confirm New Password"
@@ -116,7 +121,7 @@ const ResetPasswordPage: React.FC = () => {
                   disabled={isSubmitting}
                   className="mx-auto w-full"
                 >
-                  Reset Password
+                  {i18n.t(k.RESET_PASSWORD)}
                 </Button>
               </div>
             </Form>
@@ -125,7 +130,7 @@ const ResetPasswordPage: React.FC = () => {
         <div className="flex">
           <Text className="mt-4 mx-auto">
             <Link href="/auth/login" className="text-link font-medium">
-              Back to Login
+              {i18n.t(k.BACK_TO_LOGIN)}
             </Link>
           </Text>
         </div>

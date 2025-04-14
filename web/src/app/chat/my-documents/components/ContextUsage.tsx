@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 
 interface ContextUsageProps {
@@ -19,7 +21,7 @@ export const ContextUsage: React.FC<ContextUsageProps> = ({
     <div className={`flex ${compact ? "items-center gap-2" : "flex-col"}`}>
       {modelName && !compact && (
         <span className="text-xs text-neutral-500 dark:text-neutral-400 mb-1">
-          Context usage for {modelName}
+          {i18n.t(k.CONTEXT_USAGE_FOR)} {modelName}
         </span>
       )}
 
@@ -43,7 +45,8 @@ export const ContextUsage: React.FC<ContextUsageProps> = ({
           />
         </div>
         <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-          {totalTokens.toLocaleString()} / {maxTokens.toLocaleString()} tokens
+          {totalTokens.toLocaleString()} {i18n.t(k._6)}{" "}
+          {maxTokens.toLocaleString()} {i18n.t(k.TOKENS)}
         </span>
       </div>
     </div>

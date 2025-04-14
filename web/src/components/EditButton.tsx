@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../i18n/keys";
 
 import { FiEdit2 } from "react-icons/fi";
 
@@ -19,7 +21,7 @@ export function EditButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
     >
       <FiEdit2 className="mr-1 my-auto" />
-      Edit
+      {i18n.t(k.EDIT)}
     </div>
   );
 }

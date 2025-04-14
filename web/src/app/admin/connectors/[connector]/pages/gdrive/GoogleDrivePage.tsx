@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 
 import React from "react";
 import { FetchError } from "@/lib/fetcher";
@@ -158,7 +160,9 @@ const GDriveMain = ({
 
   return (
     <>
-      <Title className="mb-2 mt-6">Step 1: Provide your Credentials</Title>
+      <Title className="mb-2 mt-6">
+        {i18n.t(k.STEP_PROVIDE_YOUR_CREDENTIA)}
+      </Title>
       <DriveJsonUploadSection
         setPopup={setPopup}
         appCredentialData={appCredentialData}
@@ -175,7 +179,9 @@ const GDriveMain = ({
         (appCredentialData?.client_id ||
           serviceAccountKeyData?.service_account_email) && (
           <>
-            <Title className="mb-2 mt-6">Step 2: Authenticate with Onyx</Title>
+            <Title className="mb-2 mt-6">
+              {i18n.t(k.STEP_AUTHENTICATE_WITH_ONYX)}
+            </Title>
             <DriveAuthSection
               setPopup={setPopup}
               refreshCredentials={handleRefresh}
