@@ -3,8 +3,9 @@
 import { ValidSources } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { FaSwatchbook } from "react-icons/fa";
+import { FaKey } from "react-icons/fa";
 import { useState } from "react";
+import { FiEdit2 } from "react-icons/fi";
 import {
   deleteCredential,
   swapCredential,
@@ -32,6 +33,7 @@ import {
 } from "@/lib/connectors/oauth";
 import { Spinner } from "@/components/Spinner";
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
+import { Card } from "../ui/card";
 
 export default function CredentialSection({
   ccPair,
@@ -154,26 +156,66 @@ export default function CredentialSection({
   }
 
   return (
-    <div className="flex justify-start flex-col gap-y-2">
+    <div
+      className="flex
+      flex-col
+      gap-y-4
+      rounded-lg
+      bg-background"
+    >
       {popup}
 
-      <div className="flex gap-x-2">
-        <p>Current credential:</p>
-        <Text className="ml-1 italic font-bold my-auto">
-          {ccPair.credential.name || `Credential #${ccPair.credential.id}`}
-        </Text>
-      </div>
-      <div className="flex text-sm justify-start mr-auto gap-x-2">
-        <button
-          onClick={() => {
-            setShowModifyCredential(true);
-          }}
-          className="flex items-center gap-x-2 cursor-pointer bg-neutral-800 border-neutral-600 border-2 hover:bg-neutral-700 p-1.5 rounded-lg text-neutral-300"
-        >
-          <FaSwatchbook />
-          Update Credentials
-        </button>
-      </div>
+      <Card className="p-6">
+        <div className="flex items-center">
+          <div className="flex-shrink-0 mr-3">
+            <FaKey className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <div className="flex-grow flex flex-col justify-center">
+            <div className="flex items-center justify-between">
+              <div>
+                <Text className="font-medium">
+                  {ccPair.credential.name ||
+                    `Credential #${ccPair.credential.id}`}
+                </Text>
+                <div className="text-xs text-muted-foreground/70">
+                  Created{" "}
+                  <i>
+                    {new Date(
+                      ccPair.credential.time_created
+                    ).toLocaleDateString(undefined, {
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </i>
+                  {ccPair.credential.user_email && (
+                    <>
+                      {" "}
+                      by <i>{ccPair.credential.user_email}</i>
+                    </>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModifyCredential(true)}
+                className="inline-flex
+                  items-center
+                  justify-center
+                  p-2
+                  rounded-md
+                  text-muted-foreground
+                  hover:bg-accent
+                  hover:text-accent-foreground
+                  transition-colors"
+              >
+                <FiEdit2 className="h-4 w-4" />
+                <span className="sr-only">Update Credentials</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       {showModifyCredential && (
         <Modal
           onOutsideClick={closeModifyCredential}

@@ -159,6 +159,8 @@ def load_files_from_zip(
                     zip_metadata = json.load(metadata_file)
                     if isinstance(zip_metadata, list):
                         # convert list of dicts to dict of dicts
+                        # Use just the basename for matching since metadata may not include
+                        # the full path within the ZIP file
                         zip_metadata = {d["filename"]: d for d in zip_metadata}
                 except json.JSONDecodeError:
                     logger.warning(f"Unable to load {DANSWER_METADATA_FILENAME}")
@@ -176,7 +178,13 @@ def load_files_from_zip(
                 continue
 
             with zip_file.open(file_info.filename, "r") as subfile:
-                yield file_info, subfile, zip_metadata.get(file_info.filename, {})
+                # Try to match by exact filename first
+                if file_info.filename in zip_metadata:
+                    yield file_info, subfile, zip_metadata.get(file_info.filename, {})
+                else:
+                    # Then try matching by just the basename
+                    basename = os.path.basename(file_info.filename)
+                    yield file_info, subfile, zip_metadata.get(basename, {})
 
 
 def _extract_onyx_metadata(line: str) -> dict | None:

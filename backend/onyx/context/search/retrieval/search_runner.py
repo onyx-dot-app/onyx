@@ -2,10 +2,10 @@ import string
 from collections.abc import Callable
 
 import nltk  # type:ignore
-from nltk.corpus import stopwords  # type:ignore
-from nltk.tokenize import word_tokenize  # type:ignore
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
+from onyx.context.search.enums import SearchType
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -15,6 +15,8 @@ from onyx.context.search.models import MAX_METRICS_CONTENT
 from onyx.context.search.models import RetrievalMetricsContainer
 from onyx.context.search.models import SearchQuery
 from onyx.context.search.postprocessing.postprocessing import cleanup_chunks
+from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA
+from onyx.context.search.preprocessing.preprocessing import HYBRID_ALPHA_KEYWORD
 from onyx.context.search.utils import inference_section_from_chunks
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_multilingual_expansion
@@ -27,6 +29,9 @@ from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansion
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_in_background
+from onyx.utils.threadpool_concurrency import TimeoutThread
+from onyx.utils.threadpool_concurrency import wait_on_background
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MODEL_SERVER_HOST
 from shared_configs.configs import MODEL_SERVER_PORT
@@ -34,6 +39,23 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
+
+
+def _dedupe_chunks(
+    chunks: list[InferenceChunkUncleaned],
+) -> list[InferenceChunkUncleaned]:
+    used_chunks: dict[tuple[str, int], InferenceChunkUncleaned] = {}
+    for chunk in chunks:
+        key = (chunk.document_id, chunk.chunk_id)
+        if key not in used_chunks:
+            used_chunks[key] = chunk
+        else:
+            stored_chunk_score = used_chunks[key].score or 0
+            this_chunk_score = chunk.score or 0
+            if stored_chunk_score < this_chunk_score:
+                used_chunks[key] = chunk
+
+    return list(used_chunks.values())
 
 
 def download_nltk_data() -> None:
@@ -67,22 +89,6 @@ def lemmatize_text(keywords: list[str]) -> list[str]:
     #     return combined_keywords
     # except Exception:
     #     return keywords
-
-
-def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
-    try:
-        # Re-tokenize using the NLTK tokenizer for better matching
-        query = " ".join(keywords)
-        stop_words = set(stopwords.words("english"))
-        word_tokens = word_tokenize(query)
-        text_trimmed = [
-            word
-            for word in word_tokens
-            if (word.casefold() not in stop_words and word not in string.punctuation)
-        ]
-        return text_trimmed or word_tokens
-    except Exception:
-        return keywords
 
 
 def combine_retrieval_results(
@@ -123,6 +129,20 @@ def get_query_embedding(query: str, db_session: Session) -> Embedding:
     return query_embedding
 
 
+def get_query_embeddings(queries: list[str], db_session: Session) -> list[Embedding]:
+    search_settings = get_current_search_settings(db_session)
+
+    model = EmbeddingModel.from_db_model(
+        search_settings=search_settings,
+        # The below are globally set, this flow always uses the indexing one
+        server_host=MODEL_SERVER_HOST,
+        server_port=MODEL_SERVER_PORT,
+    )
+
+    query_embedding = model.encode(queries, text_type=EmbedTextType.QUERY)
+    return query_embedding
+
+
 @log_function_time(print_only=True)
 def doc_index_retrieval(
     query: SearchQuery,
@@ -139,16 +159,112 @@ def doc_index_retrieval(
         query.query, db_session
     )
 
-    top_chunks = document_index.hybrid_retrieval(
-        query=query.query,
-        query_embedding=query_embedding,
-        final_keywords=query.processed_keywords,
-        filters=query.filters,
-        hybrid_alpha=query.hybrid_alpha,
-        time_decay_multiplier=query.recency_bias_multiplier,
-        num_to_retrieve=query.num_hits,
-        offset=query.offset,
+    keyword_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
+    semantic_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
+    top_base_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = None
+
+    top_semantic_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = (
+        None
     )
+
+    keyword_embeddings: list[Embedding] | None = None
+    semantic_embeddings: list[Embedding] | None = None
+
+    top_semantic_chunks: list[InferenceChunkUncleaned] | None = None
+
+    # original retrieveal method
+    top_base_chunks_thread = run_in_background(
+        document_index.hybrid_retrieval,
+        query.query,
+        query_embedding,
+        query.processed_keywords,
+        query.filters,
+        query.hybrid_alpha,
+        query.recency_bias_multiplier,
+        query.num_hits,
+        "semantic",
+        query.offset,
+    )
+
+    if (
+        query.expanded_queries
+        and query.expanded_queries.keywords_expansions
+        and query.expanded_queries.semantic_expansions
+    ):
+
+        keyword_embeddings_thread = run_in_background(
+            get_query_embeddings,
+            query.expanded_queries.keywords_expansions,
+            db_session,
+        )
+
+        if query.search_type == SearchType.SEMANTIC:
+            semantic_embeddings_thread = run_in_background(
+                get_query_embeddings,
+                query.expanded_queries.semantic_expansions,
+                db_session,
+            )
+
+        keyword_embeddings = wait_on_background(keyword_embeddings_thread)
+        if query.search_type == SearchType.SEMANTIC:
+            assert semantic_embeddings_thread is not None
+            semantic_embeddings = wait_on_background(semantic_embeddings_thread)
+
+        # Use original query embedding for keyword retrieval embedding
+        keyword_embeddings = [query_embedding]
+
+        # Note: we generally prepped earlier for multiple expansions, but for now we only use one.
+        top_keyword_chunks_thread = run_in_background(
+            document_index.hybrid_retrieval,
+            query.expanded_queries.keywords_expansions[0],
+            keyword_embeddings[0],
+            query.processed_keywords,
+            query.filters,
+            HYBRID_ALPHA_KEYWORD,
+            query.recency_bias_multiplier,
+            query.num_hits,
+            QueryExpansionType.KEYWORD,
+            query.offset,
+        )
+
+        if query.search_type == SearchType.SEMANTIC:
+            assert semantic_embeddings is not None
+
+            top_semantic_chunks_thread = run_in_background(
+                document_index.hybrid_retrieval,
+                query.expanded_queries.semantic_expansions[0],
+                semantic_embeddings[0],
+                query.processed_keywords,
+                query.filters,
+                HYBRID_ALPHA,
+                query.recency_bias_multiplier,
+                query.num_hits,
+                QueryExpansionType.SEMANTIC,
+                query.offset,
+            )
+
+        top_base_chunks = wait_on_background(top_base_chunks_thread)
+
+        top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
+
+        if query.search_type == SearchType.SEMANTIC:
+            assert top_semantic_chunks_thread is not None
+            top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
+
+        all_top_chunks = top_base_chunks + top_keyword_chunks
+
+        # use all three retrieval methods to retrieve top chunks
+
+        if query.search_type == SearchType.SEMANTIC and top_semantic_chunks is not None:
+
+            all_top_chunks += top_semantic_chunks
+
+        top_chunks = _dedupe_chunks(all_top_chunks)
+
+    else:
+
+        top_base_chunks = wait_on_background(top_base_chunks_thread)
+        top_chunks = _dedupe_chunks(top_base_chunks)
 
     retrieval_requests: list[VespaChunkRequest] = []
     normal_chunks: list[InferenceChunkUncleaned] = []

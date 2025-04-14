@@ -74,7 +74,6 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
 
   return (
     <div>
-      <Separator />
       {isAdmin && (
         <>
           <BooleanFormField

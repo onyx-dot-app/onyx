@@ -338,7 +338,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
             retrieval_function=primary_drive_service.drives().list,
             list_key="drives",
             useDomainAdminAccess=is_service_account,
-            fields="drives(id)",
+            fields="drives(id),nextPageToken",
         ):
             all_drive_ids.add(drive["id"])
 

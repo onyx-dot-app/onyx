@@ -101,6 +101,7 @@ class ConfluenceConnector(
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
         self._confluence_client: OnyxConfluence | None = None
+        self._low_timeout_confluence_client: OnyxConfluence | None = None
         self._fetched_titles: set[str] = set()
         self.allow_images = False
 
@@ -156,6 +157,12 @@ class ConfluenceConnector(
             raise ConnectorMissingCredentialError("Confluence")
         return self._confluence_client
 
+    @property
+    def low_timeout_confluence_client(self) -> OnyxConfluence:
+        if self._low_timeout_confluence_client is None:
+            raise ConnectorMissingCredentialError("Confluence")
+        return self._low_timeout_confluence_client
+
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
@@ -163,12 +170,26 @@ class ConfluenceConnector(
 
         # raises exception if there's a problem
         confluence_client = OnyxConfluence(
-            self.is_cloud, self.wiki_base, credentials_provider
+            is_cloud=self.is_cloud,
+            url=self.wiki_base,
+            credentials_provider=credentials_provider,
         )
         confluence_client._probe_connection(**self.probe_kwargs)
         confluence_client._initialize_connection(**self.final_kwargs)
 
         self._confluence_client = confluence_client
+
+        # create a low timeout confluence client for sync flows
+        low_timeout_confluence_client = OnyxConfluence(
+            is_cloud=self.is_cloud,
+            url=self.wiki_base,
+            credentials_provider=credentials_provider,
+            timeout=3,
+        )
+        low_timeout_confluence_client._probe_connection(**self.probe_kwargs)
+        low_timeout_confluence_client._initialize_connection(**self.final_kwargs)
+
+        self._low_timeout_confluence_client = low_timeout_confluence_client
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
@@ -521,11 +542,8 @@ class ConfluenceConnector(
         yield doc_metadata_list
 
     def validate_connector_settings(self) -> None:
-        if self._confluence_client is None:
-            raise ConnectorMissingCredentialError("Confluence credentials not loaded.")
-
         try:
-            spaces = self._confluence_client.get_all_spaces(limit=1)
+            spaces = self.low_timeout_confluence_client.get_all_spaces(limit=1)
         except HTTPError as e:
             status_code = e.response.status_code if e.response else None
             if status_code == 401:

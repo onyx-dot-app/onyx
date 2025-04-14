@@ -20,7 +20,7 @@ from onyx.context.search.models import SearchRequest
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.retrieval.search_runner import (
+from onyx.context.search.utils import (
     remove_stop_words_and_punctuation,
 )
 from onyx.db.models import User
@@ -35,7 +35,6 @@ from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
 
 logger = setup_logger()
 
@@ -264,4 +263,5 @@ def retrieval_preprocessing(
         chunks_below=chunks_below,
         full_doc=search_request.full_doc,
         precomputed_query_embedding=search_request.precomputed_query_embedding,
+        expanded_queries=search_request.expanded_queries,
     )

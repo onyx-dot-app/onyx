@@ -1,15 +1,9 @@
 import csv
 import os
 import shutil
+import tempfile
 
-from onyx.connectors.salesforce.sqlite_functions import find_ids_by_type
-from onyx.connectors.salesforce.sqlite_functions import get_affected_parent_ids_by_type
-from onyx.connectors.salesforce.sqlite_functions import get_child_ids
-from onyx.connectors.salesforce.sqlite_functions import get_record
-from onyx.connectors.salesforce.sqlite_functions import init_db
-from onyx.connectors.salesforce.sqlite_functions import update_sf_db_with_csv
-from onyx.connectors.salesforce.utils import BASE_DATA_PATH
-from onyx.connectors.salesforce.utils import get_object_type_path
+from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 
 _VALID_SALESFORCE_IDS = [
     "001bm00000fd9Z3AAI",
@@ -120,8 +114,8 @@ def _clear_sf_db(directory: str) -> None:
     shutil.rmtree(directory, ignore_errors=True)
 
 
-def _create_csv_file(
-    directory: str,
+def _create_csv_file_and_update_db(
+    sf_db: OnyxSalesforceSQLite,
     object_type: str,
     records: list[dict],
     filename: str = "test_data.csv",
@@ -144,18 +138,19 @@ def _create_csv_file(
     fields = set(sorted(list(fields)))  # Sort for consistent order
 
     # Create CSV file
-    csv_path = os.path.join(get_object_type_path(object_type), filename)
-    with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
-        writer.writeheader()
-        for record in records:
-            writer.writerow(record)
+    with tempfile.TemporaryDirectory() as directory:
+        csv_path = os.path.join(directory, filename)
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fields)
+            writer.writeheader()
+            for record in records:
+                writer.writerow(record)
 
-    # Update the database with the CSV
-    update_sf_db_with_csv(directory, object_type, csv_path)
+        # Update the database with the CSV
+        sf_db.update_from_csv(object_type, csv_path)
 
 
-def _create_csv_with_example_data(directory: str) -> None:
+def _create_csv_with_example_data(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Creates CSV files with example data, organized by object type.
     """
@@ -345,10 +340,10 @@ def _create_csv_with_example_data(directory: str) -> None:
 
     # Create CSV files for each object type
     for object_type, records in example_data.items():
-        _create_csv_file(directory, object_type, records)
+        _create_csv_file_and_update_db(sf_db, object_type, records)
 
 
-def _test_query(directory: str) -> None:
+def _test_query(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Tests querying functionality by verifying:
     1. All expected Account IDs are found
@@ -404,7 +399,7 @@ def _test_query(directory: str) -> None:
     }
 
     # Get all Account IDs
-    account_ids = find_ids_by_type(directory, "Account")
+    account_ids = sf_db.find_ids_by_type("Account")
 
     # Verify we found all expected accounts
     assert len(account_ids) == len(
@@ -416,7 +411,7 @@ def _test_query(directory: str) -> None:
 
     # Verify each account's data
     for acc_id in account_ids:
-        combined = get_record(directory, acc_id)
+        combined = sf_db.get_record(acc_id)
         assert combined is not None, f"Could not find account {acc_id}"
 
         expected = expected_accounts[acc_id]
@@ -431,7 +426,7 @@ def _test_query(directory: str) -> None:
     print("All query tests passed successfully!")
 
 
-def _test_upsert(directory: str) -> None:
+def _test_upsert(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Tests upsert functionality by:
     1. Updating an existing account
@@ -456,10 +451,10 @@ def _test_upsert(directory: str) -> None:
         },
     ]
 
-    _create_csv_file(directory, "Account", update_data, "update_data.csv")
+    _create_csv_file_and_update_db(sf_db, "Account", update_data, "update_data.csv")
 
     # Verify the update worked
-    updated_record = get_record(directory, _VALID_SALESFORCE_IDS[0])
+    updated_record = sf_db.get_record(_VALID_SALESFORCE_IDS[0])
     assert updated_record is not None, "Updated record not found"
     assert updated_record.data["Name"] == "Acme Inc. Updated", "Name not updated"
     assert (
@@ -467,7 +462,7 @@ def _test_upsert(directory: str) -> None:
     ), "Description not added"
 
     # Verify the new record was created
-    new_record = get_record(directory, _VALID_SALESFORCE_IDS[2])
+    new_record = sf_db.get_record(_VALID_SALESFORCE_IDS[2])
     assert new_record is not None, "New record not found"
     assert new_record.data["Name"] == "New Company Inc.", "New record name incorrect"
     assert new_record.data["AnnualRevenue"] == "1000000", "New record revenue incorrect"
@@ -475,7 +470,7 @@ def _test_upsert(directory: str) -> None:
     print("All upsert tests passed successfully!")
 
 
-def _test_relationships(directory: str) -> None:
+def _test_relationships(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Tests relationship shelf updates and queries by:
     1. Creating test data with relationships
@@ -516,11 +511,13 @@ def _test_relationships(directory: str) -> None:
 
     # Create and update CSV files for each object type
     for object_type, records in test_data.items():
-        _create_csv_file(directory, object_type, records, "relationship_test.csv")
+        _create_csv_file_and_update_db(
+            sf_db, object_type, records, "relationship_test.csv"
+        )
 
     # Test relationship queries
     # All these objects should be children of Acme Inc.
-    child_ids = get_child_ids(directory, _VALID_SALESFORCE_IDS[0])
+    child_ids = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[0])
     assert len(child_ids) == 4, f"Expected 4 child objects, found {len(child_ids)}"
     assert _VALID_SALESFORCE_IDS[13] in child_ids, "Case 1 not found in relationship"
     assert _VALID_SALESFORCE_IDS[14] in child_ids, "Case 2 not found in relationship"
@@ -530,7 +527,7 @@ def _test_relationships(directory: str) -> None:
     ), "Opportunity not found in relationship"
 
     # Test querying relationships for a different account (should be empty)
-    other_account_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[1])
+    other_account_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[1])
     assert (
         len(other_account_children) == 0
     ), "Expected no children for different account"
@@ -538,7 +535,7 @@ def _test_relationships(directory: str) -> None:
     print("All relationship tests passed successfully!")
 
 
-def _test_account_with_children(directory: str) -> None:
+def _test_account_with_children(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Tests querying all accounts and retrieving their child objects.
     This test verifies that:
@@ -547,16 +544,16 @@ def _test_account_with_children(directory: str) -> None:
     3. Child object data is complete and accurate
     """
     # First get all account IDs
-    account_ids = find_ids_by_type(directory, "Account")
+    account_ids = sf_db.find_ids_by_type("Account")
     assert len(account_ids) > 0, "No accounts found"
 
     # For each account, get its children and verify the data
     for account_id in account_ids:
-        account = get_record(directory, account_id)
+        account = sf_db.get_record(account_id)
         assert account is not None, f"Could not find account {account_id}"
 
         # Get all child objects
-        child_ids = get_child_ids(directory, account_id)
+        child_ids = sf_db.get_child_ids(account_id)
 
         # For Acme Inc., verify specific relationships
         if account_id == _VALID_SALESFORCE_IDS[0]:  # Acme Inc.
@@ -567,7 +564,7 @@ def _test_account_with_children(directory: str) -> None:
             # Get all child records
             child_records = []
             for child_id in child_ids:
-                child_record = get_record(directory, child_id)
+                child_record = sf_db.get_record(child_id)
                 if child_record is not None:
                     child_records.append(child_record)
             # Verify Cases
@@ -602,7 +599,7 @@ def _test_account_with_children(directory: str) -> None:
     print("All account with children tests passed successfully!")
 
 
-def _test_relationship_updates(directory: str) -> None:
+def _test_relationship_updates(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Tests that relationships are properly updated when a child object's parent reference changes.
     This test verifies:
@@ -619,10 +616,12 @@ def _test_relationship_updates(directory: str) -> None:
             "LastName": "Contact",
         }
     ]
-    _create_csv_file(directory, "Contact", initial_contact, "initial_contact.csv")
+    _create_csv_file_and_update_db(
+        sf_db, "Contact", initial_contact, "initial_contact.csv"
+    )
 
     # Verify initial relationship
-    acme_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[0])
+    acme_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[0])
     assert (
         _VALID_SALESFORCE_IDS[40] in acme_children
     ), "Initial relationship not created"
@@ -636,22 +635,24 @@ def _test_relationship_updates(directory: str) -> None:
             "LastName": "Contact",
         }
     ]
-    _create_csv_file(directory, "Contact", updated_contact, "updated_contact.csv")
+    _create_csv_file_and_update_db(
+        sf_db, "Contact", updated_contact, "updated_contact.csv"
+    )
 
     # Verify old relationship is removed
-    acme_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[0])
+    acme_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[0])
     assert (
         _VALID_SALESFORCE_IDS[40] not in acme_children
     ), "Old relationship not removed"
 
     # Verify new relationship is created
-    globex_children = get_child_ids(directory, _VALID_SALESFORCE_IDS[1])
+    globex_children = sf_db.get_child_ids(_VALID_SALESFORCE_IDS[1])
     assert _VALID_SALESFORCE_IDS[40] in globex_children, "New relationship not created"
 
     print("All relationship update tests passed successfully!")
 
 
-def _test_get_affected_parent_ids(directory: str) -> None:
+def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
     """
     Tests get_affected_parent_ids functionality by verifying:
     1. IDs that are directly in the parent_types list are included
@@ -686,13 +687,13 @@ def _test_get_affected_parent_ids(directory: str) -> None:
 
     # Create and update CSV files for test data
     for object_type, records in test_data.items():
-        _create_csv_file(directory, object_type, records)
+        _create_csv_file_and_update_db(sf_db, object_type, records)
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
     parent_types = ["Account"]
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
+        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
     )
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
@@ -703,7 +704,7 @@ def _test_get_affected_parent_ids(directory: str) -> None:
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
     parent_types = ["Account"]
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
+        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
     )
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
@@ -714,7 +715,7 @@ def _test_get_affected_parent_ids(directory: str) -> None:
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
     parent_types = ["Account"]
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
+        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
     )
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     affected_ids = affected_ids_by_type["Account"]
@@ -729,7 +730,7 @@ def _test_get_affected_parent_ids(directory: str) -> None:
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
     parent_types = ["Opportunity"]  # Wrong type
     affected_ids_by_type = dict(
-        get_affected_parent_ids_by_type(directory, updated_ids, parent_types)
+        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
     )
     assert len(affected_ids_by_type) == 0, "Should return empty dict when no matches"
 
@@ -737,15 +738,22 @@ def _test_get_affected_parent_ids(directory: str) -> None:
 
 
 def test_salesforce_sqlite() -> None:
-    directory = BASE_DATA_PATH
+    with tempfile.TemporaryDirectory() as directory:
+        _clear_sf_db(directory)
 
-    _clear_sf_db(directory)
-    init_db(directory)
-    _create_csv_with_example_data(directory)
-    _test_query(directory)
-    _test_upsert(directory)
-    _test_relationships(directory)
-    _test_account_with_children(directory)
-    _test_relationship_updates(directory)
-    _test_get_affected_parent_ids(directory)
-    _clear_sf_db(directory)
+        filename = os.path.join(directory, "salesforce_db.sqlite")
+        sf_db = OnyxSalesforceSQLite(filename)
+        sf_db.connect()
+        sf_db.apply_schema()
+
+        _create_csv_with_example_data(sf_db)
+        _test_query(sf_db)
+        _test_upsert(sf_db)
+        _test_relationships(sf_db)
+        _test_account_with_children(sf_db)
+        _test_relationship_updates(sf_db)
+        _test_get_affected_parent_ids(sf_db)
+
+        sf_db.close()
+
+        _clear_sf_db(directory)

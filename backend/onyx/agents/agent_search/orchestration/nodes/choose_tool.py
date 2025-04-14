@@ -1,6 +1,8 @@
 from typing import cast
 from uuid import uuid4
 
+from langchain_core.messages import AIMessage
+from langchain_core.messages import HumanMessage
 from langchain_core.messages import ToolCall
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import StreamWriter
@@ -10,13 +12,21 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolChoice
 from onyx.agents.agent_search.orchestration.states import ToolChoiceState
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
     get_tool_call_for_non_tool_calling_llm_impl,
 )
+from onyx.configs.chat_configs import USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
+from onyx.llm.factory import get_default_llms
+from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+from onyx.prompts.chat_prompts import QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
+from onyx.tools.models import QueryExpansions
 from onyx.tools.models import SearchToolOverrideKwargs
 from onyx.tools.tool import Tool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
@@ -28,6 +38,49 @@ from onyx.utils.timing import log_function_time
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
+
+
+def _create_history_str(prompt_builder: AnswerPromptBuilder) -> str:
+    # TODO: Add trimming logic
+    history_segments = []
+    for msg in prompt_builder.message_history:
+        if isinstance(msg, HumanMessage):
+            role = "User"
+        elif isinstance(msg, AIMessage):
+            role = "Assistant"
+        else:
+            continue
+        history_segments.append(f"{role}:\n {msg.content}\n\n")
+    return "\n".join(history_segments)
+
+
+def _expand_query(
+    query: str,
+    expansion_type: QueryExpansionType,
+    prompt_builder: AnswerPromptBuilder,
+) -> str:
+
+    history_str = _create_history_str(prompt_builder)
+
+    if history_str:
+        if expansion_type == QueryExpansionType.KEYWORD:
+            base_prompt = QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
+        else:
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
+        expansion_prompt = base_prompt.format(question=query, history=history_str)
+    else:
+        if expansion_type == QueryExpansionType.KEYWORD:
+            base_prompt = QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
+        else:
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
+        expansion_prompt = base_prompt.format(question=query)
+
+    msg = HumanMessage(content=expansion_prompt)
+    primary_llm, _ = get_default_llms()
+    response = primary_llm.invoke([msg])
+    rephrased_query: str = cast(str, response.content)
+
+    return rephrased_query
 
 
 # TODO: break this out into an implementation function
@@ -52,7 +105,16 @@ def choose_tool(
 
     embedding_thread: TimeoutThread[Embedding] | None = None
     keyword_thread: TimeoutThread[tuple[bool, list[str]]] | None = None
+    expanded_keyword_thread: TimeoutThread[str] | None = None
+    expanded_semantic_thread: TimeoutThread[str] | None = None
     override_kwargs: SearchToolOverrideKwargs | None = None
+
+    using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
+    prompt_builder = state.prompt_snapshot or agent_config.inputs.prompt_builder
+
+    llm = agent_config.tooling.primary_llm
+    skip_gen_ai_answer_generation = agent_config.behavior.skip_gen_ai_answer_generation
+
     if (
         not agent_config.behavior.use_agentic_search
         and agent_config.tooling.search_tool is not None
@@ -72,11 +134,20 @@ def choose_tool(
             agent_config.inputs.search_request.query,
         )
 
-    using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
-    prompt_builder = state.prompt_snapshot or agent_config.inputs.prompt_builder
+        if USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH:
 
-    llm = agent_config.tooling.primary_llm
-    skip_gen_ai_answer_generation = agent_config.behavior.skip_gen_ai_answer_generation
+            expanded_keyword_thread = run_in_background(
+                _expand_query,
+                agent_config.inputs.search_request.query,
+                QueryExpansionType.KEYWORD,
+                prompt_builder,
+            )
+            expanded_semantic_thread = run_in_background(
+                _expand_query,
+                agent_config.inputs.search_request.query,
+                QueryExpansionType.SEMANTIC,
+                prompt_builder,
+            )
 
     structured_response_format = agent_config.inputs.structured_response_format
     tools = [
@@ -208,6 +279,19 @@ def choose_tool(
         assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.precomputed_is_keyword = is_keyword
         override_kwargs.precomputed_keywords = keywords
+
+    if (
+        selected_tool.name == SearchTool._NAME
+        and expanded_keyword_thread
+        and expanded_semantic_thread
+    ):
+        keyword_expansion = wait_on_background(expanded_keyword_thread)
+        semantic_expansion = wait_on_background(expanded_semantic_thread)
+        assert override_kwargs is not None, "must have override kwargs"
+        override_kwargs.expanded_queries = QueryExpansions(
+            keywords_expansions=[keyword_expansion],
+            semantic_expansions=[semantic_expansion],
+        )
 
     return ToolChoiceUpdate(
         tool_choice=ToolChoice(

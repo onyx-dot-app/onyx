@@ -826,7 +826,12 @@ export function ChatInputBar({
                 {retrievalEnabled && (
                   <FilterPopup
                     availableSources={availableSources}
-                    availableDocumentSets={availableDocumentSets}
+                    availableDocumentSets={
+                      selectedAssistant.document_sets &&
+                      selectedAssistant.document_sets.length > 0
+                        ? selectedAssistant.document_sets
+                        : availableDocumentSets
+                    }
                     availableTags={availableTags}
                     filterManager={filterManager}
                     trigger={
