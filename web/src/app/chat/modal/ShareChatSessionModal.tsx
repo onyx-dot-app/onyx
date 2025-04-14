@@ -146,7 +146,10 @@ export function ShareChatSessionModal({
                       setShareLink("");
                       onShare && onShare(false);
                     } else {
-                      alert("Failed to delete share link");
+                      setPopup({
+                        message: "Failed to delete share link",
+                        type: "error",
+                      });
                     }
                   }}
                   size="sm"
@@ -171,7 +174,10 @@ export function ShareChatSessionModal({
                         const shareLink =
                           await generateShareLink(chatSessionId);
                         if (!shareLink) {
-                          alert("Failed to generate share link");
+                          setPopup({
+                            message: "Failed to generate share link",
+                            type: "error",
+                          });
                         } else {
                           setShareLink(shareLink);
                           onShare && onShare(true);
@@ -231,7 +237,10 @@ export function ShareChatSessionModal({
                       }
                     } catch (e) {
                       console.error(e);
-                      alert("Failed to generate or copy link.");
+                      setPopup({
+                        message: "Failed to generate or copy link.",
+                        type: "error",
+                      });
                     }
                   }}
                   size="sm"
