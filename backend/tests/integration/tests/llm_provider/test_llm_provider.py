@@ -158,3 +158,25 @@ def test_delete_llm_provider(reset: None) -> None:
     # Verify provider is deleted by checking it's not in the list
     provider_data = _get_provider_by_id(admin_user, created_provider["id"])
     assert provider_data is None
+
+
+def test_create_custom(
+    reset: None,
+    initialize_db: None,
+    admin_user,
+) -> None:
+    response = requests.put(
+        f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
+        headers=admin_user.headers,
+        json={
+            "name": "test-provider-delete",
+            "provider": "ai21",
+            "default_model_name": "j2-ultra",
+            "model_names": ["j2-ultra"],
+            "is_public": True,
+            "groups": [],
+        },
+    )
+
+    assert response.status_code == 200
+    response.json()
