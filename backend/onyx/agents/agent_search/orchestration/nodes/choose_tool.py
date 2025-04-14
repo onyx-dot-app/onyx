@@ -18,6 +18,7 @@ from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
     get_tool_call_for_non_tool_calling_llm_impl,
 )
+from onyx.configs.chat_configs import USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
 from onyx.llm.factory import get_default_llms
@@ -136,18 +137,20 @@ def choose_tool(
             agent_config.inputs.search_request.query,
         )
 
-        expanded_keyword_thread = run_in_background(
-            _expand_query,
-            agent_config.inputs.search_request.query,
-            "keyword",
-            prompt_builder,
-        )
-        expanded_semantic_thread = run_in_background(
-            _expand_query,
-            agent_config.inputs.search_request.query,
-            "semantic",
-            prompt_builder,
-        )
+        if USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH:
+
+            expanded_keyword_thread = run_in_background(
+                _expand_query,
+                agent_config.inputs.search_request.query,
+                "keyword",
+                prompt_builder,
+            )
+            expanded_semantic_thread = run_in_background(
+                _expand_query,
+                agent_config.inputs.search_request.query,
+                "semantic",
+                prompt_builder,
+            )
 
     structured_response_format = agent_config.inputs.structured_response_format
     tools = [
