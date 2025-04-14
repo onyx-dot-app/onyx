@@ -23,6 +23,8 @@ from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import InferenceSection
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
@@ -392,6 +394,7 @@ def upsert_documents(
                     last_modified=datetime.now(timezone.utc),
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
+                    kg_processed=False,
                 )
             )
             for doc in seen_documents.values()
@@ -857,4 +860,202 @@ def fetch_chunk_count_for_document(
     db_session: Session,
 ) -> int | None:
     stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_unprocessed_kg_documents_for_connector(
+    db_session: Session,
+    connector_id: int,
+    batch_size: int = 100,
+) -> Generator[DbDocument, None, None]:
+    """
+    Retrieves all documents associated with a connector that have not yet been processed
+    for knowledge graph extraction. Uses a generator pattern to handle large result sets.
+    Args:
+        db_session (Session): The database session to use
+        connector_id (int): The ID of the connector to check
+        batch_size (int): Number of documents to fetch per batch, defaults to 100
+    Yields:
+        DbDocument: Documents that haven't been KG processed, one at a time
+    """
+    offset = 0
+    while True:
+        stmt = (
+            select(DbDocument)
+            .join(
+                DocumentByConnectorCredentialPair,
+                DbDocument.id == DocumentByConnectorCredentialPair.id,
+            )
+            .where(
+                and_(
+                    DocumentByConnectorCredentialPair.connector_id == connector_id,
+                    or_(
+                        DocumentByConnectorCredentialPair.has_been_kg_processed.is_(
+                            None
+                        ),
+                        DocumentByConnectorCredentialPair.has_been_kg_processed.is_(
+                            False
+                        ),
+                    ),
+                )
+            )
+            .distinct()
+            .limit(batch_size)
+            .offset(offset)
+        )
+
+        batch = list(db_session.scalars(stmt).all())
+        if not batch:
+            break
+
+        for document in batch:
+            yield document
+
+        offset += batch_size
+
+
+def get_kg_processed_document_ids(db_session: Session) -> list[str]:
+    """
+    Retrieves all document IDs where kg_processed is True.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        list[str]: List of document IDs that have been KG processed
+    """
+    stmt = select(DbDocument.id).where(DbDocument.kg_processed.is_(True))
+    return list(db_session.scalars(stmt).all())
+
+
+def update_document_kg_info(
+    db_session: Session,
+    document_id: str,
+    kg_processed: bool,
+    kg_data: dict,
+) -> None:
+    """Updates the knowledge graph related information for a document.
+    Args:
+        db_session (Session): The database session to use
+        document_id (str): The ID of the document to update
+        kg_processed (bool): Whether the document has been processed for KG extraction
+        kg_data (dict): Dictionary containing KG data with 'entities', 'relationships', and 'terms' keys
+    Raises:
+        ValueError: If the document with the given ID is not found
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.id == document_id)
+        .values(
+            kg_processed=kg_processed,
+            kg_data=kg_data,
+        )
+    )
+    db_session.execute(stmt)
+
+
+def get_document_kg_info(
+    db_session: Session,
+    document_id: str,
+) -> tuple[bool, dict] | None:
+    """Retrieves the knowledge graph processing status and data for a document.
+    Args:
+        db_session (Session): The database session to use
+        document_id (str): The ID of the document to query
+    Returns:
+        Optional[Tuple[bool, dict]]: A tuple containing:
+            - bool: Whether the document has been KG processed
+            - dict: The KG data containing 'entities', 'relationships', and 'terms'
+            Returns None if the document is not found
+    """
+    stmt = select(DbDocument.kg_processed, DbDocument.kg_data).where(
+        DbDocument.id == document_id
+    )
+    result = db_session.execute(stmt).one_or_none()
+
+    if result is None:
+        return None
+
+    return result.kg_processed, result.kg_data or {}
+
+
+def get_all_kg_processed_documents_info(
+    db_session: Session,
+) -> list[tuple[str, dict]]:
+    """Retrieves the knowledge graph data for all documents that have been processed.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        List[Tuple[str, dict]]: A list of tuples containing:
+            - str: The document ID
+            - dict: The KG data containing 'entities', 'relationships', and 'terms'
+        Only returns documents where kg_processed is True
+    """
+    stmt = (
+        select(DbDocument.id, DbDocument.kg_data)
+        .where(DbDocument.kg_processed.is_(True))
+        .order_by(DbDocument.id)
+    )
+
+    results = db_session.execute(stmt).all()
+    return [(str(doc_id), kg_data or {}) for doc_id, kg_data in results]
+
+
+def get_base_llm_doc_information(
+    db_session: Session, document_ids: list[str]
+) -> list[InferenceSection]:
+    stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
+    results = db_session.execute(stmt).all()
+
+    inference_sections = []
+
+    for doc in results:
+        bare_doc = doc[0]
+        inference_section = InferenceSection(
+            center_chunk=InferenceChunk(
+                document_id=bare_doc.id,
+                chunk_id=0,
+                source_type=DocumentSource.NOT_APPLICABLE,
+                semantic_identifier=bare_doc.semantic_id,
+                title=None,
+                boost=0,
+                recency_bias=0,
+                score=0,
+                hidden=False,
+                metadata={},
+                blurb="",
+                content="",
+                source_links=None,
+                image_file_name=None,
+                section_continuation=False,
+                match_highlights=[],
+                doc_summary="",
+                chunk_context="",
+                updated_at=None,
+            ),
+            chunks=[],
+            combined_content="",
+        )
+
+        inference_sections.append(inference_section)
+    return inference_sections
+
+
+def get_document_updated_at(
+    document_id: str,
+    db_session: Session,
+) -> datetime | None:
+    """Retrieves the doc_updated_at timestamp for a given document ID.
+    Args:
+        document_id (str): The ID of the document to query
+        db_session (Session): The database session to use
+    Returns:
+        Optional[datetime]: The doc_updated_at timestamp if found, None if document doesn't exist
+    """
+    if len(document_id.split(":")) == 2:
+        document_id = document_id.split(":")[1]
+    elif len(document_id.split(":")) > 2:
+        raise ValueError(f"Invalid document ID: {document_id}")
+    else:
+        pass
+
+    stmt = select(DbDocument.doc_updated_at).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none()
