@@ -400,7 +400,7 @@ export function LLMProviderUpdateForm({
                     <IsPublicGroupSelector
                       formikProps={formikProps}
                       objectName="LLM Provider"
-                      publicToWhom="all users"
+                      publicToWhom="Users"
                       enforceGroupSelection={true}
                     />
                   </>
