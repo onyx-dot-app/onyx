@@ -13,13 +13,13 @@ from datetime import timedelta
 from typing import BinaryIO
 from typing import cast
 from typing import List
-from typing import Literal
 from uuid import UUID
 
 import httpx  # type: ignore
 import requests  # type: ignore
 from retry import retry
 
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -801,7 +801,7 @@ class VespaIndex(DocumentIndex):
         hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
-        ranking_profile_type: Literal["keyword", "semantic"],
+        ranking_profile_type: QueryExpansionType,
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunkUncleaned]:
@@ -820,7 +820,7 @@ class VespaIndex(DocumentIndex):
 
         final_query = " ".join(final_keywords) if final_keywords else query
 
-        if ranking_profile_type == "keyword":
+        if ranking_profile_type == QueryExpansionType.KEYWORD:
             ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
         else:
             ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"

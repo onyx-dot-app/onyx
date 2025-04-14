@@ -1,5 +1,4 @@
 from typing import cast
-from typing import Literal
 from uuid import uuid4
 
 from langchain_core.messages import AIMessage
@@ -13,6 +12,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.orchestration.states import ToolChoice
 from onyx.agents.agent_search.orchestration.states import ToolChoiceState
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.tool_handling.tool_response_handler import get_tool_by_name
 from onyx.chat.tool_handling.tool_response_handler import (
@@ -56,23 +56,20 @@ def _create_history_str(prompt_builder: AnswerPromptBuilder) -> str:
 
 def _expand_query(
     query: str,
-    expansion_type: Literal["keyword", "semantic"],
+    expansion_type: QueryExpansionType,
     prompt_builder: AnswerPromptBuilder,
 ) -> str:
 
     history_str = _create_history_str(prompt_builder)
 
-    if expansion_type not in ["keyword", "semantic"]:
-        raise ValueError(f"Invalid query expansion type: {expansion_type}")
-
     if history_str:
-        if expansion_type == "keyword":
+        if expansion_type == QueryExpansionType.KEYWORD:
             base_prompt = QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
         else:
             base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
         expansion_prompt = base_prompt.format(question=query, history=history_str)
     else:
-        if expansion_type == "keyword":
+        if expansion_type == QueryExpansionType.KEYWORD:
             base_prompt = QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
         else:
             base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
@@ -142,13 +139,13 @@ def choose_tool(
             expanded_keyword_thread = run_in_background(
                 _expand_query,
                 agent_config.inputs.search_request.query,
-                "keyword",
+                QueryExpansionType.KEYWORD,
                 prompt_builder,
             )
             expanded_semantic_thread = run_in_background(
                 _expand_query,
                 agent_config.inputs.search_request.query,
-                "semantic",
+                QueryExpansionType.SEMANTIC,
                 prompt_builder,
             )
 

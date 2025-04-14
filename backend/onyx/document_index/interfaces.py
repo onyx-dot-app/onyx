@@ -2,9 +2,9 @@ import abc
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
-from typing import Literal
 
 from onyx.access.models import DocumentAccess
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunkUncleaned
@@ -353,7 +353,7 @@ class HybridCapable(abc.ABC):
         hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
-        ranking_profile_type: Literal["keyword", "semantic"],
+        ranking_profile_type: QueryExpansionType,
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunkUncleaned]:

@@ -1,12 +1,10 @@
 import string
 from collections.abc import Callable
-from typing import Literal
 
 import nltk  # type:ignore
-from nltk.corpus import stopwords  # type:ignore
-from nltk.tokenize import word_tokenize  # type:ignore
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import ChunkMetric
 from onyx.context.search.models import IndexFilters
@@ -32,6 +30,7 @@ from onyx.secondary_llm_flows.query_expansion import multilingual_query_expansio
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.threadpool_concurrency import run_in_background
+from onyx.utils.threadpool_concurrency import TimeoutThread
 from onyx.utils.threadpool_concurrency import wait_on_background
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MODEL_SERVER_HOST
@@ -40,32 +39,6 @@ from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding
 
 logger = setup_logger()
-
-
-def _get_top_chunks(
-    document_index: DocumentIndex,
-    query: str,
-    query_embedding: Embedding,
-    final_keywords: list[str],
-    filters: IndexFilters,
-    hybrid_alpha: float,
-    time_decay_multiplier: float,
-    num_to_retrieve: int,
-    ranking_profile_type: Literal["keyword", "semantic"],
-    offset: int,
-) -> list[InferenceChunkUncleaned]:
-
-    return document_index.hybrid_retrieval(
-        query=query,
-        query_embedding=query_embedding,
-        final_keywords=final_keywords,
-        filters=filters,
-        hybrid_alpha=hybrid_alpha,
-        time_decay_multiplier=time_decay_multiplier,
-        num_to_retrieve=num_to_retrieve,
-        ranking_profile_type=ranking_profile_type,
-        offset=offset,
-    )
 
 
 def _dedupe_chunks(
@@ -116,22 +89,6 @@ def lemmatize_text(keywords: list[str]) -> list[str]:
     #     return combined_keywords
     # except Exception:
     #     return keywords
-
-
-def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
-    try:
-        # Re-tokenize using the NLTK tokenizer for better matching
-        query = " ".join(keywords)
-        stop_words = set(stopwords.words("english"))
-        word_tokens = word_tokenize(query)
-        text_trimmed = [
-            word
-            for word in word_tokens
-            if (word.casefold() not in stop_words and word not in string.punctuation)
-        ]
-        return text_trimmed or word_tokens
-    except Exception:
-        return keywords
 
 
 def combine_retrieval_results(
@@ -202,10 +159,22 @@ def doc_index_retrieval(
         query.query, db_session
     )
 
+    keyword_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
+    semantic_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
+    top_base_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = None
+
+    top_semantic_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = (
+        None
+    )
+
+    keyword_embeddings: list[Embedding] | None = None
+    semantic_embeddings: list[Embedding] | None = None
+
+    top_semantic_chunks: list[InferenceChunkUncleaned] | None = None
+
     # original retrieveal method
     top_base_chunks_thread = run_in_background(
-        _get_top_chunks,
-        document_index,
+        document_index.hybrid_retrieval,
         query.query,
         query_embedding,
         query.processed_keywords,
@@ -238,6 +207,7 @@ def doc_index_retrieval(
 
         keyword_embeddings = wait_on_background(keyword_embeddings_thread)
         if query.search_type == SearchType.SEMANTIC:
+            assert semantic_embeddings_thread is not None
             semantic_embeddings = wait_on_background(semantic_embeddings_thread)
 
         # Use original query embedding for keyword retrieval embedding
@@ -245,8 +215,7 @@ def doc_index_retrieval(
 
         # Note: we generally prepped earlier for multiple expansions, but for now we only use one.
         top_keyword_chunks_thread = run_in_background(
-            _get_top_chunks,
-            document_index,
+            document_index.hybrid_retrieval,
             query.expanded_queries.keywords_expansions[0],
             keyword_embeddings[0],
             query.processed_keywords,
@@ -254,14 +223,15 @@ def doc_index_retrieval(
             HYBRID_ALPHA_KEYWORD,
             query.recency_bias_multiplier,
             query.num_hits,
-            "keyword",
+            QueryExpansionType.KEYWORD,
             query.offset,
         )
 
         if query.search_type == SearchType.SEMANTIC:
+            assert semantic_embeddings is not None
+
             top_semantic_chunks_thread = run_in_background(
-                _get_top_chunks,
-                document_index,
+                document_index.hybrid_retrieval,
                 query.expanded_queries.semantic_expansions[0],
                 semantic_embeddings[0],
                 query.processed_keywords,
@@ -269,22 +239,23 @@ def doc_index_retrieval(
                 HYBRID_ALPHA,
                 query.recency_bias_multiplier,
                 query.num_hits,
-                "semantic",
+                QueryExpansionType.SEMANTIC,
                 query.offset,
             )
 
         top_base_chunks = wait_on_background(top_base_chunks_thread)
-        # cleaned_top_base_chunks = [top_base_chunk.to_inference_chunk() for top_base_chunk in top_base_chunks]
+
         top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
 
         if query.search_type == SearchType.SEMANTIC:
+            assert top_semantic_chunks_thread is not None
             top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
 
         all_top_chunks = top_base_chunks + top_keyword_chunks
 
         # use all three retrieval methods to retrieve top chunks
 
-        if query.search_type == SearchType.SEMANTIC:
+        if query.search_type == SearchType.SEMANTIC and top_semantic_chunks is not None:
 
             all_top_chunks += top_semantic_chunks
 
