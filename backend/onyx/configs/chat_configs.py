@@ -99,6 +99,6 @@ VESPA_SEARCHER_THREADS = int(os.environ.get("VESPA_SEARCHER_THREADS") or 2)
 
 # Whether or not to use the semantic & keyword search expansions for Basic Search
 USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH = (
-    os.environ.get("USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH", "true").lower()
+    os.environ.get("USE_SEMANTIC_KEYWORD_EXPANSIONS_BASIC_SEARCH", "false").lower()
     == "true"
 )
