@@ -305,8 +305,8 @@ def test_validate_connector_settings_errors(
     """Test validation with various error scenarios"""
     error = HTTPError(response=MagicMock(status_code=status_code))
 
-    confluence_client = confluence_connector._confluence_client
-    assert confluence_client is not None, "bad test setup"
+    confluence_client = MagicMock()
+    confluence_connector._low_timeout_confluence_client = confluence_client
     get_all_spaces_mock = cast(MagicMock, confluence_client.get_all_spaces)
     get_all_spaces_mock.side_effect = error
 
@@ -319,8 +319,8 @@ def test_validate_connector_settings_success(
     confluence_connector: ConfluenceConnector,
 ) -> None:
     """Test successful validation"""
-    confluence_client = confluence_connector._confluence_client
-    assert confluence_client is not None, "bad test setup"
+    confluence_client = MagicMock()
+    confluence_connector._low_timeout_confluence_client = confluence_client
     get_all_spaces_mock = cast(MagicMock, confluence_client.get_all_spaces)
     get_all_spaces_mock.return_value = {"results": [{"key": "TEST"}]}
 
