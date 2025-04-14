@@ -223,7 +223,6 @@ export function ChatPage({
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
 
-  const [viewingFilePicker, setViewingFilePicker] = useState(false);
   const [toggleDocSelection, setToggleDocSelection] = useState(false);
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
