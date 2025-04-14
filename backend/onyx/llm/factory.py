@@ -13,6 +13,7 @@ from onyx.db.llm import fetch_llm_provider_view
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
+from onyx.llm.gigachat_llm import GigachatModelServer
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import model_supports_image_input
@@ -241,6 +242,13 @@ def get_llm(
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
+    if provider == "gigachat":
+        return GigachatModelServer(
+            api_key=api_key,
+            endpoint=api_base,
+            model=model,
+            custom_config=custom_config
+        )
     return DefaultMultiLLM(
         model_provider=provider,
         model_name=model,

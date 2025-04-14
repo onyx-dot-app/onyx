@@ -110,6 +110,7 @@ const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "llama-3.2-90b-vision-instruct",
   "llama-3.2-11b-vision-instruct",
   "Llama-3-2-11B-Vision-Instruct-yb",
+  "gemma3:27b"
 ];
 
 export function checkLLMSupportsImageInput(model: string) {

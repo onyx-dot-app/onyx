@@ -119,12 +119,23 @@ VERTEXAI_MODEL_NAMES = [
     "gemini-1.5-flash-002",
 ]
 
+GIGACHAT_PROVIDER_NAME = "gigachat"
+GIGACHAT_MODEL_NAMES = [
+    "GigaChat-2",
+    "GigaChat-2-Pro",
+    "GigaChat-2-Max",
+    "GigaChat",
+    "GigaChat-Pro",
+    "GigaChat-Max",
+]
+
 
 _PROVIDER_TO_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+    GIGACHAT_PROVIDER_NAME: GIGACHAT_MODEL_NAMES,
 }
 
 
@@ -133,6 +144,20 @@ CREDENTIALS_FILE_CUSTOM_CONFIG_KEY = "CREDENTIALS_FILE"
 
 def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
     return [
+        WellKnownLLMProviderDescriptor(
+            name=GIGACHAT_PROVIDER_NAME,
+            display_name="GigaChat",
+            api_key_required=True,
+            api_base_required=True,
+            api_version_required=False,
+            custom_config_keys=[
+                CustomConfigKey(name="scope", is_required=True, display_name="Тип токена", description="Укажите тип токена (GIGACHAT_API_PERS, GIGACHAT_API_B2B, GIGACHAT_API_CORP)")
+            ],
+            llm_names=fetch_models_for_provider(GIGACHAT_PROVIDER_NAME),
+            deployment_name_required=True,
+            single_model_supported=True,
+            default_model="GigaChat"
+        ),
         WellKnownLLMProviderDescriptor(
             name=OPENAI_PROVIDER_NAME,
             display_name="OpenAI",

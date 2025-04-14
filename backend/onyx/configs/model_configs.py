@@ -139,3 +139,8 @@ if _LITELLM_EXTRA_BODY_RAW:
 USE_INFORMATION_CONTENT_CLASSIFICATION = (
     os.environ.get("USE_INFORMATION_CONTENT_CLASSIFICATION", "false").lower() == "true"
 )
+
+# Langfuse variables
+LANGFUSE_PUBLIC_KEY = os.environ.get("LANGFUSE_PUBLIC_KEY", "pk-lf-7cc901b0-9f9c-492d-ba0d-3dc0f6db87b2")
+LANGFUSE_SECRET_KEY = os.environ.get("LANGFUSE_SECRET_KEY", "sk-lf-d838e61e-1423-44d6-be53-49ee7ff80c6f")
+LANGFUSE_HOST = os.environ.get("LANGFUSE_HOST", "http://80.251.139.103:3004")

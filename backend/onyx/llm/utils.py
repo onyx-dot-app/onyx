@@ -380,6 +380,17 @@ def test_llm(llm: LLM) -> str | None:
 
 def get_model_map() -> dict:
     starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
+    starting_map[f"ollama/gemma3:27b"] = {
+        "max_tokens": 12000,
+        "litellm_provider": "ollama",
+        "supports_vision": True,
+        "supports_function_calling": True,
+        "supports_parallel_function_calling": True,
+        "supports_response_schema": True,
+        "supports_prompt_caching": True,
+        "supports_system_messages": True,
+        "supports_tool_choice": True,
+    }
 
     # NOTE: we could add additional models here in the future,
     # but for now there is no point. Ollama allows the user to
@@ -619,6 +630,7 @@ def get_max_input_tokens(
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
     model_map = get_model_map()
+
     try:
         model_obj = _find_model_obj(
             model_map,
@@ -629,6 +641,7 @@ def model_supports_image_input(model_name: str, model_provider: str) -> bool:
             raise RuntimeError(
                 f"No litellm entry found for {model_provider}/{model_name}"
             )
+        logger.info(model_obj)
         return model_obj.get("supports_vision", False)
     except Exception:
         logger.exception(

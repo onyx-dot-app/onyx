@@ -277,6 +277,7 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
+    global_version.set_ee()
     application = FastAPI(
         title="Onyx Backend",
         version=__version__,
