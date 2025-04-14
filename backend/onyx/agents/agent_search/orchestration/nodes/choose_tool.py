@@ -44,38 +44,37 @@ def _create_history_str(prompt_builder: AnswerPromptBuilder) -> str:
     history_segments = []
     for msg in prompt_builder.message_history:
         if isinstance(msg, HumanMessage):
-            role = "user"
+            role = "User"
         elif isinstance(msg, AIMessage):
-            role = "assistant"
+            role = "Assistant"
         else:
             continue
-        history_segments.append(f"{role.capitalize()}:\n {msg.content}\n\n")
+        history_segments.append(f"{role}:\n {msg.content}\n\n")
     return "\n".join(history_segments)
 
 
 def _expand_query(
     query: str,
-    type: Literal["keyword", "semantic"],
+    expansion_type: Literal["keyword", "semantic"],
     prompt_builder: AnswerPromptBuilder,
 ) -> str:
 
     history_str = _create_history_str(prompt_builder)
 
+    if expansion_type not in ["keyword", "semantic"]:
+        raise ValueError(f"Invalid query expansion type: {expansion_type}")
+
     if history_str:
-        if type == "keyword":
+        if expansion_type == "keyword":
             base_prompt = QUERY_KEYWORD_EXPANSION_WITH_HISTORY_PROMPT
-        elif type == "semantic":
-            base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
         else:
-            raise ValueError(f"Invalid query type: {type}")
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITH_HISTORY_PROMPT
         expansion_prompt = base_prompt.format(question=query, history=history_str)
     else:
-        if type == "keyword":
+        if expansion_type == "keyword":
             base_prompt = QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT
-        elif type == "semantic":
-            base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
         else:
-            raise ValueError(f"Invalid query type: {type}")
+            base_prompt = QUERY_SEMANTIC_EXPANSION_WITHOUT_HISTORY_PROMPT
         expansion_prompt = base_prompt.format(question=query)
 
     msg = HumanMessage(content=expansion_prompt)

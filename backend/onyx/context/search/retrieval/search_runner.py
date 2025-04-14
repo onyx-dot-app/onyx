@@ -243,7 +243,7 @@ def doc_index_retrieval(
         # Use original query embedding for keyword retrieval embedding
         keyword_embeddings = [query_embedding]
 
-        # Note: we generally prepped earlietrfor multiple expansions, but for now we only use one.
+        # Note: we generally prepped earlier for multiple expansions, but for now we only use one.
         top_keyword_chunks_thread = run_in_background(
             _get_top_chunks,
             document_index,
@@ -280,13 +280,15 @@ def doc_index_retrieval(
         if query.search_type == SearchType.SEMANTIC:
             top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
 
+        all_top_chunks = top_base_chunks + top_keyword_chunks
+
         # use all three retrieval methods to retrieve top chunks
+
         if query.search_type == SearchType.SEMANTIC:
-            top_chunks = _dedupe_chunks(
-                top_base_chunks + top_keyword_chunks + top_semantic_chunks
-            )
-        else:
-            top_chunks = _dedupe_chunks(top_base_chunks + top_keyword_chunks)
+
+            all_top_chunks += top_semantic_chunks
+
+        top_chunks = _dedupe_chunks(all_top_chunks)
 
     else:
 
