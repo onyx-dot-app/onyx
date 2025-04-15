@@ -28,6 +28,7 @@ def upgrade() -> None:
             ["llm_provider_id"], ["llm_provider.id"], ondelete="CASCADE"
         ),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("llm_provider_id", "name"),
     )
     op.drop_column("llm_provider", "model_names")
     op.drop_column("llm_provider", "display_model_names")
