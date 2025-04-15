@@ -412,8 +412,9 @@ class DefaultMultiLLM(LLM):
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
 
-        if "vertex_credentials" not in self._model_kwargs:
-            self._model_kwargs["vertex_credentials"] = self.config.credentials_file
+        final_model_kwargs = {**self._model_kwargs}
+        if "vertex_credentials" not in final_model_kwargs:
+            final_model_kwargs["vertex_credentials"] = self.config.credentials_file
 
         try:
             return litellm.completion(
@@ -460,7 +461,7 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **self._model_kwargs,
+                **final_model_kwargs,
             )
         except Exception as e:
             self._record_error(processed_prompt, e)
