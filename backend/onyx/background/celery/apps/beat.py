@@ -152,7 +152,10 @@ class DynamicTenantScheduler(PersistentScheduler):
         current_schedule = self.schedule.items()
 
         # get potential new state
-        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+        try:
+            beat_multiplier = OnyxRuntime.get_beat_multiplier()
+        except Exception:
+            beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
         new_schedule = self._generate_schedule(tenant_ids, beat_multiplier)
 

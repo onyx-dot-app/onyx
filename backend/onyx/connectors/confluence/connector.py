@@ -149,6 +149,7 @@ class ConfluenceConnector(
         }
 
     def set_allow_images(self, value: bool) -> None:
+        logger.info(f"Setting allow_images to {value}.")
         self.allow_images = value
 
     @property
