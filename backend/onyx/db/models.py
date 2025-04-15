@@ -1567,6 +1567,8 @@ class LLMProvider(Base):
     )
 
 
+llm_provider: Mapped["LLMProvider"] = relationship("LLMProvider", back_populates="model_configurations")
+
 class ModelConfiguration(Base):
     __tablename__ = "model_configuration"
 
@@ -1578,7 +1580,6 @@ class ModelConfiguration(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
 
 class CloudEmbeddingProvider(Base):
     __tablename__ = "embedding_provider"
