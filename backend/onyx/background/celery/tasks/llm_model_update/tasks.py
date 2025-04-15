@@ -109,7 +109,7 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
         # Remove models that are no longer available
         db_session.query(ModelConfiguration).filter(
             ModelConfiguration.llm_provider_id == default_provider.id,
-            ModelConfiguration.name.notin_(available_models)
+            ModelConfiguration.name.notin_(available_models),
         ).delete(synchronize_session=False)
 
         # Add new models
