@@ -109,7 +109,7 @@ export const DocumentFeedbackTable = ({
                 <TableRow key={document.document_id}>
                   <TableCell className="whitespace-normal break-all">
                     <a
-                      className="text-blue-600"
+                      className="text-blue-600 dark:text-blue-400"
                       href={document.link}
                       target="_blank"
                       rel="noopener noreferrer"

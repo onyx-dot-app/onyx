@@ -290,8 +290,8 @@ const StandardAnswersTable = ({
           ))}
         </div>
       </div>
-      <div className="mx-auto">
-        <Table className="w-full flex items-stretch">
+      <div className="flex flex-col w-full mx-auto">
+        <Table className="w-full">
           <TableHeader>
             <TableRow>
               {columns.map((column) => (
@@ -314,11 +314,13 @@ const StandardAnswersTable = ({
             )}
           </TableBody>
         </Table>
-        {paginatedStandardAnswers.length === 0 && (
-          <div className="flex justify-center">
-            <Text>No matching standard answers found...</Text>
-          </div>
-        )}
+        <div>
+          {paginatedStandardAnswers.length === 0 && (
+            <div className="flex justify-center">
+              <Text>No matching standard answers found...</Text>
+            </div>
+          )}
+        </div>
         {paginatedStandardAnswers.length > 0 && (
           <>
             <div className="mt-4">
