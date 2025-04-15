@@ -5,7 +5,7 @@ const chinese = require("./chinese");
 const russian = require("./russian");
 
 i18next.init({
-  lng: localStorage.getItem("lng") || "ru",
+  lng: "ru",
   debug: true,
   resources: {
     en: { translation: english },
