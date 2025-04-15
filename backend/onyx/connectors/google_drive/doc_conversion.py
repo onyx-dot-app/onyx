@@ -394,12 +394,12 @@ def convert_drive_item_to_document(
         file_name = file.get("name")
         error_str = f"Error converting file '{file_name}' to Document: {e}"
         if isinstance(e, HttpError) and e.status_code == 403:
-            logger.debug(
+            logger.warning(
                 f"Uncommon permissions error while downloading file. User "
                 f"{retriever_email} was able to see file {file_name} "
                 "but cannot download it."
             )
-            logger.debug(error_str)
+            logger.warning(error_str)
 
         return ConnectorFailure(
             failed_document=DocumentFailure(
