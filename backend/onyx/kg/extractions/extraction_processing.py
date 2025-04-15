@@ -193,7 +193,7 @@ def kg_extraction(
             )
 
             # TODO: restricted for testing only
-            unprocessed_documents_list = list(unprocessed_documents)[:6]
+            unprocessed_documents_list = list(unprocessed_documents)[:2]
 
         document_classification_content_list = (
             get_document_classification_content_for_kg_processing(

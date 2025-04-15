@@ -29,14 +29,8 @@ formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization)
 are provided above, you can only extract those types of entities! Again, there should be an 'Other' \
 option. Pick this if non of the others apply.>],
 "relationships": [<a list of relationship between the identified entities, formatted as \
-'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<one of three options: 'relates_positively_to', \
-'relates_negatively_to', or 'relates_neutrally_to'. Pick the most appropriate option based on the \
-relationship between the entities implied by the text. 'relates_neutrally_to' should generally be \
-chosen if in doubt, or if the proper term may be 'interested_in', 'has', 'uses', 'wants', etc. \
-Pick 'relates_positively_to', or 'relates_negatively_to' only of it is clear. The positive option \
-could for example apply of something is now solved, value was delievered, a sales was made, someone \
-is happy, etc. The negative option would apply of a problem is reported, someone is unhappy, etc.>\
-__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
+'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
+ of the relationship between the source and the target entities>__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
 identify in the text, each formatted simply as '<term>'>]
 }}
@@ -57,17 +51,8 @@ but only use the information provided to infer whether there should be a time_fi
 
 QUERY_RELATIONSHIP_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"relationships": [<a list of relationship between the identified entities, formatted as \
-'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<one of three options: 'relates_positively_to', \
-'relates_negatively_to', or 'relates_neutrally_to'. Pick the most appropriate option based on the \
-relationship between the entities implied by the text. 'relates_neutrally_to' should generally be \
-chosen if in doubt, or if the proper term may be 'interested_in', 'has', 'uses', 'wants', etc. \
-Pick 'relates_positively_to', or 'relates_negatively_to' only of it is clear. The positive option \
-could for example apply of something is now solved, value was delievered, a sales was made, someone \
-is happy, etc. The negative option would apply of a problem is reported, someone is unhappy, etc. \
-If the 'natural' relationship is of a very different nature (like: 'participated_in', choose \
-'relates_neutrally_to'. It is MOST IMPORTANT THAT THE RELATIONSHIP IS BETWEEN THE TWO ENTITIES \
-IS CAPTURED, the type is less important. But again, if in doubt, pick 'relates_neutrally_to'.\
-__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>]
+'<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
+of the relationship between the source and the target entities>__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>]
 }}
 """.strip()
 

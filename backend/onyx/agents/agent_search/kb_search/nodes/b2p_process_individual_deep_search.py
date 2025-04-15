@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
-from onyx.agents.agent_search.dc_search_analysis.ops import research
+from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
 from onyx.agents.agent_search.kb_search.states import ResearchObjectUpdate
 from onyx.agents.agent_search.models import GraphConfig
