@@ -29,65 +29,68 @@ def main(key: str, program: str, conf: str) -> None:
     last_heartbeat = time.monotonic()
     num_lookup_failures = 0
 
-    while True:
-        time.sleep(CHECK_INTERVAL)
+    try:
+        while True:
+            time.sleep(CHECK_INTERVAL)
 
-        now = time.monotonic()
+            now = time.monotonic()
 
-        # check for the key ... handle any exception gracefully
-        try:
-            heartbeat = r.exists(key)
-        except Exception:
-            logger.exception(
-                f"Exception checking for celery beat heartbeat: key={key}."
-            )
-            continue
+            # check for the key ... handle any exception gracefully
+            try:
+                heartbeat = r.exists(key)
+            except Exception:
+                logger.exception(
+                    f"Exception checking for celery beat heartbeat: key={key}."
+                )
+                continue
 
-        # happy path ... just continue
-        if heartbeat:
-            logger.debug(f"Key lookup succeeded: key={key}")
-            last_heartbeat = time.monotonic()
-            num_lookup_failures = 0
-            continue
+            # happy path ... just continue
+            if heartbeat:
+                logger.debug(f"Key lookup succeeded: key={key}")
+                last_heartbeat = time.monotonic()
+                num_lookup_failures = 0
+                continue
 
-        # if we haven't exceeded the max lookup failures, continue
-        num_lookup_failures += 1
-        if num_lookup_failures <= MAX_LOOKUP_FAILURES:
+            # if we haven't exceeded the max lookup failures, continue
+            num_lookup_failures += 1
+            if num_lookup_failures <= MAX_LOOKUP_FAILURES:
+                logger.warning(
+                    f"Key lookup failed: key={key} "
+                    f"lookup_failures={num_lookup_failures} "
+                    f"max_lookup_failures={MAX_LOOKUP_FAILURES}"
+                )
+                continue
+
+            # if we haven't exceeded the max missing key timeout threshold, continue
+            elapsed = now - last_heartbeat
+            if elapsed <= MAX_AGE_SECONDS:
+                logger.warning(
+                    f"Key lookup failed: key={key} "
+                    f"lookup_failures={num_lookup_failures} "
+                    f"max_lookup_failures={MAX_LOOKUP_FAILURES} "
+                    f"elapsed={elapsed:.2f} "
+                    f"elapsed_threshold={MAX_AGE_SECONDS}"
+                )
+                continue
+
+            # all conditions have been exceeded ... restart the process
             logger.warning(
-                f"Key lookup failed: key={key} "
-                f"lookup_failures={num_lookup_failures} "
-                f"max_lookup_failures={MAX_LOOKUP_FAILURES}"
-            )
-            continue
-
-        # if we haven't exceeded the max missing key timeout threshold, continue
-        elapsed = now - last_heartbeat
-        if elapsed <= MAX_AGE_SECONDS:
-            logger.warning(
-                f"Key lookup failed: key={key} "
+                f"Key lookup failure thresholds exceeded - restarting {program}: "
+                f"key={key} "
                 f"lookup_failures={num_lookup_failures} "
                 f"max_lookup_failures={MAX_LOOKUP_FAILURES} "
                 f"elapsed={elapsed:.2f} "
                 f"elapsed_threshold={MAX_AGE_SECONDS}"
             )
-            continue
 
-        # all conditions have been exceeded ... restart the process
-        logger.warning(
-            f"Key lookup failure thresholds exceeded - restarting {program}: "
-            f"key={key} "
-            f"lookup_failures={num_lookup_failures} "
-            f"max_lookup_failures={MAX_LOOKUP_FAILURES} "
-            f"elapsed={elapsed:.2f} "
-            f"elapsed_threshold={MAX_AGE_SECONDS}"
-        )
+            subprocess.call(["supervisorctl", "-c", conf, "restart", program])
 
-        subprocess.call(["supervisorctl", "-c", conf, "restart", program])
-
-        # reset state so that we properly delay until the next restart
-        # instead of continually restarting
-        num_lookup_failures = 0
-        last_heartbeat = time.monotonic()
+            # reset state so that we properly delay until the next restart
+            # instead of continually restarting
+            num_lookup_failures = 0
+            last_heartbeat = time.monotonic()
+    except KeyboardInterrupt:
+        logger.info("Caught interrupt, exiting watchdog.")
 
     logger.info("supervisord_watchdog exiting.")
 
