@@ -101,6 +101,11 @@ def upsert_llm_provider(
     )
     model_names = model_names.union(display_model_names)
 
+    # Delete existing model configurations
+    db_session.execute(
+        delete(ModelConfiguration).where(ModelConfiguration.llm_provider_id == existing_llm_provider.id)
+    )
+
     model_configurations = []
     for model_name in model_names:
         model_configuration = ModelConfiguration(
