@@ -281,13 +281,11 @@ def get_vision_capable_providers(
 
     for provider in providers:
         vision_models = []
+        model_configurations = fetch_model_configurations(db_session, provider.id)
 
         # Check model names in priority order
         model_names_to_check = [
-            model_configuration.name
-            for model_configuration in fetch_model_configurations(
-                db_session, provider.id
-            )
+            model_configuration.name for model_configuration in model_configurations
         ]
 
         # Check each model for vision capability
@@ -298,9 +296,8 @@ def get_vision_capable_providers(
 
         # Only include providers with at least one vision-capable model
         if vision_models:
-            model_configuration = fetch_model_configurations(db_session, provider.id)
             provider_dict = LLMProviderView.from_model(
-                provider, model_configuration
+                provider, model_configurations
             ).model_dump()
             provider_dict["vision_models"] = vision_models
             logger.info(
