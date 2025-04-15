@@ -1565,9 +1565,12 @@ class LLMProvider(Base):
         secondary="llm_provider__user_group",
         viewonly=True,
     )
+    model_configurations: Mapped[list["ModelConfiguration"]] = relationship(
+        "ModelConfiguration",
+        back_populates="llm_provider",
+        foreign_keys="ModelConfiguration.llm_provider_id",
+    )
 
-
-llm_provider: Mapped["LLMProvider"] = relationship("LLMProvider", back_populates="model_configurations")
 
 class ModelConfiguration(Base):
     __tablename__ = "model_configuration"
@@ -1580,6 +1583,12 @@ class ModelConfiguration(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    llm_provider: Mapped["LLMProvider"] = relationship(
+        "LLMProvider",
+        back_populates="model_configurations",
+    )
+
 
 class CloudEmbeddingProvider(Base):
     __tablename__ = "embedding_provider"
@@ -1595,7 +1604,6 @@ class CloudEmbeddingProvider(Base):
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
         back_populates="cloud_provider",
-        foreign_keys="SearchSettings.provider_type",
     )
 
     def __repr__(self) -> str:
