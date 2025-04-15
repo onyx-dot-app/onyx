@@ -1285,6 +1285,7 @@ def stream_chat_message_objects(
         )
         refined_answer_improvement = True
         for packet in answer.processed_streamed_output:
+            yield RuntimeError("hi")
             if isinstance(packet, ToolResponse):
                 info_by_subq = yield from _process_tool_response(
                     packet=packet,

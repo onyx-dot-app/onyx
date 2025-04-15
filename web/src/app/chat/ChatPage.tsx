@@ -1908,15 +1908,28 @@ export function ChatPage({
 
     updateChatState("uploading", currentSessionId());
 
-    const [uploadedFiles, error] = await uploadFilesForChat(acceptedFiles);
-    if (error) {
-      setPopup({
-        type: "error",
-        message: error,
-      });
-    }
+    for (let file of acceptedFiles) {
+      const formData = new FormData();
+      formData.append("files", file);
+      const response = await uploadFile(formData, null);
 
-    setCurrentMessageFiles((prev) => [...prev, ...uploadedFiles]);
+      if (response.length > 0) {
+        const uploadedFile = response[0];
+        addSelectedFile(uploadedFile);
+        // setCurrentMessageFiles((prev) => [...prev, uploadedFile]);
+      } else {
+        setPopup({
+          type: "error",
+          message: "Failed to upload file",
+        });
+      }
+    }
+    // if (error) {
+    //   setPopup({
+    //     type: "error",
+    //     message: error,
+    //   });
+    // }
 
     updateChatState("input", currentSessionId());
   };

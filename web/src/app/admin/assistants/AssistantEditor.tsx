@@ -556,6 +556,8 @@ export function AssistantEditor({
 
           // don't set groups if marked as public
           const groups = values.is_public ? [] : values.selectedGroups;
+          const teamKnowledge = values.knowledge_source === "team_knowledge";
+
           const submissionData: PersonaUpsertParameters = {
             ...values,
             existing_prompt_id: existingPrompt?.id ?? null,
@@ -573,8 +575,13 @@ export function AssistantEditor({
               ? new Date(values.search_start_date)
               : null,
             num_chunks: numChunks,
-            user_file_ids: selectedFiles.map((file) => file.id),
-            user_folder_ids: selectedFolders.map((folder) => folder.id),
+            document_set_ids: teamKnowledge ? values.document_set_ids : [],
+            user_file_ids: teamKnowledge
+              ? []
+              : selectedFiles.map((file) => file.id),
+            user_folder_ids: teamKnowledge
+              ? []
+              : selectedFolders.map((folder) => folder.id),
           };
 
           let personaResponse;
