@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { PageSelector } from "@/components/PageSelector";
 import { useRouter } from "next/navigation";
@@ -67,10 +69,10 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Default Config</TableHead>
-            <TableHead>Channel Count</TableHead>
+            <TableHead>{i18n.t(k.NAME)}</TableHead>
+            <TableHead>{i18n.t(k.STATUS)}</TableHead>
+            <TableHead>{i18n.t(k.DEFAULT_CONFIG)}</TableHead>
+            <TableHead>{i18n.t(k.CHANNEL_COUNT)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -89,13 +91,13 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 </TableCell>
                 <TableCell>
                   {slackBot.enabled ? (
-                    <Badge variant="success">Enabled</Badge>
+                    <Badge variant="success">{i18n.t(k.ENABLED)}</Badge>
                   ) : (
-                    <Badge variant="destructive">Disabled</Badge>
+                    <Badge variant="destructive">{i18n.t(k.DISABLED)}</Badge>
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">Default Set</Badge>
+                  <Badge variant="secondary">{i18n.t(k.DEFAULT_SET)}</Badge>
                 </TableCell>
                 <TableCell>{slackBot.configs_count}</TableCell>
                 <TableCell>
@@ -110,7 +112,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                Please add a New Slack Bot to begin chatting with Danswer!
+                {i18n.t(k.PLEASE_ADD_A_NEW_SLACK_BOT_TO)}
               </TableCell>
             </TableRow>
           )}

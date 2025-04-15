@@ -23,6 +23,7 @@ export default function page() {
         title="Billing Information"
         icon={<MdOutlineCreditCard size={32} className="my-auto" />}
       />
+
       <BillingInformationPage />
     </div>
   );

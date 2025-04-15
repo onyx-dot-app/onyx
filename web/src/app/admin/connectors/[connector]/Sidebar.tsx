@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { useFormContext } from "@/components/context/FormContext";
 import { HeaderTitle } from "@/components/header/HeaderTitle";
 
@@ -57,7 +59,8 @@ export default function Sidebar() {
 
   const settingSteps = [
     ...(!noCredential ? ["Credential"] : []),
-    "Connector",
+    i18n.t(k.CONNECTOR),
+
     ...(connector == "file" ? [] : ["Advanced (optional)"]),
   ];
 
@@ -85,7 +88,7 @@ export default function Sidebar() {
               {enterpriseSettings && enterpriseSettings.application_name ? (
                 <HeaderTitle>{enterpriseSettings.application_name}</HeaderTitle>
               ) : (
-                <HeaderTitle>Onyx</HeaderTitle>
+                <HeaderTitle>{i18n.t(k.ONYX)}</HeaderTitle>
               )}
             </div>
           </div>

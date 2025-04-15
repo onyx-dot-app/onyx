@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import {
   Popover,
@@ -18,6 +20,7 @@ export interface SourceSelectorProps {
   setTimeRange: React.Dispatch<
     React.SetStateAction<DateRangePickerValue | null>
   >;
+
   selectedSources: SourceMetadata[];
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
   selectedDocumentSets: string[];
@@ -107,7 +110,7 @@ export function HorizontalSourceSelector({
             <span>
               {timeRange?.from
                 ? getDateRangeString(timeRange.from, timeRange.to)
-                : "Date Range"}
+                : i18n.t(k.DATE_RANGE)}
             </span>
           </button>
         </PopoverTrigger>
@@ -152,6 +155,7 @@ export function HorizontalSourceSelector({
               icon: (
                 <SourceIcon sourceType={source.internalName} iconSize={14} />
               ),
+
               key: source.internalName,
               display: (
                 <span className="flex items-center space-x-2">

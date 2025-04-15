@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React from "react";
 import { Formik, Form, Field, ErrorMessage } from "formik";
 import * as Yup from "yup";
@@ -40,7 +42,7 @@ const EditPropertyModal = ({
           <Form className="items-stretch">
             <h2 className="text-2xl text-text-darker font-bold mb-3 flex items-center">
               <EditIcon size={20} className="mr-2" />
-              Edit {propertyTitle}
+              {i18n.t(k.EDIT)} {propertyTitle}
             </h2>
 
             <TextFormField
@@ -59,7 +61,7 @@ const EditPropertyModal = ({
                   values.propertyValue === propertyValue
                 }
               >
-                {isSubmitting ? "Updating..." : "Update property"}
+                {isSubmitting ? i18n.t(k.UPDATING) : i18n.t(k.UPDATE_PROPERTY)}
               </Button>
             </div>
           </Form>

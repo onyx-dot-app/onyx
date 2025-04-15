@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 
 import React from "react";
 import { FetchError } from "@/lib/fetcher";
@@ -165,7 +167,7 @@ export const GmailMain = () => {
     <>
       {popup}
       <Title className="mb-2 mt-6 ml-auto mr-auto">
-        Step 1: Provide your Credentials
+        {i18n.t(k.STEP_PROVIDE_YOUR_CREDENTIA)}
       </Title>
       <GmailJsonUploadSection
         setPopup={setPopup}
@@ -181,7 +183,7 @@ export const GmailMain = () => {
       {isAdmin && hasUploadedCredentials && (
         <>
           <Title className="mb-2 mt-6 ml-auto mr-auto">
-            Step 2: Authenticate with Onyx
+            {i18n.t(k.STEP_AUTHENTICATE_WITH_ONYX)}
           </Title>
           <GmailAuthSection
             setPopup={setPopup}

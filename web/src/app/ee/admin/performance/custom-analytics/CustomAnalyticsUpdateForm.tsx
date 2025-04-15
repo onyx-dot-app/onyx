@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import { Label, SubLabel } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -45,30 +47,29 @@ export function CustomAnalyticsUpdateForm() {
           if (response.ok) {
             setPopup({
               type: "success",
-              message: "Custom analytics script updated successfully!",
+              message: i18n.t(k.CUSTOM_ANALYTICS_SCRIPT_UPDATE),
             });
           } else {
             const errorMsg = (await response.json()).detail;
             setPopup({
               type: "error",
-              message: `Failed to update custom analytics script: "${errorMsg}"`,
+              message: `${i18n.t(
+                k.FAILED_TO_UPDATE_CUSTOM_ANALYT
+              )}${errorMsg}${i18n.t(k._17)}`,
             });
           }
           setSecretKey("");
         }}
       >
         <div className="mb-4">
-          <Label>Script</Label>
+          <Label>{i18n.t(k.SCRIPT)}</Label>
           <Text className="mb-3">
-            Specify the Javascript that should run on page load in order to
-            initialize your custom tracking/analytics.
+            {i18n.t(k.SPECIFY_THE_JAVASCRIPT_THAT_SH)}
           </Text>
           <Text className="mb-2">
-            Do not include the{" "}
-            <span className="font-mono">&lt;script&gt;&lt;/script&gt;</span>{" "}
-            tags. If you upload a script below but you are not recieving any
-            events in your analytics platform, try removing all extra whitespace
-            before each line of JavaScript.
+            {i18n.t(k.DO_NOT_INCLUDE_THE)}{" "}
+            <span className="font-mono">{i18n.t(k.SCRIPT_SCRIPT)}</span>{" "}
+            {i18n.t(k.TAGS_IF_YOU_UPLOAD_A_SCRIPT_B)}
           </Text>
           <textarea
             className={`
@@ -85,15 +86,13 @@ export function CustomAnalyticsUpdateForm() {
           />
         </div>
 
-        <Label>Secret Key</Label>
+        <Label>{i18n.t(k.SECRET_KEY)}</Label>
         <SubLabel>
           <>
-            For security reasons, you must provide a secret key to update this
-            script. This should be the value of the{" "}
-            <i>CUSTOM_ANALYTICS_SECRET_KEY</i> environment variable set when
-            initially setting up Onyx.
-          </>
-        </SubLabel>
+            {i18n.t(k.FOR_SECURITY_REASONS_YOU_MUST)}{" "}
+            <i>{i18n.t(k.CUSTOM_ANALYTICS_SECRET_KEY)}</i>{" "}
+            {i18n.t(k.ENVIRONMENT_VARIABLE_SET_WHEN)}
+          </></SubLabel>
         <input
           className={`
             border 
@@ -109,7 +108,7 @@ export function CustomAnalyticsUpdateForm() {
         />
 
         <Button className="mt-4" type="submit">
-          Update
+          {i18n.t(k.UPDATE)}
         </Button>
       </form>
     </div>

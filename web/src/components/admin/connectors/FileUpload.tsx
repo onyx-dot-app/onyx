@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useFormikContext } from "formik";
 import { FC, useState } from "react";
 import React from "react";
@@ -52,9 +54,11 @@ export const FileUpload: FC<FileUploadProps> = ({
               <input {...getInputProps()} />
               <b className="text-text-darker">
                 {message ||
-                  `Drag and drop ${
-                    multiple ? "some files" : "a file"
-                  } here, or click to select ${multiple ? "files" : "a file"}`}
+                  `${i18n.t(k.DRAG_AND_DROP)} ${
+                    multiple ? i18n.t(k.SOME_FILES) : i18n.t(k.A_FILE)
+                  } ${i18n.t(k.HERE_OR_CLICK_TO_SELECT)} ${
+                    multiple ? i18n.t(k.FILES) : i18n.t(k.A_FILE)
+                  }`}
               </b>
             </div>
           </section>
@@ -64,7 +68,8 @@ export const FileUpload: FC<FileUploadProps> = ({
       {selectedFiles.length > 0 && (
         <div className="mt-4">
           <h2 className="text-sm font-bold">
-            Selected File{multiple ? "s" : ""}
+            {i18n.t(k.SELECTED_FILE)}
+            {multiple ? i18n.t(k.S) : ""}
           </h2>
           <ul>
             {selectedFiles.map((file) => (

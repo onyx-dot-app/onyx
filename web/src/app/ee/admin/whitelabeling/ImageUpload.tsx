@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { SubLabel } from "@/components/admin/connectors/Field";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useEffect, useState } from "react";
@@ -31,7 +33,7 @@ export function ImageUpload({
           if (acceptedFiles.length !== 1) {
             setPopup({
               type: "error",
-              message: "Only one file can be uploaded at a time",
+              message: i18n.t(k.ONLY_ONE_FILE_CAN_BE_UPLOADED),
             });
           }
 
@@ -54,13 +56,13 @@ export function ImageUpload({
             >
               <input {...getInputProps()} />
               <b className="text-text-darker">
-                Drag and drop a .png or .jpg file, or click to select a file!
+                {i18n.t(k.DRAG_AND_DROP_A_PNG_OR_JPG_F)}
               </b>
             </div>
 
             {tmpImageUrl && (
               <div className="mt-4 mb-8">
-                <SubLabel>Uploaded Image:</SubLabel>
+                <SubLabel>{i18n.t(k.UPLOADED_IMAGE)}</SubLabel>
                 <img
                   alt="Uploaded Image"
                   src={tmpImageUrl}

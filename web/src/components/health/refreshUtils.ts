@@ -6,6 +6,7 @@ export interface CustomRefreshTokenResponse {
   session: {
     exp: number;
   };
+
   userinfo: {
     sub: string;
     familyName: string;

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { LoadingAnimation } from "@/components/Loading";
 import { NotebookIcon } from "@/components/icons/icons";
@@ -45,11 +47,11 @@ function Main() {
   if (indexAttemptData.length === 0) {
     return (
       <Text>
-        It looks like you don&apos;t have any connectors setup yet. Visit the{" "}
+        {i18n.t(k.IT_LOOKS_LIKE_YOU_DON_T_HAVE_A)}{" "}
         <Link className="text-link" href="/admin/add-connector">
-          Add Connector
+          {i18n.t(k.ADD_CONNECTOR)}
         </Link>{" "}
-        page to get started!
+        {i18n.t(k.PAGE_TO_GET_STARTED)}
       </Text>
     );
   }
@@ -93,7 +95,7 @@ export default function Status() {
         title="Existing Connectors"
         farRightElement={
           <Link href="/admin/add-connector">
-            <Button variant="success-reverse">Add Connector</Button>
+            <Button variant="success-reverse">{i18n.t(k.ADD_CONNECTOR)}</Button>
           </Link>
         }
       />

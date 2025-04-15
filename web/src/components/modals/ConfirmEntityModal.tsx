@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { Modal } from "../Modal";
 import { Button } from "../ui/button";
 
@@ -47,14 +49,16 @@ export const ConfirmEntityModal = ({
         </div>
         {!removeConfirmationText && (
           <p className="mb-4">
-            Are you sure you want to {getActionText()} <b>{entityName}</b>?
+            {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO)} {getActionText()}{" "}
+            <b>{entityName}</b>
+            {i18n.t(k._10)}
           </p>
         )}
         {additionalDetails && <p className="mb-4">{additionalDetails}</p>}
         <div className="flex justify-end gap-2">
           {includeCancelButton && (
             <Button onClick={onClose} variant="outline">
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
           )}
           <Button

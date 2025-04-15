@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { ApiKeyForm } from "./ApiKeyForm";
 import { Modal } from "../Modal";
@@ -32,19 +34,19 @@ export const ApiKeyModal = ({
     >
       <>
         <div className="mb-5 text-sm text-neutral-700 dark:text-neutral-200">
-          Please provide an API Key – you can always change this or switch
-          models later.
+          {i18n.t(k.PLEASE_PROVIDE_AN_API_KEY_YO)}
+
           <br />
           {hide && (
             <>
-              If you would rather look around first, you can{" "}
+              {i18n.t(k.IF_YOU_WOULD_RATHER_LOOK_AROUN)}{" "}
               <strong
                 onClick={() => hide()}
                 className="text-link cursor-pointer"
               >
-                skip this step
+                {i18n.t(k.SKIP_THIS_STEP)}
               </strong>
-              .
+              {i18n.t(k._8)}
             </>
           )}
         </div>

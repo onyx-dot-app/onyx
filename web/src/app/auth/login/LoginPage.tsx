@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { AuthTypeMetadata } from "@/lib/userSS";
 import { LoginText } from "./LoginText";
@@ -46,7 +48,7 @@ export default function LoginPage({
         <div className="mt-4 w-full justify-center">
           <div className="flex items-center w-full my-4">
             <div className="flex-grow border-t border-background-300"></div>
-            <span className="px-4 text-text-500">or</span>
+            <span className="px-4 text-text-500">{i18n.t(k.OR)}</span>
             <div className="flex-grow border-t border-background-300"></div>
           </div>
           <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
@@ -57,7 +59,7 @@ export default function LoginPage({
                 href="/auth/forgot-password"
                 className="text-link font-medium"
               >
-                Reset Password
+                {i18n.t(k.RESET_PASSWORD)}
               </Link>
             </div>
           )}
@@ -77,18 +79,18 @@ export default function LoginPage({
       )}
       {!hidePageRedirect && (
         <p className="text-center mt-4">
-          Don&apos;t have an account?{" "}
+          {i18n.t(k.DON_T_HAVE_AN_ACCOUNT)}{" "}
           <span
             onClick={() => {
               if (typeof window !== "undefined" && window.top) {
-                window.top.location.href = "/auth/signup";
+                window.top.location.href = i18n.t(k.AUTH_SIGNUP);
               } else {
-                window.location.href = "/auth/signup";
+                window.location.href = i18n.t(k.AUTH_SIGNUP);
               }
             }}
             className="text-link font-medium cursor-pointer"
           >
-            Create an account
+            {i18n.t(k.CREATE_AN_ACCOUNT)}
           </span>
         </p>
       )}

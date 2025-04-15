@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../i18n/keys";
 
 import { ValidSources } from "@/lib/types";
 import { SourceIcon } from "./SourceIcon";

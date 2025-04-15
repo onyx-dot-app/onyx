@@ -4,6 +4,7 @@ import { DocumentSet, MinimalUserSnapshot } from "@/lib/types";
 export interface StarterMessageBase {
   message: string;
 }
+
 export interface StarterMessage extends StarterMessageBase {
   name: string;
 }
@@ -18,6 +19,7 @@ export interface Prompt {
   datetime_aware: boolean;
   default_prompt: boolean;
 }
+
 export interface Persona {
   id: number;
   name: string;

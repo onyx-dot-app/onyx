@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React, { useEffect, useState } from "react";
 import { Check } from "lucide-react";
 
@@ -73,6 +75,7 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
           strokeWidth={strokeWidth}
           fill="none"
         />
+
         {/* Progress circle */}
         <circle
           cx={size / 2}

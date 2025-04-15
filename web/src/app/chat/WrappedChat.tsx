@@ -7,13 +7,11 @@ export default function WrappedChat({
   firstMessage,
   defaultSidebarOff,
 }: {
-  firstMessage?: string;
-  // This is required for the chrome extension side panel
+  firstMessage?: string; // This is required for the chrome extension side panel
   // we don't want to show the sidebar by default when the user opens the side panel
   defaultSidebarOff?: boolean;
 }) {
   const { sidebarInitiallyVisible } = useChatContext();
-
   return (
     <FunctionalWrapper
       initiallyVisible={sidebarInitiallyVisible && !defaultSidebarOff}

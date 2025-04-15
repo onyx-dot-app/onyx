@@ -50,6 +50,7 @@ export const ChatProvider: React.FC<{
     | "refreshFolders"
     | "refreshInputPrompts"
   >;
+
   children: React.ReactNode;
 }> = ({ value, children }) => {
   const router = useRouter();

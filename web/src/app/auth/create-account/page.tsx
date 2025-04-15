@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { REGISTRATION_URL } from "@/lib/constants";
@@ -11,15 +13,14 @@ const Page = () => {
     <AuthFlowContainer>
       <div className="flex flex-col space-y-6">
         <h2 className="text-2xl font-bold text-text-900 text-center">
-          Account Not Found
+          {i18n.t(k.ACCOUNT_NOT_FOUND)}
         </h2>
         <p className="text-text-700 max-w-md text-center">
-          We couldn&apos;t find your account in our records. To access Onyx, you
-          need to either:
+          {i18n.t(k.WE_COULDN_T_FIND_YOUR_ACCOUNT)}
         </p>
         <ul className="list-disc text-left text-text-600 w-full pl-6 mx-auto">
-          <li>Be invited to an existing Onyx team</li>
-          <li>Create a new Onyx team</li>
+          <li>{i18n.t(k.BE_INVITED_TO_AN_EXISTING_ONYX)}</li>
+          <li>{i18n.t(k.CREATE_A_NEW_ONYX_TEAM)}</li>
         </ul>
         <div className="flex justify-center">
           <Link
@@ -27,14 +28,14 @@ const Page = () => {
             className="w-full max-w-xs"
           >
             <Button size="lg" icon={FiLogIn} className="w-full">
-              Create New Organization
+              {i18n.t(k.CREATE_NEW_ORGANIZATION)}
             </Button>
           </Link>
         </div>
         <p className="text-sm text-text-500 text-center">
-          Have an account with a different email?{" "}
+          {i18n.t(k.HAVE_AN_ACCOUNT_WITH_A_DIFFERE)}{" "}
           <Link href="/auth/login" className="text-indigo-600 hover:underline">
-            Sign in
+            {i18n.t(k.SIGN_IN)}
           </Link>
         </p>
       </div>

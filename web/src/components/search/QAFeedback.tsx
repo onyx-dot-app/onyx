@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useState } from "react";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { ThumbsDownIcon, ThumbsUpIcon } from "../icons/icons";
@@ -44,7 +46,7 @@ const QAFeedback = ({
         const isSuccessful = await giveFeedback(messageId, feedbackType);
         if (isSuccessful) {
           setPopup({
-            message: "Thanks for your feedback!",
+            message: i18n.t(k.THANKS_FOR_YOUR_FEEDBACK),
             type: "success",
           });
         }

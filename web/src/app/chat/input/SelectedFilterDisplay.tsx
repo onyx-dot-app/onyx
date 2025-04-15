@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
 import React from "react";
 import { FiBookmark, FiTag, FiX } from "react-icons/fi";
@@ -140,7 +142,7 @@ export function SelectedFilterDisplay({
                 </div>
                 <span className="ml-1 max-w-[100px] text-ellipsis line-clamp-1 break-all">
                   {tag.tag_key}
-                  <b>=</b>
+                  <b>{i18n.t(k._12)}</b>
                   {tag.tag_value}
                 </span>
               </>

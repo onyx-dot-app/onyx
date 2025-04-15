@@ -24,6 +24,7 @@ export const CustomCheckbox = ({
         readOnly={onChange ? false : true}
         disabled={disabled}
       />
+
       <span className="relative">
         <span
           className={`block w-3 h-3 border border-border-strong rounded ${

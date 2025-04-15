@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import Prism from "prismjs";
 
 import { humanReadableFormat } from "@/lib/time";
@@ -36,7 +38,8 @@ function BackToOnyxButton({
     <div className="absolute bottom-0 bg-background w-full flex border-t border-border py-4">
       <div className="mx-auto">
         <Button onClick={() => router.push("/chat")}>
-          Back to {enterpriseSettings?.application_name || "Onyx Chat"}
+          {i18n.t(k.BACK_TO)}{" "}
+          {enterpriseSettings?.application_name || "Onyx Chat"}
         </Button>
       </div>
       <div
@@ -82,7 +85,7 @@ export function SharedChatDisplay({
       <div className="min-h-full w-full">
         <div className="mx-auto w-fit pt-8">
           <Callout type="danger" title="Shared Chat Not Found">
-            Did not find a shared chat with the specified ID.
+            {i18n.t(k.DID_NOT_FIND_A_SHARED_CHAT_WIT)}
           </Callout>
         </div>
         <BackToOnyxButton documentSidebarVisible={documentSidebarVisible} />
@@ -205,7 +208,7 @@ export function SharedChatDisplay({
                 <div className="fixed z-10 w-full ">
                   <div className="bg-background relative px-5 pt-4 w-full">
                     <h1 className="text-3xl text-strong font-bold">
-                      {chatSession.description || `Unnamed Chat`}
+                      {chatSession.description || `${i18n.t(k.UNNAMED_CHAT)}`}
                     </h1>
                     <p className=" text-text-darker">
                       {humanReadableFormat(chatSession.time_created)}

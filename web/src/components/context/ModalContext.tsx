@@ -33,6 +33,7 @@ export const ModalProvider: React.FC<{
   const [newTenantInfo, setNewTenantInfo] = useState<NewTenantInfo | null>(
     user?.tenant_info?.new_tenant || null
   );
+
   const [invitationInfo, setInvitationInfo] = useState<NewTenantInfo | null>(
     user?.tenant_info?.invitation || null
   );

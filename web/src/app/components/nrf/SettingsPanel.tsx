@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import { Switch } from "@/components/ui/switch";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -47,6 +49,7 @@ const RadioOption = ({
       id={value}
       className="mt-1 border border-background-600 data-[state=checked]:border-white data-[state=checked]:bg-white"
     />
+
     <Label htmlFor={value} className="flex flex-col">
       <span className="text-sm text-text-300">{label}</span>
       {description && (
@@ -100,18 +103,18 @@ export const SettingsPanel = ({
       <div className="p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-semibold text-white">
-            Home page settings
+            {i18n.t(k.HOME_PAGE_SETTINGS)}
           </h2>
           <button
             aria-label="Close"
             onClick={toggleSettings}
             className="text-text-400 hover:text-white"
           >
-            ✕
+            {i18n.t(k._16)}
           </button>
         </div>
 
-        <h3 className="text-sm font-semibold mb-2">General</h3>
+        <h3 className="text-sm font-semibold mb-2">{i18n.t(k.GENERAL)}</h3>
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}
@@ -124,7 +127,7 @@ export const SettingsPanel = ({
           label="Show bookmarks"
         />
 
-        <h3 className="text-sm font-semibold mt-6 mb-2">Theme</h3>
+        <h3 className="text-sm font-semibold mt-6 mb-2">{i18n.t(k.THEME)}</h3>
         <RadioGroup
           value={theme}
           onValueChange={toggleTheme}
@@ -137,6 +140,7 @@ export const SettingsPanel = ({
             groupValue={theme}
             onChange={toggleTheme}
           />
+
           <RadioOption
             value="dark"
             label="Dark theme"
@@ -146,7 +150,9 @@ export const SettingsPanel = ({
           />
         </RadioGroup>
 
-        <h3 className="text-sm font-semibold mt-6 mb-2">Background</h3>
+        <h3 className="text-sm font-semibold mt-6 mb-2">
+          {i18n.t(k.BACKGROUND)}
+        </h3>
         <div className="grid grid-cols-4 gap-2">
           {(theme === "dark" ? darkExtensionImages : lightExtensionImages).map(
             (bg: string, index: number) => (
@@ -164,6 +170,7 @@ export const SettingsPanel = ({
                   className="absolute inset-0 bg-cover bg-center"
                   style={{ backgroundImage: `url(${bg})` }}
                 />
+
                 {(theme === "light"
                   ? defaultLightBackgroundUrl
                   : defaultDarkBackgroundUrl) === bg && (

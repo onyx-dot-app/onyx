@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -16,25 +18,27 @@ export function MakePublicAssistantPopover({
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-lg font-semibold">
-        {isPublic ? "Public Assistant" : "Make Assistant Public"}
+        {isPublic
+          ? i18n.t(k.PUBLIC_ASSISTANT)
+          : i18n.t(k.MAKE_ASSISTANT_PUBLIC)}
       </h2>
 
       <p className="text-sm">
-        This assistant is currently{" "}
-        <span className="font-semibold">{isPublic ? "public" : "private"}</span>
-        .
+        {i18n.t(k.THIS_ASSISTANT_IS_CURRENTLY)}{" "}
+        <span className="font-semibold">
+          {isPublic ? i18n.t(k.PUBLIC1) : i18n.t(k.PRIVATE)}
+        </span>
+        {i18n.t(k._8)}
         {isPublic
-          ? " Anyone can currently access this assistant."
-          : " Only you can access this assistant."}
+          ? i18n.t(k.ANYONE_CAN_CURRENTLY_ACCESS_TH)
+          : i18n.t(k.ONLY_YOU_CAN_ACCESS_THIS_ASSIS)}
       </p>
 
       <Separator />
 
       {isPublic ? (
         <div className="space-y-4">
-          <p className="text-sm">
-            To restrict access to this assistant, you can make it private again.
-          </p>
+          <p className="text-sm">{i18n.t(k.TO_RESTRICT_ACCESS_TO_THIS_ASS)}</p>
           <Button
             onClick={async () => {
               await onShare(false);
@@ -43,16 +47,12 @@ export function MakePublicAssistantPopover({
             size="sm"
             variant="destructive"
           >
-            Make Assistant Private
+            {i18n.t(k.MAKE_ASSISTANT_PRIVATE)}
           </Button>
         </div>
       ) : (
         <div className="space-y-4">
-          <p className="text-sm">
-            Making this assistant public will allow anyone with the link to view
-            and use it. Ensure that all content and capabilities of the
-            assistant are safe to share.
-          </p>
+          <p className="text-sm">{i18n.t(k.MAKING_THIS_ASSISTANT_PUBLIC_W)}</p>
           <Button
             onClick={async () => {
               await onShare(true);
@@ -60,7 +60,7 @@ export function MakePublicAssistantPopover({
             }}
             size="sm"
           >
-            Make Assistant Public
+            {i18n.t(k.MAKE_ASSISTANT_PUBLIC)}
           </Button>
         </div>
       )}

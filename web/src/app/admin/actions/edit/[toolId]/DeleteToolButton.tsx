@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import { Button } from "@/components/ui/button";
 import { FiTrash } from "react-icons/fi";
@@ -17,12 +19,12 @@ export function DeleteToolButton({ toolId }: { toolId: number }) {
         if (response.data) {
           router.push(`/admin/tools?u=${Date.now()}`);
         } else {
-          alert(`Failed to delete tool - ${response.error}`);
+          alert(`${i18n.t(k.FAILED_TO_DELETE_TOOL)} ${response.error}`);
         }
       }}
       icon={FiTrash}
     >
-      Delete
+      {i18n.t(k.DELETE)}
     </Button>
   );
 }

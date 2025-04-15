@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import React from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
@@ -30,18 +32,22 @@ export const DeleteEntityModal: React.FC<DeleteEntityModalProps> = ({
     >
       <>
         <div className="p-6">
-          <h2 className="text-xl font-bold mb-4">Delete {entityType}</h2>
+          <h2 className="text-xl font-bold mb-4">
+            {i18n.t(k.DELETE)} {entityType}
+          </h2>
           <p className="mb-6 line-wrap break-words">
-            Are you sure you want to delete the {entityType} &quot;{entityName}
-            &quot;? This action cannot be undone.
+            {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET1)} {entityType}{" "}
+            {i18n.t(k._17)}
+            {entityName}
+            {i18n.t(k.THIS_ACTION_CANNOT_BE_UNDON)}
             {additionalWarning}
           </p>
           <div className="flex justify-end space-x-4">
             <Button onClick={onClose} variant="outline">
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
             <Button onClick={onConfirm} variant="destructive">
-              Delete
+              {i18n.t(k.DELETE)}
             </Button>
           </div>
         </div>

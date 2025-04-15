@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Callout } from "@/components/ui/callout";
@@ -43,7 +45,7 @@ export function ChangeCredentialsModal({
   const clearFileInput = () => {
     setFileName("");
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value = i18n.t(k._1);
     }
   };
 
@@ -162,8 +164,8 @@ export function ChangeCredentialsModal({
     <Modal
       width="max-w-3xl"
       icon={provider.icon}
-      title={`Modify your ${provider.provider_type} ${
-        isProxy ? "Configuration" : "key"
+      title={`${i18n.t(k.MODIFY_YOUR)} ${provider.provider_type} ${
+        isProxy ? i18n.t(k.CONFIGURATION) : i18n.t(k.KEY)
       }`}
       onOutsideClick={onCancel}
     >
@@ -171,15 +173,15 @@ export function ChangeCredentialsModal({
         {!isAzure && (
           <>
             <p className="mb-4">
-              You can modify your configuration by providing a new API key
-              {isProxy ? " or API URL." : "."}
+              {i18n.t(k.YOU_CAN_MODIFY_YOUR_CONFIGURAT)}
+              {isProxy ? i18n.t(k.OR_API_URL) : i18n.t(k._8)}
             </p>
 
             <div className="mb-4 flex flex-col gap-y-2">
-              <Label className="mt-2">API Key</Label>
+              <Label className="mt-2">{i18n.t(k.API_KEY)}</Label>
               {useFileUpload ? (
                 <>
-                  <Label className="mt-2">Upload JSON File</Label>
+                  <Label className="mt-2">{i18n.t(k.UPLOAD_JSON_FILE)}</Label>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -187,7 +189,12 @@ export function ChangeCredentialsModal({
                     onChange={handleFileUpload}
                     className="text-lg w-full p-1"
                   />
-                  {fileName && <p>Uploaded file: {fileName}</p>}
+
+                  {fileName && (
+                    <p>
+                      {i18n.t(k.UPLOADED_FILE)} {fileName}
+                    </p>
+                  )}
                 </>
               ) : (
                 <>
@@ -210,7 +217,7 @@ export function ChangeCredentialsModal({
 
               {isProxy && (
                 <>
-                  <Label className="mt-2">API URL</Label>
+                  <Label className="mt-2">{i18n.t(k.API_URL)}</Label>
 
                   <input
                     className={`
@@ -234,11 +241,8 @@ export function ChangeCredentialsModal({
                   )}
 
                   <div>
-                    <Label className="mt-2">Test Model</Label>
-                    <p>
-                      Since you are using a liteLLM proxy, we&apos;ll need a
-                      model name to test the connection with.
-                    </p>
+                    <Label className="mt-2">{i18n.t(k.TEST_MODEL)}</Label>
+                    <p>{i18n.t(k.SINCE_YOU_ARE_USING_A_LITELLM)}</p>
                   </div>
                   <input
                     className={`
@@ -269,7 +273,7 @@ export function ChangeCredentialsModal({
                 onClick={() => handleSubmit()}
                 disabled={!apiKey}
               >
-                Update Configuration
+                {i18n.t(k.UPDATE_CONFIGURATION)}
               </Button>
 
               <Separator />
@@ -278,19 +282,16 @@ export function ChangeCredentialsModal({
         )}
 
         <Text className="mt-4 font-bold text-lg mb-2">
-          You can delete your configuration.
+          {i18n.t(k.YOU_CAN_DELETE_YOUR_CONFIGURAT)}
         </Text>
-        <Text className="mb-2">
-          This is only possible if you have already switched to a different
-          embedding type!
-        </Text>
+        <Text className="mb-2">{i18n.t(k.THIS_IS_ONLY_POSSIBLE_IF_YOU_H)}</Text>
 
         <Button
           className="mr-auto"
           onClick={handleDelete}
           variant="destructive"
         >
-          Delete Configuration
+          {i18n.t(k.DELETE_CONFIGURATION)}
         </Button>
         {deletionError && (
           <Callout type="danger" title="Error" className="mt-4">

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React from "react";
 import { Modal } from "@/components/Modal";
 import Text from "@/components/ui/text";
@@ -17,21 +19,21 @@ export function DeleteCredentialsModal({
   return (
     <Modal
       width="max-w-3xl"
-      title={`Delete ${modelProvider.provider_type} Credentials?`}
+      title={`${i18n.t(k.DELETE)} ${modelProvider.provider_type} ${i18n.t(k.CREDENTIALS)}`}
       onOutsideClick={onCancel}
     >
       <div className="mb-4">
         <Text className="text-lg mb-2">
-          You&apos;re about to delete your {modelProvider.provider_type}{" "}
-          credentials. Are you sure?
+          {i18n.t(k.YOU_RE_ABOUT_TO_DELETE_YOUR)} {modelProvider.provider_type}{" "}
+          {i18n.t(k.CREDENTIALS_ARE_YOU_SURE)}
         </Text>
         <Callout type="danger" title="Point of No Return" className="mt-4" />
         <div className="flex mt-8 justify-between">
           <Button variant="secondary" onClick={onCancel}>
-            Keep Credentials
+            {i18n.t(k.KEEP_CREDENTIALS)}
           </Button>
           <Button variant="destructive" onClick={onConfirm}>
-            Delete Credentials
+            {i18n.t(k.DELETE_CREDENTIALS)}
           </Button>
         </div>
       </div>

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, ReactNode, useCallback, useMemo, memo } from "react";
 import { FiCheck, FiCopy } from "react-icons/fi";
 
@@ -44,12 +46,12 @@ export const CodeBlock = memo(function CodeBlock({
       {copied ? (
         <div className="flex items-center space-x-2">
           <FiCheck size={16} />
-          <span>Copied!</span>
+          <span>{i18n.t(k.COPIED)}</span>
         </div>
       ) : (
         <div className="flex items-center space-x-2">
           <FiCopy size={16} />
-          <span>Copy code</span>
+          <span>{i18n.t(k.COPY_CODE)}</span>
         </div>
       )}
     </div>

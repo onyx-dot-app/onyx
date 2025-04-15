@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { Button } from "@/components/ui/button";
 import { CCPairFullInfo, ConnectorCredentialPairStatus } from "./types";
@@ -24,12 +26,12 @@ export function DeletionButton({
   let tooltip: string;
   if (ccPair.status !== ConnectorCredentialPairStatus.ACTIVE) {
     if (isDeleting) {
-      tooltip = "This connector is currently being deleted";
+      tooltip = i18n.t(k.THIS_CONNECTOR_IS_CURRENTLY_BE);
     } else {
-      tooltip = "Click to delete";
+      tooltip = i18n.t(k.CLICK_TO_DELETE);
     }
   } else {
-    tooltip = "You must pause the connector before deleting it";
+    tooltip = i18n.t(k.YOU_MUST_PAUSE_THE_CONNECTOR_B);
   }
 
   return (
@@ -59,7 +61,7 @@ export function DeletionButton({
         }
         tooltip={tooltip}
       >
-        Delete
+        {i18n.t(k.DELETE)}
       </Button>
     </div>
   );

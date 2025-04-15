@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -64,7 +66,7 @@ export function Verify({ user }: { user: User | null }) {
           />
 
           {!error ? (
-            <Text className="mt-2">Verifying your email...</Text>
+            <Text className="mt-2">{i18n.t(k.VERIFYING_YOUR_EMAIL)}</Text>
           ) : (
             <div>
               <Text className="mt-2">{error}</Text>
@@ -73,7 +75,7 @@ export function Verify({ user }: { user: User | null }) {
                 <div className="text-center">
                   <RequestNewVerificationEmail email={user.email}>
                     <Text className="mt-2 text-link">
-                      Get new verification email
+                      {i18n.t(k.GET_NEW_VERIFICATION_EMAIL)}
                     </Text>
                   </RequestNewVerificationEmail>
                 </div>

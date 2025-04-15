@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { NotebookIcon } from "@/components/icons/icons";
 import { getWebVersion, getBackendVersion } from "@/lib/version";
 
@@ -17,18 +19,18 @@ const Page = async () => {
     <div>
       <div className="border-solid border-background-600 border-b pb-2 mb-4 flex">
         <NotebookIcon size={32} />
-        <h1 className="text-3xl font-bold pl-2">Version</h1>
+        <h1 className="text-3xl font-bold pl-2">{i18n.t(k.VERSION)}</h1>
       </div>
 
       <div>
         <div className="flex mb-2">
-          <p className="my-auto mr-1">Backend Version: </p>
+          <p className="my-auto mr-1">{i18n.t(k.BACKEND_VERSION)} </p>
           <p className="text-base my-auto text-slate-400 italic">
             {backend_version}
           </p>
         </div>
         <div className="flex mb-2">
-          <p className="my-auto mr-1">Web Version: </p>
+          <p className="my-auto mr-1">{i18n.t(k.WEB_VERSION)} </p>
           <p className="text-base my-auto text-slate-400 italic">
             {web_version}
           </p>

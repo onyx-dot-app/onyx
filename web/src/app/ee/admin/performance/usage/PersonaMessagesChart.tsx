@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { X, Search } from "lucide-react";
 import {
@@ -142,21 +144,19 @@ export function PersonaMessagesChart({
   } else if (!personaList || hasError) {
     content = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
-        <p className="m-auto">Failed to fetch data...</p>
+        <p className="m-auto">{i18n.t(k.FAILED_TO_FETCH_DATA)}</p>
       </div>
     );
   } else if (selectedPersonaId === undefined) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">Select an assistant to view analytics</p>
+        <p className="m-auto">{i18n.t(k.SELECT_AN_ASSISTANT_TO_VIEW_AN)}</p>
       </div>
     );
   } else if (!personaMessagesData?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">
-          No data found for selected assistant in the specified time range
-        </p>
+        <p className="m-auto">{i18n.t(k.NO_DATA_FOUND_FOR_SELECTED_ASS)}</p>
       </div>
     );
   } else if (chartData) {
@@ -174,11 +174,9 @@ export function PersonaMessagesChart({
 
   return (
     <CardSection className="mt-8">
-      <Title>Assistant Analytics</Title>
+      <Title>{i18n.t(k.ASSISTANT_ANALYTICS)}</Title>
       <div className="flex flex-col gap-4">
-        <Text>
-          Messages and unique users per day for the selected assistant
-        </Text>
+        <Text>{i18n.t(k.MESSAGES_AND_UNIQUE_USERS_PER)}</Text>
         <div className="flex items-center gap-4">
           <Select
             value={selectedPersonaId?.toString() ?? ""}
@@ -201,6 +199,7 @@ export function PersonaMessagesChart({
                   onMouseDown={(e) => e.stopPropagation()}
                   onKeyDown={handleKeyDown}
                 />
+
                 {searchQuery && (
                   <X
                     className="h-4 w-4 shrink-0 opacity-50 cursor-pointer hover:opacity-100"

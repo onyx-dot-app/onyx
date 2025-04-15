@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -36,8 +38,7 @@ const InvitedUserTable = ({
 }: Props) => {
   const [currentPageNum, setCurrentPageNum] = useState<number>(1);
 
-  if (!users.length)
-    return <p>Users that have been invited will show up here</p>;
+  if (!users.length) return <p>{i18n.t(k.USERS_THAT_HAVE_BEEN_INVITED_W)}</p>;
 
   const totalPages = Math.ceil(users.length / USERS_PER_PAGE);
 
@@ -70,9 +71,9 @@ const InvitedUserTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Email</TableHead>
+            <TableHead>{i18n.t(k.EMAIL)}</TableHead>
             <TableHead>
-              <div className="flex justify-end">Actions</div>
+              <div className="flex justify-end">{i18n.t(k.ACTIONS)}</div>
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -96,7 +97,7 @@ const InvitedUserTable = ({
           ) : (
             <TableRow>
               <TableCell colSpan={2} className="h-24 text-center">
-                {`No users found matching "${q}"`}
+                {`${i18n.t(k.NO_USERS_FOUND_MATCHING)}${q}${i18n.t(k._17)}`}
               </TableCell>
             </TableRow>
           )}

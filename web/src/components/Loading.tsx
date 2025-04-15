@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import React, { useState, useEffect } from "react";
 import "./loading.css";
 import { ThreeDots } from "react-loader-spinner";
@@ -35,7 +37,7 @@ export const LoadingAnimation: React.FC<LoadingAnimationProps> = ({
   return (
     <div className="loading-animation flex">
       <div className={"mx-auto flex" + size ? ` ${size}` : ""}>
-        {text === undefined ? "Thinking" : text}
+        {text === undefined ? i18n.t(k.THINKING) : text}
         <span className="dots">{dots}</span>
       </div>
     </div>

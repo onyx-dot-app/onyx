@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { SourceChip } from "../input/ChatInputBar";
 
 import { useEffect } from "react";
@@ -85,6 +87,7 @@ export const PromptCard = ({
                 className="mb-2 resize-none"
                 placeholder="Prompt"
               />
+
               <Textarea
                 value={localContent}
                 onChange={(e) => handleLocalEdit("content", e.target.value)}
@@ -94,7 +97,7 @@ export const PromptCard = ({
             </div>
             <div className="flex items-end">
               <Button onClick={handleSaveLocal}>
-                {prompt.id ? "Save" : "Create"}
+                {prompt.id ? i18n.t(k.SAVE) : i18n.t(k.CREATE1)}
               </Button>
             </div>
           </div>
@@ -111,7 +114,7 @@ export const PromptCard = ({
               </TooltipTrigger>
               {isPromptPublic(prompt) && (
                 <TooltipContent>
-                  <p>This is a built-in prompt and cannot be edited</p>
+                  <p>{i18n.t(k.THIS_IS_A_BUILT_IN_PROMPT_AND)}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -131,11 +134,11 @@ export const PromptCard = ({
               <DropdownMenuContent>
                 {!isPromptPublic(prompt) && (
                   <DropdownMenuItem onClick={() => handleEdit(prompt.id)}>
-                    Edit
+                    {i18n.t(k.EDIT)}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => handleDelete(prompt.id)}>
-                  Delete
+                  {i18n.t(k.DELETE)}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

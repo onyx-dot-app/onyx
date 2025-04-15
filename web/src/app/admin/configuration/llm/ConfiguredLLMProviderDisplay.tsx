@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
 import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { Modal } from "@/components/Modal";
@@ -33,7 +35,9 @@ function LLMProviderUpdateModal({
 
   return (
     <Modal
-      title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
+      title={`${
+        llmProviderDescriptor ? i18n.t(k.CONFIGURE) : i18n.t(k.SETUP)
+      } ${providerName}`}
       onOutsideClick={() => onClose()}
     >
       <div className="max-h-[70vh] overflow-y-auto px-4">
@@ -96,7 +100,9 @@ function LLMProviderDisplay({
                   const errorMsg = (await response.json()).detail;
                   setPopup({
                     type: "error",
-                    message: `Failed to set provider as default: ${errorMsg}`,
+                    message: `${i18n.t(
+                      k.FAILED_TO_SET_PROVIDER_AS_DEFA
+                    )} ${errorMsg}`,
                   });
                   return;
                 }
@@ -104,11 +110,11 @@ function LLMProviderDisplay({
                 mutate(LLM_PROVIDERS_ADMIN_URL);
                 setPopup({
                   type: "success",
-                  message: "Provider set as default successfully!",
+                  message: i18n.t(k.PROVIDER_SET_AS_DEFAULT_SUCCES),
                 });
               }}
             >
-              Set as default
+              {i18n.t(k.SET_AS_DEFAULT)}
             </div>
           )}
         </div>
@@ -116,9 +122,9 @@ function LLMProviderDisplay({
         {existingLlmProvider && (
           <div className="my-auto ml-3">
             {existingLlmProvider.is_default_provider ? (
-              <Badge variant="agent">Default</Badge>
+              <Badge variant="agent">{i18n.t(k.DEFAULT2)}</Badge>
             ) : (
-              <Badge variant="success">Enabled</Badge>
+              <Badge variant="success">{i18n.t(k.ENABLED)}</Badge>
             )}
           </div>
         )}
@@ -128,7 +134,7 @@ function LLMProviderDisplay({
             variant={existingLlmProvider ? "success-reverse" : "navigate"}
             onClick={() => setFormIsVisible(true)}
           >
-            {existingLlmProvider ? "Edit" : "Set up"}
+            {existingLlmProvider ? i18n.t(k.EDIT) : i18n.t(k.SET_UP)}
           </Button>
         </div>
       </div>

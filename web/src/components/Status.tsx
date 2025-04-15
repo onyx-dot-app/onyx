@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../i18n/keys";
 
 import { ValidStatuses } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +32,10 @@ export function IndexAttemptStatus({
   if (status === "failed") {
     const icon = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Failed
+        {i18n.t(k.FAILED)}
       </Badge>
     );
+
     if (errorMsg) {
       badge = (
         <TooltipProvider>
@@ -50,43 +53,43 @@ export function IndexAttemptStatus({
   } else if (status === "completed_with_errors") {
     badge = (
       <Badge variant="secondary" icon={FiAlertTriangle}>
-        Completed with errors
+        {i18n.t(k.COMPLETED_WITH_ERRORS)}
       </Badge>
     );
   } else if (status === "success") {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Succeeded
+        {i18n.t(k.SUCCEEDED)}
       </Badge>
     );
   } else if (status === "in_progress") {
     badge = (
       <Badge variant="in_progress" icon={FiClock}>
-        In Progress
+        {i18n.t(k.IN_PROGRESS1)}
       </Badge>
     );
   } else if (status === "not_started") {
     badge = (
       <Badge variant="not_started" icon={FiClock}>
-        Scheduled
+        {i18n.t(k.SCHEDULED)}
       </Badge>
     );
   } else if (status === "canceled") {
     badge = (
       <Badge variant="canceled" icon={FiClock}>
-        Canceled
+        {i18n.t(k.CANCELED)}
       </Badge>
     );
   } else if (status === "invalid") {
     badge = (
       <Badge variant="invalid" icon={FiAlertTriangle}>
-        Invalid
+        {i18n.t(k.INVALID)}
       </Badge>
     );
   } else {
     badge = (
       <Badge variant="outline" icon={FiMinus}>
-        None
+        {i18n.t(k.NONE)}
       </Badge>
     );
   }
@@ -108,31 +111,31 @@ export function CCPairStatus({
   if (ccPairStatus == ConnectorCredentialPairStatus.DELETING) {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Deleting
+        {i18n.t(k.DELETING)}
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.PAUSED) {
     badge = (
       <Badge variant="paused" icon={FiPauseCircle}>
-        Paused
+        {i18n.t(k.PAUSED)}
       </Badge>
     );
   } else if (ccPairStatus == ConnectorCredentialPairStatus.INVALID) {
     badge = (
       <Badge variant="invalid" icon={FiAlertTriangle}>
-        Invalid
+        {i18n.t(k.INVALID)}
       </Badge>
     );
   } else if (status === "failed") {
     badge = (
       <Badge variant="destructive" icon={FiAlertTriangle}>
-        Error
+        {i18n.t(k.ERROR2)}
       </Badge>
     );
   } else {
     badge = (
       <Badge variant="success" icon={FiCheckCircle}>
-        Active
+        {i18n.t(k.ACTIVE)}
       </Badge>
     );
   }

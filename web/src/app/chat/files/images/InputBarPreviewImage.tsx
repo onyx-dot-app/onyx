@@ -14,6 +14,7 @@ export function InputBarPreviewImage({ fileId }: { fileId: string }) {
         open={fullImageShowing}
         onOpenChange={(open) => setFullImageShowing(open)}
       />
+
       <div
         className={`
           bg-transparent

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import {
   Tooltip,
@@ -27,6 +29,7 @@ const ProSearchIcon = () => (
       strokeLinecap="round"
       strokeLinejoin="round"
     />
+
     <path
       d="M11 8V14M8 11H14"
       stroke="currentColor"
@@ -80,7 +83,7 @@ export function AgenticToggle({
                 proSearchEnabled ? "text-agent" : "text-text-dark"
               }`}
             >
-              Agent
+              {i18n.t(k.AGENT1)}
             </span>
           </button>
         </TooltipTrigger>
@@ -91,18 +94,16 @@ export function AgenticToggle({
         >
           <div className="flex items-center space-x-2 mb-3">
             <h3 className="text-sm font-semibold text-neutral-900">
-              Agent Search
+              {i18n.t(k.AGENT_SEARCH)}
             </h3>
           </div>
           <p className="text-xs text-neutral-600  dark:text-neutral-700 mb-2">
-            Use AI agents to break down questions and run deep iterative
-            research through promising pathways. Gives more thorough and
-            accurate responses but takes slightly longer.
+            {i18n.t(k.USE_AI_AGENTS_TO_BREAK_DOWN_QU)}
           </p>
           <ul className="text-xs text-text-600 dark:text-neutral-700 list-disc list-inside">
-            <li>Improved accuracy of search results</li>
-            <li>Less hallucinations</li>
-            <li>More comprehensive answers</li>
+            <li>{i18n.t(k.IMPROVED_ACCURACY_OF_SEARCH_RE)}</li>
+            <li>{i18n.t(k.LESS_HALLUCINATIONS)}</li>
+            <li>{i18n.t(k.MORE_COMPREHENSIVE_ANSWERS)}</li>
           </ul>
         </TooltipContent>
       </Tooltip>

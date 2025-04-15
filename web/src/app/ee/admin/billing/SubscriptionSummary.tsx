@@ -15,6 +15,7 @@ export function SubscriptionSummary({
         title="Subscription Status"
         value={statusToDisplay(billingInformation.status)}
       />
+
       <InfoItem title="Seats" value={billingInformation.seats.toString()} />
       <InfoItem
         title="Billing Start"
@@ -22,6 +23,7 @@ export function SubscriptionSummary({
           billingInformation.current_period_start
         ).toLocaleDateString()}
       />
+
       <InfoItem
         title="Billing End"
         value={new Date(

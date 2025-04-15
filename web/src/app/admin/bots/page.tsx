@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { FiPlusSquare } from "react-icons/fi";
@@ -40,36 +42,28 @@ const Main = () => {
       {/* {popup} */}
 
       <p className="mb-2 text-sm text-muted-foreground">
-        Setup Slack bots that connect to Onyx. Once setup, you will be able to
-        ask questions to Onyx directly from Slack. Additionally, you can:
+        {i18n.t(k.SETUP_SLACK_BOTS_THAT_CONNECT)}
       </p>
 
       <div className="mb-2">
         <ul className="list-disc mt-2 ml-4 text-sm text-muted-foreground">
-          <li>
-            Setup OnyxBot to automatically answer questions in certain channels.
-          </li>
-          <li>
-            Choose which document sets OnyxBot should answer from, depending on
-            the channel the question is being asked.
-          </li>
-          <li>
-            Directly message OnyxBot to search just as you would in the web UI.
-          </li>
+          <li>{i18n.t(k.SETUP_ONYXBOT_TO_AUTOMATICALLY)}</li>
+          <li>{i18n.t(k.CHOOSE_WHICH_DOCUMENT_SETS_ONY)}</li>
+          <li>{i18n.t(k.DIRECTLY_MESSAGE_ONYXBOT_TO_SE)}</li>
         </ul>
       </div>
 
       <p className="mb-6 text-sm text-muted-foreground">
-        Follow the{" "}
+        {i18n.t(k.FOLLOW_THE)}{" "}
         <a
           className="text-blue-500 hover:underline"
           href="https://docs.onyx.app/slack_bot_setup"
           target="_blank"
           rel="noopener noreferrer"
         >
-          guide{" "}
+          {i18n.t(k.GUIDE)}{" "}
         </a>
-        found in the Onyx documentation to get started!
+        {i18n.t(k.FOUND_IN_THE_ONYX_DOCUMENTATIO)}
       </p>
 
       <CreateButton href="/admin/bots/new" text="New Slack Bot" />
@@ -86,6 +80,7 @@ const Page = () => {
         icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
         title="Slack Bots"
       />
+
       <InstantSSRAutoRefresh />
 
       <Main />

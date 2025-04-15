@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useRef } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -101,7 +103,7 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
                     )}
                     {!hasMore && chatGroups.length > 0 && (
                       <div className="text-center text-xs text-neutral-500 dark:text-neutral-400 py-2">
-                        No more chats to load
+                        {i18n.t(k.NO_MORE_CHATS_TO_LOAD)}
                       </div>
                     )}
                   </div>
@@ -109,7 +111,7 @@ export function ChatSearchModal({ open, onCloseModal }: ChatSearchModalProps) {
               ) : (
                 !isLoading && (
                   <div className="px-4 py-3 text-sm text-neutral-500 dark:text-neutral-400">
-                    No chats found
+                    {i18n.t(k.NO_CHATS_FOUND)}
                   </div>
                 )
               )}

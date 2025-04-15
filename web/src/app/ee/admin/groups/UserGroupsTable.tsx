@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import {
   Table,
@@ -59,11 +61,11 @@ export const UserGroupsTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Connectors</TableHead>
-            <TableHead>Users</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Delete</TableHead>
+            <TableHead>{i18n.t(k.NAME)}</TableHead>
+            <TableHead>{i18n.t(k.CONNECTORS)}</TableHead>
+            <TableHead>{i18n.t(k.USERS)}</TableHead>
+            <TableHead>{i18n.t(k.STATUS)}</TableHead>
+            <TableHead>{i18n.t(k.DELETE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -107,7 +109,7 @@ export const UserGroupsTable = ({
                         })}
                       </div>
                     ) : (
-                      "-"
+                      i18n.t(k._)
                     )}
                   </TableCell>
                   <TableCell>
@@ -132,19 +134,22 @@ export const UserGroupsTable = ({
                                 );
                               })}
                             <div>
-                              + {userGroup.users.length - MAX_USERS_TO_DISPLAY}{" "}
-                              more
+                              {i18n.t(k._9)}{" "}
+                              {userGroup.users.length - MAX_USERS_TO_DISPLAY}{" "}
+                              {i18n.t(k.MORE)}
                             </div>
                           </div>
                         )}
                       </div>
                     ) : (
-                      "-"
+                      i18n.t(k._)
                     )}
                   </TableCell>
                   <TableCell>
                     {userGroup.is_up_to_date ? (
-                      <div className="text-success">Up to date!</div>
+                      <div className="text-success">
+                        {i18n.t(k.UP_TO_DATE1)}
+                      </div>
                     ) : (
                       <div className="w-10">
                         <LoadingAnimation text="Syncing" />
@@ -158,13 +163,17 @@ export const UserGroupsTable = ({
                         const response = await deleteUserGroup(userGroup.id);
                         if (response.ok) {
                           setPopup({
-                            message: `User Group "${userGroup.name}" deleted`,
+                            message: `${i18n.t(k.USER_GROUP1)}${
+                              userGroup.name
+                            }${i18n.t(k.DELETED)}`,
                             type: "success",
                           });
                         } else {
                           const errorMsg = (await response.json()).detail;
                           setPopup({
-                            message: `Failed to delete User Group - ${errorMsg}`,
+                            message: `${i18n.t(
+                              k.FAILED_TO_DELETE_USER_GROUP
+                            )} ${errorMsg}`,
                             type: "error",
                           });
                         }
@@ -185,23 +194,23 @@ export const UserGroupsTable = ({
       <BasicTable
         columns={[
           {
-            header: "Name",
+            header: i18n.t(k.NAME),
             key: "name",
           },
           {
-            header: "Connectors",
+            header: i18n.t(k.CONNECTORS),
             key: "ccPairs",
           },
           {
-            header: "Users",
+            header: i18n.t(k.USERS),
             key: "users",
           },
           {
-            header: "Status",
+            header: i18n.t(k.STATUS),
             key: "status",
           },
           {
-            header: "Delete",
+            header: i18n.t(k.DELETE),
             key: "delete",
           },
         ]}
@@ -232,6 +241,7 @@ export const UserGroupsTable = ({
                   })}
                 </div>
               ),
+
               users: (
                 <div>
                   {userGroup.users.length <= MAX_USERS_TO_DISPLAY ? (
@@ -248,19 +258,23 @@ export const UserGroupsTable = ({
                           );
                         })}
                       <div className="text-text-300">
-                        + {userGroup.users.length - MAX_USERS_TO_DISPLAY} more
+                        {i18n.t(k._9)}{" "}
+                        {userGroup.users.length - MAX_USERS_TO_DISPLAY}{" "}
+                        {i18n.t(k.MORE)}
                       </div>
                     </div>
                   )}
                 </div>
               ),
+
               status: userGroup.is_up_to_date ? (
-                <div className="text-emerald-600">Up to date!</div>
+                <div className="text-emerald-600">{i18n.t(k.UP_TO_DATE1)}</div>
               ) : (
                 <div className="text-text-300 w-10">
                   <LoadingAnimation text="Syncing" />
                 </div>
               ),
+
               delete: (
                 <div
                   className="cursor-pointer"
@@ -269,13 +283,17 @@ export const UserGroupsTable = ({
                     const response = await deleteUserGroup(userGroup.id);
                     if (response.ok) {
                       setPopup({
-                        message: `User Group "${userGroup.name}" deleted`,
+                        message: `${i18n.t(k.USER_GROUP1)}${
+                          userGroup.name
+                        }${i18n.t(k.DELETED)}`,
                         type: "success",
                       });
                     } else {
                       const errorMsg = (await response.json()).detail;
                       setPopup({
-                        message: `Failed to delete User Group - ${errorMsg}`,
+                        message: `${i18n.t(
+                          k.FAILED_TO_DELETE_USER_GROUP
+                        )} ${errorMsg}`,
                         type: "error",
                       });
                     }

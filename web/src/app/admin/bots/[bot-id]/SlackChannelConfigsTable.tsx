@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { PageSelector } from "@/components/PageSelector";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -49,26 +51,28 @@ export function SlackChannelConfigsTable({
           }}
         >
           <FiSettings />
-          Edit Default Configuration
+          {i18n.t(k.EDIT_DEFAULT_CONFIGURATION)}
         </Button>
         <Link href={`/admin/bots/${slackBotId}/channels/new`}>
           <Button variant="outline">
             <FiPlusSquare />
-            New Channel Configuration
+            {i18n.t(k.NEW_CHANNEL_CONFIGURATION)}
           </Button>
         </Link>
       </div>
 
       <div>
-        <h2 className="text-2xl font- mb-4">Channel-Specific Configurations</h2>
+        <h2 className="text-2xl font- mb-4">
+          {i18n.t(k.CHANNEL_SPECIFIC_CONFIGURATION)}
+        </h2>
         <Card>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Channel</TableHead>
-                <TableHead>Assistant</TableHead>
-                <TableHead>Document Sets</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>{i18n.t(k.CHANNEL)}</TableHead>
+                <TableHead>{i18n.t(k.ASSISTANT)}</TableHead>
+                <TableHead>{i18n.t(k.DOCUMENT_SETS)}</TableHead>
+                <TableHead>{i18n.t(k.ACTIONS)}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -106,7 +110,7 @@ export function SlackChannelConfigsTable({
                             {slackChannelConfig.persona.name}
                           </Link>
                         ) : (
-                          "-"
+                          i18n.t(k._)
                         )}
                       </TableCell>
                       <TableCell>
@@ -115,8 +119,8 @@ export function SlackChannelConfigsTable({
                           slackChannelConfig.persona.document_sets.length > 0
                             ? slackChannelConfig.persona.document_sets
                                 .map((documentSet) => documentSet.name)
-                                .join(", ")
-                            : "-"}
+                                .join(i18n.t(k._3))
+                            : i18n.t(k._)}
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
@@ -131,13 +135,17 @@ export function SlackChannelConfigsTable({
                             );
                             if (response.ok) {
                               setPopup({
-                                message: `Slack bot config "${slackChannelConfig.id}" deleted`,
+                                message: `${i18n.t(k.SLACK_BOT_CONFIG)}${
+                                  slackChannelConfig.id
+                                }${i18n.t(k.DELETED)}`,
                                 type: "success",
                               });
                             } else {
                               const errorMsg = await response.text();
                               setPopup({
-                                message: `Failed to delete Slack bot config - ${errorMsg}`,
+                                message: `${i18n.t(
+                                  k.FAILED_TO_DELETE_SLACK_BOT_CON
+                                )} ${errorMsg}`,
                                 type: "error",
                               });
                             }
@@ -157,8 +165,7 @@ export function SlackChannelConfigsTable({
                     colSpan={4}
                     className="text-center text-muted-foreground"
                   >
-                    No channel-specific configurations. Add a new configuration
-                    to customize behavior for specific channels.
+                    {i18n.t(k.NO_CHANNEL_SPECIFIC_CONFIGURAT)}
                   </TableCell>
                 </TableRow>
               )}

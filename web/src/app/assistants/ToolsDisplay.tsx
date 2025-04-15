@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { FiImage, FiSearch } from "react-icons/fi";
 import { Persona } from "../admin/assistants/interfaces";
 import { SEARCH_TOOL_ID } from "../chat/tools/constants";
@@ -18,10 +20,10 @@ export function AssistantTools({
           !list ? "font-semibold" : "text-subtle text-sm"
         }`}
       >
-        Tools:
+        {i18n.t(k.TOOLS)}
       </span>{" "}
       {assistant.tools.length == 0 ? (
-        <p className="ml-1">None</p>
+        <p className="ml-1">{i18n.t(k.NONE)}</p>
       ) : (
         <div className="ml-1 flex flex-wrap gap-1">
           {assistant.tools.map((tool, ind) => {
@@ -42,11 +44,11 @@ export function AssistantTools({
                 >
                   <div className="flex gap-x-1">
                     <FiSearch key={ind} className="ml-1 h-3 w-3 my-auto" />
-                    Search
+                    {i18n.t(k.SEARCH)}
                   </div>
                 </div>
               );
-            } else if (tool.name === "ImageGenerationTool") {
+            } else if (tool.name === i18n.t(k.IMAGEGENERATIONTOOL)) {
               return (
                 <div
                   key={ind}
@@ -65,7 +67,8 @@ export function AssistantTools({
                       key={ind}
                       className="ml-1 my-auto h-3 w-3 my-auto"
                     />
-                    Image Generation
+
+                    {i18n.t(k.IMAGE_GENERATION)}
                   </div>
                 </div>
               );

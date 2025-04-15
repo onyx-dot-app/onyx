@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useState, useEffect, useContext } from "react";
 import { XIcon } from "../icons/icons";
 import { CustomTooltip } from "../tooltip/CustomTooltip";
@@ -68,24 +70,22 @@ export function AnnouncementBanner() {
             >
               {notification.notif_type == "reindex" ? (
                 <p className="text-center">
-                  Your index is out of date - we strongly recommend updating
-                  your search settings.{" "}
+                  {i18n.t(k.YOUR_INDEX_IS_OUT_OF_DATE_WE)}{" "}
                   <Link
                     href={"/admin/configuration/search"}
                     className="ml-2 underline cursor-pointer"
                   >
-                    Update here
+                    {i18n.t(k.UPDATE_HERE)}
                   </Link>
                 </p>
               ) : notification.notif_type == "two_day_trial_ending" ? (
                 <p className="text-center">
-                  Your trial is ending soon - submit your billing information to
-                  continue using Onyx.{" "}
+                  {i18n.t(k.YOUR_TRIAL_IS_ENDING_SOON_SU)}{" "}
                   <Link
                     href="/admin/billing"
                     className="ml-2 underline cursor-pointer"
                   >
-                    Update here
+                    {i18n.t(k.UPDATE_HERE)}
                   </Link>
                 </p>
               ) : null}

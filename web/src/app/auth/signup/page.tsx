@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 import { User } from "@/lib/types";
 import {
@@ -74,7 +76,9 @@ const Page = async (props: {
         <div className="absolute top-10x w-full"></div>
         <div className="flex w-full flex-col justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
-            {cloud ? "Complete your sign up" : "Sign Up for Onyx"}
+            {cloud
+              ? i18n.t(k.COMPLETE_YOUR_SIGN_UP)
+              : i18n.t(k.SIGN_UP_FOR_ONYX)}
           </h2>
           {cloud && (
             <>
@@ -89,7 +93,7 @@ const Page = async (props: {
               <SignInButton authorizeUrl={authUrl} authType="cloud" />
               <div className="flex items-center w-full my-4">
                 <div className="flex-grow border-t border-background-300"></div>
-                <span className="px-4 text-text-500">or</span>
+                <span className="px-4 text-text-500">{i18n.t(k.OR)}</span>
                 <div className="flex-grow border-t border-background-300"></div>
               </div>
             </div>

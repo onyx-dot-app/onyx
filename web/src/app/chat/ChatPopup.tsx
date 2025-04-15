@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { Modal } from "@/components/Modal";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -8,8 +10,10 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { transformLinkUri } from "@/lib/utils";
 
-const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED =
-  "allUsersInitialPopupFlowCompleted";
+const ALL_USERS_INITIAL_POPUP_FLOW_COMPLETED = i18n.t(
+  k.ALLUSERSINITIALPOPUPFLOWCOMPLE
+);
+
 export function ChatPopup() {
   const [completedFlow, setCompletedFlow] = useState(true);
   const [showConsentError, setShowConsentError] = useState(false);
@@ -57,6 +61,7 @@ export function ChatPopup() {
                   rel="noopener noreferrer"
                 />
               ),
+
               p: ({ node, ...props }) => <p {...props} className="text-sm" />,
             }}
             remarkPlugins={[remarkGfm]}
@@ -68,7 +73,7 @@ export function ChatPopup() {
 
         {showConsentError && (
           <p className="text-red-500 text-sm mt-2">
-            You need to agree to the terms to access the application.
+            {i18n.t(k.YOU_NEED_TO_AGREE_TO_THE_TERMS)}
           </p>
         )}
 
@@ -79,7 +84,7 @@ export function ChatPopup() {
               variant="destructive"
               onClick={() => setShowConsentError(true)}
             >
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
           )}
           <Button
@@ -92,7 +97,7 @@ export function ChatPopup() {
               setCompletedFlow(true);
             }}
           >
-            {isConsentScreen ? "I Agree" : "Get started!"}
+            {isConsentScreen ? i18n.t(k.I_AGREE) : i18n.t(k.GET_STARTED)}
           </Button>
         </div>
       </>

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
@@ -38,6 +40,7 @@ export default function TextView({
       "text/x-org",
       "txt",
     ];
+
     return markdownFormats.some((format) => mimeType.startsWith(format));
   };
 
@@ -48,6 +51,7 @@ export default function TextView({
       "image/gif",
       "image/svg+xml",
     ];
+
     return imageFormats.some((format) => mimeType.startsWith(format));
   };
   // Detect if a given MIME type can be rendered in an <iframe>
@@ -59,6 +63,7 @@ export default function TextView({
       "image/gif",
       "image/svg+xml",
     ];
+
     return supportedFormats.some((format) => mimeType.startsWith(format));
   };
 
@@ -141,20 +146,23 @@ export default function TextView({
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="icon" onClick={handleZoomOut}>
               <ZoomOut className="h-4 w-4" />
-              <span className="sr-only">Zoom Out</span>
+              <span className="sr-only">{i18n.t(k.ZOOM_OUT)}</span>
             </Button>
-            <span className="text-sm">{zoom}%</span>
+            <span className="text-sm">
+              {zoom}
+              {i18n.t(k._15)}
+            </span>
             <Button variant="ghost" size="icon" onClick={handleZoomIn}>
               <ZoomIn className="h-4 w-4" />
-              <span className="sr-only">Zoom In</span>
+              <span className="sr-only">{i18n.t(k.ZOOM_IN)}</span>
             </Button>
             <Button variant="ghost" size="icon" onClick={handleDownload}>
               <Download className="h-4 w-4" />
-              <span className="sr-only">Download</span>
+              <span className="sr-only">{i18n.t(k.DOWNLOAD)}</span>
             </Button>
             <Button variant="ghost" size="icon" onClick={onClose}>
               <XIcon className="h-4 w-4" />
-              <span className="sr-only">Close</span>
+              <span className="sr-only">{i18n.t(k.CLOSE)}</span>
             </Button>
           </div>
         </DialogHeader>
@@ -164,7 +172,7 @@ export default function TextView({
               <div className="flex flex-col items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary"></div>
                 <p className="mt-6 text-lg font-medium text-muted-foreground">
-                  Loading document...
+                  {i18n.t(k.LOADING_DOCUMENT)}
                 </p>
               </div>
             ) : (
@@ -194,10 +202,10 @@ export default function TextView({
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full">
                     <p className="text-lg font-medium text-muted-foreground">
-                      This file format is not supported for preview.
+                      {i18n.t(k.THIS_FILE_FORMAT_IS_NOT_SUPPOR)}
                     </p>
                     <Button className="mt-4" onClick={handleDownload}>
-                      Download File
+                      {i18n.t(k.DOWNLOAD_FILE)}
                     </Button>
                   </div>
                 )}

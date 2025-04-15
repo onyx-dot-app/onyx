@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { PersonasTable } from "./PersonaTable";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
@@ -11,35 +13,25 @@ export default async function Page() {
     <div className="mx-auto container">
       <AdminPageTitle icon={<AssistantsIcon size={32} />} title="Assistants" />
 
-      <Text className="mb-2">
-        Assistants are a way to build custom search/question-answering
-        experiences for different use cases.
-      </Text>
-      <Text className="mt-2">They allow you to customize:</Text>
+      <Text className="mb-2">{i18n.t(k.ASSISTANTS_ARE_A_WAY_TO_BUILD)}</Text>
+      <Text className="mt-2">{i18n.t(k.THEY_ALLOW_YOU_TO_CUSTOMIZE)}</Text>
       <div className="text-sm">
         <ul className="list-disc mt-2 ml-4">
-          <li>
-            The prompt used by your LLM of choice to respond to the user query
-          </li>
-          <li>The documents that are used as context</li>
+          <li>{i18n.t(k.THE_PROMPT_USED_BY_YOUR_LLM_OF)}</li>
+          <li>{i18n.t(k.THE_DOCUMENTS_THAT_ARE_USED_AS)}</li>
         </ul>
       </div>
 
       <div>
         <Separator />
 
-        <Title>Create an Assistant</Title>
+        <Title>{i18n.t(k.CREATE_AN_ASSISTANT)}</Title>
         <CreateButton href="/assistants/new?admin=true" text="New Assistant" />
 
         <Separator />
 
-        <Title>Existing Assistants</Title>
-        <SubLabel>
-          Assistants will be displayed as options on the Chat / Search
-          interfaces in the order they are displayed below. Assistants marked as
-          hidden will not be displayed. Editable assistants are shown at the
-          top.
-        </SubLabel>
+        <Title>{i18n.t(k.EXISTING_ASSISTANTS)}</Title>
+        <SubLabel>{i18n.t(k.ASSISTANTS_WILL_BE_DISPLAYED_A)}</SubLabel>
         <PersonasTable />
       </div>
     </div>

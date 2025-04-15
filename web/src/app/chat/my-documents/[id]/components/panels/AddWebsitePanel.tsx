@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React, { useState } from "react";
 import { Link, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -40,7 +42,7 @@ export function AddWebsitePanel({
         <div className="flex items-center">
           <Link className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
           <span className="text-sm font-medium leading-tight">
-            Add a website
+            {i18n.t(k.ADD_A_WEBSITE)}
           </span>
         </div>
         <Button variant="ghost" size="sm" className="w-6 h-6 p-0 rounded-full">
@@ -62,6 +64,7 @@ export function AddWebsitePanel({
               placeholder="Enter URL"
               className="flex-grow !text-sm mr-2 px-2 py-1 border border-neutral-300 dark:border-neutral-600 rounded bg-white dark:bg-neutral-800 text-neutral-900 dark:text-neutral-100"
             />
+
             <Button
               variant="default"
               className="!text-sm"
@@ -69,7 +72,7 @@ export function AddWebsitePanel({
               onClick={handleCreateFileFromLink}
               disabled={isCreating || !linkUrl}
             >
-              {isCreating ? "Creating..." : "Create"}
+              {isCreating ? i18n.t(k.CREATING) : i18n.t(k.CREATE1)}
             </Button>
           </div>
         </div>

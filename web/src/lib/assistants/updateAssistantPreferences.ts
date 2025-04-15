@@ -52,6 +52,7 @@ export async function moveAssistantUp(
       chosenAssistants[index],
       chosenAssistants[index - 1],
     ];
+
     return updateUserAssistantList(chosenAssistants);
   }
   return false;
@@ -67,6 +68,7 @@ export async function moveAssistantDown(
       chosenAssistants[index],
       chosenAssistants[index + 1],
     ];
+
     return updateUserAssistantList(chosenAssistants);
   }
   return false;

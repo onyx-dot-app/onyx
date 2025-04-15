@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED } from "@/lib/constants";
 
 export default async function AdminLayout({
@@ -9,7 +11,7 @@ export default async function AdminLayout({
     return (
       <div className="flex h-screen">
         <div className="mx-auto my-auto text-lg font-bold text-red-500">
-          This funcitonality is only available in the Enterprise Edition :(
+          {i18n.t(k.THIS_FUNCITONALITY_IS_ONLY_AVA)}
         </div>
       </div>
     );

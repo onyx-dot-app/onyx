@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { ThreeDotsLoader } from "@/components/Loading";
 import { PageSelector } from "@/components/PageSelector";
@@ -86,8 +88,7 @@ const EditRow = ({
             <TooltipContent width="max-w-sm">
               <div className="flex break-words break-keep whitespace-pre-wrap items-start">
                 <InfoIcon className="mr-2 mt-0.5" />
-                Cannot update while syncing! Wait for the sync to finish, then
-                try again.
+                {i18n.t(k.CANNOT_UPDATE_WHILE_SYNCING_W)}
               </div>
             </TooltipContent>
           )}
@@ -134,15 +135,15 @@ const DocumentSetTable = ({
 
   return (
     <div>
-      <Title>Existing Document Sets</Title>
+      <Title>{i18n.t(k.EXISTING_DOCUMENT_SETS)}</Title>
       <Table className="overflow-visible mt-2">
         <TableHeader>
           <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead>Connectors</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Public</TableHead>
-            <TableHead>Delete</TableHead>
+            <TableHead>{i18n.t(k.NAME)}</TableHead>
+            <TableHead>{i18n.t(k.CONNECTORS)}</TableHead>
+            <TableHead>{i18n.t(k.STATUS)}</TableHead>
+            <TableHead>{i18n.t(k.PUBLIC)}</TableHead>
+            <TableHead>{i18n.t(k.DELETE)}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -191,15 +192,15 @@ const DocumentSetTable = ({
                   <TableCell>
                     {documentSet.is_up_to_date ? (
                       <Badge variant="success" icon={FiCheckCircle}>
-                        Up to Date
+                        {i18n.t(k.UP_TO_DATE)}
                       </Badge>
                     ) : documentSet.cc_pair_descriptors.length > 0 ? (
                       <Badge variant="in_progress" icon={FiClock}>
-                        Syncing
+                        {i18n.t(k.SYNCING)}
                       </Badge>
                     ) : (
                       <Badge variant="destructive" icon={FiAlertTriangle}>
-                        Deleting
+                        {i18n.t(k.DELETING)}
                       </Badge>
                     )}
                   </TableCell>
@@ -209,14 +210,14 @@ const DocumentSetTable = ({
                         variant={isEditable ? "success" : "default"}
                         icon={FiUnlock}
                       >
-                        Public
+                        {i18n.t(k.PUBLIC)}
                       </Badge>
                     ) : (
                       <Badge
                         variant={isEditable ? "private" : "default"}
                         icon={FiLock}
                       >
-                        Private
+                        {i18n.t(k.PRIVATE1)}
                       </Badge>
                     )}
                   </TableCell>
@@ -229,13 +230,17 @@ const DocumentSetTable = ({
                           );
                           if (response.ok) {
                             setPopup({
-                              message: `Document set "${documentSet.name}" scheduled for deletion`,
+                              message: `${i18n.t(k.DOCUMENT_SET)}${
+                                documentSet.name
+                              }${i18n.t(k.SCHEDULED_FOR_DELETION)}`,
                               type: "success",
                             });
                           } else {
                             const errorMsg = (await response.json()).detail;
                             setPopup({
-                              message: `Failed to schedule document set for deletion - ${errorMsg}`,
+                              message: `${i18n.t(
+                                k.FAILED_TO_SCHEDULE_DOCUMENT_SE
+                              )} ${errorMsg}`,
                               type: "error",
                             });
                           }
@@ -244,7 +249,7 @@ const DocumentSetTable = ({
                         }}
                       />
                     ) : (
-                      "-"
+                      i18n.t(k._)
                     )}
                   </TableCell>
                 </TableRow>
@@ -287,20 +292,27 @@ const Main = () => {
   }
 
   if (documentSetsError || !documentSets) {
-    return <div>Error: {documentSetsError}</div>;
+    return (
+      <div>
+        {i18n.t(k.ERROR1)} {documentSetsError}
+      </div>
+    );
   }
 
   if (editableDocumentSetsError || !editableDocumentSets) {
-    return <div>Error: {editableDocumentSetsError}</div>;
+    return (
+      <div>
+        {i18n.t(k.ERROR1)} {editableDocumentSetsError}
+      </div>
+    );
   }
 
   return (
     <div className="mb-8">
       {popup}
       <Text className="mb-3">
-        <b>Document Sets</b> allow you to group logically connected documents
-        into a single bundle. These can then be used as a filter when performing
-        searches to control the scope of information Onyx searches over.
+        <b>{i18n.t(k.DOCUMENT_SETS)}</b>{" "}
+        {i18n.t(k.ALLOW_YOU_TO_GROUP_LOGICALLY_C)}
       </Text>
 
       <div className="mb-3"></div>
@@ -310,9 +322,10 @@ const Main = () => {
           href="/admin/documents/sets/new"
           text="New Document Set"
         />
+
         {/* <Link href="/admin/documents/sets/new">
-          <Button variant="navigate">New Document Set</Button>
-        </Link> */}
+           <Button variant="navigate">New Document Set</Button>
+          </Link> */}
       </div>
 
       {documentSets.length > 0 && (

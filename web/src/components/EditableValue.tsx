@@ -40,6 +40,7 @@ export function EditableValue({
           }}
           className="border bg-background-200 border-background-300 rounded py-1 px-1 w-12 h-4 my-auto"
         />
+
         <div
           onClick={async () => {
             const success = await onSubmit(editedValue);

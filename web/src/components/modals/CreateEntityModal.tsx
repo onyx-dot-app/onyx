@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React, { useState } from "react";
 import {
   Dialog,
@@ -54,7 +56,11 @@ export default function CreateEntityModal({
           className="flex flex-col justify-stretch space-y-2 w-full"
         >
           <div className="space-y-2 w-full">
-            {!hideLabel && <Label htmlFor="name">{entityName} Name</Label>}
+            {!hideLabel && (
+              <Label htmlFor="name">
+                {entityName} {i18n.t(k.NAME)}
+              </Label>
+            )}
             <Input
               autoComplete="off"
               id="name"
@@ -62,14 +68,15 @@ export default function CreateEntityModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={
-                placeholder || `Enter ${entityName.toLowerCase()} name`
+                placeholder ||
+                `${i18n.t(k.ENTER)} ${entityName.toLowerCase()} ${i18n.t(k.NAME1)}`
               }
               required
               className="w-full  focus-visible:border focus-visible:border-neutral-200 focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"
             />
           </div>
           <Button type="submit" className="w-full">
-            Create {entityName}
+            {i18n.t(k.CREATE1)} {entityName}
           </Button>
         </form>
       </DialogContent>

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { FiCheck, FiChevronDown, FiXCircle } from "react-icons/fi";
 import { CustomDropdown } from "../../Dropdown";
 
@@ -7,6 +9,7 @@ interface Option {
   displayName?: string;
   icon?: JSX.Element;
 }
+
 export function FilterDropdown({
   options,
   selected,

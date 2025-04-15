@@ -52,6 +52,7 @@
     "date-fns": "^3.6.0",
     "favicon-fetch": "^1.0.0",
     "formik": "^2.2.9",
+    "i18next": "^24.2.3",
     "js-cookie": "^3.0.5",
     "katex": "^0.16.17",
     "lodash": "^4.17.21",

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
@@ -76,16 +78,20 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
           {currentLlmName
             ? getDisplayNameForModel(currentLlmName)
             : userSettings
-              ? "System Default"
-              : "User Default"}
+            ? i18n.t(k.SYSTEM_DEFAULT)
+            : i18n.t(k.USER_DEFAULT)}
         </SelectValue>
       </SelectTrigger>
       <SelectContent className="z-[99999]">
         <SelectItem className="flex" hideCheck value="default">
-          <span>{userSettings ? "System Default" : "User Default"}</span>
+          <span>
+            {userSettings ? i18n.t(k.SYSTEM_DEFAULT) : i18n.t(k.USER_DEFAULT)}
+          </span>
           {userSettings && (
             <span className=" my-auto font-normal ml-1">
-              ({defaultModelDisplayName})
+              {i18n.t(k._4)}
+              {defaultModelDisplayName}
+              {i18n.t(k._5)}
             </span>
           )}
         </SelectItem>

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { StandardAnswerCategory, StandardAnswer } from "@/lib/types";
@@ -100,8 +102,8 @@ export const StandardAnswerCreationForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
                 message: isUpdate
-                  ? `Error updating Standard Answer - ${errorMsg}`
-                  : `Error creating Standard Answer - ${errorMsg}`,
+                  ? `${i18n.t(k.ERROR_UPDATING_STANDARD_ANSWER)} ${errorMsg}`
+                  : `${i18n.t(k.ERROR_CREATING_STANDARD_ANSWER)} ${errorMsg}`,
                 type: "error",
               });
             }
@@ -140,6 +142,7 @@ export const StandardAnswerCreationForm = ({
                 label="Match regex"
                 name="matchRegex"
               />
+
               {values.matchRegex ? null : (
                 <SelectorFormField
                   defaultValue={`all`}
@@ -148,11 +151,11 @@ export const StandardAnswerCreationForm = ({
                   name="matchAnyKeywords"
                   options={[
                     {
-                      name: "All keywords",
+                      name: i18n.t(k.ALL_KEYWORDS),
                       value: "all",
                     },
                     {
-                      name: "Any keywords",
+                      name: i18n.t(k.ANY_KEYWORDS),
                       value: "any",
                     },
                   ]}
@@ -208,7 +211,7 @@ export const StandardAnswerCreationForm = ({
                   disabled={isSubmitting}
                   className="mx-auto w-64"
                 >
-                  {isUpdate ? "Update!" : "Create!"}
+                  {isUpdate ? i18n.t(k.UPDATE1) : i18n.t(k.CREATE)}
                 </Button>
               </div>
             </Form>

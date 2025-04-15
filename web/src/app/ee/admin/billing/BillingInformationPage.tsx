@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -41,21 +43,23 @@ export default function BillingInformationPage() {
   }, [setPopup]);
 
   if (isLoading) {
-    return <div className="text-center py-8">Loading...</div>;
+    return <div className="text-center py-8">{i18n.t(k.LOADING)}</div>;
   }
 
   if (error) {
     console.error("Failed to fetch billing information:", error);
     return (
       <div className="text-center py-8 text-red-500">
-        Error loading billing information. Please try again later.
+        {i18n.t(k.ERROR_LOADING_BILLING_INFORMAT)}
       </div>
     );
   }
 
   if (!billingInformation) {
     return (
-      <div className="text-center py-8">No billing information available.</div>
+      <div className="text-center py-8">
+        {i18n.t(k.NO_BILLING_INFORMATION_AVAILAB)}
+      </div>
     );
   }
 
@@ -92,7 +96,7 @@ export default function BillingInformationPage() {
         <CardHeader>
           <CardTitle className="text-2xl font-bold flex items-center">
             <CreditCard className="mr-4 text-muted-foreground" size={24} />
-            Subscription Details
+            {i18n.t(k.SUBSCRIPTION_DETAILS)}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -104,16 +108,16 @@ export default function BillingInformationPage() {
       <Card className="shadow-md">
         <CardHeader>
           <CardTitle className="text-xl font-semibold">
-            Manage Subscription
+            {i18n.t(k.MANAGE_SUBSCRIPTION)}
           </CardTitle>
           <CardDescription>
-            View your plan, update payment, or change subscription
+            {i18n.t(k.VIEW_YOUR_PLAN_UPDATE_PAYMENT)}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Button onClick={handleManageSubscription} className="w-full">
             <ArrowFatUp className="mr-2" size={16} />
-            Manage Subscription
+            {i18n.t(k.MANAGE_SUBSCRIPTION)}
           </Button>
         </CardContent>
       </Card>
