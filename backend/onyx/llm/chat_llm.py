@@ -412,6 +412,9 @@ class DefaultMultiLLM(LLM):
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
 
+        if "vertex_credentials" not in self._model_kwargs:
+            self._model_kwargs["vertex_credentials"] = self.config.credentials_file
+
         try:
             return litellm.completion(
                 mock_response=MOCK_LLM_RESPONSE,
@@ -457,14 +460,7 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **{
-                    "vertex_credentials": (
-                        self.config.credentials_file
-                        if self.config.model_provider == "vertex_ai"
-                        else None
-                    ),
-                    **self._model_kwargs,
-                },
+                **self._model_kwargs,
             )
         except Exception as e:
             self._record_error(processed_prompt, e)
