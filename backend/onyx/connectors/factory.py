@@ -9,6 +9,7 @@ from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.airtable.airtable_connector import AirtableConnector
 from onyx.connectors.asana.connector import AsanaConnector
 from onyx.connectors.axero.connector import AxeroConnector
+from onyx.connectors.bitrix.connector import BitrixConnector
 from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.bookstack.connector import BookstackConnector
 from onyx.connectors.clickup.connector import ClickupConnector
@@ -41,12 +42,15 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.linear.connector import LinearConnector
 from onyx.connectors.loopio.connector import LoopioConnector
+from onyx.connectors.mailru.connector import MailRuConnector
 from onyx.connectors.mediawiki.wiki import MediaWikiConnector
+from onyx.connectors.minio.connector import MinioConnector
 from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.onyx_jira.connector import JiraConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
+from onyx.connectors.redmine.connector import RedmineConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.slab.connector import SlabConnector
@@ -120,6 +124,10 @@ def identify_connector_class(
         DocumentSource.EGNYTE: EgnyteConnector,
         DocumentSource.AIRTABLE: AirtableConnector,
         DocumentSource.HIGHSPOT: HighspotConnector,
+        DocumentSource.REDMINE: RedmineConnector,
+        DocumentSource.BITRIX: BitrixConnector,
+        DocumentSource.MAILRU: MailRuConnector,
+        DocumentSource.MINIO: MinioConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }

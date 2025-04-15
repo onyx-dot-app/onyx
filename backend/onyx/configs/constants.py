@@ -182,6 +182,11 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    REDMINE = "redmine"
+    BITRIX = "bitrix"
+    MINIO = "minio"
+    YANDEX = "yandex"
+    MAILRU = "mailru"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
