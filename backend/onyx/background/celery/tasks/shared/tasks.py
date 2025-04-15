@@ -16,6 +16,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
@@ -364,6 +365,6 @@ def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:
     """
     time_start = time.monotonic()
     r: Redis = get_redis_client()
-    r.set("onyx:celery:beat:heartbeat", 1, ex=600)
+    r.set(ONYX_CELERY_BEAT_HEARTBEAT_KEY, 1, ex=600)
     time_elapsed = time.monotonic() - time_start
     task_logger.info(f"celery_beat_heartbeat finished: " f"elapsed={time_elapsed:.2f}")
