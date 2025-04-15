@@ -457,14 +457,14 @@ class DefaultMultiLLM(LLM):
                     if structured_response_format
                     else {}
                 ),
-                **(
-                    {
-                        "vertex_credentials": self.config.credentials_file,
-                    }
-                    if self.config.model_provider == "vertex_ai"
-                    else {}
-                ),
-                **self._model_kwargs,
+                **{
+                    "vertex_credentials": (
+                        self.config.credentials_file
+                        if self.config.model_provider == "vertex_ai"
+                        else None
+                    ),
+                    **self._model_kwargs,
+                },
             )
         except Exception as e:
             self._record_error(processed_prompt, e)
