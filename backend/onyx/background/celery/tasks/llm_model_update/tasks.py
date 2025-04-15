@@ -114,7 +114,7 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
 
         # Add new models
         for available_model_name in available_models:
-            db_session.add(
+            db_session.merge(
                 ModelConfiguration(
                     llm_provider_id=default_provider.id,
                     name=available_model_name,
