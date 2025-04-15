@@ -320,6 +320,135 @@ def list_llm_provider_basics(
     return llm_provider_list
 
 
+@basic_router.get("/human_readable_model_names_map")
+def get_human_readable_model_names_map(
+    _user: User | None = Depends(current_admin_user),
+    _db_session: Session = Depends(get_session),
+) -> dict[str, str]:
+    return {
+        # OpenAI models
+        "o1-2025-12-17": "o1 (December 2025)",
+        "o3-mini": "o3 Mini",
+        "o1-mini": "o1 Mini",
+        "o1-preview": "o1 Preview",
+        "o1": "o1",
+        "gpt-4": "GPT 4",
+        "gpt-4o": "GPT 4o",
+        "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
+        "gpt-4o-mini": "GPT 4o Mini",
+        "gpt-4-0314": "GPT 4 (March 2023)",
+        "gpt-4-0613": "GPT 4 (June 2023)",
+        "gpt-4-32k-0314": "GPT 4 32k (March 2023)",
+        "gpt-4-turbo": "GPT 4 Turbo",
+        "gpt-4-turbo-preview": "GPT 4 Turbo (Preview)",
+        "gpt-4-1106-preview": "GPT 4 Turbo (November 2023)",
+        "gpt-4-vision-preview": "GPT 4 Vision (Preview)",
+        "gpt-3.5-turbo": "GPT 3.5 Turbo",
+        "gpt-3.5-turbo-0125": "GPT 3.5 Turbo (January 2024)",
+        "gpt-3.5-turbo-1106": "GPT 3.5 Turbo (November 2023)",
+        "gpt-3.5-turbo-16k": "GPT 3.5 Turbo 16k",
+        "gpt-3.5-turbo-0613": "GPT 3.5 Turbo (June 2023)",
+        "gpt-3.5-turbo-16k-0613": "GPT 3.5 Turbo 16k (June 2023)",
+        "gpt-3.5-turbo-0301": "GPT 3.5 Turbo (March 2023)",
+        # Amazon models
+        "amazon.nova-micro@v1": "Amazon Nova Micro",
+        "amazon.nova-lite@v1": "Amazon Nova Lite",
+        "amazon.nova-pro@v1": "Amazon Nova Pro",
+        # Meta models
+        "llama-3.2-90b-vision-instruct": "Llama 3.2 90B",
+        "llama-3.2-11b-vision-instruct": "Llama 3.2 11B",
+        "llama-3.3-70b-instruct": "Llama 3.3 70B",
+        # Microsoft models
+        "phi-3.5-mini-instruct": "Phi 3.5 Mini",
+        "phi-3.5-moe-instruct": "Phi 3.5 MoE",
+        "phi-3.5-vision-instruct": "Phi 3.5 Vision",
+        "phi-4": "Phi 4",
+        # Deepseek Models
+        "deepseek-r1": "DeepSeek R1",
+        # Anthropic models
+        "claude-3-opus-20240229": "Claude 3 Opus",
+        "claude-3-sonnet-20240229": "Claude 3 Sonnet",
+        "claude-3-haiku-20240307": "Claude 3 Haiku",
+        "claude-2.1": "Claude 2.1",
+        "claude-2.0": "Claude 2.0",
+        "claude-instant-1.2": "Claude Instant 1.2",
+        "claude-3-5-sonnet-20240620": "Claude 3.5 Sonnet (June 2024)",
+        "claude-3-5-sonnet-20241022": "Claude 3.5 Sonnet",
+        "claude-3-7-sonnet-20250219": "Claude 3.7 Sonnet",
+        "claude-3-5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
+        "claude-3.5-sonnet-v2@20241022": "Claude 3.5 Sonnet",
+        "claude-3-5-haiku-20241022": "Claude 3.5 Haiku",
+        "claude-3-5-haiku@20241022": "Claude 3.5 Haiku",
+        "claude-3.5-haiku@20241022": "Claude 3.5 Haiku",
+        "claude-3.7-sonnet@202502019": "Claude 3.7 Sonnet",
+        "claude-3-7-sonnet-202502019": "Claude 3.7 Sonnet",
+        # Google Models
+        # 2.5 pro models
+        "gemini-2.5-pro-exp-03-25": "Gemini 2.5 Pro (Experimental March 25th)",
+        # 2.0 flash lite models
+        "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
+        "gemini-2.0-flash-lite-001": "Gemini 2.0 Flash Lite (v1)",
+        # "gemini-2.0-flash-lite-preview-02-05": "Gemini 2.0 Flash Lite (Prv)",
+        # "gemini-2.0-pro-exp-02-05": "Gemini 2.0 Pro (Exp)",
+        # 2.0 flash models
+        "gemini-2.0-flash": "Gemini 2.0 Flash",
+        "gemini-2.0-flash-001": "Gemini 2.0 Flash (v1)",
+        "gemini-2.0-flash-exp": "Gemini 2.0 Flash (Experimental)",
+        # "gemini-2.0-flash-thinking-exp-01-02":
+        #   "Gemini 2.0 Flash Thinking (Experimental January 2nd)",
+        # "gemini-2.0-flash-thinking-exp-01-21":
+        #   "Gemini 2.0 Flash Thinking (Experimental January 21st)",
+        # 1.5 pro models
+        "gemini-1.5-pro": "Gemini 1.5 Pro",
+        "gemini-1.5-pro-latest": "Gemini 1.5 Pro (Latest)",
+        "gemini-1.5-pro-001": "Gemini 1.5 Pro (v1)",
+        "gemini-1.5-pro-002": "Gemini 1.5 Pro (v2)",
+        # 1.5 flash models
+        "gemini-1.5-flash": "Gemini 1.5 Flash",
+        "gemini-1.5-flash-latest": "Gemini 1.5 Flash (Latest)",
+        "gemini-1.5-flash-002": "Gemini 1.5 Flash (v2)",
+        "gemini-1.5-flash-001": "Gemini 1.5 Flash (v1)",
+        # Mistral Models
+        "mistral-large-2411": "Mistral Large 24.11",
+        "mistral-large@2411": "Mistral Large 24.11",
+        "ministral-3b": "Ministral 3B",
+        # Bedrock models
+        "meta.llama3-1-70b-instruct-v1:0": "Llama 3.1 70B",
+        "meta.llama3-1-8b-instruct-v1:0": "Llama 3.1 8B",
+        "meta.llama3-70b-instruct-v1:0": "Llama 3 70B",
+        "meta.llama3-2-1b-instruct-v1:0": "Llama 3.2 1B",
+        "meta.llama3-2-3b-instruct-v1:0": "Llama 3.2 3B",
+        "meta.llama3-2-11b-instruct-v1:0": "Llama 3.2 11B",
+        "meta.llama3-2-90b-instruct-v1:0": "Llama 3.2 90B",
+        "meta.llama3-8b-instruct-v1:0": "Llama 3 8B",
+        "meta.llama2-70b-chat-v1": "Llama 2 70B",
+        "meta.llama2-13b-chat-v1": "Llama 2 13B",
+        "cohere.command-r-v1:0": "Command R",
+        "cohere.command-r-plus-v1:0": "Command R Plus",
+        "cohere.command-light-text-v14": "Command Light Text",
+        "cohere.command-text-v14": "Command Text",
+        "anthropic.claude-instant-v1": "Claude Instant",
+        "anthropic.claude-v2:1": "Claude v2.1",
+        "anthropic.claude-v2": "Claude v2",
+        "anthropic.claude-v1": "Claude v1",
+        "anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0": "Claude 3.7 Sonnet",
+        "anthropic.claude-3-opus-20240229-v1:0": "Claude 3 Opus",
+        "anthropic.claude-3-haiku-20240307-v1:0": "Claude 3 Haiku",
+        "anthropic.claude-3-5-sonnet-20240620-v1:0": "Claude 3.5 Sonnet",
+        "anthropic.claude-3-5-sonnet-20241022-v2:0": "Claude 3.5 Sonnet (New)",
+        "anthropic.claude-3-sonnet-20240229-v1:0": "Claude 3 Sonnet",
+        "mistral.mistral-large-2402-v1:0": "Mistral Large",
+        "mistral.mixtral-8x7b-instruct-v0:1": "Mixtral 8x7B Instruct",
+        "mistral.mistral-7b-instruct-v0:2": "Mistral 7B Instruct",
+        "amazon.titan-text-express-v1": "Titan Text Express",
+        "amazon.titan-text-lite-v1": "Titan Text Lite",
+        "ai21.jamba-instruct-v1:0": "Jamba Instruct",
+        "ai21.j2-ultra-v1": "J2 Ultra",
+        "ai21.j2-mid-v1": "J2 Mid",
+    }
+
+
 @admin_router.get("/provider-contextual-cost")
 def get_provider_contextual_cost(
     _: User | None = Depends(current_admin_user),

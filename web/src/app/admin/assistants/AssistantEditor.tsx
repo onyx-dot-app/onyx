@@ -21,7 +21,11 @@ import {
 } from "@/components/admin/connectors/Field";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  useHumanReadableModelNamesMap,
+  useLabels,
+} from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
@@ -145,6 +149,7 @@ export function AssistantEditor({
   shouldAddAssistantToUserPreferences?: boolean;
   admin?: boolean;
 }) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -207,7 +212,7 @@ export function AssistantEditor({
   llmProviders.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_names.map((modelName) => {
       return {
-        name: getDisplayNameForModel(modelName),
+        name: getHumanReadableName(humanReadableModelNamesMap, modelName),
         value: modelName,
       };
     });

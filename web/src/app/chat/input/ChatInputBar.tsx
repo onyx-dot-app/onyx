@@ -6,7 +6,12 @@ import { Persona } from "@/app/admin/assistants/interfaces";
 import LLMPopover from "./LLMPopover";
 import { InputPrompt } from "@/app/chat/interfaces";
 
-import { FilterManager, getDisplayNameForModel, LlmManager } from "@/lib/hooks";
+import {
+  FilterManager,
+  getHumanReadableName,
+  LlmManager,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 import { useChatContext } from "@/components/context/ChatContext";
 import { ChatFileType, FileDescriptor } from "../interfaces";
 import {
@@ -231,6 +236,8 @@ export function ChatInputBar({
   proSearchEnabled,
   setProSearchEnabled,
 }: ChatInputBarProps) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
+
   const { user } = useUser();
   const {
     selectedFiles,
@@ -809,8 +816,10 @@ export function ChatInputBar({
                         minimize
                         toggle
                         flexPriority="stiff"
-                        name={getDisplayNameForModel(
-                          llmManager?.currentLlm.modelName || "Models"
+                        name={getHumanReadableName(
+                          humanReadableModelNamesMap,
+                          llmManager?.currentLlm.modelName,
+                          "Models"
                         )}
                         Icon={getProviderIcon(
                           llmManager?.currentLlm.provider || "anthropic",

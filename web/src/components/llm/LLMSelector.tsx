@@ -1,5 +1,8 @@
 import React from "react";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
   destructureValue,
@@ -33,11 +36,15 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   requiresImageGeneration,
 }) => {
   const seenModelNames = new Set();
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
 
   const llmOptions = llmProviders.flatMap((provider) => {
     return (provider.display_model_names || provider.model_names)
       .filter((modelName) => {
-        const displayName = getDisplayNameForModel(modelName);
+        const displayName = getHumanReadableName(
+          humanReadableModelNamesMap,
+          modelName
+        );
         if (seenModelNames.has(displayName)) {
           return false;
         }
@@ -45,7 +52,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         return true;
       })
       .map((modelName) => ({
-        name: getDisplayNameForModel(modelName),
+        name: getHumanReadableName(humanReadableModelNamesMap, modelName),
         value: structureValue(provider.name, provider.provider, modelName),
         icon: getProviderIcon(provider.provider, modelName),
       }));
@@ -57,7 +64,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
 
   const defaultModelName = defaultProvider?.default_model_name;
   const defaultModelDisplayName = defaultModelName
-    ? getDisplayNameForModel(defaultModelName)
+    ? getHumanReadableName(humanReadableModelNamesMap, defaultModelName)
     : null;
 
   const destructuredCurrentValue = currentLlm
@@ -74,7 +81,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
       <SelectTrigger className="min-w-40">
         <SelectValue>
           {currentLlmName
-            ? getDisplayNameForModel(currentLlmName)
+            ? getHumanReadableName(humanReadableModelNamesMap, currentLlmName)
             : userSettings
               ? "System Default"
               : "User Default"}

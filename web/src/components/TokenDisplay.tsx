@@ -4,7 +4,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 
 interface TokenDisplayProps {
   totalTokens: number;
@@ -21,6 +24,8 @@ export function TokenDisplay({
   tokenPercentage,
   selectedModel,
 }: TokenDisplayProps) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
+
   return (
     <div className="flex items-center">
       <TooltipProvider>
@@ -48,9 +53,12 @@ export function TokenDisplay({
           <TooltipContent side="bottom" className="max-w-sm">
             <p className="text-xs max-w-xs">
               Maximum tokens for default model{" "}
-              {getDisplayNameForModel(selectedModel.modelName)}, if exceeded,
-              chat will run a search over the documents rather than including
-              all of the contents.
+              {getHumanReadableName(
+                humanReadableModelNamesMap,
+                selectedModel.modelName
+              )}
+              , if exceeded, chat will run a search over the documents rather
+              than including all of the contents.
             </p>
           </TooltipContent>
         </Tooltip>

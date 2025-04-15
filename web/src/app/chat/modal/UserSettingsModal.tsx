@@ -1,6 +1,10 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
-import { getDisplayNameForModel, LlmDescriptor } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  LlmDescriptor,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
 
 import { destructureValue, structureValue } from "@/lib/llm/utils";
@@ -43,6 +47,8 @@ export function UserSettingsModal({
   onClose: () => void;
   defaultModel: string | null;
 }) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
+
   const {
     refreshUser,
     user,
@@ -105,7 +111,7 @@ export function UserSettingsModal({
   llmProviders.forEach((llmProvider) => {
     const providerOptions = llmProvider.model_names.map(
       (modelName: string) => ({
-        name: getDisplayNameForModel(modelName),
+        name: getHumanReadableName(humanReadableModelNamesMap, modelName),
         value: modelName,
       })
     );

@@ -1,7 +1,8 @@
 import { useChatContext } from "@/components/context/ChatContext";
 import {
-  getDisplayNameForModel,
+  getHumanReadableName,
   LlmDescriptor,
+  useHumanReadableModelNamesMap,
   useLlmManager,
 } from "@/lib/hooks";
 
@@ -24,6 +25,7 @@ export default function RegenerateOption({
   overriddenModel?: string;
   onDropdownVisibleChange: (isVisible: boolean) => void;
 }) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
   const { llmProviders } = useChatContext();
   const llmManager = useLlmManager(llmProviders);
   const [isOpen, setIsOpen] = useState(false);
@@ -47,7 +49,10 @@ export default function RegenerateOption({
             <Hoverable
               size={16}
               icon={FiRefreshCw as IconType}
-              hoverText={getDisplayNameForModel(overriddenModel)}
+              hoverText={getHumanReadableName(
+                humanReadableModelNamesMap,
+                overriddenModel
+              )}
             />
           )}
         </div>

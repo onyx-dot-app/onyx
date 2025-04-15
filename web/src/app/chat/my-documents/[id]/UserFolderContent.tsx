@@ -21,7 +21,10 @@ import { Input } from "@/components/ui/input";
 import { DeleteEntityModal } from "@/components/DeleteEntityModal";
 import { MoveFolderModal } from "@/components/MoveFolderModal";
 import { FolderResponse } from "../DocumentsContext";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 import { TokenDisplay } from "@/components/TokenDisplay";
 import {
   Tooltip,
@@ -137,6 +140,8 @@ interface UploadProgress {
 }
 
 export default function UserFolderContent({ folderId }: { folderId: number }) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
+
   const router = useRouter();
   const { llmProviders } = useChatContext();
   const { popup, setPopup } = usePopup();
@@ -774,7 +779,10 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           tokenPercentage={tokenPercentage}
           totalTokens={totalTokens}
           maxTokens={maxTokens}
-          selectedModelName={getDisplayNameForModel(selectedModel.modelName)}
+          selectedModelName={getHumanReadableName(
+            humanReadableModelNamesMap,
+            selectedModel.modelName
+          )}
           searchQuery={searchQuery}
           sortType={sortType}
           sortDirection={sortDirection}

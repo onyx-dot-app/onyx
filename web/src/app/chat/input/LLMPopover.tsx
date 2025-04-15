@@ -4,7 +4,10 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 import {
   checkLLMSupportsImageInput,
   destructureValue,
@@ -49,6 +52,8 @@ export default function LLMPopover({
   onSelect,
   currentModelName,
 }: LLMPopoverProps) {
+  const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
+
   const [isOpen, setIsOpen] = useState(false);
   const { user } = useUser();
 
@@ -98,7 +103,7 @@ export default function LLMPopover({
 
       const defaultModelName = defaultProvider?.default_model_name;
       const defaultModelDisplayName = defaultModelName
-        ? getDisplayNameForModel(defaultModelName)
+        ? getHumanReadableName(humanReadableModelNamesMap, defaultModelName)
         : null;
 
       return {
@@ -107,7 +112,7 @@ export default function LLMPopover({
         defaultProvider,
         defaultModelDisplayName,
       };
-    }, [llmProviders]);
+    }, [humanReadableModelNamesMap, llmProviders]);
 
   const [localTemperature, setLocalTemperature] = useState(
     llmManager.temperature ?? 0.5
@@ -142,10 +147,10 @@ export default function LLMPopover({
               minimize
               toggle
               flexPriority="stiff"
-              name={getDisplayNameForModel(
-                llmManager?.currentLlm.modelName ||
-                  defaultModelDisplayName ||
-                  "Models"
+              name={getHumanReadableName(
+                humanReadableModelNamesMap,
+                llmManager?.currentLlm.modelName,
+                defaultModelDisplayName ?? "Models"
               )}
               Icon={getProviderIcon(
                 llmManager?.currentLlm.provider ||
@@ -191,7 +196,12 @@ export default function LLMPopover({
                     size: 16,
                     className: "flex-none my-auto text-black",
                   })}
-                  <TruncatedText text={getDisplayNameForModel(name)} />
+                  <TruncatedText
+                    text={getHumanReadableName(
+                      humanReadableModelNamesMap,
+                      name
+                    )}
+                  />
                   {(() => {
                     if (currentAssistant?.llm_model_version_override === name) {
                       return (

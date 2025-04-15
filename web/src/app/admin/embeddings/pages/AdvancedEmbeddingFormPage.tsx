@@ -18,7 +18,10 @@ import NumberInput from "../../connectors/[connector]/pages/ConnectorInput/Numbe
 import { StringOrNumberOption } from "@/components/Dropdown";
 import useSWR from "swr";
 import { LLM_CONTEXTUAL_COST_ADMIN_URL } from "../../configuration/llm/constants";
-import { getDisplayNameForModel } from "@/lib/hooks";
+import {
+  getHumanReadableName,
+  useHumanReadableModelNamesMap,
+} from "@/lib/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 
 // Number of tokens to show cost calculation for
@@ -56,6 +59,8 @@ const AdvancedEmbeddingFormPage = forwardRef<
     },
     ref
   ) => {
+    const humanReadableModelNamesMap = useHumanReadableModelNamesMap();
+
     // Fetch contextual costs
     const { data: contextualCosts, error: costError } = useSWR<
       LLMContextualCost[]
@@ -65,11 +70,14 @@ const AdvancedEmbeddingFormPage = forwardRef<
       () =>
         (contextualCosts || []).map((cost) => {
           return {
-            name: getDisplayNameForModel(cost.model_name),
+            name: getHumanReadableName(
+              humanReadableModelNamesMap,
+              cost.model_name
+            ),
             value: cost.model_name,
           };
         }),
-      [contextualCosts]
+      [humanReadableModelNamesMap, contextualCosts]
     );
 
     // Helper function to format cost as USD
@@ -252,7 +260,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
                           <button
                             type="button"
                             onClick={() => remove(index)}
-                            className={`p-2 my-auto bg-input flex-none rounded-md 
+                            className={`p-2 my-auto bg-input flex-none rounded-md
                               bg-red-500 text-white hover:bg-red-600
                               focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50`}
                           >
@@ -351,9 +359,9 @@ const AdvancedEmbeddingFormPage = forwardRef<
               />
 
               <NumberInput
-                description="Number of dimensions to reduce the embedding to. 
-              Will reduce memory usage but may reduce accuracy. 
-              If not specified, will just use the selected model's default dimensionality without any reduction. 
+                description="Number of dimensions to reduce the embedding to.
+              Will reduce memory usage but may reduce accuracy.
+              If not specified, will just use the selected model's default dimensionality without any reduction.
               Currently only supported for OpenAI embedding models"
                 optional={true}
                 label="Reduced Dimension"
