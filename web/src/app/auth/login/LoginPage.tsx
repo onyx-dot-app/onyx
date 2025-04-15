@@ -43,7 +43,7 @@ export default function LoginPage({
       )}
 
       {authTypeMetadata?.authType === "cloud" && (
-        <div className="mt-4 w-full justify-center">
+        <div className="w-full justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
             <LoginText />
           </h2>
