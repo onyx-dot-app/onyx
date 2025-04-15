@@ -91,9 +91,9 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
 
         # log change if any
         old_models = set(
-            map(
-                lambda model_configuration: model_configuration.name,
-                fetch_model_configurations(db_session, default_provider.id),
+            model_configuration.name
+            for model_configuration in fetch_model_configurations(
+                db_session, default_provider.id
             )
         )
         new_models = set(available_models)

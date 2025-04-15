@@ -54,12 +54,8 @@ class LLMProviderDescriptor(BaseModel):
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             model_configurations=list(
-                map(
-                    lambda model_configuration_model: ModelConfiguration.from_model(
-                        model_configuration_model
-                    ),
-                    model_configuration_models,
-                )
+                ModelConfiguration.from_model(model_configuration_model)
+                for model_configuration_model in model_configuration_models
             ),
         )
 

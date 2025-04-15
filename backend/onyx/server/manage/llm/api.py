@@ -283,10 +283,12 @@ def get_vision_capable_providers(
         vision_models = []
 
         # Check model names in priority order
-        model_names_to_check = map(
-            lambda model_configuration: model_configuration.name,
-            fetch_model_configurations(db_session, provider.id),
-        )
+        model_names_to_check = [
+            model_configuration.name
+            for model_configuration in fetch_model_configurations(
+                db_session, provider.id
+            )
+        ]
 
         # Check each model for vision capability
         for model_name in model_names_to_check:
