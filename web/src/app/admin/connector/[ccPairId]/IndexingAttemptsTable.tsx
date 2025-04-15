@@ -15,13 +15,9 @@ import { CCPairFullInfo } from "./types";
 import { IndexAttemptSnapshot } from "@/lib/types";
 import { IndexAttemptStatus } from "@/components/Status";
 import { PageSelector } from "@/components/PageSelector";
-import { ThreeDotsLoader } from "@/components/Loading";
-import { buildCCPairInfoUrl } from "./lib";
 import { localizeAndPrettify } from "@/lib/time";
 import { getDocsProcessedPerMinute } from "@/lib/indexAttempt";
-import { ErrorCallout } from "@/components/ErrorCallout";
-import { InfoIcon, SearchIcon } from "@/components/icons/icons";
-import Link from "next/link";
+import { InfoIcon } from "@/components/icons/icons";
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 import {
   Tooltip,
@@ -29,10 +25,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import usePaginatedFetch from "@/hooks/usePaginatedFetch";
-
-const ITEMS_PER_PAGE = 8;
-const PAGES_PER_BATCH = 8;
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -84,14 +76,14 @@ export function IndexingAttemptsTable({
           <TableRow>
             <TableHead>Time Started</TableHead>
             <TableHead>Status</TableHead>
-            <TableHead>New Doc Cnt</TableHead>
+            <TableHead className="whitespace-nowrap">New Docs</TableHead>
             <TableHead>
-              <div className="w-fit">
+              <div className="w-fit whitespace-nowrap">
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="cursor-help flex items-center">
-                        Total Doc Cnt
+                        Total Docs
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>
                     </TooltipTrigger>

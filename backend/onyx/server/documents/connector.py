@@ -783,6 +783,7 @@ def get_connector_indexing_status(
                 name=cc_pair.name,
                 in_progress=in_progress,
                 cc_pair_status=cc_pair.status,
+                in_repeated_error_state=cc_pair.in_repeated_error_state,
                 connector=ConnectorSnapshot.from_connector_db_model(
                     connector, connector_to_cc_pair_ids.get(connector.id, [])
                 ),

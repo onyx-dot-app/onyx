@@ -101,6 +101,13 @@ class LLMProviderView(LLMProvider):
         llm_provider_model: "LLMProviderModel",
         model_configuration_models: list["ModelConfigurationModel"],
     ) -> "LLMProviderView":
+        # Safely get groups - handle detached instance case
+        try:
+            groups = [group.id for group in llm_provider_model.groups]
+        except Exception:
+            # If groups relationship can't be loaded (detached instance), use empty list
+            groups = []
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -115,7 +122,7 @@ class LLMProviderView(LLMProvider):
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             is_public=llm_provider_model.is_public,
-            groups=[group.id for group in llm_provider_model.groups],
+            groups=groups,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=list(
                 map(

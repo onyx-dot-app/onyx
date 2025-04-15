@@ -43,7 +43,6 @@ from onyx.connectors.google_utils.google_utils import execute_paginated_retrieva
 from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_drive_service
-from onyx.connectors.google_utils.resources import get_google_docs_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -52,7 +51,7 @@ from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_S
 from onyx.connectors.google_utils.shared_constants import ONYX_SCOPE_INSTRUCTIONS
 from onyx.connectors.google_utils.shared_constants import SLIM_BATCH_SIZE
 from onyx.connectors.google_utils.shared_constants import USER_FIELDS
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
@@ -62,7 +61,6 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import EntityFailure
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.utils.lazy import lazy_eval
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
@@ -84,36 +82,6 @@ def _extract_str_list_from_comma_str(string: str | None) -> list[str]:
 
 def _extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
-
-
-def _convert_single_file(
-    creds: Any,
-    allow_images: bool,
-    size_threshold: int,
-    retriever_email: str,
-    file: dict[str, Any],
-) -> Document | ConnectorFailure | None:
-    # We used to always get the user email from the file owners when available,
-    # but this was causing issues with shared folders where the owner was not included in the service account
-    # now we use the email of the account that successfully listed the file. Leaving this in case we end up
-    # wanting to retry with file owners and/or admin email at some point.
-    # user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
-
-    user_email = retriever_email
-    # Only construct these services when needed
-    user_drive_service = lazy_eval(
-        lambda: get_drive_service(creds, user_email=user_email)
-    )
-    docs_service = lazy_eval(
-        lambda: get_google_docs_service(creds, user_email=user_email)
-    )
-    return convert_drive_item_to_document(
-        file=file,
-        drive_service=user_drive_service,
-        docs_service=docs_service,
-        allow_images=allow_images,
-        size_threshold=size_threshold,
-    )
 
 
 def _clean_requested_drive_ids(
@@ -165,7 +133,7 @@ class DriveIdStatus(Enum):
     FINISHED = "finished"
 
 
-class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpoint]):
+class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheckpoint]):
     def __init__(
         self,
         include_shared_drives: bool = False,
@@ -963,7 +931,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointConnector[GoogleDriveCheckpo
         try:
             # Prepare a partial function with the credentials and admin email
             convert_func = partial(
-                _convert_single_file,
+                convert_drive_item_to_document,
                 self.creds,
                 self.allow_images,
                 self.size_threshold,

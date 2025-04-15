@@ -69,6 +69,7 @@ class CCPairManager:
         connector_specific_config: dict[str, Any] | None = None,
         credential_json: dict[str, Any] | None = None,
         user_performing_action: DATestUser | None = None,
+        refresh_freq: int | None = None,
     ) -> DATestCCPair:
         connector = ConnectorManager.create(
             name=name,
@@ -78,6 +79,7 @@ class CCPairManager:
             access_type=access_type,
             groups=groups,
             user_performing_action=user_performing_action,
+            refresh_freq=refresh_freq,
         )
         credential = CredentialManager.create(
             credential_json=credential_json,

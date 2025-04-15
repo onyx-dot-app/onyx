@@ -483,14 +483,6 @@ CONTINUE_ON_CONNECTOR_FAILURE = os.environ.get(
 DISABLE_INDEX_UPDATE_ON_SWAP = (
     os.environ.get("DISABLE_INDEX_UPDATE_ON_SWAP", "").lower() == "true"
 )
-# Controls how many worker processes we spin up to index documents in the
-# background. This is useful for speeding up indexing, but does require a
-# fairly large amount of memory in order to increase substantially, since
-# each worker loads the embedding models into memory.
-NUM_INDEXING_WORKERS = int(os.environ.get("NUM_INDEXING_WORKERS") or 1)
-NUM_SECONDARY_INDEXING_WORKERS = int(
-    os.environ.get("NUM_SECONDARY_INDEXING_WORKERS") or NUM_INDEXING_WORKERS
-)
 # More accurate results at the expense of indexing speed and index size (stores additional 4 MINI_CHUNK vectors)
 ENABLE_MULTIPASS_INDEXING = (
     os.environ.get("ENABLE_MULTIPASS_INDEXING", "").lower() == "true"

@@ -487,19 +487,23 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
                         f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
                     )
                 )
+        except Exception:
+            raise RuntimeError(f"search_path not set for {tenant_id}")
         finally:
             cursor.close()
 
-        with Session(bind=connection, expire_on_commit=False) as session:
-            try:
+        try:
+            # automatically rollback or close
+            with Session(bind=connection, expire_on_commit=False) as session:
                 yield session
-            finally:
-                if MULTI_TENANT:
-                    cursor = dbapi_connection.cursor()
-                    try:
-                        cursor.execute('SET search_path TO "$user", public')
-                    finally:
-                        cursor.close()
+        finally:
+            # always reset the search path on exit
+            if MULTI_TENANT:
+                cursor = dbapi_connection.cursor()
+                try:
+                    cursor.execute('SET search_path TO "$user", public')
+                finally:
+                    cursor.close()
 
 
 def set_search_path_on_checkout(

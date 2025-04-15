@@ -56,7 +56,8 @@ def get_total_users_count(db_session: Session) -> int:
 
 async def get_user_count(only_admin_users: bool = False) -> int:
     async with get_async_session_with_tenant() as session:
-        stmt = select(func.count(User.id))
+        count_stmt = func.count(User.id)  # type: ignore
+        stmt = select(count_stmt)
         if only_admin_users:
             stmt = stmt.where(User.role == UserRole.ADMIN)
         result = await session.execute(stmt)
