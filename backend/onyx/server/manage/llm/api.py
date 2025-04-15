@@ -204,7 +204,6 @@ def put_llm_provider(
         llm_provider.display_model_names if llm_provider.display_model_names else []
     )
 
-    # if llm_provider.display_model_names is not None:
     # Ensure default_model_name and fast_default_model_name are in display_model_names
     # This is necessary for custom models and Bedrock/Azure models
     if llm_provider.default_model_name not in llm_provider.model_names:

@@ -137,13 +137,17 @@ def get_default_llm_with_vision(
 
         # Fall back to searching all providers
         providers = fetch_existing_llm_providers(db_session)
+        provider_to_model_configurations = {
+            provider.id: fetch_model_configurations(db_session, provider.id)
+            for provider in providers
+        }
 
     if not providers:
         return None
 
     # Check all providers for viable vision models
     for provider in providers:
-        model_configurations = fetch_model_configurations(db_session, provider.id)
+        model_configurations = provider_to_model_configurations[provider.id]
         provider_view = LLMProviderView.from_model(provider, model_configurations)
 
         # First priority: Check if provider has a default_vision_model

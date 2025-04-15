@@ -250,7 +250,9 @@ def fetch_model_configurations(
 ) -> list[ModelConfiguration]:
     return list(
         db_session.scalars(
-            select(ModelConfiguration).where(ModelConfiguration.id == llm_provider_id)
+            select(ModelConfiguration).where(
+                ModelConfiguration.llm_provider_id == llm_provider_id
+            )
         ).all()
     )
 
