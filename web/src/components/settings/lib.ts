@@ -55,6 +55,8 @@ export async function fetchSettingsSS(): Promise<CombinedSettings | null> {
           pro_search_enabled: true,
           temperature_override_enabled: true,
           query_history_type: QueryHistoryType.NORMAL,
+          search_page_disabled: false,
+          default_page: "chat",
         };
       } else {
         throw new Error(

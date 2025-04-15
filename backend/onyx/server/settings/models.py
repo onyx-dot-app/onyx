@@ -48,6 +48,7 @@ class Settings(BaseModel):
     application_status: ApplicationStatus = ApplicationStatus.ACTIVE
     anonymous_user_enabled: bool | None = None
     pro_search_enabled: bool | None = None
+    search_page_disabled: bool | None = None
 
     temperature_override_enabled: bool | None = False
     auto_scroll: bool | None = False

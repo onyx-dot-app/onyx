@@ -10,7 +10,12 @@ export function SourceIcon({
   sourceType: ValidSources;
   iconSize: number;
 }) {
-  return getSourceMetadata(sourceType).icon({
-    size: iconSize,
-  });
+  try {
+    return getSourceMetadata(sourceType).icon({
+      size: iconSize,
+    });
+  } catch (error) {
+    console.error("Error getting source icon:", error);
+    return null;
+  }
 }

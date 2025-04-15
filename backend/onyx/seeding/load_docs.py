@@ -49,6 +49,7 @@ def _create_indexable_chunks(
 ) -> tuple[list[Document], list[DocMetadataAwareIndexChunk]]:
     ids_to_documents = {}
     chunks = []
+    now = datetime.datetime.now(datetime.timezone.utc)
     for preprocessed_doc in preprocessed_docs:
         document = Document(
             id=preprocessed_doc["url"],  # For Web connector, the URL is the ID
@@ -64,7 +65,7 @@ def _create_indexable_chunks(
             source=DocumentSource.WEB,
             semantic_identifier=preprocessed_doc["title"],
             metadata={},
-            doc_updated_at=None,
+            doc_updated_at=now,
             primary_owners=[],
             secondary_owners=[],
             chunk_count=preprocessed_doc["chunk_ind"] + 1,
@@ -214,6 +215,9 @@ def seed_initial_documents(
     )(cohere_enabled)
 
     docs, chunks = _create_indexable_chunks(processed_docs, tenant_id)
+    for i, doc in enumerate(docs):
+        print(f"{i}: has {doc.doc_updated_at}")
+        print(doc.doc_updated_at)
 
     index_doc_batch_prepare(
         documents=docs,
