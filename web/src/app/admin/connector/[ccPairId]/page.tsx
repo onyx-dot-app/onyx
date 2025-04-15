@@ -33,7 +33,6 @@ import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisp
 import EditPropertyModal from "@/components/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
-
 import * as Yup from "yup";
 import {
   AlertCircle,
@@ -41,7 +40,6 @@ import {
   PauseIcon,
   Trash2Icon,
   RefreshCwIcon,
-  AlertTriangle,
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
@@ -487,10 +485,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
                     ccPair.indexing
                       ? "Cannot re-index while indexing is already in progress"
                       : ccPair.status === ConnectorCredentialPairStatus.PAUSED
-                      ? "Resume the connector before re-indexing"
-                      : ccPair.status === ConnectorCredentialPairStatus.INVALID
-                      ? "Fix the connector configuration before re-indexing"
-                      : undefined
+                        ? "Resume the connector before re-indexing"
+                        : ccPair.status ===
+                            ConnectorCredentialPairStatus.INVALID
+                          ? "Fix the connector configuration before re-indexing"
+                          : undefined
                   }
                 >
                   <RefreshCwIcon className="h-4 w-4" />
