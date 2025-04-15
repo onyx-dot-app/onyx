@@ -227,16 +227,6 @@ if not MULTI_TENANT:
                 },
             },
             {
-                "name": "monitor-celery-beat",
-                "task": OnyxCeleryTask.MONITOR_PROCESS_MEMORY,
-                "schedule": timedelta(minutes=5),
-                "options": {
-                    "priority": OnyxCeleryPriority.LOW,
-                    "expires": BEAT_EXPIRES_DEFAULT,
-                    "queue": OnyxCeleryQueues.MONITORING,
-                },
-            },
-            {
                 "name": "celery-beat-heartbeat",
                 "task": OnyxCeleryTask.CELERY_BEAT_HEARTBEAT,
                 "schedule": timedelta(minutes=1),

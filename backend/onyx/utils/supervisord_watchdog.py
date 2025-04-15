@@ -22,7 +22,7 @@ def main(key: str, program: str, conf: str) -> None:
     consecutive number of times and the last successful lookup is more
     than a threshold time, the specified program will be restarted.
     """
-    logger.info("supervisord_watchdog starting: program={program} conf={conf}")
+    logger.info(f"supervisord_watchdog starting: program={program} conf={conf}")
 
     r = get_redis_client()
 
@@ -45,7 +45,7 @@ def main(key: str, program: str, conf: str) -> None:
 
         # happy path ... just continue
         if heartbeat:
-            logger.info(f"Key lookup succeded: key={key}")
+            logger.debug(f"Key lookup succeeded: key={key}")
             last_heartbeat = time.monotonic()
             num_lookup_failures = 0
             continue
