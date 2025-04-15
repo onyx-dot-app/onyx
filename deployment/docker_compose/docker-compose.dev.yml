@@ -15,7 +15,7 @@ services:
       - inference_model_server
     restart: always
     ports:
-      - "8080:8080"
+      - "8084:8080"
     environment:
       # Auth Settings
       - AUTH_TYPE=${AUTH_TYPE:-disabled}
@@ -61,6 +61,8 @@ services:
       - QA_PROMPT_OVERRIDE=${QA_PROMPT_OVERRIDE:-}
       # Other services
       - POSTGRES_HOST=relational_db
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
       - POSTGRES_API_SERVER_POOL_SIZE=${POSTGRES_API_SERVER_POOL_SIZE:-}
@@ -135,7 +137,7 @@ services:
         max-file: "6"
     # optional, only for debugging purposes
     volumes:
-      - api_server_logs:/var/log
+      - onyx_api_server_logs:/var/log
 
   background:
     image: onyxdotapp/onyx-backend:${IMAGE_TAG:-latest}
@@ -180,8 +182,8 @@ services:
       - QA_PROMPT_OVERRIDE=${QA_PROMPT_OVERRIDE:-}
       # Other Services
       - POSTGRES_HOST=relational_db
-      - POSTGRES_USER=${POSTGRES_USER:-}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-}
+      - POSTGRES_USER=${POSTGRES_USER:-postgres}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
       - POSTGRES_DB=${POSTGRES_DB:-}
       - POSTGRES_DEFAULT_SCHEMA=${POSTGRES_DEFAULT_SCHEMA:-}
       - POSTGRES_USE_NULL_POOL=${POSTGRES_USE_NULL_POOL:-}
@@ -263,7 +265,7 @@ services:
       - "host.docker.internal:host-gateway"
     # optional, only for debugging purposes
     volumes:
-      - background_logs:/var/log
+      - onyx_background_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -331,9 +333,9 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - model_cache_huggingface:/root/.cache/huggingface/
+      - onyx_model_cache_huggingface:/root/.cache/huggingface/
       # optional, only for debugging purposes
-      - inference_model_server_logs:/var/log
+      - onyx_inference_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -365,9 +367,9 @@ services:
       - SENTRY_DSN=${SENTRY_DSN:-}
     volumes:
       # Not necessary, this is just to reduce download time during startup
-      - indexing_huggingface_model_cache:/root/.cache/huggingface/
+      - onyx_indexing_huggingface_model_cache:/root/.cache/huggingface/
       # optional, only for debugging purposes
-      - indexing_model_server_logs:/var/log
+      - onyx_indexing_model_server_logs:/var/log
     logging:
       driver: json-file
       options:
@@ -384,7 +386,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - db_volume:/var/lib/postgresql/data
+      - onyx_db_volume:/var/lib/postgresql/data
 
   # This container name cannot have an underscore in it due to Vespa expectations of the URL
   index:
@@ -394,7 +396,7 @@ services:
       - "19071:19071"
       - "8081:8081"
     volumes:
-      - vespa_volume:/opt/vespa/var
+      - onyx_vespa_volume:/opt/vespa/var
     logging:
       driver: json-file
       options:
@@ -440,13 +442,13 @@ services:
     command: redis-server --save "" --appendonly no
 
 volumes:
-  db_volume:
-  vespa_volume: # Created by the container itself
+  onyx_db_volume:
+  onyx_vespa_volume: # Created by the container itself
 
-  model_cache_huggingface:
-  indexing_huggingface_model_cache:
+  onyx_model_cache_huggingface:
+  onyx_indexing_huggingface_model_cache:
   # for logs that we don't want to lose on container restarts
-  api_server_logs:
-  background_logs:
-  inference_model_server_logs:
-  indexing_model_server_logs:
+  onyx_api_server_logs:
+  onyx_background_logs:
+  onyx_inference_model_server_logs:
+  onyx_indexing_model_server_logs:
