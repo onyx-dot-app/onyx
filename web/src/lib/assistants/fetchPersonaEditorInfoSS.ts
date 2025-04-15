@@ -1,4 +1,4 @@
-import { FullPersona, Persona } from "@/app/admin/assistants/interfaces";
+import { FullPersona } from "@/app/admin/assistants/interfaces";
 import { CCPairBasicInfo, DocumentSet, User } from "../types";
 import { getCurrentUserSS } from "../userSS";
 import { fetchSS } from "../utilsSS";

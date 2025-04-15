@@ -9,7 +9,6 @@ import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import {
-  handleOAuthAuthorizationResponse,
   handleOAuthConfluenceFinalize,
   handleOAuthPrepareFinalization,
 } from "@/lib/oauth_utils";

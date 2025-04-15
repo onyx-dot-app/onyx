@@ -35,7 +35,6 @@ export interface IndexingAttemptsTableProps {
 }
 
 export function IndexingAttemptsTable({
-  ccPair,
   indexAttempts,
   currentPage,
   totalPages,

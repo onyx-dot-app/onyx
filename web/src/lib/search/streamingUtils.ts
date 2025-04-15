@@ -1,4 +1,4 @@
-import { isPacketType, PacketType } from "@/app/chat/lib";
+import { PacketType } from "@/app/chat/lib";
 
 type NonEmptyObject = { [k: string]: any };
 
@@ -11,7 +11,7 @@ const processSingleChunk = <T extends NonEmptyObject>(
     // every complete chunk should be valid JSON
     const chunkJson = JSON.parse(completeChunk);
     return [chunkJson, null];
-  } catch (err) {
+  } catch {
     // if it's not valid JSON, then it's probably an incomplete chunk
     return [null, completeChunk];
   }

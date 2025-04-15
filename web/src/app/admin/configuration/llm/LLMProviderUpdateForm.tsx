@@ -413,7 +413,11 @@ export function LLMProviderUpdateForm({
           {testError && <Text className="text-error mt-2">{testError}</Text>}
 
           <div className="flex w-full mt-4">
-            <Button type="submit" variant="submit">
+            <Button
+              onClick={() => alert(JSON.stringify(formikProps.errors))}
+              type="submit"
+              variant="submit"
+            >
               {isTesting ? (
                 <LoadingAnimation text="Testing" />
               ) : existingLlmProvider ? (

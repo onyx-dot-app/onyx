@@ -22,7 +22,6 @@ import { SearchBar } from "@/components/search/SearchBar";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import PendingUsersTable from "@/components/admin/users/PendingUsersTable";
-import { useUser } from "@/components/user/UserProvider";
 const UsersTables = ({
   q,
   setPopup,

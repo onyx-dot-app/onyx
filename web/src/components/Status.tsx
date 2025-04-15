@@ -9,7 +9,6 @@ import {
   FiMinus,
   FiPauseCircle,
 } from "react-icons/fi";
-import { HoverPopup } from "./HoverPopup";
 import { ConnectorCredentialPairStatus } from "@/app/admin/connector/[ccPairId]/types";
 import {
   Tooltip,

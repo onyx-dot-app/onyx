@@ -1,14 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  FolderIcon,
-  FileIcon,
-  DownloadIcon,
-  TrashIcon,
-  PencilIcon,
-  InfoIcon,
-  CheckIcon,
-  XIcon,
-} from "lucide-react";
+import { FolderIcon, FileIcon, CheckIcon, XIcon } from "lucide-react";
 
 interface FolderItemProps {
   folder: { name: string; id: number };

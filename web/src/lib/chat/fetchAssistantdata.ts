@@ -1,7 +1,6 @@
 import { fetchSS } from "@/lib/utilsSS";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
-import { personaComparator } from "@/app/admin/assistants/lib";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { checkLLMSupportsImageInput } from "../llm/utils";
 import { filterAssistants } from "../assistants/utils";

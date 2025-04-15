@@ -29,7 +29,6 @@ import {
   NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN,
   NEXT_PUBLIC_ENABLE_CHROME_EXTENSION,
 } from "../constants";
-import { redirect } from "next/navigation";
 
 interface FetchChatDataResult {
   user: User | null;

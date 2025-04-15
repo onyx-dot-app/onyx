@@ -65,7 +65,6 @@ import StarterMessagesList from "./StarterMessageList";
 import { SwitchField } from "@/components/ui/switch";
 import { generateIdenticon } from "@/components/assistants/AssistantIcon";
 import { BackButton } from "@/components/BackButton";
-import { Checkbox } from "@/components/ui/checkbox";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -89,16 +88,10 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
-import {
-  FileResponse,
-  FolderResponse,
-} from "@/app/chat/my-documents/DocumentsContext";
-import { RadioGroup } from "@/components/ui/radio-group";
-import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
+
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 
 function findSearchTool(tools: ToolSnapshot[]) {

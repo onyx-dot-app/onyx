@@ -1,10 +1,4 @@
-import {
-  AlertIcon,
-  CheckmarkIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  TriangleAlertIcon,
-} from "@/components/icons/icons";
+import { AlertIcon, TriangleAlertIcon } from "@/components/icons/icons";
 import { useState } from "react";
 
 export type StatusOptions = "in-progress" | "failed" | "warning" | "success";

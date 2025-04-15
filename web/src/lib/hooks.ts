@@ -12,7 +12,7 @@ import useSWR, { mutate, useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "./fetcher";
 import { useContext, useEffect, useMemo, useState } from "react";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
-import { Filters, SourceMetadata } from "./search/interfaces";
+import { SourceMetadata } from "./search/interfaces";
 import {
   destructureValue,
   findProviderForModel,

@@ -17,15 +17,6 @@ import { useDocumentsContext } from "./DocumentsContext";
 import TextView from "@/components/chat/TextView";
 import { TokenDisplay } from "@/components/TokenDisplay";
 import { useChatContext } from "@/components/context/ChatContext";
-import {
-  PDFIcon,
-  TXTIcon,
-  DOCIcon,
-  HTMLIcon,
-  JSONIcon,
-  ImagesIcon,
-  XMLIcon,
-} from "@/components/icons/icons";
 
 enum SortType {
   TimeCreated = "Time Created",

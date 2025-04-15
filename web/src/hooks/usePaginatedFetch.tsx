@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  IndexAttemptSnapshot,
-  AcceptedUserSnapshot,
-  InvitedUserSnapshot,
-} from "@/lib/types";
-import { ChatSessionMinimal } from "@/app/ee/admin/performance/usage/types";
+
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { PaginatedIndexAttemptErrors } from "@/app/admin/connector/[ccPairId]/types";
 
 // Any type that has an id property
 type PaginatedType = {

@@ -2,13 +2,7 @@ import React from "react";
 import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon } from "@/components/chat/sources/SourceCard";
 import { getTimeAgoString } from "@/lib/dateUtils";
-import { FiThumbsUp, FiUser, FiClock } from "react-icons/fi";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { FiThumbsUp, FiClock } from "react-icons/fi";
 
 interface SearchResultItemProps {
   document: OnyxDocument;

@@ -2,18 +2,10 @@
 
 import Cookies from "js-cookie";
 import { SIDEBAR_TOGGLED_COOKIE_NAME } from "@/components/resizable/constants";
-import {
-  ReactNode,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { ReactNode, useCallback, useContext, useRef, useState } from "react";
 import { useSidebarVisibility } from "@/components/chat/hooks";
 import FunctionalHeader from "@/components/chat/Header";
 import { useRouter } from "next/navigation";
-import { pageType } from "../chat/sessionSidebar/types";
 import FixedLogo from "../../components/logo/FixedLogo";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { useChatContext } from "@/components/context/ChatContext";

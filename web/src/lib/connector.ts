@@ -1,4 +1,3 @@
-import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ValidSources } from "./types";
 import {
   Connector,
