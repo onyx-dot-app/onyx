@@ -91,7 +91,7 @@ def test_confluence_connector_restriction_handling(
     doc_access_list = list(doc_access_generator)
     for doc_access in doc_access_list:
         print(doc_access)
-    assert len(doc_access_list) == 6
+    assert len(doc_access_list) == 7
     assert all(
         not doc_access.external_access.is_public for doc_access in doc_access_list
     )
@@ -112,6 +112,11 @@ def test_confluence_connector_restriction_handling(
 
     extra_restricted_emails = {"chris@onyx.app"}
     extra_restricted_user_groups: set[str] = set()
+
+    # note that this is only allowed since yuhong@onyx.app is a member of the
+    # confluence-admins-danswerai group
+    special_restricted_emails = {"chris@onyx.app", "yuhong@onyx.app"}
+    special_restricted_user_groups: set[str] = set()
 
     # Check Root+Page+2 is public
     root_page_2 = next(d for d in doc_access_list if d.doc_id.endswith("Root+Page+2"))
@@ -169,3 +174,13 @@ def test_confluence_connector_restriction_handling(
         child_page_3.external_access.external_user_group_ids
         == extra_restricted_user_groups
     ), "Child page 3 groups do not match expected values"
+
+    # check child page w/ specific restrictions have those applied
+    child_page_4 = next(d for d in doc_access_list if d.doc_id.endswith("Child+Page+4"))
+    assert (
+        child_page_4.external_access.external_user_emails == special_restricted_emails
+    ), "Child page 4 emails do not match expected values"
+    assert (
+        child_page_4.external_access.external_user_group_ids
+        == special_restricted_user_groups
+    ), "Child page 4 groups do not match expected values"
