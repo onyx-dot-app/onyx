@@ -10,7 +10,6 @@ from fastapi import Request
 from fastapi import Response
 from fastapi import status
 from fastapi_users import exceptions
-from fastapi_users.password import PasswordHelper
 from onelogin.saml2.auth import OneLogin_Saml2_Auth  # type: ignore
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,7 +73,6 @@ async def upsert_saml_user(email: str) -> User:
                 # Generate a secure random password meeting validation requirements
                 # We use a secure random password since we never need to know what it is
                 # (SAML users authenticate via their IdP)
-                PasswordHelper()
                 secure_random_password = "".join(
                     [
                         # Ensure minimum requirements are met
