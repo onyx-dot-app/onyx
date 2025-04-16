@@ -18,7 +18,6 @@ from oauthlib.oauth2 import BackendApplicationClient
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
-from pydantic import BaseModel
 from requests_oauthlib import OAuth2Session  # type:ignore
 from urllib3.exceptions import MaxRetryError
 
@@ -66,13 +65,6 @@ class ScrapeSessionContext:
 
     at_least_one_doc: bool = False
     last_error: str | None = None
-
-
-class ScrapePageContext(BaseModel):
-    """Page level context for scraping"""
-
-    retry_count: int = 0
-    retry_success: bool = False
 
 
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
@@ -483,10 +475,9 @@ class WebConnector(LoadConnector):
         index: int,
         initial_url: str,
         session_ctx: ScrapeSessionContext,
-        page_ctx: ScrapePageContext,
     ) -> bool:
-        """returns False if the caller should continue (usually due to skipping duplicates),
-        True if the page scraped normally"""
+        """Returns False if something happened and the page scrape can be retried.
+        Return True if the page does not need to be retried."""
 
         if session_ctx.playwright is None:
             raise RuntimeError("scrape_context.playwright is None")
@@ -529,7 +520,7 @@ class WebConnector(LoadConnector):
                     ),
                 )
             )
-            page_ctx.retry_success = True
+
             return False
 
         page = session_ctx.playwright_context.new_page()
@@ -560,15 +551,14 @@ class WebConnector(LoadConnector):
                     f"{index}: {initial_url} redirected to {final_url} - already indexed"
                 )
                 page.close()
-                page_ctx.retry_success = True
                 return False
 
             logger.info(f"{index}: {initial_url} redirected to {final_url}")
             session_ctx.visited_links.add(initial_url)
 
-        # If we got here, the request was successful
-        page_ctx.retry_success = True
+        # after this point, we return True so that the caller does not retry
 
+        # If we got here, the request was successful
         if self.scroll_before_scraping:
             scroll_attempts = 0
             previous_height = page.evaluate("document.body.scrollHeight")
@@ -593,8 +583,7 @@ class WebConnector(LoadConnector):
         if page_response and str(page_response.status)[0] in ("4", "5"):
             session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
             logger.info(session_ctx.last_error)
-            page_ctx.retry_count += 1
-            return False
+            return True
 
         parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
 
@@ -623,7 +612,7 @@ class WebConnector(LoadConnector):
             logger.info(
                 f"{index}: Skipping duplicate title + content for {initial_url}"
             )
-            return False
+            return True
 
         session_ctx.content_hashes.add(hashed_text)
 
@@ -676,24 +665,20 @@ class WebConnector(LoadConnector):
             logger.info(f"{index}: Visiting {initial_url}")
 
             # Add retry mechanism with exponential backoff
-            page_ctx = ScrapePageContext()
+            retry_count = 0
 
-            while (
-                page_ctx.retry_count < self.MAX_RETRIES and not page_ctx.retry_success
-            ):
-                if page_ctx.retry_count > 0:
+            while retry_count < self.MAX_RETRIES:
+                if retry_count > 0:
                     # Add a random delay between retries (exponential backoff)
-                    delay = min(2**page_ctx.retry_count + random.uniform(0, 1), 10)
+                    delay = min(2**retry_count + random.uniform(0, 1), 10)
                     logger.info(
-                        f"Retry {page_ctx.retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
+                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
                     )
                     time.sleep(delay)
 
                 try:
-                    normal_scrape = self._do_scrape(
-                        index, initial_url, session_ctx, page_ctx
-                    )
-                    if not normal_scrape:
+                    ok = self._do_scrape(index, initial_url, session_ctx)
+                    if not ok:
                         continue
                 except Exception as e:
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
@@ -701,9 +686,9 @@ class WebConnector(LoadConnector):
                     session_ctx.playwright_context.close()
                     session_ctx.playwright.stop()
                     session_ctx.restart_playwright = True
-
-                    page_ctx.retry_count += 1
                     continue
+                finally:
+                    retry_count += 1
 
             if len(session_ctx.doc_batch) >= self.batch_size:
                 session_ctx.playwright_context.close()
