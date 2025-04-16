@@ -52,10 +52,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
-        self._allow_images = None
+        self._allow_images: bool | None = None
 
     def set_allow_images(self, allow_images: bool) -> None:
         """Set whether to process images in this connector."""
+        logger.info(f"Setting allow_images to {allow_images}.")
         self._allow_images = allow_images
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
@@ -257,8 +258,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                             if len(batch) == self.batch_size:
                                 yield batch
                                 batch = []
-                    except Exception as e:
-                        logger.exception(f"Error processing image {key}: {e}")
+                    except Exception:
+                        logger.exception(f"Error processing image {key}")
                     continue
 
                 # Handle text and document files
@@ -283,8 +284,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         yield batch
                         batch = []
 
-                except Exception as e:
-                    logger.exception(f"Error decoding object {key} as UTF-8: {e}")
+                except Exception:
+                    logger.exception(f"Error decoding object {key} as UTF-8")
         if batch:
             yield batch
 
