@@ -376,6 +376,7 @@ class ConfluenceConnector(
             media_type: str = attachment.get("metadata", {}).get("mediaType", "")
 
             # TODO(rkuo): this check is partially redundant with validate_attachment_filetype
+            # and checks in convert_attachment_to_content/process_attachment
             # but doing the check here avoids an unnecessary download. Due for refactoring.
             if not self.allow_images:
                 if media_type.startswith("image/"):
