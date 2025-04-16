@@ -454,9 +454,12 @@ class ConfluenceConnector(
         page_query = self._construct_page_query(checkpoint.last_updated or start, end)
         logger.debug(f"page_query: {page_query}")
 
+        # most requests will include a few pages to skip, so we limit each page to
+        # 2 * batch_size to only need a single request for most checkpoint runs
         for page in self.confluence_client.paginated_cql_retrieval(
             cql=page_query,
             expand=",".join(_PAGE_EXPANSION_FIELDS),
+            limit=2 * self.batch_size,
         ):
             if page["id"] in prev_doc_ids:
                 # There are a few seconds of fuzziness in the request,
