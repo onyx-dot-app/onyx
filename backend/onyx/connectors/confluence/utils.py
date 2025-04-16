@@ -59,15 +59,16 @@ def validate_attachment_filetype(
     """
     Validates if the attachment is a supported file type.
     """
-    attachment.get("metadata", {})
     media_type = attachment.get("metadata", {}).get("mediaType", "")
-
     if media_type.startswith("image/"):
         return is_valid_image_type(media_type)
 
     # For non-image files, check if we support the extension
     title = attachment.get("title", "")
     extension = Path(title).suffix.lstrip(".").lower() if "." in title else ""
+
+    # NOTE(rkuo): Why doesn't this check
+    # ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS or ACCEPTED_DOCUMENT_FILE_EXTENSIONS?
     return extension in ["pdf", "doc", "docx", "txt", "md", "rtf"]
 
 
