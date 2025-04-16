@@ -1,6 +1,8 @@
 import io
 import ipaddress
+import random
 import socket
+import time
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
@@ -129,11 +131,29 @@ def protected_url_check(url: str) -> None:
 
 def check_internet_connection(url: str) -> None:
     try:
-        response = requests.get(url, timeout=3, headers=DEFAULT_HEADERS)
+        # Use a more realistic browser-like request
+        session = requests.Session()
+        session.headers.update(DEFAULT_HEADERS)
+
+        # Add a random delay to mimic human behavior
+        time.sleep(random.uniform(0.1, 0.5))
+
+        response = session.get(url, timeout=5, allow_redirects=True)
+
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
         # Extract status code from the response, defaulting to -1 if response is None
         status_code = e.response.status_code if e.response is not None else -1
+
+        # For 403 errors, we do have internet connection, but the request is blocked by the server
+        # this is usually due to bot detection. Future calls (via Playwright) will usually get
+        # around this.
+        if status_code == 403:
+            logger.warning(
+                f"Received 403 Forbidden for {url}, will retry with browser automation"
+            )
+            return
+
         error_msg = {
             400: "Bad Request",
             401: "Unauthorized",
@@ -198,7 +218,15 @@ def is_pdf_content(response: requests.Response) -> bool:
 def start_playwright() -> Tuple[Playwright, BrowserContext]:
     playwright = sync_playwright().start()
 
-    browser = playwright.chromium.launch(headless=True)
+    # Launch browser with more realistic settings
+    browser = playwright.chromium.launch(
+        headless=True,
+        args=[
+            "--disable-blink-features=AutomationControlled",
+            "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-site-isolation-trials",
+        ],
+    )
 
     # Create a context with realistic browser properties
     context = browser.new_context(
@@ -210,6 +238,9 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
         has_touch=False,
         java_script_enabled=True,
         color_scheme="light",
+        # Add more realistic browser properties
+        bypass_csp=True,
+        ignore_https_errors=True,
     )
 
     # Set additional headers to mimic a real browser
@@ -221,7 +252,27 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             "Sec-Fetch-Mode": DEFAULT_HEADERS["Sec-Fetch-Mode"],
             "Sec-Fetch-Site": DEFAULT_HEADERS["Sec-Fetch-Site"],
             "Sec-Fetch-User": DEFAULT_HEADERS["Sec-Fetch-User"],
+            "Sec-CH-UA": DEFAULT_HEADERS["Sec-CH-UA"],
+            "Sec-CH-UA-Mobile": DEFAULT_HEADERS["Sec-CH-UA-Mobile"],
+            "Sec-CH-UA-Platform": DEFAULT_HEADERS["Sec-CH-UA-Platform"],
+            "Cache-Control": "max-age=0",
+            "DNT": "1",
         }
+    )
+
+    # Add a script to modify navigator properties to avoid detection
+    context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5]
+        });
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['en-US', 'en']
+        });
+    """
     )
 
     if (
@@ -301,6 +352,47 @@ def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | No
         return None
 
 
+def _handle_cookies(context: BrowserContext, url: str) -> None:
+    """Handle cookies for the given URL to help with bot detection"""
+    try:
+        # Parse the URL to get the domain
+        parsed_url = urlparse(url)
+        domain = parsed_url.netloc
+
+        # Add some common cookies that might help with bot detection
+        cookies: list[dict[str, str]] = [
+            {
+                "name": "cookieconsent",
+                "value": "accepted",
+                "domain": domain,
+                "path": "/",
+            },
+            {
+                "name": "consent",
+                "value": "true",
+                "domain": domain,
+                "path": "/",
+            },
+            {
+                "name": "session",
+                "value": "random_session_id",
+                "domain": domain,
+                "path": "/",
+            },
+        ]
+
+        # Add cookies to the context
+        for cookie in cookies:
+            try:
+                context.add_cookies([cookie])  # type: ignore
+            except Exception as e:
+                logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
+    except Exception:
+        logger.exception(
+            f"Unexpected error while handling cookies for Web Connector with URL {url}"
+        )
+
+
 class WebConnector(LoadConnector):
     def __init__(
         self,
@@ -309,6 +401,7 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
+        add_randomness: bool = True,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -316,7 +409,7 @@ class WebConnector(LoadConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-
+        self.add_randomness = add_randomness
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -364,6 +457,9 @@ class WebConnector(LoadConnector):
         base_url = to_visit[0]  # For the recursive case
         doc_batch: list[Document] = []
 
+        # make sure we can connect to the base url
+        check_internet_connection(base_url)
+
         # Needed to report error
         at_least_one_doc = False
         last_error = None
@@ -386,151 +482,205 @@ class WebConnector(LoadConnector):
             index = len(visited_links)
             logger.info(f"{index}: Visiting {initial_url}")
 
-            try:
-                check_internet_connection(initial_url)
-                if restart_playwright:
-                    playwright, context = start_playwright()
-                    restart_playwright = False
+            # Add retry mechanism with exponential backoff
+            max_retries = 3
+            retry_count = 0
+            retry_success = False
 
-                # First do a HEAD request to check content type without downloading the entire content
-                head_response = requests.head(
-                    initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
-                )
-                is_pdf = is_pdf_content(head_response)
+            while retry_count < max_retries and not retry_success:
+                try:
+                    if retry_count > 0:
+                        # Add a random delay between retries (exponential backoff)
+                        delay = min(2**retry_count + random.uniform(0, 1), 10)
+                        logger.info(
+                            f"Retry {retry_count}/{max_retries} for {initial_url} after {delay:.2f}s delay"
+                        )
+                        time.sleep(delay)
 
-                if is_pdf or initial_url.lower().endswith(".pdf"):
-                    # PDF files are not checked for links
-                    response = requests.get(initial_url, headers=DEFAULT_HEADERS)
-                    page_text, metadata, images = read_pdf_file(
-                        file=io.BytesIO(response.content)
+                    if restart_playwright:
+                        playwright, context = start_playwright()
+                        restart_playwright = False
+
+                    # Handle cookies for the URL
+                    _handle_cookies(context, initial_url)
+
+                    # First do a HEAD request to check content type without downloading the entire content
+                    head_response = requests.head(
+                        initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
                     )
-                    last_modified = response.headers.get("Last-Modified")
+                    is_pdf = is_pdf_content(head_response)
+
+                    if is_pdf or initial_url.lower().endswith(".pdf"):
+                        # PDF files are not checked for links
+                        response = requests.get(initial_url, headers=DEFAULT_HEADERS)
+                        page_text, metadata, images = read_pdf_file(
+                            file=io.BytesIO(response.content)
+                        )
+                        last_modified = response.headers.get("Last-Modified")
+
+                        doc_batch.append(
+                            Document(
+                                id=initial_url,
+                                sections=[
+                                    TextSection(link=initial_url, text=page_text)
+                                ],
+                                source=DocumentSource.WEB,
+                                semantic_identifier=initial_url.split("/")[-1],
+                                metadata=metadata,
+                                doc_updated_at=(
+                                    _get_datetime_from_last_modified_header(
+                                        last_modified
+                                    )
+                                    if last_modified
+                                    else None
+                                ),
+                            )
+                        )
+                        retry_success = True
+                        continue
+
+                    page = context.new_page()
+
+                    if self.add_randomness:
+                        # Add random mouse movements and scrolling to mimic human behavior
+                        page.mouse.move(
+                            random.randint(100, 700), random.randint(100, 500)
+                        )
+
+                    # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+                    page_response = page.goto(
+                        initial_url,
+                        timeout=30000,  # 30 seconds
+                        wait_until="domcontentloaded",  # Wait for DOM to be ready
+                    )
+
+                    # Add a small random delay to mimic human behavior
+                    time.sleep(random.uniform(0.5, 2.0))
+
+                    # Check if we got a 403 error
+                    if page_response and page_response.status == 403:
+                        logger.warning(
+                            f"Received 403 Forbidden for {initial_url}, retrying..."
+                        )
+                        page.close()
+                        retry_count += 1
+                        continue
+
+                    last_modified = (
+                        page_response.header_value("Last-Modified")
+                        if page_response
+                        else None
+                    )
+                    final_url = page.url
+                    if final_url != initial_url:
+                        protected_url_check(final_url)
+                        initial_url = final_url
+                        if initial_url in visited_links:
+                            logger.info(
+                                f"{index}: {initial_url} redirected to {final_url} - already indexed"
+                            )
+                            page.close()
+                            retry_success = True
+                            continue
+                        logger.info(f"{index}: {initial_url} redirected to {final_url}")
+                        visited_links.add(initial_url)
+
+                    # If we got here, the request was successful
+                    retry_success = True
+
+                    if self.scroll_before_scraping:
+                        scroll_attempts = 0
+                        previous_height = page.evaluate("document.body.scrollHeight")
+                        while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                            page.evaluate(
+                                "window.scrollTo(0, document.body.scrollHeight)"
+                            )
+                            page.wait_for_load_state("networkidle", timeout=30000)
+                            new_height = page.evaluate("document.body.scrollHeight")
+                            if new_height == previous_height:
+                                break  # Stop scrolling when no more content is loaded
+                            previous_height = new_height
+                            scroll_attempts += 1
+
+                    content = page.content()
+                    soup = BeautifulSoup(content, "html.parser")
+
+                    if self.recursive:
+                        internal_links = get_internal_links(base_url, initial_url, soup)
+                        for link in internal_links:
+                            if link not in visited_links:
+                                to_visit.append(link)
+
+                    if page_response and str(page_response.status)[0] in ("4", "5"):
+                        last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
+                        logger.info(last_error)
+                        continue
+
+                    parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
+
+                    """For websites containing iframes that need to be scraped,
+                    the code below can extract text from within these iframes.
+                    """
+                    logger.debug(
+                        f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
+                    )
+                    if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
+                        iframe_count = (
+                            page.frame_locator("iframe").locator("html").count()
+                        )
+                        if iframe_count > 0:
+                            iframe_texts = (
+                                page.frame_locator("iframe")
+                                .locator("html")
+                                .all_inner_texts()
+                            )
+                            document_text = "\n".join(iframe_texts)
+                            """ 700 is the threshold value for the length of the text extracted
+                            from the iframe based on the issue faced """
+                            if (
+                                len(parsed_html.cleaned_text)
+                                < IFRAME_TEXT_LENGTH_THRESHOLD
+                            ):
+                                parsed_html.cleaned_text = document_text
+                            else:
+                                parsed_html.cleaned_text += "\n" + document_text
+
+                    # Sometimes pages with #! will serve duplicate content
+                    # There are also just other ways this can happen
+                    hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
+                    if hashed_text in content_hashes:
+                        logger.info(
+                            f"{index}: Skipping duplicate title + content for {initial_url}"
+                        )
+                        continue
+                    content_hashes.add(hashed_text)
 
                     doc_batch.append(
                         Document(
                             id=initial_url,
-                            sections=[TextSection(link=initial_url, text=page_text)],
+                            sections=[
+                                TextSection(
+                                    link=initial_url, text=parsed_html.cleaned_text
+                                )
+                            ],
                             source=DocumentSource.WEB,
-                            semantic_identifier=initial_url.split("/")[-1],
-                            metadata=metadata,
-                            doc_updated_at=_get_datetime_from_last_modified_header(
-                                last_modified
-                            )
-                            if last_modified
-                            else None,
+                            semantic_identifier=parsed_html.title or initial_url,
+                            metadata={},
+                            doc_updated_at=(
+                                _get_datetime_from_last_modified_header(last_modified)
+                                if last_modified
+                                else None
+                            ),
                         )
                     )
+
+                    page.close()
+                except Exception as e:
+                    last_error = f"Failed to fetch '{initial_url}': {e}"
+                    logger.exception(last_error)
+                    playwright.stop()
+                    restart_playwright = True
                     continue
-
-                page = context.new_page()
-
-                # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
-                page_response = page.goto(
-                    initial_url,
-                    timeout=30000,  # 30 seconds
-                )
-
-                last_modified = (
-                    page_response.header_value("Last-Modified")
-                    if page_response
-                    else None
-                )
-                final_url = page.url
-                if final_url != initial_url:
-                    protected_url_check(final_url)
-                    initial_url = final_url
-                    if initial_url in visited_links:
-                        logger.info(
-                            f"{index}: {initial_url} redirected to {final_url} - already indexed"
-                        )
-                        continue
-                    logger.info(f"{index}: {initial_url} redirected to {final_url}")
-                    visited_links.add(initial_url)
-
-                if self.scroll_before_scraping:
-                    scroll_attempts = 0
-                    previous_height = page.evaluate("document.body.scrollHeight")
-                    while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                        page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                        page.wait_for_load_state("networkidle", timeout=30000)
-                        new_height = page.evaluate("document.body.scrollHeight")
-                        if new_height == previous_height:
-                            break  # Stop scrolling when no more content is loaded
-                        previous_height = new_height
-                        scroll_attempts += 1
-
-                content = page.content()
-                soup = BeautifulSoup(content, "html.parser")
-
-                if self.recursive:
-                    internal_links = get_internal_links(base_url, initial_url, soup)
-                    for link in internal_links:
-                        if link not in visited_links:
-                            to_visit.append(link)
-
-                if page_response and str(page_response.status)[0] in ("4", "5"):
-                    last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
-                    logger.info(last_error)
-                    continue
-
-                parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
-
-                """For websites containing iframes that need to be scraped,
-                the code below can extract text from within these iframes.
-                """
-                logger.debug(
-                    f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
-                )
-                if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
-                    iframe_count = page.frame_locator("iframe").locator("html").count()
-                    if iframe_count > 0:
-                        iframe_texts = (
-                            page.frame_locator("iframe")
-                            .locator("html")
-                            .all_inner_texts()
-                        )
-                        document_text = "\n".join(iframe_texts)
-                        """ 700 is the threshold value for the length of the text extracted
-                        from the iframe based on the issue faced """
-                        if len(parsed_html.cleaned_text) < IFRAME_TEXT_LENGTH_THRESHOLD:
-                            parsed_html.cleaned_text = document_text
-                        else:
-                            parsed_html.cleaned_text += "\n" + document_text
-
-                # Sometimes pages with #! will serve duplicate content
-                # There are also just other ways this can happen
-                hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
-                if hashed_text in content_hashes:
-                    logger.info(
-                        f"{index}: Skipping duplicate title + content for {initial_url}"
-                    )
-                    continue
-                content_hashes.add(hashed_text)
-
-                doc_batch.append(
-                    Document(
-                        id=initial_url,
-                        sections=[
-                            TextSection(link=initial_url, text=parsed_html.cleaned_text)
-                        ],
-                        source=DocumentSource.WEB,
-                        semantic_identifier=parsed_html.title or initial_url,
-                        metadata={},
-                        doc_updated_at=_get_datetime_from_last_modified_header(
-                            last_modified
-                        )
-                        if last_modified
-                        else None,
-                    )
-                )
-
-                page.close()
-            except Exception as e:
-                last_error = f"Failed to fetch '{initial_url}': {e}"
-                logger.exception(last_error)
-                playwright.stop()
-                restart_playwright = True
-                continue
 
             if len(doc_batch) >= self.batch_size:
                 playwright.stop()

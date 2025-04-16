@@ -76,6 +76,7 @@ class DATestConnector(BaseModel):
 class SimpleTestDocument(BaseModel):
     id: str
     content: str
+    image_file_name: str | None = None
 
 
 class DATestCCPair(BaseModel):
@@ -177,6 +178,8 @@ class DATestSettings(BaseModel):
     gpu_enabled: bool | None = None
     product_gating: DATestGatingType = DATestGatingType.NONE
     anonymous_user_enabled: bool | None = None
+    image_extraction_and_analysis_enabled: bool | None = False
+    search_time_image_analysis_enabled: bool | None = False
 
 
 @dataclass
@@ -201,8 +204,10 @@ class DATestIndexAttempt:
             total_docs_indexed=index_attempt.total_docs_indexed,
             docs_removed_from_index=index_attempt.docs_removed_from_index,
             error_msg=index_attempt.error_msg,
-            time_started=datetime.fromisoformat(index_attempt.time_started)
-            if index_attempt.time_started
-            else None,
+            time_started=(
+                datetime.fromisoformat(index_attempt.time_started)
+                if index_attempt.time_started
+                else None
+            ),
             time_updated=datetime.fromisoformat(index_attempt.time_updated),
         )

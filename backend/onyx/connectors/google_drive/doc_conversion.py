@@ -1,8 +1,9 @@
 import io
-from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 from typing import cast
 
+from googleapiclient.errors import HttpError  # type: ignore
 from googleapiclient.http import MediaIoBaseDownload  # type: ignore
 
 from onyx.configs.constants import DocumentSource
@@ -12,7 +13,9 @@ from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
 from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
-from onyx.connectors.google_utils.resources import GoogleDocsService
+from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
+from onyx.connectors.google_utils.resources import get_drive_service
+from onyx.connectors.google_utils.resources import get_google_docs_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -34,6 +37,11 @@ from onyx.utils.lazy import lazy_eval
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# This is not a standard valid unicode char, it is used by the docs advanced API to
+# represent smart chips (elements like dates and doc links).
+SMART_CHIP_CHAR = "\ue907"
+WEB_VIEW_LINK_KEY = "webViewLink"
 
 # Mapping of Google Drive mime types to export formats
 GOOGLE_MIME_TYPES_TO_EXPORT = {
@@ -106,7 +114,7 @@ def _download_and_extract_sections_basic(
     file_id = file["id"]
     file_name = file["name"]
     mime_type = file["mimeType"]
-    link = file.get("webViewLink", "")
+    link = file.get(WEB_VIEW_LINK_KEY, "")
 
     # skip images if not explicitly enabled
     if not allow_images and is_gdrive_image_mime_type(mime_type):
@@ -220,18 +228,99 @@ def _download_and_extract_sections_basic(
             return []
 
 
+def _find_nth(haystack: str, needle: str, n: int, start: int = 0) -> int:
+    start = haystack.find(needle, start)
+    while start >= 0 and n > 1:
+        start = haystack.find(needle, start + len(needle))
+        n -= 1
+    return start
+
+
+def align_basic_advanced(
+    basic_sections: list[TextSection | ImageSection], adv_sections: list[TextSection]
+) -> list[TextSection | ImageSection]:
+    """Align the basic sections with the advanced sections.
+    In particular, the basic sections contain all content of the file,
+    including smart chips like dates and doc links. The advanced sections
+    are separated by section headers and contain header-based links that
+    improve user experience when they click on the source in the UI.
+
+    There are edge cases in text matching (i.e. the heading is a smart chip or
+    there is a smart chip in the doc with text containing the actual heading text)
+    that make the matching imperfect; this is hence done on a best-effort basis.
+    """
+    if len(adv_sections) <= 1:
+        return basic_sections  # no benefit from aligning
+
+    basic_full_text = "".join(
+        [section.text for section in basic_sections if isinstance(section, TextSection)]
+    )
+    new_sections: list[TextSection | ImageSection] = []
+    heading_start = 0
+    for adv_ind in range(1, len(adv_sections)):
+        heading = adv_sections[adv_ind].text.split(HEADING_DELIMITER)[0]
+        # retrieve the longest part of the heading that is not a smart chip
+        heading_key = max(heading.split(SMART_CHIP_CHAR), key=len).strip()
+        if heading_key == "":
+            logger.warning(
+                f"Cannot match heading: {heading}, its link will come from the following section"
+            )
+            continue
+        heading_offset = heading.find(heading_key)
+
+        # count occurrences of heading str in previous section
+        heading_count = adv_sections[adv_ind - 1].text.count(heading_key)
+
+        prev_start = heading_start
+        heading_start = (
+            _find_nth(basic_full_text, heading_key, heading_count, start=prev_start)
+            - heading_offset
+        )
+        if heading_start < 0:
+            logger.warning(
+                f"Heading key {heading_key} from heading {heading} not found in basic text"
+            )
+            heading_start = prev_start
+            continue
+
+        new_sections.append(
+            TextSection(
+                link=adv_sections[adv_ind - 1].link,
+                text=basic_full_text[prev_start:heading_start],
+            )
+        )
+
+    # handle last section
+    new_sections.append(
+        TextSection(link=adv_sections[-1].link, text=basic_full_text[heading_start:])
+    )
+    return new_sections
+
+
+# We used to always get the user email from the file owners when available,
+# but this was causing issues with shared folders where the owner was not included in the service account
+# now we use the email of the account that successfully listed the file. Leaving this in case we end up
+# wanting to retry with file owners and/or admin email at some point.
+# user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
 def convert_drive_item_to_document(
-    file: GoogleDriveFileType,
-    drive_service: Callable[[], GoogleDriveService],
-    docs_service: Callable[[], GoogleDocsService],
+    creds: Any,
     allow_images: bool,
     size_threshold: int,
+    retriever_email: str,
+    file: GoogleDriveFileType,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
     """
-    doc_id = ""
+    doc_id = file.get(WEB_VIEW_LINK_KEY, "")
     sections: list[TextSection | ImageSection] = []
+    # Only construct these services when needed
+    drive_service = lazy_eval(
+        lambda: get_drive_service(creds, user_email=retriever_email)
+    )
+    docs_service = lazy_eval(
+        lambda: get_google_docs_service(creds, user_email=retriever_email)
+    )
 
     try:
         # skip shortcuts or folders
@@ -244,10 +333,17 @@ def convert_drive_item_to_document(
             try:
                 # get_document_sections is the advanced approach for Google Docs
                 doc_sections = get_document_sections(
-                    docs_service=docs_service(), doc_id=file.get("id", "")
+                    docs_service=docs_service(),
+                    doc_id=file.get("id", ""),
                 )
                 if doc_sections:
                     sections = cast(list[TextSection | ImageSection], doc_sections)
+                    if any(SMART_CHIP_CHAR in section.text for section in doc_sections):
+                        basic_sections = _download_and_extract_sections_basic(
+                            file, drive_service(), allow_images
+                        )
+                        sections = align_basic_advanced(basic_sections, doc_sections)
+
             except Exception as e:
                 logger.warning(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."
@@ -277,7 +373,7 @@ def convert_drive_item_to_document(
             logger.warning(f"No content extracted from {file.get('name')}. Skipping.")
             return None
 
-        doc_id = file["webViewLink"]
+        doc_id = file[WEB_VIEW_LINK_KEY]
 
         # Create the document
         return Document(
@@ -295,14 +391,22 @@ def convert_drive_item_to_document(
             ),
         )
     except Exception as e:
-        error_str = f"Error converting file '{file.get('name')}' to Document: {e}"
-        logger.exception(error_str)
+        file_name = file.get("name")
+        error_str = f"Error converting file '{file_name}' to Document: {e}"
+        if isinstance(e, HttpError) and e.status_code == 403:
+            logger.warning(
+                f"Uncommon permissions error while downloading file. User "
+                f"{retriever_email} was able to see file {file_name} "
+                "but cannot download it."
+            )
+            logger.warning(error_str)
+
         return ConnectorFailure(
             failed_document=DocumentFailure(
                 document_id=doc_id,
-                document_link=sections[0].link
-                if sections
-                else None,  # TODO: see if this is the best way to get a link
+                document_link=(
+                    sections[0].link if sections else None
+                ),  # TODO: see if this is the best way to get a link
             ),
             failed_entity=None,
             failure_message=error_str,
@@ -314,7 +418,7 @@ def build_slim_document(file: GoogleDriveFileType) -> SlimDocument | None:
     if file.get("mimeType") in [DRIVE_FOLDER_TYPE, DRIVE_SHORTCUT_TYPE]:
         return None
     return SlimDocument(
-        id=file["webViewLink"],
+        id=file[WEB_VIEW_LINK_KEY],
         perm_sync_data={
             "doc_id": file.get("id"),
             "drive_id": file.get("driveId"),

@@ -18,6 +18,7 @@ def web_connector(request: pytest.FixtureRequest) -> WebConnector:
         base_url="https://quotes.toscrape.com/scroll",
         web_connector_type=WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value,
         scroll_before_scraping=scroll_before_scraping,
+        add_randomness=False,
     )
     return connector
 

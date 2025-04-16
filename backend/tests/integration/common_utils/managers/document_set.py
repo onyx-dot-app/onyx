@@ -36,9 +36,11 @@ class DocumentSetManager:
         response = requests.post(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_creation_request,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -69,9 +71,11 @@ class DocumentSetManager:
         response = requests.patch(
             f"{API_SERVER_URL}/manage/admin/document-set",
             json=doc_set_update_request,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return True
@@ -83,9 +87,11 @@ class DocumentSetManager:
     ) -> bool:
         response = requests.delete(
             f"{API_SERVER_URL}/manage/admin/document-set/{document_set.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return True
@@ -96,9 +102,11 @@ class DocumentSetManager:
     ) -> list[DATestDocumentSet]:
         response = requests.get(
             f"{API_SERVER_URL}/manage/document-set",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return [

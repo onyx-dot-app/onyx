@@ -28,10 +28,12 @@ function LLMProviderUpdateModal({
     : llmProviderDescriptor?.display_name ||
       llmProviderDescriptor?.name ||
       "Custom LLM Provider";
+
   return (
     <Modal
       title={`${llmProviderDescriptor ? "Configure" : "Setup"} ${providerName}`}
       onOutsideClick={() => onClose()}
+      hideOverflow={true}
     >
       <div className="max-h-[70vh] overflow-y-auto px-4">
         {llmProviderDescriptor ? (

@@ -11,10 +11,7 @@ import {
   useState,
 } from "react";
 import { XIcon } from "@/components/icons/icons";
-import {
-  FileSourceCard,
-  FileSourceCardInResults,
-} from "../message/SourcesDisplay";
+import { FileSourceCardInResults } from "../message/SourcesDisplay";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
 interface DocumentResultsProps {
   agenticMessage: boolean;

@@ -95,9 +95,11 @@ def handle_search_request(
             chunk_ind=section.center_chunk.chunk_id,
             content=section.center_chunk.content,
             semantic_identifier=section.center_chunk.semantic_identifier or "Unknown",
-            link=section.center_chunk.source_links.get(0)
-            if section.center_chunk.source_links
-            else None,
+            link=(
+                section.center_chunk.source_links.get(0)
+                if section.center_chunk.source_links
+                else None
+            ),
             blurb=section.center_chunk.blurb,
             source_type=section.center_chunk.source_type,
             boost=section.center_chunk.boost,

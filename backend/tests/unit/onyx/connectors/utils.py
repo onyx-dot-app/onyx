@@ -5,7 +5,7 @@ from typing import TypeVar
 from pydantic import BaseModel
 
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
@@ -23,7 +23,7 @@ class SingleConnectorCallOutput(BaseModel, Generic[CT]):
 
 
 def load_everything_from_checkpoint_connector(
-    connector: CheckpointConnector[CT],
+    connector: CheckpointedConnector[CT],
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[SingleConnectorCallOutput[CT]]:

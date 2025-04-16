@@ -26,7 +26,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import CredentialsConnector
 from onyx.connectors.interfaces import CredentialsProviderInterface
@@ -501,7 +501,7 @@ def _process_message(
 
 
 class SlackConnector(
-    SlimConnector, CredentialsConnector, CheckpointConnector[SlackCheckpoint]
+    SlimConnector, CredentialsConnector, CheckpointedConnector[SlackCheckpoint]
 ):
     FAST_TIMEOUT = 1
 

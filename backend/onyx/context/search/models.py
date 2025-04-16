@@ -18,9 +18,15 @@ from onyx.indexing.models import IndexingSetting
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
 
+
 MAX_METRICS_CONTENT = (
     200  # Just need enough characters to identify where in the doc the chunk is
 )
+
+
+class QueryExpansions(BaseModel):
+    keywords_expansions: list[str] | None = None
+    semantic_expansions: list[str] | None = None
 
 
 class RerankingDetails(BaseModel):
@@ -139,6 +145,8 @@ class ChunkContext(BaseModel):
 class SearchRequest(ChunkContext):
     query: str
 
+    expanded_queries: QueryExpansions | None = None
+
     search_type: SearchType = SearchType.SEMANTIC
 
     human_selected_filters: BaseFilters | None = None
@@ -163,6 +171,7 @@ class SearchRequest(ChunkContext):
 
 class SearchQuery(ChunkContext):
     "Processed Request that is directly passed to the SearchPipeline"
+
     query: str
     processed_keywords: list[str]
     search_type: SearchType
@@ -185,6 +194,8 @@ class SearchQuery(ChunkContext):
     model_config = ConfigDict(frozen=True)
 
     precomputed_query_embedding: Embedding | None = None
+
+    expanded_queries: QueryExpansions | None = None
 
 
 class RetrievalDetails(ChunkContext):

@@ -1,8 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import { Info, ChevronRight, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { LLMModelDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { ModelSelector } from "./ModelSelector";
 import { useChatContext } from "@/components/context/ChatContext";
 import { getDisplayNameForModel } from "@/lib/hooks";
 

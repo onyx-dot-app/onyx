@@ -64,7 +64,7 @@ class Answer:
         use_agentic_search: bool = False,
     ) -> None:
         self.is_connected: Callable[[], bool] | None = is_connected
-        self._processed_stream: (list[AnswerPacket] | None) = None
+        self._processed_stream: list[AnswerPacket] | None = None
         self._is_cancelled = False
 
         search_tools = [tool for tool in (tools or []) if isinstance(tool, SearchTool)]
@@ -212,9 +212,9 @@ class Answer:
         return citations
 
     def citations_by_subquestion(self) -> dict[SubQuestionKey, list[CitationInfo]]:
-        citations_by_subquestion: dict[
-            SubQuestionKey, list[CitationInfo]
-        ] = defaultdict(list)
+        citations_by_subquestion: dict[SubQuestionKey, list[CitationInfo]] = (
+            defaultdict(list)
+        )
         basic_subq_key = SubQuestionKey(level=BASIC_KEY[0], question_num=BASIC_KEY[1])
         for packet in self.processed_streamed_output:
             if isinstance(packet, CitationInfo):

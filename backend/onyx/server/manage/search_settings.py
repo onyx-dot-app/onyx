@@ -202,9 +202,11 @@ def get_all_search_settings(
     secondary_search_settings = get_secondary_search_settings(db_session)
     return FullModelVersionResponse(
         current_settings=SavedSearchSettings.from_db_model(current_search_settings),
-        secondary_settings=SavedSearchSettings.from_db_model(secondary_search_settings)
-        if secondary_search_settings
-        else None,
+        secondary_settings=(
+            SavedSearchSettings.from_db_model(secondary_search_settings)
+            if secondary_search_settings
+            else None
+        ),
     )
 
 

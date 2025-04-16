@@ -105,6 +105,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -320,7 +321,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except exceptions.UserAlreadyExists:
                 user = await self.get_by_email(user_create.email)
                 # Handle case where user has used product outside of web and is now creating an account through web
-                if not user.role.is_web_login() and user_create.role.is_web_login():
+
+                if (
+                    not user.role.is_web_login()
+                    and isinstance(user_create, UserCreate)
+                    and user_create.role.is_web_login()
+                ):
                     user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
@@ -363,6 +369,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         return
 
+    @log_function_time(print_only=True)
     async def oauth_callback(
         self,
         oauth_name: str,
@@ -609,6 +616,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user.email, token, new_organization=user_count == 1
         )
 
+    @log_function_time(print_only=True)
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -1235,6 +1243,7 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
+    @log_function_time(print_only=True)
     @router.get(
         "/callback",
         name=callback_route_name,

@@ -98,9 +98,6 @@ def _is_external_doc_permissions_sync_due(cc_pair: ConnectorCredentialPair) -> b
     if cc_pair.status != ConnectorCredentialPairStatus.ACTIVE:
         return False
 
-    if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
-        return False
-
     # If the last sync is None, it has never been run so we run the sync
     last_perm_sync = cc_pair.last_time_perm_sync
     if last_perm_sync is None:

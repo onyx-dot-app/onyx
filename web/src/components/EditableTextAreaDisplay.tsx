@@ -1,4 +1,3 @@
-import { usePopup } from "@/components/admin/connectors/Popup";
 import { CheckmarkIcon, XIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState } from "react";

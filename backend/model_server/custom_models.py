@@ -1,3 +1,5 @@
+from typing import cast
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -39,10 +41,10 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/custom")
 
-_CONNECTOR_CLASSIFIER_TOKENIZER: AutoTokenizer | None = None
+_CONNECTOR_CLASSIFIER_TOKENIZER: PreTrainedTokenizer | None = None
 _CONNECTOR_CLASSIFIER_MODEL: ConnectorClassifier | None = None
 
-_INTENT_TOKENIZER: AutoTokenizer | None = None
+_INTENT_TOKENIZER: PreTrainedTokenizer | None = None
 _INTENT_MODEL: HybridClassifier | None = None
 
 _INFORMATION_CONTENT_MODEL: SetFitModel | None = None
@@ -50,13 +52,14 @@ _INFORMATION_CONTENT_MODEL: SetFitModel | None = None
 _INFORMATION_CONTENT_MODEL_PROMPT_PREFIX: str = ""  # spec to model version!
 
 
-def get_connector_classifier_tokenizer() -> AutoTokenizer:
+def get_connector_classifier_tokenizer() -> PreTrainedTokenizer:
     global _CONNECTOR_CLASSIFIER_TOKENIZER
     if _CONNECTOR_CLASSIFIER_TOKENIZER is None:
         # The tokenizer details are not uploaded to the HF hub since it's just the
         # unmodified distilbert tokenizer.
-        _CONNECTOR_CLASSIFIER_TOKENIZER = AutoTokenizer.from_pretrained(
-            "distilbert-base-uncased"
+        _CONNECTOR_CLASSIFIER_TOKENIZER = cast(
+            PreTrainedTokenizer,
+            AutoTokenizer.from_pretrained("distilbert-base-uncased"),
         )
     return _CONNECTOR_CLASSIFIER_TOKENIZER
 
@@ -92,12 +95,15 @@ def get_local_connector_classifier(
     return _CONNECTOR_CLASSIFIER_MODEL
 
 
-def get_intent_model_tokenizer() -> AutoTokenizer:
+def get_intent_model_tokenizer() -> PreTrainedTokenizer:
     global _INTENT_TOKENIZER
     if _INTENT_TOKENIZER is None:
         # The tokenizer details are not uploaded to the HF hub since it's just the
         # unmodified distilbert tokenizer.
-        _INTENT_TOKENIZER = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+        _INTENT_TOKENIZER = cast(
+            PreTrainedTokenizer,
+            AutoTokenizer.from_pretrained("distilbert-base-uncased"),
+        )
     return _INTENT_TOKENIZER
 
 
@@ -395,9 +401,9 @@ def run_content_classification_inference(
 
 
 def map_keywords(
-    input_ids: torch.Tensor, tokenizer: AutoTokenizer, is_keyword: list[bool]
+    input_ids: torch.Tensor, tokenizer: PreTrainedTokenizer, is_keyword: list[bool]
 ) -> list[str]:
-    tokens = tokenizer.convert_ids_to_tokens(input_ids)
+    tokens = tokenizer.convert_ids_to_tokens(input_ids)  # type: ignore
 
     if not len(tokens) == len(is_keyword):
         raise ValueError("Length of tokens and keyword predictions must match")

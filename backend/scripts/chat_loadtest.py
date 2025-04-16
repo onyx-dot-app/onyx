@@ -8,6 +8,7 @@ python chat_loadtest.py --api-key <api-key> --url localhost:8080
 
 For more options, checkout the bottom of the file.
 """
+
 import argparse
 import asyncio
 import logging

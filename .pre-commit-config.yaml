@@ -1,12 +1,13 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: 23.3.0
+    rev: 25.1.0
     hooks:
     - id: black
       language_version: python3.11
 
-  - repo: https://github.com/asottile/reorder_python_imports
-    rev: v3.9.0
+  # this is a fork which keeps compatibility with black
+  - repo: https://github.com/wimglenn/reorder-python-imports-black
+    rev: v3.14.0
     hooks:
     - id: reorder-python-imports
       args: ['--py311-plus', '--application-directories=backend/']
@@ -18,14 +19,14 @@ repos:
   # These settings will remove unused imports with side effects
   # Note: The repo currently does not and should not have imports with side effects
   - repo: https://github.com/PyCQA/autoflake
-    rev: v2.2.0
+    rev: v2.3.1
     hooks:
       - id: autoflake
         args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Ruff version.
-    rev: v0.0.286
+    rev: v0.11.4
     hooks:
       - id: ruff
   - repo: https://github.com/pre-commit/mirrors-prettier

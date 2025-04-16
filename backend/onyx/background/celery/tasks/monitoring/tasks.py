@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from itertools import islice
 from typing import Any
+from typing import cast
 from typing import Literal
 
 import psutil
@@ -81,7 +82,9 @@ def _has_metric_been_emitted(redis_std: Redis, key: str) -> bool:
 
 
 class Metric(BaseModel):
-    key: str | None  # only required if we need to store that we have emitted this metric
+    key: (
+        str | None
+    )  # only required if we need to store that we have emitted this metric
     name: str
     value: Any
     tags: dict[str, str]
@@ -998,3 +1001,50 @@ def monitor_process_memory(self: Task, *, tenant_id: str) -> None:
 
     except Exception:
         task_logger.exception("Error in monitor_process_memory task")
+
+
+@shared_task(
+    name=OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX, ignore_result=True, bind=True
+)
+def cloud_monitor_celery_pidbox(
+    self: Task,
+) -> None:
+    """
+    Celery can leave behind orphaned pidboxes from old workers that are idle and never cleaned up.
+    This task removes them based on idle time to avoid Redis clutter and overflowing the instance.
+    This is a real issue we've observed in production.
+
+    Note:
+    - Setting CELERY_ENABLE_REMOTE_CONTROL = False would prevent pidbox keys entirely,
+    but might also disable features like inspect, broadcast, and worker remote control.
+    Use with caution.
+    """
+
+    num_deleted = 0
+
+    MAX_PIDBOX_IDLE = 24 * 3600  # 1 day in seconds
+    r_celery: Redis = self.app.broker_connection().channel().client  # type: ignore
+    for key in r_celery.scan_iter("*.reply.celery.pidbox"):
+        key_bytes = cast(bytes, key)
+        key_str = key_bytes.decode("utf-8")
+        if key_str.startswith("_kombu"):
+            continue
+
+        idletime_raw = r_celery.object("idletime", key)
+        if idletime_raw is None:
+            continue
+
+        idletime = cast(int, idletime_raw)
+        if idletime < MAX_PIDBOX_IDLE:
+            continue
+
+        r_celery.delete(key)
+        task_logger.info(
+            f"Deleted idle pidbox: pidbox={key_str} "
+            f"idletime={idletime} "
+            f"max_idletime={MAX_PIDBOX_IDLE}"
+        )
+        num_deleted += 1
+
+    # Enable later in case we want some aggregate metrics
+    # task_logger.info(f"Deleted idle pidbox: pidbox={key_str}")

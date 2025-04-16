@@ -1,6 +1,5 @@
 "use client";
 
-import SidebarWrapper from "@/app/assistants/SidebarWrapper";
 import UserFolderContent from "./UserFolderContent";
 import { BackButton } from "@/components/BackButton";
 import { useRouter } from "next/navigation";

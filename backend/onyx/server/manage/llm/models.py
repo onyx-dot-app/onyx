@@ -118,6 +118,13 @@ class LLMProviderView(LLMProvider):
 
     @classmethod
     def from_model(cls, llm_provider_model: "LLMProviderModel") -> "LLMProviderView":
+        # Safely get groups - handle detached instance case
+        try:
+            groups = [group.id for group in llm_provider_model.groups]
+        except Exception:
+            # If groups relationship can't be loaded (detached instance), use empty list
+            groups = []
+
         return cls(
             id=llm_provider_model.id,
             name=llm_provider_model.name,
@@ -137,16 +144,18 @@ class LLMProviderView(LLMProvider):
                 or fetch_models_for_provider(llm_provider_model.provider)
                 or [llm_provider_model.default_model_name]
             ),
-            model_token_limits={
-                model_name: get_max_input_tokens(
-                    model_name, llm_provider_model.provider
-                )
-                for model_name in llm_provider_model.model_names
-            }
-            if llm_provider_model.model_names is not None
-            else None,
+            model_token_limits=(
+                {
+                    model_name: get_max_input_tokens(
+                        model_name, llm_provider_model.provider
+                    )
+                    for model_name in llm_provider_model.model_names
+                }
+                if llm_provider_model.model_names is not None
+                else None
+            ),
             is_public=llm_provider_model.is_public,
-            groups=[group.id for group in llm_provider_model.groups],
+            groups=groups,
             deployment_name=llm_provider_model.deployment_name,
         )
 

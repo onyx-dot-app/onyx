@@ -1,7 +1,6 @@
 import {
   FileResponse,
   FolderResponse,
-  FileUploadResponse,
 } from "@/app/chat/my-documents/DocumentsContext";
 
 export async function fetchFolders(): Promise<FolderResponse[]> {

@@ -43,7 +43,7 @@ import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
 import { extractCodeText, preprocessLaTeX } from "./codeUtils";
-import { ThinkingBox } from "./ThinkingBox";
+import { ThinkingBox } from "./thinkingBox/ThinkingBox";
 import {
   hasCompletedThinkingTokens,
   hasPartialThinkingTokens,
@@ -58,9 +58,7 @@ import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
 import { StatusRefinement } from "../Refinement";
 import { copyAll, handleCopy } from "./copyingUtils";
-import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
-import { ErrorBanner, Resubmit } from "./Resubmit";
+import { ErrorBanner } from "./Resubmit";
 import { transformLinkUri } from "@/lib/utils";
 
 export const AgenticMessage = ({
@@ -147,7 +145,10 @@ export const AgenticMessage = ({
     let processed = incoming;
 
     // Apply thinking tokens processing first
-    if (hasCompletedThinkingTokens(processed) || hasPartialThinkingTokens(processed)) {
+    if (
+      hasCompletedThinkingTokens(processed) ||
+      hasPartialThinkingTokens(processed)
+    ) {
       processed = removeThinkingTokens(processed) as string;
     }
 
@@ -190,7 +191,9 @@ export const AgenticMessage = ({
 
   // Check if content contains thinking tokens
   const hasThinkingTokens = useMemo(() => {
-    return hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content);
+    return (
+      hasCompletedThinkingTokens(content) || hasPartialThinkingTokens(content)
+    );
   }, [content]);
 
   // Extract thinking content
@@ -493,9 +496,9 @@ export const AgenticMessage = ({
                   {/* Render thinking box if thinking tokens exist */}
                   {hasThinkingTokens && thinkingContent && (
                     <div className="mb-2 mt-1">
-                      <ThinkingBox 
-                        content={thinkingContent} 
-                        isComplete={isComplete || false} 
+                      <ThinkingBox
+                        content={thinkingContent}
+                        isComplete={isComplete || false}
                         isStreaming={!isThinkingTokenComplete || !isComplete}
                       />
                     </div>

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { IndexAttemptStatus } from "@/components/Status";
+import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
   ConnectorIndexingStatus,
@@ -26,8 +26,6 @@ import {
   FiUnlock,
   FiRefreshCw,
   FiPauseCircle,
-  FiFilter,
-  FiX,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -37,7 +35,6 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
-import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { Warning } from "@phosphor-icons/react";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
@@ -114,17 +111,6 @@ function SummaryRow({
         </div>
       </TableCell>
 
-      <TableCell>
-        <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Errors
-        </div>
-
-        <div className="flex items-center text-lg gap-x-1 font-semibold">
-          {summary.errors > 0 && <Warning className="text-error h-6 w-6" />}
-          {summary.errors}
-        </div>
-      </TableCell>
-
       <TableCell />
     </TableRow>
   );
@@ -145,59 +131,6 @@ function ConnectorRow({
   const handleManageClick = (e: any) => {
     e.stopPropagation();
     router.push(`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`);
-  };
-
-  const getActivityBadge = () => {
-    if (
-      ccPairsIndexingStatus.cc_pair_status ===
-      ConnectorCredentialPairStatus.DELETING
-    ) {
-      return <Badge variant="destructive">Deleting</Badge>;
-    } else if (
-      ccPairsIndexingStatus.cc_pair_status ===
-      ConnectorCredentialPairStatus.PAUSED
-    ) {
-      return (
-        <Badge icon={FiPauseCircle} variant="paused">
-          Paused
-        </Badge>
-      );
-    } else if (
-      ccPairsIndexingStatus.cc_pair_status ===
-      ConnectorCredentialPairStatus.INVALID
-    ) {
-      return (
-        <Badge
-          tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
-          circle
-          variant="invalid"
-        >
-          Invalid
-        </Badge>
-      );
-    }
-
-    // ACTIVE case
-    switch (ccPairsIndexingStatus.last_status) {
-      case "in_progress":
-        return (
-          <Badge circle variant="success">
-            Indexing
-          </Badge>
-        );
-      case "not_started":
-        return (
-          <Badge circle variant="not_started">
-            Scheduled
-          </Badge>
-        );
-      default:
-        return (
-          <Badge circle variant="success">
-            Active
-          </Badge>
-        );
-    }
   };
 
   return (
@@ -221,20 +154,28 @@ border border-border dark:border-neutral-700
       <TableCell>
         {timeAgo(ccPairsIndexingStatus?.last_success) || "-"}
       </TableCell>
-
-      <TableCell>{getActivityBadge()}</TableCell>
+      <TableCell>
+        <CCPairStatus
+          ccPairStatus={ccPairsIndexingStatus.cc_pair_status}
+          inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
+          lastIndexAttemptStatus={
+            ccPairsIndexingStatus.latest_index_attempt?.status
+          }
+        />
+      </TableCell>
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
           {ccPairsIndexingStatus.access_type === "public" ? (
             <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
-              Public
+              Organization Public
             </Badge>
           ) : ccPairsIndexingStatus.access_type === "sync" ? (
             <Badge
               variant={isEditable ? "auto-sync" : "default"}
               icon={FiRefreshCw}
             >
-              Auto-Sync
+              Inherited from{" "}
+              {getSourceDisplayName(ccPairsIndexingStatus.connector.source)}
             </Badge>
           ) : (
             <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
@@ -244,12 +185,6 @@ border border-border dark:border-neutral-700
         </TableCell>
       )}
       <TableCell>{ccPairsIndexingStatus.docs_indexed}</TableCell>
-      <TableCell>
-        <IndexAttemptStatus
-          status={ccPairsIndexingStatus.last_finished_status || null}
-          errorMsg={ccPairsIndexingStatus?.latest_index_attempt?.error_msg}
-        />
-      </TableCell>
       <TableCell>
         {isEditable && (
           <TooltipProvider>
@@ -564,6 +499,7 @@ export function CCPairIndexingStatusTable({
                 name: "Sample Credential",
                 source: ValidSources.File,
                 user_id: "1",
+                user_email: "sample@example.com",
                 time_created: "2023-07-01T12:00:00Z",
                 time_updated: "2023-07-01T12:00:00Z",
                 credential_json: {},
@@ -575,6 +511,7 @@ export function CCPairIndexingStatusTable({
               last_finished_status: "success",
               latest_index_attempt: null,
               groups: [], // Add this line
+              in_repeated_error_state: false,
             }}
             isEditable={false}
           />
@@ -691,12 +628,11 @@ export function CCPairIndexingStatusTable({
                         <TableRow className="border border-border dark:border-neutral-700">
                           <TableHead>Name</TableHead>
                           <TableHead>Last Indexed</TableHead>
-                          <TableHead>Activity</TableHead>
+                          <TableHead>Status</TableHead>
                           {isPaidEnterpriseFeaturesEnabled && (
                             <TableHead>Permissions</TableHead>
                           )}
                           <TableHead>Total Docs</TableHead>
-                          <TableHead>Last Status</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                         {(sourceMatches ? statuses : matchingConnectors).map(

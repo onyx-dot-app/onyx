@@ -65,7 +65,6 @@ import StarterMessagesList from "./StarterMessageList";
 import { SwitchField } from "@/components/ui/switch";
 import { generateIdenticon } from "@/components/assistants/AssistantIcon";
 import { BackButton } from "@/components/BackButton";
-import { Checkbox } from "@/components/ui/checkbox";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -89,16 +88,10 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
 import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
-import {
-  FileResponse,
-  FolderResponse,
-} from "@/app/chat/my-documents/DocumentsContext";
-import { RadioGroup } from "@/components/ui/radio-group";
-import { RadioGroupItemField } from "@/components/ui/RadioGroupItemField";
+
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { TabToggle } from "@/components/ui/TabToggle";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 
 function findSearchTool(tools: ToolSnapshot[]) {
@@ -281,7 +274,11 @@ export function AssistantEditor({
     selectedGroups: existingPersona?.groups ?? [],
     user_file_ids: existingPersona?.user_file_ids ?? [],
     user_folder_ids: existingPersona?.user_folder_ids ?? [],
-    knowledge_source: "user_files",
+    knowledge_source:
+      (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
+      (existingPersona?.user_folder_ids?.length ?? 0) > 0
+        ? "user_files"
+        : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
   };
 
@@ -375,6 +372,7 @@ export function AssistantEditor({
       }
     }
   };
+
   const canShowKnowledgeSource =
     ccPairs.length > 0 &&
     searchTool &&
@@ -891,33 +889,13 @@ export function AssistantEditor({
                       </div>
                     </>
                   )}
+
                   {searchTool && values.enabled_tools_map[searchTool.id] && (
                     <div>
                       {canShowKnowledgeSource && (
                         <>
                           <div className="mt-1.5 mb-2.5">
                             <div className="flex gap-2.5">
-                              <div
-                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
-                                  values.knowledge_source === "user_files"
-                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
-                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
-                                }`}
-                                onClick={() =>
-                                  setFieldValue(
-                                    "knowledge_source",
-                                    "user_files"
-                                  )
-                                }
-                              >
-                                <div className="text-blue-500 mb-2">
-                                  <FileIcon size={24} />
-                                </div>
-                                <p className="font-medium text-xs">
-                                  User Knowledge
-                                </p>
-                              </div>
-
                               <div
                                 className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
                                   values.knowledge_source === "team_knowledge"
@@ -936,6 +914,27 @@ export function AssistantEditor({
                                 </div>
                                 <p className="font-medium text-xs">
                                   Team Knowledge
+                                </p>
+                              </div>
+
+                              <div
+                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                  values.knowledge_source === "user_files"
+                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                }`}
+                                onClick={() =>
+                                  setFieldValue(
+                                    "knowledge_source",
+                                    "user_files"
+                                  )
+                                }
+                              >
+                                <div className="text-blue-500 mb-2">
+                                  <FileIcon size={24} />
+                                </div>
+                                <p className="font-medium text-xs">
+                                  User Knowledge
                                 </p>
                               </div>
                             </div>

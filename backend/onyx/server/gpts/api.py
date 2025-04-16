@@ -86,13 +86,17 @@ def gpt_search(
                 title=section.center_chunk.semantic_identifier,
                 content=section.center_chunk.content,
                 source_type=section.center_chunk.source_type,
-                link=section.center_chunk.source_links.get(0, "")
-                if section.center_chunk.source_links
-                else "",
+                link=(
+                    section.center_chunk.source_links.get(0, "")
+                    if section.center_chunk.source_links
+                    else ""
+                ),
                 metadata=section.center_chunk.metadata,
-                document_age=time_ago(section.center_chunk.updated_at)
-                if section.center_chunk.updated_at
-                else "Unknown",
+                document_age=(
+                    time_ago(section.center_chunk.updated_at)
+                    if section.center_chunk.updated_at
+                    else "Unknown"
+                ),
             )
             for section in top_sections
         ],

@@ -446,7 +446,6 @@ def set_task_finished_log_level(logLevel: int) -> None:
 
 
 class TenantContextFilter(logging.Filter):
-
     """Logging filter to inject tenant ID into the logger's name."""
 
     def filter(self, record: logging.LogRecord) -> bool:

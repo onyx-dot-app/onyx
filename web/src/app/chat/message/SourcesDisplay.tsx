@@ -1,11 +1,8 @@
-import React, { useState, useEffect } from "react";
-import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
+import React from "react";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon, SeeMoreBlock } from "@/components/chat/sources/SourceCard";
 import { openDocument } from "@/lib/search/utils";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { ValidSources } from "@/lib/types";
-import { FiFileText } from "react-icons/fi";
-import { FileDescriptor } from "../interfaces";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { truncateString } from "@/lib/utils";
 import { FileResponse } from "../my-documents/DocumentsContext";

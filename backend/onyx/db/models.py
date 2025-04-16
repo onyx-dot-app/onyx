@@ -437,6 +437,9 @@ class ConnectorCredentialPair(Base):
     status: Mapped[ConnectorCredentialPairStatus] = mapped_column(
         Enum(ConnectorCredentialPairStatus, native_enum=False), nullable=False
     )
+    # this is separate from the `status` above, since a connector can be `INITIAL_INDEXING`, `ACTIVE`,
+    # or `PAUSED` and still be in a repeated error state.
+    in_repeated_error_state: Mapped[bool] = mapped_column(Boolean, default=False)
     connector_id: Mapped[int] = mapped_column(
         ForeignKey("connector.id"), primary_key=True
     )
@@ -702,12 +705,12 @@ class Connector(Base):
         back_populates="connector",
         cascade="all, delete-orphan",
     )
-    documents_by_connector: Mapped[
-        list["DocumentByConnectorCredentialPair"]
-    ] = relationship(
-        "DocumentByConnectorCredentialPair",
-        back_populates="connector",
-        passive_deletes=True,
+    documents_by_connector: Mapped[list["DocumentByConnectorCredentialPair"]] = (
+        relationship(
+            "DocumentByConnectorCredentialPair",
+            back_populates="connector",
+            passive_deletes=True,
+        )
     )
 
     # synchronize this validation logic with RefreshFrequencySchema etc on front end
@@ -760,12 +763,12 @@ class Credential(Base):
         back_populates="credential",
         cascade="all, delete-orphan",
     )
-    documents_by_credential: Mapped[
-        list["DocumentByConnectorCredentialPair"]
-    ] = relationship(
-        "DocumentByConnectorCredentialPair",
-        back_populates="credential",
-        passive_deletes=True,
+    documents_by_credential: Mapped[list["DocumentByConnectorCredentialPair"]] = (
+        relationship(
+            "DocumentByConnectorCredentialPair",
+            back_populates="credential",
+            passive_deletes=True,
+        )
     )
 
     user: Mapped[User | None] = relationship("User", back_populates="credentials")
@@ -2194,11 +2197,11 @@ class UserGroup(Base):
         secondary=UserGroup__ConnectorCredentialPair.__table__,
         viewonly=True,
     )
-    cc_pair_relationships: Mapped[
-        list[UserGroup__ConnectorCredentialPair]
-    ] = relationship(
-        "UserGroup__ConnectorCredentialPair",
-        viewonly=True,
+    cc_pair_relationships: Mapped[list[UserGroup__ConnectorCredentialPair]] = (
+        relationship(
+            "UserGroup__ConnectorCredentialPair",
+            viewonly=True,
+        )
     )
     personas: Mapped[list[Persona]] = relationship(
         "Persona",

@@ -10,10 +10,11 @@ import {
   SelectorFormField,
   TextFormField,
   MultiSelectField,
+  FileUploadFormField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { defaultModelsByProvider, getDisplayNameForModel } from "@/lib/hooks";
+import { defaultModelsByProvider } from "@/lib/hooks";
 import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
@@ -26,16 +27,18 @@ export function LLMProviderUpdateForm({
   existingLlmProvider,
   shouldMarkAsDefault,
   setPopup,
-  hideAdvanced,
   hideSuccess,
+  firstTimeConfiguration = false,
 }: {
   llmProviderDescriptor: WellKnownLLMProviderDescriptor;
   onClose: () => void;
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
-  hideAdvanced?: boolean;
   setPopup?: (popup: PopupSpec) => void;
   hideSuccess?: boolean;
+
+  // Set this when this is the first time the user is setting Onyx up.
+  firstTimeConfiguration?: boolean;
 }) {
   const { mutate } = useSWRConfig();
 
@@ -46,7 +49,8 @@ export function LLMProviderUpdateForm({
 
   // Define the initial values based on the provider's requirements
   const initialValues = {
-    name: existingLlmProvider?.name || (hideAdvanced ? "Default" : ""),
+    name:
+      existingLlmProvider?.name || (firstTimeConfiguration ? "Default" : ""),
     api_key: existingLlmProvider?.api_key ?? "",
     api_base: existingLlmProvider?.api_base ?? "",
     api_version: existingLlmProvider?.api_version ?? "",
@@ -95,7 +99,9 @@ export function LLMProviderUpdateForm({
               (acc, customConfigKey) => {
                 if (customConfigKey.is_required) {
                   acc[customConfigKey.name] = Yup.string().required(
-                    `${customConfigKey.name} is required`
+                    `${
+                      customConfigKey.display_name || customConfigKey.name
+                    } is required`
                   );
                 }
                 return acc;
@@ -226,7 +232,7 @@ export function LLMProviderUpdateForm({
     >
       {(formikProps) => (
         <Form className="gap-y-4 items-stretch mt-6">
-          {!hideAdvanced && (
+          {!firstTimeConfiguration && (
             <TextFormField
               name="name"
               label="Display Name"
@@ -238,7 +244,7 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_key_required && (
             <TextFormField
-              small={hideAdvanced}
+              small={firstTimeConfiguration}
               name="api_key"
               label="API Key"
               placeholder="API Key"
@@ -248,7 +254,7 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_base_required && (
             <TextFormField
-              small={hideAdvanced}
+              small={firstTimeConfiguration}
               name="api_base"
               label="API Base"
               placeholder="API Base"
@@ -257,31 +263,47 @@ export function LLMProviderUpdateForm({
 
           {llmProviderDescriptor.api_version_required && (
             <TextFormField
-              small={hideAdvanced}
+              small={firstTimeConfiguration}
               name="api_version"
               label="API Version"
               placeholder="API Version"
             />
           )}
 
-          {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => (
-            <div key={customConfigKey.name}>
-              <TextFormField
-                small={hideAdvanced}
-                name={`custom_config.${customConfigKey.name}`}
-                label={
-                  customConfigKey.is_required
-                    ? customConfigKey.name
-                    : `[Optional] ${customConfigKey.name}`
-                }
-                subtext={customConfigKey.description || undefined}
-              />
-            </div>
-          ))}
+          {llmProviderDescriptor.custom_config_keys?.map((customConfigKey) => {
+            if (customConfigKey.key_type === "text_input") {
+              return (
+                <div key={customConfigKey.name}>
+                  <TextFormField
+                    small={firstTimeConfiguration}
+                    name={`custom_config.${customConfigKey.name}`}
+                    label={
+                      customConfigKey.is_required
+                        ? customConfigKey.display_name
+                        : `[Optional] ${customConfigKey.display_name}`
+                    }
+                    subtext={customConfigKey.description || undefined}
+                  />
+                </div>
+              );
+            } else if (customConfigKey.key_type === "file_input") {
+              return (
+                <FileUploadFormField
+                  key={customConfigKey.name}
+                  name={`custom_config.${customConfigKey.name}`}
+                  label={customConfigKey.display_name}
+                  subtext={customConfigKey.description || undefined}
+                />
+              );
+            } else {
+              throw new Error("Unreachable; there should only exist 2 options");
+            }
+          })}
 
-          {!(hideAdvanced && llmProviderDescriptor.name != "azure") && (
+          {!firstTimeConfiguration && (
             <>
               <Separator />
+
               {llmProviderDescriptor.llm_names.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
@@ -303,21 +325,22 @@ export function LLMProviderUpdateForm({
                   placeholder="E.g. gpt-4"
                 />
               )}
+
               {llmProviderDescriptor.deployment_name_required && (
                 <TextFormField
-                  small={hideAdvanced}
                   name="deployment_name"
                   label="Deployment Name"
                   placeholder="Deployment Name"
                 />
               )}
+
               {!llmProviderDescriptor.single_model_supported &&
                 (llmProviderDescriptor.llm_names.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
-                for this provider. If \`Default\` is specified, will use 
-                the Default Model configured above.`}
+                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+            for this provider. If \`Default\` is specified, will use
+            the Default Model configured above.`}
                     label="[Optional] Fast Model"
                     options={llmProviderDescriptor.llm_names.map((name) => ({
                       // don't clean up names here to give admins descriptive names / handle duplicates
@@ -331,125 +354,121 @@ export function LLMProviderUpdateForm({
                 ) : (
                   <TextFormField
                     name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
-                for this provider. If \`Default\` is specified, will use 
-                the Default Model configured above.`}
+                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+            for this provider. If \`Default\` is specified, will use
+            the Default Model configured above.`}
                     label="[Optional] Fast Model"
                     placeholder="E.g. gpt-4"
                   />
                 ))}
 
-              {llmProviderDescriptor.name != "azure" && (
-                <>
-                  <Separator />
+              <>
+                <Separator />
+                <AdvancedOptionsToggle
+                  showAdvancedOptions={showAdvancedOptions}
+                  setShowAdvancedOptions={setShowAdvancedOptions}
+                />
+                {showAdvancedOptions && (
+                  <>
+                    {llmProviderDescriptor.llm_names.length > 0 && (
+                      <div className="w-full">
+                        <MultiSelectField
+                          selectedInitially={
+                            formikProps.values.display_model_names
+                          }
+                          name="display_model_names"
+                          label="Display Models"
+                          subtext="Select the models to make available to users. Unselected models will not be available."
+                          options={llmProviderDescriptor.llm_names.map(
+                            (name) => ({
+                              value: name,
+                              // don't clean up names here to give admins descriptive names / handle duplicates
+                              // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                              label: name,
+                            })
+                          )}
+                          onChange={(selected) =>
+                            formikProps.setFieldValue(
+                              "display_model_names",
+                              selected
+                            )
+                          }
+                        />
+                      </div>
+                    )}
 
-                  <AdvancedOptionsToggle
-                    showAdvancedOptions={showAdvancedOptions}
-                    setShowAdvancedOptions={setShowAdvancedOptions}
-                  />
-                </>
-              )}
-              {showAdvancedOptions && (
-                <>
-                  {llmProviderDescriptor.llm_names.length > 0 && (
-                    <div className="w-full">
-                      <MultiSelectField
-                        selectedInitially={
-                          formikProps.values.display_model_names
-                        }
-                        name="display_model_names"
-                        label="Display Models"
-                        subtext="Select the models to make available to users. Unselected models will not be available."
-                        options={llmProviderDescriptor.llm_names.map(
-                          (name) => ({
-                            value: name,
-                            // don't clean up names here to give admins descriptive names / handle duplicates
-                            // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                            label: name,
-                          })
-                        )}
-                        onChange={(selected) =>
-                          formikProps.setFieldValue(
-                            "display_model_names",
-                            selected
-                          )
-                        }
-                      />
-                    </div>
-                  )}
-
-                  <IsPublicGroupSelector
-                    formikProps={formikProps}
-                    objectName="LLM Provider"
-                    publicToWhom="all users"
-                    enforceGroupSelection={true}
-                  />
-                </>
-              )}
+                    <IsPublicGroupSelector
+                      formikProps={formikProps}
+                      objectName="LLM Provider"
+                      publicToWhom="Users"
+                      enforceGroupSelection={true}
+                    />
+                  </>
+                )}
+              </>
             </>
           )}
-          <div>
-            {/* NOTE: this is above the test button to make sure it's visible */}
-            {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-            <div className="flex w-full mt-4">
-              <Button type="submit" variant="submit">
-                {isTesting ? (
-                  <LoadingAnimation text="Testing" />
-                ) : existingLlmProvider ? (
-                  "Update"
-                ) : (
-                  "Enable"
-                )}
-              </Button>
-              {existingLlmProvider && (
-                <Button
-                  type="button"
-                  variant="destructive"
-                  className="ml-3"
-                  icon={FiTrash}
-                  onClick={async () => {
-                    const response = await fetch(
-                      `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
-                      {
-                        method: "DELETE",
-                      }
-                    );
-                    if (!response.ok) {
-                      const errorMsg = (await response.json()).detail;
-                      alert(`Failed to delete provider: ${errorMsg}`);
-                      return;
-                    }
+          {/* NOTE: this is above the test button to make sure it's visible */}
+          {testError && <Text className="text-error mt-2">{testError}</Text>}
 
-                    // If the deleted provider was the default, set the first remaining provider as default
-                    const remainingProvidersResponse = await fetch(
-                      LLM_PROVIDERS_ADMIN_URL
-                    );
-                    if (remainingProvidersResponse.ok) {
-                      const remainingProviders =
-                        await remainingProvidersResponse.json();
-
-                      if (remainingProviders.length > 0) {
-                        const setDefaultResponse = await fetch(
-                          `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
-                          {
-                            method: "POST",
-                          }
-                        );
-                        if (!setDefaultResponse.ok) {
-                          console.error("Failed to set new default provider");
-                        }
-                      }
-                    }
-
-                    mutate(LLM_PROVIDERS_ADMIN_URL);
-                    onClose();
-                  }}
-                >
-                  Delete
-                </Button>
+          <div className="flex w-full mt-4">
+            <Button type="submit" variant="submit">
+              {isTesting ? (
+                <LoadingAnimation text="Testing" />
+              ) : existingLlmProvider ? (
+                "Update"
+              ) : (
+                "Enable"
               )}
-            </div>
+            </Button>
+            {existingLlmProvider && (
+              <Button
+                type="button"
+                variant="destructive"
+                className="ml-3"
+                icon={FiTrash}
+                onClick={async () => {
+                  const response = await fetch(
+                    `${LLM_PROVIDERS_ADMIN_URL}/${existingLlmProvider.id}`,
+                    {
+                      method: "DELETE",
+                    }
+                  );
+                  if (!response.ok) {
+                    const errorMsg = (await response.json()).detail;
+                    alert(`Failed to delete provider: ${errorMsg}`);
+                    return;
+                  }
+
+                  // If the deleted provider was the default, set the first remaining provider as default
+                  const remainingProvidersResponse = await fetch(
+                    LLM_PROVIDERS_ADMIN_URL
+                  );
+                  if (remainingProvidersResponse.ok) {
+                    const remainingProviders =
+                      await remainingProvidersResponse.json();
+
+                    if (remainingProviders.length > 0) {
+                      const setDefaultResponse = await fetch(
+                        `${LLM_PROVIDERS_ADMIN_URL}/${remainingProviders[0].id}/default`,
+                        {
+                          method: "POST",
+                        }
+                      );
+                      if (!setDefaultResponse.ok) {
+                        console.error("Failed to set new default provider");
+                      }
+                    }
+                  }
+
+                  mutate(LLM_PROVIDERS_ADMIN_URL);
+                  onClose();
+                }}
+              >
+                Delete
+              </Button>
+            )}
           </div>
         </Form>
       )}

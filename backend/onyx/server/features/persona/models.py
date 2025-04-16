@@ -194,6 +194,10 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 if persona.user
                 else None
             ),
+            document_sets=[
+                DocumentSet.from_model(document_set_model)
+                for document_set_model in persona.document_sets
+            ],
             search_start_date=persona.search_start_date,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
             llm_relevance_filter=persona.llm_relevance_filter,

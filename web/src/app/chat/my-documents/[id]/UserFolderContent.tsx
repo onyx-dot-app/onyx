@@ -5,11 +5,8 @@ import {
   MessageSquare,
   ArrowUp,
   ArrowDown,
-  Plus,
   Trash,
   Upload,
-  AlertCircle,
-  X,
 } from "lucide-react";
 import { useDocumentsContext } from "../DocumentsContext";
 import { useChatContext } from "@/components/context/ChatContext";
@@ -23,13 +20,7 @@ import { MoveFolderModal } from "@/components/MoveFolderModal";
 import { FolderResponse } from "../DocumentsContext";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import { TokenDisplay } from "@/components/TokenDisplay";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import CreateEntityModal from "@/components/modals/CreateEntityModal";
+
 import { CleanupModal, CleanupPeriod } from "@/components/CleanupModal";
 import { bulkCleanupFiles } from "../api";
 

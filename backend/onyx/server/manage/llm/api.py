@@ -237,8 +237,9 @@ def set_provider_as_default(
 @admin_router.post("/provider/{provider_id}/default-vision")
 def set_provider_as_default_vision(
     provider_id: int,
-    vision_model: str
-    | None = Query(None, description="The default vision model to use"),
+    vision_model: str | None = Query(
+        None, description="The default vision model to use"
+    ),
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:

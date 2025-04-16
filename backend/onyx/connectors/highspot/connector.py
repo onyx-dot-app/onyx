@@ -350,6 +350,9 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
                 return default_content
 
             else:
+                logger.warning(
+                    f"Item {item_id} has unsupported format: {file_extension}"
+                )
                 return default_content
 
         except HighspotClientError as e:

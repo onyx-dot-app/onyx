@@ -238,12 +238,12 @@ def get_chat_session(
         description=chat_session.description,
         persona_id=chat_session.persona_id,
         persona_name=chat_session.persona.name if chat_session.persona else None,
-        persona_icon_color=chat_session.persona.icon_color
-        if chat_session.persona
-        else None,
-        persona_icon_shape=chat_session.persona.icon_shape
-        if chat_session.persona
-        else None,
+        persona_icon_color=(
+            chat_session.persona.icon_color if chat_session.persona else None
+        ),
+        persona_icon_shape=(
+            chat_session.persona.icon_shape if chat_session.persona else None
+        ),
         current_alternate_model=chat_session.current_alternate_model,
         messages=[
             translate_db_message_to_chat_message_detail(msg) for msg in session_messages
@@ -448,7 +448,7 @@ def handle_new_chat_message(
                 ),
                 is_connected=is_connected_func,
             ):
-                yield json.dumps(packet) if isinstance(packet, dict) else packet
+                yield packet
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
@@ -721,11 +721,15 @@ def upload_files_for_chat(
         file_type = (
             ChatFileType.IMAGE
             if file.content_type in image_content_types
-            else ChatFileType.CSV
-            if file.content_type in csv_content_types
-            else ChatFileType.DOC
-            if file.content_type in document_content_types
-            else ChatFileType.PLAIN_TEXT
+            else (
+                ChatFileType.CSV
+                if file.content_type in csv_content_types
+                else (
+                    ChatFileType.DOC
+                    if file.content_type in document_content_types
+                    else ChatFileType.PLAIN_TEXT
+                )
+            )
         )
 
         file_content = file.file.read()  # Read the file content

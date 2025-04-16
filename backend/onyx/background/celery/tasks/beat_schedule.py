@@ -67,7 +67,9 @@ beat_task_templates.extend(
         {
             "name": "check-for-user-file-folder-sync",
             "task": OnyxCeleryTask.CHECK_FOR_USER_FILE_FOLDER_SYNC,
-            "schedule": timedelta(seconds=30),
+            "schedule": timedelta(
+                days=1
+            ),  # This should essentially always be triggered manually for user folder updates.
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -179,8 +181,18 @@ beat_cloud_tasks: list[dict] = [
     },
     {
         "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants",
-        "task": OnyxCeleryTask.CHECK_AVAILABLE_TENANTS,
+        "task": OnyxCeleryTask.CLOUD_CHECK_AVAILABLE_TENANTS,
         "schedule": timedelta(minutes=10),
+        "options": {
+            "queue": OnyxCeleryQueues.MONITORING,
+            "priority": OnyxCeleryPriority.HIGH,
+            "expires": BEAT_EXPIRES_DEFAULT,
+        },
+    },
+    {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-pidbox",
+        "task": OnyxCeleryTask.CLOUD_MONITOR_CELERY_PIDBOX,
+        "schedule": timedelta(hours=4),
         "options": {
             "queue": OnyxCeleryQueues.MONITORING,
             "priority": OnyxCeleryPriority.HIGH,
@@ -212,6 +224,16 @@ if not MULTI_TENANT:
                     "priority": OnyxCeleryPriority.LOW,
                     "expires": BEAT_EXPIRES_DEFAULT,
                     "queue": OnyxCeleryQueues.MONITORING,
+                },
+            },
+            {
+                "name": "celery-beat-heartbeat",
+                "task": OnyxCeleryTask.CELERY_BEAT_HEARTBEAT,
+                "schedule": timedelta(minutes=1),
+                "options": {
+                    "priority": OnyxCeleryPriority.HIGHEST,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.PRIMARY,
                 },
             },
         ]

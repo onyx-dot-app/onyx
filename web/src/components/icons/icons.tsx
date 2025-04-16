@@ -7,7 +7,6 @@ import {
   Link,
   Plug,
   Brain,
-  X,
   Question,
   Gear,
   ArrowSquareOut,

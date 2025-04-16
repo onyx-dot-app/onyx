@@ -6,7 +6,6 @@ import React, {
   useEffect,
 } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ValidSources } from "@/lib/types";
 
 interface EmbeddingFormContextType {
   formStep: number;

@@ -8,6 +8,7 @@ launch:
 Run this script to seed the database with dummy documents.
 Then run test_query_times.py to test query times.
 """
+
 import random
 from datetime import datetime
 

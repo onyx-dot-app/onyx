@@ -26,6 +26,7 @@ import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
+import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
@@ -90,6 +91,8 @@ export function CustomLLMProviderUpdateForm({
     groups: Yup.array().of(Yup.number()),
     deployment_name: Yup.string().nullable(),
   });
+
+  const arePaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   return (
     <Formik
@@ -305,13 +308,13 @@ export function CustomLLMProviderUpdateForm({
                               <Field
                                 name={`custom_config_list[${index}][0]`}
                                 className={`
-                                  border 
-                                  border-border 
-                                  bg-background 
-                                  rounded 
-                                  w-full 
-                                  py-2 
-                                  px-3 
+                                  border
+                                  border-border
+                                  bg-background
+                                  rounded
+                                  w-full
+                                  py-2
+                                  px-3
                                   mr-4
                                 `}
                                 autoComplete="off"
@@ -328,13 +331,13 @@ export function CustomLLMProviderUpdateForm({
                               <Field
                                 name={`custom_config_list[${index}][1]`}
                                 className={`
-                                  border 
-                                  border-border 
-                                  bg-background 
-                                  rounded 
-                                  w-full 
-                                  py-2 
-                                  px-3 
+                                  border
+                                  border-border
+                                  bg-background
+                                  rounded
+                                  w-full
+                                  py-2
+                                  px-3
                                   mr-4
                                 `}
                                 autoComplete="off"
@@ -404,8 +407,8 @@ export function CustomLLMProviderUpdateForm({
             <TextFormField
               name="default_model_name"
               subtext={`
-              The model to use by default for this provider unless 
-              otherwise specified. Must be one of the models listed 
+              The model to use by default for this provider unless
+              otherwise specified. Must be one of the models listed
               above.`}
               label="Default Model"
               placeholder="E.g. gpt-4"
@@ -414,28 +417,31 @@ export function CustomLLMProviderUpdateForm({
             {!existingLlmProvider?.deployment_name && (
               <TextFormField
                 name="fast_default_model_name"
-                subtext={`The model to use for lighter flows like \`LLM Chunk Filter\` 
-                for this provider. If not set, will use 
+                subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
+                for this provider. If not set, will use
                 the Default Model configured above.`}
                 label="[Optional] Fast Model"
                 placeholder="E.g. gpt-4"
               />
             )}
 
-            <Separator />
+            {arePaidEnterpriseFeaturesEnabled && (
+              <>
+                <Separator />
+                <AdvancedOptionsToggle
+                  showAdvancedOptions={showAdvancedOptions}
+                  setShowAdvancedOptions={setShowAdvancedOptions}
+                />
 
-            <AdvancedOptionsToggle
-              showAdvancedOptions={showAdvancedOptions}
-              setShowAdvancedOptions={setShowAdvancedOptions}
-            />
-
-            {showAdvancedOptions && (
-              <IsPublicGroupSelector
-                formikProps={formikProps}
-                objectName="LLM Provider"
-                publicToWhom="all users"
-                enforceGroupSelection={true}
-              />
+                {showAdvancedOptions && (
+                  <IsPublicGroupSelector
+                    formikProps={formikProps}
+                    objectName="LLM Provider"
+                    publicToWhom="all users"
+                    enforceGroupSelection={true}
+                  />
+                )}
+              </>
             )}
 
             <div>

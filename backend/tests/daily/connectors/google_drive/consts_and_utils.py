@@ -123,15 +123,15 @@ ACCESS_MAPPING: dict[str, list[int]] = {
 
 SPECIAL_FILE_ID_TO_CONTENT_MAP: dict[int, str] = {
     61: (
-        "Title\n\n"
+        "Title\n"
         "This is a Google Doc with sections - "
-        "Section 1\n\n"
+        "Section 1\n"
         "Section 1 content - "
-        "Sub-Section 1-1\n\n"
+        "Sub-Section 1-1\n"
         "Sub-Section 1-1 content - "
-        "Sub-Section 1-2\n\n"
+        "Sub-Section 1-2\n"
         "Sub-Section 1-2 content - "
-        "Section 2\n\n"
+        "Section 2\n"
         "Section 2 content"
     ),
 }

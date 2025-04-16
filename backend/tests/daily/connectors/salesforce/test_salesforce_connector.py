@@ -3,6 +3,7 @@ import os
 import time
 from pathlib import Path
 from typing import Any
+from typing import cast
 
 import pytest
 
@@ -24,7 +25,7 @@ def extract_key_value_pairs_to_set(
 
 def load_test_data(
     file_name: str = "test_salesforce_data.json",
-) -> dict[str, list[str] | dict[str, Any]]:
+) -> dict[str, str | list[str] | dict[str, Any] | list[dict[str, Any]]]:
     current_dir = Path(__file__).parent
     with open(current_dir / file_name, "r") as f:
         return json.load(f)
@@ -90,7 +91,7 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     if not isinstance(expected_text, list):
         raise ValueError("Expected text is not a list")
 
-    unparsed_expected_key_value_pairs: list[str] = expected_text
+    unparsed_expected_key_value_pairs: list[str] = cast(list[str], expected_text)
     received_key_value_pairs = extract_key_value_pairs_to_set(received_text)
     expected_key_value_pairs = extract_key_value_pairs_to_set(
         unparsed_expected_key_value_pairs
@@ -110,7 +111,12 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     assert primary_owner.first_name == expected_primary_owner["first_name"]
     assert primary_owner.last_name == expected_primary_owner["last_name"]
 
-    assert target_test_doc.secondary_owners == test_data["secondary_owners"]
+    secondary_owners = (
+        [owner.model_dump() for owner in target_test_doc.secondary_owners]
+        if target_test_doc.secondary_owners
+        else None
+    )
+    assert secondary_owners == test_data["secondary_owners"]
     assert target_test_doc.title == test_data["title"]
 
 

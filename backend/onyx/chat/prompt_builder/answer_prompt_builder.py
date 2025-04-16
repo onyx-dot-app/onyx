@@ -79,9 +79,11 @@ def default_build_user_message(
     user_prompt = user_prompt.strip()
     tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
-        content=build_content_with_imgs(tag_handled_prompt, files)
-        if files
-        else tag_handled_prompt
+        content=(
+            build_content_with_imgs(tag_handled_prompt, files)
+            if files
+            else tag_handled_prompt
+        )
     )
     return user_msg
 
@@ -154,6 +156,19 @@ class AnswerPromptBuilder:
     def get_user_message_content(self) -> str:
         query, _ = message_to_prompt_and_imgs(self.user_message_and_token_cnt[0])
         return query
+
+    def get_message_history(self) -> list[PreviousMessage]:
+        """
+        Get the message history as a list of PreviousMessage objects.
+        """
+        message_history = []
+        if self.system_message_and_token_cnt:
+            tmp = PreviousMessage.from_langchain_msg(*self.system_message_and_token_cnt)
+            message_history.append(tmp)
+        for i, msg in enumerate(self.message_history):
+            tmp = PreviousMessage.from_langchain_msg(msg, self.history_token_cnts[i])
+            message_history.append(tmp)
+        return message_history
 
     def build(self) -> list[BaseMessage]:
         if not self.user_message_and_token_cnt:

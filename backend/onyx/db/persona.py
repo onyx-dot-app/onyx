@@ -564,6 +564,7 @@ def upsert_persona(
             if is_default_persona is not None
             else existing_persona.is_default_persona
         )
+
         # Do not delete any associations manually added unless
         # a new updated list is provided
         if document_sets is not None:
@@ -623,9 +624,9 @@ def upsert_persona(
             display_priority=display_priority,
             is_visible=is_visible,
             search_start_date=search_start_date,
-            is_default_persona=is_default_persona
-            if is_default_persona is not None
-            else False,
+            is_default_persona=(
+                is_default_persona if is_default_persona is not None else False
+            ),
             user_folders=user_folders or [],
             user_files=user_files or [],
             labels=labels or [],

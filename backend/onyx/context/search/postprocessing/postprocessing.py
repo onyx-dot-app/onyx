@@ -163,9 +163,11 @@ logger = setup_logger()
 
 def _log_top_section_links(search_flow: str, sections: list[InferenceSection]) -> None:
     top_links = [
-        section.center_chunk.source_links[0]
-        if section.center_chunk.source_links is not None
-        else "No Link"
+        (
+            section.center_chunk.source_links[0]
+            if section.center_chunk.source_links is not None
+            else "No Link"
+        )
         for section in sections
     ]
     logger.debug(f"Top links from {search_flow} search: {', '.join(top_links)}")
@@ -374,14 +376,6 @@ def filter_sections(
     if query.evaluation_type == LLMEvaluationType.SKIP:
         return []
 
-    # Additional safeguard: Log a warning if this function is ever called with SKIP evaluation type
-    # This should never happen if our fast paths are working correctly
-    if query.evaluation_type == LLMEvaluationType.SKIP:
-        logger.warning(
-            "WARNING: filter_sections called with SKIP evaluation_type. This should never happen!"
-        )
-        return []
-
     sections_to_filter = sections_to_filter[: query.max_llm_filter_sections]
 
     contents = [
@@ -461,12 +455,10 @@ def search_postprocessing(
 
     llm_filter_task_id = None
     # Only add LLM filtering if not in SKIP mode and if LLM doc relevance is not disabled
-    if (
-        search_query.evaluation_type not in [LLMEvaluationType.SKIP]
-        and not DISABLE_LLM_DOC_RELEVANCE
-        and search_query.evaluation_type
-        in [LLMEvaluationType.BASIC, LLMEvaluationType.UNSPECIFIED]
-    ):
+    if not DISABLE_LLM_DOC_RELEVANCE and search_query.evaluation_type in [
+        LLMEvaluationType.BASIC,
+        LLMEvaluationType.UNSPECIFIED,
+    ]:
         logger.info("Adding LLM filtering task for document relevance evaluation")
         post_processing_tasks.append(
             FunctionCall(
@@ -479,8 +471,6 @@ def search_postprocessing(
             )
         )
         llm_filter_task_id = post_processing_tasks[-1].result_id
-    elif search_query.evaluation_type == LLMEvaluationType.SKIP:
-        logger.info("Fast path: Skipping LLM filtering task for ordering-only mode")
     elif DISABLE_LLM_DOC_RELEVANCE:
         logger.info("Skipping LLM filtering task because LLM doc relevance is disabled")
 

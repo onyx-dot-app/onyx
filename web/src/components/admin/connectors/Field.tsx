@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/tooltip";
 import ReactMarkdown from "react-markdown";
 import { FaMarkdown } from "react-icons/fa";
-import { useRef, useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -34,6 +34,7 @@ import { CheckboxField } from "@/components/ui/checkbox";
 import { CheckedState } from "@radix-ui/react-checkbox";
 
 import { transformLinkUri } from "@/lib/utils";
+import FileInput from "@/app/admin/connectors/[connector]/pages/ConnectorInput/FileInput";
 
 export function SectionHeader({
   children,
@@ -129,6 +130,54 @@ export function ToolTipDetails({
   );
 }
 
+const FieldLabel = ({
+  subtext,
+  error,
+  name,
+  tooltip,
+  optional,
+  hideError,
+  label,
+  removeLabel,
+  vertical,
+}: {
+  subtext?: string | JSX.Element;
+  error?: string;
+  name: string;
+  tooltip?: string;
+  optional?: boolean;
+  hideError?: boolean;
+  label: string;
+  removeLabel?: boolean;
+  vertical?: boolean;
+}) => (
+  <>
+    <div
+      className={`flex ${
+        vertical ? "flex-col" : "flex-row"
+      } gap-x-2 items-start`}
+    >
+      <div className="flex gap-x-2 items-center">
+        {!removeLabel && <Label small={false}>{label}</Label>}
+        {optional ? <span>(optional) </span> : ""}
+        {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
+      </div>
+      {error ? (
+        <ManualErrorMessage>{error}</ManualErrorMessage>
+      ) : (
+        !hideError && (
+          <ErrorMessage
+            name={name}
+            component="div"
+            className="text-error my-auto text-sm"
+          />
+        )
+      )}
+    </div>
+    {subtext && <SubLabel>{subtext}</SubLabel>}
+  </>
+);
+
 export function TextFormField({
   name,
   label,
@@ -191,8 +240,7 @@ export function TextFormField({
     heightString = "h-28";
   }
 
-  const [, , helpers] = useField(name);
-  const { setValue } = helpers;
+  const [, , { setValue }] = useField(name);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -224,29 +272,18 @@ export function TextFormField({
 
   return (
     <div className={`w-full ${maxWidth} ${width}`}>
-      <div
-        className={`flex ${
-          vertical ? "flex-col" : "flex-row"
-        } gap-x-2 items-start`}
-      >
-        <div className="flex gap-x-2 items-center">
-          {!removeLabel && <Label small={false}>{label}</Label>}
-          {optional ? <span>(optional) </span> : ""}
-          {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
-        </div>
-        {error ? (
-          <ManualErrorMessage>{error}</ManualErrorMessage>
-        ) : (
-          !hideError && (
-            <ErrorMessage
-              name={name}
-              component="div"
-              className="text-error my-auto text-sm"
-            />
-          )
-        )}
-      </div>
-      {subtext && <SubLabel>{subtext}</SubLabel>}
+      <FieldLabel
+        key={name}
+        subtext={subtext}
+        error={error}
+        name={name}
+        tooltip={tooltip}
+        optional={optional}
+        hideError={hideError}
+        label={label}
+        removeLabel={removeLabel}
+        vertical={vertical}
+      />
       <div className={`w-full flex ${includeRevert && "gap-x-2"} relative`}>
         <Field
           onChange={handleChange}
@@ -260,13 +297,13 @@ export function TextFormField({
             ${small && sizeClass.input}
             flex
             h-10
-            w-full 
+            w-full
             rounded-md
-            border 
+            border
             border-neutral-200
             bg-white
-            px-3 
-            py-2 
+            px-3
+            py-2
             mt-1
             text-base
 
@@ -276,7 +313,7 @@ export function TextFormField({
             file:font-medium
             file:text-neutral-950
             placeholder:text-neutral-500
-            placeholder:font-description 
+            placeholder:font-description
             placeholder:${sizeClass.placeholder}
             caret-accent
             focus-visible:outline-none
@@ -315,6 +352,39 @@ export function TextFormField({
       {explanationText && (
         <ExplanationText link={explanationLink} text={explanationText} />
       )}
+    </div>
+  );
+}
+
+export function FileUploadFormField({
+  name,
+  label,
+  subtext,
+}: {
+  name: string;
+  label: string;
+  subtext?: string | JSX.Element;
+}) {
+  // We create a *temporary* field inside of `Formik` to throw the `File` object into.
+  // The actual *contents* of the file will be thrown into the field called `name`.
+  const fileName = `temporary.filename-${name}`;
+  const [fileField] = useField<File>(fileName);
+  const [, , contentsHelper] = useField<string>(name);
+
+  useEffect(() => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      contentsHelper.setValue(e.target?.result as string);
+    };
+    if (fileField.value instanceof File) {
+      reader.readAsText(fileField.value);
+    }
+  }, [contentsHelper, fileField.value]);
+
+  return (
+    <div className="w-full">
+      <FieldLabel name={name} label={label} subtext={subtext} />
+      <FileInput name={fileName} multiple={false} hideError />
     </div>
   );
 }
@@ -403,7 +473,7 @@ export const MarkdownFormField = ({
   error,
   placeholder = "Enter your markdown here...",
 }: MarkdownPreviewProps) => {
-  const [field, _] = useField(name);
+  const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const togglePreview = () => {
@@ -594,13 +664,13 @@ export function TextArrayField<T extends Yup.AnyObject>({
                       name={`${name}.${index}`}
                       id={name}
                       className={`
-                      border 
-                      border-border 
-                      bg-background 
-                      rounded 
-                      w-full 
-                      py-2 
-                      px-3 
+                      border
+                      border-border
+                      bg-background
+                      rounded
+                      w-full
+                      py-2
+                      px-3
                       mr-4
                       `}
                       // Disable autocomplete since the browser doesn't know how to handle an array of text fields

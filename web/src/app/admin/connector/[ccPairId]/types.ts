@@ -9,6 +9,8 @@ import {
 import { UUID } from "crypto";
 
 export enum ConnectorCredentialPairStatus {
+  SCHEDULED = "SCHEDULED",
+  INITIAL_INDEXING = "INITIAL_INDEXING",
   ACTIVE = "ACTIVE",
   PAUSED = "PAUSED",
   DELETING = "DELETING",
@@ -31,6 +33,7 @@ export interface CCPairFullInfo {
   id: number;
   name: string;
   status: ConnectorCredentialPairStatus;
+  in_repeated_error_state: boolean;
   num_docs_indexed: number;
   connector: Connector<any>;
   credential: Credential<any>;
@@ -43,6 +46,12 @@ export interface CCPairFullInfo {
   indexing: boolean;
   creator: UUID | null;
   creator_email: string | null;
+
+  last_indexed: string | null;
+  last_pruned: string | null;
+  last_permission_sync: string | null;
+  overall_indexing_speed: number | null;
+  latest_checkpoint_description: string | null;
 }
 
 export interface PaginatedIndexAttempts {

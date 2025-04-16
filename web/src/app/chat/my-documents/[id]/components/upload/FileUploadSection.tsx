@@ -1,17 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
-import {
-  Upload,
-  Link,
-  ArrowRight,
-  X,
-  Loader2,
-  FileIcon,
-  Plus,
-  AlertCircle,
-} from "lucide-react";
+import { Upload, Link, X, Loader2, Plus, AlertCircle } from "lucide-react";
 import {
   Tooltip,
-  TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";

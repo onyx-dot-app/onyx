@@ -26,6 +26,7 @@ from onyx.background.celery.celery_utils import httpx_init_vespa_pool
 from onyx.background.celery.memory_monitoring import emit_process_memory
 from onyx.background.celery.tasks.indexing.utils import get_unfenced_index_attempt_ids
 from onyx.background.celery.tasks.indexing.utils import IndexingCallback
+from onyx.background.celery.tasks.indexing.utils import is_in_repeated_error_state
 from onyx.background.celery.tasks.indexing.utils import should_index
 from onyx.background.celery.tasks.indexing.utils import try_creating_indexing_task
 from onyx.background.celery.tasks.indexing.utils import validate_indexing_fences
@@ -44,6 +45,7 @@ from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT
 from onyx.configs.constants import CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT
+from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
@@ -53,11 +55,12 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
 from onyx.db.connector_credential_pair import fetch_connector_credential_pairs
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.connector_credential_pair import set_cc_pair_repeated_error_state
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingMode
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import get_index_attempt
-from onyx.db.index_attempt import get_last_attempt_for_cc_pair
 from onyx.db.index_attempt import mark_attempt_canceled
 from onyx.db.index_attempt import mark_attempt_failed
 from onyx.db.search_settings import get_active_search_settings_list
@@ -240,6 +243,16 @@ def monitor_ccpair_indexing_taskset(
     if not payload:
         return
 
+    # if the CC Pair is `SCHEDULED`, moved it to `INITIAL_INDEXING`. A CC Pair
+    # should only ever be `SCHEDULED` if it's a new connector.
+    cc_pair = get_connector_credential_pair_from_id(db_session, cc_pair_id)
+    if cc_pair is None:
+        raise RuntimeError(f"CC Pair {cc_pair_id} not found")
+
+    if cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED:
+        cc_pair.status = ConnectorCredentialPairStatus.INITIAL_INDEXING
+        db_session.commit()
+
     elapsed_started_str = None
     if payload.started:
         elapsed_started = datetime.now(timezone.utc) - payload.started
@@ -354,6 +367,22 @@ def monitor_ccpair_indexing_taskset(
 
     redis_connector_index.reset()
 
+    # mark the CC Pair as `ACTIVE` if it's not already
+    if (
+        # it should never technically be in this state, but we'll handle it anyway
+        cc_pair.status == ConnectorCredentialPairStatus.SCHEDULED
+        or cc_pair.status == ConnectorCredentialPairStatus.INITIAL_INDEXING
+    ):
+        cc_pair.status = ConnectorCredentialPairStatus.ACTIVE
+        db_session.commit()
+
+    # if the index attempt is successful, clear the repeated error state
+    if cc_pair.in_repeated_error_state:
+        index_attempt = get_index_attempt(db_session, payload.index_attempt_id)
+        if index_attempt and index_attempt.status.is_successful():
+            cc_pair.in_repeated_error_state = False
+            db_session.commit()
+
 
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_INDEXING,
@@ -440,6 +469,21 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
             for cc_pair_entry in cc_pairs:
                 cc_pair_ids.append(cc_pair_entry.id)
 
+        # mark CC Pairs that are repeatedly failing as in repeated error state
+        with get_session_with_current_tenant() as db_session:
+            current_search_settings = get_current_search_settings(db_session)
+            for cc_pair_id in cc_pair_ids:
+                if is_in_repeated_error_state(
+                    cc_pair_id=cc_pair_id,
+                    search_settings_id=current_search_settings.id,
+                    db_session=db_session,
+                ):
+                    set_cc_pair_repeated_error_state(
+                        db_session=db_session,
+                        cc_pair_id=cc_pair_id,
+                        in_repeated_error_state=True,
+                    )
+
         # kick off index attempts
         for cc_pair_id in cc_pair_ids:
             lock_beat.reacquire()
@@ -479,13 +523,8 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         )
                         continue
 
-                    last_attempt = get_last_attempt_for_cc_pair(
-                        cc_pair.id, search_settings_instance.id, db_session
-                    )
-
                     if not should_index(
                         cc_pair=cc_pair,
-                        last_index=last_attempt,
                         search_settings_instance=search_settings_instance,
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
@@ -493,7 +532,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         task_logger.info(
                             f"check_for_indexing - Not indexing cc_pair_id: {cc_pair_id} "
                             f"search_settings={search_settings_instance.id}, "
-                            f"last_attempt={last_attempt.id if last_attempt else None}, "
                             f"secondary_index_building={len(search_settings_list) > 1}"
                         )
                         continue
@@ -501,7 +539,6 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         task_logger.info(
                             f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
                             f"search_settings={search_settings_instance.id}, "
-                            f"last_attempt={last_attempt.id if last_attempt else None}, "
                             f"secondary_index_building={len(search_settings_list) > 1}"
                         )
 
@@ -1234,8 +1271,9 @@ def connector_indexing_proxy_task(
 @shared_task(
     name=OnyxCeleryTask.CHECK_FOR_CHECKPOINT_CLEANUP,
     soft_time_limit=300,
+    bind=True,
 )
-def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
+def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
     """Clean up old checkpoints that are older than 7 days."""
     locked = False
     redis_client = get_redis_client(tenant_id=tenant_id)
@@ -1256,14 +1294,15 @@ def check_for_checkpoint_cleanup(*, tenant_id: str) -> None:
                 task_logger.info(
                     f"Cleaning up checkpoint for index attempt {attempt.id}"
                 )
-                cleanup_checkpoint_task.apply_async(
+                self.app.send_task(
+                    OnyxCeleryTask.CLEANUP_CHECKPOINT,
                     kwargs={
                         "index_attempt_id": attempt.id,
                         "tenant_id": tenant_id,
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
+                    priority=OnyxCeleryPriority.MEDIUM,
                 )
-
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
         return None
@@ -1287,5 +1326,17 @@ def cleanup_checkpoint_task(
     self: Task, *, index_attempt_id: int, tenant_id: str | None
 ) -> None:
     """Clean up a checkpoint for a given index attempt"""
-    with get_session_with_current_tenant() as db_session:
-        cleanup_checkpoint(db_session, index_attempt_id)
+
+    start = time.monotonic()
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            cleanup_checkpoint(db_session, index_attempt_id)
+    finally:
+        elapsed = time.monotonic() - start
+
+        task_logger.info(
+            f"cleanup_checkpoint_task completed: tenant_id={tenant_id} "
+            f"index_attempt_id={index_attempt_id} "
+            f"elapsed={elapsed:.2f}"
+        )

@@ -406,7 +406,6 @@ async def delete_user_from_control_plane(tenant_id: str, email: str) -> None:
             headers=headers,
             json=payload.model_dump(),
         ) as response:
-            print(response)
             if response.status != 200:
                 error_text = await response.text()
                 logger.error(f"Control plane tenant creation failed: {error_text}")

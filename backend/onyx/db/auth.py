@@ -29,10 +29,10 @@ from onyx.utils.variable_functionality import (
 def get_default_admin_user_emails() -> list[str]:
     """Returns a list of emails who should default to Admin role.
     Only used in the EE version. For MIT, just return empty list."""
-    get_default_admin_user_emails_fn: Callable[
-        [], list[str]
-    ] = fetch_versioned_implementation_with_fallback(
-        "onyx.auth.users", "get_default_admin_user_emails_", lambda: list[str]()
+    get_default_admin_user_emails_fn: Callable[[], list[str]] = (
+        fetch_versioned_implementation_with_fallback(
+            "onyx.auth.users", "get_default_admin_user_emails_", lambda: list[str]()
+        )
     )
     return get_default_admin_user_emails_fn()
 
@@ -56,7 +56,8 @@ def get_total_users_count(db_session: Session) -> int:
 
 async def get_user_count(only_admin_users: bool = False) -> int:
     async with get_async_session_with_tenant() as session:
-        stmt = select(func.count(User.id))
+        count_stmt = func.count(User.id)  # type: ignore
+        stmt = select(count_stmt)
         if only_admin_users:
             stmt = stmt.where(User.role == UserRole.ADMIN)
         result = await session.execute(stmt)

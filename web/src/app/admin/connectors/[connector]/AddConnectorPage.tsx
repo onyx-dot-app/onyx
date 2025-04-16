@@ -23,11 +23,7 @@ import {
   oauthSupportedSources,
   ValidSources,
 } from "@/lib/types";
-import {
-  Credential,
-  credentialTemplates,
-  OAuthDetails,
-} from "@/lib/connectors/credentials";
+import { Credential, credentialTemplates } from "@/lib/connectors/credentials";
 import {
   ConnectionConfiguration,
   connectorConfigs,

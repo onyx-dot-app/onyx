@@ -25,7 +25,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import ConnectorFailure
@@ -86,9 +86,11 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
         # updated_at is UTC time but is timezone unaware, explicitly add UTC
         # as there is logic in indexing to prevent wrong timestamped docs
         # due to local time discrepancies with UTC
-        doc_updated_at=pull_request.updated_at.replace(tzinfo=timezone.utc)
-        if pull_request.updated_at
-        else None,
+        doc_updated_at=(
+            pull_request.updated_at.replace(tzinfo=timezone.utc)
+            if pull_request.updated_at
+            else None
+        ),
         metadata={
             "merged": str(pull_request.merged),
             "state": pull_request.state,
@@ -141,7 +143,7 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     cached_repo: SerializedRepository | None = None
 
 
-class GithubConnector(CheckpointConnector[GithubConnectorCheckpoint]):
+class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
     def __init__(
         self,
         repo_owner: str,

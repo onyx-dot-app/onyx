@@ -27,6 +27,7 @@ Example:
   python vespa_debug_tool.py --action list_docs --tenant-id my_tenant --connector-id 1 --n 5
   python vespa_debug_tool.py --action list_connector --tenant-id my_tenant --cc-pair-id 1 --n 5
 """
+
 import argparse
 import json
 from datetime import datetime
@@ -46,6 +47,7 @@ from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.engine import get_session_with_tenant
+from onyx.db.engine import SqlEngine
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Document
 from onyx.db.models import DocumentByConnectorCredentialPair
@@ -513,6 +515,7 @@ def get_number_of_chunks_we_think_exist(
 class VespaDebugging:
     # Class for managing Vespa debugging actions.
     def __init__(self, tenant_id: str = POSTGRES_DEFAULT_SCHEMA):
+        SqlEngine.init_engine(pool_size=20, max_overflow=5)
         CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
         self.tenant_id = tenant_id
         self.index_name = get_index_name(self.tenant_id)
@@ -854,6 +857,7 @@ def delete_documents_for_tenant(
 
 
 def main() -> None:
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
     parser = argparse.ArgumentParser(description="Vespa debugging tool")
     parser.add_argument(
         "--action",

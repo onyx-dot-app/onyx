@@ -106,6 +106,11 @@ def test_highspot_connector_slim(
     assert len(all_slim_doc_ids) > 0
 
 
+"""This test might fail because of how Highspot handles changes to the document's
+"updated at" property. It is marked as expected to fail until we can confirm the behavior."""
+
+
+@pytest.mark.xfail(reason="Highspot is not returning updated documents as expected.")
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,

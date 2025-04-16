@@ -1,13 +1,10 @@
 import React, { useEffect, useState } from "react";
-import useSWR from "swr";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import {
   Notification,
   NotificationType,
 } from "@/app/admin/settings/interfaces";
-import { errorHandlingFetcher } from "@/lib/fetcher";
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
-import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import { useAssistants } from "../context/AssistantsContext";
 import { useUser } from "../user/UserProvider";
 import { XIcon } from "../icons/icons";

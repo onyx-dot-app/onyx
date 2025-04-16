@@ -43,7 +43,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 
 import { CheckFormField } from "@/components/ui/CheckField";
-import { Input } from "@/components/ui/input";
 
 export interface SlackChannelConfigFormFieldsProps {
   isUpdate: boolean;

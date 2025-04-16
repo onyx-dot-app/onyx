@@ -23,6 +23,7 @@ export interface CredentialBase<T> {
 export interface Credential<T> extends CredentialBase<T> {
   id: number;
   user_id: string | null;
+  user_email: string | null;
   time_created: string;
   time_updated: string;
 }

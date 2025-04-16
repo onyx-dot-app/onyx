@@ -112,9 +112,9 @@ class SubQuestionResultsUpdate(LoggerUpdate):
         list[InferenceSection], dedup_inference_sections
     ] = []
     context_documents: Annotated[list[InferenceSection], dedup_inference_sections] = []
-    cited_documents: Annotated[
-        list[InferenceSection], dedup_inference_sections
-    ] = []  # cited docs from sub-answers are used for answer context
+    cited_documents: Annotated[list[InferenceSection], dedup_inference_sections] = (
+        []
+    )  # cited docs from sub-answers are used for answer context
     sub_question_results: Annotated[
         list[SubQuestionAnswerResults], dedup_question_answer_results
     ] = []

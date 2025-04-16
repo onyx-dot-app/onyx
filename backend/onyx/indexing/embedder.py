@@ -73,6 +73,8 @@ class IndexingEmbedder(ABC):
     def embed_chunks(
         self,
         chunks: list[DocAwareChunk],
+        tenant_id: str | None = None,
+        request_id: str | None = None,
     ) -> list[IndexChunk]:
         raise NotImplementedError
 
@@ -110,6 +112,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
     def embed_chunks(
         self,
         chunks: list[DocAwareChunk],
+        tenant_id: str | None = None,
+        request_id: str | None = None,
     ) -> list[IndexChunk]:
         """Adds embeddings to the chunks, the title and metadata suffixes are added to the chunk as well
         if they exist. If there is no space for it, it would have been thrown out at the chunking step.
@@ -143,6 +147,8 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
             texts=flat_chunk_texts,
             text_type=EmbedTextType.PASSAGE,
             large_chunks_present=large_chunks_present,
+            tenant_id=tenant_id,
+            request_id=request_id,
         )
 
         chunk_titles = {
@@ -158,7 +164,10 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
         title_embed_dict: dict[str, Embedding] = {}
         if chunk_titles_list:
             title_embeddings = self.embedding_model.encode(
-                chunk_titles_list, text_type=EmbedTextType.PASSAGE
+                chunk_titles_list,
+                text_type=EmbedTextType.PASSAGE,
+                tenant_id=tenant_id,
+                request_id=request_id,
             )
             title_embed_dict.update(
                 {
@@ -190,7 +199,10 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
                         "Title had to be embedded separately, this should not happen!"
                     )
                     title_embedding = self.embedding_model.encode(
-                        [title], text_type=EmbedTextType.PASSAGE
+                        [title],
+                        text_type=EmbedTextType.PASSAGE,
+                        tenant_id=tenant_id,
+                        request_id=request_id,
                     )[0]
                     title_embed_dict[title] = title_embedding
 
@@ -231,14 +243,24 @@ class DefaultIndexingEmbedder(IndexingEmbedder):
 def embed_chunks_with_failure_handling(
     chunks: list[DocAwareChunk],
     embedder: IndexingEmbedder,
+    tenant_id: str | None = None,
+    request_id: str | None = None,
 ) -> tuple[list[IndexChunk], list[ConnectorFailure]]:
     """Tries to embed all chunks in one large batch. If that batch fails for any reason,
     goes document by document to isolate the failure(s).
     """
 
+    # TODO(rkuo): this doesn't disambiguate calls to the model server on retries.
+    # Improve this if needed.
+
     # First try to embed all chunks in one batch
     try:
-        return embedder.embed_chunks(chunks=chunks), []
+        return (
+            embedder.embed_chunks(
+                chunks=chunks, tenant_id=tenant_id, request_id=request_id
+            ),
+            [],
+        )
     except Exception:
         logger.exception("Failed to embed chunk batch. Trying individual docs.")
         # wait a couple seconds to let any rate limits or temporary issues resolve
@@ -254,7 +276,9 @@ def embed_chunks_with_failure_handling(
 
     for doc_id, chunks_for_doc in chunks_by_doc.items():
         try:
-            doc_embedded_chunks = embedder.embed_chunks(chunks=chunks_for_doc)
+            doc_embedded_chunks = embedder.embed_chunks(
+                chunks=chunks_for_doc, tenant_id=tenant_id, request_id=request_id
+            )
             embedded_chunks.extend(doc_embedded_chunks)
         except Exception as e:
             logger.exception(f"Failed to embed chunks for document '{doc_id}'")

@@ -61,8 +61,9 @@ def litellm_exception_to_error_msg(
     e: Exception,
     llm: LLM,
     fallback_to_error_msg: bool = False,
-    custom_error_msg_mappings: dict[str, str]
-    | None = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
+    custom_error_msg_mappings: (
+        dict[str, str] | None
+    ) = LITELLM_CUSTOM_ERROR_MESSAGE_MAPPINGS,
 ) -> str:
     error_msg = str(e)
 
@@ -252,7 +253,7 @@ def message_to_prompt_and_imgs(message: BaseMessage) -> tuple[str, list[str]]:
 
 
 def dict_based_prompt_to_langchain_prompt(
-    messages: list[dict[str, str]]
+    messages: list[dict[str, str]],
 ) -> list[BaseMessage]:
     prompt: list[BaseMessage] = []
     for message in messages:
@@ -498,11 +499,20 @@ def get_llm_contextual_cost(
     num_input_tokens += num_tokens + num_docs * DOCUMENT_SUMMARY_TOKEN_ESTIMATE
     num_output_tokens += num_docs * MAX_CONTEXT_TOKENS
 
-    usd_per_prompt, usd_per_completion = litellm.cost_per_token(
-        model=llm.config.model_name,
-        prompt_tokens=num_input_tokens,
-        completion_tokens=num_output_tokens,
-    )
+    try:
+        usd_per_prompt, usd_per_completion = litellm.cost_per_token(
+            model=llm.config.model_name,
+            prompt_tokens=num_input_tokens,
+            completion_tokens=num_output_tokens,
+        )
+    except Exception:
+        logger.exception(
+            "An unexpected error occurred while calculating cost for model "
+            f"{llm.config.model_name} (potentially due to malformed name). "
+            "Assuming cost is 0."
+        )
+        return 0
+
     # Costs are in USD dollars per million tokens
     return usd_per_prompt + usd_per_completion
 

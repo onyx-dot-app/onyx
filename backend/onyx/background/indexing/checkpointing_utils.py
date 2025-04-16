@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.db.engine import get_db_current_time
 from onyx.db.index_attempt import get_index_attempt
@@ -61,7 +61,7 @@ def load_checkpoint(
     try:
         checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
         checkpoint_data = checkpoint_io.read().decode("utf-8")
-        if isinstance(connector, CheckpointConnector):
+        if isinstance(connector, CheckpointedConnector):
             return connector.validate_checkpoint_json(checkpoint_data)
         return ConnectorCheckpoint.model_validate_json(checkpoint_data)
     except RuntimeError:

@@ -19,6 +19,7 @@ import httpx  # type: ignore
 import requests  # type: ignore
 from retry import retry
 
+from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
 from onyx.configs.chat_configs import DOC_TIME_DECAY
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
@@ -177,9 +178,9 @@ class VespaIndex(DocumentIndex):
         self.index_to_large_chunks_enabled: dict[str, bool] = {}
         self.index_to_large_chunks_enabled[index_name] = large_chunks_enabled
         if secondary_index_name and secondary_large_chunks_enabled:
-            self.index_to_large_chunks_enabled[
-                secondary_index_name
-            ] = secondary_large_chunks_enabled
+            self.index_to_large_chunks_enabled[secondary_index_name] = (
+                secondary_large_chunks_enabled
+            )
 
     def ensure_indices_exist(
         self,
@@ -389,9 +390,9 @@ class VespaIndex(DocumentIndex):
         new_document_id_to_original_document_id: dict[str, str] = {}
         for ind, chunk in enumerate(cleaned_chunks):
             old_chunk = chunks[ind]
-            new_document_id_to_original_document_id[
-                chunk.source_document.id
-            ] = old_chunk.source_document.id
+            new_document_id_to_original_document_id[chunk.source_document.id] = (
+                old_chunk.source_document.id
+            )
 
         existing_docs: set[str] = set()
 
@@ -724,9 +725,10 @@ class VespaIndex(DocumentIndex):
         if self.secondary_index_name:
             index_names.append(self.secondary_index_name)
 
-        with self.httpx_client_context as http_client, concurrent.futures.ThreadPoolExecutor(
-            max_workers=NUM_THREADS
-        ) as executor:
+        with (
+            self.httpx_client_context as http_client,
+            concurrent.futures.ThreadPoolExecutor(max_workers=NUM_THREADS) as executor,
+        ):
             for (
                 index_name,
                 large_chunks_enabled,
@@ -799,12 +801,14 @@ class VespaIndex(DocumentIndex):
         hybrid_alpha: float,
         time_decay_multiplier: float,
         num_to_retrieve: int,
+        ranking_profile_type: QueryExpansionType,
         offset: int = 0,
         title_content_ratio: float | None = TITLE_CONTENT_RATIO,
     ) -> list[InferenceChunkUncleaned]:
         vespa_where_clauses = build_vespa_filters(filters)
         # Needs to be at least as much as the value set in Vespa schema config
         target_hits = max(10 * num_to_retrieve, 1000)
+
         yql = (
             YQL_BASE.format(index_name=self.index_name)
             + vespa_where_clauses
@@ -816,6 +820,11 @@ class VespaIndex(DocumentIndex):
 
         final_query = " ".join(final_keywords) if final_keywords else query
 
+        if ranking_profile_type == QueryExpansionType.KEYWORD:
+            ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
+        else:
+            ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
+
         logger.debug(f"Query YQL: {yql}")
 
         params: dict[str, str | int | float] = {
@@ -824,12 +833,14 @@ class VespaIndex(DocumentIndex):
             "input.query(query_embedding)": str(query_embedding),
             "input.query(decay_factor)": str(DOC_TIME_DECAY * time_decay_multiplier),
             "input.query(alpha)": hybrid_alpha,
-            "input.query(title_content_ratio)": title_content_ratio
-            if title_content_ratio is not None
-            else TITLE_CONTENT_RATIO,
+            "input.query(title_content_ratio)": (
+                title_content_ratio
+                if title_content_ratio is not None
+                else TITLE_CONTENT_RATIO
+            ),
             "hits": num_to_retrieve,
             "offset": offset,
-            "ranking.profile": f"hybrid_search{len(query_embedding)}",
+            "ranking.profile": ranking_profile,
             "timeout": VESPA_TIMEOUT,
         }
 

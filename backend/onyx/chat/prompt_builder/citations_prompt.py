@@ -175,9 +175,11 @@ def build_citations_user_message(
 
     user_prompt = user_prompt.strip()
     user_msg = HumanMessage(
-        content=build_content_with_imgs(user_prompt, img_urls=img_urls)
-        if img_urls
-        else user_prompt
+        content=(
+            build_content_with_imgs(user_prompt, img_urls=img_urls)
+            if img_urls
+            else user_prompt
+        )
     )
 
     return user_msg
