@@ -108,7 +108,6 @@ def upsert_llm_provider(
         )
     )
 
-    model_configurations = []
     for model_name in model_names:
         model_configuration = ModelConfiguration(
             llm_provider_id=existing_llm_provider.id,
@@ -124,9 +123,7 @@ def upsert_llm_provider(
         group_ids=llm_provider.groups,
         db_session=db_session,
     )
-    full_llm_provider = LLMProviderView.from_model(
-        existing_llm_provider, model_configurations
-    )
+    full_llm_provider = LLMProviderView.from_model(existing_llm_provider)
 
     db_session.commit()
 
@@ -223,8 +220,7 @@ def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
     )
     if not provider_model:
         return None
-    model_configurations = fetch_model_configurations(db_session, provider_model.id)
-    return LLMProviderView.from_model(provider_model, model_configurations)
+    return LLMProviderView.from_model(provider_model)
 
 
 def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
@@ -235,8 +231,7 @@ def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None
     )
     if not provider_model:
         return None
-    model_configurations = fetch_model_configurations(db_session, provider_model.id)
-    return LLMProviderView.from_model(provider_model, model_configurations)
+    return LLMProviderView.from_model(provider_model)
 
 
 def fetch_llm_provider_view(
@@ -247,21 +242,7 @@ def fetch_llm_provider_view(
     )
     if not provider_model:
         return None
-    model_configurations = fetch_model_configurations(db_session, provider_model.id)
-    return LLMProviderView.from_model(provider_model, model_configurations)
-
-
-def fetch_model_configurations(
-    db_session: Session,
-    llm_provider_id: int,
-) -> list[ModelConfiguration]:
-    return list(
-        db_session.scalars(
-            select(ModelConfiguration).where(
-                ModelConfiguration.llm_provider_id == llm_provider_id
-            )
-        ).all()
-    )
+    return LLMProviderView.from_model(provider_model)
 
 
 def remove_embedding_provider(

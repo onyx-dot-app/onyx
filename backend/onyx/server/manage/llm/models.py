@@ -43,7 +43,6 @@ class LLMProviderDescriptor(BaseModel):
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
-        model_configuration_models: list["ModelConfigurationModel"],
     ) -> "LLMProviderDescriptor":
         return cls(
             name=llm_provider_model.name,
@@ -54,8 +53,10 @@ class LLMProviderDescriptor(BaseModel):
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             model_configurations=list(
-                ModelConfiguration.from_model(model_configuration_model)
-                for model_configuration_model in model_configuration_models
+                map(
+                    ModelConfiguration.from_model,
+                    llm_provider_model.model_configurations,
+                )
             ),
         )
 
@@ -95,7 +96,6 @@ class LLMProviderView(LLMProvider):
     def from_model(
         cls,
         llm_provider_model: "LLMProviderModel",
-        model_configuration_models: list["ModelConfigurationModel"],
     ) -> "LLMProviderView":
         # Safely get groups - handle detached instance case
         try:
@@ -122,10 +122,8 @@ class LLMProviderView(LLMProvider):
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=list(
                 map(
-                    lambda model_configuration_model: ModelConfiguration.from_model(
-                        model_configuration_model
-                    ),
-                    model_configuration_models,
+                    ModelConfiguration.from_model,
+                    llm_provider_model.model_configurations,
                 )
             ),
         )

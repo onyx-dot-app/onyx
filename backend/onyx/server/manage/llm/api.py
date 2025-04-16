@@ -14,7 +14,6 @@ from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_llm_providers_for_user
-from onyx.db.llm import fetch_model_configurations
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
@@ -147,12 +146,7 @@ def list_llm_providers(
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(db_session):
         from_model_start = datetime.now(timezone.utc)
-        model_configurations = fetch_model_configurations(
-            db_session, llm_provider_model.id
-        )
-        full_llm_provider = LLMProviderView.from_model(
-            llm_provider_model, model_configurations
-        )
+        full_llm_provider = LLMProviderView.from_model(llm_provider_model)
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -280,11 +274,10 @@ def get_vision_capable_providers(
 
     for provider in providers:
         vision_models = []
-        model_configurations = fetch_model_configurations(db_session, provider.id)
-
         # Check model names in priority order
         model_names_to_check = [
-            model_configuration.name for model_configuration in model_configurations
+            model_configurations.name
+            for model_configurations in provider.model_configurations
         ]
 
         # Check each model for vision capability
@@ -295,9 +288,7 @@ def get_vision_capable_providers(
 
         # Only include providers with at least one vision-capable model
         if vision_models:
-            provider_dict = LLMProviderView.from_model(
-                provider, model_configurations
-            ).model_dump()
+            provider_dict = LLMProviderView.from_model(provider).model_dump()
             provider_dict["vision_models"] = vision_models
             logger.info(
                 f"Vision provider: {provider.provider} with models: {vision_models}"
@@ -322,12 +313,7 @@ def list_llm_provider_basics(
     llm_provider_list: list[LLMProviderDescriptor] = []
     for llm_provider_model in fetch_existing_llm_providers_for_user(db_session, user):
         from_model_start = datetime.now(timezone.utc)
-        model_configurations = fetch_model_configurations(
-            db_session, llm_provider_model.id
-        )
-        full_llm_provider = LLMProviderDescriptor.from_model(
-            llm_provider_model, model_configurations
-        )
+        full_llm_provider = LLMProviderDescriptor.from_model(llm_provider_model)
         from_model_end = datetime.now(timezone.utc)
         from_model_duration = (from_model_end - from_model_start).total_seconds()
         logger.debug(
@@ -360,8 +346,7 @@ def get_provider_contextual_cost(
     providers = fetch_existing_llm_providers(db_session)
     costs = []
     for provider in providers:
-        model_configurations = fetch_model_configurations(db_session, provider.id)
-        for model_configuration in model_configurations:
+        for model_configuration in provider.model_configurations:
             llm = get_llm(
                 provider=provider.provider,
                 model=model_configuration.name,

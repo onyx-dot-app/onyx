@@ -9,7 +9,6 @@ from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import LLM_MODEL_UPDATE_API_URL
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.llm import fetch_model_configurations
 from onyx.db.models import LLMProvider
 from onyx.db.models import ModelConfiguration
 
@@ -92,9 +91,7 @@ def check_for_llm_model_update(self: Task, *, tenant_id: str) -> bool | None:
         # log change if any
         old_models = set(
             model_configuration.name
-            for model_configuration in fetch_model_configurations(
-                db_session, default_provider.id
-            )
+            for model_configuration in default_provider.model_configurations
         )
         new_models = set(available_models)
         added_models = new_models - old_models

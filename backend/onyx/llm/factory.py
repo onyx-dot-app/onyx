@@ -10,7 +10,6 @@ from onyx.db.llm import fetch_default_provider
 from onyx.db.llm import fetch_default_vision_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_llm_provider_view
-from onyx.db.llm import fetch_model_configurations
 from onyx.db.models import Persona
 from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
@@ -137,18 +136,13 @@ def get_default_llm_with_vision(
 
         # Fall back to searching all providers
         providers = fetch_existing_llm_providers(db_session)
-        provider_to_model_configurations = {
-            provider.id: fetch_model_configurations(db_session, provider.id)
-            for provider in providers
-        }
 
     if not providers:
         return None
 
     # Check all providers for viable vision models
     for provider in providers:
-        model_configurations = provider_to_model_configurations[provider.id]
-        provider_view = LLMProviderView.from_model(provider, model_configurations)
+        provider_view = LLMProviderView.from_model(provider)
 
         # First priority: Check if provider has a default_vision_model
         if provider.default_vision_model and model_supports_image_input(
@@ -157,7 +151,7 @@ def get_default_llm_with_vision(
             return create_vision_llm(provider_view, provider.default_vision_model)
 
         # If no model_names are specified, try default models in priority order
-        if not model_configurations:
+        if not provider.model_configurations:
             # Try default_model_name
             if provider.default_model_name and model_supports_image_input(
                 provider.default_model_name, provider.provider
@@ -173,7 +167,7 @@ def get_default_llm_with_vision(
                 )
         else:
             # If model_names is specified, check each model
-            for model_configuration in model_configurations:
+            for model_configuration in provider.model_configurations:
                 if model_supports_image_input(
                     model_configuration.name, provider.provider
                 ):
