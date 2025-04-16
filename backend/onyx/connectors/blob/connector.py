@@ -27,6 +27,9 @@ from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import get_file_ext
+from onyx.file_processing.extract_file_text import is_accepted_file_ext
+from onyx.file_processing.extract_file_text import OnyxExtensionType
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -193,6 +196,13 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 last_modified = obj["LastModified"].replace(tzinfo=timezone.utc)
 
                 if not start <= last_modified <= end:
+                    continue
+
+                # Skip image files
+                file_name = os.path.basename(obj["Key"])
+                file_ext = get_file_ext(file_name)
+                if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
+                    logger.debug(f"Skipping image file: {obj['Key']}")
                     continue
 
                 downloaded_file = self._download_object(obj["Key"])
