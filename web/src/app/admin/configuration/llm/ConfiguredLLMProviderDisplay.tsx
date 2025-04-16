@@ -178,7 +178,7 @@ export function ConfiguredLLMProviderDisplay({
             llmProviderDescriptor={
               isEqual(
                 provider.model_configurations.map(
-                  (model_configuration) => model_configuration.model_name
+                  (model_configuration) => model_configuration.name
                 ),
                 defaultProviderDesciptor?.llm_names
               )

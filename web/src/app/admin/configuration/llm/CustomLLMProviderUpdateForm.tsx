@@ -152,7 +152,7 @@ export function CustomLLMProviderUpdateForm({
             ...values,
             // For custom llm providers, all model names are displayed
             display_model_names: values.model_configurations.map(
-              (model_configuration) => model_configuration.model_name
+              (model_configuration) => model_configuration.name
             ),
             custom_config: customConfigProcessing(values.custom_config_list),
           }),
