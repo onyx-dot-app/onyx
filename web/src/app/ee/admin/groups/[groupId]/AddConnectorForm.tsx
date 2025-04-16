@@ -1,14 +1,10 @@
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { useState } from "react";
-import { FiX } from "react-icons/fi";
 import { updateUserGroup } from "./lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ConnectorStatus, UserGroup } from "@/lib/types";
-import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
-import { Connector } from "@/lib/connectors/connectors";
 import { ConnectorMultiSelect } from "@/components/ConnectorMultiSelect";
-import { Form } from "formik";
 
 interface AddConnectorFormProps {
   ccPairs: ConnectorStatus<any, any>[];

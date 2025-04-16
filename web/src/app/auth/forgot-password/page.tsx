@@ -2,7 +2,6 @@
 import React, { useState } from "react";
 import { forgotPassword } from "./utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import CardSection from "@/components/admin/CardSection";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import Link from "next/link";

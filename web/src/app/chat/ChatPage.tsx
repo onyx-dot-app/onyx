@@ -9,7 +9,6 @@ import {
 import {
   BackendChatSession,
   BackendMessage,
-  BUFFER_COUNT,
   ChatFileType,
   ChatSession,
   ChatSessionSharedStatus,
@@ -55,11 +54,9 @@ import {
 import {
   Dispatch,
   SetStateAction,
-  use,
   useCallback,
   useContext,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -98,7 +95,6 @@ import {
 } from "@/lib/llm/utils";
 import { ChatInputBar } from "./input/ChatInputBar";
 import { useChatContext } from "@/components/context/ChatContext";
-import { v4 as uuidv4 } from "uuid";
 import { ChatPopup } from "./ChatPopup";
 import FunctionalHeader from "@/components/chat/Header";
 import { useSidebarVisibility } from "@/components/chat/hooks";
@@ -110,11 +106,7 @@ import FixedLogo from "@/components/logo/FixedLogo";
 
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
 
-import {
-  INTERNET_SEARCH_TOOL_ID,
-  SEARCH_TOOL_ID,
-  SEARCH_TOOL_NAME,
-} from "./tools/constants";
+import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
 import BlurBackground from "../../components/chat/BlurBackground";
@@ -138,7 +130,6 @@ import { FilePickerModal } from "./my-documents/components/FilePicker";
 import { SourceMetadata } from "@/lib/search/interfaces";
 import { ValidSources } from "@/lib/types";
 import {
-  FileUploadResponse,
   FileResponse,
   FolderResponse,
   useDocumentsContext,

@@ -8,7 +8,6 @@ import { useState } from "react";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { useConnectorStatus, useUserGroups, useUsers } from "@/lib/hooks";
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Button } from "@/components/ui/button";
 
 import { useUser } from "@/components/user/UserProvider";
 import CreateButton from "@/components/ui/createButton";

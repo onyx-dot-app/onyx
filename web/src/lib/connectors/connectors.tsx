@@ -1,5 +1,4 @@
 import * as Yup from "yup";
-import { IsPublicGroupSelectorFormType } from "@/components/IsPublicGroupSelector";
 import { ConfigurableSources, ValidInputTypes, ValidSources } from "../types";
 import { AccessTypeGroupSelectorFormType } from "@/components/admin/connectors/AccessTypeGroupSelector";
 import { Credential } from "@/lib/connectors/credentials"; // Import Credential type

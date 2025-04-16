@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
-import { Check, CheckCircle, XCircle } from "lucide-react";
+import { Check } from "lucide-react";
 import { Warning } from "@phosphor-icons/react";
 import { NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK } from "@/lib/constants";
 

@@ -8,6 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "lint:unused": "eslint --ext .js,.jsx,.ts,.tsx --rule 'unused-imports/no-unused-imports: error' --quiet --fix=false src/",
+    "lint:fix-unused": "eslint --ext .js,.jsx,.ts,.tsx --rule 'unused-imports/no-unused-imports: error' --quiet --fix src/",
+    "lint:fix-unused-vars": "eslint --ext .js,.jsx,.ts,.tsx --fix --quiet src/",
     "test": "jest"
   },
   "dependencies": {
@@ -100,9 +103,11 @@
     "chromatic": "^11.25.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.1.0",
+    "eslint-plugin-unused-imports": "^4.1.4",
     "jest": "^29.7.0",
     "prettier": "2.8.8",
-    "ts-jest": "^29.2.5"
+    "ts-jest": "^29.2.5",
+    "ts-unused-exports": "^11.0.1"
   },
   "overrides": {
     "react-is": "^19.0.0-rc-69d4b800-20241021"

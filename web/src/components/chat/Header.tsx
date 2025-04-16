@@ -10,7 +10,6 @@ import { ChatBanner } from "@/app/chat/ChatBanner";
 import LogoWithText from "../header/LogoWithText";
 import { NewChatIcon } from "../icons/icons";
 import { SettingsContext } from "../settings/SettingsProvider";
-import { ModeToggle } from "@/app/chat/modal/ThemeToggle";
 
 export default function FunctionalHeader({
   page,

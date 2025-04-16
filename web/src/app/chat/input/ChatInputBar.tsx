@@ -35,13 +35,9 @@ import { getFormattedDateRangeString } from "@/lib/dateUtils";
 import { truncateString } from "@/lib/utils";
 import { buildImgUrl } from "../files/images/utils";
 import { useUser } from "@/components/user/UserProvider";
-import { useDocumentSelection } from "../useDocumentSelection";
 import { AgenticToggle } from "./AgenticToggle";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { getProviderIcon } from "@/app/admin/configuration/llm/interfaces";
-import { LoadingIndicator } from "react-select/dist/declarations/src/components/indicators";
-import { FidgetSpinner } from "react-loader-spinner";
-import { LoadingAnimation } from "@/components/Loading";
 import { useDocumentsContext } from "../my-documents/DocumentsContext";
 
 const MAX_INPUT_HEIGHT = 200;
@@ -752,6 +748,7 @@ export function ChatInputBar({
                             <img
                               className="h-full py-.5 object-cover rounded-lg bg-background cursor-pointer"
                               src={buildImgUrl(file.id)}
+                              alt={file.name || "Uploaded image"}
                             />
                           )
                         }

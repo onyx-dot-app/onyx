@@ -6,7 +6,6 @@ import {
   LiteLLMIcon,
   MicrosoftIcon,
   NomicIcon,
-  OpenAIIcon,
   OpenAIISVG,
   OpenSourceIcon,
   VoyageIconSVG,

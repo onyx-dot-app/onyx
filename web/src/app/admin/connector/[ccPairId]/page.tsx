@@ -33,7 +33,6 @@ import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisp
 import EditPropertyModal from "@/components/modals/EditPropertyModal";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { deleteCCPair } from "@/lib/documentDeletion";
-
 import * as Yup from "yup";
 import {
   AlertCircle,
@@ -41,7 +40,6 @@ import {
   PauseIcon,
   Trash2Icon,
   RefreshCwIcon,
-  AlertTriangle,
 } from "lucide-react";
 import IndexAttemptErrorsModal from "./IndexAttemptErrorsModal";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";

@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-} from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";

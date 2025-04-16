@@ -5,20 +5,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { SortIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { AccessType, ValidStatuses } from "@/lib/types";
-import { FiFilter, FiX, FiCheck } from "react-icons/fi";
 
 export interface FilterOptions {
   accessType: AccessType[] | null;

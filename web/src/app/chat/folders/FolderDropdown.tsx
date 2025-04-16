@@ -8,21 +8,13 @@ import React, {
 } from "react";
 import { Folder } from "./interfaces";
 import { ChatSession } from "../interfaces";
-import {
-  FiChevronDown,
-  FiChevronRight,
-  FiEdit,
-  FiTrash2,
-  FiCheck,
-  FiX,
-} from "react-icons/fi";
+import { FiTrash2, FiCheck, FiX } from "react-icons/fi";
 import { Caret } from "@/components/icons/icons";
-import { addChatToFolder, deleteFolder } from "./FolderManagement";
+import { deleteFolder } from "./FolderManagement";
 import { PencilIcon } from "lucide-react";
 import { Popover } from "@/components/popover/Popover";
 import { useChatContext } from "@/components/context/ChatContext";
 import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 
 interface FolderDropdownProps {
   folder: Folder;

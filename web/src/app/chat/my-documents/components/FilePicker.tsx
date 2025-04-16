@@ -1,28 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
-import {
-  Grid,
-  List,
-  UploadIcon,
-  FolderIcon,
-  FileIcon,
-  PlusIcon,
-  Router,
-  X,
-  Loader2,
-  ArrowUp,
-  ArrowDown,
-} from "lucide-react";
-import { ContextUsage } from "./ContextUsage";
+import { FolderIcon, ArrowUp, ArrowDown } from "lucide-react";
 import { SelectedItemsList } from "./SelectedItemsList";
-import { Separator } from "@/components/ui/separator";
 import {
   useDocumentsContext,
   FolderResponse,
   FileResponse,
-  FileUploadResponse,
-  FileStatus,
 } from "../DocumentsContext";
 import {
   DndContext,

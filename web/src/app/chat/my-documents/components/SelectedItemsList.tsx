@@ -1,16 +1,9 @@
 import React from "react";
 import { cn, truncateString } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { X, Folder, File, FolderIcon, Loader2 } from "lucide-react";
+import { X, FolderIcon, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import {
-  FolderResponse,
-  FileResponse,
-  useDocumentsContext,
-} from "../DocumentsContext";
-import { useDocumentSelection } from "../../useDocumentSelection";
+import { FolderResponse, FileResponse } from "../DocumentsContext";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { UploadingFile } from "./FilePicker";

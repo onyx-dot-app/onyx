@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { File, File as FileIcon, Loader, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -20,7 +20,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  FiAlertCircle,
   FiAlertTriangle,
   FiDownload,
   FiEdit,
@@ -33,7 +32,6 @@ import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { AnimatedDots } from "../[id]/components/DocumentList";
 import { FolderMoveIcon } from "@/components/icons/icons";
 import { truncateString } from "@/lib/utils";
-import { triggerIndexing } from "@/app/admin/connector/[ccPairId]/lib";
 import { usePopup } from "@/components/admin/connectors/Popup";
 
 interface FileListItemProps {

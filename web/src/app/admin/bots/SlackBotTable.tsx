@@ -30,7 +30,7 @@ function ClickableTableRow({
 
   useEffect(() => {
     router.prefetch(url);
-  }, [router]);
+  }, [router, url]);
 
   const navigate = () => {
     router.push(url);

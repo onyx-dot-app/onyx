@@ -1,13 +1,9 @@
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
-import { truncateString } from "@/lib/utils";
-import { openDocument } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/types";
 import React, { useEffect, useState } from "react";
 import { SearchResultIcon } from "@/components/SearchResultIcon";
-import { FileDescriptor } from "@/app/chat/interfaces";
-import { FiFileText } from "react-icons/fi";
 import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 import { FileResponse } from "@/app/chat/my-documents/DocumentsContext";
 

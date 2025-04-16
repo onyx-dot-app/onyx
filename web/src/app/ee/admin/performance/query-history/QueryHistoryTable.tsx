@@ -20,7 +20,7 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { ChatSessionMinimal } from "../usage/types";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 import { FiFrown, FiMinus, FiSmile, FiMeh } from "react-icons/fi";
-import { useCallback, useState, useMemo } from "react";
+import { useCallback, useState } from "react";
 import { Feedback } from "@/lib/types";
 import { DateRange, DateRangeSelector } from "../DateRangeSelector";
 import { PageSelector } from "@/components/PageSelector";

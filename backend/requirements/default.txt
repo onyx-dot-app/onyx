@@ -5,7 +5,7 @@ asyncpg==0.27.0
 atlassian-python-api==3.41.16
 beautifulsoup4==4.12.3
 boto3==1.36.23
-celery==5.5.0b4
+celery==5.5.1
 chardet==5.2.0
 dask==2023.8.1
 ddtrace==2.6.5

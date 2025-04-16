@@ -6,7 +6,6 @@ import { KeyIcon } from "@/components/icons/icons";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import useSWR, { mutate } from "swr";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import {
   TableBody,
@@ -22,7 +21,7 @@ import Title from "@/components/ui/title";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
 import { DeleteButton } from "@/components/DeleteButton";
-import { FiCopy, FiEdit2, FiRefreshCw, FiX } from "react-icons/fi";
+import { FiCopy, FiEdit2, FiRefreshCw } from "react-icons/fi";
 import { Modal } from "@/components/Modal";
 import { Spinner } from "@/components/Spinner";
 import { deleteApiKey, regenerateApiKey } from "./lib";

@@ -26,8 +26,6 @@ import {
   FiUnlock,
   FiRefreshCw,
   FiPauseCircle,
-  FiFilter,
-  FiX,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -37,7 +35,6 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
-import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { Warning } from "@phosphor-icons/react";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
