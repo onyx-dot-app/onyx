@@ -89,8 +89,6 @@ def test_confluence_connector_restriction_handling(
     # Call the confluence_doc_sync function directly with the mock cc_pair
     doc_access_generator = confluence_doc_sync(mock_cc_pair, None)
     doc_access_list = list(doc_access_generator)
-    for doc_access in doc_access_list:
-        print(doc_access)
     assert len(doc_access_list) == 7
     assert all(
         not doc_access.external_access.is_public for doc_access in doc_access_list
