@@ -31,6 +31,7 @@ from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import ModelConfiguration
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
@@ -193,15 +194,34 @@ def put_llm_provider(
             detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
         )
 
+    default_model_found = False
+    default_fast_model_found = False
+
     for model_configuration in llm_provider_upsert_request.model_configurations:
         if model_configuration.name == llm_provider_upsert_request.default_model_name:
             model_configuration.is_visible = True
+            default_model_found = True
         if (
             llm_provider_upsert_request.fast_default_model_name
             and llm_provider_upsert_request.fast_default_model_name
             == model_configuration.name
         ):
             model_configuration.is_visible = True
+            default_fast_model_found = True
+
+    default_inserts = set()
+    if not default_model_found:
+        default_inserts.add(llm_provider_upsert_request.default_model_name)
+
+    if (
+        llm_provider_upsert_request.fast_default_model_name
+        and not default_fast_model_found
+    ):
+        default_inserts.add(llm_provider_upsert_request.fast_default_model_name)
+
+    llm_provider_upsert_request.model_configurations.extend(
+        ModelConfiguration(name=name, is_visible=True) for name in default_inserts
+    )
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed

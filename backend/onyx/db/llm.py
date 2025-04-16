@@ -1,6 +1,7 @@
 from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AUTH_TYPE
@@ -105,13 +106,15 @@ def upsert_llm_provider(
     )
 
     for model_configuration in llm_provider_upsert_request.model_configurations:
-        db_session.add(
-            ModelConfiguration(
+        db_session.execute(
+            insert(ModelConfiguration)
+            .values(
                 llm_provider_id=existing_llm_provider.id,
                 name=model_configuration.name,
                 is_visible=model_configuration.is_visible,
                 max_input_tokens=model_configuration.max_input_tokens,
             )
+            .on_conflict_do_nothing()
         )
 
     # Make sure the relationship table stays up to date
