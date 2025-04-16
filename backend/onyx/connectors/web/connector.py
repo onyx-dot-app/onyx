@@ -45,14 +45,13 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-class ScrapeContext(BaseModel):
+class ScrapeSessionContext(BaseModel):
+    """"""
+
     base_url: str
     to_visit: list[str]
     playwright: Playwright | None = None
     playwright_context: BrowserContext | None = None
-
-    retry_count: int = 0
-    retry_success: bool = False
 
     visited_links: set[str] = set()
     content_hashes: set[int] = set()
@@ -63,6 +62,13 @@ class ScrapeContext(BaseModel):
 
     at_least_one_doc: bool = False
     last_error: str | None = None
+
+
+class ScrapePageContext(BaseModel):
+    """"""
+
+    retry_count: int = 0
+    retry_success: bool = False
 
 
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
@@ -469,33 +475,27 @@ class WebConnector(LoadConnector):
         return None
 
     def _do_scrape(
-        self, index: int, initial_url: str, scrape_context: ScrapeContext
+        self,
+        index: int,
+        initial_url: str,
+        session_ctx: ScrapeSessionContext,
+        page_ctx: ScrapePageContext,
     ) -> bool:
         """returns False if the caller should continue (usually due to skipping duplicates),
         True if the page scraped normally"""
 
-        if scrape_context.playwright is None:
+        if session_ctx.playwright is None:
             raise RuntimeError("scrape_context.playwright is None")
 
-        if scrape_context.playwright_context is None:
+        if session_ctx.playwright_context is None:
             raise RuntimeError("scrape_context.playwright_context is None")
 
-        if scrape_context.retry_count > 0:
-            # Add a random delay between retries (exponential backoff)
-            delay = min(2**scrape_context.retry_count + random.uniform(0, 1), 10)
-            logger.info(
-                f"Retry {scrape_context.retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
-            )
-            time.sleep(delay)
-
-        if scrape_context.restart_playwright:
-            scrape_context.playwright, scrape_context.playwright_context = (
-                start_playwright()
-            )
-            scrape_context.restart_playwright = False
+        if session_ctx.restart_playwright:
+            session_ctx.playwright, session_ctx.playwright_context = start_playwright()
+            session_ctx.restart_playwright = False
 
         # Handle cookies for the URL
-        _handle_cookies(scrape_context.playwright_context, initial_url)
+        _handle_cookies(session_ctx.playwright_context, initial_url)
 
         # First do a HEAD request to check content type without downloading the entire content
         head_response = requests.head(
@@ -511,7 +511,7 @@ class WebConnector(LoadConnector):
             )
             last_modified = response.headers.get("Last-Modified")
 
-            scrape_context.doc_batch.append(
+            session_ctx.doc_batch.append(
                 Document(
                     id=initial_url,
                     sections=[TextSection(link=initial_url, text=page_text)],
@@ -525,10 +525,10 @@ class WebConnector(LoadConnector):
                     ),
                 )
             )
-            scrape_context.retry_success = True
+            page_ctx.retry_success = True
             return False
 
-        page = scrape_context.playwright_context.new_page()
+        page = session_ctx.playwright_context.new_page()
 
         if self.add_randomness:
             # Add random mouse movements and scrolling to mimic human behavior
@@ -551,19 +551,19 @@ class WebConnector(LoadConnector):
         if final_url != initial_url:
             protected_url_check(final_url)
             initial_url = final_url
-            if initial_url in scrape_context.visited_links:
+            if initial_url in session_ctx.visited_links:
                 logger.info(
                     f"{index}: {initial_url} redirected to {final_url} - already indexed"
                 )
                 page.close()
-                scrape_context.retry_success = True
+                page_ctx.retry_success = True
                 return False
 
             logger.info(f"{index}: {initial_url} redirected to {final_url}")
-            scrape_context.visited_links.add(initial_url)
+            session_ctx.visited_links.add(initial_url)
 
         # If we got here, the request was successful
-        scrape_context.retry_success = True
+        page_ctx.retry_success = True
 
         if self.scroll_before_scraping:
             scroll_attempts = 0
@@ -581,16 +581,15 @@ class WebConnector(LoadConnector):
         soup = BeautifulSoup(content, "html.parser")
 
         if self.recursive:
-            internal_links = get_internal_links(
-                scrape_context.base_url, initial_url, soup
-            )
+            internal_links = get_internal_links(session_ctx.base_url, initial_url, soup)
             for link in internal_links:
-                if link not in scrape_context.visited_links:
-                    scrape_context.to_visit.append(link)
+                if link not in session_ctx.visited_links:
+                    session_ctx.to_visit.append(link)
 
         if page_response and str(page_response.status)[0] in ("4", "5"):
-            scrape_context.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
-            logger.info(scrape_context.last_error)
+            session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
+            logger.info(session_ctx.last_error)
+            page_ctx.retry_count += 1
             return False
 
         parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
@@ -616,15 +615,15 @@ class WebConnector(LoadConnector):
         # Sometimes pages with #! will serve duplicate content
         # There are also just other ways this can happen
         hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
-        if hashed_text in scrape_context.content_hashes:
+        if hashed_text in session_ctx.content_hashes:
             logger.info(
                 f"{index}: Skipping duplicate title + content for {initial_url}"
             )
             return False
 
-        scrape_context.content_hashes.add(hashed_text)
+        session_ctx.content_hashes.add(hashed_text)
 
-        scrape_context.doc_batch.append(
+        session_ctx.doc_batch.append(
             Document(
                 id=initial_url,
                 sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
@@ -652,64 +651,75 @@ class WebConnector(LoadConnector):
         base_url = self.to_visit_list[0]  # For the recursive case
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
-        scrape_context = ScrapeContext(base_url=base_url, to_visit=self.to_visit_list)
-
-        scrape_context.playwright, scrape_context.playwright_context = (
-            start_playwright()
+        session_ctx = ScrapeSessionContext(
+            base_url=base_url, to_visit=self.to_visit_list
         )
 
-        while scrape_context.to_visit:
-            initial_url = scrape_context.to_visit.pop()
-            if initial_url in scrape_context.visited_links:
+        session_ctx.playwright, session_ctx.playwright_context = start_playwright()
+
+        while session_ctx.to_visit:
+            initial_url = session_ctx.to_visit.pop()
+            if initial_url in session_ctx.visited_links:
                 continue
-            scrape_context.visited_links.add(initial_url)
+            session_ctx.visited_links.add(initial_url)
 
             try:
                 protected_url_check(initial_url)
             except Exception as e:
-                scrape_context.last_error = f"Invalid URL {initial_url} due to {e}"
-                logger.warning(scrape_context.last_error)
+                session_ctx.last_error = f"Invalid URL {initial_url} due to {e}"
+                logger.warning(session_ctx.last_error)
                 continue
 
-            index = len(scrape_context.visited_links)
+            index = len(session_ctx.visited_links)
             logger.info(f"{index}: Visiting {initial_url}")
 
             # Add retry mechanism with exponential backoff
-            scrape_context.retry_count = 0
-            scrape_context.retry_success = False
+            page_ctx = ScrapePageContext()
 
             while (
-                scrape_context.retry_count < self.MAX_RETRIES
-                and not scrape_context.retry_success
+                page_ctx.retry_count < self.MAX_RETRIES and not page_ctx.retry_success
             ):
+                if page_ctx.retry_count > 0:
+                    # Add a random delay between retries (exponential backoff)
+                    delay = min(2**page_ctx.retry_count + random.uniform(0, 1), 10)
+                    logger.info(
+                        f"Retry {page_ctx.retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
+                    )
+                    time.sleep(delay)
+
                 try:
-                    normal_scrape = self._do_scrape(index, initial_url, scrape_context)
+                    normal_scrape = self._do_scrape(
+                        index, initial_url, session_ctx, page_ctx
+                    )
                     if not normal_scrape:
                         continue
                 except Exception as e:
-                    scrape_context.last_error = f"Failed to fetch '{initial_url}': {e}"
-                    logger.exception(scrape_context.last_error)
-                    scrape_context.playwright.stop()
-                    scrape_context.restart_playwright = True
+                    session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
+                    logger.exception(session_ctx.last_error)
+                    session_ctx.playwright_context.close()
+                    session_ctx.playwright.stop()
+                    session_ctx.restart_playwright = True
 
-                    scrape_context.retry_count += 1
+                    page_ctx.retry_count += 1
                     continue
 
-            if len(scrape_context.doc_batch) >= self.batch_size:
-                scrape_context.playwright.stop()
-                scrape_context.restart_playwright = True
-                scrape_context.at_least_one_doc = True
-                yield scrape_context.doc_batch
-                scrape_context.doc_batch = []
+            if len(session_ctx.doc_batch) >= self.batch_size:
+                session_ctx.playwright_context.close()
+                session_ctx.playwright.stop()
+                session_ctx.restart_playwright = True
+                session_ctx.at_least_one_doc = True
+                yield session_ctx.doc_batch
+                session_ctx.doc_batch = []
 
-        if scrape_context.doc_batch:
-            scrape_context.playwright.stop()
-            scrape_context.at_least_one_doc = True
-            yield scrape_context.doc_batch
+        if session_ctx.doc_batch:
+            session_ctx.playwright_context.close()
+            session_ctx.playwright.stop()
+            session_ctx.at_least_one_doc = True
+            yield session_ctx.doc_batch
 
-        if not scrape_context.at_least_one_doc:
-            if scrape_context.last_error:
-                raise RuntimeError(scrape_context.last_error)
+        if not session_ctx.at_least_one_doc:
+            if session_ctx.last_error:
+                raise RuntimeError(session_ctx.last_error)
             raise RuntimeError("No valid pages found.")
 
     def validate_connector_settings(self) -> None:
