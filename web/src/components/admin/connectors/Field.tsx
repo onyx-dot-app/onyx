@@ -685,9 +685,7 @@ export function MultiTextArrayField<T extends Yup.AnyObject>({
                                 mr-4
                               `}
                               autoComplete="off"
-                              placeholder={
-                                placeholders?.[key_index]
-                              }
+                              placeholder={placeholders?.[key_index]}
                             />
                             <ErrorMessage
                               name={subname}
