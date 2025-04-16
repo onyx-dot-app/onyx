@@ -59,7 +59,12 @@ def test_confluence_connector_permissions(
 
 
 @patch("ee.onyx.external_permissions.confluence.doc_sync.OnyxDBCredentialsProvider")
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_confluence_connector_restriction_handling(
+    mock_get_api_key: MagicMock,
     mock_db_provider_class: MagicMock,
 ) -> None:
     # Test space key
