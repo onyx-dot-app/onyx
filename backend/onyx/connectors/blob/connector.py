@@ -16,6 +16,7 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
+from onyx.configs.llm_configs import _analysis_enabled
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -45,14 +46,12 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         bucket_name: str,
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
-        process_images: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
-        self.process_images = process_images
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -186,6 +185,9 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         if self.s3_client is None:
             raise ConnectorMissingCredentialError("Blob storage")
 
+        # Check if image extraction and analysis is enabled
+        process_images = _analysis_enabled()
+
         paginator = self.s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
 
@@ -210,8 +212,10 @@ class BlobStorageConnector(LoadConnector, PollConnector):
 
                 # Handle image files
                 if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
-                    if not self.process_images:
-                        logger.debug(f"Skipping image file: {key}")
+                    if not process_images:
+                        logger.debug(
+                            f"Skipping image file: {key} (image processing not enabled)"
+                        )
                         continue
 
                     # Process the image file
@@ -373,7 +377,6 @@ if __name__ == "__main__":
         bucket_type=os.environ.get("BUCKET_TYPE") or "s3",
         bucket_name=os.environ.get("BUCKET_NAME") or "test",
         prefix="",
-        process_images=True,
     )
 
     try:
