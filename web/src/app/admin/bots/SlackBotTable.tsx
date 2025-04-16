@@ -79,7 +79,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
           {slackBotsForPage.map((slackBot) => {
             return (
               <ClickableTableRow
-                url={`${i18n.t(k.ADMIN_BOTS)}${slackBot.id}`}
+                url={`/admin/bots/${slackBot.id}`}
                 key={slackBot.id}
                 className="hover:bg-muted cursor-pointer"
               >
@@ -129,7 +129,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 window.scrollTo({
                   top: 0,
                   left: 0,
-                  behavior: i18n.t(k.SMOOTH),
+                  behavior: "smooth",
                 });
               }}
             />

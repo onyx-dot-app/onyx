@@ -67,7 +67,7 @@ export function useVisionProviders(setPopup: SetPopup) {
       if (!llmValue) {
         setPopup({
           message: "Выберите допустимую модель зрения",
-          type: "ошибка",
+          type: "error",
         });
         return false;
       }

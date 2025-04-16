@@ -288,9 +288,9 @@ function UsageReportsTable() {
                   </TableCell>
                   <TableCell>
                     {r.period_from
-                      ? `${humanReadableFormat(
-                          r.period_from
-                        )} ${i18n.t(k._)} ${humanReadableFormat(r.period_to!)}`
+                      ? `${humanReadableFormat(r.period_from)} ${i18n.t(
+                          k._
+                        )} ${humanReadableFormat(r.period_to!)}`
                       : i18n.t(k.ALL_TIME)}
                   </TableCell>
                   <TableCell>
@@ -321,7 +321,7 @@ function UsageReportsTable() {
                   window.scrollTo({
                     top: 0,
                     left: 0,
-                    behavior: i18n.t(k.SMOOTH),
+                    behavior: "smooth",
                   });
                 }}
               />

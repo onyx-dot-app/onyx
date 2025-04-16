@@ -80,7 +80,7 @@ export const InviteUserButton = ({
       return response.json();
     },
     {
-      nSuccess: () => {
+      onSuccess: () => {
         setShowInviteModal(false);
         mutate();
         setPopup({
