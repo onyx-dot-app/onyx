@@ -45,8 +45,12 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
-class ScrapeSessionContext(BaseModel):
-    """"""
+class ScrapeSessionContext:
+    """Session level context for scraping"""
+
+    def __init__(self, base_url: str, to_visit: list[str]):
+        self.base_url = base_url
+        self.to_visit = to_visit
 
     base_url: str
     to_visit: list[str]
@@ -65,7 +69,7 @@ class ScrapeSessionContext(BaseModel):
 
 
 class ScrapePageContext(BaseModel):
-    """"""
+    """Page level context for scraping"""
 
     retry_count: int = 0
     retry_success: bool = False
@@ -651,9 +655,7 @@ class WebConnector(LoadConnector):
         base_url = self.to_visit_list[0]  # For the recursive case
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
-        session_ctx = ScrapeSessionContext(
-            base_url=base_url, to_visit=self.to_visit_list
-        )
+        session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
 
         session_ctx.playwright, session_ctx.playwright_context = start_playwright()
 
