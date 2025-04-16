@@ -15,6 +15,7 @@ from mypy_boto3_s3 import S3Client  # type: ignore
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import FileOrigin
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -26,10 +27,12 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
+from onyx.db.engine import get_session_with_current_tenant
 from onyx.file_processing.extract_file_text import extract_file_text
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
 from onyx.file_processing.extract_file_text import OnyxExtensionType
+from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -42,12 +45,14 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         bucket_name: str,
         prefix: str = "",
         batch_size: int = INDEX_BATCH_SIZE,
+        process_images: bool = False,
     ) -> None:
         self.bucket_type: BlobType = BlobType(bucket_type)
         self.bucket_name = bucket_name
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
+        self.process_images = process_images
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -198,29 +203,63 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                 if not start <= last_modified <= end:
                     continue
 
-                # Skip image files
                 file_name = os.path.basename(obj["Key"])
                 file_ext = get_file_ext(file_name)
+                key = obj["Key"]
+                link = self._get_blob_link(key)
+
+                # Handle image files
                 if is_accepted_file_ext(file_ext, OnyxExtensionType.Multimedia):
-                    logger.debug(f"Skipping image file: {obj['Key']}")
+                    if not self.process_images:
+                        logger.debug(f"Skipping image file: {key}")
+                        continue
+
+                    # Process the image file
+                    try:
+                        downloaded_file = self._download_object(key)
+
+                        with get_session_with_current_tenant() as db_session:
+                            image_section, _ = store_image_and_create_section(
+                                db_session=db_session,
+                                image_data=downloaded_file,
+                                file_name=f"{self.bucket_type}_{self.bucket_name}_{key.replace('/', '_')}",
+                                display_name=file_name,
+                                link=link,
+                                file_origin=FileOrigin.CONNECTOR,
+                            )
+
+                            batch.append(
+                                Document(
+                                    id=f"{self.bucket_type}:{self.bucket_name}:{key}",
+                                    sections=[image_section],
+                                    source=DocumentSource(self.bucket_type.value),
+                                    semantic_identifier=file_name,
+                                    doc_updated_at=last_modified,
+                                    metadata={},
+                                )
+                            )
+
+                            if len(batch) == self.batch_size:
+                                yield batch
+                                batch = []
+                    except Exception as e:
+                        logger.exception(f"Error processing image {key}: {e}")
                     continue
 
-                downloaded_file = self._download_object(obj["Key"])
-                link = self._get_blob_link(obj["Key"])
-                name = os.path.basename(obj["Key"])
-
+                # Handle text and document files
                 try:
+                    downloaded_file = self._download_object(key)
                     text = extract_file_text(
                         BytesIO(downloaded_file),
-                        file_name=name,
+                        file_name=file_name,
                         break_on_unprocessable=False,
                     )
                     batch.append(
                         Document(
-                            id=f"{self.bucket_type}:{self.bucket_name}:{obj['Key']}",
+                            id=f"{self.bucket_type}:{self.bucket_name}:{key}",
                             sections=[TextSection(link=link, text=text)],
                             source=DocumentSource(self.bucket_type.value),
-                            semantic_identifier=name,
+                            semantic_identifier=file_name,
                             doc_updated_at=last_modified,
                             metadata={},
                         )
@@ -230,9 +269,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                         batch = []
 
                 except Exception as e:
-                    logger.exception(
-                        f"Error decoding object {obj['Key']} as UTF-8: {e}"
-                    )
+                    logger.exception(f"Error decoding object {key} as UTF-8: {e}")
         if batch:
             yield batch
 
@@ -336,6 +373,7 @@ if __name__ == "__main__":
         bucket_type=os.environ.get("BUCKET_TYPE") or "s3",
         bucket_name=os.environ.get("BUCKET_NAME") or "test",
         prefix="",
+        process_images=True,
     )
 
     try:
