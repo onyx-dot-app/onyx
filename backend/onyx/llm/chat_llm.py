@@ -413,7 +413,10 @@ class DefaultMultiLLM(LLM):
         self._record_call(processed_prompt)
 
         final_model_kwargs = {**self._model_kwargs}
-        if VERTEX_CREDENTIALS_KWARG not in final_model_kwargs:
+        if (
+            VERTEX_CREDENTIALS_KWARG not in final_model_kwargs
+            and self.config.credentials_file
+        ):
             final_model_kwargs[VERTEX_CREDENTIALS_KWARG] = self.config.credentials_file
 
         try:
