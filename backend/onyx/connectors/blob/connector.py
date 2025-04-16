@@ -52,6 +52,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
         self.prefix = prefix if not prefix or prefix.endswith("/") else prefix + "/"
         self.batch_size = batch_size
         self.s3_client: Optional[S3Client] = None
+        self._allow_images = None
+
+    def set_allow_images(self, allow_images: bool) -> None:
+        """Set whether to process images in this connector."""
+        self._allow_images = allow_images
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Checks for boto3 credentials based on the bucket type.
@@ -186,7 +191,11 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Blob storage")
 
         # Check if image extraction and analysis is enabled
-        process_images = get_image_extraction_and_analysis_enabled()
+        process_images = (
+            self._allow_images
+            if self._allow_images is not None
+            else get_image_extraction_and_analysis_enabled()
+        )
 
         paginator = self.s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
@@ -222,6 +231,8 @@ class BlobStorageConnector(LoadConnector, PollConnector):
                     try:
                         downloaded_file = self._download_object(key)
 
+                        # TODO: Refactor to avoid direct DB access in connector
+                        # This will require broader refactoring across the codebase
                         with get_session_with_current_tenant() as db_session:
                             image_section, _ = store_image_and_create_section(
                                 db_session=db_session,
