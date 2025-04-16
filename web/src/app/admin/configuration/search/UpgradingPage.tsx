@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { Modal } from "@/components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -60,7 +62,7 @@ export default function UpgradingPage({
       mutate("/api/search-settings/get-secondary-search-settings");
     } else {
       alert(
-        `Failed to cancel embedding model update - ${await response.text()}`
+        `Не удалось отменить обновление модели внедрения - ${await response.text()}`
       );
     }
     setIsCancelling(false);
@@ -104,17 +106,14 @@ export default function UpgradingPage({
       {isCancelling && (
         <Modal
           onOutsideClick={() => setIsCancelling(false)}
-          title="Cancel Embedding Model Switch"
+          title="Отменить встраивание переключателя модели"
         >
           <div>
-            <div>
-              Are you sure you want to cancel? Cancelling will revert to the
-              previous model and all progress will be lost.
-            </div>
+            <div>{i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_CANCE)}</div>
             <div className="mt-12 gap-x-2 w-full justify-end flex">
-              <Button onClick={onCancel}>Confirm</Button>
+              <Button onClick={onCancel}>{i18n.t(k.CONFIRM)}</Button>
               <Button onClick={() => setIsCancelling(false)} variant="outline">
-                Cancel
+                {i18n.t(k.CANCEL)}
               </Button>
             </div>
           </div>
@@ -123,10 +122,10 @@ export default function UpgradingPage({
 
       {futureEmbeddingModel && (
         <div>
-          <Title className="mt-8">Current Upgrade Status</Title>
+          <Title className="mt-8">{i18n.t(k.CURRENT_UPGRADE_STATUS)}</Title>
           <div className="mt-4">
             <div className="italic text-lg mb-2">
-              Currently in the process of switching to:{" "}
+              {i18n.t(k.CURRENTLY_IN_THE_PROCESS_OF_SW)}{" "}
               {futureEmbeddingModel.model_name}
             </div>
 
@@ -135,7 +134,7 @@ export default function UpgradingPage({
               className="mt-4"
               onClick={() => setIsCancelling(true)}
             >
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
 
             {connectors && connectors.length > 0 ? (
@@ -149,11 +148,7 @@ export default function UpgradingPage({
                   )}
 
                   <Text className="my-4">
-                    The table below shows the re-indexing progress of all
-                    existing connectors. Once all connectors have been
-                    re-indexed successfully, the new model will be used for all
-                    search queries. Until then, we will use the old model so
-                    that no downtime is necessary during this transition.
+                    {i18n.t(k.THE_TABLE_BELOW_SHOWS_THE_RE_I)}
                   </Text>
 
                   {sortedReindexingProgress ? (
@@ -161,36 +156,32 @@ export default function UpgradingPage({
                       reindexingProgress={sortedReindexingProgress}
                     />
                   ) : (
-                    <ErrorCallout errorTitle="Failed to fetch re-indexing progress" />
+                    <ErrorCallout errorTitle="Не удалось получить ход выполнения повторной индексации" />
                   )}
                 </>
               ) : (
                 <div className="mt-8">
                   <h3 className="text-lg font-semibold mb-2">
-                    Switching Embedding Models
+                    {i18n.t(k.SWITCHING_EMBEDDING_MODELS)}
                   </h3>
                   <p className="mb-4 text-text-800">
-                    You&apos;re currently switching embedding models, and
-                    you&apos;ve selected the instant switch option. The
-                    transition will complete shortly.
+                    {i18n.t(k.YOU_RE_CURRENTLY_SWITCHING_EMB)}
                   </p>
                   <p className="text-text-600">
-                    The new model will be active soon.
+                    {i18n.t(k.THE_NEW_MODEL_WILL_BE_ACTIVE_S)}
                   </p>
                 </div>
               )
             ) : (
               <div className="mt-8 p-6 bg-background-100 border border-border-strong rounded-lg max-w-2xl">
                 <h3 className="text-lg font-semibold mb-2">
-                  Switching Embedding Models
+                  {i18n.t(k.SWITCHING_EMBEDDING_MODELS)}
                 </h3>
                 <p className="mb-4 text-text-800">
-                  You&apos;re currently switching embedding models, but there
-                  are no connectors to reindex. This means the transition will
-                  be quick and seamless!
+                  {i18n.t(k.YOU_RE_CURRENTLY_SWITCHING_EMB1)}
                 </p>
                 <p className="text-text-600">
-                  The new model will be active soon.
+                  {i18n.t(k.THE_NEW_MODEL_WILL_BE_ACTIVE_S)}
                 </p>
               </div>
             )}

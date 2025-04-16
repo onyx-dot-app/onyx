@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import React, { useState, useRef, useEffect } from "react";
 import { ConnectorStatus } from "@/lib/types";
 import { ConnectorTitle } from "@/components/admin/connectors/ConnectorTitle";
@@ -23,7 +25,7 @@ export const ConnectorMultiSelect = ({
   selectedIds,
   onChange,
   disabled = false,
-  placeholder = "Search connectors...",
+  placeholder = "Поиск коннекторов...",
   showError = false,
 }: ConnectorMultiSelectProps) => {
   const [open, setOpen] = useState(false);
@@ -106,7 +108,7 @@ export const ConnectorMultiSelect = ({
   };
 
   const effectivePlaceholder = allConnectorsSelected
-    ? "All connectors selected"
+    ? "Все коннекторы выбраны"
     : placeholder;
 
   const isInputDisabled = disabled || allConnectorsSelected;
@@ -116,8 +118,7 @@ export const ConnectorMultiSelect = ({
       {label && <Label className="text-base font-medium">{label}</Label>}
 
       <p className="text-xs text-neutral-500 ">
-        All documents indexed by the selected connectors will be part of this
-        document set.
+        {i18n.t(k.ALL_DOCUMENTS_INDEXED_BY_THE_S1)}
       </p>
       <div className="relative">
         <div
@@ -156,8 +157,8 @@ export const ConnectorMultiSelect = ({
             {filteredUnselectedConnectors.length === 0 ? (
               <div className="py-4 text-center text-xs text-neutral-500">
                 {searchQuery
-                  ? "No matching connectors found"
-                  : "No more connectors available"}
+                  ? i18n.t(k.NO_MATCHING_CONNECTORS_FOUND)
+                  : i18n.t(k.NO_MORE_CONNECTORS_AVAILABLE)}
               </div>
             ) : (
               <div>
@@ -216,7 +217,7 @@ export const ConnectorMultiSelect = ({
         </div>
       ) : (
         <div className="mt-3 p-3 border border-dashed border-neutral-300 rounded-md bg-neutral-50 text-neutral-500 text-xs">
-          No connectors selected. Search and select connectors above.
+          {i18n.t(k.NO_CONNECTORS_SELECTED_SEARCH)}
         </div>
       )}
 

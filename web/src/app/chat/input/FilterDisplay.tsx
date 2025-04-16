@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React from "react";
 import { XIcon } from "lucide-react";
 
@@ -23,6 +25,7 @@ export default function FiltersDisplay({
           ...filterManager.selectedTags,
           ...(filterManager.timeRange ? [filterManager.timeRange] : []),
         ];
+
         const filtersToShow = allFilters.slice(0, 2);
         const remainingFilters = allFilters.length - 2;
 
@@ -98,7 +101,10 @@ export default function FiltersDisplay({
             })}
             {remainingFilters > 0 && (
               <div className="flex items-center bg-background-150 rounded-full px-3 py-1 text-sm">
-                <span>+{remainingFilters} more</span>
+                <span>
+                  {i18n.t(k._9)}
+                  {remainingFilters} {i18n.t(k.MORE)}
+                </span>
               </div>
             )}
           </>

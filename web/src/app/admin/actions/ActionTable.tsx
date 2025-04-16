@@ -88,6 +88,7 @@ export function ActionsTable({ tools }: { tools: ToolSnapshot[] }) {
                               message: `${i18n.t(k.FAILED_TO_DELETE_TOOL)} ${
                                 response.error
                               }`,
+
                               type: "error",
                             });
                           }

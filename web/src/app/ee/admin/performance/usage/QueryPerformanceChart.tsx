@@ -71,10 +71,11 @@ export function QueryPerformanceChart({
           return {
             Day: dateStr,
             Queries: queryAnalyticsForDate?.total_queries || 0,
-            "Unique Users": userAnalyticsForDate?.total_active_users || 0,
+            "Уникальные пользователи":
+              userAnalyticsForDate?.total_active_users || 0,
           };
         })}
-        categories={["Queries", "Unique Users"]}
+        categories={["Запросы", "Уникальные пользователи"]}
         index="Day"
         colors={["indigo", "fuchsia"]}
         yAxisFormatter={(number: number) =>

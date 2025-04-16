@@ -1,4 +1,6 @@
 "use effect";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useContext } from "react";
 import { FiSidebar } from "react-icons/fi";
 import { SettingsContext } from "../settings/SettingsProvider";
@@ -106,7 +108,7 @@ export default function LogoWithText({
                 />
               </Link>
             </TooltipTrigger>
-            <TooltipContent>New Chat</TooltipContent>
+            <TooltipContent>{i18n.t(k.NEW_CHAT)}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       )}
@@ -136,7 +138,7 @@ export default function LogoWithText({
                 </button>
               </TooltipTrigger>
               <TooltipContent className="!border-none">
-                {toggled ? `Unpin sidebar` : "Pin sidebar"}
+                {toggled ? `${i18n.t(k.UNPIN_SIDEBAR)}` : i18n.t(k.PIN_SIDEBAR)}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

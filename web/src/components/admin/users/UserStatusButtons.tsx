@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import {
   type User,
   UserRole,
@@ -50,13 +52,13 @@ export const InviteUserButton = ({
         setShowInviteModal(false);
         mutate();
         setPopup({
-          message: "User invited successfully!",
+          message: "Пользователь успешно приглашен!",
           type: "success",
         });
       },
       onError: (errorMsg) =>
         setPopup({
-          message: `Unable to invite user - ${errorMsg}`,
+          message: `Не удалось пригласить пользователя - ${errorMsg}`,
           type: "error",
         }),
     }
@@ -78,17 +80,17 @@ export const InviteUserButton = ({
       return response.json();
     },
     {
-      onSuccess: () => {
+      nSuccess: () => {
         setShowInviteModal(false);
         mutate();
         setPopup({
-          message: "User uninvited successfully!",
+          message: "Пользователь успешно отменил приглашение!",
           type: "success",
         });
       },
       onError: (errorMsg) =>
         setPopup({
-          message: `Unable to uninvite user - ${errorMsg}`,
+          message: `Не удалось отменить приглашение пользователя - ${errorMsg}`,
           type: "error",
         }),
     }
@@ -110,10 +112,12 @@ export const InviteUserButton = ({
     <>
       {showInviteModal && (
         <GenericConfirmModal
-          title={`${invited ? "Uninvite" : "Invite"} User`}
-          message={`Are you sure you want to ${
-            invited ? "uninvite" : "invite"
-          } ${user.email}?`}
+          title={`${invited ? i18n.t(k.UNINVITE) : i18n.t(k.INVITE)} ${i18n.t(
+            k.USER
+          )}`}
+          message={`${i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO)} ${
+            invited ? i18n.t(k.UNINVITE1) : i18n.t(k.INVITE1)
+          } ${user.email}${i18n.t(k._10)}`}
           onClose={() => setShowInviteModal(false)}
           onConfirm={handleConfirm}
         />
@@ -125,7 +129,7 @@ export const InviteUserButton = ({
         disabled={isMutating}
         size="sm"
       >
-        {invited ? "Uninvite" : "Invite"}
+        {invited ? i18n.t(k.UNINVITE) : i18n.t(k.INVITE)}
       </Button>
     </>
   );
@@ -219,11 +223,11 @@ export const UserRoleDropdown = ({
       {showConfirmModal && (
         <GenericConfirmModal
           title="Change Curator Role"
-          message={`Warning: Switching roles from Curator to ${
+          message={`${i18n.t(k.WARNING_SWITCHING_ROLES_FROM)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
-          } will remove their status as individual curators from all groups.`}
-          confirmText={`Switch Role to ${
+          } ${i18n.t(k.WILL_REMOVE_THEIR_STATUS_AS_IN)}`}
+          confirmText={`${i18n.t(k.SWITCH_ROLE_TO)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
           }`}

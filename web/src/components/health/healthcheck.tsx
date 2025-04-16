@@ -143,9 +143,9 @@ export const HealthCheckBanner = () => {
             break; // Success - exit the retry loop
           } catch (error) {
             console.error(
-              `Error refreshing token (attempt ${
-                retryCount + 1
-              }/${maxRetries}):`,
+              `Error refreshing token (attempt ${retryCount + 1}/${
+                maxRetries
+              }):`,
               error
             );
             retryCount++;

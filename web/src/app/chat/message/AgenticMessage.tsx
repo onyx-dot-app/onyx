@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
 import { FeedbackType } from "../types";
@@ -279,6 +281,7 @@ export const AgenticMessage = ({
         {props.children}
       </MemoizedParagraph>
     ),
+
     []
   );
   const [currentlyOpenQuestion, setCurrentlyOpenQuestion] =
@@ -314,8 +317,8 @@ export const AgenticMessage = ({
               ? docs
               : agenticDocs
             : agenticDocs && agenticDocs.length > 0
-              ? agenticDocs
-              : docs
+            ? agenticDocs
+            : docs
         }
         subQuestions={[
           ...(subQuestions || []),
@@ -327,6 +330,7 @@ export const AgenticMessage = ({
         {props.children}
       </MemoizedAnchor>
     ),
+
     [docs, agenticDocs, isViewingInitialAnswer]
   );
 
@@ -485,8 +489,8 @@ export const AgenticMessage = ({
                         !allowDocuments
                           ? []
                           : isViewingInitialAnswer
-                            ? docs!
-                            : agenticDocs!
+                          ? docs!
+                          : agenticDocs!
                       }
                       toggleDocumentSelection={() => {
                         toggleDocumentSelection!(!isViewingInitialAnswer);
@@ -516,7 +520,7 @@ export const AgenticMessage = ({
                       <div className="w-full  py-4 flex flex-col gap-4">
                         <div className="flex items-center gap-x-2 px-4">
                           <div className="text-black text-lg font-medium">
-                            Answer
+                            {i18n.t(k.ANSWER)}
                           </div>
 
                           <StatusRefinement
@@ -612,7 +616,7 @@ export const AgenticMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy">
+                          <CustomTooltip showTick line content="Копировать">
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
@@ -624,13 +628,13 @@ export const AgenticMessage = ({
                               }
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Good response">
+                          <CustomTooltip showTick line content="Хороший ответ">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
-                          <CustomTooltip showTick line content="Bad response">
+                          <CustomTooltip showTick line content="Плохой ответ">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -641,7 +645,7 @@ export const AgenticMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate"
+                              content="Перегенерировать"
                             >
                               <RegenerateOption
                                 onDropdownVisibleChange={
@@ -700,7 +704,7 @@ export const AgenticMessage = ({
                               </div>
                             )}
                           </div>
-                          <CustomTooltip showTick line content="Copy">
+                          <CustomTooltip showTick line content="Копировать">
                             <CopyButton
                               copyAllFn={() =>
                                 copyAll(
@@ -713,14 +717,14 @@ export const AgenticMessage = ({
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Good response">
+                          <CustomTooltip showTick line content="Хороший ответ">
                             <HoverableIcon
                               icon={<LikeFeedback />}
                               onClick={() => handleFeedback("like")}
                             />
                           </CustomTooltip>
 
-                          <CustomTooltip showTick line content="Bad response">
+                          <CustomTooltip showTick line content="Плохой ответ">
                             <HoverableIcon
                               icon={<DislikeFeedback size={16} />}
                               onClick={() => handleFeedback("dislike")}
@@ -731,7 +735,7 @@ export const AgenticMessage = ({
                               disabled={isRegenerateDropdownVisible}
                               showTick
                               line
-                              content="Regenerate"
+                              content="Перегенерировать"
                             >
                               <RegenerateOption
                                 selectedAssistant={currentPersona!}
@@ -780,7 +784,7 @@ function MessageSwitcher({
       />
 
       <span className="text-text-darker select-none">
-        {currentPage} / {totalPages}
+        {currentPage} {i18n.t(k._6)} {totalPages}
       </span>
 
       <Hoverable

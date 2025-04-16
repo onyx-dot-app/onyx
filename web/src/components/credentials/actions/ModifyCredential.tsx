@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { Modal } from "@/components/Modal";
 import { Button } from "@/components/ui/button";
@@ -65,16 +67,16 @@ const CredentialSelectionTable = ({
           <tr className="bg-neutral-100 dark:bg-neutral-900">
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400"></th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              ID
+              {i18n.t(k.ID)}
             </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              Name
+              {i18n.t(k.NAME)}
             </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              Created
+              {i18n.t(k.CREATED)}
             </th>
             <th className="p-2 text-left font-medium text-neutral-600 dark:text-neutral-400">
-              Last Updated
+              {i18n.t(k.LAST_UPDATED)}
             </th>
             <th />
           </tr>
@@ -103,7 +105,7 @@ const CredentialSelectionTable = ({
                         className="form-radio ml-4 h-4 w-4 text-blue-600 transition duration-150 ease-in-out"
                       />
                     ) : (
-                      <Badge>selected</Badge>
+                      <Badge>{i18n.t(k.SELECTED)}</Badge>
                     )}
                   </td>
                   <td className="p-2">{credential.id}</td>
@@ -144,7 +146,7 @@ const CredentialSelectionTable = ({
       </table>
 
       {allCredentials.length == 0 && (
-        <p className="mt-4"> No credentials exist for this connector!</p>
+        <p className="mt-4"> {i18n.t(k.NO_CREDENTIALS_EXIST_FOR_THIS)}</p>
       )}
     </div>
   );
@@ -194,8 +196,7 @@ export default function ModifyCredential({
         >
           <>
             <p className="text-lg mb-2">
-              Are you sure you want to delete this credential? You cannot delete
-              credentials that are linked to live connectors.
+              {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET6)}
             </p>
             <div className="mt-6 flex gap-x-2 justify-end">
               <Button
@@ -204,13 +205,13 @@ export default function ModifyCredential({
                   setConfirmDeletionCredential(null);
                 }}
               >
-                Confirm
+                {i18n.t(k.CONFIRM)}
               </Button>
               <Button
                 variant="outline"
                 onClick={() => setConfirmDeletionCredential(null)}
               >
-                Cancel
+                {i18n.t(k.CANCEL)}
               </Button>
             </div>
           </>
@@ -218,10 +219,7 @@ export default function ModifyCredential({
       )}
 
       <div className="mb-0">
-        <Text className="mb-4">
-          Select a credential as needed! Ensure that you have selected a
-          credential with the proper permissions for this connector!
-        </Text>
+        <Text className="mb-4">{i18n.t(k.SELECT_A_CREDENTIAL_AS_NEEDED)}</Text>
 
         <CredentialSelectionTable
           onDeleteCredential={async (credential: Credential<any | null>) => {
@@ -260,7 +258,7 @@ export default function ModifyCredential({
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <NewChatIcon className="text-white" />
-                  <p>Create</p>
+                  <p>{i18n.t(k.CREATE1)}</p>
                 </div>
               </Button>
             ) : (
@@ -286,7 +284,7 @@ export default function ModifyCredential({
             >
               <div className="flex gap-x-2 items-center w-full border-none">
                 <SwapIcon className="text-white" />
-                <p>Select</p>
+                <p>{i18n.t(k.SELECT)}</p>
               </div>
             </Button>
           </div>

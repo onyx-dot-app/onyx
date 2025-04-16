@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useState } from "react";
@@ -97,7 +99,9 @@ const UserRoleDropdown = ({
           user.role = value;
         } else {
           const errorData = await response.json();
-          throw new Error(errorData.detail || "Failed to update user role");
+          throw new Error(
+            errorData.detail || "Не удалось обновить роль пользователя."
+          );
         }
       } catch (error: any) {
         onError(error.message);
@@ -125,16 +129,16 @@ const UserRoleDropdown = ({
       {/* Confirmation modal - only shown when users try to demote themselves */}
       {showDemoteConfirm && pendingRoleChange && (
         <GenericConfirmModal
-          title="Remove Yourself as a Curator for this Group?"
-          message="Are you sure you want to change your role to Basic? This will remove your ability to curate this group."
-          confirmText="Yes, set me to Basic"
+          title="Удалить себя как куратора этой группы?"
+          message="Вы уверены, что хотите изменить свою роль на базовую? Это лишит вас возможности курировать эту группу."
+          confirmText="Да, установить для меня базовую"
           onClose={() => {
-            // Cancel the role change if user dismisses modal
+            // Отменить изменение роли, если пользователь закроет модальное окно
             setShowDemoteConfirm(false);
             setPendingRoleChange(null);
           }}
           onConfirm={() => {
-            // Apply the role change if user confirms
+            // Применить изменение роли, если пользователь подтвердит
             setShowDemoteConfirm(false);
             applyRoleChange(pendingRoleChange);
             setPendingRoleChange(null);
@@ -153,8 +157,10 @@ const UserRoleDropdown = ({
               <SelectValue placeholder="Select role" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={UserRole.BASIC}>Basic</SelectItem>
-              <SelectItem value={UserRole.CURATOR}>Curator</SelectItem>
+              <SelectItem value={UserRole.BASIC}>{i18n.t(k.BASIC1)}</SelectItem>
+              <SelectItem value={UserRole.CURATOR}>
+                {i18n.t(k.CURATOR)}
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -181,20 +187,18 @@ export const GroupDisplay = ({
   const handlePopup = (message: string, type: "success" | "error") => {
     setPopup({ message, type });
   };
-
   const onRoleChangeSuccess = () =>
-    handlePopup("User role updated successfully!", "success");
+    handlePopup("Роль пользователя успешно обновлена!", "success");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Unable to update user role - ${errorMsg}`, "error");
-
+    handlePopup(`Не удалось обновить роль пользователя - ${errorMsg}`, "error");
   return (
     <div>
       {popup}
 
       <div className="text-sm mb-3 flex">
-        <Text className="mr-1">Status:</Text>{" "}
+        <Text className="mr-1">{i18n.t(k.STATUS2)}</Text>{" "}
         {userGroup.is_up_to_date ? (
-          <div className="text-success font-bold">Up to date</div>
+          <div className="text-success font-bold">{i18n.t(k.UP_TO_DATE2)}</div>
         ) : (
           <div className="text-accent font-bold">
             <LoadingAnimation text="Syncing" />
@@ -205,7 +209,7 @@ export const GroupDisplay = ({
       <Separator />
 
       <div className="flex w-full">
-        <h2 className="text-xl font-bold">Users</h2>
+        <h2 className="text-xl font-bold">{i18n.t(k.USERS)}</h2>
       </div>
 
       <div className="mt-2">
@@ -214,10 +218,10 @@ export const GroupDisplay = ({
             <Table className="overflow-visible">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
+                  <TableHead>{i18n.t(k.EMAIL)}</TableHead>
+                  <TableHead>{i18n.t(k.ROLE)}</TableHead>
                   <TableHead className="flex w-full">
-                    <div className="ml-auto">Remove User</div>
+                    <div className="ml-auto">{i18n.t(k.REMOVE_USER)}</div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -264,8 +268,10 @@ export const GroupDisplay = ({
                                   );
                                   if (response.ok) {
                                     setPopup({
-                                      message:
-                                        "Successfully removed user from group",
+                                      message: i18n.t(
+                                        k.SUCCESSFULLY_REMOVED_USER_FROM
+                                      ),
+
                                       type: "success",
                                     });
                                   } else {
@@ -274,7 +280,9 @@ export const GroupDisplay = ({
                                       responseJson.detail ||
                                       responseJson.message;
                                     setPopup({
-                                      message: `Error removing user from group - ${errorMsg}`,
+                                      message: `${i18n.t(
+                                        k.ERROR_REMOVING_USER_FROM_GROUP
+                                      )} ${errorMsg}`,
                                       type: "error",
                                     });
                                   }
@@ -292,7 +300,7 @@ export const GroupDisplay = ({
             </Table>
           </>
         ) : (
-          <div className="text-sm">No users in this group...</div>
+          <div className="text-sm">{i18n.t(k.NO_USERS_IN_THIS_GROUP)}</div>
         )}
       </div>
 
@@ -309,12 +317,12 @@ export const GroupDisplay = ({
                 }
               }}
             >
-              Add Users
+              {i18n.t(k.ADD_USERS)}
             </Button>
           </TooltipTrigger>
           {!userGroup.is_up_to_date && (
             <TooltipContent>
-              <p>Cannot update group while sync is occurring</p>
+              <p>{i18n.t(k.CANNOT_UPDATE_GROUP_WHILE_SYNC)}</p>
             </TooltipContent>
           )}
         </Tooltip>
@@ -333,16 +341,16 @@ export const GroupDisplay = ({
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8">Connectors</h2>
+      <h2 className="text-xl font-bold mt-8">{i18n.t(k.CONNECTORS)}</h2>
       <div className="mt-2">
         {userGroup.cc_pairs.length > 0 ? (
           <>
             <Table className="overflow-visible">
               <TableHeader>
                 <TableRow>
-                  <TableHead>Connector</TableHead>
+                  <TableHead>{i18n.t(k.CONNECTOR)}</TableHead>
                   <TableHead className="flex w-full">
-                    <div className="ml-auto">Remove Connector</div>
+                    <div className="ml-auto">{i18n.t(k.REMOVE_CONNECTOR)}</div>
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -378,8 +386,10 @@ export const GroupDisplay = ({
                                 );
                                 if (response.ok) {
                                   setPopup({
-                                    message:
-                                      "Successfully removed connector from group",
+                                    message: i18n.t(
+                                      k.SUCCESSFULLY_REMOVED_CONNECTOR
+                                    ),
+
                                     type: "success",
                                   });
                                 } else {
@@ -387,7 +397,9 @@ export const GroupDisplay = ({
                                   const errorMsg =
                                     responseJson.detail || responseJson.message;
                                   setPopup({
-                                    message: `Error removing connector from group - ${errorMsg}`,
+                                    message: `${i18n.t(
+                                      k.ERROR_REMOVING_CONNECTOR_FROM
+                                    )} ${errorMsg}`,
                                     type: "error",
                                   });
                                 }
@@ -404,7 +416,7 @@ export const GroupDisplay = ({
             </Table>
           </>
         ) : (
-          <div className="text-sm">No connectors in this group...</div>
+          <div className="text-sm">{i18n.t(k.NO_CONNECTORS_IN_THIS_GROUP)}</div>
         )}
       </div>
 
@@ -421,12 +433,12 @@ export const GroupDisplay = ({
                 }
               }}
             >
-              Add Connectors
+              {i18n.t(k.ADD_CONNECTORS)}
             </Button>
           </TooltipTrigger>
           {!userGroup.is_up_to_date && (
             <TooltipContent>
-              <p>Cannot update group while sync is occurring</p>
+              <p>{i18n.t(k.CANNOT_UPDATE_GROUP_WHILE_SYNC)}</p>
             </TooltipContent>
           )}
         </Tooltip>
@@ -446,7 +458,7 @@ export const GroupDisplay = ({
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">Document Sets</h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">{i18n.t(k.DOCUMENT_SETS)}</h2>
 
       <div>
         {userGroup.document_sets.length > 0 ? (
@@ -464,14 +476,14 @@ export const GroupDisplay = ({
           </div>
         ) : (
           <>
-            <Text>No document sets in this group...</Text>
+            <Text>{i18n.t(k.NO_DOCUMENT_SETS_IN_THIS_GROUP)}</Text>
           </>
         )}
       </div>
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">Assistants</h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">{i18n.t(k.ASSISTANTS1)}</h2>
 
       <div>
         {userGroup.document_sets.length > 0 ? (
@@ -489,14 +501,16 @@ export const GroupDisplay = ({
           </div>
         ) : (
           <>
-            <Text>No Assistants in this group...</Text>
+            <Text>{i18n.t(k.NO_ASSISTANTS_IN_THIS_GROUP)}</Text>
           </>
         )}
       </div>
 
       <Separator />
 
-      <h2 className="text-xl font-bold mt-8 mb-2">Token Rate Limits</h2>
+      <h2 className="text-xl font-bold mt-8 mb-2">
+        {i18n.t(k.TOKEN_RATE_LIMITS)}
+      </h2>
 
       <AddTokenRateLimitForm
         isOpen={addRateLimitFormVisible}
@@ -518,7 +532,7 @@ export const GroupDisplay = ({
           className="mt-3"
           onClick={() => setAddRateLimitFormVisible(true)}
         >
-          Create a Token Rate Limit
+          {i18n.t(k.CREATE_A_TOKEN_RATE_LIMIT)}
         </Button>
       )}
     </div>

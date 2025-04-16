@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useContext, useEffect, useRef, useState } from "react";
 import { Modal } from "@/components/Modal";
 import { getDisplayNameForModel, LlmDescriptor } from "@/lib/hooks";
@@ -148,17 +150,17 @@ export function UserSettingsModal({
           setCurrentLlm(destructureValue(defaultModel));
         }
         setPopup({
-          message: "Default model updated successfully",
+          message: "Модель по умолчанию успешно обновлена",
           type: "success",
         });
         refreshUser();
         router.refresh();
       } else {
-        throw new Error("Failed to update default model");
+        throw new Error("Не удалось обновить модель по умолчанию");
       }
     } catch (error) {
       setPopup({
-        message: "Failed to update default model",
+        message: "Не удалось обновить модель по умолчанию",
         type: "error",
       });
     }
@@ -170,7 +172,7 @@ export function UserSettingsModal({
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      setPopup({ message: "New passwords do not match", type: "error" });
+      setPopup({ message: "Новые пароли не совпадают", type: "error" });
       return;
     }
 
@@ -189,20 +191,20 @@ export function UserSettingsModal({
       });
 
       if (response.ok) {
-        setPopup({ message: "Password changed successfully", type: "success" });
+        setPopup({ message: "Пароль успешно изменен", type: "success" });
         setCurrentPassword("");
         setNewPassword("");
         setConfirmPassword("");
       } else {
         const errorData = await response.json();
         setPopup({
-          message: errorData.detail || "Failed to change password",
+          message: errorData.detail || "Не удалось сменить пароль",
           type: "error",
         });
       }
     } catch (error) {
       setPopup({
-        message: "An error occurred while changing the password",
+        message: "Произошла ошибка при смене пароля",
         type: "error",
       });
     } finally {
@@ -217,17 +219,17 @@ export function UserSettingsModal({
       const response = await deleteAllChatSessions();
       if (response.ok) {
         setPopup({
-          message: "All your chat sessions have been deleted.",
+          message: "Все ваши сеансы чата были удалены.",
           type: "success",
         });
         refreshChatSessions();
         router.push("/chat");
       } else {
-        throw new Error("Failed to delete all chat sessions");
+        throw new Error("Не удалось удалить все сеансы чата");
       }
     } catch (error) {
       setPopup({
-        message: "Failed to delete all chat sessions",
+        message: "Не удалось удалить все сеансы чата",
         type: "error",
       });
     } finally {
@@ -244,7 +246,7 @@ export function UserSettingsModal({
       }`}
     >
       <div className="p-2">
-        <h2 className="text-xl font-bold mb-4">User Settings</h2>
+        <h2 className="text-xl font-bold mb-4">{i18n.t(k.USER_SETTINGS)}</h2>
         <Separator className="mb-6" />
         <div className="flex">
           {showPasswordSection && (
@@ -260,7 +262,7 @@ export function UserSettingsModal({
                       }`}
                       onClick={() => setActiveSection("settings")}
                     >
-                      Settings
+                      {i18n.t(k.SETTINGS)}
                     </button>
                   </li>
                   <li>
@@ -272,7 +274,7 @@ export function UserSettingsModal({
                       }`}
                       onClick={() => setActiveSection("password")}
                     >
-                      Password
+                      {i18n.t(k.PASSWORD1)}
                     </button>
                   </li>
                 </ul>
@@ -283,7 +285,7 @@ export function UserSettingsModal({
             {activeSection === "settings" && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-medium">Theme</h3>
+                  <h3 className="text-lg font-medium">{i18n.t(k.THEME)}</h3>
                   <Select
                     value={selectedTheme}
                     onValueChange={(value) => {
@@ -299,24 +301,28 @@ export function UserSettingsModal({
                         value="system"
                         icon={<Monitor className="h-4 w-4" />}
                       >
-                        System
+                        {i18n.t(k.SYSTEM)}
                       </SelectItem>
                       <SelectItem
                         value="light"
                         icon={<Sun className="h-4 w-4" />}
                       >
-                        Light
+                        {i18n.t(k.LIGHT)}
                       </SelectItem>
                       <SelectItem icon={<Moon />} value="dark">
-                        Dark
+                        {i18n.t(k.DARK)}
                       </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-medium">Auto-scroll</h3>
-                    <SubLabel>Automatically scroll to new content</SubLabel>
+                    <h3 className="text-lg font-medium">
+                      {i18n.t(k.AUTO_SCROLL)}
+                    </h3>
+                    <SubLabel>
+                      {i18n.t(k.AUTOMATICALLY_SCROLL_TO_NEW_CO)}
+                    </SubLabel>
                   </div>
                   <Switch
                     checked={user?.preferences.auto_scroll}
@@ -328,9 +334,11 @@ export function UserSettingsModal({
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-lg font-medium">
-                      Temperature override
+                      {i18n.t(k.TEMPERATURE_OVERRIDE)}
                     </h3>
-                    <SubLabel>Set the temperature for the LLM</SubLabel>
+                    <SubLabel>
+                      {i18n.t(k.SET_THE_TEMPERATURE_FOR_THE_LL)}
+                    </SubLabel>
                   </div>
                   <Switch
                     checked={user?.preferences.temperature_override_enabled}
@@ -341,8 +349,12 @@ export function UserSettingsModal({
                 </div>
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-lg font-medium">Prompt Shortcuts</h3>
-                    <SubLabel>Enable keyboard shortcuts for prompts</SubLabel>
+                    <h3 className="text-lg font-medium">
+                      {i18n.t(k.PROMPT_SHORTCUTS)}
+                    </h3>
+                    <SubLabel>
+                      {i18n.t(k.ENABLE_KEYBOARD_SHORTCUTS_FOR)}
+                    </SubLabel>
                   </div>
                   <Switch
                     checked={user?.preferences?.shortcut_enabled}
@@ -352,7 +364,9 @@ export function UserSettingsModal({
                   />
                 </div>
                 <div>
-                  <h3 className="text-lg font-medium">Default Model</h3>
+                  <h3 className="text-lg font-medium">
+                    {i18n.t(k.DEFAULT_MODEL)}
+                  </h3>
                   <LLMSelector
                     userSettings
                     llmProviders={llmProviders}
@@ -385,8 +399,7 @@ export function UserSettingsModal({
                   {!showDeleteConfirmation ? (
                     <div className="space-y-3">
                       <p className="text-sm text-neutral-600 ">
-                        This will permanently delete all your chat sessions and
-                        cannot be undone.
+                        {i18n.t(k.THIS_WILL_PERMANENTLY_DELETE_A)}
                       </p>
                       <Button
                         variant="destructive"
@@ -394,13 +407,13 @@ export function UserSettingsModal({
                         onClick={() => setShowDeleteConfirmation(true)}
                       >
                         <FiTrash2 className="mr-2" size={14} />
-                        Delete All Chats
+                        {i18n.t(k.DELETE_ALL_CHATS)}
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-3">
                       <p className="text-sm text-neutral-600 ">
-                        Are you sure you want to delete all your chat sessions?
+                        {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET4)}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -411,8 +424,8 @@ export function UserSettingsModal({
                           disabled={isDeleteAllLoading}
                         >
                           {isDeleteAllLoading
-                            ? "Deleting..."
-                            : "Yes, Delete All"}
+                            ? i18n.t(k.DELETING1)
+                            : i18n.t(k.YES_DELETE_ALL)}
                         </Button>
                         <Button
                           variant="outline"
@@ -420,7 +433,7 @@ export function UserSettingsModal({
                           onClick={() => setShowDeleteConfirmation(false)}
                           disabled={isDeleteAllLoading}
                         >
-                          Cancel
+                          {i18n.t(k.CANCEL)}
                         </Button>
                       </div>
                     </div>
@@ -431,16 +444,17 @@ export function UserSettingsModal({
             {activeSection === "password" && (
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <h3 className="text-xl font-medium">Change Password</h3>
+                  <h3 className="text-xl font-medium">
+                    {i18n.t(k.CHANGE_PASSWORD)}
+                  </h3>
                   <SubLabel>
-                    Enter your current password and new password to change your
-                    password.
+                    {i18n.t(k.ENTER_YOUR_CURRENT_PASSWORD_AN)}
                   </SubLabel>
                 </div>
                 <form onSubmit={handleChangePassword} className="w-full">
                   <div className="w-full">
                     <label htmlFor="currentPassword" className="block mb-1">
-                      Current Password
+                      {i18n.t(k.CURRENT_PASSWORD)}
                     </label>
                     <Input
                       id="currentPassword"
@@ -453,7 +467,7 @@ export function UserSettingsModal({
                   </div>
                   <div className="w-full">
                     <label htmlFor="newPassword" className="block mb-1">
-                      New Password
+                      {i18n.t(k.NEW_PASSWORD2)}
                     </label>
                     <Input
                       id="newPassword"
@@ -466,7 +480,7 @@ export function UserSettingsModal({
                   </div>
                   <div className="w-full">
                     <label htmlFor="confirmPassword" className="block mb-1">
-                      Confirm New Password
+                      {i18n.t(k.CONFIRM_NEW_PASSWORD)}
                     </label>
                     <Input
                       id="confirmPassword"
@@ -478,7 +492,7 @@ export function UserSettingsModal({
                     />
                   </div>
                   <Button type="submit" disabled={isLoading} className="w-full">
-                    {isLoading ? "Changing..." : "Change Password"}
+                    {isLoading ? i18n.t(k.CHANGING) : i18n.t(k.CHANGE_PASSWORD)}
                   </Button>
                 </form>
               </div>

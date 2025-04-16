@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useContext, useEffect, useRef, useState } from "react";
 import { FiPlusCircle, FiPlus, FiInfo, FiX, FiFilter } from "react-icons/fi";
 import { FiLoader } from "react-icons/fi";
@@ -461,7 +463,7 @@ export function ChatInputBar({
                     </p>
                     <p className="text-text-dark font-light line-clamp-1">
                       {currentAssistant.id == selectedAssistant.id &&
-                        "(default) "}
+                        "(по умолчанию) "}
                       {currentAssistant.description}
                     </p>
                   </button>
@@ -477,7 +479,7 @@ export function ChatInputBar({
                   href="/assistants/new"
                 >
                   <FiPlus size={17} />
-                  <p>Create a new assistant</p>
+                  <p>{i18n.t(k.CREATE_A_NEW_ASSISTANT)}</p>
                 </a>
               </div>
             </div>
@@ -500,7 +502,10 @@ export function ChatInputBar({
                         updateInputPrompt(currentPrompt);
                       }}
                     >
-                      <p className="font-bold">{currentPrompt.prompt}:</p>
+                      <p className="font-bold">
+                        {currentPrompt.prompt}
+                        {i18n.t(k._2)}
+                      </p>
                       <p className="text-left flex-grow mr-auto line-clamp-1">
                         {currentPrompt.content?.trim()}
                       </p>
@@ -518,7 +523,7 @@ export function ChatInputBar({
                   href="/chat/input-prompts"
                 >
                   <FiPlus size={17} />
-                  <p>Create a new prompt</p>
+                  <p>{i18n.t(k.CREATE_A_NEW_PROMPT)}</p>
                 </a>
               </div>
             </div>
@@ -617,10 +622,10 @@ export function ChatInputBar({
               style={{ scrollbarWidth: "thin" }}
               role="textarea"
               aria-multiline
-              placeholder={`Message ${truncateString(
+              placeholder={`${i18n.t(k.MESSAGE2)} ${truncateString(
                 selectedAssistant.name,
                 70
-              )} assistant...`}
+              )} ${i18n.t(k.ASSISTANT2)}`}
               value={message}
               onKeyDown={(event) => {
                 if (
@@ -737,7 +742,9 @@ export function ChatInputBar({
                         toggleDocumentSidebar();
                       }}
                       icon={<FileIcon size={16} />}
-                      title={`${selectedDocuments.length} selected`}
+                      title={`${selectedDocuments.length} ${i18n.t(
+                        k.SELECTED
+                      )}`}
                       onRemove={removeDocs}
                     />
                   )}
@@ -755,7 +762,7 @@ export function ChatInputBar({
                             />
                           )
                         }
-                        title={file.name || "File" + file.id}
+                        title={file.name || i18n.t(k.FILE2) + file.id}
                         onRemove={() => {
                           setCurrentMessageFiles(
                             currentMessageFiles.filter(
@@ -768,7 +775,7 @@ export function ChatInputBar({
                       <SourceChip
                         key={`file-${index}`}
                         icon={<FileIcon className="text-red-500" size={16} />}
-                        title={file.name || "File"}
+                        title={file.name || i18n.t(k.FILE2)}
                         onRemove={() => {
                           setCurrentMessageFiles(
                             currentMessageFiles.filter(
@@ -792,7 +799,9 @@ export function ChatInputBar({
                   onClick={() => {
                     toggleDocSelection();
                   }}
-                  tooltipContent={"Upload files and attach user files"}
+                  tooltipContent={
+                    "Загружайте файлы и прикрепляйте пользовательские файлы"
+                  }
                 />
 
                 <LLMPopover
@@ -817,7 +826,7 @@ export function ChatInputBar({
                           llmManager?.currentLlm.modelName ||
                             "claude-3-5-sonnet-20240620"
                         )}
-                        tooltipContent="Switch models"
+                        tooltipContent="Модели переключателей"
                       />
                     </button>
                   }
@@ -840,7 +849,7 @@ export function ChatInputBar({
                         name="Filters"
                         Icon={FiFilter}
                         toggle
-                        tooltipContent="Filter your search"
+                        tooltipContent="Фильтруйте свой поиск"
                       />
                     }
                   />

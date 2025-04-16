@@ -14,7 +14,7 @@ export default async function Page() {
   if (!values) {
     body = (
       <div className="px-32">
-        <ErrorCallout errorTitle="Something went wrong :(" errorMsg={error} />
+        <ErrorCallout errorTitle="Что-то пошло не так :(" errorMsg={error} />
       </div>
     );
   } else {

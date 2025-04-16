@@ -68,6 +68,7 @@ export default function GeneratingImageDisplay({ isCompleted = false }) {
             cx="50"
             cy="50"
           />
+
           <circle
             className="text-text-800 transition-all duration-300"
             strokeWidth="8"

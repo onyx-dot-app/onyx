@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React, { useState, useRef, useEffect } from "react";
 import {
   Upload,
@@ -321,7 +323,9 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
     if (!fileUrl) return;
 
     if (!validateUrl(fileUrl)) {
-      setUrlError("Please enter a valid URL (e.g., https://example.com)");
+      setUrlError(
+        "Введите действительный URL-адрес (например, https://example.com)"
+      );
       return;
     }
 
@@ -445,18 +449,23 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           <AlertCircle className="w-5 h-5 mr-2 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="font-medium">
-              Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
+              {i18n.t(k.UNSUPPORTED_FILE_TYPE)}
+              {invalidFiles.length > 1 ? i18n.t(k.S) : ""}
             </p>
             <p className="mt-1">
               {invalidFiles.length > 1
-                ? `The following files cannot be uploaded: ${invalidFiles
+                ? `${i18n.t(k.THE_FOLLOWING_FILES_CANNOT_BE)} ${invalidFiles
                     .slice(0, 3)
-                    .join(", ")}${
+                    .join(i18n.t(k._3))}${
                     invalidFiles.length > 3
-                      ? ` and ${invalidFiles.length - 3} more`
+                      ? ` ${i18n.t(k.AND)} ${invalidFiles.length - 3} ${i18n.t(
+                          k.MORE
+                        )}`
                       : ""
                   }`
-                : `The file "${invalidFiles[0]}" cannot be uploaded.`}
+                : `${i18n.t(k.THE_FILE)}${invalidFiles[0]}${i18n.t(
+                    k.CANNOT_BE_UPLOADED
+                  )}`}
             </p>
           </div>
           <button
@@ -514,8 +523,8 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                     <div className="mt-2">
                       <p className="text-center text-sm text-neutral-500 dark:text-neutral-400">
                         {isDragging
-                          ? "Drop files here..."
-                          : "Drag & drop or click to upload files"}
+                          ? i18n.t(k.DROP_FILES_HERE)
+                          : i18n.t(k.DRAG_DROP_OR_CLICK_TO_UPLOAD)}
                       </p>
                     </div>
                     <input
@@ -550,6 +559,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                           onChange={handleUrlChange}
                           onKeyDown={handleKeyDown}
                         />
+
                         <button
                           type="button"
                           onClick={handleUrlSubmit}
@@ -591,7 +601,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           onClick={() => setUploadType("file")}
         >
           <Upload className="w-3.5 h-3.5" />
-          <span>File</span>
+          <span>{i18n.t(k.FILE2)}</span>
         </button>
         <button
           type="button"
@@ -603,7 +613,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
           onClick={() => setUploadType("url")}
         >
           <Link className="w-3.5 h-3.5" />
-          <span>URL</span>
+          <span>{i18n.t(k.URL)}</span>
         </button>
       </div>
     </div>

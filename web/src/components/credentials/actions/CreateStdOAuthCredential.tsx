@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import * as Yup from "yup";
 
 import React from "react";
@@ -19,7 +21,6 @@ export function CreateStdOAuthCredential({
 }: {
   // Source information
   sourceType: ValidSources;
-
   additionalFields: OAuthAdditionalKwargDescription[];
 }) {
   const handleSubmit = async (
@@ -77,7 +78,7 @@ export function CreateStdOAuthCredential({
 
             <div className="flex w-full">
               <Button type="submit" className="flex text-sm">
-                Create
+                {i18n.t(k.CREATE1)}
               </Button>
             </div>
           </CardSection>

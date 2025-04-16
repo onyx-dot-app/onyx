@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
@@ -14,8 +16,10 @@ async function Page() {
   if (!standardAnswerCategoriesResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_STANDARD_ANSWE
+        )} ${await standardAnswerCategoriesResponse.text()}`}
       />
     );
   }
@@ -26,7 +30,7 @@ async function Page() {
     <div className="container mx-auto">
       <BackButton />
       <AdminPageTitle
-        title="New Standard Answer"
+        title="Новый стандартный ответ"
         icon={<ClipboardIcon size={32} />}
       />
 

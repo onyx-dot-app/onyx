@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 

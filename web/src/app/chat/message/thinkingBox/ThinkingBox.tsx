@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import React, { useState, useRef, useEffect } from "react";
 import { FiChevronDown, FiChevronUp } from "react-icons/fi";
@@ -273,9 +275,11 @@ export const ThinkingBox: React.FC<ThinkingBoxProps> = ({
         <div className="thinking-box__header" onClick={handleToggleExpand}>
           <div className="thinking-box__title">
             <span className="thinking-box__title-text">
-              {isThinkingActive ? "Thinking" : "Thought for"}
+              {isThinkingActive ? i18n.t(k.THINKING) : i18n.t(k.THOUGHT_FOR)}
             </span>
-            <span className="thinking-box__timer">{elapsedTime}s</span>
+            <span className="thinking-box__timer">
+              {elapsedTime}
+            </span>
           </div>
           <div className="thinking-box__collapse-icon">
             {isExpanded ? (

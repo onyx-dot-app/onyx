@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SourceIcon } from "@/components/SourceIcon";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
@@ -29,7 +31,7 @@ async function EditslackChannelConfigPage(props: {
   ] = (await Promise.all(tasks)) as [
     Response,
     Response,
-    FetchAssistantsResponse,
+    FetchAssistantsResponse
   ];
 
   const eeStandardAnswerCategoryResponse =
@@ -38,8 +40,10 @@ async function EditslackChannelConfigPage(props: {
   if (!slackChannelsResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Channels - ${await slackChannelsResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_SLACK_CHANNELS
+        )} ${await slackChannelsResponse.text()}`}
       />
     );
   }
@@ -53,8 +57,8 @@ async function EditslackChannelConfigPage(props: {
   if (!slackChannelConfig) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Did not find Slack Channel config with ID: ${params.id}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(k.DID_NOT_FIND_SLACK_CHANNEL_CON)} ${params.id}`}
       />
     );
   }
@@ -62,8 +66,10 @@ async function EditslackChannelConfigPage(props: {
   if (!documentSetsResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch document sets - ${await documentSetsResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_DOCUMENT_SETS
+        )} ${await documentSetsResponse.text()}`}
       />
     );
   }
@@ -73,8 +79,10 @@ async function EditslackChannelConfigPage(props: {
   if (assistantsFetchError) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch personas - ${assistantsFetchError}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_PERSONAS
+        )} ${assistantsFetchError}`}
       />
     );
   }

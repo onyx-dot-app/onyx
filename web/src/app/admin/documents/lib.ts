@@ -13,7 +13,7 @@ export const updateBoost = async (documentId: string, boost: number) => {
     return null;
   }
   const responseJson = await response.json();
-  return responseJson.message || responseJson.detail || "Unknown error";
+  return responseJson.message || responseJson.detail || "Неизвестная ошибка";
 };
 
 export const updateHiddenStatus = async (

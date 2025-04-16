@@ -66,14 +66,14 @@ export function ChangeCredentialsModal({
           setApiKey(JSON.stringify(jsonContent));
         } catch (parseError) {
           throw new Error(
-            "Failed to parse JSON file. Please ensure it's a valid JSON."
+            "Не удалось проанализировать файл JSON. Убедитесь, что это допустимый JSON."
           );
         }
       } catch (error) {
         setTestError(
           error instanceof Error
             ? error.message
-            : "An unknown error occurred while processing the file."
+            : "Произошла неизвестная ошибка при обработке файла."
         );
         setApiKey("");
         clearFileInput();
@@ -103,7 +103,7 @@ export function ChangeCredentialsModal({
       onDeleted();
     } catch (error) {
       setDeletionError(
-        error instanceof Error ? error.message : "An unknown error occurred"
+        error instanceof Error ? error.message : "Произошла неизвестная ошибка"
       );
     } finally {
       setIsProcessing(false);
@@ -147,7 +147,7 @@ export function ChangeCredentialsModal({
         const errorData = await updateResponse.json();
         throw new Error(
           errorData.detail ||
-            `Failed to update provider- check your ${
+            `Не удалось обновить провайдера — проверьте ${
               isProxy ? "API URL" : "API key"
             }`
         );
@@ -156,7 +156,7 @@ export function ChangeCredentialsModal({
       onConfirm();
     } catch (error) {
       setTestError(
-        error instanceof Error ? error.message : "An unknown error occurred"
+        error instanceof Error ? error.message : "Произошла неизвестная ошибка"
       );
     }
   };
@@ -210,7 +210,7 @@ export function ChangeCredentialsModal({
                     `}
                     value={apiKey}
                     onChange={(e: any) => setApiKey(e.target.value)}
-                    placeholder="Paste your API key here"
+                    placeholder="Вставьте свой ключ API здесь"
                   />
                 </>
               )}
@@ -231,7 +231,7 @@ export function ChangeCredentialsModal({
                     `}
                     value={apiUrl}
                     onChange={(e: any) => setApiUrl(e.target.value)}
-                    placeholder="Paste your API URL here"
+                    placeholder="Вставьте URL вашего API сюда"
                   />
 
                   {deletionError && (
@@ -256,7 +256,7 @@ export function ChangeCredentialsModal({
                  `}
                     value={modelName}
                     onChange={(e: any) => setModelName(e.target.value)}
-                    placeholder="Paste your model name here"
+                    placeholder="Вставьте сюда название вашей модели"
                   />
                 </>
               )}

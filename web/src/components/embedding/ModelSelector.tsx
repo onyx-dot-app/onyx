@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {
   AVAILABLE_CLOUD_PROVIDERS,
@@ -75,7 +77,7 @@ export function ModelOption({
           "Custom model—no description is available."}
       </p>
       <div className="text-xs text-text-500">
-        {model.isDefault ? "Default" : "Self-hosted"}
+        {model.isDefault ? i18n.t(k.DEFAULT2) : i18n.t(k.SELF_HOSTED)}
       </div>
       {onSelect && (
         <div className="mt-3">
@@ -91,7 +93,7 @@ export function ModelOption({
             }}
             disabled={selected}
           >
-            {selected ? "Selected Model" : "Select Model"}
+            {selected ? i18n.t(k.SELECTED_MODEL) : i18n.t(k.SELECT_MODEL)}
           </button>
         </div>
       )}

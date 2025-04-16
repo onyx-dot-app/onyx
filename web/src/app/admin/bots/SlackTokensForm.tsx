@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { TextFormField } from "@/components/admin/connectors/Field";
 import { Form, Formik } from "formik";
@@ -60,8 +62,9 @@ export const SlackTokensForm = ({
           const botId = isUpdate ? existingSlackBotId : responseJson.id;
           setPopup({
             message: isUpdate
-              ? "Successfully updated Slack Bot!"
-              : "Successfully created Slack Bot!",
+              ? i18n.t(k.SUCCESSFULLY_UPDATED_SLACK_BOT)
+              : i18n.t(k.SUCCESSFULLY_CREATED_SLACK_BOT),
+
             type: "success",
           });
           router.push(`/admin/bots/${encodeURIComponent(botId)}`);
@@ -70,14 +73,14 @@ export const SlackTokensForm = ({
           let errorMsg = responseJson.detail || responseJson.message;
 
           if (errorMsg.includes("Invalid bot token:")) {
-            errorMsg = "Slack Bot Token is invalid";
+            errorMsg = i18n.t(k.SLACK_BOT_TOKEN_IS_INVALID);
           } else if (errorMsg.includes("Invalid app token:")) {
-            errorMsg = "Slack App Token is invalid";
+            errorMsg = i18n.t(k.SLACK_APP_TOKEN_IS_INVALID);
           }
           setPopup({
             message: isUpdate
-              ? `Error updating Slack Bot - ${errorMsg}`
-              : `Error creating Slack Bot - ${errorMsg}`,
+              ? `${i18n.t(k.ERROR_UPDATING_SLACK_BOT)} ${errorMsg}`
+              : `${i18n.t(k.ERROR_CREATING_SLACK_BOT)} ${errorMsg}`,
             type: "error",
           });
         }
@@ -90,7 +93,7 @@ export const SlackTokensForm = ({
             <div className="">
               <TextFormField
                 name="name"
-                label="Name This Slack Bot:"
+                label="Назовите этого бота Slack:"
                 type="text"
               />
             </div>
@@ -99,28 +102,30 @@ export const SlackTokensForm = ({
           {!isUpdate && (
             <div className="mt-4">
               <Separator />
-              Please refer to our{" "}
+              {i18n.t(k.PLEASE_REFER_TO_OUR)}{" "}
               <a
                 className="text-blue-500 hover:underline"
                 href="https://docs.onyx.app/slack_bot_setup"
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                guide
+                {i18n.t(k.GUIDE)}
               </a>{" "}
-              if you are not sure how to get these tokens!
+              {i18n.t(k.IF_YOU_ARE_NOT_SURE_HOW_TO_GET)}
             </div>
           )}
           <TextFormField
             name="bot_token"
-            label="Slack Bot Token"
+            label="Токен бота Slack"
             type="password"
           />
+
           <TextFormField
             name="app_token"
-            label="Slack App Token"
+            label="Токен приложения Slack"
             type="password"
           />
+
           <div className="flex justify-end w-full mt-4">
             <Button
               type="submit"
@@ -133,7 +138,7 @@ export const SlackTokensForm = ({
               variant="submit"
               size="default"
             >
-              {isUpdate ? "Update!" : "Create!"}
+              {isUpdate ? i18n.t(k.UPDATE1) : i18n.t(k.CREATE)}
             </Button>
           </div>
         </Form>

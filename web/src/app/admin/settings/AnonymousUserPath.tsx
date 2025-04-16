@@ -78,7 +78,9 @@ export function AnonymousUserPath({
       if (!response.ok) {
         const detail = await response.json();
         setPopup({
-          message: detail.detail || "Failed to update anonymous user path",
+          message:
+            detail.detail ||
+            "Не удалось обновить путь анонимного пользователя.",
           type: "error",
         });
         return;
@@ -90,7 +92,7 @@ export function AnonymousUserPath({
       });
     } catch (error) {
       setPopup({
-        message: `Failed to update anonymous user path: ${error}`,
+        message: `Не удалось обновить путь анонимного пользователя: ${error}`,
         type: "error",
       });
       console.error("Error updating anonymous user path:", error);
@@ -115,7 +117,8 @@ export function AnonymousUserPath({
         <div className="flex flex-col gap-2 justify-center items-start">
           <div className="w-full flex-grow  flex items-center rounded-md shadow-sm">
             <span className="inline-flex items-center rounded-l-md border border-r-0 border-background-300 bg-background-50 px-3 text-text-500 sm:text-sm h-10">
-              {settings?.webDomain}/anonymous/
+              {settings?.webDomain}
+              {i18n.t(k.ANONYMOUS)}
             </span>
             <Input
               type="text"

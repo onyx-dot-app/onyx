@@ -1,4 +1,5 @@
-// CsvContent
+import i18n from "i18next";
+import k from "./../../i18n/keys"; // CsvContent
 import React, { useState, useEffect } from "react";
 import {
   Table,
@@ -132,13 +133,13 @@ const CsvContent: React.FC<ContentComponentProps> = ({
                     <WarningCircle className="w-8 h-8 text-error" />
                     <p className="text-text-600 font-medium">
                       {headers.length === 0
-                        ? "Error loading CSV"
-                        : "No data available"}
+                        ? i18n.t(k.ERROR_LOADING_CSV)
+                        : i18n.t(k.NO_DATA_AVAILABLE)}
                     </p>
                     <p className="text-text-400 text-sm">
                       {headers.length === 0
-                        ? "The CSV file may be too large or couldn't be loaded properly."
-                        : "The CSV file appears to be empty."}
+                        ? i18n.t(k.THE_CSV_FILE_MAY_BE_TOO_LARGE)
+                        : i18n.t(k.THE_CSV_FILE_APPEARS_TO_BE_EMP)}
                     </p>
                   </div>
                 </TableCell>

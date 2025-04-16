@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -36,7 +38,9 @@ export const UserGroupCreationForm = ({
     <Modal className="w-fit" onOutsideClick={onClose}>
       <>
         <h2 className="text-xl font-bold flex">
-          {isUpdate ? "Update a User Group" : "Create a new User Group"}
+          {isUpdate
+            ? i18n.t(k.UPDATE_A_USER_GROUP)
+            : i18n.t(k.CREATE_A_NEW_USER_GROUP)}
         </h2>
 
         <Separator />
@@ -48,7 +52,7 @@ export const UserGroupCreationForm = ({
             cc_pair_ids: [] as number[],
           }}
           validationSchema={Yup.object().shape({
-            name: Yup.string().required("Please enter a name for the group"),
+            name: Yup.string().required("Пожалуйста, введите имя группы"),
             user_ids: Yup.array().of(Yup.string().required()),
             cc_pair_ids: Yup.array().of(Yup.number().required()),
           })}
@@ -60,8 +64,9 @@ export const UserGroupCreationForm = ({
             if (response.ok) {
               setPopup({
                 message: isUpdate
-                  ? "Successfully updated user group!"
-                  : "Successfully created user group!",
+                  ? i18n.t(k.SUCCESSFULLY_UPDATED_USER_GROU)
+                  : i18n.t(k.SUCCESSFULLY_CREATED_USER_GROU),
+
                 type: "success",
               });
               onClose();
@@ -70,8 +75,8 @@ export const UserGroupCreationForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
                 message: isUpdate
-                  ? `Error updating user group - ${errorMsg}`
-                  : `Error creating user group - ${errorMsg}`,
+                  ? `${i18n.t(k.ERROR_UPDATING_USER_GROUP)} ${errorMsg}`
+                  : `${i18n.t(k.ERROR_CREATING_USER_GROUP)} ${errorMsg}`,
                 type: "error",
               });
             }
@@ -83,7 +88,7 @@ export const UserGroupCreationForm = ({
                 <TextFormField
                   name="name"
                   label="Name:"
-                  placeholder="A name for the User Group"
+                  placeholder="Имя для группы пользователей"
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />
@@ -91,11 +96,10 @@ export const UserGroupCreationForm = ({
                 <Separator />
 
                 <h2 className="mb-1 font-medium">
-                  Select which private connectors this group has access to:
+                  {i18n.t(k.SELECT_WHICH_PRIVATE_CONNECTOR)}
                 </h2>
                 <p className="mb-3 text-xs">
-                  All documents indexed by the selected connectors will be
-                  visible to users in this group.
+                  {i18n.t(k.ALL_DOCUMENTS_INDEXED_BY_THE_S)}
                 </p>
 
                 <ConnectorEditor
@@ -109,11 +113,10 @@ export const UserGroupCreationForm = ({
                 <Separator />
 
                 <h2 className="mb-1 font-medium">
-                  Select which Users should be a part of this Group.
+                  {i18n.t(k.SELECT_WHICH_USERS_SHOULD_BE_A)}
                 </h2>
                 <p className="mb-3 text-xs">
-                  All selected users will be able to search through all
-                  documents indexed by the selected connectors.
+                  {i18n.t(k.ALL_SELECTED_USERS_WILL_BE_ABL)}
                 </p>
                 <div className="mb-3 gap-2">
                   <UserEditor
@@ -133,7 +136,7 @@ export const UserGroupCreationForm = ({
                     disabled={isSubmitting}
                     className="mx-auto w-64"
                   >
-                    {isUpdate ? "Update!" : "Create!"}
+                    {isUpdate ? i18n.t(k.UPDATE1) : i18n.t(k.CREATE)}
                   </Button>
                 </div>
               </div>

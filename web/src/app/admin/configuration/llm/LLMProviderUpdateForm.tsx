@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { LoadingAnimation } from "@/components/Loading";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import Text from "@/components/ui/text";
@@ -36,9 +38,7 @@ export function LLMProviderUpdateForm({
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
-  hideSuccess?: boolean;
-
-  // Set this when this is the first time the user is setting Onyx up.
+  hideSuccess?: boolean; // Set this when this is the first time the user is setting Onyx up.
   firstTimeConfiguration?: boolean;
   hasAdvancedOptions?: boolean;
 }) {
@@ -84,15 +84,15 @@ export function LLMProviderUpdateForm({
 
   // Setup validation schema if required
   const validationSchema = Yup.object({
-    name: Yup.string().required("Display Name is required"),
+    name: Yup.string().required("Отображаемое имя обязательно"),
     api_key: llmProviderDescriptor.api_key_required
-      ? Yup.string().required("API Key is required")
+      ? Yup.string().required("Требуется API-ключ")
       : Yup.string(),
     api_base: llmProviderDescriptor.api_base_required
-      ? Yup.string().required("API Base is required")
+      ? Yup.string().required("Требуется API Base")
       : Yup.string(),
     api_version: llmProviderDescriptor.api_version_required
-      ? Yup.string().required("API Version is required")
+      ? Yup.string().required("Требуется версия API")
       : Yup.string(),
     ...(llmProviderDescriptor.custom_config_keys
       ? {
@@ -103,7 +103,7 @@ export function LLMProviderUpdateForm({
                   acc[customConfigKey.name] = Yup.string().required(
                     `${
                       customConfigKey.display_name || customConfigKey.name
-                    } is required`
+                    } обязательно`
                   );
                 }
                 return acc;
@@ -114,9 +114,9 @@ export function LLMProviderUpdateForm({
         }
       : {}),
     deployment_name: llmProviderDescriptor.deployment_name_required
-      ? Yup.string().required("Deployment Name is required")
+      ? Yup.string().required("Требуется указать имя развертывания")
       : Yup.string().nullable(),
-    default_model_name: Yup.string().required("Model name is required"),
+    default_model_name: Yup.string().required("Название модели обязательно"),
     fast_default_model_name: Yup.string().nullable(),
     // EE Only
     is_public: Yup.boolean().required(),
@@ -161,6 +161,7 @@ export function LLMProviderUpdateForm({
           `${LLM_PROVIDERS_ADMIN_URL}${
             existingLlmProvider ? "" : "?is_creation=true"
           }`,
+
           {
             method: "PUT",
             headers: {
@@ -178,8 +179,8 @@ export function LLMProviderUpdateForm({
         if (!response.ok) {
           const errorMsg = (await response.json()).detail;
           const fullErrorMsg = existingLlmProvider
-            ? `Failed to update provider: ${errorMsg}`
-            : `Failed to enable provider: ${errorMsg}`;
+            ? `${i18n.t(k.FAILED_TO_UPDATE_PROVIDER)} ${errorMsg}`
+            : `${i18n.t(k.FAILED_TO_ENABLE_PROVIDER)} ${errorMsg}`;
           if (setPopup) {
             setPopup({
               type: "error",
@@ -201,7 +202,9 @@ export function LLMProviderUpdateForm({
           );
           if (!setDefaultResponse.ok) {
             const errorMsg = (await setDefaultResponse.json()).detail;
-            const fullErrorMsg = `Failed to set provider as default: ${errorMsg}`;
+            const fullErrorMsg = `${i18n.t(
+              k.FAILED_TO_SET_PROVIDER_AS_DEFA
+            )} ${errorMsg}`;
             if (setPopup) {
               setPopup({
                 type: "error",
@@ -218,8 +221,9 @@ export function LLMProviderUpdateForm({
         onClose();
 
         const successMsg = existingLlmProvider
-          ? "Provider updated successfully!"
-          : "Provider enabled successfully!";
+          ? i18n.t(k.PROVIDER_UPDATED_SUCCESSFULLY)
+          : i18n.t(k.PROVIDER_ENABLED_SUCCESSFULLY);
+
         if (!hideSuccess && setPopup) {
           setPopup({
             type: "success",
@@ -237,9 +241,9 @@ export function LLMProviderUpdateForm({
           {!firstTimeConfiguration && (
             <TextFormField
               name="name"
-              label="Display Name"
-              subtext="A name which you can use to identify this provider when selecting it in the UI."
-              placeholder="Display Name"
+              label="Отображаемое имя"
+              subtext="Имя, которое можно использовать для идентификации этого поставщика при выборе его в пользовательском интерфейсе."
+              placeholder="Отображаемое имя"
               disabled={existingLlmProvider ? true : false}
             />
           )}
@@ -282,7 +286,9 @@ export function LLMProviderUpdateForm({
                     label={
                       customConfigKey.is_required
                         ? customConfigKey.display_name
-                        : `[Optional] ${customConfigKey.display_name}`
+                        : `${i18n.t(k.OPTIONAL1)} ${
+                            customConfigKey.display_name
+                          }`
                     }
                     subtext={customConfigKey.description || undefined}
                   />
@@ -340,10 +346,8 @@ export function LLMProviderUpdateForm({
                 (llmProviderDescriptor.llm_names.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
-            for this provider. If \`Default\` is specified, will use
-            the Default Model configured above.`}
-                    label="[Optional] Fast Model"
+                    subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
+                    label="[Необязательно] Быстрая модель"
                     options={llmProviderDescriptor.llm_names.map((name) => ({
                       // don't clean up names here to give admins descriptive names / handle duplicates
                       // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
@@ -356,10 +360,8 @@ export function LLMProviderUpdateForm({
                 ) : (
                   <TextFormField
                     name="fast_default_model_name"
-                    subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
-            for this provider. If \`Default\` is specified, will use
-            the Default Model configured above.`}
-                    label="[Optional] Fast Model"
+                    subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
+                    label="[Необязательно] Быстрая модель"
                     placeholder="E.g. gpt-4"
                   />
                 ))}
@@ -371,6 +373,7 @@ export function LLMProviderUpdateForm({
                     showAdvancedOptions={showAdvancedOptions}
                     setShowAdvancedOptions={setShowAdvancedOptions}
                   />
+
                   {showAdvancedOptions && (
                     <>
                       {llmProviderDescriptor.llm_names.length > 0 && (
@@ -380,8 +383,8 @@ export function LLMProviderUpdateForm({
                               formikProps.values.display_model_names
                             }
                             name="display_model_names"
-                            label="Display Models"
-                            subtext="Select the models to make available to users. Unselected models will not be available."
+                            label="Отобразить модели"
+                            subtext="Выберите модели, которые будут доступны пользователям. Невыбранные модели будут недоступны."
                             options={llmProviderDescriptor.llm_names.map(
                               (name) => ({
                                 value: name,
@@ -421,9 +424,9 @@ export function LLMProviderUpdateForm({
               {isTesting ? (
                 <LoadingAnimation text="Testing" />
               ) : existingLlmProvider ? (
-                "Update"
+                i18n.t(k.UPDATE)
               ) : (
-                "Enable"
+                i18n.t(k.ENABLE)
               )}
             </Button>
             {existingLlmProvider && (
@@ -441,7 +444,7 @@ export function LLMProviderUpdateForm({
                   );
                   if (!response.ok) {
                     const errorMsg = (await response.json()).detail;
-                    alert(`Failed to delete provider: ${errorMsg}`);
+                    alert(`${i18n.t(k.FAILED_TO_DELETE_PROVIDER)} ${errorMsg}`);
                     return;
                   }
 
@@ -470,7 +473,7 @@ export function LLMProviderUpdateForm({
                   onClose();
                 }}
               >
-                Delete
+                {i18n.t(k.DELETE)}
               </Button>
             )}
           </div>

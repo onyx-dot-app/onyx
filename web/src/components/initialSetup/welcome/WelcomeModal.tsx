@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import React from "react";
 import Text from "@/components/ui/text";
@@ -67,13 +69,10 @@ export function WelcomeModal({ user }: { user: User | null }) {
       >
         <div>
           <Text className="mb-4">
-            Onyx brings all your company&apos;s knowledge to your fingertips,
-            ready to be accessed instantly.
+            {i18n.t(k.ONYX_BRINGS_ALL_YOUR_COMPANY_S)}
           </Text>
           <Text className="mb-4">
-            To get started, we need to set up an API key for the Language Model
-            (LLM) provider. This key allows Onyx to interact with the AI model,
-            enabling intelligent responses to your queries.
+            {i18n.t(k.TO_GET_STARTED_WE_NEED_TO_SET)}
           </Text>
 
           <div className="max-h-[900px] overflow-y-scroll">

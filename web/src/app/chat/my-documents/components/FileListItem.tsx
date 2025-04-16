@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useState, useEffect, useCallback } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { File, File as FileIcon, Loader, MoreHorizontal } from "lucide-react";
@@ -109,10 +111,9 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
               <p className="text-xs font-medium text-red-500">
-                Indexing failed.
+                {i18n.t(k.INDEXING_FAILED)}
                 <br />
-                You can attempt a reindex to continue using this file, or delete
-                the file.
+                {i18n.t(k.YOU_CAN_ATTEMPT_A_REINDEX_TO_C)}
               </p>
             </div>
             <div className="flex flex-col gap-2">
@@ -124,7 +125,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                   e.preventDefault();
                   e.stopPropagation();
                   setIsPopoverOpen(false);
-                  fetch(`/api/user/file/reindex`, {
+                  fetch(`${i18n.t(k.API_USER_FILE_REINDEX)}`, {
                     method: "POST",
                     headers: {
                       "Content-Type": "application/json",
@@ -133,26 +134,26 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                   })
                     .then((response) => {
                       if (!response.ok) {
-                        throw new Error("Failed to reindex file");
+                        throw new Error("Не удалось переиндексировать файл");
                       }
                       setIndexingStatus(false);
                       refreshFolderDetails();
                       setPopup({
                         type: "success",
-                        message: "Reindexing will start shortly.",
+                        message: i18n.t(k.REINDEXING_WILL_START_SHORTLY),
                       });
                     })
                     .catch((error) => {
                       console.error("Error reindexing file:", error);
                       setPopup({
                         type: "error",
-                        message: "Failed to reindex file",
+                        message: i18n.t(k.FAILED_TO_REINDEX_FILE),
                       });
                     });
                 }}
               >
                 <FiRefreshCw className="mr-2 h-3.5 w-3.5" />
-                Reindex
+                {i18n.t(k.REINDEX1)}
               </Button>
               <Button
                 variant="outline"
@@ -165,7 +166,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                 }}
               >
                 <FiTrash2 className="mr-2 h-3.5 w-3.5" />
-                Delete
+                {i18n.t(k.DELETE)}
               </Button>
             </div>
           </div>
@@ -232,15 +233,15 @@ export const FileListItem: React.FC<FileListItemProps> = ({
           {file.status == FileStatus.INDEXING ||
           file.status == FileStatus.REINDEXING ? (
             <>
-              N/A, indexing
+              {i18n.t(k.N_A_INDEXING)}
               <AnimatedDots />
             </>
           ) : file.status == FileStatus.FAILED ? (
-            <>Failed</>
+            <>{i18n.t(k.FAILED)}</>
           ) : file.token_count !== undefined ? (
-            `${file.token_count?.toLocaleString()} tokens`
+            `${file.token_count?.toLocaleString()} ${i18n.t(k.TOKENS)}`
           ) : (
-            "N/A"
+            i18n.t(k.N_A)
           )}
         </div>
       </div>
@@ -269,31 +270,33 @@ export const FileListItem: React.FC<FileListItemProps> = ({
               <div className="space-y-0">
                 <Button variant="menu" onClick={() => setShowMoveOptions(true)}>
                   <FolderMoveIcon size={16} className="h-4 w-4" />
-                  Move
+                  {i18n.t(k.MOVE)}
                 </Button>
                 <Button
                   variant="menu"
                   onClick={() => onRename(file.id, file.name, false)}
                 >
                   <FiEdit className="h-4 w-4" />
-                  Rename
+                  {i18n.t(k.RENAME)}
                 </Button>
                 <Button variant="menu" onClick={handleDelete}>
                   <FiTrash className="h-4 w-4" />
-                  Delete
+                  {i18n.t(k.DELETE)}
                 </Button>
                 <Button
                   variant="menu"
                   onClick={() => onDownload(file.document_id)}
                 >
                   <FiDownload className="h-4 w-4" />
-                  Download
+                  {i18n.t(k.DOWNLOAD)}
                 </Button>
               </div>
             ) : (
               <div className="p-2 text-text-dark space-y-2">
                 <div className="flex items-center space-x-2 mb-4">
-                  <h3 className="text-sm  px-2 font-semibold">Move to </h3>
+                  <h3 className="text-sm  px-2 font-semibold">
+                    {i18n.t(k.MOVE_TO)}{" "}
+                  </h3>
                 </div>
                 <div className="max-h-60 default-scrollbar overflow-y-auto pr-2">
                   <div className="space-y-1">
@@ -317,7 +320,7 @@ export const FileListItem: React.FC<FileListItemProps> = ({
                         folder.id !== -1 && folder.id !== file.folder_id
                     ).length === 0 && (
                       <div className="text-sm text-gray-500 px-2 text-center">
-                        No folders available to move this file to.
+                        {i18n.t(k.NO_FOLDERS_AVAILABLE_TO_MOVE_T)}
                       </div>
                     )}
                   </div>

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   FileResponse,
@@ -181,7 +183,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         {
           name: url,
           error:
-            error instanceof Error ? error.message : "Failed to upload file",
+            error instanceof Error
+              ? error.message
+              : "Не удалось загрузить файл",
           isPopoverOpen: false,
         },
       ]);
@@ -209,7 +213,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
         {
           name: url,
           error:
-            error instanceof Error ? error.message : "Failed to upload file",
+            error instanceof Error
+              ? error.message
+              : "Не удалось загрузить файл",
           isPopoverOpen: false,
         },
       ]);
@@ -521,7 +527,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           onMouseLeave={() => setHoveredColumn(null)}
                           className="w-[40%] flex items-center cursor-pointer transition-colors"
                         >
-                          Name {renderSortIndicator?.(SortType.Alphabetical)}
+                          {i18n.t(k.NAME)}{" "}
+                          {renderSortIndicator?.(SortType.Alphabetical)}
                           {renderHoverIndicator?.(SortType.Alphabetical)}
                         </button>
                         <button
@@ -532,7 +539,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           onMouseLeave={() => setHoveredColumn(null)}
                           className="w-[30%] flex items-center cursor-pointer transition-colors"
                         >
-                          Created {renderSortIndicator?.(SortType.TimeCreated)}
+                          {i18n.t(k.CREATED)}{" "}
+                          {renderSortIndicator?.(SortType.TimeCreated)}
                           {renderHoverIndicator?.(SortType.TimeCreated)}
                         </button>
                         <button
@@ -541,15 +549,16 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                           onMouseLeave={() => setHoveredColumn(null)}
                           className="w-[30%] flex items-center cursor-pointer transition-colors"
                         >
-                          LLM Tokens {renderSortIndicator?.(SortType.Tokens)}
+                          {i18n.t(k.LLM_TOKENS)}{" "}
+                          {renderSortIndicator?.(SortType.Tokens)}
                           {renderHoverIndicator?.(SortType.Tokens)}
                         </button>
                       </>
                     ) : (
                       <>
-                        <div className="w-[40%]">Name</div>
-                        <div className="w-[30%]">Created</div>
-                        <div className="w-[30%]">LLM Tokens</div>
+                        <div className="w-[40%]">{i18n.t(k.NAME)}</div>
+                        <div className="w-[30%]">{i18n.t(k.CREATED)}</div>
+                        <div className="w-[30%]">{i18n.t(k.LLM_TOKENS)}</div>
                       </>
                     )}
                   </div>
@@ -566,19 +575,20 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                             className="mr-2"
                             autoFocus
                           />
+
                           <Button
                             onClick={() => onSaveRename(file.id, false)}
                             className="mr-2"
                             size="sm"
                           >
-                            Save
+                            {i18n.t(k.SAVE)}
                           </Button>
                           <Button
                             onClick={onCancelRename}
                             variant="outline"
                             size="sm"
                           >
-                            Cancel
+                            {i18n.t(k.CANCEL)}
                           </Button>
                         </div>
                       </div>
@@ -626,10 +636,10 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         </span>
                       </div>
                       <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
-                        -
+                        {i18n.t(k._)}
                       </div>
                       <div className="w-[30%] flex items-center text-text-400 dark:text-neutral-400 text-sm">
-                        -
+                        {i18n.t(k._)}
                       </div>
                     </div>
                   </div>
@@ -653,7 +663,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                         </span>
                       </div>
                       <div className="w-[30%] text-sm text-red-500 dark:text-red-400">
-                        Upload failed
+                        {i18n.t(k.UPLOAD_FAILED)}
                       </div>
                       <div className="w-[30%] flex items-center justify-end">
                         <Popover
@@ -674,9 +684,9 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                             <div className="flex flex-col gap-3">
                               <div className="flex items-center gap-2">
                                 <p className="text-xs font-medium text-red-500">
-                                  Visiting URL failed.
+                                  {i18n.t(k.VISITING_URL_FAILED)}
                                   <br />
-                                  You can retry or remove it from the list
+                                  {i18n.t(k.YOU_CAN_RETRY_OR_REMOVE_IT_FRO)}
                                 </p>
                               </div>
                               <div className="flex flex-col gap-2">
@@ -692,7 +702,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                                   }}
                                 >
                                   <RefreshCw className="mr-2 h-3.5 w-3.5" />
-                                  Retry
+                                  {i18n.t(k.RETRY)}
                                 </Button>
                                 <Button
                                   variant="outline"
@@ -705,7 +715,7 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                                   }}
                                 >
                                   <Trash2 className="mr-2 h-3.5 w-3.5" />
-                                  Remove
+                                  {i18n.t(k.REMOVE)}
                                 </Button>
                               </div>
                             </div>
@@ -721,8 +731,8 @@ export const DocumentList: React.FC<DocumentListProps> = ({
                   failedUploads.length === 0 && (
                     <div className="text-center py-8 text-neutral-500 dark:text-neutral-400">
                       {searchQuery
-                        ? "No documents match your search."
-                        : "No documents in this folder yet. Upload files or add URLs to get started."}
+                        ? i18n.t(k.NO_DOCUMENTS_MATCH_YOUR_SEARCH)
+                        : i18n.t(k.NO_DOCUMENTS_IN_THIS_FOLDER_YE)}
                     </div>
                   )}
               </>
@@ -736,18 +746,23 @@ export const DocumentList: React.FC<DocumentListProps> = ({
               <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-medium text-xs">
-                  Unsupported file type{invalidFiles.length > 1 ? "s" : ""}
+                  {i18n.t(k.UNSUPPORTED_FILE_TYPE)}
+                  {invalidFiles.length > 1 ? i18n.t(k.S) : ""}
                 </p>
                 <p className="mt-0.5 text-xs">
                   {invalidFiles.length > 1
-                    ? `The following files cannot be uploaded: ${invalidFiles
+                    ? `${i18n.t(k.THE_FOLLOWING_FILES_CANNOT_BE)} ${invalidFiles
                         .slice(0, 3)
-                        .join(", ")}${
+                        .join(i18n.t(k._3))}${
                         invalidFiles.length > 3
-                          ? ` and ${invalidFiles.length - 3} more`
+                          ? ` ${i18n.t(k.AND)} ${
+                              invalidFiles.length - 3
+                            } ${i18n.t(k.MORE)}`
                           : ""
                       }`
-                    : `The file "${invalidFiles[0]}" cannot be uploaded.`}
+                    : `${i18n.t(k.THE_FILE)}${invalidFiles[0]}${i18n.t(
+                        k.CANNOT_BE_UPLOADED
+                      )}`}
                 </p>
               </div>
               <button

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { adminSearch } from "./lib";
 import { MagnifyingGlass } from "@phosphor-icons/react";
@@ -51,7 +53,7 @@ const DocumentDisplay = ({
       </div>
       <div className="flex flex-wrap gap-x-2 mt-1 text-xs">
         <div className="px-1 py-0.5 bg-accent-background-hovered rounded flex">
-          <p className="mr-1 my-auto">Boost:</p>
+          <p className="mr-1 my-auto">{i18n.t(k.BOOST)}</p>
           <ScoreSection
             documentId={document.document_id}
             initialScore={document.boost}
@@ -71,9 +73,9 @@ const DocumentDisplay = ({
             } else {
               setPopup({
                 type: "error",
-                message: `Failed to update document - ${getErrorMsg(
+                message: `${i18n.t(k.FAILED_TO_UPDATE_DOCUMENT)} ${getErrorMsg(
                   response
-                )}}`,
+                )}${i18n.t(k._26)}`,
               });
             }
           }}
@@ -81,9 +83,9 @@ const DocumentDisplay = ({
         >
           <div className="my-auto">
             {document.hidden ? (
-              <div className="text-error">Hidden</div>
+              <div className="text-error">{i18n.t(k.HIDDEN)}</div>
             ) : (
-              "Visible"
+              i18n.t(k.VISIBLE)
             )}
           </div>
           <div className="ml-1 my-auto">
@@ -176,7 +178,7 @@ export function Explorer({
             className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
             role="textarea"
             aria-multiline
-            placeholder="Find documents based on title / content..."
+            placeholder="Найти документы по названию/содержанию..."
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -222,8 +224,7 @@ export function Explorer({
       )}
       {!query && (
         <div className="flex text-text-darker mt-3">
-          Search for a document above to modify its boost or hide it from
-          searches.
+          {i18n.t(k.SEARCH_FOR_A_DOCUMENT_ABOVE_TO)}
         </div>
       )}
     </div>

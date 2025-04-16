@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { CloudEmbeddingModel, EmbeddingProvider } from "./interfaces";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -37,15 +39,15 @@ export function CustomEmbeddingModelForm({
           }
         }
         validationSchema={Yup.object().shape({
-          model_name: Yup.string().required("Model name is required"),
-          model_dim: Yup.number().required("Model dimension is required"),
+          model_name: Yup.string().required("Название модели обязательно"),
+          model_dim: Yup.number().required("Требуется размерность модели"),
           normalize: Yup.boolean().required(),
           query_prefix: Yup.string(),
-          passage_prefix: Yup.string(),
-          provider_type: Yup.string().required("Provider type is required"),
+          pass_prefix: Yup.string(),
+          provider_type: Yup.string().required("Требуется тип поставщика"),
           api_key: Yup.string().optional(),
           enabled: Yup.boolean(),
-          api_url: Yup.string().required("API base URL is required"),
+          api_url: Yup.string().required("Требуется базовый URL API"),
           description: Yup.string(),
           index_name: Yup.string().nullable(),
         })}
@@ -56,25 +58,29 @@ export function CustomEmbeddingModelForm({
         {({ isSubmitting, submitForm, errors }) => (
           <Form>
             <Text className="text-xl text-text-900 font-bold mb-4">
-              Specify details for your{" "}
-              {embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"}{" "}
-              Provider&apos;s model
+              {i18n.t(k.SPECIFY_DETAILS_FOR_YOUR)}{" "}
+              {embeddingType === EmbeddingProvider.AZURE
+                ? i18n.t(k.AZURE)
+                : i18n.t(k.LITELLM)}{" "}
+              {i18n.t(k.PROVIDER_S_MODEL)}
             </Text>
             <TextFormField
               name="model_name"
-              label="Model Name:"
-              subtext={`The name of the ${
-                embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"
-              } model`}
-              placeholder="e.g. 'all-MiniLM-L6-v2'"
+              label="Название модели:"
+              subtext={`${i18n.t(k.THE_NAME_OF_THE)} ${
+                embeddingType === EmbeddingProvider.AZURE
+                  ? i18n.t(k.AZURE)
+                  : i18n.t(k.LITELLM)
+              } ${i18n.t(k.MODEL1)}`}
+              placeholder="например, 'all-MiniLM-L6-v2'"
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="model_dim"
-              label="Model Dimension:"
-              subtext="The dimension of the model's embeddings"
-              placeholder="e.g. '1536'"
+              label="Размерность модели:"
+              subtext="Размерность вложений модели"
+              placeholder="например, '1536'"
               type="number"
               autoCompleteDisabled={true}
             />
@@ -82,21 +88,21 @@ export function CustomEmbeddingModelForm({
             <BooleanFormField
               removeIndent
               name="normalize"
-              label="Normalize"
-              subtext="Whether to normalize the embeddings"
+              label="Нормализация"
+              subtext="Нормализация вложений"
             />
 
             <TextFormField
               name="query_prefix"
-              label="Query Prefix:"
-              subtext="Prefix for query embeddings"
+              label="Префикс запроса:"
+              subtext="Префикс для вложений запроса"
               autoCompleteDisabled={true}
             />
 
             <TextFormField
               name="passage_prefix"
-              label="Passage Prefix:"
-              subtext="Prefix for passage embeddings"
+              label="Префикс прохода:"
+              subtext="Префикс для вложений прохода"
               autoCompleteDisabled={true}
             />
 
@@ -105,9 +111,11 @@ export function CustomEmbeddingModelForm({
               disabled={isSubmitting}
               className="w-64 mx-auto"
             >
-              Configure{" "}
-              {embeddingType === EmbeddingProvider.AZURE ? "Azure" : "LiteLLM"}{" "}
-              Model
+              {i18n.t(k.CONFIGURE)}{" "}
+              {embeddingType === EmbeddingProvider.AZURE
+                ? i18n.t(k.AZURE)
+                : i18n.t(k.LITELLM)}{" "}
+              {i18n.t(k.MODEL2)}
             </Button>
           </Form>
         )}

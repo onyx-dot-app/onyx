@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import {
   redirect,
@@ -320,10 +322,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-        ? availableAssistants.find(
-            (assistant) => assistant.id === defaultAssistantId
-          )
-        : undefined
+      ? availableAssistants.find(
+          (assistant) => assistant.id === defaultAssistantId
+        )
+      : undefined
   );
   // Gather default temperature settings
   const search_param_temperature = searchParams?.get(
@@ -644,8 +646,7 @@ export function ChatPage({
     replacementsMap = null,
     makeLatestChildMessage = false,
   }: {
-    messages: Message[];
-    // if calling this function repeatedly with short delay, stay may not update in time
+    messages: Message[]; // if calling this function repeatedly with short delay, stay may not update in time
     // and result in weird behavipr
     completeMessageMapOverride?: Map<number, Message> | null;
     chatSessionId?: string;
@@ -1123,8 +1124,7 @@ export function ChatPage({
 
   const continueGenerating = () => {
     onSubmit({
-      messageOverride:
-        "Continue Generating (pick up exactly where you left off)",
+      messageOverride: i18n.t(k.CONTINUE_GENERATING_PICK_UP_E),
     });
   };
   const [uncaughtError, setUncaughtError] = useState<string | null>(null);
@@ -1212,12 +1212,12 @@ export function ChatPage({
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
         setPopup({
-          message: "Please wait for the content to upload",
+          message: i18n.t(k.PLEASE_WAIT_FOR_THE_CONTENT_TO),
           type: "error",
         });
       } else {
         setPopup({
-          message: "Please wait for the response to complete",
+          message: i18n.t(k.PLEASE_WAIT_FOR_THE_RESPONSE_T),
           type: "error",
         });
       }
@@ -1290,8 +1290,8 @@ export function ChatPage({
 
     if (!messageToResend && messageIdToResend !== undefined) {
       setPopup({
-        message:
-          "Failed to re-send message - please refresh the page and try again.",
+        message: i18n.t(k.FAILED_TO_RE_SEND_MESSAGE_PL),
+
         type: "error",
       });
       resetRegenerationState(currentSessionId());
@@ -1717,6 +1717,7 @@ export function ChatPage({
                       regenerationRequest?.parentMessage?.messageId,
                       regenerationRequest?.parentMessage?.messageId,
                     ],
+
                     [
                       regenerationRequest?.messageId,
                       initialFetchDetails?.assistant_message_id,
@@ -1747,6 +1748,7 @@ export function ChatPage({
                     []),
                   initialFetchDetails.assistant_message_id!,
                 ],
+
                 latestChildMessageId: initialFetchDetails.assistant_message_id,
               },
               {
@@ -1793,7 +1795,7 @@ export function ChatPage({
         }
       }
     } catch (e: any) {
-      console.log("Error:", e);
+      console.log("Ошибка:", e);
       const errorMsg = e.message;
       upsertToCompleteMessageMap({
         messages: [
@@ -1818,6 +1820,7 @@ export function ChatPage({
               initialFetchDetails?.user_message_id || TEMP_USER_MESSAGE_ID,
           },
         ],
+
         completeMessageMapOverride: currentMessageMap(completeMessageDetail),
       });
     }
@@ -1882,14 +1885,14 @@ export function ChatPage({
 
     if (response.ok) {
       setPopup({
-        message: "Thanks for your feedback!",
+        message: i18n.t(k.THANKS_FOR_YOUR_FEEDBACK),
         type: "success",
       });
     } else {
       const responseJson = await response.json();
       const errorMsg = responseJson.detail || responseJson.message;
       setPopup({
-        message: `Failed to submit feedback - ${errorMsg}`,
+        message: `Не удалось отправить отзыв - ${errorMsg}`,
         type: "error",
       });
     }
@@ -1910,8 +1913,7 @@ export function ChatPage({
     if (imageFiles.length > 0 && !llmAcceptsImages) {
       setPopup({
         type: "error",
-        message:
-          "The current model does not support image input. Please select a model with Vision support.",
+        message: i18n.t(k.THE_CURRENT_MODEL_DOES_NOT_SUP),
       });
       return;
     }
@@ -2063,16 +2065,16 @@ export function ChatPage({
         });
 
         if (!response.ok) {
-          throw new Error("Failed to seed chat from Slack");
+          throw new Error("Не удалось создать чат из Slack");
         }
 
         const data = await response.json();
 
         router.push(data.redirect_url);
       } catch (error) {
-        console.error("Error seeding chat from Slack:", error);
+        console.error("Ошибка при загрузке чата из Slack:", error);
         setPopup({
-          message: "Failed to load chat from Slack",
+          message: i18n.t(k.FAILED_TO_LOAD_CHAT_FROM_SLACK),
           type: "error",
         });
       }
@@ -2159,7 +2161,7 @@ export function ChatPage({
       .find((m) => m.type === "user");
     if (!lastUserMsg) {
       setPopup({
-        message: "No previously-submitted user message found.",
+        message: i18n.t(k.NO_PREVIOUSLY_SUBMITTED_USER_M),
         type: "error",
       });
       return;
@@ -2240,7 +2242,7 @@ export function ChatPage({
       )}
 
       {/* ChatPopup is a custom popup that displays a admin-specified message on initial user visit. 
-      Only used in the EE version of the app. */}
+        Only used in the EE version of the app. */}
       {popup}
 
       <ChatPopup />
@@ -2277,7 +2279,7 @@ export function ChatPage({
       {toggleDocSelection && (
         <FilePickerModal
           setPresentingDocument={setPresentingDocument}
-          buttonContent="Set as Context"
+          buttonContent="Установить как контекст"
           isOpen={true}
           onClose={() => setToggleDocSelection(false)}
           onSave={() => {
@@ -2296,7 +2298,7 @@ export function ChatPage({
           <Modal
             hideDividerForTitle
             onOutsideClick={() => setDocumentSidebarVisible(false)}
-            title="Sources"
+            title="Источники"
           >
             <DocumentResults
               agenticMessage={
@@ -2576,7 +2578,7 @@ export function ChatPage({
                             </div>
                           )}
                           {/* ChatBanner is a custom banner that displays a admin-specified message at 
-                      the top of the chat page. Oly used in the EE version of the app. */}
+                        the top of the chat page. Oly used in the EE version of the app. */}
                           {messageHistory.length === 0 &&
                             !isFetchingChatMessages &&
                             currentSessionChatState == "input" &&
@@ -2936,7 +2938,8 @@ export function ChatPage({
                                         }
                                         handleFeedback={
                                           i === messageHistory.length - 1 &&
-                                          currentSessionChatState != "input"
+                                          currentSessionChatState !=
+                                            i18n.t(k.INPUT)
                                             ? undefined
                                             : (feedbackType: FeedbackType) =>
                                                 setCurrentFeedback([
@@ -3056,8 +3059,9 @@ export function ChatPage({
                                                 if (!previousMessage) {
                                                   setPopup({
                                                     type: "error",
-                                                    message:
-                                                      "Cannot edit query of first message - please refresh the page and try again.",
+                                                    message: i18n.t(
+                                                      k.CANNOT_EDIT_QUERY_OF_FIRST_MES
+                                                    ),
                                                   });
                                                   return;
                                                 }
@@ -3067,8 +3071,9 @@ export function ChatPage({
                                                 ) {
                                                   setPopup({
                                                     type: "error",
-                                                    message:
-                                                      "Cannot edit query of a pending message - please wait a few seconds and try again.",
+                                                    message: i18n.t(
+                                                      k.CANNOT_EDIT_QUERY_OF_A_PENDING
+                                                    ),
                                                   });
                                                   return;
                                                 }
@@ -3095,8 +3100,9 @@ export function ChatPage({
                                           } else {
                                             setPopup({
                                               type: "error",
-                                              message:
-                                                "Failed to force search - please refresh the page and try again.",
+                                              message: i18n.t(
+                                                k.FAILED_TO_FORCE_SEARCH_PLEAS
+                                              ),
                                             });
                                           }
                                         }}
@@ -3168,11 +3174,11 @@ export function ChatPage({
                                   messageId={null}
                                   content={
                                     <div
-                                      key={"Generating"}
+                                      key={i18n.t(k.GENERATING1)}
                                       className="mr-auto relative inline-block"
                                     >
                                       <span className="text-sm loading-text">
-                                        Thinking...
+                                        {i18n.t(k.THINKING1)}
                                       </span>
                                     </div>
                                   }
@@ -3260,6 +3266,7 @@ export function ChatPage({
                               handleFileUpload={handleImageUpload}
                               textAreaRef={textAreaRef}
                             />
+
                             {enterpriseSettings &&
                               enterpriseSettings.custom_lower_disclaimer_content && (
                                 <div className="mobile:hidden mt-4 flex items-center justify-center relative w-[95%] mx-auto">
@@ -3318,6 +3325,7 @@ export function ChatPage({
                             : "w-[0px]"
                         }`}
                   />
+
                   <div className="my-auto">
                     <OnyxInitializingLoader />
                   </div>

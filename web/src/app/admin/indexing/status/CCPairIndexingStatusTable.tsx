@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Table,
@@ -80,34 +82,38 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Total Connectors
+          {i18n.t(k.TOTAL_CONNECTORS)}
         </div>
         <div className="text-xl font-semibold">{summary.count}</div>
       </TableCell>
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Active Connectors
+          {i18n.t(k.ACTIVE_CONNECTORS)}
         </div>
         <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-          {summary.active}/{summary.count}
+          {summary.active}
+          {i18n.t(k._6)}
+          {summary.count}
         </p>
       </TableCell>
 
       {isPaidEnterpriseFeaturesEnabled && (
         <TableCell>
           <div className="text-sm text-neutral-500 dark:text-neutral-300">
-            Public Connectors
+            {i18n.t(k.PUBLIC_CONNECTORS)}
           </div>
           <p className="flex text-xl mx-auto font-semibold items-center text-lg mt-1">
-            {summary.public}/{summary.count}
+            {summary.public}
+            {i18n.t(k._6)}
+            {summary.count}
           </p>
         </TableCell>
       )}
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Total Docs Indexed
+          {i18n.t(k.TOTAL_DOCS_INDEXED)}
         </div>
         <div className="text-xl font-semibold">
           {summary.totalDocsIndexed.toLocaleString()}
@@ -116,7 +122,7 @@ function SummaryRow({
 
       <TableCell>
         <div className="text-sm text-neutral-500 dark:text-neutral-300">
-          Errors
+          {i18n.t(k.ERRORS)}
         </div>
 
         <div className="flex items-center text-lg gap-x-1 font-semibold">
@@ -152,14 +158,14 @@ function ConnectorRow({
       ccPairsIndexingStatus.cc_pair_status ===
       ConnectorCredentialPairStatus.DELETING
     ) {
-      return <Badge variant="destructive">Deleting</Badge>;
+      return <Badge variant="destructive">{i18n.t(k.DELETING)}</Badge>;
     } else if (
       ccPairsIndexingStatus.cc_pair_status ===
       ConnectorCredentialPairStatus.PAUSED
     ) {
       return (
         <Badge icon={FiPauseCircle} variant="paused">
-          Paused
+          {i18n.t(k.PAUSED)}
         </Badge>
       );
     } else if (
@@ -168,11 +174,11 @@ function ConnectorRow({
     ) {
       return (
         <Badge
-          tooltip="Connector is in an invalid state. Please update the credentials or create a new connector."
+          tooltip="Коннектор находится в недопустимом состоянии. Пожалуйста, обновите учетные данные или создайте новый соединитель."
           circle
           variant="invalid"
         >
-          Invalid
+          {i18n.t(k.INVALID)}
         </Badge>
       );
     }
@@ -182,19 +188,21 @@ function ConnectorRow({
       case "in_progress":
         return (
           <Badge circle variant="success">
-            Indexing
+            {i18n.t(k.INDEXING)}
           </Badge>
         );
+
       case "not_started":
         return (
           <Badge circle variant="not_started">
-            Scheduled
+            {i18n.t(k.SCHEDULED)}
           </Badge>
         );
+
       default:
         return (
           <Badge circle variant="success">
-            Active
+            {i18n.t(k.ACTIVE)}
           </Badge>
         );
     }
@@ -227,18 +235,18 @@ border border-border dark:border-neutral-700
         <TableCell>
           {ccPairsIndexingStatus.access_type === "public" ? (
             <Badge variant={isEditable ? "success" : "default"} icon={FiUnlock}>
-              Public
+              {i18n.t(k.PUBLIC)}
             </Badge>
           ) : ccPairsIndexingStatus.access_type === "sync" ? (
             <Badge
               variant={isEditable ? "auto-sync" : "default"}
               icon={FiRefreshCw}
             >
-              Auto-Sync
+              {i18n.t(k.AUTO_SYNC1)}
             </Badge>
           ) : (
             <Badge variant={isEditable ? "private" : "default"} icon={FiLock}>
-              Private
+              {i18n.t(k.PRIVATE1)}
             </Badge>
           )}
         </TableCell>
@@ -261,7 +269,7 @@ border border-border dark:border-neutral-700
                 />
               </TooltipTrigger>
               <TooltipContent>
-                <p>Manage Connector</p>
+                <p>{i18n.t(k.MANAGE_CONNECTOR)}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -516,13 +524,10 @@ export function CCPairIndexingStatusTable({
     );
   };
   const toggleSources = () => {
-    const connectors = sortedSources.reduce(
-      (acc, source) => {
-        acc[source] = shouldExpand;
-        return acc;
-      },
-      {} as Record<ValidSources, boolean>
-    );
+    const connectors = sortedSources.reduce((acc, source) => {
+      acc[source] = shouldExpand;
+      return acc;
+    }, {} as Record<ValidSources, boolean>);
 
     setConnectorsToggled(connectors);
     Cookies.set(TOGGLED_CONNECTORS_COOKIE_NAME, JSON.stringify(connectors));
@@ -540,11 +545,11 @@ export function CCPairIndexingStatusTable({
             invisible
             ccPairsIndexingStatus={{
               cc_pair_id: 1,
-              name: "Sample File Connector",
+              name: i18n.t(k.SAMPLE_FILE_CONNECTOR),
               cc_pair_status: ConnectorCredentialPairStatus.ACTIVE,
               last_status: "success",
               connector: {
-                name: "Sample File Connector",
+                name: i18n.t(k.SAMPLE_FILE_CONNECTOR),
                 source: ValidSources.File,
                 input_type: "poll",
                 connector_specific_config: {
@@ -561,7 +566,7 @@ export function CCPairIndexingStatusTable({
               },
               credential: {
                 id: 1,
-                name: "Sample Credential",
+                name: i18n.t(k.SAMPLE_CREDENTIAL),
                 source: ValidSources.File,
                 user_id: "1",
                 time_created: "2023-07-01T12:00:00Z",
@@ -590,7 +595,7 @@ export function CCPairIndexingStatusTable({
           />
 
           <Button className="h-9" onClick={() => toggleSources()}>
-            {!shouldExpand ? "Collapse All" : "Expand All"}
+            {!shouldExpand ? i18n.t(k.COLLAPSE_ALL) : i18n.t(k.EXPAND_ALL)}
           </Button>
 
           <div className="flex items-center gap-2">
@@ -604,14 +609,14 @@ export function CCPairIndexingStatusTable({
                 {filterOptions.accessType &&
                   filterOptions.accessType.length > 0 && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Access: {filterOptions.accessType.join(", ")}
+                      {i18n.t(k.ACCESS1)} {filterOptions.accessType.join(", ")}
                     </Badge>
                   )}
 
                 {filterOptions.lastStatus &&
                   filterOptions.lastStatus.length > 0 && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Status:{" "}
+                      {i18n.t(k.STATUS2)}{" "}
                       {filterOptions.lastStatus
                         .map((s) => s.replace(/_/g, " "))
                         .join(", ")}
@@ -621,7 +626,7 @@ export function CCPairIndexingStatusTable({
                 {filterOptions.docsCountFilter.operator &&
                   filterOptions.docsCountFilter.value !== null && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Docs {filterOptions.docsCountFilter.operator}{" "}
+                      {i18n.t(k.DOCS1)} {filterOptions.docsCountFilter.operator}{" "}
                       {filterOptions.docsCountFilter.value}
                     </Badge>
                   )}
@@ -629,7 +634,8 @@ export function CCPairIndexingStatusTable({
                 {filterOptions.docsCountFilter.operator &&
                   filterOptions.docsCountFilter.value === null && (
                     <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Docs {filterOptions.docsCountFilter.operator} any
+                      {i18n.t(k.DOCS1)} {filterOptions.docsCountFilter.operator}{" "}
+                      {i18n.t(k.ANY)}
                     </Badge>
                   )}
 
@@ -650,7 +656,9 @@ export function CCPairIndexingStatusTable({
                     }
                   }}
                 >
-                  <span className="text-red-500 dark:text-red-400">Clear</span>
+                  <span className="text-red-500 dark:text-red-400">
+                    {i18n.t(k.CLEAR)}
+                  </span>
                 </Badge>
               </div>
             )}
@@ -686,17 +694,18 @@ export function CCPairIndexingStatusTable({
                       isOpen={connectorsToggled[source] || false}
                       onToggle={() => toggleSource(source)}
                     />
+
                     {connectorsToggled[source] && (
                       <>
                         <TableRow className="border border-border dark:border-neutral-700">
-                          <TableHead>Name</TableHead>
-                          <TableHead>Last Indexed</TableHead>
-                          <TableHead>Activity</TableHead>
+                          <TableHead>{i18n.t(k.NAME)}</TableHead>
+                          <TableHead>{i18n.t(k.LAST_INDEXED)}</TableHead>
+                          <TableHead>{i18n.t(k.ACTIVITY)}</TableHead>
                           {isPaidEnterpriseFeaturesEnabled && (
-                            <TableHead>Permissions</TableHead>
+                            <TableHead>{i18n.t(k.PERMISSIONS)}</TableHead>
                           )}
-                          <TableHead>Total Docs</TableHead>
-                          <TableHead>Last Status</TableHead>
+                          <TableHead>{i18n.t(k.TOTAL_DOCS)}</TableHead>
+                          <TableHead>{i18n.t(k.LAST_STATUS)}</TableHead>
                           <TableHead></TableHead>
                         </TableRow>
                         {(sourceMatches ? statuses : matchingConnectors).map(

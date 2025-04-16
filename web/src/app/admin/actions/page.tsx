@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { ActionsTable } from "./ActionTable";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
 import { FiPlusSquare } from "react-icons/fi";
@@ -17,8 +19,10 @@ export default async function Page() {
   if (!toolResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch tools - ${await toolResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_TOOLS
+        )} ${await toolResponse.text()}`}
       />
     );
   }
@@ -32,19 +36,17 @@ export default async function Page() {
         title="Actions"
       />
 
-      <Text className="mb-2">
-        Actions allow assistants to retrieve information or take actions.
-      </Text>
+      <Text className="mb-2">{i18n.t(k.ACTIONS_ALLOW_ASSISTANTS_TO_RE)}</Text>
 
       <div>
         <Separator />
 
-        <Title>Create an Action</Title>
+        <Title>{i18n.t(k.CREATE_AN_ACTION)}</Title>
         <CreateButton href="/admin/actions/new" text="New Action" />
 
         <Separator />
 
-        <Title>Existing Actions</Title>
+        <Title>{i18n.t(k.EXISTING_ACTIONS)}</Title>
         <ActionsTable tools={tools} />
       </div>
     </div>

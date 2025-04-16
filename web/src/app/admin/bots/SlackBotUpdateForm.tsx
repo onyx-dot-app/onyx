@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SlackBot, ValidSources } from "@/lib/types";
@@ -43,12 +45,12 @@ export const ExistingSlackBotForm = ({
         throw new Error(await response.text());
       }
       setPopup({
-        message: `Connector ${field} updated successfully`,
+        message: `Коннектор ${field} успешно обновлен`,
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: `Failed to update connector ${field}`,
+        message: `Не удалось обновить коннектор${field}`,
         type: "error",
       });
     }
@@ -102,7 +104,7 @@ export const ExistingSlackBotForm = ({
                 ) : (
                   <ChevronRight size={20} />
                 )}
-                <span>Update Tokens</span>
+                <span>{i18n.t(k.UPDATE_TOKENS)}</span>
               </div>
             </div>
             <Button
@@ -112,7 +114,7 @@ export const ExistingSlackBotForm = ({
               tooltip="Click to delete"
               className="border h-[42px]"
             >
-              Delete
+              {i18n.t(k.DELETE)}
             </Button>
           </div>
 
@@ -136,16 +138,16 @@ export const ExistingSlackBotForm = ({
       <div className="mt-2">
         <div className="inline-block border rounded-lg border-background-200 p-2">
           <Checkbox
-            label="Enabled"
+            label="Включено"
             checked={formValues.enabled}
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}
           />
         </div>
         {showDeleteModal && (
           <GenericConfirmModal
-            title="Delete Slack Bot"
-            message="Are you sure you want to delete this Slack bot? This action cannot be undone."
-            confirmText="Delete"
+            title="Удалить бота Slack"
+            message="Вы уверены, что хотите удалить этого бота Slack? Это действие нельзя отменить."
+            confirmText="Удалить"
             onClose={() => setShowDeleteModal(false)}
             onConfirm={async () => {
               try {
@@ -154,13 +156,13 @@ export const ExistingSlackBotForm = ({
                   throw new Error(await response.text());
                 }
                 setPopup({
-                  message: "Slack bot deleted successfully",
+                  message: i18n.t(k.SLACK_BOT_DELETED_SUCCESSFULLY),
                   type: "success",
                 });
                 router.push("/admin/bots");
               } catch (error) {
                 setPopup({
-                  message: "Failed to delete Slack bot",
+                  message: i18n.t(k.FAILED_TO_DELETE_SLACK_BOT),
                   type: "error",
                 });
               }

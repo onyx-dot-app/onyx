@@ -56,7 +56,7 @@ export const CreateRateLimitModal = ({
       } catch (error) {
         setPopup({
           type: "error",
-          message: `Failed to fetch user groups: ${error}`,
+          message: `Не удалось получить группы пользователей:${error}`,
         });
       }
     };
@@ -72,7 +72,7 @@ export const CreateRateLimitModal = ({
 
   return (
     <Modal
-      title={"Create a Token Rate Limit"}
+      title={"Создать ограничение скорости токенов"}
       onOutsideClick={() => setIsOpen(false)}
       width="max-w-2xl w-full"
     >
@@ -86,17 +86,17 @@ export const CreateRateLimitModal = ({
         }}
         validationSchema={Yup.object().shape({
           period_hours: Yup.number()
-            .required("Time Window is a required field")
-            .min(1, "Time Window must be at least 1 hour"),
+            .required("Временное окно — обязательное поле")
+            .min(1, "Временное окно должно быть не менее 1 часа"),
           token_budget: Yup.number()
-            .required("Token Budget is a required field")
-            .min(1, "Token Budget must be at least 1"),
+            .required("Бюджет токена — обязательное поле")
+            .min(1, "Бюджет токена должен быть не менее 1"),
           target_scope: Yup.string().required(
-            "Target Scope is a required field"
+            "Целевая область — обязательное поле"
           ),
           user_group_id: Yup.string().test(
             "user_group_id",
-            "User Group is a required field",
+            "Группа пользователей — обязательное поле",
             (value, context) => {
               return (
                 context.parent.target_scope !== "user_group" ||
@@ -141,21 +141,21 @@ export const CreateRateLimitModal = ({
               values.target_scope === Scope.USER_GROUP && (
                 <SelectorFormField
                   name="user_group_id"
-                  label="User Group"
+                  label="Группа пользователей"
                   options={modalUserGroups}
                   includeDefault={false}
                 />
               )}
             <TextFormField
               name="period_hours"
-              label="Time Window (Hours)"
+              label="Временное окно (часы)"
               type="number"
               placeholder=""
             />
 
             <TextFormField
               name="token_budget"
-              label="Token Budget (Thousands)"
+              label="Бюджет токенов (тыс.)"
               type="number"
               placeholder=""
             />

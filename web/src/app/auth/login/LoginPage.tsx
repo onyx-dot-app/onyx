@@ -21,11 +21,7 @@ export default function LoginPage({
   authUrl: string | null;
   authTypeMetadata: AuthTypeMetadata | null;
   nextUrl: string | null;
-  searchParams:
-    | {
-        [key: string]: string | string[] | undefined;
-      }
-    | undefined;
+  searchParams: { [key: string]: string | string[] | undefined } | undefined;
   hidePageRedirect?: boolean;
 }) {
   useSendAuthRequiredMessage();

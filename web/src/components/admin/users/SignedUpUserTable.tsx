@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import {
   type User,
   UserRole,
@@ -102,7 +104,7 @@ const SignedUpUserTable = ({
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Error loading users"
+        errorTitle="Ошибка загрузки пользователей"
         errorMsg={error?.message}
       />
     );
@@ -114,9 +116,9 @@ const SignedUpUserTable = ({
   };
 
   const onRoleChangeSuccess = () =>
-    handlePopup("User role updated successfully!", "success");
+    handlePopup("Роль пользователя успешно обновлена!", "success");
   const onRoleChangeError = (errorMsg: string) =>
-    handlePopup(`Unable to update user role - ${errorMsg}`, "error");
+    handlePopup(`Не удалось обновить роль пользователя - ${errorMsg}`, "error");
 
   const toggleRole = (roleEnum: UserRole) => {
     setFilters((prev) => {
@@ -168,17 +170,17 @@ const SignedUpUserTable = ({
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="bg-background-50">
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="true">Active</SelectItem>
-            <SelectItem value="false">Inactive</SelectItem>
+            <SelectItem value="all">{i18n.t(k.ALL_STATUS)}</SelectItem>
+            <SelectItem value="true">{i18n.t(k.ACTIVE)}</SelectItem>
+            <SelectItem value="false">{i18n.t(k.INACTIVE)}</SelectItem>
           </SelectContent>
         </Select>
         <Select value="roles">
           <SelectTrigger className="w-[260px] h-[34px] bg-neutral">
             <SelectValue>
               {filters.roles?.length
-                ? `${filters.roles.length} role(s) selected`
-                : "All Roles"}
+                ? `${filters.roles.length} ${i18n.t(k.ROLE_S_SELECTED)}`
+                : i18n.t(k.ALL_ROLES)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent className="bg-background-50">
@@ -195,6 +197,7 @@ const SignedUpUserTable = ({
                     checked={filters.roles?.includes(role as UserRole) || false}
                     onChange={(e) => e.stopPropagation()}
                   />
+
                   <label className="text-sm font-normal">{label}</label>
                 </div>
               ))}
@@ -210,7 +213,7 @@ const SignedUpUserTable = ({
             style={{ padding: "2px 8px" }}
           >
             <span>{USER_ROLE_LABELS[role]}</span>
-            <span className="ml-3">&times;</span>
+            <span className="ml-3">{i18n.t(k._36)}</span>
           </button>
         ))}
       </div>
@@ -219,7 +222,7 @@ const SignedUpUserTable = ({
 
   const renderUserRoleDropdown = (user: User) => {
     if (user.role === UserRole.SLACK_USER) {
-      return <p className="ml-2">Slack User</p>;
+      return <p className="ml-2">{i18n.t(k.SLACK_USER)}</p>;
     }
     return (
       <UserRoleDropdown
@@ -244,7 +247,7 @@ const SignedUpUserTable = ({
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu</span>
+            <span className="sr-only">{i18n.t(k.OPEN_MENU)}</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
@@ -258,7 +261,7 @@ const SignedUpUserTable = ({
                 className={buttonClassName}
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>Leave Organization</span>
+                <span>{i18n.t(k.LEAVE_ORGANIZATION)}</span>
               </LeaveOrganizationButton>
             ) : (
               <>
@@ -270,7 +273,7 @@ const SignedUpUserTable = ({
                     className={buttonClassName}
                   >
                     <UserMinus className="mr-2 h-4 w-4" />
-                    <span>Delete User</span>
+                    <span>{i18n.t(k.DELETE_USER)}</span>
                   </DeleteUserButton>
                 )}
                 <DeactivateUserButton
@@ -281,7 +284,10 @@ const SignedUpUserTable = ({
                   className={buttonClassName}
                 >
                   <UserX className="mr-2 h-4 w-4" />
-                  <span>{user.is_active ? "Deactivate" : "Activate"} User</span>
+                  <span>
+                    {user.is_active ? i18n.t(k.DEACTIVATE) : i18n.t(k.ACTIVATE)}{" "}
+                    {i18n.t(k.USER)}
+                  </span>
                 </DeactivateUserButton>
               </>
             )}
@@ -292,7 +298,7 @@ const SignedUpUserTable = ({
                 onClick={() => handleResetPassword(user)}
               >
                 <KeyRound className="mr-2 h-4 w-4" />
-                <span>Reset Password</span>
+                <span>{i18n.t(k.RESET_PASSWORD)}</span>
               </Button>
             )}
           </div>
@@ -330,12 +336,12 @@ const SignedUpUserTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Email</TableHead>
-            <TableHead className="text-center">Role</TableHead>
-            <TableHead className="text-center">Status</TableHead>
+            <TableHead>{i18n.t(k.EMAIL)}</TableHead>
+            <TableHead className="text-center">{i18n.t(k.ROLE)}</TableHead>
+            <TableHead className="text-center">{i18n.t(k.STATUS)}</TableHead>
             <TableHead>
               <div className="flex">
-                <div className="ml-auto">Actions</div>
+                <div className="ml-auto">{i18n.t(k.ACTIONS)}</div>
               </div>
             </TableHead>
           </TableRow>
@@ -355,8 +361,10 @@ const SignedUpUserTable = ({
                 <TableCell colSpan={4} className="text-center">
                   <p className="pt-4 pb-4">
                     {filters.roles?.length || filters.is_active !== undefined
-                      ? "No users found matching your filters"
-                      : `No users found matching "${q}"`}
+                      ? i18n.t(k.NO_USERS_FOUND_MATCHING_YOUR_F)
+                      : `${i18n.t(k.NO_USERS_FOUND_MATCHING)}${q}${i18n.t(
+                          k._17
+                        )}`}
                   </p>
                 </TableCell>
               </TableRow>
@@ -368,7 +376,9 @@ const SignedUpUserTable = ({
                     {renderUserRoleDropdown(user)}
                   </TableCell>
                   <TableCell className="text-center w-[140px]">
-                    <i>{user.is_active ? "Active" : "Inactive"}</i>
+                    <i>
+                      {user.is_active ? i18n.t(k.ACTIVE) : i18n.t(k.INACTIVE)}
+                    </i>
                   </TableCell>
                   <TableCell className="text-right  w-[300px] ">
                     {renderActionButtons(user)}

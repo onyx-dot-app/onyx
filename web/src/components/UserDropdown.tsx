@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../i18n/keys";
 
 import { useState, useRef, useContext, useEffect, useMemo } from "react";
 import { FiLogOut } from "react-icons/fi";
@@ -45,8 +47,8 @@ const DropdownOption: React.FC<DropdownOptionProps> = ({
     return (
       <Link
         href={href}
-        target={openInNewTab ? "_blank" : undefined}
-        rel={openInNewTab ? "noopener noreferrer" : undefined}
+        target={openInNewTab ? i18n.t(k.BLANK) : undefined}
+        rel={openInNewTab ? i18n.t(k.NOOPENER_NOREFERRER) : undefined}
       >
         {content}
       </Link>
@@ -158,7 +160,7 @@ export function UserDropdown({
                 text-base
               "
             >
-              {user && user.email ? user.email[0].toUpperCase() : "A"}
+              {user && user.email ? user.email[0].toUpperCase() : i18n.t(k.A1)}
             </div>
             {notifications && notifications.length > 0 && (
               <div className="absolute -right-0.5 -top-0.5 w-3 h-3 bg-red-500 rounded-full"></div>
@@ -186,7 +188,7 @@ export function UserDropdown({
                 overscroll-contain
               `}
           >
-            {page != "admin" && showNotifications ? (
+            {page != i18n.t(k.ADMIN) && showNotifications ? (
               <Notifications
                 navigateToDropdown={() => setShowNotifications(false)}
                 notifications={notifications || []}
@@ -194,7 +196,7 @@ export function UserDropdown({
               />
             ) : hideUserDropdown ? (
               <DropdownOption
-                onClick={() => router.push("/auth/login")}
+                onClick={() => router.push(i18n.t(k.AUTH_LOGIN))}
                 icon={<UserIcon className="h-5w-5 my-auto " />}
                 label="Log In"
               />
@@ -268,9 +270,9 @@ export function UserDropdown({
                     setShowNotifications(true);
                   }}
                   icon={<BellIcon size={16} className="my-auto" />}
-                  label={`Notifications ${
+                  label={`${i18n.t(k.NOTIFICATIONS)} ${
                     notifications && notifications.length > 0
-                      ? `(${notifications.length})`
+                      ? `${i18n.t(k._4)}${notifications.length}${i18n.t(k._5)}`
                       : ""
                   }`}
                 />

@@ -107,7 +107,8 @@ export const CircularProgress: React.FC<CircularProgressProps> = ({
       {/* Percentage label */}
       {showPercentage && !showComplete && (
         <span className="absolute text-[8px] font-medium">
-          {Math.round(displayedProgress)}%
+          {Math.round(displayedProgress)}
+          {i18n.t(k._15)}
         </span>
       )}
     </div>

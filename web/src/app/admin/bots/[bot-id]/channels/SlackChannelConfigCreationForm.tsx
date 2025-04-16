@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import React, { useMemo } from "react";
 import { Formik, Form } from "formik";
@@ -117,11 +119,12 @@ export const SlackChannelConfigCreationForm = ({
             existingSlackChannelConfig?.standard_answer_categories || [],
           knowledge_source: existingSlackBotUsesPersona
             ? existingPersonaHasSearchTool
-              ? "assistant"
-              : "non_search_assistant"
+              ? i18n.t(k.ASSISTANT1)
+              : i18n.t(k.NON_SEARCH_ASSISTANT)
             : existingSlackChannelConfig?.persona
-              ? "document_sets"
-              : "all_public",
+            ? i18n.t(k.DOCUMENT_SETS1)
+            : i18n.t(k.ALL_PUBLIC),
+
           disabled:
             existingSlackChannelConfig?.channel_config?.disabled ?? false,
         }}
@@ -129,7 +132,7 @@ export const SlackChannelConfigCreationForm = ({
           slack_bot_id: Yup.number().required(),
           channel_name: isDefault
             ? Yup.string()
-            : Yup.string().required("Channel Name is required"),
+            : Yup.string().required(i18n.t(k.CHANNEL_NAME_IS_REQUIRED)),
           response_type: Yup.mixed<SlackBotResponseType>()
             .oneOf(["quotes", "citations"])
             .required(),
@@ -146,7 +149,7 @@ export const SlackChannelConfigCreationForm = ({
           document_sets: Yup.array()
             .of(Yup.number())
             .when("knowledge_source", {
-              is: "document_sets",
+              is: i18n.t(k.DOCUMENT_SETS1),
               then: (schema) =>
                 schema.min(
                   1,
@@ -156,7 +159,7 @@ export const SlackChannelConfigCreationForm = ({
           persona_id: Yup.number()
             .nullable()
             .when("knowledge_source", {
-              is: "assistant",
+              is: i18n.t(k.ASSISTANT1),
               then: (schema) =>
                 schema.required(
                   "A persona is required when using the'Assistant' knowledge source"
@@ -185,12 +188,12 @@ export const SlackChannelConfigCreationForm = ({
               values.knowledge_source === "assistant" ||
               values.knowledge_source === "non_search_assistant",
             document_sets:
-              values.knowledge_source === "document_sets"
+              values.knowledge_source === i18n.t(k.DOCUMENT_SETS1)
                 ? values.document_sets
                 : [],
             persona_id:
-              values.knowledge_source === "assistant" ||
-              values.knowledge_source === "non_search_assistant"
+              values.knowledge_source === i18n.t(k.ASSISTANT1) ||
+              values.knowledge_source === i18n.t(k.NON_SEARCH_ASSISTANT)
                 ? values.persona_id
                 : null,
             standard_answer_categories: values.standard_answer_categories.map(
@@ -217,14 +220,14 @@ export const SlackChannelConfigCreationForm = ({
 
           formikHelpers.setSubmitting(false);
           if (response.ok) {
-            router.push(`/admin/bots/${slack_bot_id}`);
+            router.push(`${i18n.t(k.ADMIN_BOTS)}${slack_bot_id}`);
           } else {
             const responseJson = await response.json();
             const errorMsg = responseJson.detail || responseJson.message;
             setPopup({
-              message: `Error ${
-                isUpdate ? "updating" : "creating"
-              } OnyxBot config - ${errorMsg}`,
+              message: `${i18n.t(k.ERROR2)} ${
+                isUpdate ? i18n.t(k.UPDATING1) : i18n.t(k.CREATING1)
+              } ${i18n.t(k.ONYXBOT_CONFIG)} ${errorMsg}`,
               type: "error",
             });
           }

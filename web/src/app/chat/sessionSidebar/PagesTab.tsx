@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { ChatSession } from "../interfaces";
 import {
   createFolder,
@@ -128,14 +130,14 @@ export function PagesTab({
       try {
         await updateFolderName(folderId, newName);
         setPopup({
-          message: "Folder updated successfully",
+          message: "Папка успешно обновлена",
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Failed to update folder:", error);
+        console.error("Не удалось обновить папку:", error);
         setPopup({
-          message: `Failed to update folder: ${(error as Error).message}`,
+          message: `Не удалось обновить папку: ${(error as Error).message}`,
           type: "error",
         });
       }
@@ -147,21 +149,21 @@ export function PagesTab({
     (folderId: number) => {
       if (
         confirm(
-          "Are you sure you want to delete this folder? This action cannot be undone."
+          "Вы уверены, что хотите удалить эту папку? Это действие нельзя отменить."
         )
       ) {
         deleteFolder(folderId)
           .then(() => {
             router.refresh();
             setPopup({
-              message: "Folder deleted successfully",
+              message: "Папка успешно удалена",
               type: "success",
             });
           })
           .catch((error: Error) => {
-            console.error("Failed to delete folder:", error);
+            console.error("Не удалось удалить папку:", error);
             setPopup({
-              message: `Failed to delete folder: ${error.message}`,
+              message: `Не удалось удалить папку: ${error.message}`,
               type: "error",
             });
           });
@@ -187,16 +189,16 @@ export function PagesTab({
           await refreshFolders();
           router.refresh();
           setPopup({
-            message: "Folder created successfully",
+            message: "Папка создана успешно",
             type: "success",
           });
         } catch (error) {
-          console.error("Failed to create folder:", error);
+          console.error("Не удалось создать папку:", error);
           setPopup({
             message:
               error instanceof Error
                 ? error.message
-                : "Failed to create folder",
+                : "Не удалось создать папку",
             type: "error",
           });
         }
@@ -225,15 +227,16 @@ export function PagesTab({
         await addChatToFolder(folderId, chatSessionId);
         router.refresh();
         setPopup({
-          message: "Chat added to folder successfully",
+          message: "Чат успешно добавлен в папку",
           type: "success",
         });
       } catch (error: unknown) {
-        console.error("Failed to add chat to folder:", error);
+        console.error("Не удалось добавить чат в папку:", error);
         setPopup({
-          message: `Failed to add chat to folder: ${
-            error instanceof Error ? error.message : "Unknown error"
+          message: `Не удалось добавить чат в папку: ${
+            error instanceof Error ? error.message : "Неизвестная ошибка"
           }`,
+
           type: "error",
         });
       }
@@ -302,15 +305,12 @@ export function PagesTab({
 
         if (oldIndex !== -1 && newIndex !== -1) {
           const newOrder = arrayMove(folders, oldIndex, newIndex);
-          const displayPriorityMap = newOrder.reduce(
-            (acc, folder, index) => {
-              if (folder.folder_id !== undefined) {
-                acc[folder.folder_id] = index;
-              }
-              return acc;
-            },
-            {} as Record<number, number>
-          );
+          const displayPriorityMap = newOrder.reduce((acc, folder, index) => {
+            if (folder.folder_id !== undefined) {
+              acc[folder.folder_id] = index;
+            }
+            return acc;
+          }, {} as Record<number, number>);
 
           updateFolderDisplayPriorities(displayPriorityMap);
           reorderFolders(displayPriorityMap);
@@ -325,7 +325,7 @@ export function PagesTab({
       {popup}
       <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
         <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
-          <p>Chats</p>
+          <p>{i18n.t(k.CHATS)}</p>
 
           <TooltipProvider delayDuration={1000}>
             <Tooltip>
@@ -342,7 +342,7 @@ export function PagesTab({
                   />
                 </button>
               </TooltipTrigger>
-              <TooltipContent>Search Chats</TooltipContent>
+              <TooltipContent>{i18n.t(k.SEARCH_CHATS)}</TooltipContent>
             </Tooltip>
           </TooltipProvider>
 
@@ -351,7 +351,7 @@ export function PagesTab({
             className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"
           >
             <FiPlus size={12} className="flex-none" />
-            Create Group
+            {i18n.t(k.CREATE_GROUP)}
           </button>
         </div>
       </div>
@@ -362,7 +362,7 @@ export function PagesTab({
             <Caret size={16} className="flex-none mr-1" />
             <input
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === i18n.t(k.ENTER)) {
                   handleNewFolderSubmit(e);
                 }
               }}
@@ -371,6 +371,7 @@ export function PagesTab({
               placeholder="Enter group name"
               className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
             />
+
             <div className="flex -my-1">
               <div
                 onClick={handleNewFolderSubmit}
@@ -468,7 +469,7 @@ export function PagesTab({
 
         {isHistoryEmpty && (!folders || folders.length === 0) && (
           <p className="text-sm max-w-full mt-2 w-[250px]">
-            Try sending a message! Your chat history will appear here.
+            {i18n.t(k.TRY_SENDING_A_MESSAGE_YOUR_CH)}
           </p>
         )}
       </div>

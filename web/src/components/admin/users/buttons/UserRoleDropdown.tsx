@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import {
   type User,
   UserRole,
@@ -109,12 +111,12 @@ const UserRoleDropdown = ({
       </Select>
       {showConfirmModal && (
         <GenericConfirmModal
-          title="Change Curator Role"
-          message={`Warning: Switching roles from Curator to ${
+          title="Изменить роль куратора"
+          message={`${i18n.t(k.WARNING_SWITCHING_ROLES_FROM)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
-          } will remove their status as individual curators from all groups.`}
-          confirmText={`Switch Role to ${
+          } ${i18n.t(k.WILL_REMOVE_THEIR_STATUS_AS_IN)}`}
+          confirmText={`${i18n.t(k.SWITCH_ROLE_TO)} ${
             USER_ROLE_LABELS[pendingRole as UserRole] ??
             USER_ROLE_LABELS[user.role]
           }`}

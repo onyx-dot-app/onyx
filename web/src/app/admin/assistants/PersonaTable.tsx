@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import Text from "@/components/ui/text";
 import { Persona } from "./interfaces";
@@ -22,22 +24,33 @@ import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
   if (persona.builtin_persona) {
-    return <Text>Built-In</Text>;
+    return <Text>{i18n.t(k.BUILT_IN2)}</Text>;
   }
 
   if (persona.is_default_persona) {
-    return <Text>Default</Text>;
+    return <Text>{i18n.t(k.DEFAULT2)}</Text>;
   }
 
   if (persona.is_public) {
-    return <Text>Public</Text>;
+    return <Text>{i18n.t(k.PUBLIC)}</Text>;
   }
 
   if (persona.groups.length > 0 || persona.users.length > 0) {
-    return <Text>Shared</Text>;
+    return <Text>{i18n.t(k.SHARED)}</Text>;
   }
 
-  return <Text>Personal {persona.owner && <>({persona.owner.email})</>}</Text>;
+  return (
+    <Text>
+      {i18n.t(k.PERSONAL)}{" "}
+      {persona.owner && (
+        <>
+          {i18n.t(k._4)}
+          {persona.owner.email}
+          {i18n.t(k._5)}
+        </>
+      )}
+    </Text>
+  );
 }
 
 export function PersonasTable() {
@@ -94,7 +107,7 @@ export function PersonasTable() {
     if (!response.ok) {
       setPopup({
         type: "error",
-        message: `Failed to update persona order - ${await response.text()}`,
+        message: `Не удалось обновить порядок персон -${await response.text()}`,
       });
       setFinalPersonas(assistants);
       await refreshAssistants();
@@ -124,7 +137,7 @@ export function PersonasTable() {
       } else {
         setPopup({
           type: "error",
-          message: `Failed to delete persona - ${await response.text()}`,
+          message: `Не удалось удалить персону -${await response.text()}`,
         });
       }
     }
@@ -152,7 +165,7 @@ export function PersonasTable() {
       } else {
         setPopup({
           type: "error",
-          message: `Failed to update persona - ${await response.text()}`,
+          message: `Не удалось обновить персону -${await response.text()}`,
         });
       }
     }
@@ -179,30 +192,34 @@ export function PersonasTable() {
           onSubmit={handleToggleDefault}
           actionText={
             personaToToggleDefault.is_default_persona
-              ? "remove the featured status of"
-              : "set as featured"
+              ? i18n.t(k.REMOVE_THE_FEATURED_STATUS_OF)
+              : i18n.t(k.SET_AS_FEATURED)
           }
           actionButtonText={
             personaToToggleDefault.is_default_persona
-              ? "Remove Featured"
-              : "Set as Featured"
+              ? i18n.t(k.REMOVE_FEATURED)
+              : i18n.t(k.SET_AS_FEATURED1)
           }
           additionalDetails={
             personaToToggleDefault.is_default_persona
-              ? `Removing "${personaToToggleDefault.name}" as a featured assistant will not affect its visibility or accessibility.`
-              : `Setting "${personaToToggleDefault.name}" as a featured assistant will make it public and visible to all users. This action cannot be undone.`
+              ? `${i18n.t(k.REMOVING)}${personaToToggleDefault.name}${i18n.t(
+                  k.AS_A_FEATURED_ASSISTANT_WILL
+                )}`
+              : `${i18n.t(k.SETTING)}${personaToToggleDefault.name}${i18n.t(
+                  k.AS_A_FEATURED_ASSISTANT_WILL1
+                )}`
           }
         />
       )}
 
       <DraggableTable
         headers={[
-          "Name",
-          "Description",
-          "Type",
-          "Featured Assistant",
-          "Is Visible",
-          "Delete",
+          "Имя",
+          "Описание",
+          "Тип",
+          "Избранный помощник",
+          "Видимость",
+          "Удалить",
         ]}
         isAdmin={isAdmin}
         rows={finalPersonas.map((persona) => {
@@ -216,9 +233,9 @@ export function PersonasTable() {
                     className="mr-1 my-auto cursor-pointer"
                     onClick={() =>
                       router.push(
-                        `/assistants/edit/${
-                          persona.id
-                        }?u=${Date.now()}&admin=true`
+                        `${i18n.t(k.ASSISTANTS_EDIT)}${persona.id}${i18n.t(
+                          k.U
+                        )}${Date.now()}${i18n.t(k.ADMIN_TRUE)}`
                       )
                     }
                   />
@@ -249,9 +266,9 @@ export function PersonasTable() {
               >
                 <div className="my-auto flex-none w-22">
                   {!persona.is_default_persona ? (
-                    <div className="text-error">Not Featured</div>
+                    <div className="text-error">{i18n.t(k.NOT_FEATURED)}</div>
                   ) : (
-                    "Featured"
+                    i18n.t(k.FEATURED)
                   )}
                 </div>
                 <div className="ml-1 my-auto">
@@ -271,7 +288,9 @@ export function PersonasTable() {
                     } else {
                       setPopup({
                         type: "error",
-                        message: `Failed to update persona - ${await response.text()}`,
+                        message: `${i18n.t(
+                          k.FAILED_TO_UPDATE_PERSONA
+                        )} ${await response.text()}`,
                       });
                     }
                   }
@@ -284,9 +303,9 @@ export function PersonasTable() {
               >
                 <div className="my-auto w-12">
                   {!persona.is_visible ? (
-                    <div className="text-error">Hidden</div>
+                    <div className="text-error">{i18n.t(k.HIDDEN)}</div>
                   ) : (
-                    "Visible"
+                    i18n.t(k.VISIBLE)
                   )}
                 </div>
                 <div className="ml-1 my-auto">
@@ -303,11 +322,12 @@ export function PersonasTable() {
                       <TrashIcon />
                     </div>
                   ) : (
-                    "-"
+                    i18n.t(k._)
                   )}
                 </div>
               </div>,
             ],
+
             staticModifiers: [[1, "lg:w-[250px] xl:w-[400px] 2xl:w-[550px]"]],
           };
         })}

@@ -119,9 +119,9 @@ export async function createChatSession(
   );
   if (!createChatSessionResponse.ok) {
     console.error(
-      `Failed to create chat session - ${createChatSessionResponse.status}`
+      `Не удалось создать сеанс чата - ${createChatSessionResponse.status}`
     );
-    throw Error("Failed to create chat session");
+    throw Error("Не удалось создать сеанс чата");
   }
   const chatSessionResponseJson = await createChatSessionResponse.json();
   return chatSessionResponseJson.chat_session_id;
@@ -260,7 +260,7 @@ export async function* sendMessage({
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    throw new Error(`Ошибка HTTP! статус: ${response.status}`);
   }
 
   yield* handleSSEStream<PacketType>(response, signal);
@@ -424,9 +424,9 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
 
   const groups: Record<string, ChatSession[]> = {
     Today: [],
-    "Previous 7 Days": [],
-    "Previous 30 days": [],
-    "Over 30 days": [],
+    "Предыдущие 7 дней": [],
+    "Предыдущие 30 дней": [],
+    "Более 30 дней": [],
   };
 
   chatSessions.forEach((chatSession) => {
@@ -436,13 +436,13 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
     const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
 
     if (diffDays < 1) {
-      groups["Today"].push(chatSession);
+      groups["Сегодня"].push(chatSession);
     } else if (diffDays <= 7) {
-      groups["Previous 7 Days"].push(chatSession);
+      groups["Предыдущие 7 дней"].push(chatSession);
     } else if (diffDays <= 30) {
-      groups["Previous 30 days"].push(chatSession);
+      groups["Предыдущие 30 дней"].push(chatSession);
     } else {
-      groups["Over 30 days"].push(chatSession);
+      groups["Более 30 дней"].push(chatSession);
     }
   });
 
@@ -712,7 +712,10 @@ export async function uploadFilesForChat(
     body: formData,
   });
   if (!response.ok) {
-    return [[], `Failed to upload files - ${(await response.json()).detail}`];
+    return [
+      [],
+      `Не удалось загрузить файлы - ${(await response.json()).detail}`,
+    ];
   }
   const responseJson = await response.json();
 

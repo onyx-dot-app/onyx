@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
@@ -190,10 +192,7 @@ export function EmbeddingModelSelection({
         />
       )}
 
-      <p className="mb-4">
-        Select from cloud, self-hosted models, or continue with your current
-        embedding model.
-      </p>
+      <p className="mb-4">{i18n.t(k.SELECT_FROM_CLOUD_SELF_HOSTED)}</p>
       <div className="text-sm mr-auto mb-6 divide-x-2 flex">
         <button
           onClick={() => setModelTab(null)}
@@ -203,7 +202,7 @@ export function EmbeddingModelSelection({
               : " hover:underline bg-neutral-100 dark:bg-neutral-900"
           }`}
         >
-          Current
+          {i18n.t(k.CURRENT)}
         </button>
         <div className="px-2">
           <button
@@ -214,7 +213,7 @@ export function EmbeddingModelSelection({
                 : " hover:underline bg-neutral-100 dark:bg-neutral-900"
             }`}
           >
-            Cloud-based
+            {i18n.t(k.CLOUD_BASED)}
           </button>
         </div>
         <div className="px-2">
@@ -226,7 +225,7 @@ export function EmbeddingModelSelection({
                 : "hover:underline bg-neutral-100 dark:bg-neutral-900"
             }`}
           >
-            Self-hosted
+            {i18n.t(k.SELF_HOSTED)}
           </button>
         </div>
       </div>

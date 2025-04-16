@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { Quote } from "@/lib/search/interfaces";
 import { ResponseSection, StatusOptions } from "./ResponseSection";
 import { CheckmarkIcon, CopyIcon } from "@/components/icons/icons";
@@ -20,7 +22,7 @@ const QuoteDisplay = ({ quoteInfo }: { quoteInfo: Quote }) => {
         <div className="absolute top-0 mt-9 pt-2 z-50">
           <div className="flex flex-shrink-0 rounded-lg break-words hyphens-auto w-96 bg-background border border-border shadow p-3 text-sm leading-relaxed overflow-hidden">
             <div>
-              <b>Quote:</b> <i>{quoteInfo.quote}</i>
+              <b>{i18n.t(k.QUOTE)}</b> <i>{quoteInfo.quote}</i>
             </div>
             <div
               className="my-auto pl-3 ml-auto"
@@ -70,10 +72,10 @@ interface QuotesSectionProps {
 
 const QuotesHeader = ({ quotes, isFetching }: QuotesSectionProps) => {
   if ((!quotes || quotes.length === 0) && isFetching) {
-    return <>Extracting quotes...</>;
+    return <>{i18n.t(k.EXTRACTING_QUOTES)}</>;
   }
 
-  return <>Quotes</>;
+  return <>{i18n.t(k.QUOTES1)}</>;
 };
 
 const QuotesBody = ({ quotes, isFetching }: QuotesSectionProps) => {

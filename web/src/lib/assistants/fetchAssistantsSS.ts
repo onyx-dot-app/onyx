@@ -8,5 +8,5 @@ export async function fetchAssistantsSS(): Promise<FetchAssistantsResponse> {
   if (response.ok) {
     return [(await response.json()) as Persona[], null];
   }
-  return [[], (await response.json()).detail || "Unknown Error"];
+  return [[], (await response.json()).detail || "Неизвестная ошибка"];
 }

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ValidSources } from "@/lib/types";
@@ -48,7 +50,7 @@ const CreateButton = ({
       disabled={isSubmitting || (!isAdmin && groups.length === 0)}
     >
       <PlusCircleIcon className="h-4 w-4" />
-      Create
+      {i18n.t(k.CREATE1)}
     </Button>
   </div>
 );
@@ -72,30 +74,17 @@ export default function CreateCredential({
   // Source information
   hideSource?: boolean; // hides docs link
   sourceType: ValidSources;
-
-  setPopup: (popupSpec: PopupSpec | null) => void;
-
-  // Optional toggle- close section after selection?
-  close?: boolean;
-
-  // Special handlers
-  onClose?: () => void;
-  // Switch currently selected credential
-  onSwitch?: (selectedCredential: Credential<any>) => Promise<void>;
-  // Switch currently selected credential + link with connector
-  onSwap?: (selectedCredential: Credential<any>, connectorId: number) => void;
-
-  // For swapping credentials on selection
-  swapConnector?: Connector<any>;
-
-  // Mutating parent state
+  setPopup: (popupSpec: PopupSpec | null) => void; // Optional toggle- close section after selection?
+  close?: boolean; // Special handlers
+  onClose?: () => void; // Switch currently selected credential
+  onSwitch?: (selectedCredential: Credential<any>) => Promise<void>; // Switch currently selected credential + link with connector
+  onSwap?: (selectedCredential: Credential<any>, connectorId: number) => void; // For swapping credentials on selection
+  swapConnector?: Connector<any>; // Mutating parent state
   refresh?: () => void;
 }) {
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
-
   const { isAdmin } = useUser();
-
   const handleSubmit = async (
     values: formType,
     formikHelpers: FormikHelpers<formType>,
@@ -191,24 +180,25 @@ export default function CreateCredential({
         <Form className="w-full flex items-stretch">
           {!hideSource && (
             <p className="text-sm">
-              Check our
+              {i18n.t(k.CHECK_OUR)}
               <a
                 className="text-blue-600 hover:underline"
                 target="_blank"
                 href={getSourceDocLink(sourceType) || ""}
               >
                 {" "}
-                docs{" "}
+                {i18n.t(k.DOCS)}{" "}
               </a>
-              for information on setting up this connector.
+              {i18n.t(k.FOR_INFORMATION_ON_SETTING_UP)}
             </p>
           )}
           <CardSection className="w-full items-start dark:bg-neutral-900 mt-4 flex flex-col gap-y-6">
             <TextFormField
               name="name"
-              placeholder="(Optional) credential name.."
+              placeholder="(Необязательно) имя учетных данных.."
               label="Name:"
             />
+
             {Object.entries(credentialTemplate).map(([key, val]) => {
               if (typeof val === "boolean") {
                 return (
@@ -226,10 +216,10 @@ export default function CreateCredential({
                   placeholder={val}
                   label={getDisplayNameForCredentialKey(key)}
                   type={
-                    key.toLowerCase().includes("token") ||
-                    key.toLowerCase().includes("password")
-                      ? "password"
-                      : "text"
+                    key.toLowerCase().includes(i18n.t(k.TOKEN)) ||
+                    key.toLowerCase().includes(i18n.t(k.PASSWORD))
+                      ? i18n.t(k.PASSWORD)
+                      : i18n.t(k.TEXT)
                   }
                 />
               );
@@ -280,7 +270,7 @@ export default function CreateCredential({
               >
                 <div className="flex gap-x-2 items-center w-full border-none">
                   <FaAccusoft />
-                  <p>Create</p>
+                  <p>{i18n.t(k.CREATE1)}</p>
                 </div>
               </Button>
             </div>

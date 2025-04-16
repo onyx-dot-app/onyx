@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { useState } from "react";
 import { FeedbackType } from "../types";
@@ -69,7 +71,7 @@ export const FeedbackModal = ({
               />
             )}
           </div>
-          Provide additional feedback
+          {i18n.t(k.PROVIDE_ADDITIONAL_FEEDBACK)}
         </h2>
 
         <div className="mb-4 flex flex-wrap justify-start">
@@ -100,8 +102,8 @@ export const FeedbackModal = ({
           aria-multiline
           placeholder={
             feedbackType === "like"
-              ? "(Optional) What did you like about this response?"
-              : "(Optional) What was the issue with the response? How could it be improved?"
+              ? i18n.t(k.OPTIONAL_WHAT_DID_YOU_LIKE_A)
+              : i18n.t(k.OPTIONAL_WHAT_WAS_THE_ISSUE)
           }
           value={message}
           onChange={(e) => setMessage(e.target.value)}
@@ -112,7 +114,7 @@ export const FeedbackModal = ({
             className="bg-agent text-white py-2 px-4 rounded hover:bg-agent/50 focus:outline-none mx-auto"
             onClick={handleSubmit}
           >
-            Submit feedback
+            {i18n.t(k.SUBMIT_FEEDBACK)}
           </button>
         </div>
       </>

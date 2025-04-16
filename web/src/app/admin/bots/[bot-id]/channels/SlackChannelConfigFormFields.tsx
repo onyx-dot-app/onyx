@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import React, { useState, useEffect, useMemo } from "react";
 import { FieldArray, useFormikContext, ErrorMessage, Field } from "formik";
@@ -132,8 +134,8 @@ export function SlackChannelConfigFormFields({
         )
       );
       setPopup({
-        message:
-          "We removed one or more document sets from your selection because they are no longer valid. Please review and update your configuration.",
+        message: i18n.t(k.WE_REMOVED_ONE_OR_MORE_DOCUMEN),
+
         type: "warning",
       });
     }
@@ -201,22 +203,19 @@ export function SlackChannelConfigFormFields({
         {isDefault && (
           <>
             <Badge variant="agent" className="bg-blue-100 text-blue-800">
-              Default Configuration
+              {i18n.t(k.DEFAULT_CONFIGURATION)}
             </Badge>
             <p className="mt-2 text-sm text-neutral-600">
-              This default configuration will apply across all Slack channels
-              the bot is added to in the Slack workspace, as well as direct
-              messages (DMs), unless disabled.
+              {i18n.t(k.THIS_DEFAULT_CONFIGURATION_WIL)}
             </p>
             <div className="mt-4 p-4 bg-neutral-100 rounded-md border border-neutral-300">
               <CheckFormField
                 name="disabled"
                 label="Disable Default Configuration"
               />
+
               <p className="mt-2 text-sm text-neutral-600 italic">
-                Warning: Disabling the default configuration means the bot
-                won&apos;t respond in Slack channels or DMs unless explicitly
-                configured for them.
+                {i18n.t(k.WARNING_DISABLING_THE_DEFAULT)}
               </p>
             </div>
           </>
@@ -227,18 +226,18 @@ export function SlackChannelConfigFormFields({
               htmlFor="channel_name"
               className="block  text-text font-medium text-base mb-2"
             >
-              Select A Slack Channel:
+              {i18n.t(k.SELECT_A_SLACK_CHANNEL)}
             </label>{" "}
             {error ? (
               <div>
                 <div className="text-red-600 text-sm mb-4">
-                  {error.message || "Unable to fetch Slack channels."}
-                  {" Please enter the channel name manually."}
+                  {error.message || i18n.t(k.UNABLE_TO_FETCH_SLACK_CHANNELS)}
+                  {i18n.t(k.PLEASE_ENTER_THE_CHANNEL_NAME)}
                 </div>
                 <TextFormField
                   name="channel_name"
-                  label="Channel Name"
-                  placeholder="Enter channel name"
+                  label="Название канала"
+                  placeholder="Введите название канала"
                 />
               </div>
             ) : (
@@ -259,16 +258,14 @@ export function SlackChannelConfigFormFields({
                   )}
                 </Field>
                 <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
-                  Note: This list shows existing public and private channels (up
-                  to 500). You can either select from the list or type any
-                  channel name directly.
+                  {i18n.t(k.NOTE_THIS_LIST_SHOWS_EXISTING)}
                 </p>
               </>
             )}
           </>
         )}
         <div className="space-y-2 mt-4">
-          <Label>Knowledge Source</Label>
+          <Label>{i18n.t(k.KNOWLEDGE_SOURCE)}</Label>
           <RadioGroup
             className="flex flex-col gap-y-4"
             value={values.knowledge_source}
@@ -279,28 +276,30 @@ export function SlackChannelConfigFormFields({
             <RadioGroupItemField
               value="all_public"
               id="all_public"
-              label="All Public Knowledge"
-              sublabel="Let OnyxBot respond based on information from all public connectors"
+              label="Все общедоступные знания"
+              sublabel="Позвольте OnyxBot реагировать на основе информации со всех публичных коннекторов"
             />
+
             {selectableSets.length + unselectableSets.length > 0 && (
               <RadioGroupItemField
                 value="document_sets"
                 id="document_sets"
-                label="Specific Document Sets"
-                sublabel="Control which documents to use for answering questions"
+                label="Конкретные наборы документов"
+                sublabel="Контролируйте, какие документы использовать для ответов на вопросы"
               />
             )}
             <RadioGroupItemField
               value="assistant"
               id="assistant"
-              label="Search Assistant"
-              sublabel="Control both the documents and the prompt to use for answering questions"
+              label="Помощник по поиску"
+              sublabel="Контролируйте как документы, так и подсказки, используемые для ответа на вопросы"
             />
+
             <RadioGroupItemField
               value="non_search_assistant"
               id="non_search_assistant"
-              label="Non-Search Assistant"
-              sublabel="Chat with an assistant that does not use documents"
+              label="Помощник без поиска"
+              sublabel="Чат с помощником, который не использует документы"
             />
           </RadioGroup>
         </div>
@@ -309,12 +308,12 @@ export function SlackChannelConfigFormFields({
             <div className="mt-4">
               <SubLabel>
                 <>
-                  Select the document sets OnyxBot will use while answering
-                  questions in Slack.
+                  {i18n.t(k.SELECT_THE_DOCUMENT_SETS_ONYXB)}
+
                   <br />
                   {unselectableSets.length > 0 ? (
                     <span>
-                      Some incompatible document sets are{" "}
+                      {i18n.t(k.SOME_INCOMPATIBLE_DOCUMENT_SET)}{" "}
                       {viewUnselectableSets ? "visible" : "hidden"}.{" "}
                       <button
                         type="button"
@@ -326,9 +325,9 @@ export function SlackChannelConfigFormFields({
                         className="text-sm text-link"
                       >
                         {viewUnselectableSets
-                          ? "Hide un-selectable "
-                          : "View all "}
-                        document sets
+                          ? i18n.t(k.HIDE_UN_SELECTABLE)
+                          : i18n.t(k.VIEW_ALL)}
+                        {i18n.t(k.DOCUMENT_SETS2)}
                       </button>
                     </span>
                   ) : (
@@ -369,8 +368,7 @@ export function SlackChannelConfigFormFields({
                     {viewUnselectableSets && unselectableSets.length > 0 && (
                       <div className="mt-4">
                         <p className="text-sm text-text-dark/80">
-                          These document sets cannot be attached as they have
-                          auto-synced docs:
+                          {i18n.t(k.THESE_DOCUMENT_SETS_CANNOT_BE)}
                         </p>
                         <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
                           {unselectableSets.map((documentSet) => (
@@ -378,7 +376,7 @@ export function SlackChannelConfigFormFields({
                               key={documentSet.id}
                               documentSet={documentSet}
                               disabled
-                              disabledTooltip="Unable to use this document set because it contains a connector with auto-sync permissions. OnyxBot's responses in this channel are visible to all Slack users, so mirroring the asker's permissions could inadvertently expose private information."
+                              disabledTooltip="Невозможно использовать этот набор документов, поскольку он содержит коннектор с разрешениями автосинхронизации. Ответы OnyxBot в этом канале видны всем пользователям Slack, поэтому зеркалирование разрешений спрашивающего может непреднамеренно раскрыть личную информацию."
                               isSelected={false}
                               onSelect={() => {}}
                             />
@@ -400,15 +398,13 @@ export function SlackChannelConfigFormFields({
           <div className="mt-4">
             <SubLabel>
               <>
-                Select the search-enabled assistant OnyxBot will use while
-                answering questions in Slack.
+                {i18n.t(k.SELECT_THE_SEARCH_ENABLED_ASSI)}
+
                 {syncEnabledAssistants.length > 0 && (
                   <>
                     <br />
                     <span className="text-sm text-text-dark/80">
-                      Note: Some of your assistants have auto-synced connectors
-                      in their document sets. You cannot select these assistants
-                      as they will not be able to answer questions in Slack.{" "}
+                      {i18n.t(k.NOTE_SOME_OF_YOUR_ASSISTANTS)}{" "}
                       <button
                         type="button"
                         onClick={() =>
@@ -420,9 +416,9 @@ export function SlackChannelConfigFormFields({
                         className="text-sm text-link"
                       >
                         {viewSyncEnabledAssistants
-                          ? "Hide un-selectable "
-                          : "View all "}
-                        assistants
+                          ? i18n.t(k.HIDE_UN_SELECTABLE)
+                          : i18n.t(k.VIEW_ALL)}
+                        {i18n.t(k.ASSISTANTS)}
                       </button>
                     </span>
                   </>
@@ -437,10 +433,11 @@ export function SlackChannelConfigFormFields({
                 value: persona.id,
               }))}
             />
+
             {viewSyncEnabledAssistants && syncEnabledAssistants.length > 0 && (
               <div className="mt-4">
                 <p className="text-sm text-text-dark/80">
-                  Un-selectable assistants:
+                  {i18n.t(k.UN_SELECTABLE_ASSISTANTS)}
                 </p>
                 <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
                   {syncEnabledAssistants.map((persona: Persona) => (
@@ -457,6 +454,7 @@ export function SlackChannelConfigFormFields({
                         size={16}
                         className="flex-none"
                       />
+
                       {persona.name}
                     </button>
                   ))}
@@ -469,15 +467,13 @@ export function SlackChannelConfigFormFields({
           <div className="mt-4">
             <SubLabel>
               <>
-                Select the non-search assistant OnyxBot will use while answering
-                questions in Slack.
+                {i18n.t(k.SELECT_THE_NON_SEARCH_ASSISTAN)}
+
                 {syncEnabledAssistants.length > 0 && (
                   <>
                     <br />
                     <span className="text-sm text-text-dark/80">
-                      Note: Some of your assistants have auto-synced connectors
-                      in their document sets. You cannot select these assistants
-                      as they will not be able to answer questions in Slack.{" "}
+                      {i18n.t(k.NOTE_SOME_OF_YOUR_ASSISTANTS)}{" "}
                       <button
                         type="button"
                         onClick={() =>
@@ -489,9 +485,9 @@ export function SlackChannelConfigFormFields({
                         className="text-sm text-link"
                       >
                         {viewSyncEnabledAssistants
-                          ? "Hide un-selectable "
-                          : "View all "}
-                        assistants
+                          ? i18n.t(k.HIDE_UN_SELECTABLE)
+                          : i18n.t(k.VIEW_ALL)}
+                        {i18n.t(k.ASSISTANTS)}
                       </button>
                     </span>
                   </>
@@ -514,31 +510,31 @@ export function SlackChannelConfigFormFields({
         {values.knowledge_source !== "non_search_assistant" && (
           <AccordionItem value="search-options">
             <AccordionTrigger className="text-text">
-              Search Configuration
+              {i18n.t(k.SEARCH_CONFIGURATION)}
             </AccordionTrigger>
             <AccordionContent>
               <div className="space-y-4">
                 <div className="w-64">
                   <SelectorFormField
                     name="response_type"
-                    label="Answer Type"
-                    tooltip="Controls the format of OnyxBot's responses."
+                    label="Тип ответа"
+                    tooltip="Управляет форматом ответов OnyxBot."
                     options={[
-                      { name: "Standard", value: "citations" },
-                      { name: "Detailed", value: "quotes" },
+                      { name: i18n.t(k.STANDARD1), value: "citations" },
+                      { name: i18n.t(k.DETAILED), value: "quotes" },
                     ]}
                   />
                 </div>
                 <CheckFormField
                   name="enable_auto_filters"
-                  label="Enable LLM Autofiltering"
-                  tooltip="If set, the LLM will generate source and time filters based on the user's query"
+                  label="Включить автофильтрацию LLM"
+                  tooltip="Если установлено, LLM будет генерировать фильтры источника и времени на основе запроса пользователя."
                 />
 
                 <CheckFormField
                   name="answer_validity_check_enabled"
-                  label="Only respond if citations found"
-                  tooltip="If set, will only answer questions where the model successfully produces citations"
+                  label="Отвечайте только в том случае, если найдены цитаты"
+                  tooltip="Если установлено, будут отвечать только на те вопросы, где модель успешно производит цитаты"
                 />
               </div>
             </AccordionContent>
@@ -546,13 +542,13 @@ export function SlackChannelConfigFormFields({
         )}
 
         <AccordionItem className="mt-4" value="general-options">
-          <AccordionTrigger>General Configuration</AccordionTrigger>
+          <AccordionTrigger>{i18n.t(k.GENERAL_CONFIGURATION)}</AccordionTrigger>
           <AccordionContent>
             <div className="space-y-4">
               <CheckFormField
                 name="show_continue_in_web_ui"
-                label="Show Continue in Web UI button"
-                tooltip="If set, will show a button at the bottom of the response that allows the user to continue the conversation in the Onyx Web UI"
+                label="Показать кнопку «Продолжить» в веб-интерфейсе"
+                tooltip="Если установлено, в нижней части ответа будет отображаться кнопка, позволяющая пользователю продолжить разговор в веб-интерфейсе Onyx."
               />
 
               <CheckFormField
@@ -563,61 +559,57 @@ export function SlackChannelConfigFormFields({
                     setFieldValue("follow_up_tags", []);
                   }
                 }}
-                label={'Give a "Still need help?" button'}
-                tooltip={`OnyxBot's response will include a button at the bottom 
-                      of the response that asks the user if they still need help.`}
+                label={"Дайте кнопку «Все еще нужна помощь?»"}
+                tooltip={`${i18n.t(k.ONYXBOT_S_RESPONSE_WILL_INCLUD)}`}
               />
+
               {values.still_need_help_enabled && (
-                <CollapsibleSection prompt="Configure Still Need Help Button">
+                <CollapsibleSection prompt="Настроить кнопку «Все еще нужна помощь»">
                   <TextArrayField
                     name="follow_up_tags"
-                    label="(Optional) Users / Groups to Tag"
+                    label="(Необязательно) Пользователи/Группы для тегирования"
                     values={values}
                     subtext={
-                      <div>
-                        The Slack users / groups we should tag if the user
-                        clicks the &quot;Still need help?&quot; button. If no
-                        emails are provided, we will not tag anyone and will
-                        just react with a 🆘 emoji to the original message.
-                      </div>
+                      <div>{i18n.t(k.THE_SLACK_USERS_GROUPS_WE_SH)}</div>
                     }
-                    placeholder="User email or user group name..."
+                    placeholder="Адрес электронной почты пользователя или имя группы пользователей..."
                   />
                 </CollapsibleSection>
               )}
 
               <CheckFormField
                 name="questionmark_prefilter_enabled"
-                label="Only respond to questions"
-                tooltip="If set, OnyxBot will only respond to messages that contain a question mark"
+                label="Отвечайте только на вопросы"
+                tooltip="Если установлено, OnyxBot будет отвечать только на сообщения, содержащие вопросительный знак."
               />
+
               <CheckFormField
                 name="respond_tag_only"
-                label="Respond to @OnyxBot Only"
-                tooltip="If set, OnyxBot will only respond when directly tagged"
+                label="Отвечайте только @OnyxBot"
+                tooltip="Если установлено, OnyxBot будет реагировать только при прямой пометке"
               />
+
               <CheckFormField
                 name="respond_to_bots"
-                label="Respond to Bot messages"
-                tooltip="If not set, OnyxBot will always ignore messages from Bots"
+                label="Отвечайте на сообщения бота"
+                tooltip="Если не установлено, OnyxBot всегда будет игнорировать сообщения от ботов."
               />
+
               <CheckFormField
                 name="is_ephemeral"
-                label="Respond to user in a private (ephemeral) message"
-                tooltip="If set, OnyxBot will respond only to the user in a private (ephemeral) message. If you also 
-                chose 'Search' Assistant above, selecting this option will make documents that are private to the user 
-                available for their queries."
+                label="Ответить пользователю в личном (кратковременном) сообщении"
+                tooltip="Если установлено, OnyxBot будет отвечать только пользователю в личном (эфемерном) сообщении. Если вы также выбрали помощника «Поиск» выше, выбор этого параметра сделает документы, которые являются личными для пользователя, доступными для его запросов."
               />
 
               <TextArrayField
                 name="respond_member_group_list"
-                label="(Optional) Respond to Certain Users / Groups"
+                label="(Необязательно) Ответить определенным пользователям/группам"
                 subtext={
-                  "If specified, OnyxBot responses will only " +
-                  "be visible to the members or groups in this list."
+                  "Если указано, ответы OnyxBot будут видны только " +
+                  "участникам или группам в этом списке."
                 }
                 values={values}
-                placeholder="User email or user group name..."
+                placeholder="Адрес электронной почты пользователя или имя группы пользователей..."
               />
 
               <StandardAnswerCategoryDropdownField
@@ -643,21 +635,14 @@ export function SlackChannelConfigFormFields({
               </TooltipTrigger>
               <TooltipContent side="top" className="bg-white p-4 w-80">
                 <Label className="text-text mb-2 font-semibold">
-                  Privacy Alert
+                  {i18n.t(k.PRIVACY_ALERT)}
                 </Label>
                 <p className="text-sm text-text-darker mb-4">
-                  Please note that if the private (ephemeral) response is *not
-                  selected*, only public documents within the selected document
-                  sets will be accessible for user queries. If the private
-                  (ephemeral) response *is selected*, user quries can also
-                  leverage documents that the user has already been granted
-                  access to. Note that users will be able to share the response
-                  with others in the channel, so please ensure that this is
-                  aligned with your company sharing policies.
+                  {i18n.t(k.PLEASE_NOTE_THAT_IF_THE_PRIVAT)}
                 </p>
                 <div className="space-y-2">
                   <h4 className="text-sm text-text font-medium">
-                    Relevant Connectors:
+                    {i18n.t(k.RELEVANT_CONNECTORS)}
                   </h4>
                   <div className="max-h-40 overflow-y-auto border-t border-text-subtle flex-col gap-y-2">
                     {memoizedPrivateConnectors.map(
@@ -685,9 +670,11 @@ export function SlackChannelConfigFormFields({
             </Tooltip>
           </TooltipProvider>
         )}
-        <Button type="submit">{isUpdate ? "Update" : "Create"}</Button>
+        <Button type="submit">
+          {isUpdate ? i18n.t(k.UPDATE) : i18n.t(k.CREATE1)}
+        </Button>
         <Button type="button" variant="outline" onClick={() => router.back()}>
-          Cancel
+          {i18n.t(k.CANCEL)}
         </Button>
       </div>
     </>

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React, {
   ReactNode,
   useState,
@@ -174,7 +176,7 @@ export const CustomTooltip = ({
                   : {}
               }
             >
-              lll
+              {i18n.t(k.LLL)}
               {content}
             </div>
           </div>,

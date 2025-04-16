@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React, { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Persona } from "@/app/admin/assistants/interfaces";
@@ -164,7 +166,7 @@ export const Notifications = ({
                     )}
                     <div className="flex-grow">
                       <p className="font-semibold text-sm text-text-800">
-                        New Assistant Shared: {persona?.name}
+                        {i18n.t(k.NEW_ASSISTANT_SHARED)} {persona?.name}
                       </p>
                       {persona?.description && (
                         <p className="text-xs text-text-600 mt-1">
@@ -175,23 +177,24 @@ export const Notifications = ({
                         <div className="mt-2">
                           {persona.tools.length > 0 && (
                             <p className="text-xs text-text-500">
-                              Tools:{" "}
+                              {i18n.t(k.TOOLS)}{" "}
                               {persona.tools
                                 .map((tool) => tool.name)
-                                .join(", ")}
+                                .join(i18n.t(k._3))}
                             </p>
                           )}
                           {persona.document_sets.length > 0 && (
                             <p className="text-xs text-text-500">
-                              Document Sets:{" "}
+                              {i18n.t(k.DOCUMENT_SETS3)}{" "}
                               {persona.document_sets
                                 .map((set) => set.name)
-                                .join(", ")}
+                                .join(i18n.t(k._3))}
                             </p>
                           )}
                           {persona.llm_model_version_override && (
                             <p className="text-xs text-text-500">
-                              Model: {persona.llm_model_version_override}
+                              {i18n.t(k.MODEL)}{" "}
+                              {persona.llm_model_version_override}
                             </p>
                           )}
                         </div>
@@ -205,13 +208,13 @@ export const Notifications = ({
                       }
                       className="px-3 py-1 text-sm font-medium text-blue-600 hover:text-blue-800 transition duration-150 ease-in-out"
                     >
-                      Chat
+                      {i18n.t(k.CHAT1)}
                     </button>
                     <button
                       onClick={() => dismissNotification(notification.id)}
                       className="px-3 py-1 text-sm font-medium text-text-600 hover:text-text-800 transition duration-150 ease-in-out"
                     >
-                      Dismiss
+                      {i18n.t(k.DISMISS)}
                     </button>
                   </div>
                 </div>
@@ -224,7 +227,7 @@ export const Notifications = ({
         )
       ) : (
         <div className="px-4 py-3 text-center text-text-600">
-          No new notifications
+          {i18n.t(k.NO_NEW_NOTIFICATIONS)}
         </div>
       )}
     </div>

@@ -73,7 +73,7 @@ export default function ImpersonatePage() {
         </h2>
 
         <Formik
-          initialValues={{ email: "", apiKey: "" }}
+          initialValues={{ email: i18n.t(k._1), apiKey: i18n.t(k._1) }}
           validationSchema={ImpersonateSchema}
           onSubmit={handleImpersonate}
         >

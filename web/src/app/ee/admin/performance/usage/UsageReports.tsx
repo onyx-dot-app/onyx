@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 
 import { format } from "date-fns";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -104,10 +106,8 @@ function GenerateReportInput() {
 
   return (
     <div className="mb-8">
-      <Title className="mb-2">Generate Usage Reports</Title>
-      <Text className="mb-8">
-        Generate usage statistics for users in the workspace.
-      </Text>
+      <Title className="mb-2">{i18n.t(k.GENERATE_USAGE_REPORTS)}</Title>
+      <Text className="mb-8">{i18n.t(k.GENERATE_USAGE_STATISTICS_FOR)}</Text>
       <div className="grid gap-2 mb-3">
         <Popover>
           <PopoverTrigger asChild>
@@ -122,14 +122,14 @@ function GenerateReportInput() {
               {dateRange?.from ? (
                 dateRange.to ? (
                   <>
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
+                    {format(dateRange.from, i18n.t(k.LLL_DD_Y))} {i18n.t(k._)}{" "}
+                    {format(dateRange.to, i18n.t(k.LLL_DD_Y))}
                   </>
                 ) : (
-                  format(dateRange.from, "LLL dd, y")
+                  format(dateRange.from, i18n.t(k.LLL_DD_Y))
                 )
               ) : (
-                <span>Pick a date range</span>
+                <span>{i18n.t(k.PICK_A_DATE_RANGE)}</span>
               )}
             </Button>
           </PopoverTrigger>
@@ -144,12 +144,13 @@ function GenerateReportInput() {
                 setDateRange({
                   from: range.from,
                   to: range.to ?? range.from,
-                  selectValue: "custom",
+                  selectValue: i18n.t(k.CUSTOM),
                 })
               }
               numberOfMonths={2}
               disabled={(date) => date > new Date()}
             />
+
             <div className="border-t p-3">
               <Button
                 variant="ghost"
@@ -158,11 +159,11 @@ function GenerateReportInput() {
                   setDateRange({
                     from: lastWeek,
                     to: new Date(),
-                    selectValue: "lastWeek",
+                    selectValue: i18n.t(k.LASTWEEK),
                   });
                 }}
               >
-                Last 7 days
+                {i18n.t(k.LAST_DAYS1)}
               </Button>
               <Button
                 variant="ghost"
@@ -171,11 +172,11 @@ function GenerateReportInput() {
                   setDateRange({
                     from: lastMonth,
                     to: new Date(),
-                    selectValue: "lastMonth",
+                    selectValue: i18n.t(k.LASTMONTH),
                   });
                 }}
               >
-                Last 30 days
+                {i18n.t(k.LAST_DAYS)}
               </Button>
               <Button
                 variant="ghost"
@@ -184,11 +185,11 @@ function GenerateReportInput() {
                   setDateRange({
                     from: lastYear,
                     to: new Date(),
-                    selectValue: "lastYear",
+                    selectValue: i18n.t(k.LASTYEAR),
                   });
                 }}
               >
-                Last year
+                {i18n.t(k.LAST_YEAR)}
               </Button>
               <Button
                 variant="ghost"
@@ -197,11 +198,11 @@ function GenerateReportInput() {
                   setDateRange({
                     from: new Date(1970, 0, 1),
                     to: new Date(),
-                    selectValue: "allTime",
+                    selectValue: i18n.t(k.ALLTIME),
                   });
                 }}
               >
-                All time
+                {i18n.t(k.ALL_TIME)}
               </Button>
             </div>
           </PopoverContent>
@@ -214,9 +215,9 @@ function GenerateReportInput() {
         disabled={isLoading}
         onClick={() => requestReport()}
       >
-        Generate Report
+        {i18n.t(k.GENERATE_REPORT)}
       </Button>
-      <p className="mt-1 text-xs">This can take a few minutes.</p>
+      <p className="mt-1 text-xs">{i18n.t(k.THIS_CAN_TAKE_A_FEW_MINUTES)}</p>
       {errorOccurred && (
         <ErrorCallout
           errorTitle="Something went wrong."
@@ -252,7 +253,10 @@ function UsageReportsTable() {
 
   return (
     <div>
-      <Title className="mb-2 mt-6 mx-auto"> Previous Reports </Title>
+      <Title className="mb-2 mt-6 mx-auto">
+        {" "}
+        {i18n.t(k.PREVIOUS_REPORTS)}{" "}
+      </Title>
       {usageReportsIsLoading ? (
         <div className="flex justify-center w-full">
           <ThreeDotsLoader />
@@ -267,11 +271,11 @@ function UsageReportsTable() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Report</TableHead>
-                <TableHead>Period</TableHead>
-                <TableHead>Generated By</TableHead>
-                <TableHead>Time Generated</TableHead>
-                <TableHead>Download</TableHead>
+                <TableHead>{i18n.t(k.REPORT)}</TableHead>
+                <TableHead>{i18n.t(k.PERIOD)}</TableHead>
+                <TableHead>{i18n.t(k.GENERATED_BY)}</TableHead>
+                <TableHead>{i18n.t(k.TIME_GENERATED)}</TableHead>
+                <TableHead>{i18n.t(k.DOWNLOAD)}</TableHead>
               </TableRow>
             </TableHeader>
 
@@ -279,17 +283,19 @@ function UsageReportsTable() {
               {paginatedReports.map((r) => (
                 <TableRow key={r.report_name}>
                   <TableCell>
-                    {r.report_name.split("_")[1]?.substring(0, 8) ||
+                    {r.report_name.split(i18n.t(k._32))[1]?.substring(0, 8) ||
                       r.report_name.substring(0, 8)}
                   </TableCell>
                   <TableCell>
                     {r.period_from
                       ? `${humanReadableFormat(
                           r.period_from
-                        )} - ${humanReadableFormat(r.period_to!)}`
-                      : "All time"}
+                        )} ${i18n.t(k._)} ${humanReadableFormat(r.period_to!)}`
+                      : i18n.t(k.ALL_TIME)}
                   </TableCell>
-                  <TableCell>{r.requestor ?? "Auto generated"}</TableCell>
+                  <TableCell>
+                    {r.requestor ?? i18n.t(k.AUTO_GENERATED)}
+                  </TableCell>
                   <TableCell>
                     {humanReadableFormatWithTime(r.time_created)}
                   </TableCell>
@@ -315,7 +321,7 @@ function UsageReportsTable() {
                   window.scrollTo({
                     top: 0,
                     left: 0,
-                    behavior: "smooth",
+                    behavior: i18n.t(k.SMOOTH),
                   });
                 }}
               />

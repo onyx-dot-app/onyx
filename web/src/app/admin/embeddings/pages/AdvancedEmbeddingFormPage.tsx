@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { forwardRef } from "react";
 import { Formik, Form, FormikProps, FieldArray, Field } from "formik";
 import * as Yup from "yup";
@@ -108,7 +110,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
               .nullable()
               .test(
                 "required-if-contextual-rag",
-                "LLM must be selected when Contextual RAG is enabled",
+                "LLM необходимо выбрать, если включен контекстный RAG",
                 function (value) {
                   const enableContextualRag = this.parent.enable_contextual_rag;
                   console.log("enableContextualRag", enableContextualRag);
@@ -118,19 +120,21 @@ const AdvancedEmbeddingFormPage = forwardRef<
               ),
             disable_rerank_for_streaming: Yup.boolean(),
             num_rerank: Yup.number()
-              .required("Number of results to rerank is required")
-              .min(1, "Must be at least 1"),
+              .required(
+                "Количество результатов для повторной оценки обязательно"
+              )
+              .min(1, "Должно быть не менее 1"),
             embedding_precision: Yup.string().nullable(),
             reduced_dimension: Yup.number()
               .nullable()
               .test(
                 "positive",
-                "Must be larger than or equal to 256",
+                "Должно быть больше или равно 256",
                 (value) => value === null || value === undefined || value >= 256
               )
               .test(
                 "openai",
-                "Reduced Dimensions is only supported for OpenAI embedding models",
+                "Уменьшенные размеры поддерживаются только для моделей встраивания OpenAI.",
                 (value) => {
                   return embeddingProviderType === "openai" || value === null;
                 }
@@ -180,7 +184,7 @@ const AdvancedEmbeddingFormPage = forwardRef<
                       .nullable()
                       .test(
                         "required-if-contextual-rag",
-                        "LLM must be selected when Contextual RAG is enabled",
+                        "LLM необходимо выбрать, если включен контекстный RAG",
                         function (value) {
                           const enableContextualRag =
                             this.parent.enable_contextual_rag;
@@ -194,20 +198,22 @@ const AdvancedEmbeddingFormPage = forwardRef<
                       ),
                     disable_rerank_for_streaming: Yup.boolean(),
                     num_rerank: Yup.number()
-                      .required("Number of results to rerank is required")
-                      .min(1, "Must be at least 1"),
+                      .required(
+                        "Требуется количество результатов для повторной оценки"
+                      )
+                      .min(1, "Должно быть не менее 1"),
                     embedding_precision: Yup.string().nullable(),
-                    reduced_dimension: Yup.number()
+                    Reduced_dimension: Yup.number()
                       .nullable()
                       .test(
                         "positive",
-                        "Must be larger than or equal to 256",
+                        "Должно быть больше или равно 256",
                         (value) =>
                           value === null || value === undefined || value >= 256
                       )
                       .test(
                         "openai",
-                        "Reduced Dimensions is only supported for OpenAI embedding models",
+                        "Reduced Dimensions поддерживается только для моделей встраивания OpenAI",
                         (value) => {
                           return (
                             embeddingProviderType === "openai" || value === null
@@ -238,17 +244,22 @@ const AdvancedEmbeddingFormPage = forwardRef<
               <FieldArray name="multilingual_expansion">
                 {({ push, remove }) => (
                   <div className="w-full">
-                    <Label>Multi-lingual Expansion</Label>
+                    <Label>{i18n.t(k.MULTI_LINGUAL_EXPANSION)}</Label>
 
-                    <SubLabel>Add additional languages to the search.</SubLabel>
+                    <SubLabel>
+                      {i18n.t(k.ADD_ADDITIONAL_LANGUAGES_TO_TH)}
+                    </SubLabel>
                     {values.multilingual_expansion.map(
                       (_: any, index: number) => (
                         <div key={index} className="w-full flex mb-4">
                           <Field
-                            name={`multilingual_expansion.${index}`}
+                            name={`${i18n.t(
+                              k.MULTILINGUAL_EXPANSION1
+                            )}${index}`}
                             className={`w-full bg-input text-sm p-2  border border-border-medium rounded-md
                                       focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 mr-2`}
                           />
+
                           <button
                             type="button"
                             onClick={() => remove(index)}
@@ -268,42 +279,45 @@ const AdvancedEmbeddingFormPage = forwardRef<
                         hover:bg-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-opacity-50`}
                     >
                       <FaPlus className="mr-2" />
-                      Add Language
+                      {i18n.t(k.ADD_LANGUAGE)}
                     </button>
                   </div>
                 )}
               </FieldArray>
 
               <BooleanFormField
-                subtext="Enable multipass indexing for both mini and large chunks."
+                subtext="Включить многопроходное индексирование для мини- и больших фрагментов."
                 optional
-                label="Multipass Indexing"
+                label="Многопроходное индексирование"
                 name="multipass_indexing"
               />
+
               <BooleanFormField
-                subtext="Disable reranking for streaming to improve response time."
+                subtext="Отключить переоценку для потоковой передачи для улучшения времени отклика."
                 optional
-                label="Disable Rerank for Streaming"
+                label="Отключить переоценку для потоковой передачи"
                 name="disable_rerank_for_streaming"
               />
+
               <BooleanFormField
-                subtext="Enable contextual RAG for all chunk sizes."
+                subtext="Включить контекстный RAG для всех размеров фрагментов."
                 optional
-                label="Contextual RAG"
+                label="Контекстный RAG"
                 name="enable_contextual_rag"
               />
+
               <div>
                 <SelectorFormField
                   name="contextual_rag_llm"
-                  label="Contextual RAG LLM"
+                  label="Контекстуальный RAG LLM"
                   subtext={
                     costError
-                      ? "Error loading LLM models. Please try again later."
+                      ? i18n.t(k.ERROR_LOADING_LLM_MODELS_PLEA)
                       : !contextualCosts
-                        ? "Loading available LLM models..."
-                        : values.enable_contextual_rag
-                          ? "Select the LLM model to use for contextual RAG processing."
-                          : "Enable Contextual RAG above to select an LLM model."
+                      ? i18n.t(k.LOADING_AVAILABLE_LLM_MODELS)
+                      : values.enable_contextual_rag
+                      ? i18n.t(k.SELECT_THE_LLM_MODEL_TO_USE_FO)
+                      : i18n.t(k.ENABLE_CONTEXTUAL_RAG_ABOVE_TO)
                   }
                   options={llmOptions}
                   disabled={
@@ -312,14 +326,16 @@ const AdvancedEmbeddingFormPage = forwardRef<
                     !!costError
                   }
                 />
+
                 {values.enable_contextual_rag &&
                   values.contextual_rag_llm &&
                   !costError && (
                     <div className="mt-2 text-sm text-text-600">
                       {contextualCosts ? (
                         <>
-                          Estimated cost for processing{" "}
-                          {COST_CALCULATION_TOKENS.toLocaleString()} tokens:{" "}
+                          {i18n.t(k.ESTIMATED_COST_FOR_PROCESSING)}{" "}
+                          {COST_CALCULATION_TOKENS.toLocaleString()}{" "}
+                          {i18n.t(k.TOKENS1)}{" "}
                           <span className="font-medium">
                             {getSelectedModelCost(values.contextual_rag_llm)
                               ? formatCost(
@@ -327,36 +343,36 @@ const AdvancedEmbeddingFormPage = forwardRef<
                                     values.contextual_rag_llm
                                   )!.cost
                                 )
-                              : "Cost information not available"}
+                              : i18n.t(k.COST_INFORMATION_NOT_AVAILABLE)}
                           </span>
                         </>
                       ) : (
-                        "Loading cost information..."
+                        i18n.t(k.LOADING_COST_INFORMATION)
                       )}
                     </div>
                   )}
               </div>
               <NumberInput
-                description="Number of results to rerank"
+                description="Количество результатов для переоценки"
                 optional={false}
-                label="Number of Results to Rerank"
+                label="Количество результатов для переоценки"
                 name="num_rerank"
               />
 
               <SelectorFormField
                 name="embedding_precision"
-                label="Embedding Precision"
+                label="Точность встраивания"
                 options={embeddingPrecisionOptions}
-                subtext="Select the precision for embedding vectors. Lower precision uses less storage but may reduce accuracy."
+                subtext="Выберите точность для встраивания векторов. Более низкая точность использует меньше памяти, но может снизить точность."
               />
 
               <NumberInput
-                description="Number of dimensions to reduce the embedding to. 
-              Will reduce memory usage but may reduce accuracy. 
-              If not specified, will just use the selected model's default dimensionality without any reduction. 
-              Currently only supported for OpenAI embedding models"
+                description="Количество измерений, до которых нужно уменьшить встраивание.
+Снизит использование памяти, но может снизить точность.
+Если не указано, будет использоваться размерность выбранной модели по умолчанию без какого-либо снижения.
+В настоящее время поддерживается только для моделей встраивания OpenAI"
                 optional={true}
-                label="Reduced Dimension"
+                label="Уменьшенное измерение"
                 name="reduced_dimension"
               />
             </Form>

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { useState } from "react";
 import { Modal } from "../Modal";
 import { CheckmarkIcon, CopyIcon } from "../icons/icons";
@@ -29,12 +31,12 @@ export default function ExceptionTraceModal({
               }}
               className="flex w-fit cursor-pointer hover:bg-accent-background p-2 border-border border rounded"
             >
-              Copy full trace
+              {i18n.t(k.COPY_FULL_TRACE)}
               <CopyIcon className="ml-2 my-auto" />
             </div>
           ) : (
             <div className="flex w-fit hover:bg-accent-background p-2 border-border border rounded cursor-default">
-              Copied to clipboard
+              {i18n.t(k.COPIED_TO_CLIPBOARD)}
               <CheckmarkIcon
                 className="my-auto ml-2 flex flex-shrink-0 text-success"
                 size={16}

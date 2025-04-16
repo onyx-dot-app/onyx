@@ -92,6 +92,7 @@ export const useConnectorCredentialIndexingStatus = (
   const url = `${INDEXING_STATUS_URL}${
     getEditable ? "?get_editable=true" : ""
   }`;
+
   const swrResponse = useSWR<ConnectorIndexingStatus<any, any>[]>(
     url,
     errorHandlingFetcher,
@@ -208,6 +209,7 @@ export interface FilterManager {
   setTimeRange: React.Dispatch<
     React.SetStateAction<DateRangePickerValue | null>
   >;
+
   selectedSources: SourceMetadata[];
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
   selectedDocumentSets: string[];
@@ -822,5 +824,6 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-7-sonnet-20250219-v1:0",
   ],
+
   anthropic: ["claude-3-opus-20240229", "claude-3-5-sonnet-20241022"],
 };

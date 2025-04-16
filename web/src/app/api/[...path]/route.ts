@@ -70,7 +70,7 @@ async function handleRequest(request: NextRequest, path: string[]) {
     return NextResponse.json(
       {
         message:
-          "This API is only available in development mode. In production, something else (e.g. nginx) should handle this.",
+          "Этот API доступен только в режиме разработки. В производстве этим должно заниматься что-то другое (например, nginx).",
       },
       { status: 404 }
     );
@@ -121,7 +121,9 @@ async function handleRequest(request: NextRequest, path: string[]) {
       {
         message: "Proxy error",
         error:
-          error instanceof Error ? error.message : "An unknown error occurred",
+          error instanceof Error
+            ? error.message
+            : "Произошла неизвестная ошибка",
       },
       { status: 500 }
     );

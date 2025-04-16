@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import React, { useState, useEffect, useRef } from "react";
 import { Folder } from "./interfaces";
@@ -38,7 +40,6 @@ const FolderItem = ({
   currentChatId?: string;
   isInitiallyExpanded: boolean;
   initiallySelected: boolean;
-
   showShareModal: ((chatSession: ChatSession) => void) | undefined;
   showDeleteModal: ((chatSession: ChatSession) => void) | undefined;
 }) => {
@@ -98,7 +99,7 @@ const FolderItem = ({
       }
       router.refresh(); // Refresh values to update the sidebar
     } catch (error) {
-      setPopup({ message: "Failed to save folder name", type: "error" });
+      setPopup({ message: "Не удалось сохранить имя папки", type: "error" });
     }
   };
 
@@ -116,7 +117,7 @@ const FolderItem = ({
       await deleteFolder(folder.folder_id!);
       router.refresh();
     } catch (error) {
-      setPopup({ message: "Failed to delete folder", type: "error" });
+      setPopup({ message: "Не удалось удалить папку.", type: "error" });
     } finally {
       setShowDeleteConfirm(false);
     }
@@ -161,7 +162,7 @@ const FolderItem = ({
       router.refresh();
     } catch (error) {
       setPopup({
-        message: "Failed to add chat session to folder",
+        message: "Не удалось добавить сеанс чата в папку",
         type: "error",
       });
     }
@@ -249,21 +250,22 @@ const FolderItem = ({
                     popover={
                       <div className="p-2 w-[225px] bg-background-100 rounded shadow-lg">
                         <p className="text-sm mb-2">
-                          Are you sure you want to delete folder{" "}
-                          <i>{folder.folder_name}</i>?
+                          {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET3)}{" "}
+                          <i>{folder.folder_name}</i>
+                          {i18n.t(k._10)}
                         </p>
                         <div className="flex justify-end">
                           <button
                             onClick={confirmDelete}
                             className="bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs mr-2"
                           >
-                            Yes
+                            {i18n.t(k.YES)}
                           </button>
                           <button
                             onClick={cancelDelete}
                             className="bg-background-300 hover:bg-background-200 px-2 py-1 rounded text-xs"
                           >
-                            No
+                            {i18n.t(k.NO)}
                           </button>
                         </div>
                       </div>
@@ -350,7 +352,7 @@ export const FolderList = ({
       {folders.length == 1 && folders[0].chat_sessions.length == 0 && (
         <p className="text-sm font-normal text-subtle mt-2">
           {" "}
-          Drag a chat into a folder to save for later{" "}
+          {i18n.t(k.DRAG_A_CHAT_INTO_A_FOLDER_TO_S)}{" "}
         </p>
       )}
     </div>

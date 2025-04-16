@@ -24,8 +24,10 @@ export const StandardAnswerCategoryDropdownField: FC<
   if (standardAnswerCategoryResponse.error != null) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_STANDARD_ANSWE)} ${standardAnswerCategoryResponse.error.message}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_STANDARD_ANSWE)} ${
+          standardAnswerCategoryResponse.error.message
+        }`}
       />
     );
   }

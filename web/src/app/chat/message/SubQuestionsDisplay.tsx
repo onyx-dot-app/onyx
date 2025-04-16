@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, {
   useCallback,
   useEffect,
@@ -168,6 +170,7 @@ const SubQuestionDisplay: React.FC<{
     (props: any) => (
       <MemoizedParagraph fontSize={"sm"}>{props.children}</MemoizedParagraph>
     ),
+
     []
   );
 
@@ -181,6 +184,7 @@ const SubQuestionDisplay: React.FC<{
         {props.children}
       </MemoizedAnchor>
     ),
+
     [documents]
   );
 
@@ -188,6 +192,7 @@ const SubQuestionDisplay: React.FC<{
     (props: any) => (
       <span className="text-sm leading-tight">{props.children}</span>
     ),
+
     []
   );
 
@@ -211,9 +216,11 @@ const SubQuestionDisplay: React.FC<{
       li: ({ children }: any) => (
         <li className="text-sm leading-tight">{children}</li>
       ),
+
       ul: ({ children }: any) => (
         <ul className="text-sm leading-tight pl-4 mt-0 mb-2">{children}</ul>
       ),
+
       ol: ({ children }: any) => (
         <ol className="text-sm leading-tight pl-4 mt-0 mb-2">{children}</ol>
       ),
@@ -327,6 +334,7 @@ const SubQuestionDisplay: React.FC<{
 
         ${isLast && !toggled ? "h-4" : "h-full"}`}
       />
+
       <div
         style={{ scrollMarginTop: "20px" }}
         ref={questionRef}
@@ -366,7 +374,7 @@ const SubQuestionDisplay: React.FC<{
                   <div className="pl-0 pb-2">
                     <div className="mb-4 flex flex-col gap-2">
                       <div className="text-text-800 text-xs font-medium leading-normal">
-                        Searching
+                        {i18n.t(k.SEARCHING)}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {subQuestion?.sub_queries?.map((query, queryIndex) => (
@@ -383,7 +391,7 @@ const SubQuestionDisplay: React.FC<{
                     {(subQuestion?.is_complete || memoizedDocs?.length > 0) && (
                       <div className="mb-4 flex flex-col gap-2">
                         <div className="text-text-800 text-xs font-medium leading-normal">
-                          Reading
+                          {i18n.t(k.READING)}
                         </div>
                         <div className="flex flex-wrap gap-2">
                           {memoizedDocs.length > 0 ? (
@@ -400,7 +408,7 @@ const SubQuestionDisplay: React.FC<{
                                   icon={<ResultIcon doc={doc} size={10} />}
                                   title={`${truncatedIdentifier}${
                                     truncatedIdentifier.length === 20
-                                      ? "..."
+                                      ? i18n.t(k._13)
                                       : ""
                                   }`}
                                 />
@@ -408,7 +416,7 @@ const SubQuestionDisplay: React.FC<{
                             })
                           ) : (
                             <div className="text-black text-sm font-medium">
-                              No sources found
+                              {i18n.t(k.NO_SOURCES_FOUND)}
                             </div>
                           )}
                         </div>
@@ -422,7 +430,7 @@ const SubQuestionDisplay: React.FC<{
                           className="text-text-800 cursor-pointer items-center text-xs flex gap-x-1 font-medium leading-normal"
                           onClick={() => setAnalysisToggled(!analysisToggled)}
                         >
-                          Analyzing
+                          {i18n.t(k.ANALYZING)}
                           <ChevronDown
                             className={`transition-transform duration-200 ${
                               analysisToggled ? "" : "-rotate-90"
@@ -745,7 +753,7 @@ const SubQuestionsDisplay: React.FC<SubQuestionsDisplayProps> = ({
             completed={shownDocuments && shownDocuments.length > 0}
             temporaryDisplay={{
               question: streamedText,
-              tinyQuestion: "Combining results",
+              tinyQuestion: i18n.t(k.COMBINING_RESULTS),
             }}
           />
         )}

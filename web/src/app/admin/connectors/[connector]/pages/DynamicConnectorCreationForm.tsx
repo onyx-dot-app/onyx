@@ -56,9 +56,9 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
       )}
 
       <TextFormField
-        subtext="A descriptive name for the connector."
+        subtext="Описательное имя для коннектора."
         type={"text"}
-        label={"Connector Name"}
+        label={"Название коннектора"}
         name={"name"}
       />
 
@@ -84,6 +84,7 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
             showAdvancedOptions={showAdvancedOptions}
             setShowAdvancedOptions={setShowAdvancedOptions}
           />
+
           {showAdvancedOptions &&
             config.advanced_values.map(
               (field) =>

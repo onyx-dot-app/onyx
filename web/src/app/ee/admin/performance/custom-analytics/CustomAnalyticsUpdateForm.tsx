@@ -92,7 +92,8 @@ export function CustomAnalyticsUpdateForm() {
             {i18n.t(k.FOR_SECURITY_REASONS_YOU_MUST)}{" "}
             <i>{i18n.t(k.CUSTOM_ANALYTICS_SECRET_KEY)}</i>{" "}
             {i18n.t(k.ENVIRONMENT_VARIABLE_SET_WHEN)}
-          </></SubLabel>
+          </>
+        </SubLabel>
         <input
           className={`
             border 

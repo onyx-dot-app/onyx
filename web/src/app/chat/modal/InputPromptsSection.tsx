@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -62,15 +64,15 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update prompt");
+        throw new Error("Не удалось обновить приглашение");
       }
 
       setEditingPromptId(null);
       setEditedPrompt(null);
       refreshInputPrompts();
-      setPopup({ message: "Prompt updated successfully", type: "success" });
+      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
     } catch (error) {
-      setPopup({ message: "Failed to update prompt", type: "error" });
+      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
     }
   };
 
@@ -81,13 +83,13 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to delete prompt");
+        throw new Error("Не удалось удалить запрос");
       }
 
       refreshInputPrompts();
-      setPopup({ message: "Prompt deleted successfully", type: "success" });
+      setPopup({ message: "Подсказка успешно удалена", type: "success" });
     } catch (error) {
-      setPopup({ message: "Failed to delete prompt", type: "error" });
+      setPopup({ message: "Не удалось удалить запрос", type: "error" });
     }
   };
 
@@ -100,15 +102,15 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create prompt");
+        throw new Error("Не удалось создать приглашение");
       }
 
       setNewPrompt({});
       setIsCreatingNew(false);
       refreshInputPrompts();
-      setPopup({ message: "Prompt created successfully", type: "success" });
+      setPopup({ message: "Запрос создан успешно", type: "success" });
     } catch (error) {
-      setPopup({ message: "Failed to create prompt", type: "error" });
+      setPopup({ message: "Не удалось создать приглашение", type: "error" });
     }
   };
 
@@ -121,20 +123,20 @@ export function InputPromptsSection({
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update prompt");
+        throw new Error("Не удалось обновить приглашение");
       }
 
       refreshInputPrompts();
-      setPopup({ message: "Prompt updated successfully", type: "success" });
+      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
     } catch (error) {
-      setPopup({ message: "Failed to update prompt", type: "error" });
+      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
     }
   };
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Input Prompts</h3>
+        <h3 className="text-lg font-semibold">{i18n.t(k.INPUT_PROMPTS)}</h3>
         <Button
           variant="ghost"
           size="sm"
@@ -153,10 +155,10 @@ export function InputPromptsSection({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-1/4">Prompt</TableHead>
-                <TableHead className="w-1/2">Content</TableHead>
-                <TableHead className="w-1/12">Active</TableHead>
-                <TableHead className="w-1/6">Actions</TableHead>
+                <TableHead className="w-1/4">{i18n.t(k.PROMPT1)}</TableHead>
+                <TableHead className="w-1/2">{i18n.t(k.CONTENT1)}</TableHead>
+                <TableHead className="w-1/12">{i18n.t(k.ACTIVE)}</TableHead>
+                <TableHead className="w-1/6">{i18n.t(k.ACTIONS)}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -257,6 +259,7 @@ export function InputPromptsSection({
                   setNewPrompt({ ...newPrompt, prompt: e.target.value })
                 }
               />
+
               <Textarea
                 placeholder="New content"
                 value={newPrompt.content || ""}
@@ -265,17 +268,18 @@ export function InputPromptsSection({
                 }
                 className="min-h-[80px]"
               />
+
               <div className="flex space-x-2">
-                <Button onClick={handleCreate}>Create</Button>
+                <Button onClick={handleCreate}>{i18n.t(k.CREATE1)}</Button>
                 <Button variant="ghost" onClick={() => setIsCreatingNew(false)}>
-                  Cancel
+                  {i18n.t(k.CANCEL)}
                 </Button>
               </div>
             </div>
           ) : (
             <Button onClick={() => setIsCreatingNew(true)} className="w-full">
               <PlusIcon size={14} className="mr-2" />
-              Create New Prompt
+              {i18n.t(k.CREATE_NEW_PROMPT)}
             </Button>
           )}
         </>

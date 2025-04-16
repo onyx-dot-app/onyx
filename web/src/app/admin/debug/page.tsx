@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { useState, useEffect } from "react";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -45,7 +47,7 @@ function Main() {
       const response = await fetch(
         `/api/admin/long-term-logs/${category}/download`
       );
-      if (!response.ok) throw new Error("Failed to download logs");
+      if (!response.ok) throw new Error("Не удалось загрузить журналы");
 
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
@@ -73,9 +75,8 @@ function Main() {
       {isDownloading && <Spinner />}
       <div className="mb-8">
         <Text className="mb-3">
-          <b>Debug Logs</b> provide detailed information about system operations
-          and events. You can download logs for each category to analyze system
-          behavior or troubleshoot issues.
+          <b>{i18n.t(k.DEBUG_LOGS)}</b>{" "}
+          {i18n.t(k.PROVIDE_DETAILED_INFORMATION_A)}
         </Text>
 
         {categories.length > 0 && (
@@ -83,8 +84,8 @@ function Main() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Actions</TableHead>
+                  <TableHead>{i18n.t(k.CATEGORY)}</TableHead>
+                  <TableHead>{i18n.t(k.ACTIONS)}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -102,7 +103,7 @@ function Main() {
                         className="flex items-center gap-2"
                       >
                         <FiDownload className="h-4 w-4" />
-                        Download Logs
+                        {i18n.t(k.DOWNLOAD_LOGS)}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -119,7 +120,7 @@ function Main() {
 const Page = () => {
   return (
     <div className="container mx-auto">
-      <AdminPageTitle icon={<FiDownload size={32} />} title="Debug Logs" />
+      <AdminPageTitle icon={<FiDownload size={32} />} title="Журналы отладки" />
       <Main />
     </div>
   );

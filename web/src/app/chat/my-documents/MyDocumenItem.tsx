@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useEffect, useRef, useState } from "react";
 import {
   FolderIcon,
@@ -19,6 +21,7 @@ interface FolderItemProps {
   setEditingItem: React.Dispatch<
     React.SetStateAction<{ id: number; name: string; isFolder: boolean } | null>
   >;
+
   handleRename: (id: number, newName: string, isFolder: boolean) => void;
   onDragStart: (
     e: React.DragEvent<HTMLDivElement>,
@@ -107,6 +110,7 @@ export function FolderItem({
               className="border rounded px-2 py-1 mr-2"
               autoFocus
             />
+
             <button
               onClick={submitRename}
               className="text-green-500 hover:text-green-700 mr-2"
@@ -136,7 +140,7 @@ export function FolderItem({
               startEditing();
             }}
           >
-            Rename
+            {i18n.t(k.RENAME)}
           </button>
           <button
             className="block w-full text-left px-4 py-2 hover:bg-background-100 text-sm"
@@ -146,7 +150,7 @@ export function FolderItem({
               setShowMenu(undefined);
             }}
           >
-            Move
+            {i18n.t(k.MOVE)}
           </button>
           <button
             className="block w-full text-left px-4 py-2 hover:bg-background-100 text-sm text-red-600"
@@ -156,7 +160,7 @@ export function FolderItem({
               setShowMenu(undefined);
             }}
           >
-            Delete
+            {i18n.t(k.DELETE)}
           </button>
         </div>
       )}
@@ -173,6 +177,7 @@ interface FileItemProps {
   setEditingItem: React.Dispatch<
     React.SetStateAction<{ id: number; name: string; isFolder: boolean } | null>
   >;
+
   setPresentingDocument: (
     document_id: string,
     semantic_identifier: string
@@ -274,6 +279,7 @@ export function FileItem({
               className="border rounded px-2 py-1 mr-2"
               autoFocus
             />
+
             <button
               onClick={submitRename}
               className="text-green-500 hover:text-green-700 mr-2"
@@ -304,7 +310,7 @@ export function FileItem({
               setShowMenu(undefined);
             }}
           >
-            Download
+            {i18n.t(k.DOWNLOAD)}
           </button>
           <button
             className="block w-full text-left px-4 py-2 hover:bg-background-100 text-sm"
@@ -313,7 +319,7 @@ export function FileItem({
               startEditing();
             }}
           >
-            Rename
+            {i18n.t(k.RENAME)}
           </button>
           <button
             className="block w-full text-left px-4 py-2 hover:bg-background-100 text-sm"
@@ -323,7 +329,7 @@ export function FileItem({
               setShowMenu(undefined);
             }}
           >
-            Moveewsd
+            {i18n.t(k.MOVEEWSD)}
           </button>
           <button
             className="block w-full text-left px-4 py-2 hover:bg-background-100 text-sm text-red-600"
@@ -333,7 +339,7 @@ export function FileItem({
               setShowMenu(undefined);
             }}
           >
-            Delete
+            {i18n.t(k.DELETE)}
           </button>
         </div>
       )}

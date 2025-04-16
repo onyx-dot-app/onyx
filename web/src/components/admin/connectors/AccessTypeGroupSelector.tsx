@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FieldArray, ArrayHelpers, ErrorMessage, useField } from "formik";
@@ -78,7 +80,7 @@ export function AccessTypeGroupSelector({
   ]);
 
   if (userGroupsIsLoading) {
-    return <div>Loading...</div>;
+    return <div>{i18n.t(k.LOADING)}</div>;
   }
   if (!isPaidEnterpriseFeaturesEnabled) {
     return null;
@@ -89,8 +91,9 @@ export function AccessTypeGroupSelector({
       <>
         {userGroups && (
           <div className="mb-1 font-medium text-base">
-            This Connector will be assigned to group <b>{userGroups[0].name}</b>
-            .
+            {i18n.t(k.THIS_CONNECTOR_WILL_BE_ASSIGNE)}{" "}
+            <b>{userGroups[0].name}</b>
+            {i18n.t(k._8)}
           </div>
         )}
       </>
@@ -106,7 +109,7 @@ export function AccessTypeGroupSelector({
             <Separator />
             <div className="flex mt-4 gap-x-2 items-center">
               <div className="block font-medium text-base">
-                Assign group access for this Connector
+                {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS_C)}
               </div>
             </div>
             {userGroupsIsLoading ? (
@@ -114,15 +117,9 @@ export function AccessTypeGroupSelector({
             ) : (
               <Text className="mb-3">
                 {isAdmin ? (
-                  <>
-                    This Connector will be visible/accessible by the groups
-                    selected below
-                  </>
+                  <>{i18n.t(k.THIS_CONNECTOR_WILL_BE_VISIBLE)}</>
                 ) : (
-                  <>
-                    Curators must select one or more groups to give access to
-                    this Connector
-                  </>
+                  <>{i18n.t(k.CURATORS_MUST_SELECT_ONE_OR_MO)}</>
                 )}
               </Text>
             )}
@@ -174,6 +171,7 @@ export function AccessTypeGroupSelector({
                 </div>
               )}
             />
+
             <ErrorMessage
               name="groups"
               component="div"

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import React, { Dispatch, FC, SetStateAction, useEffect } from "react";
 import { AdminBooleanFormField } from "@/components/credentials/CredentialFields";
 import { FileUpload } from "@/components/admin/connectors/FileUpload";
@@ -137,11 +139,11 @@ export const RenderField: FC<RenderFieldProps> = ({
   const disabled =
     typeof field.disabled === "function"
       ? field.disabled(currentCredential)
-      : (field.disabled ?? false);
+      : field.disabled ?? false;
   const initialValue =
     typeof field.initial === "function"
       ? field.initial(currentCredential)
-      : (field.initial ?? "");
+      : field.initial ?? "";
 
   // if initialValue exists, prepopulate the field with it
   useEffect(() => {
@@ -213,7 +215,7 @@ export const RenderField: FC<RenderFieldProps> = ({
       ) : field.type === "string_tab" ? (
         <div className="text-center">{description}</div>
       ) : (
-        <>INVALID FIELD TYPE</>
+        <>{i18n.t(k.INVALID_FIELD_TYPE)}</>
       )}
     </>
   );

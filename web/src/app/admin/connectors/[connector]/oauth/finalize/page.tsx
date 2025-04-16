@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -57,15 +59,15 @@ export default function OAuthFinalizePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [statusMessage, setStatusMessage] = useState("Processing...");
+  const [statusMessage, setStatusMessage] = useState("Обработка...");
   const [statusDetails, setStatusDetails] = useState(
-    "Please wait while we complete the setup."
+    "Пожалуйста, подождите, пока мы завершим настройку."
   );
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false); // New state
   const [pageTitle, setPageTitle] = useState(
-    "Finalize Authorization with Third-Party service"
+    "Завершите авторизацию с помощью стороннего сервиса"
   );
 
   const [accessibleResources, setAccessibleResources] = useState<
@@ -85,8 +87,12 @@ export default function OAuthFinalizePage() {
       // sourceType (for looking up metadata) = "google_drive"
 
       if (isNaN(credential) || !connector) {
-        setStatusMessage("Improperly formed OAuth finalization request.");
-        setStatusDetails("Invalid or missing credential id.");
+        setStatusMessage(
+          "Неправильно сформированный запрос на завершение OAuth."
+        );
+        setStatusDetails(
+          "Недействительный или отсутствующий идентификатор учетных данных."
+        );
         setIsError(true);
         return;
       }
@@ -94,19 +100,23 @@ export default function OAuthFinalizePage() {
       const sourceType = connector.replaceAll("-", "_");
       if (!isValidSource(sourceType)) {
         setStatusMessage(
-          `The specified connector source type ${sourceType} does not exist.`
+          `Указанный тип источника коннектора ${sourceType} не существует.`
         );
-        setStatusDetails(`${sourceType} is not a valid source type.`);
+        setStatusDetails(
+          `${sourceType} не является допустимым типом источника.`
+        );
         setIsError(true);
         return;
       }
 
       const sourceMetadata = getSourceMetadata(sourceType as ValidSources);
-      setPageTitle(`Finalize Authorization with ${sourceMetadata.displayName}`);
+      setPageTitle(
+        `Завершить авторизацию с помощью ${sourceMetadata.displayName}`
+      );
 
-      setStatusMessage("Processing...");
+      setStatusMessage("Обработка...");
       setStatusDetails(
-        "Please wait while we retrieve a list of your accessible sites."
+        "Пожалуйста, подождите, пока мы получим список доступных вам сайтов."
       );
       setIsError(false); // Ensure no error state during loading
 
@@ -117,20 +127,20 @@ export default function OAuthFinalizePage() {
         );
 
         if (!response) {
-          throw new Error("Empty response from OAuth server.");
+          throw new Error("Пустой ответ от сервера OAuth.");
         }
 
         setAccessibleResources(response.accessible_resources);
 
-        setStatusMessage("Select a Confluence site");
+        setStatusMessage("Выберите сайт Confluence");
         setStatusDetails("");
 
         setIsError(false);
       } catch (error) {
-        console.error("OAuth finalization error:", error);
-        setStatusMessage("Oops, something went wrong!");
+        console.error("Ошибка завершения OAuth:", error);
+        setStatusMessage("Упс, что-то пошло не так!");
         setStatusDetails(
-          "An error occurred during the OAuth finalization process. Please try again."
+          "Во время процесса завершения OAuth произошла ошибка. Повторите попытку."
         );
         setIsError(true);
       }
@@ -159,16 +169,16 @@ export default function OAuthFinalizePage() {
             }}
             validationSchema={Yup.object().shape({
               credential_id: Yup.number().required(
-                "Credential ID is required."
+                "Требуется идентификатор учетных данных."
               ),
               cloud_id: Yup.string().required(
-                "You must select a Confluence site (id not found)."
+                "Вы должны выбрать сайт Confluence (id не найден)."
               ),
               cloud_name: Yup.string().required(
-                "You must select a Confluence site (name not found)."
+                "Вы должны выбрать сайт Confluence (имя не найдено)."
               ),
               cloud_url: Yup.string().required(
-                "You must select a Confluence site (url not found)."
+                "Вы должны выбрать сайт Confluence (url не найден)."
               ),
             })}
             validateOnMount
@@ -176,15 +186,14 @@ export default function OAuthFinalizePage() {
               formikHelpers.setSubmitting(true);
               try {
                 if (!values.cloud_id) {
-                  throw new Error("Cloud ID is required.");
+                  throw new Error("Требуется идентификатор облака.");
                 }
-
                 if (!values.cloud_name) {
-                  throw new Error("Cloud URL is required.");
+                  throw new Error("Облачный URL-адрес обязателен.");
                 }
 
                 if (!values.cloud_url) {
-                  throw new Error("Cloud URL is required.");
+                  throw new Error("Облачный URL-адрес обязателен.");
                 }
 
                 const response = await handleOAuthConfluenceFinalize(
@@ -197,15 +206,15 @@ export default function OAuthFinalizePage() {
 
                 if (response) {
                   setRedirectUrl(response.redirect_url);
-                  setStatusMessage("Confluence authorization finalized.");
+                  setStatusMessage("Авторизация Confluence завершена.");
                 }
 
-                setIsSubmitted(true); // Mark as submitted
+                setIsSubmitted(true); // Отметить как отправленное
               } catch (error) {
                 console.error(error);
-                setStatusMessage("Error during submission.");
+                setStatusMessage("Ошибка во время отправки.");
                 setStatusDetails(
-                  "An error occurred during the submission process. Please try again."
+                  "Во время отправки произошла ошибка. Попробуйте еще раз."
                 );
                 setIsError(true);
                 formikHelpers.setSubmitting(false);
@@ -216,11 +225,11 @@ export default function OAuthFinalizePage() {
               <Form>
                 {/* Debug info
                 <div className="mb-4 p-2 bg-gray-100 rounded text-xs">
-                  <pre>
-                    isValid: {String(isValid)}
-                    errors: {JSON.stringify(errors, null, 2)}
-                    values: {JSON.stringify(values, null, 2)}
-                  </pre>
+                 <pre>
+                   isValid: {String(isValid)}
+                   errors: {JSON.stringify(errors, null, 2)}
+                   values: {JSON.stringify(values, null, 2)}
+                 </pre>
                 </div> */}
 
                 {/* Our helper component that reacts to changes in cloud_id */}
@@ -267,7 +276,7 @@ export default function OAuthFinalizePage() {
                     variant="submit"
                     disabled={!isValid || isSubmitting}
                   >
-                    {isSubmitting ? "Submitting..." : "Submit"}
+                    {isSubmitting ? i18n.t(k.SUBMITTING) : i18n.t(k.SUBMIT1)}
                   </Button>
                 )}
               </Form>
@@ -277,11 +286,11 @@ export default function OAuthFinalizePage() {
           {redirectUrl && !isError && (
             <div className="mt-4">
               <p className="text-sm">
-                Authorization finalized. Click{" "}
+                {i18n.t(k.AUTHORIZATION_FINALIZED_CLICK)}{" "}
                 <a href={redirectUrl} className="text-blue-500 underline">
-                  here
+                  {i18n.t(k.HERE)}
                 </a>{" "}
-                to continue.
+                {i18n.t(k.TO_CONTINUE)}
               </p>
             </div>
           )}

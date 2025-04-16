@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import {
   Popover,
@@ -96,7 +98,15 @@ export function FilterPopup({
       currentDate.getMonth(),
       1
     ).getDay();
-    const days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    const days = [
+      i18n.t(k.SU),
+      i18n.t(k.MO),
+      i18n.t(k.TU),
+      i18n.t(k.WE),
+      i18n.t(k.TH),
+      i18n.t(k.FR),
+      i18n.t(k.SA),
+    ];
 
     const isDateInRange = (date: Date) => {
       if (!filterManager.timeRange) return false;
@@ -264,27 +274,28 @@ export function FilterPopup({
               <FilterOption
                 category={FilterCategories.date}
                 icon={<FiCalendar className="w-4 h-4" />}
-                label="Date"
+                label="Дата"
               />
+
               {availableSources.length > 0 && (
                 <FilterOption
                   category={FilterCategories.sources}
                   icon={<FiDatabase className="w-4 h-4" />}
-                  label="Sources"
+                  label="Источники"
                 />
               )}
               {availableDocumentSets.length > 0 && (
                 <FilterOption
                   category={FilterCategories.documentSets}
                   icon={<FiBook className="w-4 h-4" />}
-                  label="Sets"
+                  label="Наборы"
                 />
               )}
               {availableTags.length > 0 && (
                 <FilterOption
                   category={FilterCategories.tags}
                   icon={<FiTag className="w-4 h-4" />}
-                  label="Tags"
+                  label="Теги"
                 />
               )}
             </ul>
@@ -295,13 +306,14 @@ export function FilterPopup({
                 {renderCalendar()}
                 {filterManager.timeRange ? (
                   <div className="mt-2 text-xs text-text-600">
-                    Selected:{" "}
-                    {filterManager.timeRange.from.toLocaleDateString()} -{" "}
+                    {i18n.t(k.SELECTED1)}{" "}
+                    {filterManager.timeRange.from.toLocaleDateString()}{" "}
+                    {i18n.t(k._)}{" "}
                     {filterManager.timeRange.to.toLocaleDateString()}
                   </div>
                 ) : (
                   <div className="mt-2 text-xs text-text-600">
-                    No time restriction selected
+                    {i18n.t(k.NO_TIME_RESTRICTION_SELECTED)}
                   </div>
                 )}
 
@@ -312,7 +324,7 @@ export function FilterPopup({
                     }}
                     className="mt-2 text-xs text-text-dark hover:text-text transition-colors duration-200"
                   >
-                    Reset Date Filter
+                    {i18n.t(k.RESET_DATE_FILTER)}
                   </button>
                 )}
               </div>
@@ -320,9 +332,11 @@ export function FilterPopup({
             {selectedFilter === FilterCategories.sources && (
               <div className="p-4">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold">Sources</h3>
+                  <h3 className="text-sm font-semibold">{i18n.t(k.SOURCES)}</h3>
                   <div className="flex gap-x-2 items-center ">
-                    <p className="text-xs text-text-dark">Select all</p>
+                    <p className="text-xs text-text-dark">
+                      {i18n.t(k.SELECT_ALL)}
+                    </p>
                     <Checkbox
                       size="sm"
                       id="select-all-sources"
@@ -396,27 +410,27 @@ export function FilterPopup({
             }}
             className="text-xs"
           >
-            Clear Filters
+            {i18n.t(k.CLEAR_FILTERS)}
           </Button>
           <div className="text-xs text-text-500 flex items-center space-x-1">
             {filterManager.selectedSources.length > 0 && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedSources.length} sources
+                {filterManager.selectedSources.length} {i18n.t(k.SOURCES1)}
               </span>
             )}
             {filterManager.selectedDocumentSets.length > 0 && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedDocumentSets.length} sets
+                {filterManager.selectedDocumentSets.length} {i18n.t(k.SETS)}
               </span>
             )}
             {filterManager.selectedTags.length > 0 && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                {filterManager.selectedTags.length} tags
+                {filterManager.selectedTags.length} {i18n.t(k.TAGS1)}
               </span>
             )}
             {filterManager.timeRange && (
               <span className="bg-background-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
-                Date range
+                {i18n.t(k.DATE_RANGE1)}
               </span>
             )}
           </div>

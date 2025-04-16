@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { Modal } from "@/components/Modal";
 import { updateUserGroup } from "./lib";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -42,13 +44,14 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
                 )
               ),
             ];
+
             const response = await updateUserGroup(userGroup.id, {
               user_ids: newUserIds,
               cc_pair_ids: userGroup.cc_pairs.map((ccPair) => ccPair.id),
             });
             if (response.ok) {
               setPopup({
-                message: "Successfully added users to group",
+                message: i18n.t(k.SUCCESSFULLY_ADDED_USERS_TO_GR),
                 type: "success",
               });
               onClose();
@@ -56,7 +59,9 @@ export const AddMemberForm: React.FC<AddMemberFormProps> = ({
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
-                message: `Failed to add users to group - ${errorMsg}`,
+                message: `${i18n.t(
+                  k.FAILED_TO_ADD_USERS_TO_GROUP
+                )} ${errorMsg}`,
                 type: "error",
               });
               onClose();

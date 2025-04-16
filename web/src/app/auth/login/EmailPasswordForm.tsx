@@ -141,7 +141,7 @@ export function EmailPasswordForm({
 
             <TextFormField
               name="password"
-              label="Password"
+              label="Пароль"
               type="password"
               includeForgotPassword={
                 NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && !isSignup

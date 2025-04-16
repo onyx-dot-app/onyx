@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { withFormik, FormikProps, FormikErrors, Form, Field } from "formik";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,7 @@ const AddUserFormRenderer = ({
         }
       }}
     />
+
     {touched.emails && errors.emails && (
       <div className="text-error text-sm">{errors.emails}</div>
     )}
@@ -54,7 +57,7 @@ const AddUserFormRenderer = ({
       type="submit"
       disabled={isSubmitting}
     >
-      Add!
+      {i18n.t(k.ADD)}
     </Button>
   </Form>
 );
@@ -62,13 +65,13 @@ const AddUserFormRenderer = ({
 const AddUserForm = withFormik<FormProps, FormValues>({
   mapPropsToValues: (props) => {
     return {
-      emails: "",
+      emails: i18n.t(k._1),
     };
   },
   validate: (values: FormValues): FormikErrors<FormValues> => {
     const emails = values.emails.trim().split(WHITESPACE_SPLIT);
     if (!emails.some(Boolean)) {
-      return { emails: "Required" };
+      return { emails: i18n.t(k.REQUIRED) };
     }
     for (let email of emails) {
       if (!email.match(EMAIL_REGEX)) {

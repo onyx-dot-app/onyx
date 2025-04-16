@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import {
   ConfluenceConfig,
   Connector,
@@ -103,6 +105,7 @@ export const ConnectorTitle = ({
       </div>
     </>
   );
+
   return (
     <div className="my-auto max-w-full">
       {isLink ? (
@@ -120,7 +123,11 @@ export const ConnectorTitle = ({
           {Array.from(additionalMetadata.entries()).map(([key, value]) => {
             return (
               <div key={key} className="truncate">
-                <i>{key}:</i> {value}
+                <i>
+                  {key}
+                  {i18n.t(k._2)}
+                </i>{" "}
+                {value}
               </div>
             );
           })}

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useEffect } from "react";
 import { FiPlusCircle } from "react-icons/fi";
 import { ChatInputOption } from "./ChatInputOption";
@@ -168,7 +170,7 @@ export function SimplifiedChatInputBar({
           style={{ scrollbarWidth: "thin" }}
           role="textarea"
           aria-multiline
-          placeholder="Ask me anything..."
+          placeholder="Спросите меня о чем угодно..."
           value={message}
           onKeyDown={(event) => {
             if (
@@ -184,6 +186,7 @@ export function SimplifiedChatInputBar({
           }}
           suppressContentEditableWarning={true}
         />
+
         <div className="flex items-center space-x-3 mr-12 px-4 pb-2">
           <ChatInputOption
             flexPriority="stiff"

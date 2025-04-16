@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { WebResultIcon } from "@/components/WebResultIcon";
 import { SourceIcon } from "@/components/SourceIcon";
 import { OnyxDocument } from "@/lib/search/interfaces";
@@ -87,11 +89,13 @@ export function getUniqueIcons(docs: OnyxDocument[]): JSX.Element[] {
         iconSize={18}
         key="fallback-1"
       />,
+
       <SourceIcon
         sourceType={ValidSources.Web}
         iconSize={18}
         key="fallback-2"
       />,
+
       <SourceIcon
         sourceType={ValidSources.Web}
         iconSize={18}
@@ -135,7 +139,7 @@ export function SeeMoreBlock({
         {docs.length > 2 && iconsToRender.map((icon, index) => icon)}
       </div>
       <div className="text-text-darker text-xs font-semibold">
-        {toggled ? "Hide Results" : "Show All"}
+        {toggled ? i18n.t(k.HIDE_RESULTS) : i18n.t(k.SHOW_ALL1)}
       </div>
     </button>
   );
@@ -214,7 +218,7 @@ export function FilesSeeMoreBlock({
         {files.length > 2 && iconsToRender.map((icon, index) => icon)}
       </div>
       <div className="text-text-darker text-xs font-semibold">
-        {toggled ? "Hide Files" : "Show All Files"}
+        {toggled ? i18n.t(k.HIDE_FILES) : i18n.t(k.SHOW_ALL_FILES)}
       </div>
     </button>
   );

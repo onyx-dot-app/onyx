@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React from "react";
 import { DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { SourceMetadata } from "@/lib/search/interfaces";
@@ -33,6 +35,7 @@ export interface SourceSelectorProps {
   setTimeRange: React.Dispatch<
     React.SetStateAction<DateRangePickerValue | null>
   >;
+
   showDocSidebar?: boolean;
   selectedSources: SourceMetadata[];
   setSelectedSources: React.Dispatch<React.SetStateAction<SourceMetadata[]>>;
@@ -107,7 +110,7 @@ export function SourceSelector({
       } duration-1000 flex ease-out transition-all transform origin-top-right`}
     >
       <button onClick={() => toggleFilters()} className="flex text-text-darker">
-        <h2 className="font-bold my-auto">Filters</h2>
+        <h2 className="font-bold my-auto">{i18n.t(k.FILTERS)}</h2>
         <FiFilter className="my-auto ml-2" size="16" />
       </button>
       {!filtersUntoggled && (
@@ -117,7 +120,7 @@ export function SourceSelector({
             <PopoverTrigger asChild>
               <div className="cursor-pointer">
                 <div className="flex justify-between items-center">
-                  <SectionTitle>Time Range</SectionTitle>
+                  <SectionTitle>{i18n.t(k.TIME_RANGE)}</SectionTitle>
                   {true && (
                     <button
                       onClick={(e) => {
@@ -126,7 +129,7 @@ export function SourceSelector({
                       }}
                       className="text-sm text-text-500 hover:text-text-700"
                     >
-                      Clear
+                      {i18n.t(k.CLEAR)}
                     </button>
                   )}
                 </div>
@@ -166,7 +169,7 @@ export function SourceSelector({
           {availableTags.length > 0 && (
             <>
               <div className="mt-4 mb-2">
-                <SectionTitle>Tags</SectionTitle>
+                <SectionTitle>{i18n.t(k.TAGS)}</SectionTitle>
               </div>
               <TagFilter
                 tags={availableTags}
@@ -180,7 +183,7 @@ export function SourceSelector({
             <div className="mt-4">
               <div className="flex w-full gap-x-2 items-center">
                 <div className="font-bold text-xs mt-2 flex items-center gap-x-2">
-                  <p>Sources</p>
+                  <p>{i18n.t(k.SOURCES)}</p>
                   <input
                     type="checkbox"
                     checked={allSourcesSelected}
@@ -212,6 +215,7 @@ export function SourceSelector({
                         sourceType={source.internalName}
                         iconSize={16}
                       />
+
                       <span className="ml-2 text-sm text-default">
                         {source.displayName}
                       </span>
@@ -224,7 +228,7 @@ export function SourceSelector({
           {availableDocumentSets.length > 0 && (
             <>
               <div className="mt-4">
-                <SectionTitle>Knowledge Sets</SectionTitle>
+                <SectionTitle>{i18n.t(k.KNOWLEDGE_SETS)}</SectionTitle>
               </div>
               <div className="px-1">
                 {availableDocumentSets.map((documentSet) => (
@@ -248,7 +252,9 @@ export function SourceSelector({
                         }
                         popupContent={
                           <div className="text-sm w-64">
-                            <div className="flex font-medium">Description</div>
+                            <div className="flex font-medium">
+                              {i18n.t(k.DESCRIPTION)}
+                            </div>
                             <div className="mt-1">
                               {documentSet.description}
                             </div>
@@ -256,6 +262,7 @@ export function SourceSelector({
                         }
                         classNameModifications="-ml-2"
                       />
+
                       <span className="text-sm">{documentSet.name}</span>
                     </div>
                   </div>
@@ -359,6 +366,7 @@ export function HorizontalFilters({
           }
           defaultDisplay="All Sources"
         />
+
         {availableDocumentSets.length > 0 && (
           <FilterDropdown
             width="w-52"
@@ -514,7 +522,9 @@ export function HorizontalSourceSelector({
           >
             <CalendarIcon className="h-4 w-4" />
 
-            {timeRange?.from ? getTimeAgoString(timeRange.from) : "Since"}
+            {timeRange?.from
+              ? getTimeAgoString(timeRange.from)
+              : i18n.t(k.SINCE)}
           </div>
         </PopoverTrigger>
         <PopoverContent
@@ -595,17 +605,17 @@ export function HorizontalSourceSelector({
         <FilterDropdown
           backgroundColor="bg-background-search-filter"
           options={availableTags.map((tag) => ({
-            key: `${tag.tag_key}=${tag.tag_value}`,
+            key: `${tag.tag_key}${i18n.t(k._12)}${tag.tag_value}`,
             display: (
               <span className="text-sm">
                 {tag.tag_key}
-                <b>=</b>
+                <b>{i18n.t(k._12)}</b>
                 {tag.tag_value}
               </span>
             ),
           }))}
           selected={selectedTags.map(
-            (tag) => `${tag.tag_key}=${tag.tag_value}`
+            (tag) => `${tag.tag_key}${i18n.t(k._12)}${tag.tag_value}`
           )}
           handleSelect={(option) => {
             const [tag_key, tag_value] = option.key.split("=");

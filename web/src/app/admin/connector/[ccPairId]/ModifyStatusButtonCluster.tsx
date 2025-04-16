@@ -59,11 +59,10 @@ export function ModifyStatusButtonCluster({
 
   // Compute the button text based on current state and backend status
   const isNotActive = statusIsNotCurrentlyActive(ccPair.status);
-  const buttonText = isNotActive ? "Re-Enable" : "Pause";
-
+  const buttonText = isNotActive ? "Повторно включить" : "Пауза";
   const tooltip = isNotActive
-    ? "Click to start indexing again!"
-    : "When paused, the connector's documents will still be visible. However, no new documents will be indexed.";
+    ? "Щелкните, чтобы снова начать индексацию!"
+    : "При паузе документы коннектора будут по-прежнему видны. Однако новые документы не будут индексироваться.";
 
   return (
     <>
@@ -92,15 +91,15 @@ export function ModifyStatusButtonCluster({
       </Button>
       {showConfirmModal && (
         <ConfirmEntityModal
-          entityType="Invalid Connector"
+          entityType="Недопустимый коннектор"
           entityName={ccPair.name}
           onClose={() => setShowConfirmModal(false)}
           onSubmit={() => {
             setShowConfirmModal(false);
             updateStatus(ConnectorCredentialPairStatus.ACTIVE);
           }}
-          additionalDetails="This connector was previously marked as invalid. Please verify that your configuration is correct before re-enabling. Are you sure you want to proceed?"
-          actionButtonText="Re-Enable"
+          additionalDetails="Этот коннектор ранее был отмечен как недействительный. Перед повторным включением проверьте правильность конфигурации. Вы уверены, что хотите продолжить?"
+          actionButtonText="Повторное включение"
           variant="action"
         />
       )}

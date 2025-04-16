@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -187,7 +189,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
   const { popup: folderCreatedPopup } = usePopupFromQuery({
     "folder-created": {
-      message: `Folder created successfully`,
+      message: `Папка успешно создана`,
       type: "success",
     },
   });
@@ -234,14 +236,13 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       <div className="min-h-full w-full min-w-0 flex-1 mx-auto max-w-5xl px-4 pb-20 md:pl-8 mt-6 md:pr-8 2xl:pr-14">
         <div className="text-left space-y-4">
           <h2 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
-            No Folder Found
+            {i18n.t(k.NO_FOLDER_FOUND)}
           </h2>
           <p className="text-neutral-600">
-            The requested folder does not exist or you dont have permission to
-            view it.
+            {i18n.t(k.THE_REQUESTED_FOLDER_DOES_NOT)}
           </p>
           <Button onClick={handleBack} variant="outline" className="mt-2">
-            Back to My Documents
+            {i18n.t(k.BACK_TO_MY_DOCUMENTS)}
           </Button>
         </div>
       </div>
@@ -277,14 +278,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       try {
         await renameItem(itemId, newItemName, isFolder);
         setPopup({
-          message: `${isFolder ? "Folder" : "File"} renamed successfully`,
+          message: `${isFolder ? "Папка" : "Файл"} успешно переименован`,
           type: "success",
         });
         await refreshFolderDetails();
       } catch (error) {
         console.error("Error renaming item:", error);
         setPopup({
-          message: `Failed to rename ${isFolder ? "folder" : "file"}`,
+          message: `Не удалось переименовать ${isFolder ? "папку" : "файл"}`,
           type: "error",
         });
       }
@@ -313,14 +314,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           newDescription
         );
         setPopup({
-          message: "Folder description updated successfully",
+          message: "Описание папки успешно обновлено",
           type: "success",
         });
         await refreshFolderDetails();
       } catch (error) {
-        console.error("Error updating folder description:", error);
+        console.error("Ошибка обновления описания папки:", error);
         setPopup({
-          message: "Failed to update folder description",
+          message: "Не удалось обновить описание папки",
           type: "error",
         });
       }
@@ -349,14 +350,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
       try {
         await deleteItem(deleteItemId, deleteItemType === "folder");
         setPopup({
-          message: `${deleteItemType} deleted successfully`,
+          message: `${deleteItemType} успешно удалено`,
           type: "success",
         });
         await refreshFolderDetails();
       } catch (error) {
-        console.error("Error deleting item:", error);
+        console.error("Ошибка удаления элемента:", error);
         setPopup({
-          message: `Failed to delete ${deleteItemType}`,
+          message: `Не удалось удалить ${deleteItemType}`,
           type: "error",
         });
       }
@@ -372,14 +373,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     try {
       await moveItem(folderId, targetFolderId, true);
       setPopup({
-        message: "Folder moved successfully",
+        message: "Папка успешно перемещена",
         type: "success",
       });
       router.push(`/chat/my-documents/${targetFolderId}`);
     } catch (error) {
-      console.error("Error moving folder:", error);
+      console.error("Ошибка перемещения папки:", error);
       setPopup({
-        message: "Failed to move folder",
+        message: "Не удалось переместить папку",
         type: "error",
       });
     }
@@ -390,14 +391,14 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     try {
       await moveItem(fileId, targetFolderId, false);
       setPopup({
-        message: "File moved successfully",
+        message: "Файл успешно перемещен",
         type: "success",
       });
       await refreshFolderDetails();
     } catch (error) {
-      console.error("Error moving file:", error);
+      console.error("Ошибка перемещения файла:", error);
       setPopup({
-        message: "Failed to move file",
+        message: "Не удалось переместить файл",
         type: "error",
       });
     }
@@ -523,9 +524,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         try {
           await handleUpload(allowed);
         } catch (error) {
-          console.error("Error uploading files:", error);
+          console.error("Ошибка загрузки файлов:", error);
           setPopup({
-            message: "Failed to upload files",
+            message: "Не удалось загрузить файлы",
             type: "error",
           });
         }
@@ -576,7 +577,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     } catch (error) {
       console.error("Error during cleanup:", error);
       setPopup({
-        message: "Failed to cleanup files",
+        message: "Не удалось очистить файлы",
         type: "error",
       });
       // Modal will remain open, user can try again or cancel
@@ -610,10 +611,10 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               />
             </div>
             <h3 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-50">
-              Drop files to upload
+              {i18n.t(k.DROP_FILES_TO_UPLOAD)}
             </h3>
             <p className="text-neutral-500 dark:text-neutral-400 text-sm">
-              Files will be uploaded to{" "}
+              {i18n.t(k.FILES_WILL_BE_UPLOADED_TO)}{" "}
               <span className="font-medium text-neutral-900 dark:text-neutral-200">
                 {folderDetails?.name || "this folder"}
               </span>
@@ -629,6 +630,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
         entityType={deleteItemType}
         entityName={deleteItemName}
       />
+
       <MoveFolderModal
         isOpen={isMoveModalOpen}
         onClose={() => setIsMoveModalOpen(false)}
@@ -650,7 +652,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
               onClick={handleBack}
             >
-              My Documents
+              {i18n.t(k.MY_DOCUMENTS)}
             </span>
             <span className="text-neutral-800 dark:text-neutral-700 flex items-center">
               <ChevronRight className="h-5 w-5 text-neutral-600 dark:text-neutral-300" />
@@ -662,12 +664,13 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
                   onChange={(e) => setNewItemName(e.target.value)}
                   className="mr-2 h-8 dark:bg-neutral-800 dark:border-neutral-700"
                 />
+
                 <Button
                   onClick={() => handleSaveRename(folderDetails.id, true)}
                   className="mr-2 h-8 py-0 dark:bg-neutral-700 dark:hover:bg-neutral-600"
                   size="sm"
                 >
-                  Save
+                  {i18n.t(k.SAVE)}
                 </Button>
                 <Button
                   onClick={handleCancelRename}
@@ -675,7 +678,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
                   className="h-8 py-0 dark:border-neutral-600 dark:text-neutral-300 dark:hover:bg-neutral-800"
                   size="sm"
                 >
-                  Cancel
+                  {i18n.t(k.CANCEL)}
                 </Button>
               </div>
             ) : (
@@ -700,7 +703,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             onClick={handleCleanup}
           >
             <Trash className="h-4 w-4" />
-            Cleanup
+            {i18n.t(k.CLEANUP)}
           </Button>
         </div>
 
@@ -725,7 +728,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
             </div>
             <input
               type="text"
-              placeholder="Search documents..."
+              placeholder="Поиск документов..."
               className="w-full pl-10 pr-4 py-2 border border-neutral-300 rounded-md focus:outline-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -740,7 +743,7 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
               className="flex items-center gap-2 p-4 bg-black rounded-full !text-xs text-white hover:bg-neutral-800"
             >
               <MessageSquare className="w-3 h-3" />
-              Chat with this folder
+              {i18n.t(k.CHAT_WITH_THIS_FOLDER)}
             </Button>
             <TokenDisplay
               totalTokens={totalTokens}

@@ -20,19 +20,19 @@ export function BillingAlerts({
 
   if (isExpired) {
     messages.push(
-      "Your subscription has expired. Please resubscribe to continue using the service."
+      "Ваша подписка истекла. Пожалуйста, подпишитесь повторно, чтобы продолжить пользоваться сервисом."
     );
   }
   if (isCancelled && !isExpired) {
     messages.push(
-      `Your subscription will cancel on ${new Date(
+      `Ваша подписка будет отменена ${new Date(
         billingInformation.current_period_end
-      ).toLocaleDateString()}. You can resubscribe before this date to remain uninterrupted.`
+      ).toLocaleDateString()}. Вы можете подписаться повторно до этой даты, чтобы не прерываться.`
     );
   }
   if (isTrialing) {
     messages.push(
-      `You're currently on a trial. Your trial ends on ${
+      `В настоящее время у вас пробный период. Ваш пробный период заканчивается ${
         billingInformation.trial_end
           ? new Date(billingInformation.trial_end).toLocaleDateString()
           : "N/A"
@@ -41,7 +41,7 @@ export function BillingAlerts({
   }
   if (noPaymentMethod) {
     messages.push(
-      "You currently have no payment method on file. Please add one to avoid service interruption."
+      "В настоящее время у вас нет зарегистрированного способа оплаты. Пожалуйста, добавьте его, чтобы избежать перерыва в обслуживании."
     );
   }
 

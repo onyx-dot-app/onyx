@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import {
   ChangeEvent,
   FC,
@@ -122,7 +124,9 @@ export function SearchMultiSelectDropdown({
         <input
           type="text"
           placeholder={
-            allowCustomValues ? "Search or enter custom value..." : "Search..."
+            allowCustomValues
+              ? i18n.t(k.SEARCH_OR_ENTER_CUSTOM_VALUE)
+              : i18n.t(k.SEARCH2)
           }
           value={searchTerm}
           onChange={(e: ChangeEvent<HTMLInputElement>) => {
@@ -150,6 +154,7 @@ export function SearchMultiSelectDropdown({
           }}
           className="inline-flex justify-between w-full px-4 py-2 text-sm bg-white dark:bg-transparent text-text-800 border border-background-300 rounded-md shadow-sm"
         />
+
         <button
           type="button"
           className="absolute top-0 right-0 text-sm h-full px-2 border-l border-background-300"
@@ -200,7 +205,9 @@ export function SearchMultiSelectDropdown({
                   onClick={handleCustomValueSelect}
                 >
                   <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
-                  Use &quot;{searchTerm}&quot; as custom value
+                  {i18n.t(k.USE)}
+                  {searchTerm}
+                  {i18n.t(k.AS_CUSTOM_VALUE)}
                 </button>
               )}
 
@@ -222,7 +229,9 @@ export function SearchMultiSelectDropdown({
                     }}
                   >
                     <PlusIcon className="w-4 h-4 mr-2 text-text-600" />
-                    Create label &quot;{searchTerm}&quot;
+                    {i18n.t(k.CREATE_LABEL)}
+                    {searchTerm}
+                    {i18n.t(k._17)}
                   </button>
                 </>
               )}
@@ -231,7 +240,7 @@ export function SearchMultiSelectDropdown({
               ((!onCreate && !allowCustomValues) ||
                 searchTerm.trim() === "") && (
                 <div className="px-4 py-2.5 text-sm text-text-500">
-                  No matches found
+                  {i18n.t(k.NO_MATCHES_FOUND)}
                 </div>
               )}
           </div>
@@ -391,8 +400,8 @@ export const DefaultDropdown = forwardRef<HTMLDivElement, DefaultDropdownProps>(
         <p className="line-clamp-1">
           {selectedOption?.name ||
             (includeDefault
-              ? defaultValue || "Default"
-              : "Select an option...")}
+              ? defaultValue || i18n.t(k.DEFAULT2)
+              : i18n.t(k.SELECT_AN_OPTION1))}
         </p>
         <FiChevronDown className="my-auto ml-auto" />
       </div>

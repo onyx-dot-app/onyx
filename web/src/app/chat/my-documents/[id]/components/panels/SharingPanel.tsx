@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React from "react";
 import { User, Users, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -34,14 +36,15 @@ export function SharingPanel({
             <>
               <Users className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
               <span className="text-sm font-medium leading-tight">
-                Shared with {count} Assistant{count > 1 ? "s" : ""}
+                {i18n.t(k.SHARED_WITH1)} {count} {i18n.t(k.ASSISTANT)}
+                {count > 1 ? i18n.t(k.S) : ""}
               </span>
             </>
           ) : (
             <>
               <User className="w-5 h-4 mr-3 text-neutral-600 dark:text-neutral-400" />
               <span className="text-sm font-medium leading-tight">
-                Not shared
+                {i18n.t(k.NOT_SHARED)}
               </span>
             </>
           )}
@@ -75,7 +78,7 @@ export function SharingPanel({
               })}
             </div>
           ) : (
-            <span>Not shared with any assistants</span>
+            <span>{i18n.t(k.NOT_SHARED_WITH_ANY_ASSISTANTS)}</span>
           )}
         </div>
       )}

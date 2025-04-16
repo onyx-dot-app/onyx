@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -15,9 +17,9 @@ export default function OAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [statusMessage, setStatusMessage] = useState("Processing...");
+  const [statusMessage, setStatusMessage] = useState("Обработка...");
   const [statusDetails, setStatusDetails] = useState(
-    "Please wait while we complete the setup."
+    "Пожалуйста, подождите, пока мы завершим настройку."
   );
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
@@ -39,9 +41,13 @@ export default function OAuthCallbackPage() {
       // sourceType (for looking up metadata) = "google_drive"
 
       if (!code || !state) {
-        setStatusMessage("Improperly formed OAuth authorization request.");
+        setStatusMessage(
+          "Неправильно сформированный запрос авторизации OAuth."
+        );
         setStatusDetails(
-          !code ? "Missing authorization code." : "Missing state parameter."
+          !code
+            ? "Отсутствует код авторизации."
+            : "Отсутствует параметр состояния."
         );
         setIsError(true);
         return;
@@ -49,9 +55,11 @@ export default function OAuthCallbackPage() {
 
       if (!connector) {
         setStatusMessage(
-          `The specified connector source type ${connector} does not exist.`
+          `Указанный тип источника коннектора ${connector} не существует.`
         );
-        setStatusDetails(`${connector} is not a valid source type.`);
+        setStatusDetails(
+          `${connector} не является допустимым типом источника.`
+        );
         setIsError(true);
         return;
       }
@@ -59,18 +67,20 @@ export default function OAuthCallbackPage() {
       const sourceType = connector.replaceAll("-", "_");
       if (!isValidSource(sourceType)) {
         setStatusMessage(
-          `The specified connector source type ${sourceType} does not exist.`
+          `Указанный тип источника коннектора ${sourceType} не существует.`
         );
-        setStatusDetails(`${sourceType} is not a valid source type.`);
+        setStatusDetails(
+          `${sourceType} не является допустимым типом источника.`
+        );
         setIsError(true);
         return;
       }
 
       const sourceMetadata = getSourceMetadata(sourceType as ValidSources);
-      setPageTitle(`Authorize with ${sourceMetadata.displayName}`);
+      setPageTitle(`Авторизуйтесь с помощью ${sourceMetadata.displayName}`);
 
-      setStatusMessage("Processing...");
-      setStatusDetails("Please wait while we complete authorization.");
+      setStatusMessage("Обработка...");
+      setStatusDetails("Пожалуйста, подождите, пока мы завершим авторизацию.");
       setIsError(false); // Ensure no error state during loading
 
       try {
@@ -81,29 +91,27 @@ export default function OAuthCallbackPage() {
         );
 
         if (!response) {
-          throw new Error("Empty response from OAuth server.");
+          throw new Error("Пустой ответ от сервера OAuth.");
         }
 
-        setStatusMessage("Success!");
-
-        // set the continuation link
+        setStatusMessage("Успешно!");
         if (response.finalize_url) {
           setRedirectUrl(response.finalize_url);
           setStatusDetails(
-            `Your authorization with ${sourceMetadata.displayName} completed successfully. Additional steps are required to complete credential setup.`
+            `Ваша авторизация с ${sourceMetadata.displayName} успешно завершена. Для завершения настройки учетных данных требуются дополнительные шаги.`
           );
         } else {
           setRedirectUrl(response.redirect_on_success);
           setStatusDetails(
-            `Your authorization with ${sourceMetadata.displayName} completed successfully.`
+            `Ваша авторизация с ${sourceMetadata.displayName} успешно завершена.`
           );
         }
         setIsError(false);
       } catch (error) {
-        console.error("OAuth error:", error);
-        setStatusMessage("Oops, something went wrong!");
+        console.error("OAuth ошибка:", error);
+        setStatusMessage("Упс, что-то пошло не так!");
         setStatusDetails(
-          "An error occurred during the OAuth process. Please try again."
+          "Во время процесса OAuth произошла ошибка. Попробуйте еще раз."
         );
         setIsError(true);
       }
@@ -123,11 +131,11 @@ export default function OAuthCallbackPage() {
           {redirectUrl && !isError && (
             <div className="mt-4">
               <p className="text-sm">
-                Click{" "}
+                {i18n.t(k.CLICK)}{" "}
                 <a href={redirectUrl} className="text-blue-500 underline">
-                  here
+                  {i18n.t(k.HERE)}
                 </a>{" "}
-                to continue.
+                {i18n.t(k.TO_CONTINUE)}
               </p>
             </div>
           )}

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
@@ -12,13 +14,16 @@ async function Page(props: { params: Promise<{ id: string }> }) {
     fetchSS("/manage/admin/standard-answer"),
     fetchSS(`/manage/admin/standard-answer/category`),
   ];
+
   const [standardAnswersResponse, standardAnswerCategoriesResponse] =
     await Promise.all(tasks);
   if (!standardAnswersResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answers - ${await standardAnswersResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_STANDARD_ANSWE1
+        )} ${await standardAnswersResponse.text()}`}
       />
     );
   }
@@ -31,8 +36,8 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   if (!standardAnswer) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Did not find standard answer with ID: ${params.id}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(k.DID_NOT_FIND_STANDARD_ANSWER_W)} ${params.id}`}
       />
     );
   }
@@ -40,8 +45,10 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   if (!standardAnswerCategoriesResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${await standardAnswerCategoriesResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_STANDARD_ANSWE
+        )} ${await standardAnswerCategoriesResponse.text()}`}
       />
     );
   }
@@ -52,7 +59,7 @@ async function Page(props: { params: Promise<{ id: string }> }) {
     <div className="container mx-auto">
       <BackButton />
       <AdminPageTitle
-        title="Edit Standard Answer"
+        title="Изменить стандартный ответ"
         icon={<ClipboardIcon size={32} />}
       />
 

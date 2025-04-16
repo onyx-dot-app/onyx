@@ -22,17 +22,17 @@ const ReferralSourceSelector: React.FC<ReferralSourceSelectorProps> = ({
   const [referralSource, setReferralSource] = useState(defaultValue);
 
   const referralOptions = [
-    { value: "search", label: i18n.t(k.SEARCH_ENGINE_GOOGLE_BING) },
-    { value: "friend", label: i18n.t(k.FRIEND_COLLEAGUE) },
-    { value: "linkedin", label: i18n.t(k.LINKEDIN1) },
-    { value: "twitter", label: i18n.t(k.TWITTER1) },
-    { value: "hackernews", label: i18n.t(k.HACKERNEWS1) },
-    { value: "reddit", label: i18n.t(k.REDDIT1) },
-    { value: "youtube", label: i18n.t(k.YOUTUBE1) },
-    { value: "podcast", label: i18n.t(k.PODCAST1) },
-    { value: "blog", label: i18n.t(k.ARTICLE_BLOG) },
-    { value: "ads", label: i18n.t(k.ADVERTISEMENTS) },
-    { value: "other", label: i18n.t(k.OTHER1) },
+    { value: i18n.t(k.SEARCH1), label: i18n.t(k.SEARCH_ENGINE_GOOGLE_BING) },
+    { value: i18n.t(k.FRIEND), label: i18n.t(k.FRIEND_COLLEAGUE) },
+    { value: i18n.t(k.LINKEDIN), label: i18n.t(k.LINKEDIN1) },
+    { value: i18n.t(k.TWITTER), label: i18n.t(k.TWITTER1) },
+    { value: i18n.t(k.HACKERNEWS), label: i18n.t(k.HACKERNEWS1) },
+    { value: i18n.t(k.REDDIT), label: i18n.t(k.REDDIT1) },
+    { value: i18n.t(k.YOUTUBE), label: i18n.t(k.YOUTUBE1) },
+    { value: i18n.t(k.PODCAST), label: i18n.t(k.PODCAST1) },
+    { value: i18n.t(k.BLOG), label: i18n.t(k.ARTICLE_BLOG) },
+    { value: i18n.t(k.ADS), label: i18n.t(k.ADVERTISEMENTS) },
+    { value: i18n.t(k.OTHER), label: i18n.t(k.OTHER1) },
   ];
 
   const handleChange = (value: string) => {

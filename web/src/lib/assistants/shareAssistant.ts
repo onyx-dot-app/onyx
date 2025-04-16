@@ -22,7 +22,7 @@ async function updateAssistantSharedStatus(
     return null;
   }
 
-  const errorMessage = (await response.json()).detail || "Unknown error";
+  const errorMessage = (await response.json()).detail || "Неизвестная ошибка";
   return errorMessage;
 }
 

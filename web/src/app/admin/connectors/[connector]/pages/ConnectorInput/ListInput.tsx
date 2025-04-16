@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import React from "react";
 import { ListOption } from "@/lib/connectors/connectors";
 import { TextArrayField } from "@/components/admin/connectors/Field";
@@ -19,7 +21,9 @@ const ListInput: React.FC<ListInputProps> = ({ name, label, description }) => {
       subtext={
         typeof description === "function" ? description(null) : description
       }
-      placeholder={`Enter ${typeof label === "function" ? label(null) : label.toLowerCase()}`}
+      placeholder={`${i18n.t(k.ENTER)} ${
+        typeof label === "function" ? label(null) : label.toLowerCase()
+      }`}
     />
   );
 };

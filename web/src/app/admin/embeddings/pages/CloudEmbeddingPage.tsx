@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
@@ -95,13 +97,8 @@ export default function CloudEmbeddingPage({
 
   return (
     <div>
-      <Title className="mt-8">
-        Here are some cloud-based models to choose from.
-      </Title>
-      <Text className="mb-4">
-        These models require API keys and run in the clouds of the respective
-        providers.
-      </Text>
+      <Title className="mt-8">{i18n.t(k.HERE_ARE_SOME_CLOUD_BASED_MODE)}</Title>
+      <Text className="mb-4">{i18n.t(k.THESE_MODELS_REQUIRE_API_KEYS)}</Text>
 
       <div className="gap-4 mt-2 pb-10 flex content-start flex-wrap">
         {providers.map((provider) => (
@@ -110,7 +107,7 @@ export default function CloudEmbeddingPage({
               {provider.icon({ size: 40 })}
               <h2 className="ml-2  mt-2 text-xl font-bold">
                 {provider.provider_type}{" "}
-                {provider.provider_type == "Cohere" && "(recommended)"}
+                {provider.provider_type == "Cohere" && "(рекомендуется)"}
               </h2>
               <HoverPopup
                 mainContent={
@@ -135,7 +132,9 @@ export default function CloudEmbeddingPage({
               }}
               className="mb-2  hover:underline text-sm cursor-pointer"
             >
-              {provider.configured ? "Modify API key" : "Provide API key"}
+              {provider.configured
+                ? i18n.t(k.MODIFY_API_KEY)
+                : i18n.t(k.PROVIDE_API_KEY)}
             </button>
             <div className="flex flex-wrap gap-4">
               {provider.embedding_models.map((model) => (
@@ -155,16 +154,14 @@ export default function CloudEmbeddingPage({
         ))}
 
         <Text className="mt-6">
-          Alternatively, you can use a self-hosted model using the LiteLLM
-          proxy. This allows you to leverage various LLM providers through a
-          unified interface that you control.{" "}
+          {i18n.t(k.ALTERNATIVELY_YOU_CAN_USE_A_S)}{" "}
           <a
             href="https://docs.litellm.ai/"
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-500 hover:underline"
           >
-            Learn more about LiteLLM
+            {i18n.t(k.LEARN_MORE_ABOUT_LITELLM)}
           </a>
         </Text>
 
@@ -174,7 +171,7 @@ export default function CloudEmbeddingPage({
             <h2 className="ml-2  mt-2 text-xl font-bold">
               {LITELLM_CLOUD_PROVIDER.provider_type}{" "}
               {LITELLM_CLOUD_PROVIDER.provider_type == "Cohere" &&
-                "(recommended)"}
+                "(рекомендуется)"}
             </h2>
             <HoverPopup
               mainContent={
@@ -196,7 +193,7 @@ export default function CloudEmbeddingPage({
                 onClick={() => setShowTentativeProvider(LITELLM_CLOUD_PROVIDER)}
                 className="mb-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm cursor-pointer"
               >
-                Set API Configuration
+                {i18n.t(k.SET_API_CONFIGURATION)}
               </button>
             ) : (
               <button
@@ -205,7 +202,7 @@ export default function CloudEmbeddingPage({
                 }
                 className="mb-2 hover:underline text-sm cursor-pointer"
               >
-                Modify API Configuration
+                {i18n.t(k.MODIFY_API_CONFIGURATION)}
               </button>
             )}
 
@@ -213,18 +210,15 @@ export default function CloudEmbeddingPage({
               <CardSection className="mt-2 w-full max-w-4xl bg-background-50 border border-background-200">
                 <div className="p-4">
                   <Text className="text-lg font-semibold mb-2">
-                    API URL Required
+                    {i18n.t(k.API_URL_REQUIRED)}
                   </Text>
                   <Text className="text-sm text-text-600 mb-4">
-                    Before you can add models, you need to provide an API URL
-                    for your LiteLLM proxy. Click the &quot;Provide API
-                    URL&quot; button above to set up your LiteLLM configuration.
+                    {i18n.t(k.BEFORE_YOU_CAN_ADD_MODELS_YOU)}
                   </Text>
                   <div className="flex items-center">
                     <FiInfo className="text-blue-500 mr-2" size={18} />
                     <Text className="text-sm text-blue-500">
-                      Once configured, you&apos;ll be able to add and manage
-                      your LiteLLM models here.
+                      {i18n.t(k.ONCE_CONFIGURED_YOU_LL_BE_ABL)}
                     </Text>
                   </div>
                 </div>
@@ -276,10 +270,7 @@ export default function CloudEmbeddingPage({
           </div>
         </div>
 
-        <Text className="mt-6">
-          You can also use Azure OpenAI models for embeddings. Azure requires
-          separate configuration for each model.
-        </Text>
+        <Text className="mt-6">{i18n.t(k.YOU_CAN_ALSO_USE_AZURE_OPENAI)}</Text>
 
         <div key={AZURE_CLOUD_PROVIDER.provider_type} className="mt-4 w-full">
           <div className="flex items-center mb-2">
@@ -310,23 +301,19 @@ export default function CloudEmbeddingPage({
                 onClick={() => setShowTentativeProvider(AZURE_CLOUD_PROVIDER)}
                 className="mb-2 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm cursor-pointer"
               >
-                Configure Azure OpenAI
+                {i18n.t(k.CONFIGURE_AZURE_OPENAI)}
               </button>
               <div className="mt-2 w-full max-w-4xl">
                 <CardSection className="p-4 border border-background-200 rounded-lg shadow-sm">
                   <Text className="text-base font-medium mb-2">
-                    Configure Azure OpenAI for Embeddings
+                    {i18n.t(k.CONFIGURE_AZURE_OPENAI_FOR_EMB)}
                   </Text>
                   <Text className="text-sm text-text-600 mb-3">
-                    Click &quot;Configure Azure OpenAI&quot; to set up Azure
-                    OpenAI for embeddings.
+                    {i18n.t(k.CLICK_CONFIGURE_AZURE_OPENAI)}
                   </Text>
                   <div className="flex items-center text-sm text-text-700">
                     <FiInfo className="text-neutral-400 mr-2" size={16} />
-                    <Text>
-                      You&apos;ll need: API version, base URL, API key, model
-                      name, and deployment name.
-                    </Text>
+                    <Text>{i18n.t(k.YOU_LL_NEED_API_VERSION_BASE)}</Text>
                   </div>
                 </CardSection>
               </div>
@@ -335,22 +322,28 @@ export default function CloudEmbeddingPage({
             <>
               <div className="mb-6 w-full">
                 <Text className="text-lg font-semibold mb-3">
-                  Current Azure Configuration
+                  {i18n.t(k.CURRENT_AZURE_CONFIGURATION)}
                 </Text>
 
                 {azureProviderDetails ? (
                   <CardSection className="bg-white shadow-sm border border-background-200 rounded-lg">
                     <div className="p-4 space-y-3">
                       <div className="flex justify-between">
-                        <span className="font-medium">API Version:</span>
+                        <span className="font-medium">
+                          {i18n.t(k.API_VERSION)}
+                        </span>
                         <span>{azureProviderDetails.api_version}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="font-medium">Base URL:</span>
+                        <span className="font-medium">
+                          {i18n.t(k.BASE_URL)}
+                        </span>
                         <span>{azureProviderDetails.api_url}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="font-medium">Deployment Name:</span>
+                        <span className="font-medium">
+                          {i18n.t(k.DEPLOYMENT_NAME)}
+                        </span>
                         <span>{azureProviderDetails.deployment_name}</span>
                       </div>
                     </div>
@@ -360,13 +353,13 @@ export default function CloudEmbeddingPage({
                       }
                       className="mt-2 px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 text-sm"
                     >
-                      Delete Current Azure Provider
+                      {i18n.t(k.DELETE_CURRENT_AZURE_PROVIDER)}
                     </button>
                   </CardSection>
                 ) : (
                   <CardSection className="bg-background-50 border border-background-200 rounded-lg">
                     <div className="p-4 text-text-500 text-center">
-                      No Azure provider has been configured yet.
+                      {i18n.t(k.NO_AZURE_PROVIDER_HAS_BEEN_CON)}
                     </div>
                   </CardSection>
                 )}
@@ -428,19 +421,19 @@ export function CloudModelCard({
 
   const deleteModel = async () => {
     if (!model.id) {
-      setPopup({ message: "Model cannot be deleted", type: "error" });
+      setPopup({ message: "Модель не может быть удалена", type: "error" });
       return;
     }
 
     const response = await deleteSearchSettings(model.id);
 
     if (response.ok) {
-      setPopup({ message: "Model deleted successfully", type: "success" });
+      setPopup({ message: "Модель успешно удалена", type: "success" });
       setShowDeleteModel(false);
     } else {
       setPopup({
         message:
-          "Failed to delete model. Ensure you are not attempting to delete a curently active model.",
+          "Не удалось удалить модель. Убедитесь, что вы не пытаетесь удалить активную в данный момент модель.",
         type: "error",
       });
     }
@@ -495,7 +488,9 @@ export function CloudModelCard({
       {model?.provider_type?.toLowerCase() !=
         EmbeddingProvider.LITELLM.toLowerCase() && (
         <div className="text-xs text-text-500 mb-2">
-          ${model.pricePerMillion}/M tokens
+          {i18n.t(k._27)}
+          {model.pricePerMillion}
+          {i18n.t(k.M_TOKENS)}
         </div>
       )}
       <div className="mt-3">
@@ -520,7 +515,7 @@ export function CloudModelCard({
           }}
           disabled={enabled}
         >
-          {enabled ? "Selected Model" : "Select Model"}
+          {enabled ? i18n.t(k.SELECTED_MODEL) : i18n.t(k.SELECT_MODEL)}
         </button>
       </div>
     </div>

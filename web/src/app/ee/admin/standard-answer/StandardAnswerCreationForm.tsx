@@ -66,13 +66,13 @@ export const StandardAnswerCreationForm = ({
           }}
           validationSchema={Yup.object().shape({
             keyword: Yup.string()
-              .required("Keywords or pattern is required")
+              .required("Требуются ключевые слова или шаблон")
               .max(255)
               .min(1),
-            answer: Yup.string().required("Answer is required").min(1),
+            answer: Yup.string().required("Требуется ответ").min(1),
             categories: Yup.array()
               .required()
-              .min(1, "At least one category is required"),
+              .min(1, "Требуется хотя бы одна категория"),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -116,38 +116,38 @@ export const StandardAnswerCreationForm = ({
                   name="keyword"
                   label="Regex pattern"
                   isCode
-                  tooltip="Triggers if the question matches this regex pattern (using Python `re.search()`)"
+                  tooltip="Срабатывает, если вопрос соответствует этому шаблону регулярного выражения (используя Python `re.search()`)"
                   placeholder="(?:it|support)\s*ticket"
                 />
               ) : values.matchAnyKeywords == "any" ? (
                 <TextFormField
                   name="keyword"
-                  label="Any of these keywords, separated by spaces"
-                  tooltip="A question must match these keywords in order to trigger the answer."
-                  placeholder="ticket problem issue"
+                  label="Любые из этих ключевых слов, разделенных пробелами"
+                  tooltip="Вопрос должен соответствовать этим ключевым словам, чтобы вызвать ответ."
+                  placeholder="проблема с билетом"
                   autoCompleteDisabled={true}
                 />
               ) : (
                 <TextFormField
                   name="keyword"
-                  label="All of these keywords, in any order, separated by spaces"
-                  tooltip="A question must match these keywords in order to trigger the answer."
+                  label="Все эти ключевые слова в любом порядке, разделенные пробелами"
+                  tooltip="Вопрос должен соответствовать этим ключевым словам, чтобы вызвать ответ."
                   placeholder="it ticket"
                   autoCompleteDisabled={true}
                 />
               )}
               <BooleanFormField
-                subtext="Match a regex pattern instead of an exact keyword"
+                subtext="Сопоставить шаблон регулярного выражения вместо точного ключевого слова"
                 optional
-                label="Match regex"
+                label="Сопоставить регулярное выражение"
                 name="matchRegex"
               />
 
               {values.matchRegex ? null : (
                 <SelectorFormField
                   defaultValue={`all`}
-                  label="Keyword detection strategy"
-                  subtext="Choose whether to require the user's question to contain any or all of the keywords above to show this answer."
+                  label="Стратегия обнаружения ключевых слов"
+                  subtext="Выберите, требуется ли, чтобы вопрос пользователя содержал какие-либо или все ключевые слова, указанные выше, для отображения этого ответа."
                   name="matchAnyKeywords"
                   options={[
                     {
@@ -167,14 +167,14 @@ export const StandardAnswerCreationForm = ({
               <div className="w-full">
                 <MarkdownFormField
                   name="answer"
-                  label="Answer"
-                  placeholder="The answer in Markdown. Example: If you need any help from the IT team, please email internalsupport@company.com"
+                  label="Ответ"
+                  placeholder="Ответ в Markdown. Пример: если вам нужна помощь от ИТ-отдела, отправьте электронное письмо на адрес internalsupport@company.com"
                 />
               </div>
               <div className="w-4/12">
                 <MultiSelectDropdown
                   name="categories"
-                  label="Categories:"
+                  label="Категории:"
                   onChange={(selected_options) => {
                     const selected_categories = selected_options.map(
                       (option) => {

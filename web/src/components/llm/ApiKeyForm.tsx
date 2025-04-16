@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import { PopupSpec } from "../admin/connectors/Popup";
 import { useState } from "react";
 import { Tabs, TabsList, TabsContent, TabsTrigger } from "@/components/ui/tabs";
@@ -50,7 +52,7 @@ export const ApiKeyForm = ({
             </TabsTrigger>
           ))}
           <TabsTrigger value={String(providerOptions.length)}>
-            Custom
+            {i18n.t(k.CUSTOM1)}
           </TabsTrigger>
         </TabsList>
 

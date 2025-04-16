@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList } from "@/app/ee/admin/performance/lib";
 import { useEffect, useState, useMemo } from "react";
@@ -52,16 +54,18 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
 
         if (!res.ok) {
           if (res.status === 403) {
-            throw new Error("You don't have permission to view these stats.");
+            throw new Error(
+              "У вас нет разрешения на просмотр этой статистики."
+            );
           }
-          throw new Error("Failed to fetch assistant stats");
+          throw new Error("Не удалось получить статистику помощника");
         }
 
         const data = (await res.json()) as AssistantStatsResponse;
         setAssistantStats(data);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "An unknown error occurred"
+          err instanceof Error ? err.message : "Произошла неизвестная ошибка"
         );
       } finally {
         setIsLoading(false);
@@ -124,9 +128,7 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
   } else if (!assistantStats?.daily_stats?.length) {
     content = (
       <div className="h-80 text-text-500 flex flex-col">
-        <p className="m-auto">
-          No data found for this assistant in the selected date range
-        </p>
+        <p className="m-auto">{i18n.t(k.NO_DATA_FOUND_FOR_THIS_ASSISTA)}</p>
       </div>
     );
   } else if (chartData) {
@@ -145,7 +147,9 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
   return (
     <Card className="w-full">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <p className="text-base font-normal text-2xl">Assistant Analytics</p>
+        <p className="text-base font-normal text-2xl">
+          {i18n.t(k.ASSISTANT_ANALYTICS)}
+        </p>
         <DateRangeSelector value={dateRange} onValueChange={setDateRange} />
       </CardHeader>
       <CardContent>
@@ -174,13 +178,13 @@ export function AssistantStats({ assistantId }: { assistantId: number }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm font-medium text-text-500">
-                    Total Messages
+                    {i18n.t(k.TOTAL_MESSAGES)}
                   </p>
                   <p className="text-2xl font-normal">{totalMessages}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium text-text-500">
-                    Total Unique Users
+                    {i18n.t(k.TOTAL_UNIQUE_USERS)}
                   </p>
                   <p className="text-2xl font-normal">{totalUniqueUsers}</p>
                 </div>

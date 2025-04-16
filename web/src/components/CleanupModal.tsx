@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Calendar, Clock, Loader2, Trash, X } from "lucide-react";
@@ -36,29 +38,29 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
 
     setIsLoading(true);
     try {
-      // Value is always 1 for the fixed options, or 0 for "All"
+      // Значение всегда равно 1 для фиксированных параметров или 0 для "All"
       const value = selectedPeriod === CleanupPeriod.All ? 0 : 1;
       await onConfirm(selectedPeriod, value);
-      // Modal will be closed by parent component after onConfirm
+      // Модальное окно будет закрыто родительским компонентом после onConfirm
     } catch (error) {
-      console.error("Cleanup error:", error);
+      console.error("Ошибка очистки:", error);
       setIsLoading(false);
-      // Let parent handle the error, keep modal open with loading state reset
+      // Позвольте родительскому компоненту обработать ошибку, оставьте модальное окно открытым со сбросом состояния загрузки
     }
   };
 
   const getDeleteButtonText = () => {
-    if (!selectedPeriod) return "Select an option first";
+    if (!selectedPeriod) return "Сначала выберите параметр";
 
     switch (selectedPeriod) {
       case CleanupPeriod.Day:
-        return "Delete files older than 1 day";
+        return "Удалить файлы старше 1 дня";
       case CleanupPeriod.Week:
-        return "Delete files older than 1 week";
+        return "Удалить файлы старше 1 недели";
       case CleanupPeriod.Month:
-        return "Delete files older than 1 month";
+        return "Удалить файлы старше 1 месяца";
       case CleanupPeriod.All:
-        return "Delete all files";
+        return "Удалить все файлы";
     }
   };
 
@@ -81,18 +83,21 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
             ? "text-blue-600 dark:text-blue-300"
             : "text-blue-500 dark:text-blue-400"
         }`;
+
       case CleanupPeriod.Week:
         return `h-4 w-4 mb-1 ${
           isSelected
             ? "text-green-600 dark:text-green-300"
             : "text-green-500 dark:text-green-400"
         }`;
+
       case CleanupPeriod.Month:
         return `h-4 w-4 mb-1 ${
           isSelected
             ? "text-purple-600 dark:text-purple-300"
             : "text-purple-500 dark:text-purple-400"
         }`;
+
       case CleanupPeriod.All:
         return `h-4 w-4 mb-1 ${
           isSelected
@@ -107,7 +112,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
       <div className="max-w-xl w-full bg-white dark:bg-neutral-800 p-5 rounded-lg shadow-lg border border-neutral-200 dark:border-neutral-700">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-medium dark:text-white">
-            Cleanup Documents
+            {i18n.t(k.CLEANUP_DOCUMENTS)}
           </h2>
           <Button
             variant="ghost"
@@ -121,7 +126,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
         </div>
 
         <p className="text-sm text-neutral-600 dark:text-neutral-400 mb-5">
-          First, select how far back to keep your documents:
+          {i18n.t(k.FIRST_SELECT_HOW_FAR_BACK_TO)}
         </p>
 
         <div className="flex space-x-3 mb-5">
@@ -133,7 +138,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
           >
             <div className="flex flex-col items-center">
               <Clock className={getIconClass(CleanupPeriod.Day)} />
-              <span className="font-medium">1 Day</span>
+              <span className="font-medium">{i18n.t(k.DAY1)}</span>
             </div>
           </Button>
 
@@ -145,7 +150,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
           >
             <div className="flex flex-col items-center">
               <Calendar className={getIconClass(CleanupPeriod.Week)} />
-              <span className="font-medium">1 Week</span>
+              <span className="font-medium">{i18n.t(k.WEEK)}</span>
             </div>
           </Button>
 
@@ -157,7 +162,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
           >
             <div className="flex flex-col items-center">
               <Calendar className={getIconClass(CleanupPeriod.Month)} />
-              <span className="font-medium">1 Month</span>
+              <span className="font-medium">{i18n.t(k.MONTH)}</span>
             </div>
           </Button>
 
@@ -169,7 +174,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
           >
             <div className="flex flex-col items-center">
               <Trash className={getIconClass(CleanupPeriod.All)} />
-              <span className="font-medium">All Time</span>
+              <span className="font-medium">{i18n.t(k.ALL_TIME1)}</span>
             </div>
           </Button>
         </div>
@@ -179,11 +184,10 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
             <AlertCircle className="text-red-500 dark:text-red-400 h-5 w-5 mt-0.5 mr-2 flex-shrink-0" />
             <div>
               <p className="text-sm font-medium text-red-800 dark:text-red-300">
-                Warning: This will delete ALL documents
+                {i18n.t(k.WARNING_THIS_WILL_DELETE_ALL)}
               </p>
               <p className="text-xs text-red-700 dark:text-red-400 mt-1">
-                This action cannot be undone. Deleted documents cannot be
-                recovered.
+                {i18n.t(k.THIS_ACTION_CANNOT_BE_UNDONE)}
               </p>
             </div>
           </div>
@@ -191,7 +195,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
 
         <div className="flex justify-between items-center border-t border-neutral-200 dark:border-neutral-700 pt-4 mt-2">
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
-            Note: This action cannot be undone.
+            {i18n.t(k.NOTE_THIS_ACTION_CANNOT_BE_UN)}
           </p>
 
           <div className="flex gap-3">
@@ -201,7 +205,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
               disabled={isLoading}
               className="border-neutral-300 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors duration-200"
             >
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
             <Button
               variant="destructive"
@@ -212,7 +216,7 @@ export const CleanupModal: React.FC<CleanupModalProps> = ({
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Deleting...
+                  {i18n.t(k.DELETING1)}
                 </>
               ) : (
                 getDeleteButtonText()

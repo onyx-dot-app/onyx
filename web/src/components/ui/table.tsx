@@ -61,6 +61,7 @@ const TableRow = React.forwardRef<
       `border-b transition-colors  data-[state=selected]:bg-neutral-100 dark:data-[state=selected]:bg-neutral-800 ${
         noHover ? "" : "dark:hover:bg-neutral-800/80 hover:bg-neutral-100/50"
       }`,
+
       className
     )}
     {...props}

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { Modal } from "@/components/Modal";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -38,7 +40,10 @@ function LLMProviderUpdateModal({
   const hasAdvancedOptions = llmProviderDescriptor?.name != "azure";
 
   return (
-    <Modal title={`Setup ${providerName}`} onOutsideClick={() => onClose()}>
+    <Modal
+      title={`${i18n.t(k.SETUP)} ${providerName}`}
+      onOutsideClick={() => onClose()}
+    >
       <div className="max-h-[70vh] overflow-y-auto px-4">
         {llmProviderDescriptor ? (
           <LLMProviderUpdateForm
@@ -83,7 +88,7 @@ function DefaultLLMProviderDisplay({
         </div>
         <div className="ml-auto">
           <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
-            Set up
+            {i18n.t(k.SET_UP)}
           </Button>
         </div>
       </div>
@@ -109,7 +114,7 @@ function AddCustomLLMProvider({
   if (formIsVisible) {
     return (
       <Modal
-        title={`Setup Custom LLM Provider`}
+        title={`${i18n.t(k.SETUP_CUSTOM_LLM_PROVIDER)}`}
         onOutsideClick={() => setFormIsVisible(false)}
       >
         <div className="max-h-[70vh] overflow-y-auto px-4">
@@ -124,7 +129,7 @@ function AddCustomLLMProvider({
 
   return (
     <Button variant="navigate" onClick={() => setFormIsVisible(true)}>
-      Add Custom LLM Provider
+      {i18n.t(k.ADD_CUSTOM_LLM_PROVIDER)}
     </Button>
   );
 }
@@ -144,15 +149,12 @@ export function LLMConfiguration() {
 
   return (
     <>
-      <Title className="mb-2">Enabled LLM Providers</Title>
+      <Title className="mb-2">{i18n.t(k.ENABLED_LLM_PROVIDERS)}</Title>
 
       {existingLlmProviders.length > 0 ? (
         <>
           <Text className="mb-4">
-            If multiple LLM providers are enabled, the default provider will be
-            used for all &quot;Default&quot; Assistants. For user-created
-            Assistants, you can select the LLM provider/model that best fits the
-            use case!
+            {i18n.t(k.IF_MULTIPLE_LLM_PROVIDERS_ARE)}
           </Text>
           <ConfiguredLLMProviderDisplay
             existingLlmProviders={existingLlmProviders}
@@ -160,16 +162,16 @@ export function LLMConfiguration() {
           />
         </>
       ) : (
-        <Callout type="warning" title="No LLM providers configured yet">
-          Please set one up below in order to start using Onyx!
+        <Callout
+          type="warning"
+          title="Пока не настроено ни одного поставщика LLM"
+        >
+          {i18n.t(k.PLEASE_SET_ONE_UP_BELOW_IN_ORD)}
         </Callout>
       )}
 
-      <Title className="mb-2 mt-6">Add LLM Provider</Title>
-      <Text className="mb-4">
-        Add a new LLM provider by either selecting from one of the default
-        providers or by specifying your own custom LLM provider.
-      </Text>
+      <Title className="mb-2 mt-6">{i18n.t(k.ADD_LLM_PROVIDER)}</Title>
+      <Text className="mb-4">{i18n.t(k.ADD_A_NEW_LLM_PROVIDER_BY_EITH)}</Text>
 
       <div className="gap-y-4 flex flex-col">
         {llmProviderDescriptors.map((llmProviderDescriptor) => (

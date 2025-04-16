@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { User } from "@/lib/types";
 import { FiPlus, FiX } from "react-icons/fi";
 import { SearchMultiSelectDropdown } from "@/components/Dropdown";
@@ -81,12 +83,13 @@ export const UserEditor = ({
             </div>
           )}
         />
+
         {onSubmit && (
           <Button
             className="ml-3 flex-nowrap w-32"
             onClick={() => onSubmit(selectedUsers)}
           >
-            Add Users
+            {i18n.t(k.ADD_USERS)}
           </Button>
         )}
       </div>

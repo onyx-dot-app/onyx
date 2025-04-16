@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useRef, useState } from "react";
 import Text from "@/components/ui/text";
 import { Callout } from "@/components/ui/callout";
@@ -52,25 +54,25 @@ export function ProviderCreationModal({
   };
 
   const validationSchema = Yup.object({
-    provider_type: Yup.string().required("Provider type is required"),
+    provider_type: Yup.string().required("Тип провадера обязателен"),
     api_key:
       isProxy || isAzure
         ? Yup.string()
         : useFileUpload
-          ? Yup.string()
-          : Yup.string().required("API Key is required"),
+        ? Yup.string()
+        : Yup.string().required("Требуется API-ключ"),
     model_name: isProxy
-      ? Yup.string().required("Model name is required")
+      ? Yup.string().required("Название модели обязательно")
       : Yup.string().nullable(),
     api_url:
       isProxy || isAzure
-        ? Yup.string().required("API URL is required")
+        ? Yup.string().required("API URL обязателен")
         : Yup.string(),
     deployment_name: isAzure
-      ? Yup.string().required("Deployment name is required")
+      ? Yup.string().required("Имя развертывания обязательно")
       : Yup.string(),
     api_version: isAzure
-      ? Yup.string().required("API Version is required")
+      ? Yup.string().required("Требуется версия API")
       : Yup.string(),
     custom_config: Yup.array().of(Yup.array().of(Yup.string()).length(2)),
   });
@@ -92,7 +94,7 @@ export function ProviderCreationModal({
           jsonContent = JSON.parse(fileContent);
         } catch (parseError) {
           throw new Error(
-            "Failed to parse JSON file. Please ensure it's a valid JSON."
+            "Не удалось проанализировать файл JSON. Убедитесь, что это допустимый JSON."
           );
         }
         setFieldValue("api_key", JSON.stringify(jsonContent));
@@ -163,7 +165,8 @@ export function ProviderCreationModal({
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
-          errorData.detail || "Failed to update provider- check your API key"
+          errorData.detail ||
+            "Не удалось обновить провайдера - проверьте ваш ключ API"
         );
       }
 
@@ -172,7 +175,7 @@ export function ProviderCreationModal({
       if (error instanceof Error) {
         setErrorMsg(error.message);
       } else {
-        setErrorMsg("An unknown error occurred");
+        setErrorMsg("Произошла неизвестная ошибка");
       }
     } finally {
       setIsProcessing(false);
@@ -182,7 +185,7 @@ export function ProviderCreationModal({
 
   return (
     <Modal
-      title={`Configure ${selectedProvider.provider_type}`}
+      title={`${i18n.t(k.CONFIGURE)} ${selectedProvider.provider_type}`}
       onOutsideClick={onCancel}
       icon={selectedProvider.icon}
     >
@@ -195,24 +198,23 @@ export function ProviderCreationModal({
           {({ isSubmitting, handleSubmit, setFieldValue }) => (
             <Form onSubmit={handleSubmit} className="space-y-4">
               <Text className="text-lg mb-2">
-                You are setting the credentials for this provider. To access
-                this information, follow the instructions{" "}
+                {i18n.t(k.YOU_ARE_SETTING_THE_CREDENTIAL)}{" "}
                 <a
                   className="cursor-pointer underline"
                   target="_blank"
                   href={selectedProvider.docsLink}
                   rel="noreferrer"
                 >
-                  here
+                  {i18n.t(k.HERE)}
                 </a>{" "}
-                and gather your{" "}
+                {i18n.t(k.AND_GATHER_YOUR)}{" "}
                 <a
                   className="cursor-pointer underline"
                   target="_blank"
                   href={selectedProvider.apiLink}
                   rel="noreferrer"
                 >
-                  {isProxy || isAzure ? "API URL" : "API KEY"}
+                  {isProxy || isAzure ? i18n.t(k.API_URL) : i18n.t(k.API_KEY1)}
                 </a>
               </Text>
 
@@ -229,8 +231,10 @@ export function ProviderCreationModal({
                 {isProxy && (
                   <TextFormField
                     name="model_name"
-                    label={`Model Name ${isProxy ? "(for testing)" : ""}`}
-                    placeholder="Model Name"
+                    label={`${i18n.t(k.MODEL_NAME)} ${
+                      isProxy ? i18n.t(k.FOR_TESTING) : ""
+                    }`}
+                    placeholder="Название модели"
                     type="text"
                   />
                 )}
@@ -238,8 +242,8 @@ export function ProviderCreationModal({
                 {isAzure && (
                   <TextFormField
                     name="deployment_name"
-                    label="Deployment Name"
-                    placeholder="Deployment Name"
+                    label="Имя развертывания"
+                    placeholder="Имя развертывания"
                     type="text"
                   />
                 )}
@@ -247,15 +251,15 @@ export function ProviderCreationModal({
                 {isAzure && (
                   <TextFormField
                     name="api_version"
-                    label="API Version"
-                    placeholder="API Version"
+                    label="Версия API"
+                    placeholder="Версия API"
                     type="text"
                   />
                 )}
 
                 {useFileUpload ? (
                   <>
-                    <Label>Upload JSON File</Label>
+                    <Label>{i18n.t(k.UPLOAD_JSON_FILE)}</Label>
                     <input
                       ref={fileInputRef}
                       type="file"
@@ -263,13 +267,18 @@ export function ProviderCreationModal({
                       onChange={(e) => handleFileUpload(e, setFieldValue)}
                       className="text-lg w-full p-1"
                     />
-                    {fileName && <p>Uploaded file: {fileName}</p>}
+
+                    {fileName && (
+                      <p>
+                        {i18n.t(k.UPLOADED_FILE)} {fileName}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <TextFormField
                     name="api_key"
-                    label={`API Key ${
-                      isProxy ? "(for non-local deployments)" : ""
+                    label={`${i18n.t(k.API_KEY)} ${
+                      isProxy ? i18n.t(k.FOR_NON_LOCAL_DEPLOYMENTS) : ""
                     }`}
                     placeholder="API Key"
                     type="password"
@@ -282,12 +291,12 @@ export function ProviderCreationModal({
                   className="underline cursor-pointer"
                   rel="noreferrer"
                 >
-                  Learn more here
+                  {i18n.t(k.LEARN_MORE_HERE)}
                 </a>
               </div>
 
               {errorMsg && (
-                <Callout title="Error" type="danger">
+                <Callout title="Ошибка" type="danger">
                   {errorMsg}
                 </Callout>
               )}
@@ -301,9 +310,9 @@ export function ProviderCreationModal({
                 {isProcessing ? (
                   <LoadingAnimation />
                 ) : existingProvider ? (
-                  "Update"
+                  i18n.t(k.UPDATE)
                 ) : (
-                  "Create"
+                  i18n.t(k.CREATE1)
                 )}
               </Button>
             </Form>

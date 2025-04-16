@@ -47,13 +47,13 @@ export function useVisionProviders(setPopup: SetPopup) {
         }
       }
     } catch (error) {
-      console.error("Error fetching vision providers:", error);
+      console.error("Ошибка загрузки поставщиков визуализации:", error);
       setError(
-        error instanceof Error ? error.message : "Unknown error occurred"
+        error instanceof Error ? error.message : "Произошла неизвестная ошибка"
       );
       setPopup({
-        message: `Failed to load vision providers: ${
-          error instanceof Error ? error.message : "Unknown error"
+        message: `Не удалось загрузить поставщиков визуализации: ${
+          error instanceof Error ? error.message : "Неизвестная ошибка"
         }`,
         type: "error",
       });
@@ -66,8 +66,8 @@ export function useVisionProviders(setPopup: SetPopup) {
     async (llmValue: string | null) => {
       if (!llmValue) {
         setPopup({
-          message: "Please select a valid vision model",
-          type: "error",
+          message: "Выберите допустимую модель зрения",
+          type: "ошибка",
         });
         return false;
       }
@@ -78,13 +78,13 @@ export function useVisionProviders(setPopup: SetPopup) {
         // Find the provider ID
         const providerObj = visionProviders.find((p) => p.name === name);
         if (!providerObj) {
-          throw new Error("Provider not found");
+          throw new Error("Провайдер не найден");
         }
 
         await setDefaultVisionProvider(providerObj.id, modelName);
 
         setPopup({
-          message: "Default vision provider updated successfully!",
+          message: "Провайдер по умолчанию успешно обновлен!",
           type: "success",
         });
         setVisionLLM(llmValue);
@@ -95,9 +95,11 @@ export function useVisionProviders(setPopup: SetPopup) {
       } catch (error: unknown) {
         console.error("Error setting default vision provider:", error);
         const errorMessage =
-          error instanceof Error ? error.message : "Unknown error occurred";
+          error instanceof Error
+            ? error.message
+            : "Произошла неизвестная ошибка";
         setPopup({
-          message: `Failed to update default vision provider: ${errorMessage}`,
+          message: `Не удалось обновить провайдера визуализации по умолчанию:${errorMessage}`,
           type: "error",
         });
         return false;

@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, {
   useState,
   useRef,
@@ -238,20 +240,20 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
                   popover={
                     <div className="p-3 w-64 border border-border rounded-lg bg-background z-50">
                       <p className="text-sm mb-3">
-                        Are you sure you want to delete this folder?
+                        {i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_DELET2)}
                       </p>
                       <div className="flex justify-center gap-2">
                         <button
                           className="px-3 py-1 text-sm bg-background-200 rounded"
                           onClick={handleCancelDelete}
                         >
-                          Cancel
+                          {i18n.t(k.CANCEL)}
                         </button>
                         <button
                           className="px-3 py-1 text-sm bg-red-500 text-white rounded"
                           onClick={handleConfirmDelete}
                         >
-                          Delete
+                          {i18n.t(k.DELETE)}
                         </button>
                       </div>
                     </div>

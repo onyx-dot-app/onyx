@@ -58,10 +58,13 @@ const ResetPasswordPage: React.FC = () => {
             confirmPassword: "",
           }}
           validationSchema={Yup.object().shape({
-            password: Yup.string().required("Password is required"),
+            password: Yup.string().required("Требуется пароль"),
             confirmPassword: Yup.string()
-              .oneOf([Yup.ref("password"), undefined], "Passwords must match")
-              .required("Confirm Password is required"),
+              .oneOf(
+                [Yup.ref("password"), undefined],
+                "Пароли должны совпадать"
+              )
+              .required("Требуется подтверждение пароля"),
           })}
           onSubmit={async (values) => {
             if (!token) {
@@ -86,7 +89,7 @@ const ResetPasswordPage: React.FC = () => {
                 setPopup({
                   type: "error",
                   message:
-                    error.message || "An error occurred during password reset.",
+                    error.message || "Произошла ошибка при сбросе пароля.",
                 });
               } else {
                 setPopup({
@@ -103,16 +106,16 @@ const ResetPasswordPage: React.FC = () => {
             <Form className="w-full flex flex-col items-stretch mt-2">
               <TextFormField
                 name="password"
-                label="New Password"
+                label="Новый пароль"
                 type="password"
-                placeholder="Enter your new password"
+                placeholder="Введите новый пароль"
               />
 
               <TextFormField
                 name="confirmPassword"
-                label="Confirm New Password"
+                label="Подтвердите новый пароль"
                 type="password"
-                placeholder="Confirm your new password"
+                placeholder="Подтвердите новый пароль"
               />
 
               <div className="flex">

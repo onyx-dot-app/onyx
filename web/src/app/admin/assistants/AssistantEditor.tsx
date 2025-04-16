@@ -1344,7 +1344,7 @@ export function AssistantEditor({
                   <div className="w-full flex flex-col">
                     <div className="flex gap-x-2 items-center">
                       <div className="block font-medium text-sm">
-                        [Optional] Starter Messages
+                        [Необязательно] Starter Messages
                       </div>
                     </div>
 
@@ -1492,7 +1492,7 @@ export function AssistantEditor({
                         <TextFormField
                           small={true}
                           name="num_chunks"
-                          label="[Optional] Number of Context Documents"
+                          label="[Необязательно] Number of Context Documents"
                           placeholder="Default 10"
                           onChange={(e) => {
                             const value = e.target.value;
@@ -1507,7 +1507,7 @@ export function AssistantEditor({
                           type="date"
                           small
                           subtext="Documents prior to this date will be ignored."
-                          label="[Optional] Knowledge Cutoff Date"
+                          label="[Необязательно] Knowledge Cutoff Date"
                           name="search_start_date"
                         />
 
@@ -1544,7 +1544,7 @@ export function AssistantEditor({
                   <TextFormField
                     maxWidth="max-w-4xl"
                     name="task_prompt"
-                    label="[Optional] Reminders"
+                    label="[Необязательно] Reminders"
                     isTextArea={true}
                     placeholder="Remember to reference all of the points mentioned in my message to you and focus on identifying action items that can move things forward"
                     onChange={(e) => {

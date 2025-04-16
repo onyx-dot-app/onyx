@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { CheckmarkIcon, EditIcon, XIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
@@ -89,6 +91,7 @@ export function EditableStringFieldDisplay({
         )}
         style={{ fontSize: `${scale}rem` }}
       />
+
       {!isEditing && (
         <span
           onClick={() => isEditable && setIsEditing(true)}

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -60,11 +62,11 @@ function ActionForm({
   isSubmitting: boolean;
   definitionErrorState: [
     string | null,
-    React.Dispatch<React.SetStateAction<string | null>>,
+    React.Dispatch<React.SetStateAction<string | null>>
   ];
   methodSpecsState: [
     MethodSpec[] | null,
-    React.Dispatch<React.SetStateAction<MethodSpec[] | null>>,
+    React.Dispatch<React.SetStateAction<MethodSpec[] | null>>
   ];
 }) {
   const [definitionError, setDefinitionError] = definitionErrorState;
@@ -119,6 +121,7 @@ function ActionForm({
           isCode
           hideError
         />
+
         <button
           type="button"
           className="
@@ -148,7 +151,7 @@ function ActionForm({
             }
           }}
         >
-          Format
+          {i18n.t(k.FORMAT)}
         </button>
       </div>
       {definitionError && (
@@ -159,6 +162,7 @@ function ActionForm({
         component="div"
         className="mb-4 text-error text-sm"
       />
+
       <div className="mt-4 text-sm bg-blue-50 p-4 rounded-md border border-blue-200">
         <Link
           href="https://docs.onyx.app/tools/custom"
@@ -178,21 +182,23 @@ function ActionForm({
               clipRule="evenodd"
             />
           </svg>
-          Learn more about actions in our documentation
+          {i18n.t(k.LEARN_MORE_ABOUT_ACTIONS_IN_OU)}
         </Link>
       </div>
 
       {methodSpecs && methodSpecs.length > 0 && (
         <div className="my-4">
-          <h3 className="text-base font-semibold mb-2">Available methods</h3>
+          <h3 className="text-base font-semibold mb-2">
+            {i18n.t(k.AVAILABLE_METHODS)}
+          </h3>
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white border border-background-200">
               <thead>
                 <tr>
-                  <th className="px-4 py-2 border-b">Name</th>
-                  <th className="px-4 py-2 border-b">Summary</th>
-                  <th className="px-4 py-2 border-b">Method</th>
-                  <th className="px-4 py-2 border-b">Path</th>
+                  <th className="px-4 py-2 border-b">{i18n.t(k.NAME)}</th>
+                  <th className="px-4 py-2 border-b">{i18n.t(k.SUMMARY)}</th>
+                  <th className="px-4 py-2 border-b">{i18n.t(k.METHOD)}</th>
+                  <th className="px-4 py-2 border-b">{i18n.t(k.PATH)}</th>
                 </tr>
               </thead>
               <tbody>
@@ -216,13 +222,14 @@ function ActionForm({
         showAdvancedOptions={showAdvancedOptions}
         setShowAdvancedOptions={setShowAdvancedOptions}
       />
+
       {showAdvancedOptions && (
         <div>
           <h3 className="text-xl font-bold mb-2 text-primary-600">
-            Custom Headers
+            {i18n.t(k.CUSTOM_HEADERS)}
           </h3>
           <p className="text-sm mb-6 text-text-600 italic">
-            Specify custom headers for each request to this action&apos;s API.
+            {i18n.t(k.SPECIFY_CUSTOM_HEADERS_FOR_EAC)}
           </p>
           <FieldArray
             name="customHeaders"
@@ -236,15 +243,21 @@ function ActionForm({
                         className="flex items-center space-x-2 bg-background-50 p-3 rounded-lg shadow-sm"
                       >
                         <Field
-                          name={`customHeaders.${index}.key`}
+                          name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
+                            k.KEY1
+                          )}`}
                           placeholder="Header Key"
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
+
                         <Field
-                          name={`customHeaders.${index}.value`}
+                          name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
+                            k.VALUE
+                          )}`}
                           placeholder="Header Value"
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
+
                         <Button
                           type="button"
                           onClick={() => arrayHelpers.remove(index)}
@@ -252,7 +265,7 @@ function ActionForm({
                           size="sm"
                           className="transition-colors duration-200 hover:bg-red-600"
                         >
-                          Remove
+                          {i18n.t(k.REMOVE)}
                         </Button>
                       </div>
                     )
@@ -266,7 +279,7 @@ function ActionForm({
                   size="sm"
                   className="transition-colors duration-200"
                 >
-                  Add New Header
+                  {i18n.t(k.ADD_NEW_HEADER)}
                 </Button>
               </div>
             )}
@@ -274,7 +287,7 @@ function ActionForm({
 
           <div className="mt-6">
             <h3 className="text-xl font-bold mb-2 text-primary-600">
-              Authentication
+              {i18n.t(k.AUTHENTICATION)}
             </h3>
             {isOAuthEnabled ? (
               <div className="flex flex-col gap-y-2">
@@ -312,8 +325,7 @@ function ActionForm({
                       ) && (
                         <TooltipContent side="top" align="center">
                           <p className="bg-background-900 max-w-[200px] mb-1 text-sm rounded-lg p-1.5 text-white">
-                            Cannot enable OAuth passthrough when an
-                            Authorization header is already set
+                            {i18n.t(k.CANNOT_ENABLE_OAUTH_PASSTHROUG)}
                           </p>
                         </TooltipContent>
                       )}
@@ -324,19 +336,17 @@ function ActionForm({
                       htmlFor="passthrough_auth"
                       className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                     >
-                      Pass through user&apos;s OAuth token
+                      {i18n.t(k.PASS_THROUGH_USER_S_OAUTH_TOKE)}
                     </label>
                     <p className="text-xs text-subtle mt-1">
-                      When enabled, the user&apos;s OAuth token will be passed
-                      as the Authorization header for all API calls
+                      {i18n.t(k.WHEN_ENABLED_THE_USER_S_OAUTH)}
                     </p>
                   </div>
                 </div>
               </div>
             ) : (
               <p className="text-sm text-subtle">
-                OAuth passthrough is only available when OIDC or OAuth
-                authentication is enabled
+                {i18n.t(k.OAUTH_PASSTHROUGH_IS_ONLY_AVAI)}
               </p>
             )}
           </div>
@@ -353,7 +363,7 @@ function ActionForm({
           type="submit"
           disabled={isSubmitting || !!definitionError}
         >
-          {existingTool ? "Update Action" : "Create Action"}
+          {existingTool ? i18n.t(k.UPDATE_ACTION) : i18n.t(k.CREATE_ACTION)}
         </Button>
       </div>
     </Form>

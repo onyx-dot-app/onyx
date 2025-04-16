@@ -85,7 +85,7 @@ export default function QueryPage(props: { params: Promise<{ id: string }> }) {
   if (!chatSessionSnapshot || error) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
+        errorTitle="Что-то пошло не так :("
         errorMsg={`${i18n.t(k.FAILED_TO_FETCH_CHAT_SESSION)} ${error}`}
       />
     );

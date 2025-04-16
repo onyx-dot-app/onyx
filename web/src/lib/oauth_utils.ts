@@ -81,16 +81,16 @@ export async function handleOAuthSlackAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Slack authorization response: ${response.status}`;
+    let errorDetails = `Не удалось обработать ответ авторизации OAuth Slack: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
+      const responseBody = await response.text(); // Прочитать тело как текст
+      errorDetails += `\nТело ответа: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
+        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
       } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
+        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
       }
     }
 
@@ -122,13 +122,13 @@ export async function handleOAuthGoogleDriveAuthorizationResponse(
     let errorDetails = `Failed to handle OAuth Google Drive authorization response: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
+      const responseBody = await response.text(); // Прочитать тело как текст
+      errorDetails += `\nТело ответа: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
+        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
       } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
+        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
       }
     }
 
@@ -159,16 +159,16 @@ export async function handleOAuthConfluenceAuthorizationResponse(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence authorization response: ${response.status}`;
+    let errorDetails = `Не удалось обработать ответ авторизации OAuth Confluence: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
+      const responseBody = await response.text(); // Прочитать тело как текст
+      errorDetails += `\nТело ответа: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
+        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
       } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
+        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
       }
     }
 
@@ -208,16 +208,16 @@ export async function handleOAuthConfluencePrepareFinalization(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence prepare finalization response: ${response.status}`;
+    let errorDetails = `Не удалось обработать ответ завершения подготовки OAuth Confluence: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
+      const responseBody = await response.text(); // Прочитать тело как текст
+      errorDetails += `\nТело ответа: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
+        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
       } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
+        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
       }
     }
 
@@ -250,16 +250,16 @@ export async function handleOAuthConfluenceFinalize(
   });
 
   if (!response.ok) {
-    let errorDetails = `Failed to handle OAuth Confluence finalization response: ${response.status}`;
+    let errorDetails = `Не удалось обработать ответ на финализацию OAuth Confluence: ${response.status}`;
 
     try {
-      const responseBody = await response.text(); // Read the body as text
-      errorDetails += `\nResponse Body: ${responseBody}`;
+      const responseBody = await response.text(); // Прочитать тело как текст
+      errorDetails += `\nТело ответа: ${responseBody}`;
     } catch (err) {
       if (err instanceof Error) {
-        errorDetails += `\nUnable to read response body: ${err.message}`;
+        errorDetails += `\nНе удалось прочитать тело ответа: ${err.message}`;
       } else {
-        errorDetails += `\nUnable to read response body: Unknown error type`;
+        errorDetails += `\nНе удалось прочитать тело ответа: Неизвестная ошибка type`;
       }
     }
 

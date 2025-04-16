@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Tooltip,
@@ -101,14 +103,14 @@ export function RefinemenetBadge({
         ? StreamingPhase.COMPLETE
         : StreamingPhase.ANSWER
       : secondLevelSubquestions?.[0]
-        ? secondLevelSubquestions.every((q) => q.answer && q.answer.length > 0)
-          ? StreamingPhase.EVALUATE
-          : secondLevelSubquestions?.[0].context_docs
-            ? StreamingPhase.CONTEXT_DOCS
-            : secondLevelSubquestions?.[0].sub_queries
-              ? StreamingPhase.SUB_QUERIES
-              : StreamingPhase.WAITING
-        : StreamingPhase.WAITING;
+      ? secondLevelSubquestions.every((q) => q.answer && q.answer.length > 0)
+        ? StreamingPhase.EVALUATE
+        : secondLevelSubquestions?.[0].context_docs
+        ? StreamingPhase.CONTEXT_DOCS
+        : secondLevelSubquestions?.[0].sub_queries
+        ? StreamingPhase.SUB_QUERIES
+        : StreamingPhase.WAITING
+      : StreamingPhase.WAITING;
 
   // Get the array of displayed phases
   const displayedPhases = useOrderedPhases(currentState);
@@ -178,9 +180,9 @@ export function RefinemenetBadge({
   return (
     <TooltipProvider delayDuration={0}>
       {/*
-        IMPORTANT: We rely on open={ isHovered || toolTipHoveredInternal }
-        to keep the tooltip visible if either the badge or tooltip is hovered.
-      */}
+         IMPORTANT: We rely on open={ isHovered || toolTipHoveredInternal }
+         to keep the tooltip visible if either the badge or tooltip is hovered.
+        */}
       <Tooltip open={isHovered || toolTipHoveredInternal}>
         <div
           className="relative w-fit max-w-sm"
@@ -196,7 +198,7 @@ export function RefinemenetBadge({
           <TooltipTrigger asChild>
             <div className="flex items-center gap-x-1 text-black text-sm font-medium cursor-pointer hover:text-blue-600 transition-colors duration-200">
               <p className="text-sm loading-text font-medium">
-                Refining Answer
+                {i18n.t(k.REFINING_ANSWER)}
               </p>
               <FiChevronRight
                 className={`inline-block my-auto transition-transform duration-200 text-text-darker ${
@@ -304,7 +306,7 @@ export const NoNewAnswerMessage = () => {
       className="text-text-600 text-sm transition-opacity duration-2000 ease-out"
       style={{ opacity: opacity }}
     >
-      No new answer found...
+      {i18n.t(k.NO_NEW_ANSWER_FOUND)}
     </div>
   );
 };
@@ -375,8 +377,8 @@ export function StatusRefinement({
                   }}
                 >
                   {isViewingInitialAnswer
-                    ? "See Refined Answer"
-                    : "See Original Answer"}
+                    ? i18n.t(k.SEE_REFINED_ANSWER)
+                    : i18n.t(k.SEE_ORIGINAL_ANSWER)}
                 </Badge>
               </TooltipTrigger>
               <TooltipContent

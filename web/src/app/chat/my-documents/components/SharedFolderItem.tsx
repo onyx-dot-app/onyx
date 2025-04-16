@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useState } from "react";
 import { FolderIcon, MoreHorizontal } from "lucide-react";
 import {
@@ -91,8 +93,8 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
 
           <div className="w-[30%] text-sm text-text-400 dark:text-neutral-400">
             {folder.tokens !== undefined
-              ? `${folder.tokens.toLocaleString()} tokens`
-              : "-"}
+              ? `${folder.tokens.toLocaleString()} ${i18n.t(k.TOKENS)}`
+              : i18n.t(k._)}
           </div>
         </div>
 
@@ -111,16 +113,16 @@ export const SharedFolderItem: React.FC<SharedFolderItemProps> = ({
             <PopoverContent className="!p-0 w-40">
               <div className="space-y-0">
                 {/* <Button variant="menu" onClick={onMove}>
-                  <FiArrowDown className="h-4 w-4" />
-                  Move
-                </Button>
-                <Button variant="menu" onClick={onRename}>
-                  <FiEdit className="h-4 w-4" />
-                  Rename
-                </Button> */}
+                   <FiArrowDown className="h-4 w-4" />
+                   Move
+                  </Button>
+                  <Button variant="menu" onClick={onRename}>
+                   <FiEdit className="h-4 w-4" />
+                   Rename
+                  </Button> */}
                 <Button variant="menu" onClick={handleDeleteClick}>
                   <FiTrash className="h-4 w-4" />
-                  Delete
+                  {i18n.t(k.DELETE)}
                 </Button>
               </div>
             </PopoverContent>

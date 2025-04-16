@@ -48,11 +48,13 @@ function SlackBotEditPage({
     const errorMsg =
       slackBotError?.info?.message ||
       slackBotError?.info?.detail ||
-      "An unknown error occurred";
+      "Произошла неизвестная ошибка";
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_SLACK_BOT)} ${unwrappedParams["bot-id"]}${i18n.t(k._2)} ${errorMsg}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_SLACK_BOT)} ${
+          unwrappedParams["bot-id"]
+        }${i18n.t(k._2)} ${errorMsg}`}
       />
     );
   }
@@ -61,11 +63,13 @@ function SlackBotEditPage({
     const errorMsg =
       slackChannelConfigsError?.info?.message ||
       slackChannelConfigsError?.info?.detail ||
-      "An unknown error occurred";
+      "Произошла неизвестная ошибка";
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_SLACK_BOT)} ${unwrappedParams["bot-id"]}${i18n.t(k._2)} ${errorMsg}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_SLACK_BOT)} ${
+          unwrappedParams["bot-id"]
+        }${i18n.t(k._2)} ${errorMsg}`}
       />
     );
   }

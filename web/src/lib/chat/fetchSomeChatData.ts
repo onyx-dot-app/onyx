@@ -132,6 +132,7 @@ export async function fetchSomeChatData(
           Persona[],
           string | null,
         ];
+
         result.assistants = rawAssistantsList
           .filter((assistant) => assistant.is_visible)
           .sort(personaComparator);

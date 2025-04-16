@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,7 +64,7 @@ const UsersTables = ({
   if (domainsError) {
     return (
       <ErrorCallout
-        errorTitle="Error loading valid domains"
+        errorTitle="Ошибка загрузки допустимых доменов"
         errorMsg={domainsError?.info?.detail}
       />
     );
@@ -71,17 +73,17 @@ const UsersTables = ({
   return (
     <Tabs defaultValue="current">
       <TabsList>
-        <TabsTrigger value="current">Current Users</TabsTrigger>
-        <TabsTrigger value="invited">Invited Users</TabsTrigger>
+        <TabsTrigger value="current">{i18n.t(k.CURRENT_USERS)}</TabsTrigger>
+        <TabsTrigger value="invited">{i18n.t(k.INVITED_USERS)}</TabsTrigger>
         {NEXT_PUBLIC_CLOUD_ENABLED && (
-          <TabsTrigger value="pending">Pending Users</TabsTrigger>
+          <TabsTrigger value="pending">{i18n.t(k.PENDING_USERS)}</TabsTrigger>
         )}
       </TabsList>
 
       <TabsContent value="current">
         <Card>
           <CardHeader>
-            <CardTitle>Current Users</CardTitle>
+            <CardTitle>{i18n.t(k.CURRENT_USERS)}</CardTitle>
           </CardHeader>
           <CardContent>
             <SignedUpUserTable
@@ -96,7 +98,7 @@ const UsersTables = ({
       <TabsContent value="invited">
         <Card>
           <CardHeader>
-            <CardTitle>Invited Users</CardTitle>
+            <CardTitle>{i18n.t(k.INVITED_USERS)}</CardTitle>
           </CardHeader>
           <CardContent>
             <InvitedUserTable
@@ -114,7 +116,7 @@ const UsersTables = ({
         <TabsContent value="pending">
           <Card>
             <CardHeader>
-              <CardTitle>Pending Users</CardTitle>
+              <CardTitle>{i18n.t(k.PENDING_USERS)}</CardTitle>
             </CardHeader>
             <CardContent>
               <PendingUsersTable
@@ -177,7 +179,7 @@ const AddUserButton = ({
     );
     setModal(false);
     setPopup({
-      message: "Users invited!",
+      message: "Пользователи приглашены!",
       type: "success",
     });
   };
@@ -185,7 +187,7 @@ const AddUserButton = ({
   const onFailure = async (res: Response) => {
     const error = (await res.json()).detail;
     setPopup({
-      message: `Failed to invite users - ${error}`,
+      message: `Не удалось пригласить пользователей - ${error}`,
       type: "error",
     });
   };
@@ -212,18 +214,18 @@ const AddUserButton = ({
       <Button className="my-auto w-fit" onClick={handleInviteClick}>
         <div className="flex">
           <FiPlusSquare className="my-auto mr-2" />
-          Invite Users
+          {i18n.t(k.INVITE_USERS)}
         </div>
       </Button>
 
       {showConfirmation && (
         <ConfirmEntityModal
-          entityType="First User Invitation"
-          entityName="your Access Logic"
+          entityType="Приглашение первого пользователя"
+          entityName="ваша логика доступа"
           onClose={() => setShowConfirmation(false)}
           onSubmit={handleConfirmFirstInvite}
-          additionalDetails="After inviting the first user, only invited users will be able to join this platform. This is a security measure to control access to your team."
-          actionButtonText="Continue"
+          additionalDetails="После приглашения первого пользователя, только приглашенные пользователи смогут присоединиться к этой платформе. Это мера безопасности для контроля доступа к вашей команде."
+          actionButtonText="Продолжить"
           variant="action"
         />
       )}
@@ -232,9 +234,7 @@ const AddUserButton = ({
         <Modal title="Bulk Add Users" onOutsideClick={() => setModal(false)}>
           <div className="flex flex-col gap-y-4">
             <Text className="font-medium text-base">
-              Add the email addresses to import, separated by whitespaces.
-              Invited users will be able to login to this domain with their
-              email address.
+              {i18n.t(k.ADD_THE_EMAIL_ADDRESSES_TO_IMP)}
             </Text>
             <BulkAdd onSuccess={onSuccess} onFailure={onFailure} />
           </div>
@@ -247,7 +247,10 @@ const AddUserButton = ({
 const Page = () => {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle title="Manage Users" icon={<UsersIcon size={32} />} />
+      <AdminPageTitle
+        title="Управление пользователями"
+        icon={<UsersIcon size={32} />}
+      />
       <SearchableTables />
     </div>
   );

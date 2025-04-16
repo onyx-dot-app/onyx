@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
@@ -22,13 +24,13 @@ export async function submitCredential<T>(
       const parsed_response = await response.json();
       const credential = parsed_response.credential;
       isSuccess = true;
-      return { credential, message: "Success!", isSuccess: true };
+      return { credential, message: i18n.t(k.SUCCESS1), isSuccess: true };
     } else {
       const errorData = await response.json();
-      return { message: `Error: ${errorData.detail}`, isSuccess: false };
+      return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
     }
   } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
+    return { message: `Ошибка: ${error}`, isSuccess: false };
   }
 }
 
@@ -91,7 +93,7 @@ export function CredentialForm<T extends Yup.AnyObject>({
                 disabled:pointer-events-none disabled:opacity-50 
                 shadow hover:bg-primary/90 h-9 px-4 py-2"
               >
-                Update
+                {i18n.t(k.UPDATE)}
               </button>
             </div>
           </Form>

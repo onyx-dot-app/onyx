@@ -20,10 +20,12 @@ export default function AnalyticsPage() {
         title="Usage Statistics"
         icon={<FiActivity size={32} />}
       />
+
       <DateRangeSelector
         value={timeRange}
         onValueChange={(value) => setTimeRange(value as any)}
       />
+
       <QueryPerformanceChart timeRange={timeRange} />
       <FeedbackChart timeRange={timeRange} />
       <OnyxBotChart timeRange={timeRange} />

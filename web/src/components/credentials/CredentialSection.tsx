@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { ValidSources } from "@/lib/types";
 import useSWR, { mutate } from "swr";
@@ -92,8 +94,9 @@ export default function CredentialSection({
       const errorData = await response.json();
       setPopup({
         message: `Issue swapping credential: ${
-          errorData.detail || errorData.message || "Unknown error"
+          errorData.detail || errorData.message || "Неизвестная ошибка"
         }`,
+
         type: "error",
       });
     }
@@ -158,9 +161,10 @@ export default function CredentialSection({
       {popup}
 
       <div className="flex gap-x-2">
-        <p>Current credential:</p>
+        <p>{i18n.t(k.CURRENT_CREDENTIAL)}</p>
         <Text className="ml-1 italic font-bold my-auto">
-          {ccPair.credential.name || `Credential #${ccPair.credential.id}`}
+          {ccPair.credential.name ||
+            `${i18n.t(k.CREDENTIAL1)}${ccPair.credential.id}`}
         </Text>
       </div>
       <div className="flex text-sm justify-start mr-auto gap-x-2">
@@ -171,7 +175,7 @@ export default function CredentialSection({
           className="flex items-center gap-x-2 cursor-pointer bg-neutral-800 border-neutral-600 border-2 hover:bg-neutral-700 p-1.5 rounded-lg text-neutral-300"
         >
           <FaSwatchbook />
-          Update Credentials
+          {i18n.t(k.UPDATE_CREDENTIALS)}
         </button>
       </div>
       {showModifyCredential && (
@@ -216,7 +220,9 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeCreateCredential}
           className="max-w-3xl flex flex-col items-start rounded-lg"
-          title={`Create ${getSourceDisplayName(sourceType)} Credential`}
+          title={`${i18n.t(k.CREATE1)} ${getSourceDisplayName(
+            sourceType
+          )} ${i18n.t(k.CREDENTIAL2)}`}
         >
           {oauthDetailsLoading ? (
             <Spinner />

@@ -117,6 +117,7 @@ export interface ConnectionConfiguration {
     | FileOption
     | TabOption
   )[];
+
   advanced_values: (
     | BooleanOption
     | ListOption
@@ -126,6 +127,7 @@ export interface ConnectionConfiguration {
     | FileOption
     | TabOption
   )[];
+
   overrideDefaultFreq?: number;
 }
 
@@ -134,23 +136,24 @@ export const connectorConfigs: Record<
   ConnectionConfiguration
 > = {
   web: {
-    description: "Configure Web connector",
+    description: "Настройка Web connector",
     values: [
       {
         type: "text",
-        query: "Enter the website URL to scrape e.g. https://docs.onyx.app/:",
-        label: "Base URL",
+        query:
+          "Введите URL веб-сайта для сканирования, например https://docs.onyx.app/:",
+        label: "Базовый URL",
         name: "base_url",
         optional: false,
       },
       {
         type: "select",
-        query: "Select the web connector type:",
-        label: "Scrape Method",
+        query: "Выберите тип web connector:",
+        label: "Метод сканирования",
         name: "web_connector_type",
         options: [
-          { name: "recursive", value: "recursive" },
-          { name: "single", value: "single" },
+          { name: "рекурсивный", value: "recursive" },
+          { name: "одиночный", value: "single" },
           { name: "sitemap", value: "sitemap" },
         ],
       },
@@ -158,57 +161,57 @@ export const connectorConfigs: Record<
     advanced_values: [
       {
         type: "checkbox",
-        query: "Scroll before scraping:",
-        label: "Scroll before scraping",
+        query: "Прокрутить перед сканированием:",
+        label: "Прокрутить перед сканированием",
         description:
-          "Enable if the website requires scrolling for the desired content to load",
+          "Включите, если для загрузки нужного контента требуется прокрутка",
         name: "scroll_before_scraping",
         optional: true,
       },
     ],
-    overrideDefaultFreq: 60 * 60 * 24,
+    overrideDefaultFreq: 86400,
   },
   github: {
-    description: "Configure GitHub connector",
+    description: "Настройка GitHub connector",
     values: [
       {
         type: "text",
-        query: "Enter the GitHub username or organization:",
-        label: "Repository Owner",
+        query: "Введите имя пользователя или организацию GitHub:",
+        label: "Владелец репозитория",
         name: "repo_owner",
         optional: false,
       },
       {
         type: "tab",
         name: "github_mode",
-        label: "What should we index from GitHub?",
+        label: "Что мы будем индексировать из GitHub?",
         optional: true,
         tabs: [
           {
             value: "repo",
-            label: "Specific Repository",
+            label: "Конкретный репозиторий",
             fields: [
               {
                 type: "text",
-                query: "Enter the repository name(s):",
-                label: "Repository Name(s)",
+                query: "Введите имя репозитория(ев):",
+                label: "Имя репозитория(ев)",
                 name: "repositories",
                 optional: false,
                 description:
-                  "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)",
+                  "Для нескольких репозиториев введите имена через запятую (например, repo1,repo2,repo3)",
               },
             ],
           },
           {
             value: "everything",
-            label: "Everything",
+            label: "Все",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "Все",
                 name: "everything",
                 description:
-                  "This connector will index all repositories the provided credentials have access to!",
+                  "Этот connector проиндексирует все репозитории, доступные предоставленным учетным данным!",
               },
             ],
           },
@@ -216,52 +219,52 @@ export const connectorConfigs: Record<
       },
       {
         type: "checkbox",
-        query: "Include pull requests?",
-        label: "Include pull requests?",
-        description: "Index pull requests from repositories",
+        query: "Включить pull requests?",
+        label: "Включить pull requests?",
+        description: "Индексировать pull requests из репозиториев",
         name: "include_prs",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Include issues?",
-        label: "Include Issues?",
+        query: "Включить issues?",
+        label: "Включить Issues?",
         name: "include_issues",
-        description: "Index issues from repositories",
+        description: "Индексировать issues из репозиториев",
         optional: true,
       },
     ],
     advanced_values: [],
   },
   gitlab: {
-    description: "Configure GitLab connector",
+    description: "Настройка GitLab connector",
     values: [
       {
         type: "text",
-        query: "Enter the project owner:",
-        label: "Project Owner",
+        query: "Введите владельца проекта:",
+        label: "Владелец проекта",
         name: "project_owner",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the project name:",
-        label: "Project Name",
+        query: "Введите имя проекта:",
+        label: "Имя проекта",
         name: "project_name",
         optional: false,
       },
       {
         type: "checkbox",
-        query: "Include merge requests?",
-        label: "Include MRs",
+        query: "Включить merge requests?",
+        label: "Включить MRs",
         name: "include_mrs",
         default: true,
         hidden: true,
       },
       {
         type: "checkbox",
-        query: "Include issues?",
-        label: "Include Issues",
+        query: "Включить issues?",
+        label: "Включить Issues",
         name: "include_issues",
         optional: true,
         hidden: true,
@@ -270,43 +273,40 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   gitbook: {
-    description: "Configure GitBook connector",
+    description: "Настройка GitBook connector",
     values: [
       {
         type: "text",
-        query: "Enter the space ID:",
-        label: "Space ID",
+        query: "Введите ID пространства:",
+        label: "ID пространства",
         name: "space_id",
         optional: false,
         description:
-          "The ID of the GitBook space to index. This can be found in the URL " +
-          "of a page in the space. For example, if your URL looks like " +
-          "`https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, " +
-          "then your space ID is `8JkzVx8QCIGRrmxhGHU8`.",
+          "ID пространства GitBook для индексации. Это можно найти в URL страницы в пространстве. Например, если ваш URL выглядит как `https://app.gitbook.com/o/ccLx08XZ5wZ54LwdP9QU/s/8JkzVx8QCIGRrmxhGHU8/`, то ваш ID пространства — `8JkzVx8QCIGRrmxhGHU8`.",
       },
     ],
     advanced_values: [],
   },
   google_drive: {
-    description: "Configure Google Drive connector",
+    description: "Настройка Google Drive connector",
     values: [
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How should we index your Google Drive?",
+        label: "Как мы будем индексировать ваш Google Drive?",
         optional: true,
         tabs: [
           {
             value: "general",
-            label: "General",
+            label: "Общее",
             fields: [
               {
                 type: "checkbox",
-                label: "Include shared drives?",
+                label: "Включить общие диски?",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Onyx to index everything in the shared drives you have access to."
-                    : "This will allow Onyx to index everything in your Organization's shared drives.";
+                    ? "Это позволит Onyx индексировать все на общих дисках, к которым у вас есть доступ."
+                    : "Это позволит Onyx индексировать все на общих дисках вашей организации.";
                 },
                 name: "include_shared_drives",
                 default: false,
@@ -315,13 +315,13 @@ export const connectorConfigs: Record<
                 type: "checkbox",
                 label: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Include My Drive?"
-                    : "Include Everyone's My Drive?";
+                    ? "Включить Мой диск?"
+                    : "Включить Мой диск для всех?";
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "This will allow Onyx to index everything in your My Drive."
-                    : "This will allow Onyx to index everything in everyone's My Drives.";
+                    ? "Это позволит Onyx индексировать все на вашем Моем диске."
+                    : "Это позволит Onyx индексировать все на Моем диске каждого.";
                 },
                 name: "include_my_drives",
                 default: false,
@@ -329,8 +329,8 @@ export const connectorConfigs: Record<
               {
                 type: "checkbox",
                 description:
-                  "This will allow Onyx to index all files shared with you.",
-                label: "Include All Files Shared With You?",
+                  "Это позволит Onyx индексировать все файлы, доступные вам.",
+                label: "Включить все файлы, доступные вам?",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
                   currentCredential?.credential_json?.google_tokens,
@@ -340,16 +340,16 @@ export const connectorConfigs: Record<
           },
           {
             value: "specific",
-            label: "Specific",
+            label: "Конкретное",
             fields: [
               {
                 type: "text",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Enter a comma separated list of the URLs for the shared drive you would like to index. You must have access to these shared drives."
-                    : "Enter a comma separated list of the URLs for the shared drive you would like to index.";
+                    ? "Введите через запятую URL общих дисков, которые вы хотите индексировать. Вы должны иметь доступ к этим дискам."
+                    : "Введите через запятую URL общих дисков, которые вы хотите индексировать.";
                 },
-                label: "Shared Drive URLs",
+                label: "URL общих дисков",
                 name: "shared_drive_urls",
                 default: "",
                 isTextArea: true,
@@ -357,8 +357,8 @@ export const connectorConfigs: Record<
               {
                 type: "text",
                 description:
-                  "Enter a comma separated list of the URLs of any folders you would like to index. The files located in these folders (and all subfolders) will be indexed.",
-                label: "Folder URLs",
+                  "Введите через запятую URL папок, которые вы хотите индексировать. Файлы, расположенные в этих папках (и всех вложенных папках), будут проиндексированы.",
+                label: "URL папок",
                 name: "shared_folder_urls",
                 default: "",
                 isTextArea: true,
@@ -366,8 +366,8 @@ export const connectorConfigs: Record<
               {
                 type: "text",
                 description:
-                  "Enter a comma separated list of the emails of the users whose MyDrive you want to index.",
-                label: "My Drive Emails",
+                  "Введите через запятую email пользователей, чьи Мой диск вы хотите индексировать.",
+                label: "Email Мой диск",
                 name: "my_drive_emails",
                 visibleCondition: (values, currentCredential) =>
                   !currentCredential?.credential_json?.google_tokens,
@@ -383,28 +383,28 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   gmail: {
-    description: "Configure Gmail connector",
+    description: "Настройка Gmail connector",
     values: [],
     advanced_values: [],
   },
   bookstack: {
-    description: "Configure Bookstack connector",
+    description: "Настройка Bookstack connector",
     values: [],
     advanced_values: [],
   },
   confluence: {
-    description: "Configure Confluence connector",
+    description: "Настройка Confluence connector",
     initialConnectorName: "cloud_name",
     values: [
       {
         type: "checkbox",
-        query: "Is this a Confluence Cloud instance?",
-        label: "Is Cloud",
+        query: "Это экземпляр Confluence Cloud?",
+        label: "Это Cloud",
         name: "is_cloud",
         optional: false,
         default: true,
         description:
-          "Check if this is a Confluence Cloud instance, uncheck for Confluence Server/Data Center",
+          "Отметьте, если это экземпляр Confluence Cloud, снимите для Confluence Server/Data Center",
         disabled: (currentCredential) => {
           if (currentCredential?.credential_json?.confluence_refresh_token) {
             return true;
@@ -414,8 +414,8 @@ export const connectorConfigs: Record<
       },
       {
         type: "text",
-        query: "Enter the wiki base URL:",
-        label: "Wiki Base URL",
+        query: "Введите базовый URL вики:",
+        label: "Базовый URL вики",
         name: "wiki_base",
         optional: false,
         initial: (currentCredential) => {
@@ -428,60 +428,62 @@ export const connectorConfigs: Record<
           return false;
         },
         description:
-          "The base URL of your Confluence instance (e.g., https://your-domain.atlassian.net/wiki)",
+          "Базовый URL вашего экземпляра Confluence (например, https://your-domain.atlassian.net/wiki)",
       },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Confluence?",
+        label: "Как мы будем индексировать ваш Confluence?",
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "Everything",
+            label: "Все",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "Все",
                 name: "everything",
                 description:
-                  "This connector will index all pages the provided credentials have access to!",
+                  "Этот connector проиндексирует все страницы, доступные предоставленным учетным данным!",
               },
             ],
           },
           {
             value: "space",
-            label: "Space",
+            label: "Пространство",
             fields: [
               {
                 type: "text",
-                query: "Enter the space:",
-                label: "Space Key",
+                query: "Введите пространство:",
+                label: "Ключ пространства",
                 name: "space",
                 default: "",
-                description: "The Confluence space key to index (e.g. `KB`).",
+                description:
+                  "Ключ пространства Confluence для индексации (например, `KB`).",
               },
             ],
           },
           {
             value: "page",
-            label: "Page",
+            label: "Страница",
             fields: [
               {
                 type: "text",
-                query: "Enter the page ID:",
-                label: "Page ID",
+                query: "Введите ID страницы:",
+                label: "ID страницы",
                 name: "page_id",
                 default: "",
-                description: "Specific page ID to index (e.g. `131368`)",
+                description:
+                  "Конкретный ID страницы для индексации (например, `131368`)",
               },
               {
                 type: "checkbox",
-                query: "Should index pages recursively?",
-                label: "Index Recursively",
+                query: "Индексировать страницы рекурсивно?",
+                label: "Индексировать рекурсивно",
                 name: "index_recursively",
                 description:
-                  "If this is set, we will index the page indicated by the Page ID as well as all of its children.",
+                  "Если включено, мы проиндексируем страницу, указанную по ID, а также все её дочерние страницы.",
                 optional: false,
                 default: true,
               },
@@ -489,16 +491,16 @@ export const connectorConfigs: Record<
           },
           {
             value: "cql",
-            label: "CQL Query",
+            label: "CQL запрос",
             fields: [
               {
                 type: "text",
-                query: "Enter the CQL query (optional):",
-                label: "CQL Query",
+                query: "Введите CQL запрос (опционально):",
+                label: "CQL запрос",
                 name: "cql_query",
                 default: "",
                 description:
-                  "IMPORTANT: We currently only support CQL queries that return objects of type 'page'. This means all CQL queries must contain 'type=page' as the only type filter. It is also important that no filters for 'lastModified' are used as it will cause issues with our connector polling logic. We will still get all attachments and comments for the pages returned by the CQL query. Any 'lastmodified' filters will be overwritten. See https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/ for more details.",
+                  "ВАЖНО: В настоящее время мы поддерживаем только CQL запросы, возвращающие объекты типа 'page'. Это означает, что все CQL запросы должны содержать 'type=page' как единственный фильтр типа. Также важно не использовать фильтры для 'lastModified', так как это вызовет проблемы с логикой опроса connector. Мы все равно получим все вложения и комментарии для страниц, возвращенных CQL запросом. Любые фильтры 'lastmodified' будут перезаписаны. Подробнее см. https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/.",
               },
             ],
           },
@@ -509,48 +511,49 @@ export const connectorConfigs: Record<
     advanced_values: [],
   },
   jira: {
-    description: "Configure Jira connector",
-    subtext: `Configure which Jira content to index. You can index everything or specify a particular project.`,
+    description: "Настройка Jira connector",
+    subtext:
+      "Настройте, какой контент Jira индексировать. Вы можете индексировать все или указать конкретный проект.",
     values: [
       {
         type: "text",
-        query: "Enter the Jira base URL:",
-        label: "Jira Base URL",
+        query: "Введите базовый URL Jira:",
+        label: "Базовый URL Jira",
         name: "jira_base_url",
         optional: false,
         description:
-          "The base URL of your Jira instance (e.g., https://your-domain.atlassian.net)",
+          "Базовый URL вашего экземпляра Jira (например, https://your-domain.atlassian.net)",
       },
       {
         type: "tab",
         name: "indexing_scope",
-        label: "How Should We Index Your Jira?",
+        label: "Как мы будем индексировать ваш Jira?",
         optional: true,
         tabs: [
           {
             value: "everything",
-            label: "Everything",
+            label: "Все",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "Все",
                 name: "everything",
                 description:
-                  "This connector will index all issues the provided credentials have access to!",
+                  "Этот connector проиндексирует все issues, доступные предоставленным учетным данным!",
               },
             ],
           },
           {
             value: "project",
-            label: "Project",
+            label: "Проект",
             fields: [
               {
                 type: "text",
-                query: "Enter the project key:",
-                label: "Project Key",
+                query: "Введите ключ проекта:",
+                label: "Ключ проекта",
                 name: "project_key",
                 description:
-                  "The key of a specific project to index (e.g., 'PROJ').",
+                  "Ключ конкретного проекта для индексации (например, 'PROJ').",
               },
             ],
           },
@@ -559,79 +562,79 @@ export const connectorConfigs: Record<
       },
       {
         type: "list",
-        query: "Enter email addresses to blacklist from comments:",
-        label: "Comment Email Blacklist",
+        query: "Введите email адреса для черного списка комментариев:",
+        label: "Черный список email для комментариев",
         name: "comment_email_blacklist",
         description:
-          "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed.",
+          "Это полезно для игнорирования определенных ботов. Добавьте email пользователей, комментарии которых НЕ должны индексироваться.",
         optional: true,
       },
     ],
     advanced_values: [],
   },
   salesforce: {
-    description: "Configure Salesforce connector",
+    description: "Настройка Salesforce connector",
     values: [
       {
         type: "list",
-        query: "Enter requested objects:",
-        label: "Requested Objects",
+        query: "Введите запрашиваемые объекты:",
+        label: "Запрашиваемые объекты",
         name: "requested_objects",
         optional: true,
-        description: `Specify the Salesforce object types you want us to index. If unsure, don't specify any objects and Onyx will default to indexing by 'Account'.
+        description: `Укажите типы объектов Salesforce, которые вы хотите индексировать. Если не уверены, не указывайте объекты, и Onyx по умолчанию будет индексировать по 'Account'.
 
-Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of 'Opportunities').`,
+Подсказка: Используйте единственное число имени объекта (например, 'Opportunity' вместо 'Opportunities').`,
       },
     ],
     advanced_values: [],
   },
   sharepoint: {
-    description: "Configure SharePoint connector",
+    description: "Настройка коннектора SharePoint",
     values: [
       {
         type: "list",
-        query: "Enter SharePoint sites:",
-        label: "Sites",
+        query: "Введите сайты SharePoint:",
+        label: "Сайты",
         name: "sites",
         optional: true,
-        description: `• If no sites are specified, all sites in your organization will be indexed (Sites.Read.All permission required).
+        description: `• Если сайты не указаны, будут проиндексированы все сайты в вашей организации (требуется разрешение Sites.Read.All).
 
-• Specifying 'https://onyxai.sharepoint.com/sites/support' for example will only index documents within this site.
+• Указание, например, 'https://onyxai.sharepoint.com/sites/support' приведет к индексации только документов в этом сайте.
 
-• Specifying 'https://onyxai.sharepoint.com/sites/support/subfolder' for example will only index documents within this folder.
+• Указание, например, 'https://onyxai.sharepoint.com/sites/support/subfolder' приведет к индексации только документов в этой папке.
 `,
       },
     ],
     advanced_values: [],
   },
   teams: {
-    description: "Configure Teams connector",
+    description: "Настройка коннектора Teams",
     values: [
       {
         type: "list",
-        query: "Enter Teams to include:",
+        query: "Введите Teams для включения:",
         label: "Teams",
         name: "teams",
         optional: true,
-        description: `Specify 0 or more Teams to index. For example, specifying the Team 'Support' for the 'onyxai' Org will cause us to only index messages sent in channels belonging to the 'Support' Team. If no Teams are specified, all Teams in your organization will be indexed.`,
+        description: `Укажите 0 или более Teams для индексации. Например, указание Team 'Support' для организации 'onyxai' приведет к индексации только сообщений в каналах, принадлежащих Team 'Support'. Если Teams не указаны, будут проиндексированы все Teams в вашей организации.`,
       },
     ],
     advanced_values: [],
   },
   discourse: {
-    description: "Configure Discourse connector",
+    description: "Настройка коннектора Discourse",
     values: [
       {
         type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
+        query: "Введите базовый URL:",
+        label: "Базовый URL",
         name: "base_url",
         optional: false,
       },
       {
         type: "list",
-        query: "Enter categories to include:",
-        label: "Categories",
+        query: "Введите категории для включения:",
+        label: "Категории",
         name: "categories",
         optional: true,
       },
@@ -639,95 +642,94 @@ Hint: Use the singular form of the object name (e.g., 'Opportunity' instead of '
     advanced_values: [],
   },
   axero: {
-    description: "Configure Axero connector",
+    description: "Настройка коннектора Axero",
     values: [
       {
         type: "list",
-        query: "Enter spaces to include:",
-        label: "Spaces",
+        query: "Введите пространства для включения:",
+        label: "Пространства",
         name: "spaces",
         optional: true,
         description:
-          "Specify zero or more Spaces to index (by the Space IDs). If no Space IDs are specified, all Spaces will be indexed.",
+          "Укажите ноль или более пространств для индексации (по ID пространств). Если ID пространств не указаны, будут проиндексированы все пространства.",
       },
     ],
     advanced_values: [],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   productboard: {
-    description: "Configure Productboard connector",
+    description: "Настройка коннектора Productboard",
     values: [],
     advanced_values: [],
   },
   slack: {
-    description: "Configure Slack connector",
+    description: "Настройка коннектора Slack",
     values: [],
     advanced_values: [
       {
         type: "list",
-        query: "Enter channels to include:",
-        label: "Channels",
+        query: "Введите каналы для включения:",
+        label: "Каналы",
         name: "channels",
-        description: `Specify 0 or more channels to index. For example, specifying the channel "support" will cause us to only index all content within the "#support" channel. If no channels are specified, all channels in your workspace will be indexed.`,
+        description: `Укажите 0 или более каналов для индексации. Например, указание канала "support" приведет к индексации всего контента в канале "#support". Если каналы не указаны, будут проиндексированы все каналы в вашем рабочем пространстве.`,
         optional: true,
-        // Slack Channels can only be lowercase
         transform: (values) => values.map((value) => value.toLowerCase()),
       },
       {
         type: "checkbox",
-        query: "Enable channel regex?",
-        label: "Enable Channel Regex",
+        query: "Включить регулярные выражения для каналов?",
+        label: "Включить регулярные выражения для каналов",
         name: "channel_regex_enabled",
-        description: `If enabled, we will treat the "channels" specified above as regular expressions. A channel's messages will be pulled in by the connector if the name of the channel fully matches any of the specified regular expressions.
-For example, specifying .*-support.* as a "channel" will cause the connector to include any channels with "-support" in the name.`,
+        description: `Если включено, "каналы", указанные выше, будут рассматриваться как регулярные выражения. Сообщения канала будут включены коннектором, если имя канала полностью соответствует любому из указанных регулярных выражений.
+Например, указание .*-support.* в качестве "канала" приведет к включению любых каналов с "-support" в названии.`,
         optional: true,
       },
     ],
   },
   slab: {
-    description: "Configure Slab connector",
+    description: "Настройка коннектора Slab",
     values: [
       {
         type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
+        query: "Введите базовый URL:",
+        label: "Базовый URL",
         name: "base_url",
         optional: false,
-        description: `Specify the base URL for your Slab team. This will look something like: https://onyx.slab.com/`,
+        description: `Укажите базовый URL для вашей команды Slab. Это будет выглядеть примерно так: https://onyx.slab.com/`,
       },
     ],
     advanced_values: [],
   },
   guru: {
-    description: "Configure Guru connector",
+    description: "Настройка коннектора Guru",
     values: [],
     advanced_values: [],
   },
   gong: {
-    description: "Configure Gong connector",
+    description: "Настройка коннектора Gong",
     values: [
       {
         type: "list",
-        query: "Enter workspaces to include:",
-        label: "Workspaces",
+        query: "Введите рабочие пространства для включения:",
+        label: "Рабочие пространства",
         name: "workspaces",
         optional: true,
         description:
-          "Specify 0 or more workspaces to index. Provide the workspace ID or the EXACT workspace name from Gong. If no workspaces are specified, transcripts from all workspaces will be indexed.",
+          "Укажите 0 или более рабочих пространств для индексации. Укажите ID рабочего пространства или ТОЧНОЕ название рабочего пространства из Gong. Если рабочие пространства не указаны, будут проиндексированы транскрипты из всех рабочих пространств.",
       },
     ],
     advanced_values: [],
   },
   loopio: {
-    description: "Configure Loopio connector",
+    description: "Настройка коннектора Loopio",
     values: [
       {
         type: "text",
-        query: "Enter the Loopio stack name",
-        label: "Loopio Stack Name",
+        query: "Введите название стека Loopio",
+        label: "Название стека Loopio",
         name: "loopio_stack_name",
         description:
-          "Must be exact match to the name in Library Management, leave this blank if you want to index all Stacks",
+          "Должно точно совпадать с названием в управлении библиотекой. Оставьте это поле пустым, если хотите проиндексировать все стеки.",
         optional: true,
       },
     ],
@@ -735,12 +737,12 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     overrideDefaultFreq: 60 * 60 * 24,
   },
   file: {
-    description: "Configure File connector",
+    description: "Настройка коннектора для файлов",
     values: [
       {
         type: "file",
-        query: "Enter file locations:",
-        label: "File Locations",
+        query: "Введите расположения файлов:",
+        label: "Расположения файлов",
         name: "file_locations",
         optional: false,
       },
@@ -748,19 +750,19 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   zulip: {
-    description: "Configure Zulip connector",
+    description: "Настройка коннектора Zulip",
     values: [
       {
         type: "text",
-        query: "Enter the realm name",
-        label: "Realm Name",
+        query: "Введите название области:",
+        label: "Название области",
         name: "realm_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the realm URL",
-        label: "Realm URL",
+        query: "Введите URL области:",
+        label: "URL области",
         name: "realm_url",
         optional: false,
       },
@@ -768,99 +770,98 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   notion: {
-    description: "Configure Notion connector",
+    description: "Настройка коннектора Notion",
     values: [
       {
         type: "text",
-        query: "Enter the root page ID",
-        label: "Root Page ID",
+        query: "Введите ID корневой страницы:",
+        label: "ID корневой страницы",
         name: "root_page_id",
         optional: true,
         description:
-          "If specified, will only index the specified page + all of its child pages. If left blank, will index all pages the integration has been given access to.",
+          "Если указано, будет проиндексирована только указанная страница и все её дочерние страницы. Если оставлено пустым, будут проиндексированы все страницы, к которым интеграция имеет доступ.",
       },
     ],
     advanced_values: [],
   },
   hubspot: {
-    description: "Configure HubSpot connector",
+    description: "Настройка коннектора HubSpot",
     values: [],
     advanced_values: [],
   },
   document360: {
-    description: "Configure Document360 connector",
+    description: "Настройка коннектора Document360",
     values: [
       {
         type: "text",
-        query: "Enter the workspace",
-        label: "Workspace",
+        query: "Введите рабочее пространство:",
+        label: "Рабочее пространство",
         name: "workspace",
         optional: false,
       },
       {
         type: "list",
-        query: "Enter categories to include",
-        label: "Categories",
+        query: "Введите категории для включения:",
+        label: "Категории",
         name: "categories",
         optional: true,
         description:
-          "Specify 0 or more categories to index. For instance, specifying the category 'Help' will cause us to only index all content within the 'Help' category. If no categories are specified, all categories in your workspace will be indexed.",
+          "Укажите 0 или более категорий для индексации. Например, указание категории 'Помощь' приведет к индексации всего контента в категории 'Помощь'. Если категории не указаны, будут проиндексированы все категории в вашем рабочем пространстве.",
       },
     ],
     advanced_values: [],
   },
   clickup: {
-    description: "Configure ClickUp connector",
+    description: "Настройка коннектора ClickUp",
     values: [
       {
         type: "select",
-        query: "Select the connector type:",
-        label: "Connector Type",
+        query: "Выберите тип коннектора:",
+        label: "Тип коннектора",
         name: "connector_type",
         optional: false,
         options: [
-          { name: "list", value: "list" },
-          { name: "folder", value: "folder" },
-          { name: "space", value: "space" },
-          { name: "workspace", value: "workspace" },
+          { name: "список", value: "list" },
+          { name: "папка", value: "folder" },
+          { name: "пространство", value: "space" },
+          { name: "рабочее пространство", value: "workspace" },
         ],
       },
       {
         type: "list",
-        query: "Enter connector IDs:",
-        label: "Connector IDs",
+        query: "Введите ID коннекторов:",
+        label: "ID коннекторов",
         name: "connector_ids",
-        description: "Specify 0 or more id(s) to index from.",
+        description: "Укажите 0 или более ID для индексации.",
         optional: true,
       },
       {
         type: "checkbox",
-        query: "Retrieve task comments?",
-        label: "Retrieve Task Comments",
+        query: "Получать комментарии к задачам?",
+        label: "Получать комментарии к задачам",
         name: "retrieve_task_comments",
         description:
-          "If checked, then all the comments for each task will also be retrieved and indexed.",
+          "Если отмечено, все комментарии для каждой задачи также будут получены и проиндексированы.",
         optional: false,
       },
     ],
     advanced_values: [],
   },
   google_sites: {
-    description: "Configure Google Sites connector",
+    description: "Настройка коннектора Google Sites",
     values: [
       {
         type: "file",
-        query: "Enter the zip path:",
-        label: "File Locations",
+        query: "Введите путь к zip-файлу:",
+        label: "Расположение файлов",
         name: "file_locations",
         optional: false,
-        description:
-          "Upload a zip file containing the HTML of your Google Site",
+        description: "Загрузите zip-файл, содержащий HTML вашего сайта Google.",
       },
       {
         type: "text",
-        query: "Enter the base URL:",
-        label: "Base URL",
+        query: "Введите базовый URL:",
+        label: "Базовый URL",
         name: "base_url",
         optional: false,
       },
@@ -868,17 +869,17 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   zendesk: {
-    description: "Configure Zendesk connector",
+    description: "Настройка коннектора Zendesk",
     values: [
       {
         type: "select",
-        query: "Select the what content this connector will index:",
-        label: "Content Type",
+        query: "Выберите тип контента для индексации:",
+        label: "Тип контента",
         name: "content_type",
         optional: false,
         options: [
-          { name: "articles", value: "articles" },
-          { name: "tickets", value: "tickets" },
+          { name: "статьи", value: "articles" },
+          { name: "тикеты", value: "tickets" },
         ],
         default: "articles",
       },
@@ -886,35 +887,35 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   linear: {
-    description: "Configure Linear connector",
+    description: "Настройка коннектора Linear",
     values: [],
     advanced_values: [],
   },
   dropbox: {
-    description: "Configure Dropbox connector",
+    description: "Настройка коннектора Dropbox",
     values: [],
     advanced_values: [],
   },
   s3: {
-    description: "Configure S3 connector",
+    description: "Настройка коннектора S3",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        query: "Введите название бакета:",
+        label: "Название бакета",
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Prefix",
+        query: "Введите префикс:",
+        label: "Префикс",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "Тип бакета",
         name: "bucket_type",
         optional: false,
         default: "s3",
@@ -925,25 +926,25 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     overrideDefaultFreq: 60 * 60 * 24,
   },
   r2: {
-    description: "Configure R2 connector",
+    description: "Настройка коннектора R2",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        query: "Введите название бакета:",
+        label: "Название бакета",
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Prefix",
+        query: "Введите префикс:",
+        label: "Префикс",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "Тип бакета",
         name: "bucket_type",
         optional: false,
         default: "r2",
@@ -954,26 +955,27 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     overrideDefaultFreq: 60 * 60 * 24,
   },
   google_cloud_storage: {
-    description: "Configure Google Cloud Storage connector",
+    description: "Настройка коннектора Google Cloud Storage",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        query: "Введите название бакета:",
+        label: "Название бакета",
         name: "bucket_name",
         optional: false,
-        description: "Name of the GCS bucket to index, e.g. my-gcs-bucket",
+        description:
+          "Название бакета GCS для индексации, например, my-gcs-bucket",
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Path Prefix",
+        query: "Введите префикс:",
+        label: "Префикс пути",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "Тип бакета",
         name: "bucket_type",
         optional: false,
         default: "google_cloud_storage",
@@ -984,25 +986,25 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     overrideDefaultFreq: 60 * 60 * 24,
   },
   oci_storage: {
-    description: "Configure OCI Storage connector",
+    description: "Настройка коннектора OCI Storage",
     values: [
       {
         type: "text",
-        query: "Enter the bucket name:",
-        label: "Bucket Name",
+        query: "Введите название бакета:",
+        label: "Название бакета",
         name: "bucket_name",
         optional: false,
       },
       {
         type: "text",
-        query: "Enter the prefix:",
-        label: "Prefix",
+        query: "Введите префикс:",
+        label: "Префикс",
         name: "prefix",
         optional: true,
       },
       {
         type: "text",
-        label: "Bucket Type",
+        label: "Тип бакета",
         name: "bucket_type",
         optional: false,
         default: "oci_storage",
@@ -1012,276 +1014,278 @@ For example, specifying .*-support.* as a "channel" will cause the connector to 
     advanced_values: [],
   },
   wikipedia: {
-    description: "Configure Wikipedia connector",
+    description: "Настройка коннектора Wikipedia",
     values: [
       {
         type: "text",
-        query: "Enter the language code:",
-        label: "Language Code",
+        query: "Введите код языка:",
+        label: "Код языка",
         name: "language_code",
         optional: false,
-        description: "Input a valid Wikipedia language code (e.g. 'en', 'es')",
+        description:
+          "Введите действительный код языка Wikipedia (например, 'en', 'es')",
       },
       {
         type: "list",
-        query: "Enter categories to include:",
-        label: "Categories to index",
+        query: "Введите категории для включения:",
+        label: "Категории для индексации",
         name: "categories",
         description:
-          "Specify 0 or more names of categories to index. For most Wikipedia sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url.",
+          "Укажите 0 или более названий категорий для индексации. Для большинства сайтов Wikipedia это страницы с названием вида 'Категория: XYZ', которые являются списками других страниц/категорий. Указывайте только название категории, а не её URL.",
         optional: true,
       },
       {
         type: "list",
-        query: "Enter pages to include:",
-        label: "Pages",
+        query: "Введите страницы для включения:",
+        label: "Страницы",
         name: "pages",
         optional: true,
-        description: "Specify 0 or more names of pages to index.",
+        description: "Укажите 0 или более названий страниц для индексации.",
       },
       {
         type: "number",
-        query: "Enter the recursion depth:",
-        label: "Recursion Depth",
+        query: "Введите глубину рекурсии:",
+        label: "Глубина рекурсии",
         name: "recurse_depth",
         description:
-          "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen.",
+          "При индексации категорий, которые имеют подкатегории, это определит, сколько уровней индексировать. Укажите 0, чтобы индексировать только саму категорию (без рекурсии). Укажите -1 для неограниченной глубины рекурсии. Обратите внимание, что в редких случаях категория может содержать себя в своих зависимостях, что вызовет бесконечный цикл. Используйте -1 только если уверены, что этого не произойдет.",
         optional: false,
       },
     ],
     advanced_values: [],
   },
   xenforo: {
-    description: "Configure Xenforo connector",
+    description: "Настройка коннектора Xenforo",
     values: [
       {
         type: "text",
-        query: "Enter forum or thread URL:",
+        query: "Введите URL форума или темы:",
         label: "URL",
         name: "base_url",
         optional: false,
         description:
-          "The XenForo v2.2 forum URL to index. Can be board or thread.",
+          "URL форума XenForo v2.2 для индексации. Может быть доска или тема.",
       },
     ],
     advanced_values: [],
   },
   asana: {
-    description: "Configure Asana connector",
+    description: "Настройка коннектора Asana",
     values: [
       {
         type: "text",
-        query: "Enter your Asana workspace ID:",
-        label: "Workspace ID",
+        query: "Введите ID вашего рабочего пространства Asana:",
+        label: "ID рабочего пространства",
         name: "asana_workspace_id",
         optional: false,
         description:
-          "The ID of the Asana workspace to index. You can find this at https://app.asana.com/api/1.0/workspaces. It's a number that looks like 1234567890123456.",
+          "ID рабочего пространства Asana для индексации. Вы можете найти его на https://app.asana.com/api/1.0/workspaces. Это число, которое выглядит как 1234567890123456.",
       },
       {
         type: "text",
-        query: "Enter project IDs to index (optional):",
-        label: "Project IDs",
+        query: "Введите ID проектов для индексации (необязательно):",
+        label: "ID проектов",
         name: "asana_project_ids",
         description:
-          "IDs of specific Asana projects to index, separated by commas. Leave empty to index all projects in the workspace. Example: 1234567890123456,2345678901234567",
+          "ID конкретных проектов Asana для индексации, разделенные запятыми. Оставьте пустым, чтобы индексировать все проекты в рабочем пространстве. Пример: 1234567890123456,2345678901234567",
         optional: true,
       },
       {
         type: "text",
-        query: "Enter the Team ID (optional):",
-        label: "Team ID",
+        query: "Введите ID команды (необязательно):",
+        label: "ID команды",
         name: "asana_team_id",
         optional: true,
         description:
-          "ID of a team to use for accessing team-visible tasks. This allows indexing of team-visible tasks in addition to public tasks. Leave empty if you don't want to use this feature.",
+          "ID команды для доступа к задачам, видимым команде. Это позволяет индексировать задачи, видимые команде, в дополнение к публичным задачам. Оставьте пустым, если не хотите использовать эту функцию.",
       },
     ],
     advanced_values: [],
   },
   mediawiki: {
-    description: "Configure MediaWiki connector",
+    description: "Настройка коннектора MediaWiki",
     values: [
       {
         type: "text",
-        query: "Enter the language code:",
-        label: "Language Code",
+        query: "Введите код языка:",
+        label: "Код языка",
         name: "language_code",
         optional: false,
-        description: "Input a valid MediaWiki language code (e.g. 'en', 'es')",
+        description:
+          "Введите действительный код языка MediaWiki (например, 'en', 'es')",
       },
       {
         type: "text",
-        query: "Enter the MediaWiki Site URL",
-        label: "MediaWiki Site URL",
+        query: "Введите URL сайта MediaWiki:",
+        label: "URL сайта MediaWiki",
         name: "hostname",
         optional: false,
       },
       {
         type: "list",
-        query: "Enter categories to include:",
-        label: "Categories to index",
+        query: "Введите категории для включения:",
+        label: "Категории для индексации",
         name: "categories",
         description:
-          "Specify 0 or more names of categories to index. For most MediaWiki sites, these are pages with a name of the form 'Category: XYZ', that are lists of other pages/categories. Only specify the name of the category, not its url.",
+          "Укажите 0 или более названий категорий для индексации. Для большинства сайтов MediaWiki это страницы с названием вида 'Категория: XYZ', которые являются списками других страниц/категорий. Указывайте только название категории, а не её URL.",
         optional: true,
       },
       {
         type: "list",
-        query: "Enter pages to include:",
-        label: "Pages",
+        query: "Введите страницы для включения:",
+        label: "Страницы",
         name: "pages",
         optional: true,
         description:
-          "Specify 0 or more names of pages to index. Only specify the name of the page, not its url.",
+          "Укажите 0 или более названий страниц для индексации. Указывайте только название страницы, а не её URL.",
       },
       {
         type: "number",
-        query: "Enter the recursion depth:",
-        label: "Recursion Depth",
+        query: "Введите глубину рекурсии:",
+        label: "Глубина рекурсии",
         name: "recurse_depth",
         description:
-          "When indexing categories that have sub-categories, this will determine how may levels to index. Specify 0 to only index the category itself (i.e. no recursion). Specify -1 for unlimited recursion depth. Note, that in some rare instances, a category might contain itself in its dependencies, which will cause an infinite loop. Only use -1 if you confident that this will not happen.",
+          "При индексации категорий, которые имеют подкатегории, это определит, сколько уровней индексировать. Укажите 0, чтобы индексировать только саму категорию (без рекурсии). Укажите -1 для неограниченной глубины рекурсии. Обратите внимание, что в редких случаях категория может содержать себя в своих зависимостях, что вызовет бесконечный цикл. Используйте -1 только если уверены, что этого не произойдет.",
         optional: true,
       },
     ],
     advanced_values: [],
   },
   discord: {
-    description: "Configure Discord connector",
+    description: "Настройка коннектора Discord",
     values: [],
     advanced_values: [
       {
         type: "list",
-        query: "Enter Server IDs to include:",
-        label: "Server IDs",
+        query: "Введите ID серверов для включения:",
+        label: "ID серверов",
         name: "server_ids",
-        description: `Specify 0 or more server ids to include. Only channels inside them will be used for indexing`,
+        description: `Укажите 0 или более ID серверов для включения. Только каналы внутри них будут использоваться для индексации.`,
         optional: true,
       },
       {
         type: "list",
-        query: "Enter channel names to include:",
-        label: "Channels",
+        query: "Введите названия каналов для включения:",
+        label: "Каналы",
         name: "channel_names",
-        description: `Specify 0 or more channels to index. For example, specifying the channel "support" will cause us to only index all content within the "#support" channel. If no channels are specified, all channels the bot has access to will be indexed.`,
+        description: `Укажите 0 или более каналов для индексации. Например, указание канала "поддержка" приведет к индексации всего контента в канале "#поддержка". Если каналы не указаны, будут проиндексированы все каналы, к которым бот имеет доступ.`,
         optional: true,
       },
       {
         type: "text",
-        query: "Enter the Start Date:",
-        label: "Start Date",
+        query: "Введите начальную дату:",
+        label: "Начальная дата",
         name: "start_date",
-        description: `Only messages after this date will be indexed. Format: YYYY-MM-DD`,
+        description: `Только сообщения после этой даты будут проиндексированы. Формат: ГГГГ-ММ-ДД`,
         optional: true,
       },
     ],
   },
   freshdesk: {
-    description: "Configure Freshdesk connector",
+    description: "Настройка коннектора Freshdesk",
     values: [],
     advanced_values: [],
   },
   fireflies: {
-    description: "Configure Fireflies connector",
+    description: "Настройка коннектора Fireflies",
     values: [],
     advanced_values: [],
   },
   egnyte: {
-    description: "Configure Egnyte connector",
+    description: "Настройка коннектора Egnyte",
     values: [
       {
         type: "text",
-        query: "Enter folder path to index:",
-        label: "Folder Path",
+        query: "Введите путь к папке для индексации:",
+        label: "Путь к папке",
         name: "folder_path",
         optional: true,
         description:
-          "The folder path to index (e.g., '/Shared/Documents'). Leave empty to index everything.",
+          "Путь к папке для индексации (например, '/Shared/Documents'). Оставьте пустым, чтобы индексировать всё.",
       },
     ],
     advanced_values: [],
   },
   airtable: {
-    description: "Configure Airtable connector",
+    description: "Настройка коннектора Airtable",
     values: [
       {
         type: "text",
-        query: "Enter the base ID:",
-        label: "Base ID",
+        query: "Введите ID базы:",
+        label: "ID базы",
         name: "base_id",
         optional: false,
-        description: "The ID of the Airtable base to index.",
+        description: "ID базы Airtable для индексации.",
       },
       {
         type: "text",
-        query: "Enter the table name or ID:",
-        label: "Table Name or Table ID",
+        query: "Введите название таблицы или ID таблицы:",
+        label: "Название таблицы или ID таблицы",
         name: "table_name_or_id",
         optional: false,
       },
       {
         type: "checkbox",
-        label: "Treat all fields except attachments as metadata",
+        label: "Считать все поля, кроме вложений, метаданными",
         name: "treat_all_non_attachment_fields_as_metadata",
         description:
-          "Choose this if the primary content to index are attachments and all other columns are metadata for these attachments.",
+          "Выберите это, если основной контент для индексации — это вложения, а все остальные столбцы являются метаданными для этих вложений.",
         optional: false,
       },
     ],
     advanced_values: [
       {
         type: "text",
-        label: "View ID",
+        label: "ID представления",
         name: "view_id",
         optional: true,
         description:
-          "If you need to link to a specific View, put that ID here e.g. viwVUEJjWPd8XYjh8.",
+          "Если вам нужно ссылаться на конкретное представление, укажите его ID, например, viwVUEJjWPd8XYjh8.",
       },
       {
         type: "text",
-        label: "Share ID",
+        label: "ID общего доступа",
         name: "share_id",
         optional: true,
         description:
-          "If you need to link to a specific Share, put that ID here e.g. shrkfjEzDmLaDtK83.",
+          "Если вам нужно ссылаться на конкретный общий доступ, укажите его ID, например, shrkfjEzDmLaDtK83.",
       },
     ],
     overrideDefaultFreq: 60 * 60 * 24,
   },
   highspot: {
-    description: "Configure Highspot connector",
+    description: "Настройка коннектора Highspot",
     values: [
       {
         type: "tab",
         name: "highspot_scope",
-        label: "What should we index from Highspot?",
+        label: "Что мы будем индексировать из Highspot?",
         optional: true,
         tabs: [
           {
             value: "spots",
-            label: "Specific Spots",
+            label: "Конкретные Spots",
             fields: [
               {
                 type: "list",
-                query: "Enter the spot name(s):",
-                label: "Spot Name(s)",
+                query: "Введите название Spot(ов):",
+                label: "Название Spot(ов)",
                 name: "spot_names",
                 optional: false,
-                description: "For multiple spots, enter your spot one by one.",
+                description: "Для нескольких Spots вводите их по одному.",
               },
             ],
           },
           {
             value: "everything",
-            label: "Everything",
+            label: "Всё",
             fields: [
               {
                 type: "string_tab",
-                label: "Everything",
+                label: "Всё",
                 name: "everything",
                 description:
-                  "This connector will index all spots the provided credentials have access to!",
+                  "Этот коннектор проиндексирует все Spots, к которым есть доступ у предоставленных учетных данных!",
               },
             ],
           },
@@ -1301,30 +1305,27 @@ export function createConnectorInitialValues(
     name: "",
     groups: [],
     access_type: "public",
-    ...configuration.values.reduce(
-      (acc, field) => {
-        if (field.type === "select") {
-          acc[field.name] = null;
-        } else if (field.type === "list") {
-          acc[field.name] = field.default || [];
-        } else if (field.type === "checkbox") {
-          // Special case for include_files_shared_with_me when using service account
-          if (
-            field.name === "include_files_shared_with_me" &&
-            currentCredential &&
-            !currentCredential.credential_json?.google_tokens
-          ) {
-            acc[field.name] = true;
-          } else {
-            acc[field.name] = field.default || false;
-          }
-        } else if (field.default !== undefined) {
-          acc[field.name] = field.default;
+    ...configuration.values.reduce((acc, field) => {
+      if (field.type === "select") {
+        acc[field.name] = null;
+      } else if (field.type === "list") {
+        acc[field.name] = field.default || [];
+      } else if (field.type === "checkbox") {
+        // Special case for include_files_shared_with_me when using service account
+        if (
+          field.name === "include_files_shared_with_me" &&
+          currentCredential &&
+          !currentCredential.credential_json?.google_tokens
+        ) {
+          acc[field.name] = true;
+        } else {
+          acc[field.name] = field.default || false;
         }
-        return acc;
-      },
-      {} as { [record: string]: any }
-    ),
+      } else if (field.default !== undefined) {
+        acc[field.name] = field.default;
+      }
+      return acc;
+    }, {} as { [record: string]: any }),
   };
 }
 
@@ -1342,12 +1343,12 @@ export function createConnectorValidationSchema(
           field.type === "select"
             ? Yup.string()
             : field.type === "list"
-              ? Yup.array().of(Yup.string())
-              : field.type === "checkbox"
-                ? Yup.boolean()
-                : field.type === "file"
-                  ? Yup.mixed()
-                  : Yup.string();
+            ? Yup.array().of(Yup.string())
+            : field.type === "checkbox"
+            ? Yup.boolean()
+            : field.type === "file"
+            ? Yup.mixed()
+            : Yup.string();
 
         if (!field.optional) {
           schema = schema.required(`${field.label} is required`);

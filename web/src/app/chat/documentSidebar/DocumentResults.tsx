@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ChatDocumentDisplay } from "./ChatDocumentDisplay";
 import { removeDuplicateDocs } from "@/lib/documentUtils";
@@ -113,7 +115,7 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                   <div className="p-4 flex items-center justify-between gap-x-2">
                     <div className="flex items-center gap-x-2">
                       <h2 className="text-xl font-bold text-text-900">
-                        Sources
+                        {i18n.t(k.SOURCES)}
                       </h2>
                     </div>
                     <button className="my-auto" onClick={closeSidebar}>
@@ -133,7 +135,7 @@ export const DocumentResults = forwardRef<HTMLDivElement, DocumentResultsProps>(
                         relevantDocument={dedupedDocuments.find(
                           (doc) =>
                             doc.document_id ===
-                            `FILE_CONNECTOR__${file.file_id}`
+                            `${i18n.t(k.FILE_CONNECTOR)}${file.file_id}`
                         )}
                         document={file}
                         setPresentingDocument={() =>

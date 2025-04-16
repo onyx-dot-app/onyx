@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Popover,
@@ -145,20 +147,22 @@ export default function LLMPopover({
               name={getDisplayNameForModel(
                 llmManager?.currentLlm.modelName ||
                   defaultModelDisplayName ||
-                  "Models"
+                  i18n.t(k.MODELS)
               )}
               Icon={getProviderIcon(
                 llmManager?.currentLlm.provider ||
                   defaultProvider?.provider ||
-                  "anthropic",
+                  i18n.t(k.ANTHROPIC),
+
                 llmManager?.currentLlm.modelName ||
                   defaultProvider?.default_model_name ||
-                  "claude-3-5-sonnet-20240620"
+                  i18n.t(k.CLAUDE_SONNET)
               )}
-              tooltipContent="Switch models"
+              tooltipContent="Модели переключателей"
             />
           </button>
         ),
+
     [defaultModelDisplayName, defaultProvider, llmManager?.currentLlm]
   );
 
@@ -196,7 +200,7 @@ export default function LLMPopover({
                     if (currentAssistant?.llm_model_version_override === name) {
                       return (
                         <span className="flex-none ml-auto text-xs">
-                          (assistant)
+                          {i18n.t(k.ASSISTANT3)}
                         </span>
                       );
                     }
@@ -210,8 +214,7 @@ export default function LLMPopover({
                           </TooltipTrigger>
                           <TooltipContent>
                             <p className="text-xs">
-                              This LLM is not vision-capable and cannot process
-                              image files present in your chat session.
+                              {i18n.t(k.THIS_LLM_IS_NOT_VISION_CAPABLE)}
                             </p>
                           </TooltipContent>
                         </Tooltip>
@@ -235,8 +238,9 @@ export default function LLMPopover({
                 onValueCommit={handleTemperatureChangeComplete}
                 className="w-full"
               />
+
               <div className="flex justify-between text-xs text-text-500 mt-2">
-                <span>Temperature (creativity)</span>
+                <span>{i18n.t(k.TEMPERATURE_CREATIVITY)}</span>
                 <span>{localTemperature.toFixed(1)}</span>
               </div>
             </div>

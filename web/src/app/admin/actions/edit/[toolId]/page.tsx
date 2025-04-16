@@ -22,7 +22,7 @@ export default async function Page(props: {
     body = (
       <div>
         <ErrorCallout
-          errorTitle="Something went wrong :("
+          errorTitle="Что-то пошло не так :("
           errorMsg="Tool not found"
         />
       </div>

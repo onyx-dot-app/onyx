@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR, { mutate } from "swr";
@@ -95,10 +97,14 @@ export async function submitConnector<T>(
       );
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return {
+          message: i18n.t(k.SUCCESS1),
+          isSuccess: true,
+          response: responseJson,
+        };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
       }
     } else {
       const response = await fetch(
@@ -114,14 +120,18 @@ export async function submitConnector<T>(
 
       if (response.ok) {
         const responseJson = await response.json();
-        return { message: "Success!", isSuccess: true, response: responseJson };
+        return {
+          message: i18n.t(k.SUCCESS1),
+          isSuccess: true,
+          response: responseJson,
+        };
       } else {
         const errorData = await response.json();
-        return { message: `Error: ${errorData.detail}`, isSuccess: false };
+        return { message: `Ошибка: ${errorData.detail}`, isSuccess: false };
       }
     }
   } catch (error) {
-    return { message: `Error: ${error}`, isSuccess: false };
+    return { message: `Ошибка: ${error}`, isSuccess: false };
   }
 }
 
@@ -221,7 +231,7 @@ export default function AddConnector({
     const response = await deleteCredential(credential.id, true);
     if (response.ok) {
       setPopup({
-        message: "Credential deleted successfully!",
+        message: i18n.t(k.CREDENTIAL_DELETED_SUCCESSFULL),
         type: "success",
       });
     } else {
@@ -237,7 +247,7 @@ export default function AddConnector({
     setCurrentCredential(selectedCredential);
     setAllowCreate(true);
     setPopup({
-      message: "Swapped credential successfully!",
+      message: i18n.t(k.SWAPPED_CREDENTIAL_SUCCESSFULL),
       type: "success",
     });
     refresh();
@@ -263,15 +273,21 @@ export default function AddConnector({
         setOauthUrl(response.url);
         window.open(response.url, "_blank", "noopener,noreferrer");
       } else {
-        setPopup({ message: "Failed to fetch OAuth URL", type: "error" });
+        setPopup({
+          message: i18n.t(k.FAILED_TO_FETCH_OAUTH_URL),
+          type: "error",
+        });
       }
     } catch (error: unknown) {
       // Narrow the type of error
       if (error instanceof Error) {
-        setPopup({ message: `Error: ${error.message}`, type: "error" });
+        setPopup({ message: `Ошибка: ${error.message}`, type: "error" });
       } else {
         // Handle non-standard errors
-        setPopup({ message: "An unknown error occurred", type: "error" });
+        setPopup({
+          message: i18n.t(k.AN_UNKNOWN_ERROR_OCCURRED),
+          type: "error",
+        });
       }
     } finally {
       setIsAuthorizing(false);
@@ -305,30 +321,27 @@ export default function AddConnector({
         // Apply special transforms according to application logic
         const transformedConnectorSpecificConfig = Object.entries(
           connector_specific_config
-        ).reduce(
-          (acc, [key, value]) => {
-            // Filter out empty strings from arrays
-            if (Array.isArray(value)) {
-              value = (value as any[]).filter(
-                (item) => typeof item !== "string" || item.trim() !== ""
-              );
-            }
-            const matchingConfigValue = configuration.values.find(
-              (configValue) => configValue.name === key
+        ).reduce((acc, [key, value]) => {
+          // Filter out empty strings from arrays
+          if (Array.isArray(value)) {
+            value = (value as any[]).filter(
+              (item) => typeof item !== "string" || item.trim() !== ""
             );
-            if (
-              matchingConfigValue &&
-              "transform" in matchingConfigValue &&
-              matchingConfigValue.transform
-            ) {
-              acc[key] = matchingConfigValue.transform(value as string[]);
-            } else {
-              acc[key] = value;
-            }
-            return acc;
-          },
-          {} as Record<string, any>
-        );
+          }
+          const matchingConfigValue = configuration.values.find(
+            (configValue) => configValue.name === key
+          );
+          if (
+            matchingConfigValue &&
+            "transform" in matchingConfigValue &&
+            matchingConfigValue.transform
+          ) {
+            acc[key] = matchingConfigValue.transform(value as string[]);
+          } else {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as Record<string, any>);
 
         // Apply advanced configuration-specific transforms.
         const advancedConfiguration: any = {
@@ -341,8 +354,8 @@ export default function AddConnector({
         const selectedFiles = Array.isArray(values.file_locations)
           ? values.file_locations
           : values.file_locations
-            ? [values.file_locations]
-            : [];
+          ? [values.file_locations]
+          : [];
 
         // Google sites-specific handling
         if (connector == "google_sites") {
@@ -377,7 +390,10 @@ export default function AddConnector({
               onSuccess();
             }
           } catch (error) {
-            setPopup({ message: "Error uploading files", type: "error" });
+            setPopup({
+              message: i18n.t(k.ERROR_UPLOADING_FILES),
+              type: "error",
+            });
           } finally {
             setUploading(false);
           }
@@ -455,7 +471,9 @@ export default function AddConnector({
 
             {formStep == 0 && (
               <CardSection>
-                <Title className="mb-2 text-lg">Select a credential</Title>
+                <Title className="mb-2 text-lg">
+                  {i18n.t(k.SELECT_A_CREDENTIAL)}
+                </Title>
 
                 {connector == ValidSources.Gmail ? (
                   <GmailMain />
@@ -470,6 +488,7 @@ export default function AddConnector({
                       onDeleteCredential={onDeleteCredential}
                       onSwitch={onSwap}
                     />
+
                     {!createCredentialFormToggle && (
                       <div className="mt-6 flex space-x-4">
                         {/* Button to pop up a form to manually enter credentials */}
@@ -504,7 +523,7 @@ export default function AddConnector({
                             }
                           }}
                         >
-                          Create New
+                          {i18n.t(k.CREATE_NEW)}
                         </Button>
                         {/* Button to sign in via OAuth */}
                         {oauthSupportedSources.includes(connector) &&
@@ -518,10 +537,10 @@ export default function AddConnector({
                               hidden={!isAuthorizeVisible}
                             >
                               {isAuthorizing
-                                ? "Authorizing..."
-                                : `Authorize with ${getSourceDisplayName(
-                                    connector
-                                  )}`}
+                                ? i18n.t(k.AUTHORIZING)
+                                : `${i18n.t(
+                                    k.AUTHORIZE_WITH
+                                  )} ${getSourceDisplayName(connector)}`}
                             </Button>
                           )}
                       </div>
@@ -539,8 +558,9 @@ export default function AddConnector({
                         ) : (
                           <>
                             <Title className="mb-2 text-lg">
-                              Create a {getSourceDisplayName(connector)}{" "}
-                              credential
+                              {i18n.t(k.CREATE_A)}{" "}
+                              {getSourceDisplayName(connector)}{" "}
+                              {i18n.t(k.CREDENTIAL)}
                             </Title>
                             {oauthDetails && oauthDetails.oauth_enabled ? (
                               <CreateStdOAuthCredential

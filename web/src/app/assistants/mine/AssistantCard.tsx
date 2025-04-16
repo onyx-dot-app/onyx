@@ -86,12 +86,12 @@ const AssistantCard: React.FC<{
       setActivePopover(null);
       setIsDeleteConfirmation(false);
       setPopup({
-        message: `${persona.name} has been successfully deleted.`,
+        message: `${persona.name} был успешно удален.`,
         type: "success",
       });
     } else {
       setPopup({
-        message: `Failed to delete assistant - ${await response.text()}`,
+        message: `Не удалось удалить помощника - ${await response.text()}`,
         type: "error",
       });
     }
@@ -213,7 +213,9 @@ const AssistantCard: React.FC<{
                               isOwnedByUser
                                 ? () => {
                                     router.push(
-                                      `/assistants/stats/${persona.id}`
+                                      `${i18n.t(k.ASSISTANTS_STATS)}${
+                                        persona.id
+                                      }`
                                     );
                                     closePopover();
                                   }

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -139,12 +141,12 @@ export function NewTeamModal() {
             {hasRequestedInvite ? (
               <>
                 <CheckCircle className="mr-2 h-5 w-5 text-neutral-900 dark:text-[#fff]" />
-                Join Request Sent
+                {i18n.t(k.JOIN_REQUEST_SENT)}
               </>
             ) : (
               <>
                 <Building className="mr-2 h-5 w-5" />
-                We found an existing team for {appDomain}
+                {i18n.t(k.WE_FOUND_AN_EXISTING_TEAM_FOR)} {appDomain}
               </>
             )}
           </Dialog.Title>
@@ -152,7 +154,7 @@ export function NewTeamModal() {
           {isLoading ? (
             <div className="py-8 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neutral-900 dark:border-neutral-100 mx-auto mb-4"></div>
-              <p>Loading team information...</p>
+              <p>{i18n.t(k.LOADING_TEAM_INFORMATION)}</p>
             </div>
           ) : error ? (
             <div className="space-y-4">
@@ -163,7 +165,7 @@ export function NewTeamModal() {
                   onClick={handleContinueToNewOrg}
                   className="flex w-full text-center items-center justify-center"
                 >
-                  Continue with new team
+                  {i18n.t(k.CONTINUE_WITH_NEW_TEAM)}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -171,9 +173,8 @@ export function NewTeamModal() {
           ) : hasRequestedInvite ? (
             <div className="space-y-4">
               <p className="text-neutral-700 dark:text-neutral-200">
-                Your join request has been sent. You can explore as your own
-                team while waiting for an admin of {appDomain} to approve your
-                request.
+                {i18n.t(k.YOUR_JOIN_REQUEST_HAS_BEEN_SEN)}
+                {appDomain} {i18n.t(k.TO_APPROVE_YOUR)}
               </p>
               <div className="flex w-full pt-2">
                 <Button
@@ -181,7 +182,7 @@ export function NewTeamModal() {
                   onClick={handleContinueToNewOrg}
                   className="flex w-full text-center items-center justify-center"
                 >
-                  Try Onyx while waiting
+                  {i18n.t(k.TRY_ONYX_WHILE_WAITING)}
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
@@ -189,7 +190,8 @@ export function NewTeamModal() {
           ) : (
             <div className="space-y-4">
               <p className="text-neutral-500 dark:text-neutral-200 text-sm mb-2">
-                Your join request can be approved by any admin of {appDomain}.
+                {i18n.t(k.YOUR_JOIN_REQUEST_CAN_BE_APPRO)} {appDomain}
+                {i18n.t(k._8)}
               </p>
               <div className="mt-4">
                 <Button
@@ -200,13 +202,13 @@ export function NewTeamModal() {
                 >
                   {isSubmitting ? (
                     <span className="flex items-center">
-                      <span className="animate-spin mr-2">⟳</span>
-                      Sending request...
+                      <span className="animate-spin mr-2">{i18n.t(k._20)}</span>
+                      {i18n.t(k.SENDING_REQUEST)}
                     </span>
                   ) : (
                     <>
                       <Send className="mr-2 h-4 w-4" />
-                      Request to join your team
+                      {i18n.t(k.REQUEST_TO_JOIN_YOUR_TEAM)}
                     </>
                   )}
                 </Button>
@@ -215,7 +217,7 @@ export function NewTeamModal() {
                 onClick={handleContinueToNewOrg}
                 className="flex hover:underline cursor-pointer text-link text-sm flex-col space-y-3 pt-0"
               >
-                + Continue with new team
+                {i18n.t(k.CONTINUE_WITH_NEW_TEAM1)}
               </div>
             </div>
           )}

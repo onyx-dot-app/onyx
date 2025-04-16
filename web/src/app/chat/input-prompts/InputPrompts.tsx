@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect, useCallback } from "react";
 import { InputPrompt } from "@/app/chat/interfaces";
 import { Button } from "@/components/ui/button";
@@ -40,7 +42,7 @@ export default function InputPrompts() {
         const data = await response.json();
         setInputPrompts(data);
       } else {
-        throw new Error("Failed to fetch prompt shortcuts");
+        throw new Error("Не удалось получить ярлыки подсказок");
       }
     } catch (error) {
       setPopup({ message: "Failed to fetch prompt shortcuts", type: "error" });
@@ -76,7 +78,7 @@ export default function InputPrompts() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update prompt");
+        throw new Error("Не удалось обновить приглашение");
       }
 
       // Update local state with new values
@@ -89,9 +91,9 @@ export default function InputPrompts() {
       );
 
       setEditingPromptId(null);
-      setPopup({ message: "Prompt updated successfully", type: "success" });
+      setPopup({ message: "Подсказка успешно обновлена", type: "success" });
     } catch (error) {
-      setPopup({ message: "Failed to update prompt", type: "error" });
+      setPopup({ message: "Не удалось обновить приглашение", type: "error" });
     }
   };
 
@@ -122,12 +124,15 @@ export default function InputPrompts() {
       );
       setPopup({
         message: isPromptPublic(promptToDelete)
-          ? "Prompt hidden successfully"
-          : "Prompt deleted successfully",
+          ? "Подсказка успешно скрыта"
+          : "Подсказка успешно удалена",
         type: "success",
       });
     } catch (error) {
-      setPopup({ message: "Failed to delete/hide prompt", type: "error" });
+      setPopup({
+        message: "Не удалось удалить/скрыть подсказку",
+        type: "error",
+      });
     }
   };
 
@@ -140,16 +145,16 @@ export default function InputPrompts() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create prompt");
+        throw new Error("Не удалось создать приглашение");
       }
 
       const createdPrompt = await response.json();
       setInputPrompts((prevPrompts) => [...prevPrompts, createdPrompt]);
       setNewPrompt({});
       setIsCreatingNew(false);
-      setPopup({ message: "Prompt created successfully", type: "success" });
+      setPopup({ message: "Запрос создан успешно", type: "success" });
     } catch (error) {
-      setPopup({ message: "Failed to create prompt", type: "error" });
+      setPopup({ message: "Не удалось создать приглашение", type: "error" });
     }
   };
 
@@ -161,12 +166,8 @@ export default function InputPrompts() {
       {popup}
       <div className="flex justify-between items-start mb-6">
         <div className="flex flex-col gap-2">
-          <Title>Prompt Shortcuts</Title>
-          <Text>
-            Manage and customize prompt shortcuts for your assistants. Use your
-            prompt shortcuts by starting a new message with &quot;/&quot; in
-            chat.
-          </Text>
+          <Title>{i18n.t(k.PROMPT_SHORTCUTS)}</Title>
+          <Text>{i18n.t(k.MANAGE_AND_CUSTOMIZE_PROMPT_SH)}</Text>
         </div>
       </div>
 
@@ -184,32 +185,34 @@ export default function InputPrompts() {
       {isCreatingNew ? (
         <div className="space-y-2 border p-4 rounded-md mt-4">
           <Textarea
-            placeholder="Prompt Shortcut (e.g. Summarize)"
+            placeholder="Ярлык подсказки (например, «Резюмировать»)"
             value={newPrompt.prompt || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, prompt: e.target.value })
             }
             className="resize-none"
           />
+
           <Textarea
-            placeholder="Actual Prompt (e.g. Summarize the uploaded document and highlight key points.)"
+            placeholder="Фактическая подсказка (например, кратко изложите загруженный документ и выделите ключевые моменты.)"
             value={newPrompt.content || ""}
             onChange={(e) =>
               setNewPrompt({ ...newPrompt, content: e.target.value })
             }
             className="resize-none"
           />
+
           <div className="flex space-x-2">
-            <Button onClick={handleCreate}>Create</Button>
+            <Button onClick={handleCreate}>{i18n.t(k.CREATE1)}</Button>
             <Button variant="ghost" onClick={() => setIsCreatingNew(false)}>
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
           </div>
         </div>
       ) : (
         <Button onClick={() => setIsCreatingNew(true)} className="w-full mt-4">
           <PlusIcon size={14} className="mr-2" />
-          Create New Prompt
+          {i18n.t(k.CREATE_NEW_PROMPT)}
         </Button>
       )}
     </div>
@@ -279,18 +282,19 @@ const PromptCard: React.FC<PromptCardProps> = ({
                 value={localPrompt}
                 onChange={(e) => handleLocalEdit("prompt", e.target.value)}
                 className="mb-2 resize-none"
-                placeholder="Prompt"
+                placeholder="Промпт"
               />
+
               <Textarea
                 value={localContent}
                 onChange={(e) => handleLocalEdit("content", e.target.value)}
                 className="resize-vertical min-h-[100px]"
-                placeholder="Content"
+                placeholder="Контент"
               />
             </div>
             <div className="flex items-end">
               <Button onClick={handleSaveLocal}>
-                {prompt.id ? "Save" : "Create"}
+                {prompt.id ? i18n.t(k.SAVE) : i18n.t(k.CREATE1)}
               </Button>
             </div>
           </div>
@@ -307,7 +311,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
               </TooltipTrigger>
               {isPromptPublic(prompt) && (
                 <TooltipContent>
-                  <p>This is a built-in prompt and cannot be edited</p>
+                  <p>{i18n.t(k.THIS_IS_A_BUILT_IN_PROMPT_AND)}</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -327,11 +331,11 @@ const PromptCard: React.FC<PromptCardProps> = ({
               <DropdownMenuContent>
                 {!isPromptPublic(prompt) && (
                   <DropdownMenuItem onClick={() => onEdit(prompt.id)}>
-                    Edit
+                    {i18n.t(k.EDIT)}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem onClick={() => onDelete(prompt.id)}>
-                  Delete
+                  {i18n.t(k.DELETE)}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

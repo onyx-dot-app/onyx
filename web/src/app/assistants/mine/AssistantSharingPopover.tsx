@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState } from "react";
 import { MinimalUserSnapshot, User } from "@/lib/types";
 import { Button } from "@/components/ui/button";
@@ -56,7 +58,7 @@ export function AssistantSharingPopover({
       setIsUpdating(false);
       if (error) {
         setPopup({
-          message: `Failed to share assistant - ${error}`,
+          message: `Не удалось поделиться помощником - ${error}`,
           type: "error",
         });
       }
@@ -75,7 +77,7 @@ export function AssistantSharingPopover({
   } else {
     sharedStatus = (
       <div>
-        Shared with:{" "}
+        {i18n.t(k.SHARED_WITH)}{" "}
         <div className="flex flex-wrap gap-x-2 mt-2">
           {sharedUsersWithoutOwner.map((u) => (
             <Bubble
@@ -98,7 +100,9 @@ export function AssistantSharingPopover({
                   setIsUpdating(false);
                   if (error) {
                     setPopup({
-                      message: `Failed to remove assistant - ${error}`,
+                      message: `${i18n.t(
+                        k.FAILED_TO_REMOVE_ASSISTANT
+                      )} ${error}`,
                       type: "error",
                     });
                   }
@@ -126,16 +130,20 @@ export function AssistantSharingPopover({
           </h2>
         </div>
         <p className="text-text-600 text-sm mb-4">
-          Manage access to this assistant by sharing it with other users.
+          {i18n.t(k.MANAGE_ACCESS_TO_THIS_ASSISTAN)}
         </p>
 
         <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-2">Current Status</h3>
+          <h3 className="text-sm font-semibold mb-2">
+            {i18n.t(k.CURRENT_STATUS)}
+          </h3>
           <div className="bg-background-50 rounded-lg p-2">{sharedStatus}</div>
         </div>
 
         <div className="mb-4">
-          <h3 className="text-sm font-semibold mb-2">Share Assistant</h3>
+          <h3 className="text-sm font-semibold mb-2">
+            {i18n.t(k.SHARE_ASSISTANT)}
+          </h3>
           <SearchMultiSelectDropdown
             options={allUsers
               .filter(
@@ -171,7 +179,7 @@ export function AssistantSharingPopover({
         {selectedUsers.length > 0 && (
           <div className="mb-4">
             <h4 className="text-xs font-medium text-text-700 mb-2">
-              Selected Users:
+              {i18n.t(k.SELECTED_USERS)}
             </h4>
             <div className="flex flex-wrap gap-2">
               {selectedUsers.map((selectedUser) => (
@@ -203,7 +211,7 @@ export function AssistantSharingPopover({
             size="sm"
             variant="secondary"
           >
-            Share with Selected Users
+            {i18n.t(k.SHARE_WITH_SELECTED_USERS)}
           </Button>
         )}
       </div>

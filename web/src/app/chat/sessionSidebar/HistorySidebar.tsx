@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import React, {
   ForwardedRef,
@@ -116,6 +118,7 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
           !pinned ? "opacity-0" : ""
         }`}
       />
+
       <div
         data-testid={`assistant-[${assistant.id}]`}
         onClick={(e) => {
@@ -159,8 +162,8 @@ const SortableAssistant: React.FC<SortableAssistantProps> = ({
             </TooltipTrigger>
             <TooltipContent>
               {pinned
-                ? "Unpin this assistant from the sidebar"
-                : "Pin this assistant to the sidebar"}
+                ? i18n.t(k.UNPIN_THIS_ASSISTANT_FROM_THE)
+                : i18n.t(k.PIN_THIS_ASSISTANT_TO_THE_SIDE)}
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -303,7 +306,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               >
                 <NewChatIcon size={20} className="flex-none" />
                 <p className="my-auto flex font-normal  items-center ">
-                  New Chat
+                  {i18n.t(k.NEW_CHAT)}
                 </p>
               </Link>
               <Link
@@ -314,8 +317,9 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                   size={20}
                   className="flex-none text-text-history-sidebar-button"
                 />
+
                 <p className="my-auto flex font-normal items-center text-base">
-                  My Documents
+                  {i18n.t(k.MY_DOCUMENTS)}
                 </p>
               </Link>
               {user?.preferences?.shortcut_enabled && (
@@ -327,8 +331,9 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                     size={20}
                     className="flex-none text-text-history-sidebar-button"
                   />
+
                   <p className="my-auto flex font-normal items-center text-base">
-                    Prompt Shortcuts
+                    {i18n.t(k.PROMPT_SHORTCUTS)}
                   </p>
                 </Link>
               )}
@@ -336,7 +341,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
           )}
           <div className="h-full  relative overflow-x-hidden overflow-y-auto">
             <div className="flex px-4 font-normal text-sm gap-x-2 leading-normal text-text-500/80 dark:text-[#D4D4D4] items-center font-normal leading-normal">
-              Assistants
+              {i18n.t(k.ASSISTANTS1)}
             </div>
             <DndContext
               sensors={sensors}
@@ -346,14 +351,16 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
             >
               <SortableContext
                 items={pinnedAssistants.map((a) =>
-                  a.id === 0 ? "assistant-0" : a.id
+                  a.id === 0 ? i18n.t(k.ASSISTANT5) : a.id
                 )}
                 strategy={verticalListSortingStrategy}
               >
                 <div className="flex px-0  mr-4 flex-col gap-y-1 mt-1">
                   {pinnedAssistants.map((assistant: Persona) => (
                     <SortableAssistant
-                      key={assistant.id === 0 ? "assistant-0" : assistant.id}
+                      key={
+                        assistant.id === 0 ? i18n.t(k.ASSISTANT5) : assistant.id
+                      }
                       assistant={assistant}
                       active={assistant.id === liveAssistant?.id}
                       onClick={() => {
@@ -405,7 +412,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 onClick={() => setShowAssistantsModal(true)}
                 className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
               >
-                Explore Assistants
+                {i18n.t(k.EXPLORE_ASSISTANTS)}
               </button>
             </div>
 

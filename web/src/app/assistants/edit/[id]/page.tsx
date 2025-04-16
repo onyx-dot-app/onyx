@@ -12,7 +12,7 @@ export default async function Page(props: { params: Promise<{ id: string }> }) {
   if (!values) {
     return (
       <div className="px-32">
-        <ErrorCallout errorTitle="Something went wrong :(" errorMsg={error} />
+        <ErrorCallout errorTitle="Что-то пошло не так :(" errorMsg={error} />
       </div>
     );
   } else {

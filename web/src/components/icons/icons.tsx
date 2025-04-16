@@ -1428,8 +1428,8 @@ export const ZendeskIcon = ({
   >
     <LogoIcon
       size={
-        typeof window !== "undefined" &&
-        window.matchMedia("(prefers-color-scheme: dark)").matches
+        typeof window !== i18n.t(k.UNDEFINED) &&
+        window.matchMedia(i18n.t(k.PREFERS_COLOR_SCHEME_DARK)).matches
           ? size * 0.8
           : size
       }

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { HealthCheckBanner } from "@/components/health/healthcheck";
 
@@ -224,7 +226,7 @@ export default function EmbeddingForm() {
       return true;
     } else {
       setPopup({
-        message: "Failed to update search settings",
+        message: "Не удалось обновить настройки поиска",
         type: "error",
       });
       return false;
@@ -268,7 +270,7 @@ export default function EmbeddingForm() {
                   setShowInstantSwitchConfirm(true);
                 } else {
                   handleReIndex();
-                  navigateToEmbeddingPage("search settings");
+                  navigateToEmbeddingPage(i18n.t(k.SEARCH_SETTINGS1));
                 }
               }}
               disabled={!isOverallFormValid}
@@ -292,8 +294,8 @@ export default function EmbeddingForm() {
                 w-32"
             >
               {reindexType == ReindexType.REINDEX
-                ? "Re-index"
-                : "Instant Switch"}
+                ? i18n.t(k.RE_INDEX1)
+                : i18n.t(k.INSTANT_SWITCH)}
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -332,14 +334,10 @@ export default function EmbeddingForm() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger className="w-full text-left">
-                        (Recommended) Re-index
+                        {i18n.t(k.RECOMMENDED_RE_INDEX)}
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>
-                          Re-runs all connectors in the background before
-                          switching over. Takes longer but ensures no
-                          degredation of search during the switch.
-                        </p>
+                        <p>{i18n.t(k.RE_RUNS_ALL_CONNECTORS_IN_THE)}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -352,14 +350,10 @@ export default function EmbeddingForm() {
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger className="w-full text-left">
-                        Instant Switch
+                        {i18n.t(k.INSTANT_SWITCH)}
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>
-                          Immediately switches to new settings without
-                          re-indexing. Searches will be degraded until the
-                          re-indexing is complete.
-                        </p>
+                        <p>{i18n.t(k.IMMEDIATELY_SWITCHES_TO_NEW_SE)}</p>
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
@@ -374,23 +368,26 @@ export default function EmbeddingForm() {
                 size={20}
                 weight="fill"
               />
+
               <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
-                <p className="font-semibold mb-2">Needs re-indexing due to:</p>
+                <p className="font-semibold mb-2">
+                  {i18n.t(k.NEEDS_RE_INDEXING_DUE_TO)}
+                </p>
                 <ul className="list-disc pl-5">
                   {currentEmbeddingModel != selectedProvider && (
-                    <li>Changed embedding provider</li>
+                    <li>{i18n.t(k.CHANGED_EMBEDDING_PROVIDER)}</li>
                   )}
                   {searchSettings?.multipass_indexing !=
                     advancedEmbeddingDetails.multipass_indexing && (
-                    <li>Multipass indexing modification</li>
+                    <li>{i18n.t(k.MULTIPASS_INDEXING_MODIFICATIO)}</li>
                   )}
                   {searchSettings?.embedding_precision !=
                     advancedEmbeddingDetails.embedding_precision && (
-                    <li>Embedding precision modification</li>
+                    <li>{i18n.t(k.EMBEDDING_PRECISION_MODIFICATI)}</li>
                   )}
                   {searchSettings?.reduced_dimension !=
                     advancedEmbeddingDetails.reduced_dimension && (
-                    <li>Reduced dimension modification</li>
+                    <li>{i18n.t(k.REDUCED_DIMENSION_MODIFICATION)}</li>
                   )}
                   {(searchSettings?.enable_contextual_rag !=
                     advancedEmbeddingDetails.enable_contextual_rag ||
@@ -398,7 +395,7 @@ export default function EmbeddingForm() {
                       advancedEmbeddingDetails.contextual_rag_llm_name ||
                     searchSettings?.contextual_rag_llm_provider !=
                       advancedEmbeddingDetails.contextual_rag_llm_provider) && (
-                    <li>Contextual RAG modification</li>
+                    <li>{i18n.t(k.CONTEXTUAL_RAG_MODIFICATION)}</li>
                   )}
                 </ul>
               </div>
@@ -412,13 +409,17 @@ export default function EmbeddingForm() {
                   size={20}
                   weight="fill"
                 />
+
                 <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
-                  <p className="font-semibold mb-2">Validation Errors:</p>
+                  <p className="font-semibold mb-2">
+                    {i18n.t(k.VALIDATION_ERRORS)}
+                  </p>
                   <ul className="list-disc pl-5">
                     {Object.entries(combinedFormErrors).map(
                       ([field, error]) => (
                         <li key={field}>
-                          {field}: {error}
+                          {field}
+                          {i18n.t(k._2)} {error}
                         </li>
                       )
                     )}
@@ -433,11 +434,11 @@ export default function EmbeddingForm() {
             className="enabled:cursor-pointer ml-auto disabled:bg-accent/50 disabled:cursor-not-allowed bg-agent flex mx-auto gap-x-1 items-center text-white py-2.5 px-3.5 text-sm font-regular rounded-sm"
             onClick={() => {
               updateSearch();
-              navigateToEmbeddingPage("search settings");
+              navigateToEmbeddingPage(i18n.t(k.SEARCH_SETTINGS1));
             }}
             disabled={!isOverallFormValid}
           >
-            Update Search
+            {i18n.t(k.UPDATE_SEARCH)}
           </button>
           {!isOverallFormValid &&
             Object.keys(combinedFormErrors).length > 0 && (
@@ -447,9 +448,10 @@ export default function EmbeddingForm() {
                   size={20}
                   weight="fill"
                 />
+
                 <div className="absolute z-10 invisible group-hover:visible bg-background-800 text-text-200 text-sm rounded-md shadow-md p-2 right-0 mt-1 w-64">
                   <p className="font-semibold mb-2 text-red-400">
-                    Validation Errors:
+                    {i18n.t(k.VALIDATION_ERRORS)}
                   </p>
                   <ul className="list-disc pl-5">
                     {Object.entries(combinedFormErrors).map(
@@ -472,7 +474,9 @@ export default function EmbeddingForm() {
     return <ThreeDotsLoader />;
   }
   if (currentEmbeddingModelError || !currentEmbeddingModel) {
-    return <ErrorCallout errorTitle="Failed to fetch embedding model status" />;
+    return (
+      <ErrorCallout errorTitle="Не удалось получить статус модели внедрения" />
+    );
   }
 
   const updateCurrentModel = (newModel: string) => {
@@ -530,9 +534,14 @@ export default function EmbeddingForm() {
     if (response.ok) {
       navigateToEmbeddingPage("embedding model");
     } else {
-      setPopup({ message: "Failed to update embedding model", type: "error" });
+      setPopup({
+        message: "Не удалось обновить модель встраивания",
+        type: "error",
+      });
 
-      alert(`Failed to update embedding model - ${await response.text()}`);
+      alert(
+        `Не удалось обновить модель встраивания - ${await response.text()}`
+      );
     }
   };
 
@@ -547,15 +556,10 @@ export default function EmbeddingForm() {
         {formStep == 0 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              Select an Embedding Model
+              {i18n.t(k.SELECT_AN_EMBEDDING_MODEL)}
             </h2>
             <Text className="mb-4">
-              Note that updating the backing model will require a complete
-              re-indexing of all documents across every connected source. This
-              is taken care of in the background so that the system can continue
-              to be used, but depending on the size of the corpus, this could
-              take hours or days. You can monitor the progress of the
-              re-indexing on this page while the models are being switched.
+              {i18n.t(k.NOTE_THAT_UPDATING_THE_BACKING)}
             </Text>
             <CardSection>
               <EmbeddingModelSelection
@@ -583,7 +587,7 @@ export default function EmbeddingForm() {
                   }
                 }}
               >
-                Continue
+                {i18n.t(k.CONTINUE)}
                 <ArrowRight />
               </button>
             </div>
@@ -593,22 +597,25 @@ export default function EmbeddingForm() {
           <Modal
             onOutsideClick={() => setShowPoorModel(false)}
             width="max-w-3xl"
-            title={`Are you sure you want to select ${selectedProvider.model_name}?`}
+            title={`${i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO_SELEC)} ${
+              selectedProvider.model_name
+            }${i18n.t(k._10)}`}
           >
             <>
               <div className="text-lg">
-                {selectedProvider.model_name} is a lower accuracy model.
+                {selectedProvider.model_name}{" "}
+                {i18n.t(k.IS_A_LOWER_ACCURACY_MODEL)}
                 <br />
-                We recommend the following alternatives.
-                <li>Cohere embed-english-v3.0 for cloud-based</li>
-                <li>Nomic nomic-embed-text-v1 for self-hosted</li>
+                {i18n.t(k.WE_RECOMMEND_THE_FOLLOWING_ALT)}
+                <li>{i18n.t(k.COHERE_EMBED_ENGLISH_V_FOR)}</li>
+                <li>{i18n.t(k.NOMIC_NOMIC_EMBED_TEXT_V_FOR)}</li>
               </div>
               <div className="flex mt-4 justify-between">
                 <Button
                   variant="secondary"
                   onClick={() => setShowPoorModel(false)}
                 >
-                  Cancel update
+                  {i18n.t(k.CANCEL_UPDATE)}
                 </Button>
                 <Button
                   onClick={() => {
@@ -616,7 +623,7 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }}
                 >
-                  Continue with {selectedProvider.model_name}
+                  {i18n.t(k.CONTINUE_WITH)} {selectedProvider.model_name}
                 </Button>
               </div>
             </>
@@ -637,13 +644,10 @@ export default function EmbeddingForm() {
         {formStep == 1 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              Select a Reranking Model
+              {i18n.t(k.SELECT_A_RERANKING_MODEL)}
             </h2>
             <Text className="mb-4">
-              Updating the reranking model does not require re-indexing
-              documents. The reranker helps improve search quality by reordering
-              results after the initial embedding search. Changes will take
-              effect immediately for all new searches.
+              {i18n.t(k.UPDATING_THE_RERANKING_MODEL_D)}
             </Text>
 
             <CardSection>
@@ -668,7 +672,7 @@ export default function EmbeddingForm() {
                 onClick={() => prevFormStep()}
               >
                 <ArrowLeft />
-                Previous
+                {i18n.t(k.PREVIOUS)}
               </button>
 
               <ReIndexingButton needsReIndex={needsReIndex} />
@@ -680,7 +684,7 @@ export default function EmbeddingForm() {
                     nextFormStep();
                   }}
                 >
-                  Advanced
+                  {i18n.t(k.ADVANCED)}
                   <ArrowRight />
                 </button>
               </div>
@@ -690,11 +694,10 @@ export default function EmbeddingForm() {
         {formStep == 2 && (
           <>
             <h2 className="text-2xl font-bold mb-4 text-text-800">
-              Advanced Search Configuration
+              {i18n.t(k.ADVANCED_SEARCH_CONFIGURATION)}
             </h2>
             <Text className="mb-4">
-              Configure advanced embedding and search settings. Changes will
-              require re-indexing documents.
+              {i18n.t(k.CONFIGURE_ADVANCED_EMBEDDING_A)}
             </Text>
 
             <CardSection>
@@ -714,7 +717,7 @@ export default function EmbeddingForm() {
                 onClick={() => prevFormStep()}
               >
                 <ArrowLeft />
-                Previous
+                {i18n.t(k.PREVIOUS)}
               </button>
 
               <ReIndexingButton needsReIndex={needsReIndex} />

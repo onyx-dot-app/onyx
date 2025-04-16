@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 import React, { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/Modal";
@@ -184,7 +186,7 @@ const DraggableItem: React.FC<{
           <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
             {file.created_at
               ? getFormattedDateTime(new Date(file.created_at))
-              : "–"}
+              : i18n.t(k._34)}
           </div>
         </div>
       </div>
@@ -281,7 +283,8 @@ const FilePickerFolderItem: React.FC<{
           </div>
 
           <div className="w-[35%] text-right text-sm text-text-400 dark:text-neutral-400 pr-4">
-            {folder.files.length} {folder.files.length === 1 ? "file" : "files"}
+            {folder.files.length}{" "}
+            {folder.files.length === 1 ? "файл" : "файлов"}
           </div>
         </div>
       </div>
@@ -949,7 +952,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               d="M15 19l-7-7 7-7"
             />
           </svg>
-          Back to My Documents
+          {i18n.t(k.BACK_TO_MY_DOCUMENTS)}
         </div>
       );
     }
@@ -966,21 +969,21 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     isFolder: boolean
   ) => {
     const newName = prompt(
-      `Enter new name for ${isFolder ? "folder" : "file"}:`,
+      `Введите новое имя для ${isFolder ? "folder" : "file"}:`,
       currentName
     );
     if (newName && newName !== currentName) {
       try {
         await renameItem(itemId, newName, isFolder);
         setPopup({
-          message: `${isFolder ? "Folder" : "File"} renamed successfully`,
+          message: `${isFolder ? "Folder" : "File"} переименован успешно`,
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Error renaming item:", error);
+        console.error("Ошибка переименования элемента:", error);
         setPopup({
-          message: `Failed to rename ${isFolder ? "folder" : "file"}`,
+          message: `Не удалось переименовать ${isFolder ? "folder" : "file"}`,
           type: "error",
         });
       }
@@ -988,23 +991,23 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   };
 
   const handleDeleteItem = async (itemId: number, isFolder: boolean) => {
-    const itemType = isFolder ? "folder" : "file";
+    const itemType = isFolder ? "папка" : "файл";
     const confirmDelete = window.confirm(
-      `Are you sure you want to delete this ${itemType}?`
+      `Вы уверены, что хотите удалить этот ${itemType}?`
     );
 
     if (confirmDelete) {
       try {
         await deleteItem(itemId, isFolder);
         setPopup({
-          message: `${itemType} deleted successfully`,
+          message: `${itemType} успешно удален`,
           type: "success",
         });
         await refreshFolders();
       } catch (error) {
-        console.error("Error deleting item:", error);
+        console.error("Ошибка удаления элемента:", error);
         setPopup({
-          message: `Failed to delete ${itemType}`,
+          message: `Не удалось удалить ${itemType}`,
           type: "error",
         });
       }
@@ -1099,7 +1102,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       title={
         currentFolder
           ? folders?.find((folder) => folder.id === currentFolder)?.name
-          : "My Documents"
+          : i18n.t(k.MY_DOCUMENTS)
       }
     >
       <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col">
@@ -1146,7 +1149,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                       onMouseLeave={() => setHoveredColumn(null)}
                       className="px-1 cursor-pointer flex items-center"
                     >
-                      Name
+                      {i18n.t(k.NAME)}
                       {renderSortIndicator(SortType.Alphabetical)}
                       {renderHoverIndicator(SortType.Alphabetical)}
                     </button>
@@ -1181,7 +1184,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                             ? SortType.Files
                             : SortType.TimeCreated
                         )}
-                        {currentFolder === null ? "Files" : "Created"}
+                        {currentFolder === null
+                          ? i18n.t(k.FILES1)
+                          : i18n.t(k.CREATED)}
                       </span>
                     </button>
                   </div>
@@ -1267,20 +1272,20 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             ) : folders.length > 0 ? (
               <div className="flex-grow overflow-y-auto px-4">
                 <p className="text-text-subtle dark:text-neutral-400">
-                  No groups found
+                  {i18n.t(k.NO_GROUPS_FOUND)}
                 </p>
               </div>
             ) : (
               <div className="flex-grow flex-col overflow-y-auto px-4 flex items-start justify-start gap-y-2">
                 <p className="text-sm text-muted-foreground dark:text-neutral-400">
-                  No groups found
+                  {i18n.t(k.NO_GROUPS_FOUND)}
                 </p>
                 <a
                   href="/chat/my-documents"
                   className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
                 >
                   <FolderIcon className="mr-2 h-4 w-4" />
-                  Create folder in My Documents
+                  {i18n.t(k.CREATE_FOLDER_IN_MY_DOCUMENTS)}
                 </a>
               </div>
             )}
@@ -1375,7 +1380,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
           <div className="flex flex-col items-center justify-center py-2 space-y-4">
             <div className="flex items-center gap-3">
               <span className="text-sm text-neutral-600 dark:text-neutral-400">
-                Selected context:
+                {i18n.t(k.SELECTED_CONTEXT)}
               </span>
               <TokenDisplay
                 totalTokens={selectedItems.totalTokens}
@@ -1399,7 +1404,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                         uploadingFiles.length > 0
                       }
                     >
-                      {buttonContent || "Set Context"}
+                      {buttonContent || "Установить контекст"}
                     </Button>
                   </div>
                 </TooltipTrigger>
@@ -1407,7 +1412,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                   isCreatingFileFromLink ||
                   uploadingFiles.length > 0) && (
                   <TooltipContent>
-                    <p>Please wait for all files to finish uploading</p>
+                    <p>{i18n.t(k.PLEASE_WAIT_FOR_ALL_FILES_TO_F)}</p>
                   </TooltipContent>
                 )}
               </Tooltip>

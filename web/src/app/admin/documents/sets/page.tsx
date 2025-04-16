@@ -320,12 +320,12 @@ const Main = () => {
       <div className="flex mb-6">
         <CreateButton
           href="/admin/documents/sets/new"
-          text="New Document Set"
+          text="Новый набор документов"
         />
 
         {/* <Link href="/admin/documents/sets/new">
-           <Button variant="navigate">New Document Set</Button>
-          </Link> */}
+            <Button variant="navigate">New Document Set</Button>
+           </Link> */}
       </div>
 
       {documentSets.length > 0 && (
@@ -347,7 +347,10 @@ const Main = () => {
 const Page = () => {
   return (
     <div className="container mx-auto">
-      <AdminPageTitle icon={<BookmarkIcon size={32} />} title="Document Sets" />
+      <AdminPageTitle
+        icon={<BookmarkIcon size={32} />}
+        title="Наборы документов"
+      />
 
       <Main />
     </div>

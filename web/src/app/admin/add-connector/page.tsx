@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ConnectorIcon } from "@/components/icons/icons";
@@ -105,7 +107,9 @@ export default function Page() {
         title="Add Connector"
         farRightElement={
           <Link href="/admin/indexing/status">
-            <Button variant="success-reverse">See Connectors</Button>
+            <Button variant="success-reverse">
+              {i18n.t(k.SEE_CONNECTORS)}
+            </Button>
           </Link>
         }
       />

@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
@@ -60,11 +62,11 @@ export const DocumentSetCreationForm = ({
           groups: existingDocumentSet?.groups ?? [],
         }}
         validationSchema={Yup.object().shape({
-          name: Yup.string().required("Please enter a name for the set"),
+          name: Yup.string().required("Пожалуйста, введите имя для набора"),
           description: Yup.string().optional(),
           cc_pair_ids: Yup.array()
             .of(Yup.number().required())
-            .required("Please select at least one connector"),
+            .required("Пожалуйста, выберите хотя бы один коннектор"),
         })}
         onSubmit={async (values, formikHelpers) => {
           formikHelpers.setSubmitting(true);
@@ -88,8 +90,9 @@ export const DocumentSetCreationForm = ({
           if (response.ok) {
             setPopup({
               message: isUpdate
-                ? "Successfully updated document set!"
-                : "Successfully created document set!",
+                ? i18n.t(k.SUCCESSFULLY_UPDATED_DOCUMENT)
+                : i18n.t(k.SUCCESSFULLY_CREATED_DOCUMENT),
+
               type: "success",
             });
             onClose();
@@ -97,8 +100,8 @@ export const DocumentSetCreationForm = ({
             const errorMsg = await response.text();
             setPopup({
               message: isUpdate
-                ? `Error updating document set - ${errorMsg}`
-                : `Error creating document set - ${errorMsg}`,
+                ? `${i18n.t(k.ERROR_UPDATING_DOCUMENT_SET)} ${errorMsg}`
+                : `${i18n.t(k.ERROR_CREATING_DOCUMENT_SET)} ${errorMsg}`,
               type: "error",
             });
           }
@@ -146,15 +149,16 @@ export const DocumentSetCreationForm = ({
               <div className="space-y-4 w-full">
                 <TextFormField
                   name="name"
-                  label="Name:"
-                  placeholder="A name for the document set"
+                  label="Имя:"
+                  placeholder="Имя для набора документов"
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />
+
                 <TextFormField
                   name="description"
-                  label="Description:"
-                  placeholder="Describe what the document set represents"
+                  label="Описание:"
+                  placeholder="Опишите, что представляет собой набор документов"
                   autoCompleteDisabled={true}
                   optional={true}
                 />
@@ -174,41 +178,41 @@ export const DocumentSetCreationForm = ({
                   <>
                     <ConnectorMultiSelect
                       name="cc_pair_ids"
-                      label={`Connectors available to ${
+                      label={`${i18n.t(k.CONNECTORS_AVAILABLE_TO)} ${
                         userGroups && userGroups.length > 1
-                          ? "the selected group"
-                          : "the group you curate"
+                          ? i18n.t(k.THE_SELECTED_GROUP)
+                          : i18n.t(k.THE_GROUP_YOU_CURATE)
                       }`}
                       connectors={visibleCcPairs}
                       selectedIds={props.values.cc_pair_ids}
                       onChange={(selectedIds) => {
-                        props.setFieldValue("cc_pair_ids", selectedIds);
+                        props.setFieldValue(i18n.t(k.CC_PAIR_IDS), selectedIds);
                       }}
-                      placeholder="Search for connectors..."
+                      placeholder="Поиск коннекторов..."
                     />
 
                     <NonSelectableConnectors
                       connectors={nonVisibleCcPairs}
-                      title={`Connectors not available to the ${
+                      title={`${i18n.t(k.CONNECTORS_NOT_AVAILABLE_TO_TH)} ${
                         userGroups && userGroups.length > 1
-                          ? `group${
-                              props.values.groups.length > 1 ? "s" : ""
-                            } you have selected`
-                          : "group you curate"
+                          ? `${i18n.t(k.GROUP)}${
+                              props.values.groups.length > 1 ? i18n.t(k.S) : ""
+                            } ${i18n.t(k.YOU_HAVE_SELECTED1)}`
+                          : i18n.t(k.GROUP_YOU_CURATE)
                       }`}
-                      description="Only connectors that are directly assigned to the group you are trying to add the document set to will be available."
+                      description="Будут доступны только те коннекторы, которые напрямую назначены группе, в которую вы пытаетесь добавить набор документов."
                     />
                   </>
                 ) : (
                   <ConnectorMultiSelect
                     name="cc_pair_ids"
-                    label="Pick your connectors"
+                    label="Выберите коннекторы"
                     connectors={visibleCcPairs}
                     selectedIds={props.values.cc_pair_ids}
                     onChange={(selectedIds) => {
-                      props.setFieldValue("cc_pair_ids", selectedIds);
+                      props.setFieldValue(i18n.t(k.CC_PAIR_IDS), selectedIds);
                     }}
-                    placeholder="Search for connectors..."
+                    placeholder="Поиск коннекторов..."
                   />
                 )}
               </div>
@@ -220,7 +224,9 @@ export const DocumentSetCreationForm = ({
                   disabled={props.isSubmitting}
                   className="w-56 mx-auto py-1.5 h-auto text-sm"
                 >
-                  {isUpdate ? "Update Document Set" : "Create Document Set"}
+                  {isUpdate
+                    ? i18n.t(k.UPDATE_DOCUMENT_SET)
+                    : i18n.t(k.CREATE_DOCUMENT_SET1)}
                 </Button>
               </div>
             </Form>

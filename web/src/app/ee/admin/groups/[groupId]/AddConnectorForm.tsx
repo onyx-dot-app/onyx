@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { Button } from "@/components/Button";
 import { Modal } from "@/components/Modal";
 import { useState } from "react";
@@ -38,17 +40,17 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
   return (
     <Modal
       className="max-w-3xl"
-      title="Add New Connector"
+      title="Добавить новый коннектор"
       onOutsideClick={() => onClose()}
     >
       <div className="px-6 pt-4">
         <ConnectorMultiSelect
           name="connectors"
-          label="Select Connectors"
+          label="Выбрать коннекторы"
           connectors={availableCCPairs}
           selectedIds={selectedCCPairIds}
           onChange={setSelectedCCPairIds}
-          placeholder="Search for connectors to add..."
+          placeholder="Поиск коннекторов для добавления..."
           showError={false}
         />
 
@@ -64,13 +66,14 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
                 )
               ),
             ];
+
             const response = await updateUserGroup(userGroup.id, {
               user_ids: userGroup.users.map((user) => user.id),
               cc_pair_ids: newCCPairIds,
             });
             if (response.ok) {
               setPopup({
-                message: "Successfully added connectors to group",
+                message: i18n.t(k.SUCCESSFULLY_ADDED_CONNECTORS),
                 type: "success",
               });
               onClose();
@@ -78,14 +81,16 @@ export const AddConnectorForm: React.FC<AddConnectorFormProps> = ({
               const responseJson = await response.json();
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
-                message: `Failed to add connectors to group - ${errorMsg}`,
+                message: `${i18n.t(
+                  k.FAILED_TO_ADD_CONNECTORS_TO_GR
+                )} ${errorMsg}`,
                 type: "error",
               });
               onClose();
             }
           }}
         >
-          Add Connectors
+          {i18n.t(k.ADD_CONNECTORS)}
         </Button>
       </div>
     </Modal>

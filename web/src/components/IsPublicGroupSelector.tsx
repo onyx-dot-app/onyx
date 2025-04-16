@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
 import React, { useState, useEffect } from "react";
 import { FormikProps, FieldArray, ArrayHelpers, ErrorMessage } from "formik";
@@ -53,7 +55,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
   }, [user, userGroups, isPaidEnterpriseFeaturesEnabled]);
 
   if (userGroupsIsLoading) {
-    return <div>Loading...</div>;
+    return <div>{i18n.t(k.LOADING)}</div>;
   }
   if (!isPaidEnterpriseFeaturesEnabled) {
     return null;
@@ -64,8 +66,9 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
       <>
         {userGroups && (
           <div className="mb-1 font-medium text-base">
-            This {objectName} will be assigned to group{" "}
-            <b>{userGroups[0].name}</b>.
+            {i18n.t(k.THIS)} {objectName} {i18n.t(k.WILL_BE_ASSIGNED_TO_GROUP)}{" "}
+            <b>{userGroups[0].name}</b>
+            {i18n.t(k._8)}
           </div>
         )}
       </>
@@ -82,16 +85,23 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
             removeIndent={removeIndent}
             label={
               publicToWhom === "Curators"
-                ? `Make this ${objectName} Curator Accessible?`
-                : `Make this ${objectName} Public?`
+                ? `${i18n.t(k.MAKE_THIS)} ${objectName} ${i18n.t(
+                    k.CURATOR_ACCESSIBLE
+                  )}`
+                : `${i18n.t(k.MAKE_THIS)} ${objectName} ${i18n.t(k.PUBLIC2)}`
             }
             disabled={!isAdmin}
             subtext={
               <span className="block mt-2 text-sm text-text-600 dark:text-neutral-400">
-                If set, then this {objectName} will be usable by{" "}
-                <b>All {publicToWhom}</b>. Otherwise, only <b>Admins</b> and{" "}
-                <b>{publicToWhom}</b> who have explicitly been given access to
-                this {objectName} (e.g. via a User Group) will have access.
+                {i18n.t(k.IF_SET_THEN_THIS)} {objectName}{" "}
+                {i18n.t(k.WILL_BE_USABLE_BY)}{" "}
+                <b>
+                  {i18n.t(k.ALL1)} {publicToWhom}
+                </b>
+                {i18n.t(k.OTHERWISE_ONLY)} <b>{i18n.t(k.ADMINS)}</b>{" "}
+                {i18n.t(k.AND)} <b>{publicToWhom}</b>{" "}
+                {i18n.t(k.WHO_HAVE_EXPLICITLY_BEEN_GIVEN)}
+                {objectName} {i18n.t(k.E_G_VIA_A_USER_GROUP_WILL_H)}
               </span>
             }
           />
@@ -104,7 +114,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
           <>
             <div className="flex mt-4 gap-x-2 items-center">
               <div className="block font-medium text-base">
-                Assign group access for this {objectName}
+                {i18n.t(k.ASSIGN_GROUP_ACCESS_FOR_THIS)} {objectName}
               </div>
             </div>
             {userGroupsIsLoading ? (
@@ -113,13 +123,13 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
               <Text className="mb-3">
                 {isAdmin || !enforceGroupSelection ? (
                   <>
-                    This {objectName} will be visible/accessible by the groups
-                    selected below
+                    {i18n.t(k.THIS)} {objectName}{" "}
+                    {i18n.t(k.WILL_BE_VISIBLE_ACCESSIBLE_BY)}
                   </>
                 ) : (
                   <>
-                    Curators must select one or more groups to give access to
-                    this {objectName}
+                    {i18n.t(k.CURATORS_MUST_SELECT_ONE_OR_MO1)}
+                    {objectName}
                   </>
                 )}
               </Text>
@@ -174,6 +184,7 @@ export const IsPublicGroupSelector = <T extends IsPublicGroupSelectorFormType>({
                 </div>
               )}
             />
+
             <ErrorMessage
               name="groups"
               component="div"

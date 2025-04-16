@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React from "react";
 import {
   OnyxDocument,
@@ -416,7 +418,7 @@ export const AgenticDocumentDisplay = ({
                   <span className="flex gap-x-1 items-center">
                     {" "}
                     <WarningCircle />
-                    Model failed to produce an analysis of the document
+                    {i18n.t(k.MODEL_FAILED_TO_PRODUCE_AN_ANA)}
                   </span>
                 )}
           </p>
@@ -460,7 +462,8 @@ export function CompactDocumentCard({
         <div className=" flex mt-0 pt-0 items-center justify-between w-full ">
           {!isNaN(new Date(document.updated_at).getTime()) && (
             <span className="text-xs text-text-500">
-              Updated {new Date(document.updated_at).toLocaleDateString()}
+              {i18n.t(k.UPDATED)}{" "}
+              {new Date(document.updated_at).toLocaleDateString()}
             </span>
           )}
         </div>
@@ -482,18 +485,19 @@ export function CompactQuestionCard({
       className="max-w-[250px] gap-y-0 cursor-pointer pb-0 pt-0 mt-0 flex gap-y-0 flex-col content-start items-start gap-0"
     >
       <div className="text-sm !pb-0 !mb-0 font-semibold flex items-center gap-x-1 text-text-900 pt-0 mt-0 truncate w-full">
-        Question
+        {i18n.t(k.QUESTION)}
       </div>
       <div className="text-xs mb-0 text-text-600 line-clamp-2">
         {question.question}
       </div>
       <div className="flex mt-0 pt-0 items-center justify-between w-full">
         <span className="text-xs text-text-500">
-          {question.context_docs?.top_documents.length || 0} context docs
+          {question.context_docs?.top_documents.length || 0}{" "}
+          {i18n.t(k.CONTEXT_DOCS)}
         </span>
         {question.sub_queries && (
           <span className="text-xs text-text-500">
-            {question.sub_queries.length} subqueries
+            {question.sub_queries.length} {i18n.t(k.SUBQUERIES)}
           </span>
         )}
       </div>

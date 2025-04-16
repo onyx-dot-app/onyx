@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { DefaultDropdown } from "@/components/Dropdown";
 import {
   AccessType,
@@ -50,28 +52,28 @@ export function AccessTypeForm({
 
   const options = [
     {
-      name: "Private",
+      name: "Частный",
       value: "private",
       description:
-        "Only users who have explicitly been given access to this connector (through the User Groups page) can access the documents pulled in by this connector",
+        "Только пользователи, которым явно предоставлен доступ к этому коннектору (через страницу групп пользователей), могут получить доступ к документам, полученным этим коннектором",
     },
   ];
 
   if (isAdmin) {
     options.push({
-      name: "Public",
+      name: "Публичный",
       value: "public",
       description:
-        "Everyone with an account on Onyx can access the documents pulled in by this connector",
+        "Все пользователи с учетной записью на Onyx могут получить доступ к документам, полученным этим коннектором",
     });
   }
 
   if (isAutoSyncSupported && isPaidEnterpriseEnabled) {
     options.push({
-      name: "Auto Sync Permissions",
+      name: "Автоматическая синхронизация разрешений",
       value: "sync",
       description:
-        "We will automatically sync permissions from the source. A document will be searchable in Onyx if and only if the user performing the search has permission to access the document in the source.",
+        "Мы автоматически синхронизируем разрешения из источника. Документ будет доступен для поиска в Onyx, если и только если пользователь, выполняющий поиск, имеет разрешение на доступ к документу в источнике.",
     });
   }
 
@@ -80,9 +82,11 @@ export function AccessTypeForm({
       {isPaidEnterpriseEnabled && (isAdmin || isAutoSyncSupported) && (
         <>
           <div>
-            <label className="text-text-950 font-medium">Document Access</label>
+            <label className="text-text-950 font-medium">
+              {i18n.t(k.DOCUMENT_ACCESS)}
+            </label>
             <p className="text-sm text-text-500">
-              Control who has access to the documents indexed by this connector.
+              {i18n.t(k.CONTROL_WHO_HAS_ACCESS_TO_THE)}
             </p>
           </div>
           <DefaultDropdown
@@ -93,6 +97,7 @@ export function AccessTypeForm({
             }
             includeDefault={false}
           />
+
           {access_type.value === "sync" && isAutoSyncSupported && (
             <AutoSyncOptions connectorType={connector as ValidAutoSyncSource} />
           )}

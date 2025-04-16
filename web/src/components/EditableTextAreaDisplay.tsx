@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../i18n/keys";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { CheckmarkIcon, XIcon } from "@/components/icons/icons";
 import { Button } from "@/components/ui/button";
@@ -86,6 +88,7 @@ export function EditableTextAreaDisplay({
         readOnly={!isEditing}
         onClick={() => isEditable && !isEditing && setIsEditing(true)}
       />
+
       {isEditing && isEditable ? (
         <div className={cn("flex", "flex-col gap-1")}>
           <Button

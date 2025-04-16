@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect, useRef, useContext } from "react";
 import { useUser } from "@/components/user/UserProvider";
 import { usePopup } from "@/components/admin/connectors/Popup";
@@ -168,13 +170,15 @@ export default function NRFPage({
           credentials: "include",
         });
         if (!res.ok) {
-          throw new Error(`Failed to fetch auth type: ${res.statusText}`);
+          throw new Error(
+            `Не удалось получить тип аутентификации: ${res.statusText}`
+          );
         }
 
         const data = await res.json();
         setAuthType(data.auth_type);
       } catch (err) {
-        console.error("Error fetching auth data:", err);
+        console.error("Ошибка получения данных аутентификации:", err);
       } finally {
         setFetchingAuth(false);
       }
@@ -185,9 +189,7 @@ export default function NRFPage({
 
   const onSubmit = async ({
     messageOverride,
-  }: {
-    messageOverride?: string;
-  } = {}) => {
+  }: { messageOverride?: string } = {}) => {
     const userMessage = messageOverride || message;
 
     let filterString = filterManager?.getFilterString();
@@ -242,8 +244,8 @@ export default function NRFPage({
                 }`}
               >
                 {isNight
-                  ? "End your day with Onyx"
-                  : "Start your day with Onyx"}
+                  ? i18n.t(k.END_YOUR_DAY_WITH_ONYX)
+                  : i18n.t(k.START_YOUR_DAY_WITH_ONYX)}
               </h1>
 
               <SimplifiedChatInputBar
@@ -321,11 +323,11 @@ export default function NRFPage({
       <Dialog open={showTurnOffModal} onOpenChange={setShowTurnOffModal}>
         <DialogContent className="w-fit max-w-[95%]">
           <DialogHeader>
-            <DialogTitle>Turn off Onyx new tab page?</DialogTitle>
+            <DialogTitle>{i18n.t(k.TURN_OFF_ONYX_NEW_TAB_PAGE)}</DialogTitle>
             <DialogDescription>
-              You&apos;ll see your browser&apos;s default new tab page instead.
+              {i18n.t(k.YOU_LL_SEE_YOUR_BROWSER_S_DEFA)}
               <br />
-              You can turn it back on anytime in your Onyx settings.
+              {i18n.t(k.YOU_CAN_TURN_IT_BACK_ON_ANYTIM)}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex gap-2 justify-center">
@@ -333,10 +335,10 @@ export default function NRFPage({
               variant="outline"
               onClick={() => setShowTurnOffModal(false)}
             >
-              Cancel
+              {i18n.t(k.CANCEL)}
             </Button>
             <Button variant="destructive" onClick={confirmTurnOff}>
-              Turn off
+              {i18n.t(k.TURN_OFF)}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -344,7 +346,7 @@ export default function NRFPage({
       {!user && authType !== "disabled" && showLoginModal ? (
         <Modal className="max-w-md mx-auto">
           {fetchingAuth ? (
-            <p className="p-4">Loading login info…</p>
+            <p className="p-4">{i18n.t(k.LOADING_LOGIN_INFO)}</p>
           ) : authType == "basic" ? (
             <LoginPage
               authUrl={null}
@@ -360,7 +362,7 @@ export default function NRFPage({
           ) : (
             <div className="flex flex-col items-center">
               <h2 className="text-center text-xl text-strong font-bold mb-4">
-                Welcome to Onyx
+                {i18n.t(k.WELCOME_TO_ONYX)}
               </h2>
               <Button
                 className="bg-agent w-full hover:bg-accent-hover text-white"
@@ -372,7 +374,7 @@ export default function NRFPage({
                   }
                 }}
               >
-                Log in
+                {i18n.t(k.LOG_IN1)}
               </Button>
             </div>
           )}

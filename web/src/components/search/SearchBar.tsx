@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 import React, { KeyboardEvent, ChangeEvent, useContext } from "react";
 
 import { MagnifyingGlass } from "@phosphor-icons/react";
@@ -67,28 +69,30 @@ export const AnimatedToggle = ({
                 `}
                 ></div>
               </div>
-              <p className="ml-2 text-sm">Pro</p>
+              <p className="ml-2 text-sm">{i18n.t(k.PRO)}</p>
             </div>
           </div>
         </TooltipTrigger>
         <TooltipContent side={direction} backgroundColor="bg-background-200">
           <div className="bg-white my-auto p-6 rounded-lg max-w-sm">
             <h2 className="text-xl text-text-800 font-bold mb-2">
-              Agentic Search
+              {i18n.t(k.AGENTIC_SEARCH)}
             </h2>
             <p className="text-text-700 text-sm mb-4">
-              Our most powerful search, have an AI agent guide you to pinpoint
-              exactly what you&apos;re looking for.
+              {i18n.t(k.OUR_MOST_POWERFUL_SEARCH_HAVE)}
             </p>
             <Separator />
             <h2 className="text-xl text-text-800 font-bold mb-2">
-              Fast Search
+              {i18n.t(k.FAST_SEARCH)}
             </h2>
             <p className="text-text-700 text-sm mb-4">
-              Get quality results immediately, best suited for instant access to
-              your documents.
+              {i18n.t(k.GET_QUALITY_RESULTS_IMMEDIATEL)}
             </p>
-            <p className="mt-2 flex text-xs">Shortcut: ({commandSymbol}/)</p>
+            <p className="mt-2 flex text-xs">
+              {i18n.t(k.SHORTCUT)}
+              {commandSymbol}
+              {i18n.t(k._40)}
+            </p>
           </div>
         </TooltipContent>
       </Tooltip>
@@ -187,6 +191,7 @@ export const FullSearchBar = ({
         onKeyDown={(event) => {}}
         suppressContentEditableWarning={true}
       />
+
       <div
         className={`flex flex-nowrap ${
           showingSidebar ? " 2xl:justify-between" : "2xl:justify-end"

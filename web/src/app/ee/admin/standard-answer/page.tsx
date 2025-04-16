@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ClipboardIcon, EditIcon, TrashIcon } from "@/components/icons/icons";
@@ -46,7 +48,7 @@ const RowTemplate = ({
     Displayable,
     Displayable,
     Displayable,
-    Displayable,
+    Displayable
   ];
 }) => {
   return (
@@ -92,7 +94,7 @@ const CategoryBubble = ({
         className="ml-1 text-subtle hover:text-emphasis"
         aria-label="Remove category"
       >
-        &times;
+        {i18n.t(k._36)}
       </button>
     )}
   </span>
@@ -165,12 +167,12 @@ const StandardAnswersTable = ({
     StandardAnswerCategory[]
   >([]);
   const columns = [
-    { name: "", key: "edit" },
-    { name: "Categories", key: "category" },
-    { name: "Keywords/Pattern", key: "keyword" },
-    { name: "Match regex?", key: "match_regex" },
-    { name: "Answer", key: "answer" },
-    { name: "", key: "delete" },
+    { name: i18n.t(k._1), key: i18n.t(k.EDIT2) },
+    { name: i18n.t(k.CATEGORIES1), key: i18n.t(k.CATEGORY1) },
+    { name: i18n.t(k.KEYWORDS_PATTERN), key: i18n.t(k.KEYWORD) },
+    { name: i18n.t(k.MATCH_REGEX1), key: i18n.t(k.MATCH_REGEX2) },
+    { name: i18n.t(k.ANSWER), key: i18n.t(k.ANSWER2) },
+    { name: i18n.t(k._1), key: i18n.t(k.DELETE1) },
   ];
 
   const filteredStandardAnswers = standardAnswers.filter((standardAnswer) => {
@@ -212,13 +214,13 @@ const StandardAnswersTable = ({
     const response = await deleteStandardAnswer(id);
     if (response.ok) {
       setPopup({
-        message: `Standard answer ${id} deleted`,
+        message: `Стандартный ответ ${id} удален`,
         type: "success",
       });
     } else {
       const errorMsg = await response.text();
       setPopup({
-        message: `Failed to delete standard answer - ${errorMsg}`,
+        message: `Не удалось удалить стандартный ответ - ${errorMsg}`,
         type: "error",
       });
     }
@@ -244,7 +246,7 @@ const StandardAnswersTable = ({
           className="flex-grow ml-2 h-6 bg-transparent outline-none placeholder-subtle overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
-          placeholder="Find standard answers by keyword/phrase..."
+          placeholder="Найти стандартные ответы по ключевому слову/фразе..."
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -281,6 +283,7 @@ const StandardAnswersTable = ({
           }
           defaultDisplay="All Categories"
         />
+
         <div className="flex flex-wrap pb-4 mt-3">
           {selectedCategories.map((category) => (
             <CategoryBubble
@@ -317,18 +320,18 @@ const StandardAnswersTable = ({
         </Table>
         {paginatedStandardAnswers.length === 0 && (
           <div className="flex justify-center">
-            <Text>No matching standard answers found...</Text>
+            <Text>{i18n.t(k.NO_MATCHING_STANDARD_ANSWERS_F)}</Text>
           </div>
         )}
         {paginatedStandardAnswers.length > 0 && (
           <>
             <div className="mt-4">
               <Text>
-                Ensure that you have added the category to the relevant{" "}
+                {i18n.t(k.ENSURE_THAT_YOU_HAVE_ADDED_THE)}{" "}
                 <a className="text-link" href="/admin/bots">
-                  Slack Bot
+                  {i18n.t(k.SLACK_BOT)}
                 </a>
-                .
+                {i18n.t(k._8)}
               </Text>
             </div>
             <div className="mt-4 flex justify-center">
@@ -367,7 +370,7 @@ const Main = () => {
   if (standardAnswersError || !standardAnswers) {
     return (
       <ErrorCallout
-        errorTitle="Error loading standard answers"
+        errorTitle="Ошибка загрузки стандартных ответов"
         errorMsg={
           standardAnswersError.info?.message ||
           standardAnswersError.message.info?.detail
@@ -379,7 +382,7 @@ const Main = () => {
   if (standardAnswerCategoriesError || !standardAnswerCategories) {
     return (
       <ErrorCallout
-        errorTitle="Error loading standard answer categories"
+        errorTitle="Ошибка загрузки стандартных категорий ответов"
         errorMsg={
           standardAnswerCategoriesError.info?.message ||
           standardAnswerCategoriesError.message.info?.detail
@@ -393,19 +396,18 @@ const Main = () => {
       {popup}
 
       <Text className="mb-2">
-        Manage the standard answers for pre-defined questions.
+        {i18n.t(k.MANAGE_THE_STANDARD_ANSWERS_FO)}
         <br />
-        Note: Currently, only questions asked from Slack can receive standard
-        answers.
+        {i18n.t(k.NOTE_CURRENTLY_ONLY_QUESTION)}
       </Text>
       {standardAnswers.length == 0 && (
-        <Text className="mb-2">Add your first standard answer below!</Text>
+        <Text className="mb-2">{i18n.t(k.ADD_YOUR_FIRST_STANDARD_ANSWER)}</Text>
       )}
       <div className="mb-2"></div>
 
       <CreateButton
         href="/admin/standard-answer/new"
-        text="New Standard Answer"
+        text="Новый стандартный ответ"
       />
 
       <Separator />
@@ -427,8 +429,9 @@ const Page = () => {
     <div className="container mx-auto">
       <AdminPageTitle
         icon={<ClipboardIcon size={32} />}
-        title="Standard Answers"
+        title="Стандартные ответы"
       />
+
       <Main />
     </div>
   );

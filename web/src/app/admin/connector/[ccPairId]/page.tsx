@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../../i18n/keys";
 
 import { BackButton } from "@/components/BackButton";
 import { ErrorCallout } from "@/components/ErrorCallout";
@@ -49,20 +51,19 @@ import { Callout } from "@/components/ui/callout";
 // centralized schema for both frontend and backend
 const RefreshFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
-    .typeError("Property value must be a valid number")
-    .integer("Property value must be an integer")
-    .min(60, "Property value must be greater than or equal to 60")
-    .required("Property value is required"),
+    .typeError("Значение свойства должно быть допустимым числом")
+    .integer("Значение свойства должно быть целым числом")
+    .min(60, "Значение свойства должно быть больше или равно 60")
+    .required("Значение свойства обязательно"),
 });
 
 const PruneFrequencySchema = Yup.object().shape({
   propertyValue: Yup.number()
-    .typeError("Property value must be a valid number")
-    .integer("Property value must be an integer")
-    .min(86400, "Property value must be greater than or equal to 86400")
-    .required("Property value is required"),
+    .typeError("Значение свойства должно быть допустимым числом")
+    .integer("Значение свойства должно быть целым числом")
+    .min(86400, "Значение свойства должно быть больше или равно 86400")
+    .required("Значение свойства обязательно"),
 });
-
 const ITEMS_PER_PAGE = 8;
 const PAGES_PER_BATCH = 8;
 
@@ -168,12 +169,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Connector name updated successfully",
+        message: "Имя коннектора успешно обновлено",
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: `Failed to update connector name`,
+        message: `Не удалось обновить имя коннектора`,
         type: "error",
       });
     }
@@ -195,7 +196,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     if (isNaN(parsedRefreshFreq)) {
       setPopup({
-        message: "Invalid refresh frequency: must be an integer",
+        message: "Неверная частота обновления: должна быть целым числом",
         type: "error",
       });
       return;
@@ -212,12 +213,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Connector refresh frequency updated successfully",
+        message: "Частота обновления коннектора успешно обновлена",
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Failed to update connector refresh frequency",
+        message: "Не удалось обновить частоту обновления коннектора",
         type: "error",
       });
     }
@@ -231,7 +232,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
     if (isNaN(parsedFreq)) {
       setPopup({
-        message: "Invalid pruning frequency: must be an integer",
+        message: "Неверная частота обрезки: должна быть целым числом",
         type: "error",
       });
       return;
@@ -248,12 +249,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Connector pruning frequency updated successfully",
+        message: "Частота обрезки соединителя успешно обновлена",
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Failed to update connector pruning frequency",
+        message: "Не удалось обновить частоту обрезки соединителя",
         type: "error",
       });
     }
@@ -266,11 +267,11 @@ function Main({ ccPairId }: { ccPairId: number }) {
   if (!ccPair || (!hasLoadedOnce && ccPairError)) {
     return (
       <ErrorCallout
-        errorTitle={`Failed to fetch info on Connector with ID ${ccPairId}`}
+        errorTitle={`${i18n.t(k.FAILED_TO_FETCH_INFO_ON_CONNEC)} ${ccPairId}`}
         errorMsg={
           ccPairError?.info?.detail ||
           ccPairError?.toString() ||
-          "Unknown error"
+          "Неизвестная ошибка"
         }
       />
     );
@@ -295,8 +296,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingRefreshFrequency && (
         <EditPropertyModal
-          propertyTitle="Refresh Frequency"
-          propertyDetails="How often the connector should refresh (in seconds)"
+          propertyTitle="Частота обновления"
+          propertyDetails="Как часто должен обновляться коннектор (в секундах)"
           propertyName="refresh_frequency"
           propertyValue={String(refreshFreq)}
           validationSchema={RefreshFrequencySchema}
@@ -307,8 +308,8 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {editingPruningFrequency && (
         <EditPropertyModal
-          propertyTitle="Pruning Frequency"
-          propertyDetails="How often the connector should be pruned (in seconds)"
+          propertyTitle="Частота обрезки"
+          propertyDetails="Как часто следует обрезать соединитель (в секундах)"
           propertyName="pruning_frequency"
           propertyValue={String(pruneFreq)}
           validationSchema={PruneFrequencySchema}
@@ -346,6 +347,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       <BackButton
         behaviorOverride={() => router.push("/admin/indexing/status")}
       />
+
       <div className="flex items-center justify-between h-14">
         <div className="my-auto">
           <SourceIcon iconSize={32} sourceType={ccPair.connector.source} />
@@ -382,21 +384,22 @@ function Main({ ccPairId }: { ccPairId: number }) {
         status={ccPair.last_index_attempt_status || "not_started"}
         ccPairStatus={ccPair.status}
       />
+
       <div className="text-sm mt-1">
-        Creator:{" "}
-        <b className="text-emphasis">{ccPair.creator_email ?? "Unknown"}</b>
+        {i18n.t(k.CREATOR)}{" "}
+        <b className="text-emphasis">{ccPair.creator_email ?? "Неизвестный"}</b>
       </div>
       <div className="text-sm mt-1">
-        Total Documents Indexed:{" "}
+        {i18n.t(k.TOTAL_DOCUMENTS_INDEXED)}{" "}
         <b className="text-emphasis">{ccPair.num_docs_indexed}</b>
       </div>
       {!ccPair.is_editable_for_current_user && (
         <div className="text-sm mt-2 text-text-500 italic">
           {ccPair.access_type === "public"
-            ? "Public connectors are not editable by curators."
+            ? i18n.t(k.PUBLIC_CONNECTORS_ARE_NOT_EDIT)
             : ccPair.access_type === "sync"
-              ? "Sync connectors are not editable by curators unless the curator is also the owner."
-              : "This connector belongs to groups where you don't have curator permissions, so it's not editable."}
+            ? i18n.t(k.SYNC_CONNECTORS_ARE_NOT_EDITAB)
+            : i18n.t(k.THIS_CONNECTOR_BELONGS_TO_GROU)}
         </div>
       )}
 
@@ -415,7 +418,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
           <>
             <Separator />
 
-            <Title className="mb-2">Credentials</Title>
+            <Title className="mb-2">{i18n.t(k.CREDENTIALS1)}</Title>
 
             <CredentialSection
               ccPair={ccPair}
@@ -428,8 +431,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
         <div className="mt-2">
           <Callout type="warning" title="Invalid Connector State">
-            This connector is in an invalid state. Please update your
-            credentials or create a new connector before re-indexing.
+            {i18n.t(k.THIS_CONNECTOR_IS_IN_AN_INVALI)}
           </Callout>
         </div>
       )}
@@ -452,29 +454,29 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       <div className="mt-6">
         <div className="flex">
-          <Title>Indexing Attempts</Title>
+          <Title>{i18n.t(k.INDEXING_ATTEMPTS)}</Title>
         </div>
         {indexAttemptErrors && indexAttemptErrors.total_items > 0 && (
           <Alert className="border-alert bg-yellow-50 dark:bg-yellow-800 my-2">
             <AlertCircle className="h-4 w-4 text-yellow-700 dark:text-yellow-500" />
             <AlertTitle className="text-yellow-950 dark:text-yellow-200 font-semibold">
-              Some documents failed to index
+              {i18n.t(k.SOME_DOCUMENTS_FAILED_TO_INDEX)}
             </AlertTitle>
             <AlertDescription className="text-yellow-900 dark:text-yellow-300">
               {isResolvingErrors ? (
                 <span>
                   <span className="text-sm text-yellow-700 dark:text-yellow-400 da animate-pulse">
-                    Resolving failures
+                    {i18n.t(k.RESOLVING_FAILURES)}
                   </span>
                 </span>
               ) : (
                 <>
-                  We ran into some issues while processing some documents.{" "}
+                  {i18n.t(k.WE_RAN_INTO_SOME_ISSUES_WHILE)}{" "}
                   <b
                     className="text-link cursor-pointer dark:text-blue-300"
                     onClick={() => setShowIndexAttemptErrors(true)}
                   >
-                    View details.
+                    {i18n.t(k.VIEW_DETAILS)}
                   </b>
                 </>
               )}

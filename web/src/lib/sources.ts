@@ -61,9 +61,7 @@ interface PartialSourceMetadata {
   docs?: string;
 }
 
-type SourceMap = {
-  [K in ValidSources]: PartialSourceMetadata;
-};
+type SourceMap = { [K in ValidSources]: PartialSourceMetadata };
 
 export const SOURCE_METADATA_MAP: SourceMap = {
   web: {

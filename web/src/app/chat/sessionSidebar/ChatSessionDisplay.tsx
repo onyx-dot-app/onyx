@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import { useRouter } from "next/navigation";
 import { ChatSession } from "../interfaces";
@@ -108,7 +110,7 @@ export function ChatSessionDisplay({
         setIsRenamingChat(false);
         router.refresh();
       } else {
-        alert("Failed to rename chat session");
+        alert("Не удалось переименовать сеанс чата");
       }
     },
     [chatSession.id, chatName, router]
@@ -268,15 +270,15 @@ export function ChatSessionDisplay({
                   </div>
                 ) : (
                   <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
-                    {chatName || `Unnamed Chat`}
+                    {chatName || `${i18n.t(k.UNNAMED_CHAT)}`}
                     <span
                       className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
                       ${
                         isSelected
                           ? "to-background-chat-selected"
                           : isHovered
-                            ? "to-background-chat-hover"
-                            : "to-background-sidebar"
+                          ? "to-background-chat-hover"
+                          : "to-background-sidebar"
                       } `}
                     />
                   </p>
@@ -289,11 +291,13 @@ export function ChatSessionDisplay({
                         line
                         content={
                           <p>
-                            This chat will expire{" "}
+                            {i18n.t(k.THIS_CHAT_WILL_EXPIRE)}{" "}
                             {daysUntilExpiration < 1
-                              ? "today"
-                              : `in ${daysUntilExpiration} day${
-                                  daysUntilExpiration !== 1 ? "s" : ""
+                              ? i18n.t(k.TODAY1)
+                              : `${i18n.t(
+                                  k.IN
+                                )} ${daysUntilExpiration} ${i18n.t(k.DAY)}${
+                                  daysUntilExpiration !== 1 ? i18n.t(k.S) : ""
                                 }`}
                           </p>
                         }
@@ -356,20 +360,22 @@ export function ChatSessionDisplay({
                                 ) : (
                                   <div className="p-3">
                                     <p className="text-sm mb-3">
-                                      Are you sure you want to delete this chat?
+                                      {i18n.t(
+                                        k.ARE_YOU_SURE_YOU_WANT_TO_DELET5
+                                      )}
                                     </p>
                                     <div className="flex justify-center gap-2">
                                       <button
                                         className="px-3 py-1 text-sm bg-background-200 rounded"
                                         onClick={handleCancelDelete}
                                       >
-                                        Cancel
+                                        {i18n.t(k.CANCEL)}
                                       </button>
                                       <button
                                         className="px-3 py-1 text-sm bg-red-500 text-white rounded"
                                         onClick={handleConfirmDelete}
                                       >
-                                        Delete
+                                        {i18n.t(k.DELETE)}
                                       </button>
                                     </div>
                                   </div>

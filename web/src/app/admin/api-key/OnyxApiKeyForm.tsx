@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
@@ -32,7 +34,7 @@ export const OnyxApiKeyForm = ({
     <Modal onOutsideClick={onClose} width="w-2/6">
       <>
         <h2 className="text-xl font-bold flex">
-          {isUpdate ? "Update API Key" : "Create a new API Key"}
+          {isUpdate ? i18n.t(k.UPDATE_API_KEY) : i18n.t(k.CREATE_A_NEW_API_KEY)}
         </h2>
 
         <Separator />
@@ -61,8 +63,9 @@ export const OnyxApiKeyForm = ({
             if (response.ok) {
               setPopup({
                 message: isUpdate
-                  ? "Successfully updated API key!"
-                  : "Successfully created API key!",
+                  ? i18n.t(k.SUCCESSFULLY_UPDATED_API_KEY)
+                  : i18n.t(k.SUCCESSFULLY_CREATED_API_KEY),
+
                 type: "success",
               });
               if (!isUpdate) {
@@ -74,8 +77,8 @@ export const OnyxApiKeyForm = ({
               const errorMsg = responseJson.detail || responseJson.message;
               setPopup({
                 message: isUpdate
-                  ? `Error updating API key - ${errorMsg}`
-                  : `Error creating API key - ${errorMsg}`,
+                  ? `${i18n.t(k.ERROR_UPDATING_API_KEY)} ${errorMsg}`
+                  : `${i18n.t(k.ERROR_CREATING_API_KEY)} ${errorMsg}`,
                 type: "error",
               });
             }
@@ -84,8 +87,7 @@ export const OnyxApiKeyForm = ({
           {({ isSubmitting, values, setFieldValue }) => (
             <Form className="w-full overflow-visible">
               <Text className="mb-4 text-lg">
-                Choose a memorable name for your API key. This is optional and
-                can be added or changed later!
+                {i18n.t(k.CHOOSE_A_MEMORABLE_NAME_FOR_YO)}
               </Text>
 
               <TextFormField
@@ -124,7 +126,7 @@ export const OnyxApiKeyForm = ({
                 variant="submit"
                 disabled={isSubmitting}
               >
-                {isUpdate ? "Update!" : "Create!"}
+                {isUpdate ? i18n.t(k.UPDATE1) : i18n.t(k.CREATE)}
               </Button>
             </Form>
           )}

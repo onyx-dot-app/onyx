@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../i18n/keys";
 
 import { AdminSidebar } from "@/components/admin/connectors/AdminSidebar";
 import {
@@ -81,15 +83,15 @@ export function ClientLayout({
         {settings?.settings.application_status ===
           ApplicationStatus.PAYMENT_REMINDER && (
           <div className="fixed top-2 left-1/2 transform -translate-x-1/2 bg-amber-400 dark:bg-amber-500 text-gray-900 dark:text-gray-100 p-4 rounded-lg shadow-lg z-50 max-w-md text-center">
-            <strong className="font-bold">Warning:</strong> Your trial ends in
-            less than 5 days and no payment method has been added.
+            <strong className="font-bold">{i18n.t(k.WARNING2)}</strong>{" "}
+            {i18n.t(k.YOUR_TRIAL_ENDS_IN)}
             <div className="mt-2">
               <Link href="/admin/billing">
                 <Button
                   variant="default"
                   className="bg-amber-600 hover:bg-amber-700 text-white"
                 >
-                  Update Billing Information
+                  {i18n.t(k.UPDATE_BILLING_INFORMATION)}
                 </Button>
               </Link>
             </div>
@@ -100,7 +102,7 @@ export function ClientLayout({
           <AdminSidebar
             collections={[
               {
-                name: "Connectors",
+                name: i18n.t(k.CONNECTORS),
                 items: [
                   {
                     name: (
@@ -109,10 +111,14 @@ export function ClientLayout({
                           className="text-text-700"
                           size={18}
                         />
-                        <div className="ml-1">Existing Connectors</div>
+
+                        <div className="ml-1">
+                          {i18n.t(k.EXISTING_CONNECTORS)}
+                        </div>
                       </div>
                     ),
-                    link: "/admin/indexing/status",
+
+                    link: i18n.t(k.ADMIN_INDEXING_STATUS),
                   },
                   {
                     name: (
@@ -121,15 +127,17 @@ export function ClientLayout({
                           className="text-text-700"
                           size={18}
                         />
-                        <div className="ml-1.5">Add Connector</div>
+
+                        <div className="ml-1.5">{i18n.t(k.ADD_CONNECTOR)}</div>
                       </div>
                     ),
-                    link: "/admin/add-connector",
+
+                    link: i18n.t(k.ADMIN_ADD_CONNECTOR),
                   },
                 ],
               },
               {
-                name: "Document Management",
+                name: i18n.t(k.DOCUMENT_MANAGEMENT),
                 items: [
                   {
                     name: (
@@ -138,10 +146,12 @@ export function ClientLayout({
                           className="text-text-700"
                           size={18}
                         />
-                        <div className="ml-1">Document Sets</div>
+
+                        <div className="ml-1">{i18n.t(k.DOCUMENT_SETS)}</div>
                       </div>
                     ),
-                    link: "/admin/documents/sets",
+
+                    link: i18n.t(k.ADMIN_DOCUMENTS_SETS1),
                   },
                   {
                     name: (
@@ -150,10 +160,12 @@ export function ClientLayout({
                           className="text-text-700"
                           size={18}
                         />
-                        <div className="ml-1">Explorer</div>
+
+                        <div className="ml-1">{i18n.t(k.EXPLORER)}</div>
                       </div>
                     ),
-                    link: "/admin/documents/explorer",
+
+                    link: i18n.t(k.ADMIN_DOCUMENTS_EXPLORER),
                   },
                   {
                     name: (
@@ -162,15 +174,17 @@ export function ClientLayout({
                           className="text-text-700"
                           size={18}
                         />
-                        <div className="ml-1">Feedback</div>
+
+                        <div className="ml-1">{i18n.t(k.FEEDBACK)}</div>
                       </div>
                     ),
-                    link: "/admin/documents/feedback",
+
+                    link: i18n.t(k.ADMIN_DOCUMENTS_FEEDBACK),
                   },
                 ],
               },
               {
-                name: "Custom Assistants",
+                name: i18n.t(k.CUSTOM_ASSISTANTS),
                 items: [
                   {
                     name: (
@@ -179,10 +193,12 @@ export function ClientLayout({
                           className="text-text-700"
                           size={18}
                         />
-                        <div className="ml-1">Assistants</div>
+
+                        <div className="ml-1">{i18n.t(k.ASSISTANTS1)}</div>
                       </div>
                     ),
-                    link: "/admin/assistants",
+
+                    link: i18n.t(k.ADMIN_ASSISTANTS),
                   },
                   ...(!isCurator
                     ? [
@@ -190,10 +206,11 @@ export function ClientLayout({
                           name: (
                             <div className="flex">
                               <SlackIconSkeleton className="text-text-700" />
-                              <div className="ml-1">Slack Bots</div>
+                              <div className="ml-1">{i18n.t(k.SLACK_BOTS)}</div>
                             </div>
                           ),
-                          link: "/admin/bots",
+
+                          link: i18n.t(k.ADMIN_BOTS1),
                         },
                         {
                           name: (
@@ -202,10 +219,12 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Actions</div>
+
+                              <div className="ml-1">{i18n.t(k.ACTIONS)}</div>
                             </div>
                           ),
-                          link: "/admin/actions",
+
+                          link: i18n.t(k.ADMIN_ACTIONS),
                         },
                       ]
                     : []),
@@ -218,10 +237,14 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Standard Answers</div>
+
+                              <div className="ml-1">
+                                {i18n.t(k.STANDARD_ANSWERS)}
+                              </div>
                             </div>
                           ),
-                          link: "/admin/standard-answer",
+
+                          link: i18n.t(k.ADMIN_STANDARD_ANSWER),
                         },
                       ]
                     : []),
@@ -230,7 +253,7 @@ export function ClientLayout({
               ...(isCurator
                 ? [
                     {
-                      name: "User Management",
+                      name: i18n.t(k.USER_MANAGEMENT),
                       items: [
                         {
                           name: (
@@ -239,10 +262,12 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Groups</div>
+
+                              <div className="ml-1">{i18n.t(k.GROUPS)}</div>
                             </div>
                           ),
-                          link: "/admin/groups",
+
+                          link: i18n.t(k.ADMIN_GROUPS1),
                         },
                       ],
                     },
@@ -251,7 +276,7 @@ export function ClientLayout({
               ...(!isCurator
                 ? [
                     {
-                      name: "Configuration",
+                      name: i18n.t(k.CONFIGURATION),
                       items: [
                         {
                           name: (
@@ -260,34 +285,42 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">LLM</div>
+
+                              <div className="ml-1">{i18n.t(k.LLM)}</div>
                             </div>
                           ),
-                          link: "/admin/configuration/llm",
+
+                          link: i18n.t(k.ADMIN_CONFIGURATION_LLM),
                         },
                         {
                           error: settings?.settings.needs_reindexing,
                           name: (
                             <div className="flex">
                               <SearchIcon className="text-text-700" />
-                              <div className="ml-1">Search Settings</div>
+                              <div className="ml-1">
+                                {i18n.t(k.SEARCH_SETTINGS)}
+                              </div>
                             </div>
                           ),
-                          link: "/admin/configuration/search",
+
+                          link: i18n.t(k.ADMIN_CONFIGURATION_SEARCH),
                         },
                         {
                           name: (
                             <div className="flex">
                               <DocumentIcon2 className="text-text-700" />
-                              <div className="ml-1">Document Processing</div>
+                              <div className="ml-1">
+                                {i18n.t(k.DOCUMENT_PROCESSING)}
+                              </div>
                             </div>
                           ),
-                          link: "/admin/configuration/document-processing",
+
+                          link: i18n.t(k.ADMIN_CONFIGURATION_DOCUMENT),
                         },
                       ],
                     },
                     {
-                      name: "User Management",
+                      name: i18n.t(k.USER_MANAGEMENT),
                       items: [
                         {
                           name: (
@@ -296,10 +329,12 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Users</div>
+
+                              <div className="ml-1">{i18n.t(k.USERS)}</div>
                             </div>
                           ),
-                          link: "/admin/users",
+
+                          link: i18n.t(k.ADMIN_USERS),
                         },
                         ...(enableEnterprise
                           ? [
@@ -310,10 +345,14 @@ export function ClientLayout({
                                       className="text-text-700"
                                       size={18}
                                     />
-                                    <div className="ml-1">Groups</div>
+
+                                    <div className="ml-1">
+                                      {i18n.t(k.GROUPS)}
+                                    </div>
                                   </div>
                                 ),
-                                link: "/admin/groups",
+
+                                link: i18n.t(k.ADMIN_GROUPS1),
                               },
                             ]
                           : []),
@@ -324,10 +363,12 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">API Keys</div>
+
+                              <div className="ml-1">{i18n.t(k.API_KEYS)}</div>
                             </div>
                           ),
-                          link: "/admin/api-key",
+
+                          link: i18n.t(k.ADMIN_API_KEY),
                         },
                         {
                           name: (
@@ -336,17 +377,21 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Token Rate Limits</div>
+
+                              <div className="ml-1">
+                                {i18n.t(k.TOKEN_RATE_LIMITS)}
+                              </div>
                             </div>
                           ),
-                          link: "/admin/token-rate-limits",
+
+                          link: i18n.t(k.ADMIN_TOKEN_RATE_LIMITS),
                         },
                       ],
                     },
                     ...(enableEnterprise
                       ? [
                           {
-                            name: "Performance",
+                            name: i18n.t(k.PERFORMANCE),
                             items: [
                               {
                                 name: (
@@ -355,13 +400,17 @@ export function ClientLayout({
                                       className="text-text-700"
                                       size={18}
                                     />
-                                    <div className="ml-1">Usage Statistics</div>
+
+                                    <div className="ml-1">
+                                      {i18n.t(k.USAGE_STATISTICS)}
+                                    </div>
                                   </div>
                                 ),
-                                link: "/admin/performance/usage",
+
+                                link: i18n.t(k.ADMIN_PERFORMANCE_USAGE),
                               },
                               ...(settings?.settings.query_history_type !==
-                              "disabled"
+                              i18n.t(k.DISABLED1)
                                 ? [
                                     {
                                       name: (
@@ -370,12 +419,16 @@ export function ClientLayout({
                                             className="text-text-700"
                                             size={18}
                                           />
+
                                           <div className="ml-1">
-                                            Query History
+                                            {i18n.t(k.QUERY_HISTORY)}
                                           </div>
                                         </div>
                                       ),
-                                      link: "/admin/performance/query-history",
+
+                                      link: i18n.t(
+                                        k.ADMIN_PERFORMANCE_QUERY_HISTO
+                                      ),
                                     },
                                   ]
                                 : []),
@@ -386,17 +439,21 @@ export function ClientLayout({
                                       className="text-text-700"
                                       size={18}
                                     />
-                                    <div className="ml-1">Custom Analytics</div>
+
+                                    <div className="ml-1">
+                                      {i18n.t(k.CUSTOM_ANALYTICS)}
+                                    </div>
                                   </div>
                                 ),
-                                link: "/admin/performance/custom-analytics",
+
+                                link: i18n.t(k.ADMIN_PERFORMANCE_CUSTOM_ANAL),
                               },
                             ],
                           },
                         ]
                       : []),
                     {
-                      name: "Settings",
+                      name: i18n.t(k.SETTINGS),
                       items: [
                         {
                           name: (
@@ -405,10 +462,14 @@ export function ClientLayout({
                                 className="text-text-700"
                                 size={18}
                               />
-                              <div className="ml-1">Workspace Settings</div>
+
+                              <div className="ml-1">
+                                {i18n.t(k.WORKSPACE_SETTINGS)}
+                              </div>
                             </div>
                           ),
-                          link: "/admin/settings",
+
+                          link: i18n.t(k.ADMIN_SETTINGS),
                         },
                         ...(enableEnterprise
                           ? [
@@ -419,10 +480,14 @@ export function ClientLayout({
                                       className="text-text-700"
                                       size={18}
                                     />
-                                    <div className="ml-1">Whitelabeling</div>
+
+                                    <div className="ml-1">
+                                      {i18n.t(k.WHITELABELING)}
+                                    </div>
                                   </div>
                                 ),
-                                link: "/admin/whitelabeling",
+
+                                link: i18n.t(k.ADMIN_WHITELABELING),
                               },
                             ]
                           : []),
@@ -435,10 +500,14 @@ export function ClientLayout({
                                       className="text-text-700"
                                       size={18}
                                     />
-                                    <div className="ml-1">Billing</div>
+
+                                    <div className="ml-1">
+                                      {i18n.t(k.BILLING)}
+                                    </div>
                                   </div>
                                 ),
-                                link: "/admin/billing",
+
+                                link: i18n.t(k.ADMIN_BILLING),
                               },
                             ]
                           : []),
@@ -460,5 +529,6 @@ export function ClientLayout({
       </div>
     </div>
   );
+
   // Is there a clean way to add this to some piece of text where we need to enbale for copy-paste in a react app?
 }

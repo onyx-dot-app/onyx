@@ -73,8 +73,8 @@ export function ChatBanner() {
                 isExpanded
                   ? "max-h-[1000px]"
                   : settings.enterpriseSettings.two_lines_for_chat_header
-                  ? "max-h-[3em]" // ~3 lines
-                  : "max-h-[1.5em]" // ~1.5 lines
+                    ? "max-h-[3em]" // ~3 lines
+                    : "max-h-[1.5em]" // ~1.5 lines
               }
             `}
           >

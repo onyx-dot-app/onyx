@@ -80,12 +80,13 @@ export function useChatSearch(
         .sort((a, b) => {
           // Custom sort order for time periods
           const order = [
-            "Today",
-            "Yesterday",
-            "This Week",
-            "This Month",
-            "Older",
+            "Сегодня",
+            "Вчера",
+            "На этой неделе",
+            "В этом месяце",
+            "Старше",
           ];
+
           return order.indexOf(a.title) - order.indexOf(b.title);
         });
     },

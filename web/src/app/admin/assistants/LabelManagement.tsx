@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 
 import React from "react";
 import { Separator } from "@/components/ui/separator";
@@ -50,7 +52,7 @@ export default function LabelManagement() {
       {popup}
       <div className="max-w-4xl">
         <div className="flex gap-x-2 items-center">
-          <Title size="lg">Manage Labels</Title>
+          <Title size="lg">{i18n.t(k.MANAGE_LABELS)}</Title>
         </div>
 
         <Formik<FormValues>
@@ -65,11 +67,10 @@ export default function LabelManagement() {
             <Form>
               <div className="flex flex-col gap-4 mt-4 mb-6">
                 <div className="flex flex-col">
-                  <Title className="text-lg">Create New Label</Title>
-                  <SubLabel>
-                    Labels are used to categorize personas. You can create a new
-                    label by entering a name below.
-                  </SubLabel>
+                  <Title className="text-lg">
+                    {i18n.t(k.CREATE_NEW_LABEL)}
+                  </Title>
+                  <SubLabel>{i18n.t(k.LABELS_ARE_USED_TO_CATEGORIZE)}</SubLabel>
                 </div>
                 <div className="max-w-3xl w-full justify-start flex gap-4 items-end">
                   <TextFormField
@@ -78,18 +79,18 @@ export default function LabelManagement() {
                     name="newLabelName"
                     label="Label Name"
                   />
+
                   <Button type="submit" disabled={isSubmitting}>
-                    Create
+                    {i18n.t(k.CREATE1)}
                   </Button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 w-full gap-4">
                 <div className="flex flex-col">
-                  <Title className="text-lg">Edit Labels</Title>
+                  <Title className="text-lg">{i18n.t(k.EDIT_LABELS)}</Title>
                   <SubLabel>
-                    You can edit the name of a label by clicking on the label
-                    name and entering a new name.
+                    {i18n.t(k.YOU_CAN_EDIT_THE_NAME_OF_A_LAB)}
                   </SubLabel>
                 </div>
 
@@ -105,6 +106,7 @@ export default function LabelManagement() {
                         setFieldValue("editLabelName", e.target.value);
                       }}
                     />
+
                     <div className="flex gap-2">
                       {values.editLabelId === label.id ? (
                         <>
@@ -125,13 +127,15 @@ export default function LabelManagement() {
                                 setFieldValue("editLabelName", "");
                               } else {
                                 setPopup({
-                                  message: `Failed to update label - ${await response.text()}`,
+                                  message: `${i18n.t(
+                                    k.FAILED_TO_UPDATE_LABEL
+                                  )} ${await response.text()}`,
                                   type: "error",
                                 });
                               }
                             }}
                           >
-                            Save
+                            {i18n.t(k.SAVE)}
                           </Button>
                           <Button
                             variant="outline"
@@ -140,7 +144,7 @@ export default function LabelManagement() {
                               setFieldValue("editLabelName", "");
                             }}
                           >
-                            Cancel
+                            {i18n.t(k.CANCEL)}
                           </Button>
                         </>
                       ) : (
@@ -150,18 +154,22 @@ export default function LabelManagement() {
                             const response = await deleteLabel(label.id);
                             if (response.ok) {
                               setPopup({
-                                message: `Label "${label.name}" deleted successfully`,
+                                message: `${i18n.t(k.LABEL)}${
+                                  label.name
+                                }${i18n.t(k.DELETED_SUCCESSFULLY)}`,
                                 type: "success",
                               });
                             } else {
                               setPopup({
-                                message: `Failed to delete label - ${await response.text()}`,
+                                message: `${i18n.t(
+                                  k.FAILED_TO_DELETE_LABEL
+                                )} ${await response.text()}`,
                                 type: "error",
                               });
                             }
                           }}
                         >
-                          Delete
+                          {i18n.t(k.DELETE)}
                         </Button>
                       )}
                     </div>

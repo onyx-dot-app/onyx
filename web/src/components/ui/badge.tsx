@@ -50,7 +50,7 @@ const badgeVariants = cva(
       },
     },
     defaultVariants: {
-      variant: "default",
+      variant: i18n.t(k.DEFAULT),
     },
   }
 );

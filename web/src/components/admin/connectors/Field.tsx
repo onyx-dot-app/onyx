@@ -1,4 +1,6 @@
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -159,7 +161,7 @@ const FieldLabel = ({
     >
       <div className="flex gap-x-2 items-center">
         {!removeLabel && <Label small={false}>{label}</Label>}
-        {optional ? <span>(optional) </span> : ""}
+        {optional ? <span>{i18n.t(k.OPTIONAL)} </span> : ""}
         {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
       </div>
       {error ? (
@@ -284,6 +286,7 @@ export function TextFormField({
         removeLabel={removeLabel}
         vertical={vertical}
       />
+
       <div className={`w-full flex ${includeRevert && "gap-x-2"} relative`}>
         <Field
           onChange={handleChange}
@@ -339,12 +342,13 @@ export function TextFormField({
           placeholder={placeholder}
           autoComplete={autoCompleteDisabled ? "off" : undefined}
         />
+
         {includeForgotPassword && (
           <Link
             href="/auth/forgot-password"
             className="absolute right-3 top-1/2 mt-[3px] transform -translate-y-1/2 text-xs text-blue-500 cursor-pointer"
           >
-            Forgot password?
+            {i18n.t(k.FORGOT_PASSWORD1)}
           </Link>
         )}
       </div>
@@ -453,6 +457,7 @@ export function MultiSelectField({
               onChange={() => handleCheckboxChange(option.value)}
               className="mr-2"
             />
+
             {option.label}
           </label>
         ))}
@@ -471,7 +476,7 @@ export const MarkdownFormField = ({
   name,
   label,
   error,
-  placeholder = "Enter your markdown here...",
+  placeholder = "Введите здесь свою скидку...",
 }: MarkdownPreviewProps) => {
   const [field] = useField(name);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -488,7 +493,7 @@ export const MarkdownFormField = ({
           <div className="flex items-center space-x-2">
             <FaMarkdown className="text-text-500" />
             <span className="text-sm font-semibold text-text-600">
-              Markdown
+              {i18n.t(k.MARKDOWN)}
             </span>
           </div>
           <button
@@ -496,7 +501,7 @@ export const MarkdownFormField = ({
             onClick={togglePreview}
             className="text-sm font-semibold text-text-600 hover:text-text-800 focus:outline-none"
           >
-            {isPreviewOpen ? "Write" : "Preview"}
+            {isPreviewOpen ? i18n.t(k.WRITE) : i18n.t(k.PREVIEW)}
           </button>
         </div>
         {isPreviewOpen ? (
@@ -602,7 +607,7 @@ export const BooleanFormField = ({
           <div>
             <div className="flex items-center gap-x-2">
               <Label small={small}>{`${label}${
-                optional ? " (Optional)" : ""
+                optional ? i18n.t(k.OPTIONAL2) : ""
               }`}</Label>
               {tooltip && <ToolTipDetails>{tooltip}</ToolTipDetails>}
             </div>
@@ -677,6 +682,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
                       autoComplete="off"
                       placeholder={placeholder}
                     />
+
                     <div className="my-auto">
                       {index >= minFields ? (
                         <FiX
@@ -706,7 +712,7 @@ export function TextArrayField<T extends Yup.AnyObject>({
               type="button"
               icon={FiPlus}
             >
-              Add New
+              {i18n.t(k.ADD_NEW)}
             </Button>
           </div>
         )}
@@ -729,6 +735,7 @@ export function TextArrayFieldBuilder<T extends Yup.AnyObject>(
   const _TextArrayField: FormBodyBuilder<T> = (values) => (
     <TextArrayField {...props} values={values} />
   );
+
   return _TextArrayField;
 }
 
@@ -833,7 +840,7 @@ export function SelectorFormField({
               container={container}
             >
               {options.length === 0 ? (
-                <SelectItem value="default">Select...</SelectItem>
+                <SelectItem value="default">{i18n.t(k.SELECT1)}</SelectItem>
               ) : (
                 options.map((option) => (
                   <SelectItem
@@ -852,7 +859,7 @@ export function SelectorFormField({
                   value={"__none__"}
                   onSelect={() => setFieldValue(name, null)}
                 >
-                  None
+                  {i18n.t(k.NONE)}
                 </SelectItem>
               )}
             </SelectContent>

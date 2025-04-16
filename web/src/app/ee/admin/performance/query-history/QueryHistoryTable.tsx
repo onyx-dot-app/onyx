@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../i18n/keys";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -84,7 +86,9 @@ function SelectFeedbackType({
 }) {
   return (
     <div>
-      <Text className="my-auto mr-2 font-medium mb-1">Feedback Type</Text>
+      <Text className="my-auto mr-2 font-medium mb-1">
+        {i18n.t(k.FEEDBACK_TYPE)}
+      </Text>
       <div className="max-w-sm space-y-6">
         <Select
           value={value}
@@ -97,25 +101,25 @@ function SelectFeedbackType({
             <SelectItem value="all">
               <div className="flex items-center gap-2">
                 <FiMinus className="h-4 w-4" />
-                <span>Any</span>
+                <span>{i18n.t(k.ANY1)}</span>
               </div>
             </SelectItem>
             <SelectItem value="like">
               <div className="flex items-center gap-2">
                 <FiSmile className="h-4 w-4" />
-                <span>Like</span>
+                <span>{i18n.t(k.LIKE)}</span>
               </div>
             </SelectItem>
             <SelectItem value="dislike">
               <div className="flex items-center gap-2">
                 <FiFrown className="h-4 w-4" />
-                <span>Dislike</span>
+                <span>{i18n.t(k.DISLIKE)}</span>
               </div>
             </SelectItem>
             <SelectItem value="mixed">
               <div className="flex items-center gap-2">
                 <FiMeh className="h-4 w-4" />
-                <span>Mixed</span>
+                <span>{i18n.t(k.MIXED)}</span>
               </div>
             </SelectItem>
           </SelectContent>
@@ -170,7 +174,7 @@ export function QueryHistoryTable() {
   if (error) {
     return (
       <ErrorCallout
-        errorTitle="Error fetching query history"
+        errorTitle="Ошибка получения истории запросов"
         errorMsg={error?.message}
       />
     );
@@ -208,12 +212,12 @@ export function QueryHistoryTable() {
         <Table className="mt-5">
           <TableHeader>
             <TableRow>
-              <TableHead>First User Message</TableHead>
-              <TableHead>First AI Response</TableHead>
-              <TableHead>Feedback</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Persona</TableHead>
-              <TableHead>Date</TableHead>
+              <TableHead>{i18n.t(k.FIRST_USER_MESSAGE)}</TableHead>
+              <TableHead>{i18n.t(k.FIRST_AI_RESPONSE)}</TableHead>
+              <TableHead>{i18n.t(k.FEEDBACK)}</TableHead>
+              <TableHead>{i18n.t(k.USER)}</TableHead>
+              <TableHead>{i18n.t(k.PERSONA)}</TableHead>
+              <TableHead>{i18n.t(k.DATE)}</TableHead>
             </TableRow>
           </TableHeader>
           {isLoading ? (

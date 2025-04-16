@@ -118,13 +118,13 @@ export const SettingsPanel = ({
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}
-          label="Use Onyx as new tab page"
+          label="Использовать Onyx как страницу новой вкладки"
         />
 
         <SidebarSwitch
           checked={showShortcuts}
           onCheckedChange={setShowShortcuts}
-          label="Show bookmarks"
+          label="Показать закладки"
         />
 
         <h3 className="text-sm font-semibold mt-6 mb-2">{i18n.t(k.THEME)}</h3>
@@ -135,16 +135,16 @@ export const SettingsPanel = ({
         >
           <RadioOption
             value="light"
-            label="Light theme"
-            description="Light theme"
+            label="Светлая тема"
+            description="Светлая тема"
             groupValue={theme}
             onChange={toggleTheme}
           />
 
           <RadioOption
             value="dark"
-            label="Dark theme"
-            description="Dark theme"
+            label="Темная тема"
+            description="Темная тема"
             groupValue={theme}
             onChange={toggleTheme}
           />

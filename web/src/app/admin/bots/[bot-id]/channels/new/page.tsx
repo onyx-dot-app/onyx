@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../../../../i18n/keys";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { SlackChannelConfigCreationForm } from "../SlackChannelConfigCreationForm";
 import { fetchSS } from "@/lib/utilsSS";
@@ -39,8 +41,10 @@ async function NewChannelConfigPage(props: {
   if (!documentSetsResponse.ok) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch document sets - ${await documentSetsResponse.text()}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(
+          k.FAILED_TO_FETCH_DOCUMENT_SETS
+        )} ${await documentSetsResponse.text()}`}
       />
     );
   }
@@ -49,8 +53,10 @@ async function NewChannelConfigPage(props: {
   if (assistantsResponse[1]) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch assistants - ${assistantsResponse[1]}`}
+        errorTitle="Что-то пошло не так :("
+        errorMsg={`${i18n.t(k.FAILED_TO_FETCH_ASSISTANTS)} ${
+          assistantsResponse[1]
+        }`}
       />
     );
   }
@@ -60,7 +66,7 @@ async function NewChannelConfigPage(props: {
       <BackButton />
       <AdminPageTitle
         icon={<SourceIcon iconSize={32} sourceType={ValidSources.Slack} />}
-        title="Configure OnyxBot for Slack Channel"
+        title="Настройте OnyxBot для канала Slack"
       />
 
       <SlackChannelConfigCreationForm

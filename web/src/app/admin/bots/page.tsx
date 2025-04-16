@@ -30,7 +30,7 @@ const Main = () => {
     const errorMsg =
       slackBotsError?.info?.message ||
       slackBotsError?.info?.detail ||
-      "An unknown error occurred";
+      "Произошла неизвестная ошибка";
 
     return (
       <ErrorCallout errorTitle="Error loading apps" errorMsg={`${errorMsg}`} />

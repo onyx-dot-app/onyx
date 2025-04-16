@@ -34,6 +34,7 @@ export async function fetchAssistantEditorInfoSS(
     getCurrentUserSS(),
     fetchToolsSS(),
   ];
+
   if (personaId) {
     tasks.push(fetchSS(`/persona/${personaId}`));
   } else {

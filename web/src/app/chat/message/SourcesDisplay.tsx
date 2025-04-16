@@ -1,3 +1,5 @@
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useState, useEffect } from "react";
 import { MinimalOnyxDocument, OnyxDocument } from "@/lib/search/interfaces";
 import { ResultIcon, SeeMoreBlock } from "@/components/chat/sources/SourceCard";
@@ -105,7 +107,7 @@ export const FileSourceCard: React.FC<{
               relevantDocument?.match_highlights || [],
               relevantDocument?.blurb || ""
             )
-          : "This file has not been indexed yet"}
+          : i18n.t(k.THIS_FILE_HAS_NOT_BEEN_INDEXED)}
       </div>
 
       <div className="flex items-center gap-1 mt-1">
@@ -188,7 +190,9 @@ export const SourcesDisplay: React.FC<SourcesDisplayProps> = ({
       }`}
     >
       <div className="flex items-center px-4">
-        <div className="text-black text-lg font-medium">Sources</div>
+        <div className="text-black text-lg font-medium">
+          {i18n.t(k.SOURCES)}
+        </div>
       </div>
       <div
         className={`grid  w-full ${

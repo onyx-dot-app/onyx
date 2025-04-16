@@ -1,5 +1,7 @@
 // Sidebar.tsx
 "use client";
+import i18n from "i18next";
+import k from "./../../../i18n/keys";
 import React, { useContext } from "react";
 import Link from "next/link";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
@@ -41,7 +43,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
             <button className="text-sm text-text-700 hover:bg-background-settings-hover dark:hover:bg-neutral-800 flex items-center block w-52 py-2.5 flex px-2 text-left hover:bg-opacity-80 cursor-pointer rounded">
               <CgArrowsExpandUpLeft className="my-auto" size={18} />
               <p className="ml-1 break-words line-clamp-2 ellipsis leading-none">
-                Exit Admin
+                {i18n.t(k.EXIT_ADMIN)}
               </p>
             </button>
           </Link>
@@ -72,7 +74,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
           key={"onyxVersion"}
         >
           <h2 className="text-xs text-text/40 w-52 font-medium">
-            Onyx version: {combinedSettings.webVersion}
+            {i18n.t(k.ONYX_VERSION)} {combinedSettings.webVersion}
           </h2>
         </div>
       )}

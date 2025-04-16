@@ -139,6 +139,7 @@ export default function SidebarWrapper<T extends object>({
           toggleSidebar={toggleSidebar}
           page="chat"
         />
+
         <div className="w-full flex">
           <div
             style={{ transition: "width 0.30s ease-out" }}
