@@ -220,10 +220,9 @@ def _get_all_page_restrictions(
     perm_sync_data: dict[str, Any],
 ) -> ExternalAccess | None:
     """
-    This function gets the restrictions for a page by taking the intersection
-    of the page's restrictions and the restrictions of all the ancestors
-    of the page.
-    If the page/ancestor has no restrictions, then it is ignored (no intersection).
+    This function gets the restrictions for a page. In Confluence, a child can have
+    at MOST the same level accessibility as its immediate parent.
+
     If no restrictions are found anywhere, then return None, indicating that the page
     should inherit the space's restrictions.
     """
@@ -234,7 +233,15 @@ def _get_all_page_restrictions(
         confluence_client=confluence_client,
         restrictions=perm_sync_data.get("restrictions", {}),
     )
-    has_found_restrictions = bool(found_user_emails or found_group_names)
+    # if there are individual page-level restrictions, then this is the accurate
+    # restriction for the page. You cannot both have page-level restrictions AND
+    # inherit restrictions from the parent.
+    if bool(found_user_emails or found_group_names):
+        return ExternalAccess(
+            external_user_emails=found_user_emails,
+            external_user_group_ids=found_group_names,
+            is_public=False,
+        )
 
     ancestors: list[dict[str, Any]] = perm_sync_data.get("ancestors", [])
     # ancestors seem to be in order from root to immediate parent
@@ -251,31 +258,18 @@ def _get_all_page_restrictions(
             # the page's restrictions, so we ignore it
             continue
 
-        # If there are no restrictions found yet, then use the ancestor's restrictions
-        # else take the intersection of the restrictions
-        found_user_emails = (
-            ancestor_user_emails
-            if not has_found_restrictions
-            else found_user_emails.intersection(ancestor_user_emails)
-        )
-        found_group_names = (
-            ancestor_group_names
-            if not has_found_restrictions
-            else found_group_names.intersection(ancestor_group_names)
-        )
-        has_found_restrictions = True
+        # if inheriting restrictions from the parent, then the first one we run into
+        # should be applied (the reason why we'd traverse more than one ancestor is if
+        # the ancestor also is in "inherit" mode.)
+        if ancestor_user_emails or ancestor_group_names:
+            return ExternalAccess(
+                external_user_emails=ancestor_user_emails,
+                external_user_group_ids=ancestor_group_names,
+                is_public=False,
+            )
 
-    # If there are no restrictions found, then the page
-    # inherits the space's restrictions so return None
-    if not found_user_emails and not found_group_names:
-        return None
-
-    return ExternalAccess(
-        external_user_emails=found_user_emails,
-        external_user_group_ids=found_group_names,
-        # there is no way for a page to be individually public if the space isn't public
-        is_public=False,
-    )
+    # we didn't find any restrictions, so the page inherits the space's restrictions
+    return None
 
 
 def _fetch_all_page_restrictions(
