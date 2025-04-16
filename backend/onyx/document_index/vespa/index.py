@@ -665,12 +665,6 @@ class VespaIndex(DocumentIndex):
     def kg_chunk_updates(
         self, kg_update_requests: list[KGUChunkUpdateRequest], tenant_id: str
     ) -> None:
-        def _get_general_entity(specific_entity: str) -> str:
-            entity_type, entity_name = specific_entity.split(":")
-            if entity_type != "*":
-                return f"{entity_type}:*"
-            else:
-                return specific_entity
 
         processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
         logger.debug(f"Updating {len(kg_update_requests)} documents in Vespa")
@@ -689,9 +683,6 @@ class VespaIndex(DocumentIndex):
                     if len(kg_relationship_split) == 3:
                         implied_entities.add(kg_relationship_split[0])
                         implied_entities.add(kg_relationship_split[2])
-                        # Keep this for now in case we want to also add the general entities
-                        # implied_entities.add(_get_general_entity(kg_relationship_split[0]))
-                        # implied_entities.add(_get_general_entity(kg_relationship_split[2]))
 
                 kg_update_dict["fields"]["kg_relationships"] = {
                     "assign": {

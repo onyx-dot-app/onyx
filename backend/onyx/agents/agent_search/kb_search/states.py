@@ -75,6 +75,7 @@ class ResearchObjectOutput(LoggerUpdate):
 
 class ERTExtractionUpdate(LoggerUpdate):
     entities_types_str: str = ""
+    relationship_types_str: str = ""
     entities: list[str] = []
     relationships: list[str] = []
     terms: list[str] = []

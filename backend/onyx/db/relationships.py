@@ -13,6 +13,7 @@ from onyx.kg.utils.formatting_utils import generate_relationship_type
 def add_relationship(
     db_session: Session,
     relationship_id_name: str,
+    source_document_id: str,
     cluster_count: int | None = None,
 ) -> "KGRelationship":
     """
@@ -20,9 +21,8 @@ def add_relationship(
 
     Args:
         db_session: SQLAlchemy database session
-        source_entity_id: ID of the source entity
         relationship_type: Type of relationship
-        target_entity_id: ID of the target entity
+        source_document_id: ID of the source document
         cluster_count: Optional count of similar relationships clustered together
 
     Returns:
@@ -40,7 +40,9 @@ def add_relationship(
     ) = relationship_id_name.split("__")
 
     source_entity_id_name = format_entity(source_entity_id_name)
+    source_entity_type = source_entity_id_name.split(":")[0]
     target_entity_id_name = format_entity(target_entity_id_name)
+    target_entity_type = target_entity_id_name.split(":")[0]
     relationship_id_name = format_relationship(relationship_id_name)
     relationship_type = generate_relationship_type(relationship_id_name)
 
@@ -49,8 +51,11 @@ def add_relationship(
         id_name=relationship_id_name,
         source_node=source_entity_id_name,
         target_node=target_entity_id_name,
+        source_node_type=source_entity_type,
+        target_node_type=target_entity_type,
         type=relationship_string.lower(),
         relationship_type_id_name=relationship_type,
+        source_document=source_document_id,
         cluster_count=cluster_count,
     )
 
@@ -63,6 +68,7 @@ def add_relationship(
 def add_or_increment_relationship(
     db_session: Session,
     relationship_id_name: str,
+    source_document_id: str,
 ) -> "KGRelationship":
     """
     Add a relationship between two entities to the database if it doesn't exist,
@@ -71,7 +77,7 @@ def add_or_increment_relationship(
     Args:
         db_session: SQLAlchemy database session
         relationship_id_name: The ID name of the relationship in format "source__relationship__target"
-
+        source_document_id: ID of the source document
     Returns:
         The created or updated KGRelationship object
 
@@ -85,6 +91,7 @@ def add_or_increment_relationship(
     existing_relationship = (
         db_session.query(KGRelationship)
         .filter(KGRelationship.id_name == relationship_id_name)
+        .filter(KGRelationship.source_document == source_document_id)
         .first()
     )
 
@@ -97,7 +104,9 @@ def add_or_increment_relationship(
         return existing_relationship
     else:
         # If it doesn't exist, add it with cluster_count=1
-        return add_relationship(db_session, relationship_id_name, cluster_count=1)
+        return add_relationship(
+            db_session, relationship_id_name, source_document_id, cluster_count=1
+        )
 
 
 def add_relationship_type(

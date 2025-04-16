@@ -79,11 +79,11 @@ def generate_simple_sql(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
     entities_types_str = state.entities_types_str
-    state.strategy
-    state.output_format
+    relationship_types_str = state.relationship_types_str
 
     simple_sql_prompt = (
-        SIMPLE_SQL_PROMPT.replace("---entities_types---", entities_types_str)
+        SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
+        .replace("---relationship_types---", relationship_types_str)
         .replace("---question---", question)
         .replace("---query_entities---", "\n".join(state.query_graph_entities))
         .replace(
@@ -120,10 +120,10 @@ def generate_simple_sql(
         logger.error(f"Error in strategy generation: {e}")
         raise e
 
-    if _sql_is_aggregate_query(sql_statement):
-        individualized_sql_query = _remove_aggregation(sql_statement, llm=fast_llm)
-    else:
-        individualized_sql_query = None
+    # if _sql_is_aggregate_query(sql_statement):
+    #     individualized_sql_query = _remove_aggregation(sql_statement, llm=fast_llm)
+    # else:
+    individualized_sql_query = None
 
     # write_custom_event(
     #     "initial_agent_answer",
@@ -155,9 +155,7 @@ def generate_simple_sql(
             if sql_statement.upper().startswith("SELECT COUNT"):
                 scalar_result = result.scalar()
                 query_results = (
-                    [{"count": int(scalar_result) - 1}]
-                    if scalar_result is not None
-                    else []
+                    [{"count": int(scalar_result)}] if scalar_result is not None else []
                 )
             else:
                 # Handle regular row results
@@ -179,7 +177,7 @@ def generate_simple_sql(
                 if individualized_sql_query.upper().startswith("SELECT COUNT"):
                     scalar_result = result.scalar()
                     individualized_query_results = (
-                        [{"count": int(scalar_result) - 1}]
+                        [{"count": int(scalar_result)}]
                         if scalar_result is not None
                         else []
                     )
@@ -208,6 +206,7 @@ def generate_simple_sql(
     # dispatch_main_answer_stop_info(0, writer)
 
     logger.info(f"query_results: {query_results}")
+    logger.debug(f"sql_statement: {sql_statement}")
 
     return SQLSimpleGenerationUpdate(
         sql_query=sql_statement,

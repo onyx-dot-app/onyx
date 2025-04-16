@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Dict
 
 from pydantic import BaseModel
@@ -35,11 +34,16 @@ class KGChunkId(BaseModel):
     chunk_id: int
 
 
+class KGRelationshipExtraction(BaseModel):
+    relationship_str: str
+    source_document_id: str
+
+
 class KGAggregatedExtractions(BaseModel):
-    grounded_entities_document_ids: defaultdict[str, str]
-    entities: defaultdict[str, int]
-    relationships: defaultdict[str, int]
-    terms: defaultdict[str, int]
+    grounded_entities_document_ids: dict[str, str]
+    entities: dict[str, int]
+    relationships: dict[str, dict[str, int]]
+    terms: dict[str, int]
 
 
 class KGBatchExtractionStats(BaseModel):

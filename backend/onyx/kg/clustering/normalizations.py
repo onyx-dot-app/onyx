@@ -82,6 +82,11 @@ def normalize_entities(raw_entities: List[str]) -> NormalizedEntities:
     threshold = 80  # Adjust threshold as needed
 
     for entity in raw_entities:
+        if "*" in entity:
+            normalized_results.append(entity)
+            normalized_map[entity] = entity
+            continue
+
         # Find the best match and its score from norm_entities
         best_match, score = process.extractOne(entity, norm_entities)
 

@@ -226,6 +226,7 @@ def extract_ert(
 
     return ERTExtractionUpdate(
         entities_types_str=all_entity_types,
+        relationship_types_str=all_relationship_types,
         entities=entity_extraction_result.entities,
         relationships=relationship_extraction_result.relationships,
         terms=entity_extraction_result.terms,

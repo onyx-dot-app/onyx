@@ -181,7 +181,9 @@ def kg_extraction(
             KGAggregatedExtractions(
                 grounded_entities_document_ids=defaultdict(str),
                 entities=defaultdict(int),
-                relationships=defaultdict(int),
+                relationships=defaultdict(
+                    lambda: defaultdict(int)
+                ),  # relationship + source document_id
                 terms=defaultdict(int),
             )
         )
@@ -265,18 +267,35 @@ def kg_extraction(
                     )
                     # Add to entity counts instead of replacing
                     for entity, count in aggregated_batch_extractions.entities.items():
-                        connector_aggregated_kg_extractions.entities[entity] += count
+                        if entity not in connector_aggregated_kg_extractions.entities:
+                            connector_aggregated_kg_extractions.entities[entity] = count
+                        else:
+                            connector_aggregated_kg_extractions.entities[
+                                entity
+                            ] += count
                     # Add to relationship counts instead of replacing
                     for (
                         relationship,
-                        count,
+                        relationship_data,
                     ) in aggregated_batch_extractions.relationships.items():
-                        connector_aggregated_kg_extractions.relationships[
-                            relationship
-                        ] += count
+                        for source_document_id, count in relationship_data.items():
+                            if (
+                                relationship
+                                not in connector_aggregated_kg_extractions.relationships
+                            ):
+                                connector_aggregated_kg_extractions.relationships[
+                                    relationship
+                                ] = defaultdict(int)
+                            connector_aggregated_kg_extractions.relationships[
+                                relationship
+                            ][source_document_id] += count
+
                     # Add to term counts instead of replacing
                     for term, count in aggregated_batch_extractions.terms.items():
-                        connector_aggregated_kg_extractions.terms[term] += count
+                        if term not in connector_aggregated_kg_extractions.terms:
+                            connector_aggregated_kg_extractions.terms[term] = count
+                        else:
+                            connector_aggregated_kg_extractions.terms[term] += count
 
                     connector_extraction_stats.append(
                         ConnectorExtractionStats(
@@ -310,13 +329,33 @@ def kg_extraction(
         )
         # Add to entity counts instead of replacing
         for entity, count in aggregated_batch_extractions.entities.items():
-            connector_aggregated_kg_extractions.entities[entity] += count
-        # Add to relationship counts instead of replacing
-        for relationship, count in aggregated_batch_extractions.relationships.items():
-            connector_aggregated_kg_extractions.relationships[relationship] += count
+            if entity not in connector_aggregated_kg_extractions.entities:
+                connector_aggregated_kg_extractions.entities[entity] = count
+            else:
+                connector_aggregated_kg_extractions.entities[entity] += count
         # Add to term counts instead of replacing
         for term, count in aggregated_batch_extractions.terms.items():
-            connector_aggregated_kg_extractions.terms[term] += count
+            if term not in connector_aggregated_kg_extractions.terms:
+                connector_aggregated_kg_extractions.terms[term] = count
+            else:
+                connector_aggregated_kg_extractions.terms[term] += count
+
+        # Add to relationship counts instead of replacing
+        for (
+            relationship,
+            relationship_data,
+        ) in aggregated_batch_extractions.relationships.items():
+            for source_document_id, count in relationship_data.items():
+                if (
+                    relationship
+                    not in connector_aggregated_kg_extractions.relationships
+                ):
+                    connector_aggregated_kg_extractions.relationships[relationship] = (
+                        defaultdict(int)
+                    )
+                connector_aggregated_kg_extractions.relationships[relationship][
+                    source_document_id
+                ] += count
 
         connector_extraction_stats.append(
             ConnectorExtractionStats(
@@ -430,32 +469,33 @@ def kg_extraction(
 
     for (
         relationship,
-        extraction_count,
+        relationship_data,
     ) in aggregated_kg_extractions.relationships.items():
-        relationship_split = relationship.split("__")
+        for source_document_id, extraction_count in relationship_data.items():
+            relationship_split = relationship.split("__")
 
-        source_entity, relationship_type_, target_entity = relationship.split("__")
-        source_entity = relationship_split[0]
-        relationship_type = " ".join(relationship_split[1:-1]).replace("__", "_")
-        target_entity = relationship_split[-1]
+            source_entity, relationship_type_, target_entity = relationship.split("__")
+            source_entity = relationship_split[0]
+            relationship_type = " ".join(relationship_split[1:-1]).replace("__", "_")
+            target_entity = relationship_split[-1]
 
-        source_entity_type = source_entity.split(":")[0]
-        target_entity_type = target_entity.split(":")[0]
+            source_entity_type = source_entity.split(":")[0]
+            target_entity_type = target_entity.split(":")[0]
 
-        if (
-            source_entity_type not in tracked_entity_types
-            or target_entity_type not in tracked_entity_types
-        ):
-            continue
+            if (
+                source_entity_type not in tracked_entity_types
+                or target_entity_type not in tracked_entity_types
+            ):
+                continue
 
-        source_entity_general = f"{source_entity_type.upper()}"
-        target_entity_general = f"{target_entity_type.upper()}"
-        relationship_type_id_name = (
-            f"{source_entity_general}__{relationship_type.lower()}__"
-            f"{target_entity_general}"
-        )
+            source_entity_general = f"{source_entity_type.upper()}"
+            target_entity_general = f"{target_entity_type.upper()}"
+            relationship_type_id_name = (
+                f"{source_entity_general}__{relationship_type.lower()}__"
+                f"{target_entity_general}"
+            )
 
-        relationship_type_counter[relationship_type_id_name] += extraction_count
+            relationship_type_counter[relationship_type_id_name] += extraction_count
 
     for (
         relationship_type_id_name,
@@ -496,31 +536,36 @@ def kg_extraction(
 
     for (
         relationship,
-        extraction_count,
+        relationship_data,
     ) in aggregated_kg_extractions.relationships.items():
-        relationship_split = relationship.split("__")
+        for source_document_id, extraction_count in relationship_data.items():
+            relationship_split = relationship.split("__")
 
-        source_entity, relationship_type_, target_entity = relationship.split("__")
-        source_entity = relationship_split[0]
-        relationship_type = (
-            " ".join(relationship_split[1:-1]).replace("__", " ").replace("_", " ")
-        )
-        target_entity = relationship_split[-1]
-
-        source_entity_type = source_entity.split(":")[0]
-        target_entity_type = target_entity.split(":")[0]
-
-        try:
-            with get_session_with_current_tenant() as db_session:
-                add_relationship(db_session, relationship, extraction_count)
-                db_session.commit()
-        except Exception as e:
-            logger.error(
-                f"Error adding relationship {relationship} to the database: {e}"
+            source_entity, relationship_type_, target_entity = relationship.split("__")
+            source_entity = relationship_split[0]
+            relationship_type = (
+                " ".join(relationship_split[1:-1]).replace("__", " ").replace("_", " ")
             )
-            with get_session_with_current_tenant() as db_session:
-                add_or_increment_relationship(db_session, relationship)
-                db_session.commit()
+            target_entity = relationship_split[-1]
+
+            source_entity_type = source_entity.split(":")[0]
+            target_entity_type = target_entity.split(":")[0]
+
+            try:
+                with get_session_with_current_tenant() as db_session:
+                    add_relationship(
+                        db_session, relationship, source_document_id, extraction_count
+                    )
+                    db_session.commit()
+            except Exception as e:
+                logger.error(
+                    f"Error adding relationship {relationship} to the database: {e}"
+                )
+                with get_session_with_current_tenant() as db_session:
+                    add_or_increment_relationship(
+                        db_session, relationship, source_document_id
+                    )
+                    db_session.commit()
 
     # Populate the Documents table with the kg information for the documents
 
@@ -589,15 +634,14 @@ def _kg_chunk_batch_extraction(
                 )
                 parsed_result = json.loads(cleaned_result)
                 extracted_entities = parsed_result.get("entities", [])
-                extracted_relationships = parsed_result.get("relationships", [])
+                extracted_relationships = [
+                    relationship.replace(" ", "_")
+                    for relationship in parsed_result.get("relationships", [])
+                ]
                 extracted_terms = parsed_result.get("terms", [])
 
                 implied_extracted_relationships = [
-                    llm_preprocessing.core_entity
-                    + "__"
-                    + "relates_neutrally_to"
-                    + "__"
-                    + entity
+                    llm_preprocessing.core_entity + "__" + "mentions" + "__" + entity
                     for entity in extracted_entities
                 ]
 
@@ -618,9 +662,11 @@ def _kg_chunk_batch_extraction(
                     + llm_preprocessing.implied_relationships
                     + implied_extracted_relationships
                 )
-                all_relationships = set(
-                    list(all_relationships)
-                    + list(generalize_relationships(all_relationships))
+                all_relationships = list(
+                    set(
+                        list(all_relationships)
+                        + list(generalize_relationships(all_relationships))
+                    )
                 )
 
                 kg_updates = [
@@ -629,7 +675,7 @@ def _kg_chunk_batch_extraction(
                         chunk_id=chunk.chunk_id,
                         core_entity=llm_preprocessing.core_entity,
                         entities=all_entities,
-                        relationships=all_relationships,
+                        relationships=set(all_relationships),
                         terms=set(extracted_terms),
                     ),
                 ]
@@ -706,7 +752,9 @@ def _kg_chunk_batch_extraction(
     aggregated_kg_extractions = KGAggregatedExtractions(
         grounded_entities_document_ids=defaultdict(str),
         entities=defaultdict(int),
-        relationships=defaultdict(int),
+        relationships=defaultdict(
+            lambda: defaultdict(int)
+        ),  # relationship + source document_id
         terms=defaultdict(int),
     )
 
@@ -719,21 +767,42 @@ def _kg_chunk_batch_extraction(
         for relationship in chunk_result.relationships:
             relationship_split = relationship.split("__")
             if len(relationship_split) == 3:
-                if relationship_split[0] not in mentioned_chunk_entities:
-                    aggregated_kg_extractions.entities[relationship_split[0]] += 1
-                    mentioned_chunk_entities.add(relationship_split[0])
-                if relationship_split[2] not in mentioned_chunk_entities:
-                    aggregated_kg_extractions.entities[relationship_split[2]] += 1
-                    mentioned_chunk_entities.add(relationship_split[2])
-            aggregated_kg_extractions.relationships[relationship] += 1
+                source_entity = relationship_split[0]
+                target_entity = relationship_split[2]
+                if "*" in source_entity or "*" in target_entity:
+                    continue
+                if source_entity not in mentioned_chunk_entities:
+                    aggregated_kg_extractions.entities[source_entity] = 1
+                    mentioned_chunk_entities.add(source_entity)
+                else:
+                    aggregated_kg_extractions.entities[source_entity] += 1
+                if target_entity not in mentioned_chunk_entities:
+                    aggregated_kg_extractions.entities[target_entity] = 1
+                    mentioned_chunk_entities.add(target_entity)
+                else:
+                    aggregated_kg_extractions.entities[target_entity] += 1
+            if relationship not in aggregated_kg_extractions.relationships:
+                aggregated_kg_extractions.relationships[relationship] = defaultdict(int)
+            aggregated_kg_extractions.relationships[relationship][
+                chunk_result.document_id
+            ] += 1
 
         for kg_entity in chunk_result.entities:
+            if "*" in kg_entity:
+                continue
             if kg_entity not in mentioned_chunk_entities:
-                aggregated_kg_extractions.entities[kg_entity] += 1
+                aggregated_kg_extractions.entities[kg_entity] = 1
                 mentioned_chunk_entities.add(kg_entity)
+            else:
+                aggregated_kg_extractions.entities[kg_entity] += 1
 
         for kg_term in chunk_result.terms:
-            aggregated_kg_extractions.terms[kg_term] += 1
+            if "*" in kg_term:
+                continue
+            if kg_term not in aggregated_kg_extractions.terms:
+                aggregated_kg_extractions.terms[kg_term] = 1
+            else:
+                aggregated_kg_extractions.terms[kg_term] += 1
 
     return KGBatchExtractionStats(
         connector_id=chunks[0].connector_id if chunks else None,  # TODO: Update!

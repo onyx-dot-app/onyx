@@ -39,6 +39,7 @@ from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.types import LargeBinary
 from sqlalchemy.types import TypeDecorator
+from sqlalchemy import PrimaryKeyConstraint
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.chat_configs import NUM_POSTPROCESSED_RESULTS
@@ -826,9 +827,11 @@ class KGEntity(Base):
 class KGRelationship(Base):
     __tablename__ = "kg_relationship"
 
-    # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, index=True
+    # Primary identifier - now part of composite key
+    id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
+
+    source_document: Mapped[str | None] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
     )
 
     # Source and target nodes (foreign keys to Entity table)
@@ -838,6 +841,20 @@ class KGRelationship(Base):
 
     target_node: Mapped[str] = mapped_column(
         NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+    )
+
+    source_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
     )
 
     # Relationship type
@@ -871,8 +888,13 @@ class KGRelationship(Base):
     # Relationships to Entity table
     source: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[source_node])
     target: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[target_node])
+    document: Mapped["Document"] = relationship(
+        "Document", foreign_keys=[source_document]
+    )
 
     __table_args__ = (
+        # Composite primary key
+        PrimaryKeyConstraint("id_name", "source_document"),
         # Index for querying relationships by type
         Index("ix_kg_relationship_type", type),
         # Composite index for source/target queries
@@ -923,7 +945,7 @@ class ChunkStats(Base):
     # NOTE: if more sensitive data is added here for display, make sure to add user/group permission
 
     # this should correspond to the ID of the document
-    # (as is passed around in Onyx)
+    # (as is passed around in Onyx)x
     id: Mapped[str] = mapped_column(
         NullFilteredString,
         primary_key=True,

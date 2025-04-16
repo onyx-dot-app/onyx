@@ -131,9 +131,12 @@ def upgrade() -> None:
     # Create KGRelationship table
     op.create_table(
         "kg_relationship",
-        sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
+        sa.Column("id_name", sa.String(), nullable=False, index=True),
         sa.Column("source_node", sa.String(), nullable=False, index=True),
         sa.Column("target_node", sa.String(), nullable=False, index=True),
+        sa.Column("source_node_type", sa.String(), nullable=False, index=True),
+        sa.Column("target_node_type", sa.String(), nullable=False, index=True),
+        sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
         sa.Column("cluster_count", sa.Integer(), nullable=True),
@@ -148,6 +151,9 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["source_node"], ["kg_entity.id_name"]),
         sa.ForeignKeyConstraint(["target_node"], ["kg_entity.id_name"]),
+        sa.ForeignKeyConstraint(["source_node_type"], ["kg_entity_type.id_name"]),
+        sa.ForeignKeyConstraint(["target_node_type"], ["kg_entity_type.id_name"]),
+        sa.ForeignKeyConstraint(["source_document"], ["document.id"]),
         sa.ForeignKeyConstraint(
             ["relationship_type_id_name"], ["kg_relationship_type.id_name"]
         ),
@@ -157,6 +163,7 @@ def upgrade() -> None:
             "type",
             name="uq_kg_relationship_source_target_type",
         ),
+        sa.PrimaryKeyConstraint("id_name", "source_document"),
     )
     op.create_index(
         "ix_kg_relationship_nodes", "kg_relationship", ["source_node", "target_node"]

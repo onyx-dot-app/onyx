@@ -897,6 +897,7 @@ def get_unprocessed_kg_documents_for_connector(
                             False
                         ),
                     ),
+                    DbDocument.kg_processed.is_(False),
                 )
             )
             .distinct()

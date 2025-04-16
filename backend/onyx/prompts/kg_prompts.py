@@ -30,7 +30,11 @@ are provided above, you can only extract those types of entities! Again, there s
 option. Pick this if non of the others apply.>],
 "relationships": [<a list of relationship between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
- of the relationship between the source and the target entities>__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
+of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.). \
+Common relationships may be: 'likes', 'dislikes', 'uses', 'is interested in', 'mentions', 'addresses', \
+'participates in', etc., but look at the text to find the most appropriate relationship. \
+Use spaces here for word separation.>\
+__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>],
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
 identify in the text, each formatted simply as '<term>'>]
 }}
@@ -52,32 +56,33 @@ but only use the information provided to infer whether there should be a time_fi
 QUERY_RELATIONSHIP_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"relationships": [<a list of relationship between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
-of the relationship between the source and the target entities>__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>]
+of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
+__<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>]
 }}
 """.strip()
 
 EXAMPLE_1 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:*"],
-    "relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*"], "terms": []}}
+    "relationships": ["ACCOUNT:Nike__had__CONCERN:*"], "terms": []}}
 """.strip()
 
 EXAMPLE_2 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:performance"],
-    "relationships": ["ACCOUNT:*__relates_negatively_to__CONCERN:performance"], "terms": ["performance issue"]}}
+    "relationships": ["ACCOUNT:*__had_issues__CONCERN:performance"], "terms": ["performance issue"]}}
 """.strip()
 
 EXAMPLE_3 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:performance", "CONCERN:user_experience"],
-    "relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
-                      "ACCOUNT:Nike__relates_positively_to__CONCERN:user_experience"],
+    "relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
+                      "ACCOUNT:Nike__solved__CONCERN:user_experience"],
     "terms": ["performance", "user experience"]}}
 """.strip()
 
 EXAMPLE_4 = r"""
 {{"entities": ["ACCOUNT:Nike", "FEATURE:dashboard", "CONCERN:performance"],
-    "relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
-                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__relates_positively_to__FEATURE:dashboard"],
+    "relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
+                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__gets_value_from__FEATURE:dashboard"],
     "terms": ["value", "performance"]}}
 """.strip()
 
@@ -88,7 +93,7 @@ RELATIONSHIP_EXAMPLE_1 = r"""
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*"]}}
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_2 = r"""
@@ -98,7 +103,7 @@ RELATIONSHIP_EXAMPLE_2 = r"""
 
 then a much more suitable relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:*__relates_negatively_to__CONCERN:performance"]}}
+{{"relationships": ["ACCOUNT:*__had_issues__CONCERN:performance"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_3 = r"""
@@ -109,8 +114,8 @@ and the extracted entities were found to be:
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
-                      "ACCOUNT:Nike__relates_positively_to__CONCERN:user_experience"]}}
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
+                      "ACCOUNT:Nike__solved__CONCERN:user_experience"]}}
 """.strip()
 
 RELATIONSHIP_EXAMPLE_4 = r"""
@@ -122,9 +127,9 @@ and the extracted entities were found to be:
 then a valid relationship extraction could be:
 Example 4:
 
-{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:performance",
-                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__relates_positively_to__FEATURE:dashboard"]}}
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:performance",
+                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__gets_value_from__FEATURE:dashboard"]}}
 
 Explanation:
  - Nike did report performance concerns
@@ -141,11 +146,11 @@ and the extracted entities were found to be:
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*",
-                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__relates_neutrally_to__EMAIL:*",
-                      "EMAIL:*__relates_neutrally_to__FEATURE:dashboard",
-                      "EMAIL:*__relates_negatively_to__CONCERN:* "]}}
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*",
+                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__in__EMAIL:*",
+                      "EMAIL:*__discusses__FEATURE:dashboard",
+                      "EMAIL:*Nike__had__CONCERN:* "]}}
 Explanation:
  - Nike did report unspecified concerns
  - Nike had problems with the dashboard, which is a feature
@@ -160,9 +165,9 @@ and the extracted entities were found to be:
 
 then a valid relationship extraction could be:
 
-{{"relationships": ["ACCOUNT:Nike__relates_negatively_to__CONCERN:*",
-                      "ACCOUNT:Nike__relates_negatively_to__FEATURE:dashboard",
-                      "ACCOUNT:NIKE__relates_neutrally_to__EMAIL:*"]}}
+{{"relationships": ["ACCOUNT:Nike__had__CONCERN:*",
+                      "ACCOUNT:Nike__had_issues__FEATURE:dashboard",
+                      "ACCOUNT:NIKE__in__EMAIL:*"]}}
 Explanation:
  - Nike did report unspecified concerns
  - Nike had problems with the dashboard, which is a feature
@@ -185,7 +190,6 @@ and asked to extract entities, relationships, and terms from it that you can rel
 Here are the entity types that are available for extraction. Some of them may have a description, others \
 should be obvious. Also, for a given entity allowed options may be provided. If allowed options are provided, \
 you can only extract those types of entities! If no allowed options are provided, take your best guess.
-
 
 You can ONLY extract entities of these types and relationships between objects of these types:
 {SEPARATOR_LINE}
@@ -352,13 +356,10 @@ limit the allowed relationships that you can extract. You would then though use 
 
 <SOURCE_ENTITY_TYPE>:<SOURCE_ENTITY_NAME>__<RELATIONSHIP_SHORTHAND>__<TARGET_ENTITY_TYPE>:<TARGET_ENTITY_NAME>.
 
-NOTE: <RELATIONSHIP_SHORTHAND> can only take one of three values: 'relates_neutrally_to', 'relates_positively_to', \
-or 'relates_negatively_to'. Pick the most appropriate option based on the \
-relationship between the entities implied by the question. 'relates_neutrally_to' should generally be \
-chosen if in doubt, or if the proper term may be 'interested_in', 'has', 'uses', 'wants', etc. \
-Pick 'relates_positively_to', or 'relates_negatively_to' only of it is clear. The positive option \
-could for example apply of something is now solved, value was delievered, a sales was made, someone \
-is happy, etc. The negative option would apply of a problem is reported, someone is unhappy, etc.
+Note: <RELATIONSHIP_SHORTHAND> should be a word or two that captures the nature \
+of the relationship. Common relationships may be: 'likes', 'dislikes', 'uses', 'is interested in', 'mentions', \
+'addresses', 'participates in', etc., but look at the text to find the most appropriate relationship. \
+Use spaces here for word separation.
 
 Please format your answer in this format:
 {SEPARATOR_LINE}
@@ -524,7 +525,6 @@ To help you, here are the entities, relationships, and terms that you have extra
 {SEPARATOR_LINE}
 ---entities---
 ---relationships---
----entities---
 {SEPARATOR_LINE}
 
 Here is the question you are asked to answer:
@@ -548,88 +548,88 @@ Do not include any other text or explanations.
 
 
 SIMPLE_SQL_PROMPT = f"""
-You are an expert in generating a SQL statement that only uses two tables, one for entities and another for relationships \
-between two entities - to find (or count) the desired entities.
+You are an expert in generating a SQL statement that only uses ONE TABLE that captures RELATIONSHIPS \
+between TWO ENTITIES. The table has the following structure:
 
-Here is the structure of the two tables:
 {SEPARATOR_LINE}
-Entities:
- - Table name: kg_entity
- - Columns:
-   - id_name: the id of the entity, compining the entity type and the name [example: ACCOUNT:Nike]
-   - name: the name of the entity [example: Nike]
-   - entity_type_id_name: the type of the entity [example: ACCOUNT]
-   - event_time: the timestamp of the event [example: 2021-01-01 00:00:00]
-
-
-Relationships:
  - Table name: kg_relationship
  - Columns:
-   - id_name: the id of the relationship, compining the relationship type and the names of the entities \
-[example: ACCOUNT:Nike__had__CONCERN:performance]
-   - type: the type of the relationship [example: had]
-   - source_node: the id_name of the first entity in the relationship, foreign key to kg_entity.id_name \
-[example: ACCOUNT:Nike]
-   - target_node: the id_name of the second entity in the relationship, foreign key to kg_entity.id_name \
-[example: CONCERN:performance]
+   - relationship (str): the id of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
+It is of the form \
+<source_entity_type>:<source_entity_name>__<relationship_description>__<target_entity_type>:<target_entity_name> \
+[example: ACCOUNT:Nike__has__CONCERN:performance].
+   - source_node (str): the id of the source ENTITY/NODE in the relationship [example: ACCOUNT:Nike]
+   - target_node (str): the id of the target ENTITY/NODE in the relationship [example: CONCERN:performance]
+      - source_node_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
+   below are valid.
+   - target_node_type (str): the type of the target entity/node [example: CONCERN]. Only the entity types provided \
+   below are valid.
+   - relationship_type (str): the type of the relationship, formatted as  \
+<source_entity_type>__<relationship_description>__<target_entity_type>.   So the explicit entity_names have \
+been removed. [example: ACCOUNT__has__CONCERN]
+   - source_document (str): the id of the document that contains the relationship
+   - source_date (str): the date of the source document [example: 2021-01-01]
 
 {SEPARATOR_LINE}
 
-Importantly, here are the entity types that you can use, with a short description what they mean. You may need to \
+Importantly, here are the entity (node) types that you can use, with a short description what they mean. You may need to \
 identify the proper entity type through its description.
 
 {SEPARATOR_LINE}
 ---entity_types---
 {SEPARATOR_LINE}
 
+Here are the relationship types that are in the table, denoted as <source_entity_type>__<relationship_type>__<target_entity_type>:
+{SEPARATOR_LINE}
+---relationship_types---
+{SEPARATOR_LINE}
+In the table, the actual relationships are not quite of this form, but each <entity_type> is followed by ':<entity_name>' in the \
+relationship id as shown above..
 
 Here is the question you are supposed to translate into a SQL statement:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
 
-We already have identified the entities and  relationships that the SQL statement likely *should* use (but note the \
+To help you, we already have identified the entities and relationships that the SQL statement likely *should* use (but note the \
 exception below!):
 {SEPARATOR_LINE}
-Query entities (id_name):
+Identified entities (id_name) in query:
+
 ---query_entities---
 
 --
 
-Query relationships (id_name):
+Identified relationships (id_name) in query:
+
 ---query_relationships---
 
 {SEPARATOR_LINE}
 
-EXCEPTIONS:
-  - if you see an *entity* of the form <entity_type>:* in the entities or the relationships, you should use \
-the entity type, not the entity itself, appropriately in the SQL statement!! These refer effectively to \
-'any entity of type <entity_type>', and it is not an actual entity!
-  - DO NOT include entities of the type <entity>:* in counts or lists! These are not actual entities but \
-rather refer to any entity of that type!
+CRITICAL SPECIAL CASE:
+  - if an identified entity is of the form <entity_type>:*, or an identified relationship contains an \
+entity of this form, this refers to *any* entity of that type. Correspondingly, the SQL query should use the *entity type*, \
+and possibly the relationship type, but not the entity with the * itself. \
+Example: if you see 'ACCOUNT:*', that means any account matches. So if you are supposed to count the 'ACCOUNT:*', \
+you should count the entities of entity_type_id_name 'ACCOUNT'.
 
 
 Note:
-- The id_name of each enity has the format <entity_type_id_name>:<name>, where 'entity_type_id_name' and 'name' are columns and \
-  the values <entity_type_id_name> and <name> can be used for filtering.
 - The id_name of each relationship has the format \
-<relationship_type_id_name>:<source_entity_id_name>__<relationship_type>__<target_entity_id_name>, where \
-we can also, if needed, get values from for filtering by type or by name if needed.
-- Please generate a SQL statement that uses only the entities and relationships, implied types and names, and things \
-like (*) if you want to produce a count(*), etc, and obviously the tables.
-- If you see in the used entities items like '<entity_type>:*', that refers to any of those entities. \
-Example: if you see 'ACCOUNT:*', that means you can use any account. So if you are supposed to count the 'ACCOUNT:*', \
-you should count the entities of entity_type_id_name 'ACCOUNT'.
-- The entity table can only be joined on the relationshiptable which can then be joined again on the entity table, etc.
-- Ultimately this should be a select statement that asks about entities, or a select count() of entities.
-- You can ultimately only return i) numbers (if counts are asked), or ii) entity id_names. Particularly, do not return names.
+<source_entity_id_name>__<relationship_type>__<target_entity_id_name>.
+- The relationship id_names are NOT UNIQUE, only the combinations of relationship id_name and source_document_id are unique. \
+That is because each relationship is extracted from a document. So make sure you use the proper 'distincts'!
+- If you join the relationship table on itself using the source_node or target_node, you need to make sure that you also \
+join on the source_document_id.
+- The id_name of each node/entity has the format <entity_type_id_name>:<name>, where 'entity_type_id_name' \
+and 'name' are columns and \
+  the values <entity_type_id_name> and <name> can be used for filtering.
+- The table can be joined on itself on both, source nodes and target nodes if needed.
+- the SQL statement MUST ultimately only return NODES/ENTITIES (not relationships!), or aggregations of \
+entities/nodes(count, avg, max, min, etc.). \
+Again, DO NOT compose a SQL statement that returns id_name of relationships.
+- You can ultimately only return i) numbers (if counts are asked), or ii) entity id_names.
 - Try to be as efficient as possible.
-- for actual counts or lists DO NOT include entities of the type <entity>:*! These are not actual entities but \
-rather refer to any entity of that type!
-- the SQL statement MUST ultimately only return entities (by id_name), or aggregations (count, avg, max, min, etc.). \
-DO NOT compose a SQL statement that returns relationships.
-- in the response, do not include entities that end on ':*', as these are not actual entities but rather refer to any entity \
-so the final list should have a filter of type .... 'where <>. of that type!
 
 
 Approach:
@@ -721,10 +721,9 @@ Please answer in the following json dictionary format:
 }}
 """.strip()
 
-
 OUTPUT_FORMAT_NO_EXAMPLES_PROMPT = f"""
 You need to format an answer to a research question. \
-You will see what the desired output is, the original question, and the answer to the research question. \
+You will see what the desired output is, the original question, and the unformatted answer to the research question. \
 Your purpose is to generate the answer respecting the desired format.
 
 Notes:
@@ -753,7 +752,6 @@ the text, after all, all you need to do here is formatting. \
 
 Your Answer:
 """.strip()
-
 
 OUTPUT_FORMAT_PROMPT = f"""
 You need to format the answers to a research question that targeted one or more objects. \
@@ -798,7 +796,6 @@ Please start generating the answer, without any explanation. After all, all you 
 Your Answer:
 """.strip()
 
-
 OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT = f"""
 You need to format the return of research on multiple objects. The research results will be given \
 to you as a string. You will also see what the desired output is, as well as the original question. \
@@ -842,7 +839,6 @@ Please start generating the answer, without any explanation. After all, all you 
 
 Your Answer:
 """.strip()
-
 
 KG_OBJECT_SOURCE_RESEARCH_PROMPT = f"""
 You are an expert in extracting relevant structured information from a list of documents that \

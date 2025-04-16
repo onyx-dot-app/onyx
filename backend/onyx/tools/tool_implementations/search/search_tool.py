@@ -308,6 +308,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             document_sources = override_kwargs.document_sources
             time_cutoff = override_kwargs.time_cutoff
             expanded_queries = override_kwargs.expanded_queries
+            kg_entities = override_kwargs.kg_entities
+            kg_relationships = override_kwargs.kg_relationships
+            kg_terms = override_kwargs.kg_terms
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
@@ -330,6 +333,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             if time_cutoff:
                 # Overwrite time-cutoff should supercede existing time-cutoff, even if defined
                 retrieval_options.filters.time_cutoff = time_cutoff
+
+        retrieval_options = retrieval_options or RetrievalDetails()
+        retrieval_options.filters = retrieval_options.filters or BaseFilters()
+        if kg_entities:
+            retrieval_options.filters.kg_entities = kg_entities
+        if kg_relationships:
+            retrieval_options.filters.kg_relationships = kg_relationships
+        if kg_terms:
+            retrieval_options.filters.kg_terms = kg_terms
 
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(

@@ -49,7 +49,7 @@ def aggregate_kg_extractions(
     aggregated_kg_extractions = KGAggregatedExtractions(
         grounded_entities_document_ids=defaultdict(str),
         entities=defaultdict(int),
-        relationships=defaultdict(int),
+        relationships=defaultdict(lambda: defaultdict(int)),
         terms=defaultdict(int),
     )
 
@@ -63,14 +63,27 @@ def aggregate_kg_extractions(
             ] = document_id
 
         for entity, count in connector_aggregated_kg_extractions.entities.items():
-            aggregated_kg_extractions.entities[entity] += count
+            if entity not in aggregated_kg_extractions.entities:
+                aggregated_kg_extractions.entities[entity] = count
+            else:
+                aggregated_kg_extractions.entities[entity] += count
         for (
             relationship,
-            count,
+            relationship_data,
         ) in connector_aggregated_kg_extractions.relationships.items():
-            aggregated_kg_extractions.relationships[relationship] += count
+            for source_document_id, count in relationship_data.items():
+                if relationship not in aggregated_kg_extractions.relationships:
+                    aggregated_kg_extractions.relationships[relationship] = defaultdict(
+                        int
+                    )
+                aggregated_kg_extractions.relationships[relationship][
+                    source_document_id
+                ] += count
         for term, count in connector_aggregated_kg_extractions.terms.items():
-            aggregated_kg_extractions.terms[term] += count
+            if term not in aggregated_kg_extractions.terms:
+                aggregated_kg_extractions.terms[term] = count
+            else:
+                aggregated_kg_extractions.terms[term] += count
     return aggregated_kg_extractions
 
 
