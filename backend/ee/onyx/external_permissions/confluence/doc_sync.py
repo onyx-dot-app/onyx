@@ -234,9 +234,14 @@ def _get_all_page_restrictions(
         confluence_client=confluence_client,
         restrictions=perm_sync_data.get("restrictions", {}),
     )
+    has_found_restrictions = bool(found_user_emails or found_group_names)
 
     ancestors: list[dict[str, Any]] = perm_sync_data.get("ancestors", [])
-    for ancestor in ancestors:
+    # ancestors seem to be in order from root to immediate parent
+    # https://community.atlassian.com/forums/Confluence-questions/Order-of-ancestors-in-REST-API-response-Confluence-Server-amp/qaq-p/2385981
+    # we want the restrictions from the immediate parent to take precedence, so we should
+    # reverse the list
+    for ancestor in reversed(ancestors):
         ancestor_user_emails, ancestor_group_names = _extract_read_access_restrictions(
             confluence_client=confluence_client,
             restrictions=ancestor.get("restrictions", {}),
@@ -246,8 +251,19 @@ def _get_all_page_restrictions(
             # the page's restrictions, so we ignore it
             continue
 
-        found_user_emails.intersection_update(ancestor_user_emails)
-        found_group_names.intersection_update(ancestor_group_names)
+        # If there are no restrictions found yet, then use the ancestor's restrictions
+        # else take the intersection of the restrictions
+        found_user_emails = (
+            ancestor_user_emails
+            if not has_found_restrictions
+            else found_user_emails.intersection(ancestor_user_emails)
+        )
+        found_group_names = (
+            ancestor_group_names
+            if not has_found_restrictions
+            else found_group_names.intersection(ancestor_group_names)
+        )
+        has_found_restrictions = True
 
     # If there are no restrictions found, then the page
     # inherits the space's restrictions so return None
