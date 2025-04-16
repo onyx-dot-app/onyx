@@ -76,7 +76,12 @@ export async function loginAsRandomUser(page: Page) {
   // Click the signup button
   await page.click('button[type="submit"]');
   try {
+    // Refresh the page to ensure everything is loaded properly
+    await page.reload();
+
     await page.waitForURL("http://localhost:3000/chat");
+    // Wait for the page to be fully loaded after refresh
+    await page.waitForLoadState("networkidle");
   } catch (error) {
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
     throw new Error("Failed to sign up and redirect to chat page");

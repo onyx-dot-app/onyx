@@ -2,24 +2,14 @@
   "cookies": [
     {
       "name": "fastapiusersauth",
-      "value": "kWM6TWltVu70K1WJ4mGzeyD1WXF3qrWYyS8e3uleBQA",
+      "value": "d5g5m1wYuYWu72IKB6BKkg7ytILu9UZMWIDfnynXB2k",
       "domain": "localhost",
       "path": "/",
-      "expires": 1744914576.210367,
+      "expires": 1745450332.121525,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"
     }
   ],
-  "origins": [
-    {
-      "origin": "http://localhost:3000",
-      "localStorage": [
-        {
-          "name": "defaultLlmProviderTestComplete",
-          "value": "true"
-        }
-      ]
-    }
-  ]
+  "origins": []
 }
