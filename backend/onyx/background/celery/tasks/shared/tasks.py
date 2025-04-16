@@ -6,6 +6,7 @@ import httpx
 from celery import shared_task
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
+from redis import Redis
 from redis.lock import Lock as RedisLock
 from tenacity import RetryError
 
@@ -15,6 +16,7 @@ from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.tasks.shared.RetryDocumentIndex import RetryDocumentIndex
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
+from onyx.configs.constants import ONYX_CELERY_BEAT_HEARTBEAT_KEY
 from onyx.configs.constants import ONYX_CLOUD_TENANT_ID
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
@@ -353,3 +355,16 @@ def cloud_beat_task_generator(
         f"elapsed={time_elapsed:.2f}"
     )
     return True
+
+
+@shared_task(name=OnyxCeleryTask.CELERY_BEAT_HEARTBEAT, ignore_result=True, bind=True)
+def celery_beat_heartbeat(self: Task, *, tenant_id: str) -> None:
+    """When this task runs, it writes a key to Redis with a TTL.
+
+    An external observer can check this key to figure out if the celery beat is still running.
+    """
+    time_start = time.monotonic()
+    r: Redis = get_redis_client()
+    r.set(ONYX_CELERY_BEAT_HEARTBEAT_KEY, 1, ex=600)
+    time_elapsed = time.monotonic() - time_start
+    task_logger.info(f"celery_beat_heartbeat finished: " f"elapsed={time_elapsed:.2f}")

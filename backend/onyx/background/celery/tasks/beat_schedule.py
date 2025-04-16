@@ -226,6 +226,16 @@ if not MULTI_TENANT:
                     "queue": OnyxCeleryQueues.MONITORING,
                 },
             },
+            {
+                "name": "celery-beat-heartbeat",
+                "task": OnyxCeleryTask.CELERY_BEAT_HEARTBEAT,
+                "schedule": timedelta(minutes=1),
+                "options": {
+                    "priority": OnyxCeleryPriority.HIGHEST,
+                    "expires": BEAT_EXPIRES_DEFAULT,
+                    "queue": OnyxCeleryQueues.PRIMARY,
+                },
+            },
         ]
     )
 
