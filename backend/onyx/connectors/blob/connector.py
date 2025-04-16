@@ -16,7 +16,7 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import BlobType
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
-from onyx.configs.llm_configs import _analysis_enabled
+from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -186,7 +186,7 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Blob storage")
 
         # Check if image extraction and analysis is enabled
-        process_images = _analysis_enabled()
+        process_images = get_image_extraction_and_analysis_enabled()
 
         paginator = self.s3_client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=self.bucket_name, Prefix=self.prefix)
