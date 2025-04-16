@@ -1139,9 +1139,8 @@ def connector_indexing_proxy_task(
             ttl = redis_connector_index.connector_active_ttl()
             if ttl < 0:
                 # verify expectations around ttl
+                last_observed = last_activity_ttl_observed - now
                 if now > last_activity_ttl_observed + last_activity_ttl:
-                    last_observed = now - last_activity_ttl_observed
-
                     task_logger.warning(
                         log_builder.build(
                             "Indexing watchdog - activity timeout exceeded",
