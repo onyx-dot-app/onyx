@@ -66,40 +66,36 @@ def upsert_cloud_embedding_provider(
 
 
 def upsert_llm_provider(
-    llm_provider: LLMProviderUpsertRequest,
+    llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
 ) -> LLMProviderView:
     existing_llm_provider = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.name == llm_provider.name)
+        select(LLMProviderModel).where(
+            LLMProviderModel.name == llm_provider_upsert_request.name
+        )
     )
 
     if not existing_llm_provider:
-        existing_llm_provider = LLMProviderModel(name=llm_provider.name)
+        existing_llm_provider = LLMProviderModel(name=llm_provider_upsert_request.name)
         db_session.add(existing_llm_provider)
 
-    existing_llm_provider.provider = llm_provider.provider
-    existing_llm_provider.api_key = llm_provider.api_key
-    existing_llm_provider.api_base = llm_provider.api_base
-    existing_llm_provider.api_version = llm_provider.api_version
-    existing_llm_provider.custom_config = llm_provider.custom_config
-    existing_llm_provider.default_model_name = llm_provider.default_model_name
-    existing_llm_provider.fast_default_model_name = llm_provider.fast_default_model_name
-    existing_llm_provider.is_public = llm_provider.is_public
-    existing_llm_provider.deployment_name = llm_provider.deployment_name
+    existing_llm_provider.provider = llm_provider_upsert_request.provider
+    existing_llm_provider.api_key = llm_provider_upsert_request.api_key
+    existing_llm_provider.api_base = llm_provider_upsert_request.api_base
+    existing_llm_provider.api_version = llm_provider_upsert_request.api_version
+    existing_llm_provider.custom_config = llm_provider_upsert_request.custom_config
+    existing_llm_provider.default_model_name = (
+        llm_provider_upsert_request.default_model_name
+    )
+    existing_llm_provider.fast_default_model_name = (
+        llm_provider_upsert_request.fast_default_model_name
+    )
+    existing_llm_provider.is_public = llm_provider_upsert_request.is_public
+    existing_llm_provider.deployment_name = llm_provider_upsert_request.deployment_name
 
     if not existing_llm_provider.id:
         # If its not already in the db, we need to generate an ID by flushing
         db_session.flush()
-
-    display_model_names: set[str] = (
-        set(llm_provider.display_model_names)
-        if llm_provider.display_model_names
-        else set()
-    )
-    model_names: set[str] = (
-        set(llm_provider.model_names) if llm_provider.model_names else set()
-    )
-    model_names = model_names.union(display_model_names)
 
     # Delete existing model configurations
     db_session.execute(
@@ -108,19 +104,20 @@ def upsert_llm_provider(
         )
     )
 
-    for model_name in model_names:
-        model_configuration = ModelConfiguration(
-            llm_provider_id=existing_llm_provider.id,
-            name=model_name,
-            is_visible=model_name in display_model_names,
-            max_input_tokens=None,
+    for model_configuration in llm_provider_upsert_request.model_configurations:
+        db_session.add(
+            ModelConfiguration(
+                llm_provider_id=existing_llm_provider.id,
+                name=model_configuration.name,
+                is_visible=model_configuration.is_visible,
+                max_input_tokens=model_configuration.max_input_tokens,
+            )
         )
-        db_session.add(model_configuration)
 
     # Make sure the relationship table stays up to date
     update_group_llm_provider_relationships__no_commit(
         llm_provider_id=existing_llm_provider.id,
-        group_ids=llm_provider.groups,
+        group_ids=llm_provider_upsert_request.groups,
         db_session=db_session,
     )
     full_llm_provider = LLMProviderView.from_model(existing_llm_provider)

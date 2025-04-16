@@ -168,7 +168,7 @@ def list_llm_providers(
 
 @admin_router.put("/provider")
 def put_llm_provider(
-    llm_provider: LLMProviderUpsertRequest,
+    llm_provider_upsert_request: LLMProviderUpsertRequest,
     is_creation: bool = Query(
         False,
         description="True if updating an existing provider, False if creating a new one",
@@ -179,48 +179,38 @@ def put_llm_provider(
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
-    existing_provider = fetch_existing_llm_provider(llm_provider.name, db_session)
+    existing_provider = fetch_existing_llm_provider(
+        llm_provider_upsert_request.name, db_session
+    )
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider.name} already exists",
+            detail=f"LLM Provider with name {llm_provider_upsert_request.name} already exists",
         )
     elif not existing_provider and not is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider.name} does not exist",
+            detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
         )
 
-    llm_provider.model_names = (
-        llm_provider.model_names if llm_provider.model_names else []
-    )
-    llm_provider.display_model_names = (
-        llm_provider.display_model_names if llm_provider.display_model_names else []
-    )
-
-    # Ensure default_model_name and fast_default_model_name are in display_model_names
-    # This is necessary for custom models and Bedrock/Azure models
-    if llm_provider.default_model_name not in llm_provider.model_names:
-        llm_provider.model_names.append(llm_provider.default_model_name)
-    if llm_provider.default_model_name not in llm_provider.display_model_names:
-        llm_provider.display_model_names.append(llm_provider.default_model_name)
-
-    if llm_provider.fast_default_model_name:
-        if llm_provider.fast_default_model_name not in llm_provider.model_names:
-            llm_provider.model_names.append(llm_provider.fast_default_model_name)
-        if llm_provider.fast_default_model_name not in llm_provider.display_model_names:
-            llm_provider.display_model_names.append(
-                llm_provider.fast_default_model_name
-            )
+    for model_configuration in llm_provider_upsert_request.model_configurations:
+        if model_configuration.name == llm_provider_upsert_request.default_model_name:
+            model_configuration.is_visible = True
+        if (
+            llm_provider_upsert_request.fast_default_model_name
+            and llm_provider_upsert_request.fast_default_model_name
+            == model_configuration.name
+        ):
+            model_configuration.is_visible = True
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
-    if existing_provider and not llm_provider.api_key_changed:
-        llm_provider.api_key = existing_provider.api_key
+    if existing_provider and not llm_provider_upsert_request.api_key_changed:
+        llm_provider_upsert_request.api_key = existing_provider.api_key
 
     try:
         return upsert_llm_provider(
-            llm_provider=llm_provider,
+            llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
         )
     except ValueError as e:
@@ -274,17 +264,14 @@ def get_vision_capable_providers(
 
     for provider in providers:
         vision_models = []
-        # Check model names in priority order
-        model_names_to_check = [
-            model_configurations.name
-            for model_configurations in provider.model_configurations
-        ]
 
         # Check each model for vision capability
-        for model_name in model_names_to_check:
-            if model_supports_image_input(model_name, provider.provider):
-                vision_models.append(model_name)
-                logger.debug(f"Vision model found: {provider.provider}/{model_name}")
+        for model_configuration in provider.model_configurations:
+            if model_supports_image_input(model_configuration.name, provider.provider):
+                vision_models.append(model_configuration.name)
+                logger.debug(
+                    f"Vision model found: {provider.provider}/{model_configuration.name}"
+                )
 
         # Only include providers with at least one vision-capable model
         if vision_models:

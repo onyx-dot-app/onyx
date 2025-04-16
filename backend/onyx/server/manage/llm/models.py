@@ -79,9 +79,8 @@ class LLMProvider(BaseModel):
 class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
-    model_names: list[str] | None = None
-    display_model_names: list[str] | None = None
     api_key_changed: bool = False
+    model_configurations: list["ModelConfiguration"] = []
 
 
 class LLMProviderView(LLMProvider):
@@ -131,7 +130,7 @@ class LLMProviderView(LLMProvider):
 
 class ModelConfiguration(BaseModel):
     name: str
-    is_visible: bool
+    is_visible: bool | None = False
     max_input_tokens: int | None = None
 
     @classmethod

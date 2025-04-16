@@ -2,6 +2,7 @@ import uuid
 
 import requests
 
+from onyx.server.manage.llm.models import ModelConfiguration
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -21,9 +22,11 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
     return next((p for p in providers if p["id"] == provider_id), None)
 
 
-def test_create_llm_provider_without_display_model_names(reset: None) -> None:
-    """Test creating an LLM provider without specifying
-    display_model_names and verify it's null in response"""
+def test_create_llm_provider_without_any_visible_models(reset: None) -> None:
+    """
+    Test creating an LLM provider with a list of model-configurations in which *NO* models are visible.
+    Ensure that all returned model-configurations are non-visible.
+    """
     # Create admin user
     admin_user = UserManager.create(name="admin_user")
 
@@ -36,7 +39,9 @@ def test_create_llm_provider_without_display_model_names(reset: None) -> None:
             "provider": "openai",
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": _DEFAULT_MODELS[0],
-            "model_names": _DEFAULT_MODELS,
+            "model_configurations": [
+                ModelConfiguration(name=name) for name in _DEFAULT_MODELS
+            ],
             "is_public": True,
             "groups": [],
         },
@@ -47,9 +52,10 @@ def test_create_llm_provider_without_display_model_names(reset: None) -> None:
 
     # Verify model_names is None/null
     assert provider_data is not None
-    assert provider_data["model_names"] == _DEFAULT_MODELS
     assert provider_data["default_model_name"] == _DEFAULT_MODELS[0]
-    assert provider_data["display_model_names"] is None
+    assert provider_data["model_configurations"] == [
+        ModelConfiguration(name=name, is_visible=False) for name in _DEFAULT_MODELS
+    ]
     assert (
         provider_data["api_key"] == "sk-0****0000"
     )  # test that returned key is sanitized

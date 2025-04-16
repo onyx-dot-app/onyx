@@ -150,7 +150,7 @@ def get_default_llm_with_vision(
         ):
             return create_vision_llm(provider_view, provider.default_vision_model)
 
-        # If no model_names are specified, try default models in priority order
+        # If no model-configurations are specified, try default models in priority order
         if not provider.model_configurations:
             # Try default_model_name
             if provider.default_model_name and model_supports_image_input(
@@ -165,8 +165,9 @@ def get_default_llm_with_vision(
                 return create_vision_llm(
                     provider_view, provider.fast_default_model_name
                 )
+
+        # Otherwise, if model-configurations are specified, check each model
         else:
-            # If model_names is specified, check each model
             for model_configuration in provider.model_configurations:
                 if model_supports_image_input(
                     model_configuration.name, provider.provider
