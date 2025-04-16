@@ -2,6 +2,9 @@
 export ONYX_BACKEND_API_HOST="${ONYX_BACKEND_API_HOST:-api_server}"
 export ONYX_WEB_SERVER_HOST="${ONYX_WEB_SERVER_HOST:-web_server}"
 
+export SSL_CERT_FILE_NAME="${SSL_CERT_FILE_NAME:-ssl.crt}"
+export SSL_CERT_KEY_FILE_NAME="${SSL_CERT_KEY_FILE_NAME:-ssl.key}"
+
 echo "Using API server host: $ONYX_BACKEND_API_HOST"
 echo "Using web server host: $ONYX_WEB_SERVER_HOST"
 
