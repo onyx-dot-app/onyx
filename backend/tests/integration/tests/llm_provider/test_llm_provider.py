@@ -25,12 +25,12 @@ def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None
 
 
 def assert_response_is_equivalent(
-    admin_user,
+    admin_user: DATestUser,
     response: Response,
     default_model_name: str,
     model_configurations: list[ModelConfiguration],
     api_key: str | None = None,
-):
+) -> None:
     assert response.status_code == 200
     created_provider = response.json()
 
@@ -111,9 +111,9 @@ def assert_response_is_equivalent(
 )
 def test_create_llm_provider(
     reset: None,
-    default_model_name,
+    default_model_name: str,
     model_configurations: list[ModelConfiguration],
-    expected,
+    expected: list[ModelConfiguration],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
@@ -183,7 +183,11 @@ def test_create_llm_provider(
     ],
 )
 def test_update_model_configurations(
-    reset: None, initial, initial_expected, updated, updated_expected
+    reset: None,
+    initial: tuple[str, list[ModelConfiguration]],
+    initial_expected: list[ModelConfiguration],
+    updated: tuple[str, list[ModelConfiguration]],
+    updated_expected: list[ModelConfiguration],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
@@ -283,7 +287,9 @@ def test_update_model_configurations(
     ],
 )
 def test_delete_llm_provider(
-    reset: None, default_model_name, model_configurations
+    reset: None,
+    default_model_name: str,
+    model_configurations: list[ModelConfiguration],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
