@@ -15,6 +15,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
@@ -44,6 +45,12 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         ),
         in_code_tool_id=ImageGenerationTool.__name__,
         display_name=ImageGenerationTool._DISPLAY_NAME,
+    ),
+    InCodeToolInfo(
+        cls=LangflowTool,
+        description="Инструмент Langflow",
+        in_code_tool_id=LangflowTool.__name__,
+        display_name=LangflowTool._DISPLAY_NAME
     ),
     # don't show the InternetSearchTool as an option if BING_API_KEY is not available
     *(

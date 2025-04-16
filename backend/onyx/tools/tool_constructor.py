@@ -38,6 +38,7 @@ from onyx.tools.tool_implementations.images.image_generation_tool import (
 from onyx.tools.tool_implementations.internet_search.internet_search_tool import (
     InternetSearchTool,
 )
+from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tools.utils import explicit_tool_calling_supported
@@ -221,6 +222,15 @@ def construct_tools(
                         api_key=BING_API_KEY,
                         answer_style_config=internet_search_tool_config.answer_style_config,
                         prompt_config=prompt_config,
+                    )
+                ]
+            elif tool_cls.__name__ == LangflowTool.__name__:
+                tool_dict[db_tool_model.id] = [
+                    LangflowTool(
+                        db_session=db_session,
+                        pipeline_id=persona.pipeline_id,
+                        prompt_config=prompt_config,
+                        llm_config=llm.config
                     )
                 ]
 

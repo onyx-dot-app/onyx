@@ -712,3 +712,6 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
+
+LANGFLOW_BASE_URL = os.environ.get("REACT_APP_LANGFLOW_URL")
+LANGFLOW_API_KEY = os.environ.get("LANGFLOW_API_KEY")
