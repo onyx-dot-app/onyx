@@ -34,7 +34,11 @@ from onyx.db.models import PGFileStore
 from onyx.db.pg_file_store import create_populate_lobj
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
 from onyx.db.pg_file_store import upsert_pgfilestore
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import (
+    OnyxExtensionType,
+    extract_file_text,
+    is_accepted_file_ext,
+)
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
@@ -67,9 +71,9 @@ def validate_attachment_filetype(
     title = attachment.get("title", "")
     extension = Path(title).suffix.lstrip(".").lower() if "." in title else ""
 
-    # NOTE(rkuo): Why doesn't this check
-    # ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS or ACCEPTED_DOCUMENT_FILE_EXTENSIONS?
-    return extension in ["pdf", "doc", "docx", "txt", "md", "rtf"]
+    return is_accepted_file_ext(
+        "." + extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+    )
 
 
 class AttachmentProcessingResult(BaseModel):
