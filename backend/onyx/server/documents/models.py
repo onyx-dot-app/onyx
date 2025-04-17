@@ -422,6 +422,7 @@ class GoogleServiceAccountCredentialRequest(BaseModel):
 
 class FileUploadResponse(BaseModel):
     file_paths: list[str]
+    zip_metadata: dict[str, Any]
 
 
 class ObjectCreationIdResponse(BaseModel):

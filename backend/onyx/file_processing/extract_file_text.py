@@ -26,8 +26,8 @@ from PIL import Image
 from pypdf import PdfReader
 from pypdf.errors import PdfStreamError
 
-from onyx.configs.constants import DANSWER_METADATA_FILENAME
 from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.unstructured import get_unstructured_api_key
 from onyx.file_processing.unstructured import unstructured_to_text
@@ -146,27 +146,11 @@ def load_files_from_zip(
     zip_file_io: IO,
     ignore_macos_resource_fork_files: bool = True,
     ignore_dirs: bool = True,
-) -> Iterator[tuple[zipfile.ZipInfo, IO[Any], dict[str, Any]]]:
+) -> Iterator[tuple[zipfile.ZipInfo, IO[Any]]]:
     """
     If there's a .onyx_metadata.json in the zip, attach those metadata to each subfile.
     """
     with zipfile.ZipFile(zip_file_io, "r") as zip_file:
-        zip_metadata = {}
-        try:
-            metadata_file_info = zip_file.getinfo(DANSWER_METADATA_FILENAME)
-            with zip_file.open(metadata_file_info, "r") as metadata_file:
-                try:
-                    zip_metadata = json.load(metadata_file)
-                    if isinstance(zip_metadata, list):
-                        # convert list of dicts to dict of dicts
-                        # Use just the basename for matching since metadata may not include
-                        # the full path within the ZIP file
-                        zip_metadata = {d["filename"]: d for d in zip_metadata}
-                except json.JSONDecodeError:
-                    logger.warning(f"Unable to load {DANSWER_METADATA_FILENAME}")
-        except KeyError:
-            logger.info(f"No {DANSWER_METADATA_FILENAME} file")
-
         for file_info in zip_file.infolist():
             if ignore_dirs and file_info.is_dir():
                 continue
@@ -174,28 +158,23 @@ def load_files_from_zip(
             if (
                 ignore_macos_resource_fork_files
                 and is_macos_resource_fork_file(file_info.filename)
-            ) or file_info.filename == DANSWER_METADATA_FILENAME:
+            ) or file_info.filename == ONYX_METADATA_FILENAME:
                 continue
 
             with zip_file.open(file_info.filename, "r") as subfile:
                 # Try to match by exact filename first
-                if file_info.filename in zip_metadata:
-                    yield file_info, subfile, zip_metadata.get(file_info.filename, {})
-                else:
-                    # Then try matching by just the basename
-                    basename = os.path.basename(file_info.filename)
-                    yield file_info, subfile, zip_metadata.get(basename, {})
+                yield file_info, subfile
 
 
 def _extract_onyx_metadata(line: str) -> dict | None:
     """
     Example: first line has:
-        <!-- DANSWER_METADATA={"title": "..."} -->
+        <!-- ONYX_METADATA={"title": "..."} -->
       or
-        #DANSWER_METADATA={"title":"..."}
+        #ONYX_METADATA={"title":"..."}
     """
-    html_comment_pattern = r"<!--\s*DANSWER_METADATA=\{(.*?)\}\s*-->"
-    hashtag_pattern = r"#DANSWER_METADATA=\{(.*?)\}"
+    html_comment_pattern = r"<!--\s*ONYX_METADATA=\{(.*?)\}\s*-->"
+    hashtag_pattern = r"#ONYX_METADATA=\{(.*?)\}"
 
     html_comment_match = re.search(html_comment_pattern, line)
     hashtag_match = re.search(hashtag_pattern, line)
