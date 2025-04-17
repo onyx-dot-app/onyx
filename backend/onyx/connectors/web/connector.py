@@ -494,8 +494,7 @@ class WebConnector(LoadConnector):
         initial_url: str,
         session_ctx: ScrapeSessionContext,
     ) -> ScrapeResult:
-        """Returns False if something happened and the page scrape can be retried.
-        Return True if the page does not need to be retried."""
+        """Returns a ScrapeResult object with a doc and retry flag."""
 
         if session_ctx.playwright is None:
             raise RuntimeError("scrape_context.playwright is None")
