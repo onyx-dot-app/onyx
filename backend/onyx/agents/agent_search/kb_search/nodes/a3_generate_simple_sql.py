@@ -12,7 +12,10 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.db.engine import get_kg_readonly_user_session_with_current_tenant
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.kg_temp_view import create_views
+from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SQL_AGGREGATION_REMOVAL_PROMPT
@@ -81,6 +84,13 @@ def generate_simple_sql(
     entities_types_str = state.entities_types_str
     relationship_types_str = state.relationship_types_str
 
+    if graph_config.tooling.search_tool is None:
+        raise ValueError("Search tool is not set")
+    elif graph_config.tooling.search_tool.user is None:
+        raise ValueError("User is not set")
+    else:
+        user_email = graph_config.tooling.search_tool.user.email
+
     simple_sql_prompt = (
         SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
         .replace("---relationship_types---", relationship_types_str)
@@ -90,6 +100,23 @@ def generate_simple_sql(
             "---query_relationships---", "\n".join(state.query_graph_relationships)
         )
     )
+
+    # Create temporary view
+
+    allowed_docs_view_name = f"allowed_docs_{user_email}".replace("@", "_").replace(
+        ".", "_"
+    )
+    kg_relationships_view_name = f"kg_relationships_with_access_{user_email}".replace(
+        "@", "_"
+    ).replace(".", "_")
+
+    with get_session_with_current_tenant() as db_session:
+        create_views(
+            db_session,
+            user_email=user_email,
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
 
     msg = [
         HumanMessage(
@@ -113,6 +140,9 @@ def generate_simple_sql(
         sql_statement = cleaned_response.split("SQL:")[1].strip()
         sql_statement = sql_statement.split(";")[0].strip() + ";"
         sql_statement = sql_statement.replace("sql", "").strip()
+        sql_statement = sql_statement.replace(
+            "kg_relationship", kg_relationships_view_name
+        )
 
         # reasoning = cleaned_response.split("SQL:")[0].strip()
 
@@ -148,7 +178,7 @@ def generate_simple_sql(
     # )
 
     # CRITICAL: EXECUTION OF SQL NEEDS TO ME MADE SAFE FOR PRODUCTION
-    with get_session_with_current_tenant() as db_session:
+    with get_kg_readonly_user_session_with_current_tenant() as db_session:
         try:
             result = db_session.execute(text(sql_statement))
             # Handle scalar results (like COUNT)
@@ -170,7 +200,7 @@ def generate_simple_sql(
         individualized_sql_query is not None
         and individualized_sql_query != sql_statement
     ):
-        with get_session_with_current_tenant() as db_session:
+        with get_kg_readonly_user_session_with_current_tenant() as db_session:
             try:
                 result = db_session.execute(text(individualized_sql_query))
                 # Handle scalar results (like COUNT)
@@ -192,6 +222,13 @@ def generate_simple_sql(
 
     else:
         individualized_query_results = None
+
+    with get_session_with_current_tenant() as db_session:
+        drop_views(
+            db_session,
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
 
     # write_custom_event(
     #     "initial_agent_answer",

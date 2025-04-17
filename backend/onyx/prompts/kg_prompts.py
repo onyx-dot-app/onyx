@@ -554,21 +554,22 @@ between TWO ENTITIES. The table has the following structure:
 {SEPARATOR_LINE}
  - Table name: kg_relationship
  - Columns:
-   - relationship (str): the id of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
+   - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
 It is of the form \
 <source_entity_type>:<source_entity_name>__<relationship_description>__<target_entity_type>:<target_entity_name> \
-[example: ACCOUNT:Nike__has__CONCERN:performance].
-   - source_node (str): the id of the source ENTITY/NODE in the relationship [example: ACCOUNT:Nike]
-   - target_node (str): the id of the target ENTITY/NODE in the relationship [example: CONCERN:performance]
-      - source_node_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
+[example: ACCOUNT:Nike__has__CONCERN:performance]. Note that this is NOT UNIQUE!
+   - source_entity (str): the id of the source ENTITY/NODE in the relationship [example: ACCOUNT:Nike]
+   - target_entity (str): the id of the target ENTITY/NODE in the relationship [example: CONCERN:performance]
+      - source_entity_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
    below are valid.
-   - target_node_type (str): the type of the target entity/node [example: CONCERN]. Only the entity types provided \
+   - target_entity_type (str): the type of the target entity/node [example: CONCERN]. Only the entity types provided \
    below are valid.
    - relationship_type (str): the type of the relationship, formatted as  \
 <source_entity_type>__<relationship_description>__<target_entity_type>.   So the explicit entity_names have \
 been removed. [example: ACCOUNT__has__CONCERN]
-   - source_document (str): the id of the document that contains the relationship
-   - source_date (str): the date of the source document [example: 2021-01-01]
+   - source_document (str): the id of the document that contains the relationship. Note that the combination of \
+id_name and source_document IS UNIQUE!
+   - source_date (str): the 'event' date of the source document [example: 2021-01-01]
 
 {SEPARATOR_LINE}
 
@@ -594,13 +595,13 @@ Here is the question you are supposed to translate into a SQL statement:
 To help you, we already have identified the entities and relationships that the SQL statement likely *should* use (but note the \
 exception below!):
 {SEPARATOR_LINE}
-Identified entities (id_name) in query:
+Identified entities in query:
 
 ---query_entities---
 
 --
 
-Identified relationships (id_name) in query:
+Identified relationships in query:
 
 ---query_relationships---
 
@@ -614,11 +615,13 @@ Example: if you see 'ACCOUNT:*', that means any account matches. So if you are s
 you should count the entities of entity_type_id_name 'ACCOUNT'.
 
 
-Note:
+IMPORTANT NOTES:
 - The id_name of each relationship has the format \
 <source_entity_id_name>__<relationship_type>__<target_entity_id_name>.
 - The relationship id_names are NOT UNIQUE, only the combinations of relationship id_name and source_document_id are unique. \
 That is because each relationship is extracted from a document. So make sure you use the proper 'distincts'!
+- If the SQL ciontains a 'DISTINCT' clause and an ORDER BY clause, then you MUST include the columns in the ORDER BY \
+clause ALSO IN THE DISTINCT CLAUSE! This is very important! (This is a postgres db., so this is a MUST!)
 - If you join the relationship table on itself using the source_node or target_node, you need to make sure that you also \
 join on the source_document_id.
 - The id_name of each node/entity has the format <entity_type_id_name>:<name>, where 'entity_type_id_name' \
@@ -631,15 +634,13 @@ Again, DO NOT compose a SQL statement that returns id_name of relationships.
 - You can ultimately only return i) numbers (if counts are asked), or ii) entity id_names.
 - Try to be as efficient as possible.
 
-
-Approach:
+APPROACH:
 Please think through this step by step. Then, when you have it say 'SQL:' followed ONLY by the SQL statement. The SQL statement \
-must end with a ';'
-
+must end with a ';'. (And make sure you check that you included all columns in the ORDER BY clause also in the DISTINCT clause, \
+if applicable!)
 
 Your answer:
-
-"""
+""".strip()
 
 
 SQL_AGGREGATION_REMOVAL_PROMPT = f"""

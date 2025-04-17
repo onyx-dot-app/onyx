@@ -561,3 +561,70 @@ def provide_iam_token(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> 
         region = os.getenv("AWS_REGION_NAME", "us-east-2")
         # Configure for psycopg2 with IAM token
         configure_psycopg2_iam_auth(cparams, host, port, user, region)
+
+
+@contextmanager
+def get_kg_readonly_user_session_with_current_tenant() -> (
+    Generator[Session, None, None]
+):
+    """
+    Generate a database session using a custom database user for the current tenant.
+    The custom user credentials are obtained from environment variables.
+    """
+    tenant_id = get_current_tenant_id()
+
+    # Get custom user credentials from environment variables
+    kg_readonly_user = os.getenv("KG_READONLY_DB_USER")
+    kg_read_only_password = os.getenv("KG_READONLY_DB_PASSWORD")
+
+    if not kg_readonly_user or not kg_read_only_password:
+        raise ValueError(
+            "Custom database user credentials not configured in environment variables"
+        )
+
+    # Build connection string with custom user
+    connection_string = build_connection_string(
+        user=kg_readonly_user,
+        password=kg_read_only_password,
+        use_iam=False,  # Custom users typically don't use IAM auth
+        db_api=SYNC_DB_API,  # Explicitly use sync DB API
+    )
+
+    # Create a new sync engine with custom credentials
+    engine = create_engine(
+        connection_string,
+        pool_pre_ping=POSTGRES_POOL_PRE_PING,
+        pool_recycle=POSTGRES_POOL_RECYCLE,
+        pool_size=POSTGRES_API_SERVER_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
+    )
+
+    event.listen(engine, "checkout", set_search_path_on_checkout)
+
+    if not is_valid_schema_name(tenant_id):
+        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+
+    with engine.connect() as connection:
+        dbapi_connection = connection.connection
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute(f'SET search_path = "{tenant_id}"')
+            if POSTGRES_IDLE_SESSIONS_TIMEOUT:
+                cursor.execute(
+                    text(
+                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
+                    )
+                )
+        finally:
+            cursor.close()
+
+        with Session(bind=connection, expire_on_commit=False) as session:
+            try:
+                yield session
+            finally:
+                if MULTI_TENANT:
+                    cursor = dbapi_connection.cursor()
+                    try:
+                        cursor.execute('SET search_path TO "$user", public')
+                    finally:
+                        cursor.close()

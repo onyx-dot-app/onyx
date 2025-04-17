@@ -116,16 +116,12 @@ def construct_deep_search_filters(
             for x in state.individualized_query_results
             if x["id_name"] is not None and "*" not in x["id_name"]
         ]
-    elif state.query_results and len(state.query_results) > 0:
-        div_con_entities = [
-            x["id_name"]
-            for x in state.query_results
-            if x["id_name"] is not None and "*" not in x["id_name"]
-        ]
+    elif state.query_results:
+
+        div_con_base_values = [x.values() for x in state.query_results]
+        div_con_entities = list(set([x for xs in div_con_base_values for x in xs]))
     else:
         div_con_entities = []
-
-    div_con_entities = list(set(div_con_entities))
 
     logger.info(f"div_con_entities: {div_con_entities}")
 
