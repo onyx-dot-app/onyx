@@ -706,6 +706,8 @@ class WebConnector(LoadConnector):
                 finally:
                     retry_count += 1
 
+                break  # success / don't retry
+
             if len(session_ctx.doc_batch) >= self.batch_size:
                 session_ctx.initialize()
                 session_ctx.at_least_one_doc = True
