@@ -673,6 +673,7 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "o1-mini": "o1 Mini",
   "o1-preview": "o1 Preview",
   o1: "o1",
+  "gpt-4.1": "GPT 4.1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
@@ -813,7 +814,15 @@ export function getDisplayNameForModel(modelName: string): string {
 }
 
 export const defaultModelsByProvider: { [name: string]: string[] } = {
-  openai: ["gpt-4", "gpt-4o", "gpt-4o-mini", "o3-mini", "o1-mini", "o1"],
+  openai: [
+    "gpt-4",
+    "gpt-4o",
+    "gpt-4o-mini",
+    "gpt-4.1",
+    "o3-mini",
+    "o1-mini",
+    "o1",
+  ],
   bedrock: [
     "meta.llama3-1-70b-instruct-v1:0",
     "meta.llama3-1-8b-instruct-v1:0",

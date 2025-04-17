@@ -78,6 +78,7 @@ def _should_propagate_error(e: Exception) -> bool:
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
     last_updated: SecondsSinceUnixEpoch
+    last_seen_doc_ids: list[str]
 
 
 class ConfluenceConnector(
@@ -108,7 +109,6 @@ class ConfluenceConnector(
         self.index_recursively = index_recursively
         self.cql_query = cql_query
         self.batch_size = batch_size
-        self.continue_on_failure = continue_on_failure
         self.labels_to_skip = labels_to_skip
         self.timezone_offset = timezone_offset
         self._confluence_client: OnyxConfluence | None = None
@@ -158,6 +158,9 @@ class ConfluenceConnector(
             "max_backoff_retries": 10,
             "max_backoff_seconds": 60,
         }
+
+        # deprecated
+        self.continue_on_failure = continue_on_failure
 
     def set_allow_images(self, value: bool) -> None:
         logger.info(f"Setting allow_images to {value}.")
@@ -417,18 +420,16 @@ class ConfluenceConnector(
                     f"Failed to extract/summarize attachment {attachment['title']}",
                     exc_info=e,
                 )
-                if not self.continue_on_failure:
-                    if _should_propagate_error(e):
-                        raise
-                    # TODO: should we remove continue_on_failure entirely now that we have checkpointing?
-                    return ConnectorFailure(
-                        failed_document=DocumentFailure(
-                            document_id=doc.id,
-                            document_link=object_url,
-                        ),
-                        failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {doc.id}",
-                        exception=e,
-                    )
+                if _should_propagate_error(e):
+                    raise
+                return ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=doc.id,
+                        document_link=object_url,
+                    ),
+                    failure_message=f"Failed to extract/summarize attachment {attachment['title']} for doc {doc.id}",
+                    exception=e,
+                )
         return doc
 
     def _fetch_document_batches(
@@ -447,16 +448,23 @@ class ConfluenceConnector(
         doc_count = 0
 
         checkpoint = copy.deepcopy(checkpoint)
-
+        prev_doc_ids = checkpoint.last_seen_doc_ids
+        checkpoint.last_seen_doc_ids = []
         # use "start" when last_updated is 0
         page_query = self._construct_page_query(checkpoint.last_updated or start, end)
         logger.debug(f"page_query: {page_query}")
 
+        # most requests will include a few pages to skip, so we limit each page to
+        # 2 * batch_size to only need a single request for most checkpoint runs
         for page in self.confluence_client.paginated_cql_retrieval(
             cql=page_query,
             expand=",".join(_PAGE_EXPANSION_FIELDS),
-            limit=self.batch_size,
+            limit=2 * self.batch_size,
         ):
+            if page["id"] in prev_doc_ids:
+                # There are a few seconds of fuzziness in the request,
+                # so we skip if we saw this page on the last run
+                continue
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
 
@@ -477,6 +485,7 @@ class ConfluenceConnector(
 
             # yield completed document
             doc_count += 1
+            checkpoint.last_seen_doc_ids.append(page["id"])
             yield doc_or_failure
 
             # create checkpoint after enough documents have been processed
@@ -507,7 +516,7 @@ class ConfluenceConnector(
 
     @override
     def build_dummy_checkpoint(self) -> ConfluenceCheckpoint:
-        return ConfluenceCheckpoint(last_updated=0, has_more=True)
+        return ConfluenceCheckpoint(last_updated=0, has_more=True, last_seen_doc_ids=[])
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConfluenceCheckpoint:
