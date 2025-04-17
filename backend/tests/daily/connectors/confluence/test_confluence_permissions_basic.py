@@ -39,6 +39,7 @@ def confluence_connector() -> ConfluenceConnector:
     return_value=None,
 )
 def test_confluence_connector_permissions(
+    mock_get_api_key: MagicMock,
     confluence_connector: ConfluenceConnector,
 ) -> None:
     # Get all doc IDs from the full connector
