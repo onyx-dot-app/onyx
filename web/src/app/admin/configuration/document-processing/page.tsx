@@ -89,7 +89,7 @@ function Main() {
             ) : (
               <input
                 type="text"
-                placeholder="Enter API Key"
+                placeholder="Введите API Key"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 className="w-full p-3 border rounded-md bg-background text-text focus:ring-2 focus:ring-blue-500 transition duration-200"

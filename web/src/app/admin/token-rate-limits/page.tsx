@@ -150,21 +150,21 @@ function Main() {
           <TabsContent value="0">
             <GenericTokenRateLimitTable
               fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-              title={"Global Token Rate Limits"}
+              title={"Глобальные ограничения скорости токенов"}
               description={GLOBAL_DESCRIPTION}
             />
           </TabsContent>
           <TabsContent value="1">
             <GenericTokenRateLimitTable
               fetchUrl={USER_TOKEN_FETCH_URL}
-              title={"User Token Rate Limits"}
+              title={"Ограничения скорости токенов пользователя"}
               description={USER_DESCRIPTION}
             />
           </TabsContent>
           <TabsContent value="2">
             <GenericTokenRateLimitTable
               fetchUrl={USER_GROUP_FETCH_URL}
-              title={"User Group Token Rate Limits"}
+              title={"Ограничения скорости токенов для групп пользователей"}
               description={USER_GROUP_DESCRIPTION}
               responseMapper={(data: Record<string, TokenRateLimit[]>) =>
                 Object.entries(data).flatMap(([group_name, elements]) =>
@@ -183,7 +183,7 @@ function Main() {
         <div className="mt-6">
           <GenericTokenRateLimitTable
             fetchUrl={GLOBAL_TOKEN_FETCH_URL}
-            title={"Global Token Rate Limits"}
+            title={"Глобальные ограничения скорости токенов"}
             description={GLOBAL_DESCRIPTION}
           />
         </div>
@@ -206,7 +206,7 @@ export default function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Token Rate Limits"
+        title="Ограничения скорости токенов"
         icon={<ShieldIcon size={32} />}
       />
 

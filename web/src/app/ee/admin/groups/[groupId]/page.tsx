@@ -62,7 +62,7 @@ const Page = (props: { params: Promise<{ groupId: string }> }) => {
       <BackButton />
 
       <AdminPageTitle
-        title={userGroup.name || "Unknown"}
+        title={userGroup.name || "Неизвестный"}
         icon={<GroupsIcon size={32} />}
       />
 

@@ -95,7 +95,7 @@ function SelectFeedbackType({
           onValueChange={onValueChange as (value: string) => void}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Select feedback type" />
+            <SelectValue placeholder="Выберите тип отзыва" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">

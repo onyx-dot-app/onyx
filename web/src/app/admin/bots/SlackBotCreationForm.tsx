@@ -23,7 +23,7 @@ export const NewSlackBotForm = ({}: {}) => {
     <div>
       <AdminPageTitle
         icon={<SourceIcon iconSize={36} sourceType={ValidSources.Slack} />}
-        title="New Slack Bot"
+        title="Новый Slack Bot"
       />
 
       <CardSection>

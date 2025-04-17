@@ -42,7 +42,7 @@ export const INVALID_ROLE_HOVER_TEXT: Partial<Record<UserRole, string>> = {
     "Global Curator users can perform admin actions for all groups they are a member of",
   [UserRole.CURATOR]: "Curator role must be assigned in the Groups tab",
   [UserRole.SLACK_USER]:
-    "This role is automatically assigned to users who only use Onyx via Slack",
+    "This role is automatically assigned to users who only use SmartSearch via Slack",
 };
 
 export interface User {
@@ -163,7 +163,7 @@ export interface ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
 
 export interface ConnectorIndexingStatus<
   ConnectorConfigType,
-  ConnectorCredentialType,
+  ConnectorCredentialType
 > extends ConnectorStatus<ConnectorConfigType, ConnectorCredentialType> {
   // Inlcude data only necessary for indexing statuses in admin page
   last_success: string | null;

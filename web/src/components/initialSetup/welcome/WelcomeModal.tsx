@@ -64,7 +64,7 @@ export function WelcomeModal({ user }: { user: User | null }) {
           setWelcomeFlowComplete();
           router.refresh();
         }}
-        title={"Welcome to Onyx!"}
+        title={"Добро пожаловать в SmartSearch!"}
         width="w-full max-h-[900px] overflow-y-scroll max-w-3xl"
       >
         <div>

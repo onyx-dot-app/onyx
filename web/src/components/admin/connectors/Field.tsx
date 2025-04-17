@@ -824,7 +824,7 @@ export function SelectorFormField({
           disabled={disabled}
         >
           <SelectTrigger className={sizeClass.input} disabled={disabled}>
-            <SelectValue placeholder="Select...">
+            <SelectValue placeholder="Выбрать...">
               {currentlySelected?.name || defaultValue || ""}
             </SelectValue>
           </SelectTrigger>

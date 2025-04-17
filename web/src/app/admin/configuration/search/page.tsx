@@ -202,7 +202,7 @@ function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Search Settings"
+        title="Настройки поиска"
         icon={<EmbeddingIcon size={32} className="my-auto" />}
       />
 

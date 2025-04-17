@@ -32,7 +32,7 @@ import { OnyxApiKeyForm } from "./OnyxApiKeyForm";
 import { APIKey } from "./types";
 import CreateButton from "@/components/ui/createButton";
 
-const API_KEY_TEXT = `API Keys allow you to access Onyx APIs programmatically. Click the button below to generate a new API Key.`;
+const API_KEY_TEXT = `API Keys allow you to access SmartSearch APIs programmatically. Click the button below to generate a new API Key.`;
 
 function NewApiKeyModal({
   apiKey,

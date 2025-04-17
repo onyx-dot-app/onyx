@@ -185,7 +185,7 @@ export const FullSearchBar = ({
         style={{ scrollbarWidth: "thin" }}
         role="textarea"
         aria-multiline
-        placeholder="Search for anything..."
+        placeholder="Поиск чего-либо..."
         value={query}
         onChange={handleChange}
         onKeyDown={(event) => {}}
@@ -279,7 +279,7 @@ export const SearchBar = ({ query, setQuery, onSearch }: SearchBarProps) => {
           className="flex-grow ml-2 h-6 placeholder:text-text-chatbar-subtle outline-none placeholder-default overflow-hidden whitespace-normal resize-none"
           role="textarea"
           aria-multiline
-          placeholder="Search..."
+          placeholder="Поиск..."
           value={query}
           onChange={handleChange}
           onKeyDown={handleKeyDown}

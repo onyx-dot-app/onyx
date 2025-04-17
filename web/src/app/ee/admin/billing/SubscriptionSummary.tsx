@@ -12,20 +12,20 @@ export function SubscriptionSummary({
   return (
     <div className="grid grid-cols-2 gap-4">
       <InfoItem
-        title="Subscription Status"
+        title="Статус подписки"
         value={statusToDisplay(billingInformation.status)}
       />
 
-      <InfoItem title="Seats" value={billingInformation.seats.toString()} />
+      <InfoItem title="Места" value={billingInformation.seats.toString()} />
       <InfoItem
-        title="Billing Start"
+        title="Начало выставления счетов"
         value={new Date(
           billingInformation.current_period_start
         ).toLocaleDateString()}
       />
 
       <InfoItem
-        title="Billing End"
+        title="Окончание выставления счетов"
         value={new Date(
           billingInformation.current_period_end
         ).toLocaleDateString()}

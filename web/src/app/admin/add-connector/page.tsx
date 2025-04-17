@@ -101,7 +101,7 @@ export default function Page() {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ConnectorIcon size={32} />}
-        title="Add Connector"
+        title="Добавить коннектор"
         farRightElement={
           <Link href="/admin/indexing/status">
             <Button variant="success-reverse">
@@ -114,7 +114,7 @@ export default function Page() {
       <input
         type="text"
         ref={searchInputRef}
-        placeholder="Search connectors..."
+        placeholder="Найти коннекторы..."
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         onKeyDown={handleKeyPress}
@@ -149,20 +149,20 @@ export default function Page() {
 function getCategoryDescription(category: SourceCategory): string {
   switch (category) {
     case SourceCategory.Messaging:
-      return "Integrate with messaging and communication platforms.";
+      return "Интеграция с платформами обмена сообщениями и общения.";
     case SourceCategory.ProjectManagement:
-      return "Link to project management and task tracking tools.";
+      return "Ссылка на инструменты управления проектами и отслеживания задач.";
     case SourceCategory.CustomerSupport:
-      return "Connect to customer support and helpdesk systems.";
+      return "Подключение к системам поддержки клиентов и справочной службы.";
     case SourceCategory.CodeRepository:
-      return "Integrate with code repositories and version control systems.";
+      return "Интеграция с репозиториями кода и системами контроля версий.";
     case SourceCategory.Storage:
-      return "Connect to cloud storage and file hosting services.";
+      return "Подключение к облачным хранилищам и службам хостинга файлов.";
     case SourceCategory.Wiki:
-      return "Link to wiki and knowledge base platforms.";
+      return "Ссылка на платформы вики и базы знаний.";
     case SourceCategory.Other:
-      return "Connect to other miscellaneous knowledge sources.";
+      return "Подключение к другим различным источникам знаний.";
     default:
-      return "Connect to various knowledge sources.";
+      return "Подключение к различным источникам знаний.";
   }
 }

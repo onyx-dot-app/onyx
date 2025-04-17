@@ -253,7 +253,7 @@ export function InputPromptsSection({
           {isCreatingNew ? (
             <div className="space-y-2 border p-4 rounded-md">
               <Input
-                placeholder="New prompt"
+                placeholder="Новый промпт"
                 value={newPrompt.prompt || ""}
                 onChange={(e) =>
                   setNewPrompt({ ...newPrompt, prompt: e.target.value })
@@ -261,7 +261,7 @@ export function InputPromptsSection({
               />
 
               <Textarea
-                placeholder="New content"
+                placeholder="Новый контент"
                 value={newPrompt.content || ""}
                 onChange={(e) =>
                   setNewPrompt({ ...newPrompt, content: e.target.value })

@@ -38,7 +38,7 @@ export function LLMProviderUpdateForm({
   existingLlmProvider?: LLMProviderView;
   shouldMarkAsDefault?: boolean;
   setPopup?: (popup: PopupSpec) => void;
-  hideSuccess?: boolean; // Set this when this is the first time the user is setting Onyx up.
+  hideSuccess?: boolean; // Set this when this is the first time the user is setting SmartSearch up.
   firstTimeConfiguration?: boolean;
   hasAdvancedOptions?: boolean;
 }) {
@@ -330,15 +330,15 @@ export function LLMProviderUpdateForm({
                   name="default_model_name"
                   subtext="The model to use by default for this provider unless otherwise specified."
                   label="Default Model"
-                  placeholder="E.g. gpt-4"
+                  placeholder="Например gpt-4"
                 />
               )}
 
               {llmProviderDescriptor.deployment_name_required && (
                 <TextFormField
                   name="deployment_name"
-                  label="Deployment Name"
-                  placeholder="Deployment Name"
+                  label="Имя развертывания"
+                  placeholder="Имя развертывания"
                 />
               )}
 
@@ -362,7 +362,7 @@ export function LLMProviderUpdateForm({
                     name="fast_default_model_name"
                     subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F1)}`}
                     label="[Необязательно] Быстрая модель"
-                    placeholder="E.g. gpt-4"
+                    placeholder="Например gpt-4"
                   />
                 ))}
 

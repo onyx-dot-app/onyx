@@ -21,7 +21,9 @@ export function CustomAnalyticsUpdateForm() {
   const { popup, setPopup } = usePopup();
 
   if (!settings) {
-    return <Callout type="danger" title="Failed to fetch settings"></Callout>;
+    return (
+      <Callout type="danger" title="Не удалось получить настройки"></Callout>
+    );
   }
 
   return (

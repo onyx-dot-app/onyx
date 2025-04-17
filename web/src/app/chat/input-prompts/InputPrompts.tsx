@@ -306,7 +306,7 @@ const PromptCard: React.FC<PromptCardProps> = ({
               <TooltipTrigger asChild>
                 <div className="mb-2  flex gap-x-2 ">
                   <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
+                  {isPromptPublic(prompt) && <SourceChip title="Встроенный" />}
                 </div>
               </TooltipTrigger>
               {isPromptPublic(prompt) && (

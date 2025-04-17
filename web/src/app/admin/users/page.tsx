@@ -231,7 +231,10 @@ const AddUserButton = ({
       )}
 
       {modal && (
-        <Modal title="Bulk Add Users" onOutsideClick={() => setModal(false)}>
+        <Modal
+          title="Массовое добавление пользователей"
+          onOutsideClick={() => setModal(false)}
+        >
           <div className="flex flex-col gap-y-4">
             <Text className="font-medium text-base">
               {i18n.t(k.ADD_THE_EMAIL_ADDRESSES_TO_IMP)}

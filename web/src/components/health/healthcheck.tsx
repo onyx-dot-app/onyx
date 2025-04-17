@@ -188,7 +188,7 @@ export const HealthCheckBanner = () => {
       <Modal
         width="w-1/3"
         className="overflow-y-hidden flex flex-col"
-        title="You Have Been Logged Out"
+        title="Вы вышли из системы"
       >
         <div className="flex flex-col gap-y-4">
           <p className="text-sm">{i18n.t(k.YOUR_SESSION_HAS_EXPIRED_PLEA)}</p>

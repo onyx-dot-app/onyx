@@ -174,7 +174,7 @@ function ConnectorRow({
     ) {
       return (
         <Badge
-          tooltip="Коннектор находится в недопустимом состоянии. Пожалуйста, обновите учетные данные или создайте новый соединитель."
+          tooltip="Коннектор находится в недопустимом состоянии. Пожалуйста, обновите учетные данные или создайте новый коннектор."
           circle
           variant="invalid"
         >
@@ -588,7 +588,7 @@ export function CCPairIndexingStatusTable({
           <input
             type="text"
             ref={searchInputRef}
-            placeholder="Search connectors..."
+            placeholder="Найти коннекторы..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="ml-1 w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"

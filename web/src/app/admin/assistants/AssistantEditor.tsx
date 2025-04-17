@@ -820,8 +820,8 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-lg"
                 name="name"
-                label="Name"
-                placeholder="Email Assistant"
+                label="Название"
+                placeholder="Email Ассистент"
                 aria-label="assistant-name-input"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
@@ -829,8 +829,8 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-lg"
                 name="description"
-                label="Description"
-                placeholder="Use this Assistant to help draft professional emails"
+                label="Описание"
+                placeholder="Используйте этого помощника для составления профессиональных писем"
                 className="[&_input]:placeholder:text-text-muted/50"
               />
 
@@ -839,9 +839,9 @@ export function AssistantEditor({
               <TextFormField
                 maxWidth="max-w-4xl"
                 name="system_prompt"
-                label="Instructions"
+                label="Инструкции"
                 isTextArea={true}
-                placeholder="You are a professional email writing assistant that always uses a polite enthusiastic tone, emphasizes action items, and leaves blanks for the human to fill in when you have unknowns"
+                placeholder="Вы профессиональный помощник по написанию писем, который всегда использует вежливый восторженный тон, подчеркивает элементы действий и оставляет пробелы для человека для заполнения, когда у вас есть неизвестные"
                 data-testid="assistant-instructions-input"
                 className="[&_textarea]:placeholder:text-text-muted/50"
               />
@@ -1492,8 +1492,8 @@ export function AssistantEditor({
                         <TextFormField
                           small={true}
                           name="num_chunks"
-                          label="[Необязательно] Number of Context Documents"
-                          placeholder="Default 10"
+                          label="[Необязательно] Количество контекстных документов"
+                          placeholder="По умолчанию 10"
                           onChange={(e) => {
                             const value = e.target.value;
                             if (value === "" || /^[0-9]+$/.test(value)) {
@@ -1506,8 +1506,8 @@ export function AssistantEditor({
                           width="max-w-xl"
                           type="date"
                           small
-                          subtext="Documents prior to this date will be ignored."
-                          label="[Необязательно] Knowledge Cutoff Date"
+                          subtext="Документы до этой даты будут игнорироваться."
+                          label="[Необязательно] Дата окончания знаний"
                           name="search_start_date"
                         />
 
@@ -1515,16 +1515,16 @@ export function AssistantEditor({
                           small
                           removeIndent
                           name="llm_relevance_filter"
-                          label="AI Relevance Filter"
-                          subtext="If enabled, the LLM will filter out documents that are not useful for answering the user query prior to generating a response. This typically improves the quality of the response but incurs slightly higher cost."
+                          label="Фильтр релевантности ИИ"
+                          subtext="Если включено, LLM будет отфильтровывать документы, которые не являются полезными для ответа на запрос пользователя, перед созданием ответа. Обычно это улучшает качество ответа, но влечет за собой немного более высокую стоимость."
                         />
 
                         <BooleanFormField
                           small
                           removeIndent
                           name="include_citations"
-                          label="Citations"
-                          subtext="Response will include citations ([1], [2], etc.) for documents referenced by the LLM. In general, we recommend to leave this enabled in order to increase trust in the LLM answer."
+                          label="Цитаты"
+                          subtext="Ответ будет включать цитаты ([1], [2] и т. д.) для документов, на которые ссылается LLM. В целом мы рекомендуем оставить этот параметр включенным, чтобы повысить доверие к ответу LLM."
                         />
                       </div>
                     </div>
@@ -1536,7 +1536,7 @@ export function AssistantEditor({
                     removeIndent
                     name="datetime_aware"
                     label="Date and Time Aware"
-                    subtext='Toggle this option to let the assistant know the current date and time (formatted like: "Thursday Jan 1, 1970 00:01"). To inject it in a specific place in the prompt, use the pattern [[CURRENT_DATETIME]]'
+                    subtext='Включите эту опцию, чтобы сообщить помощнику текущую дату и время (в формате: "Четверг, 1 января 1970 г., 00:01"). Чтобы вставить ее в определенное место в подсказке, используйте шаблон [[CURRENT_DATETIME]]'
                   />
 
                   <Separator />
@@ -1544,13 +1544,13 @@ export function AssistantEditor({
                   <TextFormField
                     maxWidth="max-w-4xl"
                     name="task_prompt"
-                    label="[Необязательно] Reminders"
+                    label="[Необязательно] Напоминания"
                     isTextArea={true}
-                    placeholder="Remember to reference all of the points mentioned in my message to you and focus on identifying action items that can move things forward"
+                    placeholder="Не забудьте сослаться на все пункты, упомянутые в моем сообщении вам, и сосредоточьтесь на определении элементов действий, которые могут продвинуть дело вперед"
                     onChange={(e) => {
                       setFieldValue("task_prompt", e.target.value);
                     }}
-                    explanationText="Learn about prompting in our docs!"
+                    explanationText="Узнайте о подсказках в наших документах!"
                     explanationLink="https://docs.onyx.app/guides/assistants"
                     className="[&_textarea]:placeholder:text-text-muted/50"
                   />
@@ -1562,14 +1562,14 @@ export function AssistantEditor({
                   type="submit"
                   disabled={isSubmitting || isRequestSuccessful}
                 >
-                  {isUpdate ? "Update" : "Create"}
+                  {isUpdate ? "Обновить" : "Создать"}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => router.back()}
                 >
-                  Cancel
+                  Отмена
                 </Button>
               </div>
 
@@ -1580,7 +1580,7 @@ export function AssistantEditor({
                     onClick={openDeleteModal}
                     type="button"
                   >
-                    Delete
+                    Удалить
                   </Button>
                 )}
               </div>

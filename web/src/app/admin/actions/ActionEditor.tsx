@@ -112,9 +112,9 @@ function ActionForm({
       <div className="relative w-full">
         <TextFormField
           name="definition"
-          label="Definition"
-          subtext="Specify an OpenAPI schema that defines the APIs you want to make available as part of this action."
-          placeholder="Enter your OpenAPI schema here"
+          label="Определение"
+          subtext="Укажите схему OpenAPI, которая определяет API, которые вы хотите сделать доступными в рамках этого действия."
+          placeholder="Введите здесь схему OpenAPI"
           isTextArea={true}
           defaultHeight="h-96"
           fontSize="sm"
@@ -246,7 +246,7 @@ function ActionForm({
                           name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
                             k.KEY1
                           )}`}
-                          placeholder="Header Key"
+                          placeholder="Ключ заголовка"
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
 
@@ -254,7 +254,7 @@ function ActionForm({
                           name={`${i18n.t(k.CUSTOMHEADERS)}${index}${i18n.t(
                             k.VALUE
                           )}`}
-                          placeholder="Header Value"
+                          placeholder="Значение заголовка"
                           className="flex-1 p-2 border border-background-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                         />
 
@@ -377,12 +377,12 @@ interface ToolFormValues {
 }
 
 const ToolSchema = Yup.object().shape({
-  definition: Yup.string().required("Tool definition is required"),
+  definition: Yup.string().required("Требуется определение инструмента"),
   customHeaders: Yup.array()
     .of(
       Yup.object().shape({
-        key: Yup.string().required("Header key is required"),
-        value: Yup.string().required("Header value is required"),
+        key: Yup.string().required("Требуется ключ заголовка"),
+        value: Yup.string().required("Требуется значение заголовка"),
       })
     )
     .default([]),
@@ -420,9 +420,9 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           if (hasAuthHeader && values.passthrough_auth) {
             setPopup({
               message:
-                "Cannot enable passthrough auth when Authorization " +
-                "headers are present. Please remove any Authorization " +
-                "headers first.",
+                "Невозможно включить сквозную аутентификацию, если присутствуют заголовки " +
+                "Авторизации. Сначала удалите все заголовки " +
+                "Авторизации.",
               type: "error",
             });
             console.log(
@@ -456,7 +456,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           }
           if (response.error) {
             setPopup({
-              message: "Failed to create action - " + response.error,
+              message: "Не удалось создать действие - " + response.error,
               type: "error",
             });
             return;

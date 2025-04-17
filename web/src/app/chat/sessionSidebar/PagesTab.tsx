@@ -368,7 +368,7 @@ export function PagesTab({
               }}
               ref={newFolderInputRef}
               type="text"
-              placeholder="Enter group name"
+              placeholder="Введите название группы"
               className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
             />
 

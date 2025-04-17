@@ -182,7 +182,7 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeModifyCredential}
           className="max-w-3xl rounded-lg"
-          title="Update Credentials"
+          title="Обновить учетные данные"
         >
           <ModifyCredential
             close={closeModifyCredential}
@@ -205,7 +205,7 @@ export default function CredentialSection({
         <Modal
           onOutsideClick={closeEditingCredential}
           className="max-w-3xl rounded-lg"
-          title="Edit Credential"
+          title="Изменить учетные данные"
         >
           <EditCredential
             onUpdate={onUpdateCredential}

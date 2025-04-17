@@ -12,7 +12,7 @@ export function OnyxInitializingLoader() {
       <Logo height={96} width={96} className="mx-auto mb-3" />
       <p className="text-lg text-text font-semibold">
         {i18n.t(k.INITIALIZING)}{" "}
-        {settings?.enterpriseSettings?.application_name ?? "Onyx"}
+        {settings?.enterpriseSettings?.application_name ?? "SmartSearch"}
       </p>
     </div>
   );

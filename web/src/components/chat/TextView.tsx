@@ -190,7 +190,7 @@ export default function TextView({
                   <iframe
                     src={`${fileUrl}#toolbar=0`}
                     className="w-full h-full border-none"
-                    title="File Viewer"
+                    title="Просмотр файлов"
                   />
                 ) : isMarkdownFormat(fileType) ? (
                   <div className="w-full h-full p-6 overflow-y-scroll overflow-x-hidden">

@@ -22,7 +22,7 @@ export function AdvancedOptionsToggle({
       onClick={() => setShowAdvancedOptions(!showAdvancedOptions)}
       className="text-xs mr-auto !p-0 text-text-950 hover:text-text-500"
     >
-      {title || "Advanced Options"}
+      {title || "Расширенные настройки"}
     </Button>
   );
 }

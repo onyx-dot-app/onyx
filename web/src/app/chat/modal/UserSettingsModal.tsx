@@ -294,7 +294,7 @@ export function UserSettingsModal({
                     }}
                   >
                     <SelectTrigger className="w-full mt-2">
-                      <SelectValue placeholder="Select theme" />
+                      <SelectValue placeholder="Выберите тему" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem

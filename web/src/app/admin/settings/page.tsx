@@ -10,7 +10,7 @@ export default async function Page() {
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Workspace Settings"
+        title="Настройки рабочего пространства"
         icon={<SettingsIcon size={32} className="my-auto" />}
       />
 

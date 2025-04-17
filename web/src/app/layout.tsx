@@ -46,19 +46,19 @@ const hankenGrotesk = Hanken_Grotesk({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  let logoLocation = buildClientUrl("/onyx.ico");
+  let logoLocation = buildClientUrl("/smartsearch.ico");
   let enterpriseSettings: EnterpriseSettings | null = null;
   if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
     enterpriseSettings = await (await fetchEnterpriseSettingsSS()).json();
     logoLocation =
       enterpriseSettings && enterpriseSettings.use_custom_logo
         ? "/api/enterprise-settings/logo"
-        : buildClientUrl("/onyx.ico");
+        : buildClientUrl("/smartsearch.ico");
   }
 
   return {
-    title: enterpriseSettings?.application_name || "Onyx",
-    description: "Question answering for your documents",
+    title: enterpriseSettings?.application_name || "SmartSearch",
+    description: "Ответы на вопросы по вашим документам",
     icons: {
       icon: logoLocation,
     },

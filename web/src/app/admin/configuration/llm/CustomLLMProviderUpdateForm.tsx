@@ -405,7 +405,7 @@ export function CustomLLMProviderUpdateForm({
               subtext={`
               ${i18n.t(k.THE_MODEL_TO_USE_BY_DEFAULT_FO)}`}
               label="Стандартная модель"
-              placeholder="E.g. gpt-4"
+              placeholder="Например gpt-4"
             />
 
             {!existingLlmProvider?.deployment_name && (
@@ -413,7 +413,7 @@ export function CustomLLMProviderUpdateForm({
                 name="fast_default_model_name"
                 subtext={`${i18n.t(k.THE_MODEL_TO_USE_FOR_LIGHTER_F)}`}
                 label="[Необязательно] Быстрая модель"
-                placeholder="E.g. gpt-4"
+                placeholder="Например gpt-4"
               />
             )}
 

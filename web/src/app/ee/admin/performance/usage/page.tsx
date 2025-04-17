@@ -17,7 +17,7 @@ export default function AnalyticsPage() {
   return (
     <main className="pt-4 mx-auto container">
       <AdminPageTitle
-        title="Usage Statistics"
+        title="Статистика использования"
         icon={<FiActivity size={32} />}
       />
 

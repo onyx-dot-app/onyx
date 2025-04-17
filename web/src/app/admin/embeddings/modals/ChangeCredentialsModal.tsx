@@ -235,7 +235,7 @@ export function ChangeCredentialsModal({
                   />
 
                   {deletionError && (
-                    <Callout type="danger" title="Error" className="mt-4">
+                    <Callout type="danger" title="Ошибка" className="mt-4">
                       {deletionError}
                     </Callout>
                   )}
@@ -262,7 +262,7 @@ export function ChangeCredentialsModal({
               )}
 
               {testError && (
-                <Callout type="danger" title="Error" className="my-4">
+                <Callout type="danger" title="Ошибка" className="my-4">
                   {testError}
                 </Callout>
               )}
@@ -294,7 +294,7 @@ export function ChangeCredentialsModal({
           {i18n.t(k.DELETE_CONFIGURATION)}
         </Button>
         {deletionError && (
-          <Callout type="danger" title="Error" className="mt-4">
+          <Callout type="danger" title="Ошибка" className="mt-4">
             {deletionError}
           </Callout>
         )}

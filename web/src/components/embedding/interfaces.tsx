@@ -112,7 +112,7 @@ export const AVAILABLE_MODELS: HostedEmbeddingModel[] = [
     model_dim: 384,
     normalize: true,
     description:
-      "The smallest and fastest version of the E5 line of models. If you're running Onyx on a resource constrained system, then this may be a good choice.",
+      "The smallest and fastest version of the E5 line of models. If you're running SmartSearch on a resource constrained system, then this may be a good choice.",
     link: "https://huggingface.co/intfloat/e5-small-v2",
     query_prefix: "query: ",
     passage_prefix: "passage: ",

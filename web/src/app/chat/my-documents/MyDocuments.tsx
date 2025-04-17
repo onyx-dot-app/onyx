@@ -333,10 +333,10 @@ export default function MyDocuments() {
         </h1>
         <div className="flex items-center gap-2">
           <CreateEntityModal
-            title="New Folder"
+            title="Новая папка"
             entityName=""
             open={isCreateFolderOpen}
-            placeholder="Untitled folder"
+            placeholder="Папка без названия"
             setOpen={setIsCreateFolderOpen}
             onSubmit={handleCreateFolder}
             trigger={
@@ -372,7 +372,7 @@ export default function MyDocuments() {
             </div>
             <input
               type="text"
-              placeholder="Search documents..."
+              placeholder="Поиск документов..."
               className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}

@@ -1112,7 +1112,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
               <div className="w-full relative">
                 <input
                   type="text"
-                  placeholder="Search documents..."
+                  placeholder="Поиск документов..."
                   className="w-full pl-10 pr-4 py-2 border border-neutral-300 dark:border-neutral-600 rounded-md focus:border-transparent dark:bg-neutral-800 dark:text-neutral-100"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}

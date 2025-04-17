@@ -250,7 +250,7 @@ export function SettingsForm() {
 
       <Checkbox
         label="Анонимные пользователи"
-        sublabel="Если установлено, пользователям не потребуется входить в систему для использования Onyx."
+        sublabel="Если установлено, пользователям не потребуется входить в систему для использования SmartSearch."
         checked={settings.anonymous_user_enabled}
         onChange={(e) =>
           handleToggleSettingsField("anonymous_user_enabled", e.target.checked)
@@ -298,7 +298,7 @@ export function SettingsForm() {
           <Title className="mt-8 mb-4">{i18n.t(k.CHAT_SETTINGS)}</Title>
           <IntegerInput
             label="Сохранение чата"
-            sublabel="Введите максимальное количество дней, в течение которых Onyx будет хранить сообщения чата. Если оставить это поле пустым, Onyx никогда не удалит сообщения чата."
+            sublabel="Введите максимальное количество дней, в течение которых SmartSearch будет хранить сообщения чата. Если оставить это поле пустым, SmartSearch никогда не удалит сообщения чата."
             value={chatRetention === "" ? null : Number(chatRetention)}
             onChange={(e) => {
               const numValue = parseInt(e.target.value, 10);

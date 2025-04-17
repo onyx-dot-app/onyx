@@ -10,7 +10,8 @@ export const LoginText = () => {
   return (
     <>
       {i18n.t(k.LOG_IN_TO)}{" "}
-      {(settings && settings?.enterpriseSettings?.application_name) || "Onyx"}
+      {(settings && settings?.enterpriseSettings?.application_name) ||
+        "SmartSearch"}
     </>
   );
 };

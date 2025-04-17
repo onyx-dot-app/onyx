@@ -11,7 +11,7 @@ import CreateButton from "@/components/ui/createButton";
 export default async function Page() {
   return (
     <div className="mx-auto container">
-      <AdminPageTitle icon={<AssistantsIcon size={32} />} title="Assistants" />
+      <AdminPageTitle icon={<AssistantsIcon size={32} />} title="Ассистенты" />
 
       <Text className="mb-2">{i18n.t(k.ASSISTANTS_ARE_A_WAY_TO_BUILD)}</Text>
       <Text className="mt-2">{i18n.t(k.THEY_ALLOW_YOU_TO_CUSTOMIZE)}</Text>

@@ -22,7 +22,7 @@ export function SearchInput({
         <Input
           removeFocusRing
           className="w-full !focus-visible:ring-offset-0 !focus-visible:ring-none !focus-visible:ring-0 hover:focus-none border-none bg-transparent placeholder:text-neutral-400 focus:border-transparent focus:outline-none focus:ring-0 dark:placeholder:text-neutral-500 dark:text-neutral-200"
-          placeholder="Search chats..."
+          placeholder="Поиск чатов..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />

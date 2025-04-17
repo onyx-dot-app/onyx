@@ -85,14 +85,14 @@ export const PromptCard = ({
                 value={localPrompt}
                 onChange={(e) => handleLocalEdit("prompt", e.target.value)}
                 className="mb-2 resize-none"
-                placeholder="Prompt"
+                placeholder="Промпт"
               />
 
               <Textarea
                 value={localContent}
                 onChange={(e) => handleLocalEdit("content", e.target.value)}
                 className="resize-vertical min-h-[100px]"
-                placeholder="Content"
+                placeholder="Контент"
               />
             </div>
             <div className="flex items-end">
@@ -109,7 +109,7 @@ export const PromptCard = ({
               <TooltipTrigger asChild>
                 <div className="mb-2  flex gap-x-2 ">
                   <p className="font-semibold">{prompt.prompt}</p>
-                  {isPromptPublic(prompt) && <SourceChip title="Built-in" />}
+                  {isPromptPublic(prompt) && <SourceChip title="Встроенный" />}
                 </div>
               </TooltipTrigger>
               {isPromptPublic(prompt) && (

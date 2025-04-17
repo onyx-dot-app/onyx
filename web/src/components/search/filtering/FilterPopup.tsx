@@ -370,7 +370,7 @@ export function FilterPopup({
               <div className="pt-4 h-full flex flex-col w-full">
                 <div className="flex pb-2 px-4">
                   <Input
-                    placeholder="Search document sets..."
+                    placeholder="Поиск наборов документов..."
                     value={documentSetSearch}
                     onChange={(e) => setDocumentSetSearch(e.target.value)}
                     className="border border-text-subtle w-full"

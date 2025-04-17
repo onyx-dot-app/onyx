@@ -162,13 +162,13 @@ export interface SearchResponse {
 }
 
 export enum SourceCategory {
-  Storage = "Storage",
+  Storage = "Хранилища",
   Wiki = "Wiki",
-  CustomerSupport = "Customer Support",
-  Messaging = "Messaging",
-  ProjectManagement = "Project Management",
-  CodeRepository = "Code Repository",
-  Other = "Other",
+  CustomerSupport = "Поддержка клиентов",
+  Messaging = "Обмен сообщениями",
+  ProjectManagement = "Управление проектами",
+  CodeRepository = "Репозиторий кода",
+  Other = "Другое",
 }
 
 export interface SourceMetadata {

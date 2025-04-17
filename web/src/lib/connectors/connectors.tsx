@@ -305,8 +305,8 @@ export const connectorConfigs: Record<
                 label: "Включить общие диски?",
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Это позволит Onyx индексировать все на общих дисках, к которым у вас есть доступ."
-                    : "Это позволит Onyx индексировать все на общих дисках вашей организации.";
+                    ? "Это позволит SmartSearch индексировать все на общих дисках, к которым у вас есть доступ."
+                    : "Это позволит SmartSearch индексировать все на общих дисках вашей организации.";
                 },
                 name: "include_shared_drives",
                 default: false,
@@ -320,8 +320,8 @@ export const connectorConfigs: Record<
                 },
                 description: (currentCredential) => {
                   return currentCredential?.credential_json?.google_tokens
-                    ? "Это позволит Onyx индексировать все на вашем Моем диске."
-                    : "Это позволит Onyx индексировать все на Моем диске каждого.";
+                    ? "Это позволит SmartSearch индексировать все на вашем Моем диске."
+                    : "Это позволит SmartSearch индексировать все на Моем диске каждого.";
                 },
                 name: "include_my_drives",
                 default: false,
@@ -329,7 +329,7 @@ export const connectorConfigs: Record<
               {
                 type: "checkbox",
                 description:
-                  "Это позволит Onyx индексировать все файлы, доступные вам.",
+                  "Это позволит SmartSearch индексировать все файлы, доступные вам.",
                 label: "Включить все файлы, доступные вам?",
                 name: "include_files_shared_with_me",
                 visibleCondition: (values, currentCredential) =>
@@ -581,7 +581,7 @@ export const connectorConfigs: Record<
         label: "Запрашиваемые объекты",
         name: "requested_objects",
         optional: true,
-        description: `Укажите типы объектов Salesforce, которые вы хотите индексировать. Если не уверены, не указывайте объекты, и Onyx по умолчанию будет индексировать по 'Account'.
+        description: `Укажите типы объектов Salesforce, которые вы хотите индексировать. Если не уверены, не указывайте объекты, и SmartSearch по умолчанию будет индексировать по 'Account'.
 
 Подсказка: Используйте единственное число имени объекта (например, 'Opportunity' вместо 'Opportunities').`,
       },

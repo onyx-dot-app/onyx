@@ -249,12 +249,12 @@ function Main({ ccPairId }: { ccPairId: number }) {
       }
       mutate(buildCCPairInfoUrl(ccPairId));
       setPopup({
-        message: "Частота обрезки соединителя успешно обновлена",
+        message: "Частота обрезки коннектора успешно обновлена",
         type: "success",
       });
     } catch (error) {
       setPopup({
-        message: "Не удалось обновить частоту обрезки соединителя",
+        message: "Не удалось обновить частоту обрезки коннектора",
         type: "error",
       });
     }
@@ -309,7 +309,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
       {editingPruningFrequency && (
         <EditPropertyModal
           propertyTitle="Частота обрезки"
-          propertyDetails="Как часто следует обрезать соединитель (в секундах)"
+          propertyDetails="Как часто следует обрезать коннектор (в секундах)"
           propertyName="pruning_frequency"
           propertyValue={String(pruneFreq)}
           validationSchema={PruneFrequencySchema}
@@ -430,7 +430,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
 
       {ccPair.status === ConnectorCredentialPairStatus.INVALID && (
         <div className="mt-2">
-          <Callout type="warning" title="Invalid Connector State">
+          <Callout type="warning" title="Неверное состояние коннектора">
             {i18n.t(k.THIS_CONNECTOR_IS_IN_AN_INVALI)}
           </Callout>
         </div>

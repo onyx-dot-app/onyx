@@ -17,7 +17,7 @@ export default function ExceptionTraceModal({
     <Modal
       width="w-4/6"
       className="h-5/6 overflow-y-hidden flex flex-col"
-      title="Full Exception Trace"
+      title="Полная трассировка исключений"
       onOutsideClick={onOutsideClick}
     >
       <div className="overflow-y-auto default-scrollbar overflow-x-hidden pr-3 h-full mb-6">

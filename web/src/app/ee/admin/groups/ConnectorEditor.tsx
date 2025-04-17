@@ -24,7 +24,7 @@ export const ConnectorEditor = ({
       connectors={privateCCPairs}
       selectedIds={selectedCCPairIds}
       onChange={setSetCCPairIds}
-      placeholder="Search for connectors..."
+      placeholder="Поиск коннекторов..."
       showError={true}
     />
   );

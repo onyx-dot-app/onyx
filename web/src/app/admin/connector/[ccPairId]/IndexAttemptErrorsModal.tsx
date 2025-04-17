@@ -44,7 +44,7 @@ export default function IndexAttemptErrorsModal({
   const hasUnresolvedErrors = errors.items.some((error) => !error.is_resolved);
 
   return (
-    <Modal title="Indexing Errors" onOutsideClick={onClose} width="max-w-6xl">
+    <Modal title="Ошибки индексации" onOutsideClick={onClose} width="max-w-6xl">
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
           {isResolvingErrors ? (

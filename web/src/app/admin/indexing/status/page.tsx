@@ -92,7 +92,7 @@ export default function Status() {
       {popup}
       <AdminPageTitle
         icon={<NotebookIcon size={32} />}
-        title="Existing Connectors"
+        title="Существующие коннекторы"
         farRightElement={
           <Link href="/admin/add-connector">
             <Button variant="success-reverse">{i18n.t(k.ADD_CONNECTOR)}</Button>

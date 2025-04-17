@@ -548,7 +548,7 @@ export const FileUploadSection: React.FC<FileUploadSectionProps> = ({
                         <input
                           ref={urlInputRef}
                           type="text"
-                          placeholder="Enter website URL..."
+                          placeholder="Введите URL..."
                           className={`w-full text-sm py-2 px-3 border rounded-md bg-transparent focus:outline-none focus:ring-1 
                             ${
                               urlError

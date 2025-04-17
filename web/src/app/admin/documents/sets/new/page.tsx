@@ -64,7 +64,7 @@ const Page = () => {
 
       <AdminPageTitle
         icon={<BookmarkIcon size={32} />}
-        title="New Document Set"
+        title="Новый набор документов"
       />
 
       <Main />

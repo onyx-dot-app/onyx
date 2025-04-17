@@ -39,7 +39,7 @@ function BackToOnyxButton({
       <div className="mx-auto">
         <Button onClick={() => router.push("/chat")}>
           {i18n.t(k.BACK_TO)}{" "}
-          {enterpriseSettings?.application_name || "Onyx Chat"}
+          {enterpriseSettings?.application_name || "SmartSearch Chat"}
         </Button>
       </div>
       <div
@@ -84,7 +84,7 @@ export function SharedChatDisplay({
     return (
       <div className="min-h-full w-full">
         <div className="mx-auto w-fit pt-8">
-          <Callout type="danger" title="Shared Chat Not Found">
+          <Callout type="danger" title="Общий чат не найден">
             {i18n.t(k.DID_NOT_FIND_A_SHARED_CHAT_WIT)}
           </Callout>
         </div>

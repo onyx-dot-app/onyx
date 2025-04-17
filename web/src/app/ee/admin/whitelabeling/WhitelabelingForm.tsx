@@ -143,7 +143,7 @@ export function WhitelabelingForm() {
               label="Application Name"
               name="application_name"
               subtext={`${i18n.t(k.THE_CUSTOM_NAME_YOU_ARE_GIVING)}`}
-              placeholder="Custom name which will replace 'Onyx'"
+              placeholder="Пользовательское имя, которое заменит 'SmartSearch'"
               disabled={isSubmitting}
             />
 
@@ -211,14 +211,14 @@ export function WhitelabelingForm() {
                   label="Chat Header Content"
                   name="custom_header_content"
                   subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W)}`}
-                  placeholder="Your header content..."
+                  placeholder="Содержание вашего заголовка..."
                   disabled={isSubmitting}
                 />
 
                 <BooleanFormField
                   name="two_lines_for_chat_header"
-                  label="Two lines for chat header?"
-                  subtext="If enabled, the chat header will be displayed on two lines instead of one."
+                  label="Две строки для заголовка чата?"
+                  subtext="Если включено, заголовок чата будет отображаться на двух строках вместо одной."
                 />
 
                 <Separator />
@@ -268,16 +268,16 @@ export function WhitelabelingForm() {
 
                 <BooleanFormField
                   name="enable_consent_screen"
-                  label="Enable Consent Screen"
-                  subtext="If enabled, the initial popup will be transformed into a consent screen. Users will be required to agree to the terms before accessing the application on their first login."
+                  label="Включить экран согласия"
+                  subtext="Если включено, первоначальное всплывающее окно будет преобразовано в экран согласия. Пользователи должны будут согласиться с условиями перед доступом к приложению при первом входе в систему."
                   disabled={isSubmitting}
                 />
 
                 <TextFormField
-                  label="Chat Footer Text"
+                  label="Текст нижнего колонтитула чата"
                   name="custom_lower_disclaimer_content"
                   subtext={`${i18n.t(k.CUSTOM_MARKDOWN_CONTENT_THAT_W3)}`}
-                  placeholder="Your disclaimer content..."
+                  placeholder="Содержимое вашего отказа от ответственности..."
                   isTextArea
                   disabled={isSubmitting}
                 />

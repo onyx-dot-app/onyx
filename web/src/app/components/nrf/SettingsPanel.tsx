@@ -118,7 +118,7 @@ export const SettingsPanel = ({
         <SidebarSwitch
           checked={useOnyxAsNewTab}
           onCheckedChange={handleUseOnyxToggle}
-          label="Использовать Onyx как страницу новой вкладки"
+          label="Использовать SmartSearch как страницу новой вкладки"
         />
 
         <SidebarSwitch

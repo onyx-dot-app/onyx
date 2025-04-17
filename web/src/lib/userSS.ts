@@ -33,7 +33,7 @@ export const getAuthTypeMetadataSS = async (): Promise<AuthTypeMetadata> => {
   }
 
   // for SAML / OIDC, we auto-redirect the user to the IdP when the user visits
-  // Onyx in an un-authenticated state
+  // SmartSearch in an un-authenticated state
   if (authType === "oidc" || authType === "saml") {
     return {
       authType,
@@ -165,7 +165,9 @@ export const getCurrentUserSS = async (): Promise<User | null> => {
       credentials: "include",
       next: { revalidate: 0 },
       headers: {
-        cookie: (await cookies())
+        cookie: (
+          await cookies()
+        )
           .getAll()
           .map((cookie) => `${cookie.name}=${cookie.value}`)
           .join("; "),

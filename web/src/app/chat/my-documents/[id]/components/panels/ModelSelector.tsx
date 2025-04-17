@@ -28,7 +28,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     }
   >
     <SelectTrigger className="w-full">
-      <SelectValue placeholder="Select a model" />
+      <SelectValue placeholder="Выберите модель" />
     </SelectTrigger>
     <SelectContent>
       {models.map((model) => (

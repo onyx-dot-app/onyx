@@ -39,15 +39,15 @@ module.exports = {
   [k.NO_LLM_PROVIDERS_CONFIGURED_G]: `No LLM providers configured. Generation is not available.`,
   [k.MAX_FOUR_STARTER_MESSAGES]: `Max four starter messages`,
   [k._1]: ``,
-  [k.SETUP_SLACK_BOTS_THAT_CONNECT]: `Setup Slack bots that connect to Onyx. Once setup, you will be able to
-        ask questions to Onyx directly from Slack. Additionally, you can:`,
+  [k.SETUP_SLACK_BOTS_THAT_CONNECT]: `Setup Slack bots that connect to SmartSearch. Once setup, you will be able to
+        ask questions to SmartSearch directly from Slack. Additionally, you can:`,
   [k.SETUP_ONYXBOT_TO_AUTOMATICALLY]: `Setup OnyxBot to automatically answer questions in certain channels.`,
   [k.CHOOSE_WHICH_DOCUMENT_SETS_ONY]: `Choose which document sets OnyxBot should answer from, depending on
             the channel the question is being asked.`,
   [k.DIRECTLY_MESSAGE_ONYXBOT_TO_SE]: `Directly message OnyxBot to search just as you would in the web UI.`,
   [k.FOLLOW_THE]: `Follow the`,
   [k.GUIDE]: `guide`,
-  [k.FOUND_IN_THE_ONYX_DOCUMENTATIO]: `found in the Onyx documentation to get started!`,
+  [k.FOUND_IN_THE_ONYX_DOCUMENTATIO]: `found in the SmartSearch documentation to get started!`,
   [k.STATUS]: `Status`,
   [k.DEFAULT_CONFIG]: `Default Config`,
   [k.CHANNEL_COUNT]: `Channel Count`,
@@ -176,8 +176,8 @@ module.exports = {
   [k.ZIP]: `.zip`,
   [k.SELECT_AN_OPTION]: `Select an option`,
   [k.STEP_PROVIDE_YOUR_CREDENTIA]: `Step 1: Provide your Credentials`,
-  [k.STEP_AUTHENTICATE_WITH_ONYX]: `Step 2: Authenticate with Onyx`,
-  [k.ONYX]: `Onyx`,
+  [k.STEP_AUTHENTICATE_WITH_ONYX]: `Step 2: Authenticate with SmartSearch`,
+  [k.ONYX]: `SmartSearch`,
   [k.CONNECTOR]: `Connector`,
   [k.HIDDEN]: `Hidden`,
   [k.VISIBLE]: `Visible`,
@@ -208,7 +208,7 @@ module.exports = {
   [k.ERROR1]: `Ошибка:`,
   [k.ALLOW_YOU_TO_GROUP_LOGICALLY_C]: `allow you to group logically connected documents
         into a single bundle. These can then be used as a filter when performing
-        searches to control the scope of information Onyx searches over.`,
+        searches to control the scope of information SmartSearch searches over.`,
   [k.DOCUMENT_SET_WITH_ID]: `Document set with id`,
   [k.NOT_FOUND]: `not found`,
   [k.ALREADY_CHOSEN]: `already chosen`,
@@ -248,12 +248,12 @@ module.exports = {
   [k.ARE_YOU_SURE_YOU]: `. Are you sure
             you want to update to this new embedding model?`,
   [k.WE_WILL_RE_INDEX_ALL_YOUR_DOCU]: `We will re-index all your documents in the background so you will be
-            able to continue to use Onyx as normal with the old model in the
+            able to continue to use SmartSearch as normal with the old model in the
             meantime. Depending on how many documents you have indexed, this may
             take a while.`,
   [k.THIS_RE_INDEXING_PROCESS_WILL]: `this re-indexing process will consume more resources
             than normal. If you are self-hosting, we recommend that you allocate
-            at least 16GB of RAM to Onyx during this process.`,
+            at least 16GB of RAM to SmartSearch during this process.`,
   [k.WE_VE_DETECTED_THAT_THIS_IS_A]: `We've detected that this is a custom-specified embedding
               model. Since we have to download the model files before verifying
               the configuration's correctness, we won't be able to let
@@ -275,9 +275,9 @@ module.exports = {
   [k.COMPATIBLE_MODEL_OF_YOUR_CHOI]: `-compatible model of your choice below. The rough list of supported
         models can be found`,
   [k.HERE]: `here`,
-  [k.NOT_ALL_MODELS_LISTED_WILL_WOR]: `not all models listed will work with Onyx, since some have
+  [k.NOT_ALL_MODELS_LISTED_WILL_WOR]: `not all models listed will work with SmartSearch, since some have
         unique interfaces or special requirements. If in doubt, reach out to the
-        Onyx team.`,
+        SmartSearch team.`,
   [k.CONFIGURE_CUSTOM_MODEL]: `Configure custom model`,
   [k.IT_LOOKS_LIKE_YOU_DON_T_HAVE_A]: `It looks like you don't have any connectors setup yet. Visit the`,
   [k.ADD_CONNECTOR]: `Add Connector`,
@@ -300,7 +300,7 @@ module.exports = {
   [k.CUSTOM_PATH_CANNOT_BE_EMPTY]: `Custom path cannot be empty`,
   [k.CUSTOM_PATH_CAN_ONLY_CONTAIN_L]: `Custom path can only contain letters, numbers, and hyphens`,
   [k.ANONYMOUS_USER_PATH_UPDATED_SU]: `Anonymous user path updated successfully!`,
-  [k.MANAGE_GENERAL_ONYX_SETTINGS_A]: `Manage general Onyx settings applicable to all users in the workspace.`,
+  [k.MANAGE_GENERAL_ONYX_SETTINGS_A]: `Manage general SmartSearch settings applicable to all users in the workspace.`,
   [k.VERSION]: `Version`,
   [k.BACKEND_VERSION]: `Backend Version:`,
   [k.WEB_VERSION]: `Web Version:`,
@@ -364,10 +364,10 @@ module.exports = {
   [k.IMAGEGENERATIONTOOL]: `ImageGenerationTool`,
   [k.IMAGE_GENERATION]: `Image Generation`,
   [k.ACCOUNT_NOT_FOUND]: `Account Not Found`,
-  [k.WE_COULDN_T_FIND_YOUR_ACCOUNT]: `We couldn't find your account in our records. To access Onyx, you
+  [k.WE_COULDN_T_FIND_YOUR_ACCOUNT]: `We couldn't find your account in our records. To access SmartSearch, you
           need to either:`,
-  [k.BE_INVITED_TO_AN_EXISTING_ONYX]: `Be invited to an existing Onyx team`,
-  [k.CREATE_A_NEW_ONYX_TEAM]: `Create a new Onyx team`,
+  [k.BE_INVITED_TO_AN_EXISTING_ONYX]: `Be invited to an existing SmartSearch team`,
+  [k.CREATE_A_NEW_ONYX_TEAM]: `Create a new SmartSearch team`,
   [k.CREATE_NEW_ORGANIZATION]: `Create New Organization`,
   [k.HAVE_AN_ACCOUNT_WITH_A_DIFFERE]: `Have an account with a different email?`,
   [k.SIGN_IN]: `Sign in`,
@@ -417,7 +417,7 @@ module.exports = {
   [k.PASSWORD_RESET_SUCCESSFULLY_R]: `Password reset successfully. Redirecting to login...`,
   [k.AN_UNEXPECTED_ERROR_OCCURRED]: `An unexpected error occurred. Please try again.`,
   [k.COMPLETE_YOUR_SIGN_UP]: `Complete your sign up`,
-  [k.SIGN_UP_FOR_ONYX]: `Sign Up for Onyx`,
+  [k.SIGN_UP_FOR_ONYX]: `Sign Up for SmartSearch`,
   [k.HOW_DID_YOU_HEAR_ABOUT_US]: `How did you hear about us?`,
   [k.SEARCH1]: `search`,
   [k.FRIEND]: `friend`,
@@ -636,14 +636,14 @@ module.exports = {
             script. This should be the value of the`,
   [k.CUSTOM_ANALYTICS_SECRET_KEY]: `CUSTOM_ANALYTICS_SECRET_KEY`,
   [k.ENVIRONMENT_VARIABLE_SET_WHEN]: `environment variable set when
-            initially setting up Onyx.`,
+            initially setting up SmartSearch.`,
   [k.UPDATE]: `Update`,
   [k.PUT]: `PUT`,
   [k.CUSTOM_ANALYTICS_SCRIPT_UPDATE]: `Custom analytics script updated successfully!`,
   [k.TO_SET_UP_CUSTOM_ANALYTICS_SCR]: `To set up custom analytics scripts, please work with the team who
-            setup Onyx in your team to set the`,
+            setup SmartSearch in your team to set the`,
   [k.ENVIRONMENT_VARIABLE]: `environment variable.`,
-  [k.THIS_ALLOWS_YOU_TO_BRING_YOUR]: `This allows you to bring your own analytics tool to Onyx! Copy the Web
+  [k.THIS_ALLOWS_YOU_TO_BRING_YOUR]: `This allows you to bring your own analytics tool to SmartSearch! Copy the Web
         snippet from your analytics provider into the box below, and we'll
         start sending usage events.`,
   [k.LLL_DD_Y]: `LLL dd, y`,
@@ -699,13 +699,13 @@ module.exports = {
   [k.UPLOADED_IMAGE]: `Uploaded Image:`,
   [k.ONLY_ONE_FILE_CAN_BE_UPLOADED]: `Only one file can be uploaded at a time`,
   [k.FAILED_TO_UPLOAD_LOGO]: `Failed to upload logo.`,
-  [k.THE_CUSTOM_NAME_YOU_ARE_GIVING]: `The custom name you are giving Onyx for your team. This will replace 'Onyx' everywhere in the UI.`,
+  [k.THE_CUSTOM_NAME_YOU_ARE_GIVING]: `The custom name you are giving SmartSearch for your team. This will replace 'SmartSearch' everywhere in the UI.`,
   [k.CUSTOM_LOGO]: `Custom Logo`,
   [k.CURRENT_CUSTOM_LOGO]: `Current Custom Logo:`,
   [k.LOGO]: `logo`,
   [k.OVERRIDE_THE_CURRENT_CUSTOM_LO]: `Override the current custom logo by uploading a new image
                   below and clicking the Update button.`,
-  [k.SPECIFY_YOUR_OWN_LOGO_TO_REPLA]: `Specify your own logo to replace the standard Onyx logo.`,
+  [k.SPECIFY_YOUR_OWN_LOGO_TO_REPLA]: `Specify your own logo to replace the standard SmartSearch logo.`,
   [k.READ]: `Read`,
   [k.THE_DOCS]: `the docs`,
   [k.TO_SEE_WHITELABELING_EXAMPLES]: `to see whitelabeling examples in action.`,
@@ -822,9 +822,9 @@ module.exports = {
   [k.DELETE_CONNECTOR]: `Delete Connector`,
   [k.DOCS_RE_INDEXED]: `Docs Re-Indexed`,
   [k.ACCESS_RESTRICTED]: `Access Restricted`,
-  [k.WE_REGRET_TO_INFORM_YOU_THAT_Y]: `We regret to inform you that your access to Onyx has been temporarily
+  [k.WE_REGRET_TO_INFORM_YOU_THAT_Y]: `We regret to inform you that your access to SmartSearch has been temporarily
           suspended due to a lapse in your subscription.`,
-  [k.TO_REINSTATE_YOUR_ACCESS_AND_C]: `To reinstate your access and continue benefiting from Onyx's
+  [k.TO_REINSTATE_YOUR_ACCESS_AND_C]: `To reinstate your access and continue benefiting from SmartSearch's
           powerful features, please update your payment information.`,
   [k.IF_YOU_RE_AN_ADMIN_YOU_CAN_MA]: `If you're an admin, you can manage your subscription by clicking
           the button below. For other users, please reach out to your
@@ -836,12 +836,12 @@ module.exports = {
   [k.SLACK_COMMUNITY]: `Slack community`,
   [k.FOR_SUPPORT1]: `for support.`,
   [k.MAINTENANCE_IN_PROGRESS]: `Maintenance in Progress`,
-  [k.ONYX_IS_CURRENTLY_IN_A_MAINTEN]: `Onyx is currently in a maintenance window. Please check back in a
+  [k.ONYX_IS_CURRENTLY_IN_A_MAINTEN]: `SmartSearch is currently in a maintenance window. Please check back in a
           couple of minutes.`,
   [k.WE_APOLOGIZE_FOR_ANY_INCONVENI]: `We apologize for any inconvenience this may cause and appreciate your
           patience.`,
   [k.WE_ENCOUNTERED_AN_ISSUE]: `We encountered an issue`,
-  [k.IT_SEEMS_THERE_WAS_A_PROBLEM_L]: `It seems there was a problem loading your Onyx settings. This could be
+  [k.IT_SEEMS_THERE_WAS_A_PROBLEM_L]: `It seems there was a problem loading your SmartSearch settings. This could be
           due to a configuration issue or incomplete setup.`,
   [k.IF_YOU_RE_AN_ADMIN_PLEASE_REV]: `If you're an admin, please review our`,
   [k.DOCUMENTATION]: `documentation`,
@@ -866,10 +866,10 @@ module.exports = {
   [k.UPDATE_HERE]: `Update here`,
   [k.TWO_DAY_TRIAL_ENDING]: `two_day_trial_ending`,
   [k.YOUR_TRIAL_IS_ENDING_SOON_SU]: `Your trial is ending soon - submit your billing information to
-                  continue using Onyx.`,
+                  continue using SmartSearch.`,
   [k.YOUR_SESSION_HAS_EXPIRED_PLEA]: `Your session has expired. Please log in again to continue.`,
   [k.THE_BACKEND_IS_CURRENTLY_UNAVA]: `The backend is currently unavailable.`,
-  [k.IF_THIS_IS_YOUR_INITIAL_SETUP]: `If this is your initial setup or you just updated your Onyx
+  [k.IF_THIS_IS_YOUR_INITIAL_SETUP]: `If this is your initial setup or you just updated your SmartSearch
           deployment, this is likely because the backend is still starting up.
           Give it a minute or two, and then refresh the page. If that does not
           work, make sure the backend is setup and/or contact an administrator.`,
@@ -943,7 +943,7 @@ module.exports = {
           switch.`,
   [k.PLEASE_CLICK_THE_BUTTON_BELOW]: `Please click the button below to choose a new model. Don't worry,
           the re-indexing necessary for the switch will happen in the background
-          - your use of Onyx will not be interrupted.`,
+          - your use of SmartSearch will not be interrupted.`,
   [k.LLM_TOKENS1]: `LLM tokens`,
   [k.MAXIMUM_TOKENS_FOR_DEFAULT_MOD]: `Maximum tokens for default model`,
   [k.IF_EXCEEDED_C]: `, if exceeded,
@@ -1191,7 +1191,7 @@ module.exports = {
   [k.FAILED_TO_FETCH_PERSONAS]: `Failed to fetch personas -`,
   [k.PROCESS_WITH_UNSTRUCTURED_API]: `Process with Unstructured API`,
   [k.UNSTRUCTURED_EXTRACTS_AND_TRAN]: `Unstructured extracts and transforms complex data from formats like
-            .pdf, .docx, .png, .pptx, etc. into clean text for Onyx to ingest.
+            .pdf, .docx, .png, .pptx, etc. into clean text for SmartSearch to ingest.
             Provide an API key to enable Unstructured document processing.`,
   [k.NOTE1]: `Note:`,
   [k.THIS_WILL_SEND_DOCUMENTS_TO]: `this will send documents to
@@ -1246,7 +1246,7 @@ module.exports = {
             Assistants, you can select the LLM provider/model that best fits the
             use case!`,
   [k.NO_LLM_PROVIDERS_CONFIGURED_YE]: `No LLM providers configured yet`,
-  [k.PLEASE_SET_ONE_UP_BELOW_IN_ORD]: `Please set one up below in order to start using Onyx!`,
+  [k.PLEASE_SET_ONE_UP_BELOW_IN_ORD]: `Please set one up below in order to start using SmartSearch!`,
   [k.ADD_LLM_PROVIDER]: `Add LLM Provider`,
   [k.ADD_A_NEW_LLM_PROVIDER_BY_EITH]: `Add a new LLM provider by either selecting from one of the default
         providers or by specifying your own custom LLM provider.`,
@@ -1548,7 +1548,7 @@ module.exports = {
   [k.WORKSPACE_SETTINGS]: `Workspace Settings`,
   [k.ENABLE_ANONYMOUS_USERS]: `Enable Anonymous Users`,
   [k.ARE_YOU_SURE_YOU_WANT_TO_ENABL]: `Are you sure you want to enable anonymous users? This will allow
-              anyone to use Onyx without signing in.`,
+              anyone to use SmartSearch without signing in.`,
   [k.CHAT_SETTINGS]: `Chat Settings`,
   [k.SET_RETENTION_LIMIT]: `Set Retention Limit`,
   [k.RETAIN_ALL]: `Retain All`,
@@ -1745,17 +1745,17 @@ module.exports = {
   [k.FILES_WILL_BE_UPLOADED_TO]: `Files will be uploaded to`,
   [k.CLEANUP]: `Cleanup`,
   [k.CHAT_WITH_THIS_FOLDER]: `Chat with this folder`,
-  [k.END_YOUR_DAY_WITH_ONYX]: `End your day with Onyx`,
-  [k.START_YOUR_DAY_WITH_ONYX]: `Start your day with Onyx`,
-  [k.TURN_OFF_ONYX_NEW_TAB_PAGE]: `Turn off Onyx new tab page?`,
+  [k.END_YOUR_DAY_WITH_ONYX]: `End your day with SmartSearch`,
+  [k.START_YOUR_DAY_WITH_ONYX]: `Start your day with SmartSearch`,
+  [k.TURN_OFF_ONYX_NEW_TAB_PAGE]: `Turn off SmartSearch new tab page?`,
   [k.YOU_LL_SEE_YOUR_BROWSER_S_DEFA]: `You'll see your browser's default new tab page instead.`,
-  [k.YOU_CAN_TURN_IT_BACK_ON_ANYTIM]: `You can turn it back on anytime in your Onyx settings.`,
+  [k.YOU_CAN_TURN_IT_BACK_ON_ANYTIM]: `You can turn it back on anytime in your SmartSearch settings.`,
   [k.TURN_OFF]: `Turn off`,
   [k.DISABLED1]: `disabled`,
   [k.LOADING_LOGIN_INFO]: `Loading login info…`,
   [k.BASIC]: `basic`,
   [k.NRF]: `/nrf`,
-  [k.WELCOME_TO_ONYX]: `Welcome to Onyx`,
+  [k.WELCOME_TO_ONYX]: `Welcome to SmartSearch`,
   [k.AUTH_LOGIN]: `/auth/login`,
   [k.LOG_IN1]: `Log in`,
   [k.REFINING_ANSWER]: `Refining Answer`,
@@ -1921,7 +1921,7 @@ module.exports = {
   [k.CURATORS_MUST_SELECT_ONE_OR_MO]: `Curators must select one or more groups to give access to
                     this Connector`,
   [k.EXIT_ADMIN]: `Exit Admin`,
-  [k.ONYX_VERSION]: `Onyx version:`,
+  [k.ONYX_VERSION]: `SmartSearch version:`,
   [k.FORGOT_PASSWORD1]: `Forgot password?`,
   [k.MARKDOWN]: `Markdown`,
   [k.WRITE]: `Write`,
@@ -2018,10 +2018,10 @@ module.exports = {
   [k.CHAT2]: `chat`,
   [k.UNPIN_SIDEBAR]: `Unpin sidebar`,
   [k.PIN_SIDEBAR]: `Pin sidebar`,
-  [k.ONYX_BRINGS_ALL_YOUR_COMPANY_S]: `Onyx brings all your company's knowledge to your fingertips,
+  [k.ONYX_BRINGS_ALL_YOUR_COMPANY_S]: `SmartSearch brings all your company's knowledge to your fingertips,
             ready to be accessed instantly.`,
   [k.TO_GET_STARTED_WE_NEED_TO_SET]: `To get started, we need to set up an API key for the Language Model
-            (LLM) provider. This key allows Onyx to interact with the AI model,
+            (LLM) provider. This key allows SmartSearch to interact with the AI model,
             enabling intelligent responses to your queries.`,
   [k.THIS]: `This`,
   [k.WILL_BE_ASSIGNED_TO_GROUP]: `will be assigned to group`,
@@ -2043,7 +2043,7 @@ module.exports = {
   [k.CURATORS_MUST_SELECT_ONE_OR_MO1]: `Curators must select one or more groups to give access to
                     this`,
   [k.CUSTOM1]: `Custom`,
-  [k.POWERED_BY_ONYX]: `Powered by Onyx`,
+  [k.POWERED_BY_ONYX]: `Powered by SmartSearch`,
   [k.COPY_FULL_TRACE]: `Copy full trace`,
   [k.COPIED_TO_CLIPBOARD]: `Copied to clipboard`,
   [k.JOIN_REQUEST_SENT]: `Join Request Sent`,
@@ -2054,7 +2054,7 @@ module.exports = {
                 team while waiting for an admin of`,
   [k.TO_APPROVE_YOUR]: `to approve your
                 request.`,
-  [k.TRY_ONYX_WHILE_WAITING]: `Try Onyx while waiting`,
+  [k.TRY_ONYX_WHILE_WAITING]: `Try SmartSearch while waiting`,
   [k.YOUR_JOIN_REQUEST_CAN_BE_APPRO]: `Your join request can be approved by any admin of`,
   [k.SENDING_REQUEST]: `Sending request...`,
   [k.REQUEST_TO_JOIN_YOUR_TEAM]: `Request to join your team`,

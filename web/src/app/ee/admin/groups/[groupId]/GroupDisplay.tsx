@@ -154,7 +154,7 @@ const UserRoleDropdown = ({
             disabled={isSettingRole}
           >
             <SelectTrigger>
-              <SelectValue placeholder="Select role" />
+              <SelectValue placeholder="Выберите роль" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={UserRole.BASIC}>{i18n.t(k.BASIC1)}</SelectItem>

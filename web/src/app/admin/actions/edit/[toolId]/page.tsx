@@ -52,7 +52,7 @@ export default async function Page(props: {
       <BackButton />
 
       <AdminPageTitle
-        title="Edit Tool"
+        title="Редактировать инструмент"
         icon={<ToolIcon size={32} className="my-auto" />}
       />
 

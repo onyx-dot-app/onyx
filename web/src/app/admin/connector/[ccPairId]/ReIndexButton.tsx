@@ -29,7 +29,7 @@ function ReIndexPopup({
   hide: () => void;
 }) {
   return (
-    <Modal title="Run Indexing" onOutsideClick={hide}>
+    <Modal title="Запустить индексацию" onOutsideClick={hide}>
       <div>
         <Button
           variant="submit"

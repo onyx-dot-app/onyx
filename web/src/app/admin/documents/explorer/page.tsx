@@ -13,7 +13,7 @@ const Page = async (props: {
     <div className="mx-auto container">
       <AdminPageTitle
         icon={<ZoomInIcon size={32} />}
-        title="Document Explorer"
+        title="Проводник по документам"
       />
 
       <Explorer

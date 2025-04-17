@@ -123,7 +123,7 @@ export function AnonymousUserPath({
             <Input
               type="text"
               className="block w-full flex-grow flex-1 rounded-none rounded-r-md border-background-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm h-10"
-              placeholder="your-custom-path"
+              placeholder="Ваш путь"
               value={customPath ?? anonymousUserPath ?? ""}
               onChange={(e) => setCustomPath(e.target.value)}
             />
