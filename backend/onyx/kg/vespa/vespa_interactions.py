@@ -1,14 +1,14 @@
 import json
 from collections.abc import Generator
 
+from onyx.configs.constants import OnyxCallTypes
+from onyx.configs.kg_configs import KG_IGNORE_EMAIL_DOMAINS
 from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
-from onyx.kg.context_preparations_extraction.fireflies import (
-    get_classification_content_from_fireflies_chunks,
-)
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGClassificationContent
+from onyx.kg.utils.formatting_utils import kg_email_processing
 
 
 def get_document_classification_content_for_kg_processing(
@@ -150,6 +150,51 @@ def get_document_chunks_for_kg_processing(
         yield current_batch
 
 
+def _get_classification_content_from_call_chunks(
+    first_num_classification_chunks: list[dict],
+) -> str:
+    """
+    Creates a KGClassificationContent object from a list of call chunks.
+    """
+
+    assert isinstance(KG_IGNORE_EMAIL_DOMAINS, list)
+
+    primary_owners = first_num_classification_chunks[0]["fields"]["primary_owners"]
+    secondary_owners = first_num_classification_chunks[0]["fields"]["secondary_owners"]
+
+    company_participant_emails = set()
+    account_participant_emails = set()
+
+    for owner in primary_owners + secondary_owners:
+        kg_owner = kg_email_processing(owner)
+        if any(
+            domain.lower() in kg_owner.company.lower()
+            for domain in KG_IGNORE_EMAIL_DOMAINS
+        ):
+            continue
+
+        if kg_owner.employee:
+            company_participant_emails.add(f"{kg_owner.name} -- ({kg_owner.company})")
+        else:
+            account_participant_emails.add(f"{kg_owner.name} -- ({kg_owner.company})")
+
+    participant_string = "\n  - " + "\n  - ".join(company_participant_emails)
+    account_participant_string = "\n  - " + "\n  - ".join(account_participant_emails)
+
+    title_string = first_num_classification_chunks[0]["fields"]["title"]
+    content_string = "\n".join(
+        [
+            chunk_content["fields"]["content"]
+            for chunk_content in first_num_classification_chunks
+        ]
+    )
+
+    classification_content = f"{title_string}\n\nVendor Participants:\n{participant_string}\n\n\
+Other Participants:\n{account_participant_string}\n\nBeginning of Call:\n{content_string}"
+
+    return classification_content
+
+
 def _get_classification_content_from_chunks(
     first_num_classification_chunks: list[dict],
 ) -> str:
@@ -159,8 +204,8 @@ def _get_classification_content_from_chunks(
 
     source_type = first_num_classification_chunks[0]["fields"]["source_type"]
 
-    if source_type == "fireflies":
-        classification_content = get_classification_content_from_fireflies_chunks(
+    if source_type.lower() in [call_type.value.lower() for call_type in OnyxCallTypes]:
+        classification_content = _get_classification_content_from_call_chunks(
             first_num_classification_chunks
         )
 

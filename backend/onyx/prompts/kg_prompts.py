@@ -413,27 +413,26 @@ Here is the question you are asked to extract desired entities, relationships, a
 """.strip()
 
 
-### Source-specific prompts
+GENERAL_CHUNK_PREPROCESSING_PROMPT = f"""
+This is a part of a document that you need to extract information from.
 
-FIREFLIES_CHUNK_PREPROCESSING_PROMPT = f"""
-This is a call between employees of the VENDOR's company and representatives of one or more ACCOUNTs (usually one). \
-When you exract information based on the instructions, please make sure that you properly attribute the information \
-to the correct employee and account. \
+Here are the primary owners of the document:
+{{primary_owner_emails}}
 
-Here are the participants (name component of emil) from us ({KG_OWN_COMPANY}):
-{{participant_string}}
+Here are the secondary owners of the document:
+{{secondary_owner_emails}}
 
-Here are the participants (name component of emil) from the other account(s):
-{{account_participant_string}}
+Here is how email addresses match with accounts:
+{{email_account_mapping}}
 
-In the text it should be easy to associate a name with the email, and then with the account ('us' vs 'them'). If in doubt, \
-look at the context and try to identify whether the statement comes from the other account. If you are not sure, ignore.
+If applicable, it should be easy to associate a name with the email, and from there the account. If in doubt, \
+ignore.
 
 Note: when you extract relationships, please make sure that:
-  - if you see a relationship for one of our employees, you should extract the relationship once for the employee AND \
-    once for the account, i.e. VENDOR:{KG_OWN_COMPANY}.
+  - if you see a relationship for one of our employees, you should extract the relationship both for the employee AND \
+    VENDOR:{KG_OWN_COMPANY}.
   - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
-only for the account!
+only for the account ACCOUNT:<account_name>!
 
 --
 And here is the content:
@@ -441,7 +440,35 @@ And here is the content:
 """.strip()
 
 
-FIREFLIES_DOCUMENT_CLASSIFICATION_PROMPT = f"""
+### Source-specific prompts
+
+CALL_CHUNK_PREPROCESSING_PROMPT = f"""
+This is a call between employees of the VENDOR's company and representatives of one or more ACCOUNTs (usually one). \
+When you exract information based on the instructions, please make sure that you properly attribute the information \
+to the correct employee and account. \
+
+Here are the participants (name component of email) from us ({KG_OWN_COMPANY}):
+{{participant_string}}
+
+Here are the participants (name component of email) from the other account(s):
+{{account_participant_string}}
+
+In the text it should be easy to associate a name with the email, and then with the account ('us' vs 'them'). If in doubt, \
+look at the context and try to identify whether the statement comes from the other account. If you are not sure, ignore.
+
+Note: when you extract relationships, please make sure that:
+  - if you see a relationship for one of our employees, you should extract the relationship both for the employee AND \
+    VENDOR:{KG_OWN_COMPANY}.
+  - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
+only for the account ACCOUNT:<account_name>!
+
+--
+And here is the content:
+{{content}}
+""".strip()
+
+
+CALL_DOCUMENT_CLASSIFICATION_PROMPT = f"""
 This is the beginning of a call between employees of the VENDOR's company ({KG_OWN_COMPANY}) and other participants.
 
 Your task is to classify the call into one of the following categories:

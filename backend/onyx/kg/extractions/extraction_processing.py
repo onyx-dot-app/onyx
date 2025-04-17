@@ -28,7 +28,7 @@ from onyx.kg.models import KGChunkId
 from onyx.kg.models import KGClassificationContent
 from onyx.kg.models import KGClassificationDecisions
 from onyx.kg.models import KGClassificationInstructionStrings
-from onyx.kg.utils.chunk_preprocessing import prepare_llm_content
+from onyx.kg.utils.chunk_preprocessing import prepare_llm_content_extraction
 from onyx.kg.utils.chunk_preprocessing import prepare_llm_document_content
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
 from onyx.kg.utils.formatting_utils import generalize_entities
@@ -609,7 +609,7 @@ def _kg_chunk_batch_extraction(
         # For now, we're just processing the content
         # TODO: Implement actual prompt application logic
 
-        llm_preprocessing = prepare_llm_content(chunk)
+        llm_preprocessing = prepare_llm_content_extraction(chunk)
 
         formatted_prompt = preformatted_prompt.replace(
             "---content---", llm_preprocessing.llm_context
