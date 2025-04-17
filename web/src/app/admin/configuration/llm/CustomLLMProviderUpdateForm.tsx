@@ -84,8 +84,9 @@ export function CustomLLMProviderUpdateForm({
     api_version: Yup.string(),
     model_configurations: Yup.array(
       Yup.object({
-        model_name: Yup.string().required("Model name is required"),
-        max_input_tokens: Yup.number().optional(),
+        name: Yup.string().required("Model name is required"),
+        is_visible: Yup.boolean().required("Visibility is required"),
+        max_input_tokens: Yup.number().nullable().optional(),
       })
     ),
     default_model_name: Yup.string().required("Model name is required"),
@@ -150,10 +151,6 @@ export function CustomLLMProviderUpdateForm({
           },
           body: JSON.stringify({
             ...values,
-            // For custom llm providers, all model names are displayed
-            display_model_names: values.model_configurations.map(
-              (model_configuration) => model_configuration.name
-            ),
             custom_config: customConfigProcessing(values.custom_config_list),
           }),
         });
