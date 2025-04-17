@@ -1,5 +1,6 @@
 import os
 import time
+from unittest.mock import patch
 
 import pytest
 
@@ -25,6 +26,10 @@ def jira_connector() -> JiraConnector:
     return connector
 
 
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_jira_connector_basic(jira_connector: JiraConnector) -> None:
     docs = load_all_docs_from_checkpoint_connector(
         connector=jira_connector,
