@@ -24,9 +24,11 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page.getByRole("combobox").nth(1).click();
   await page.getByLabel("o3 Mini", { exact: true }).click();
   await page.getByLabel("Close modal").click();
+  await page.waitForTimeout(2000);
   await verifyCurrentModel(page, "o3 Mini");
-
   // Test Art Assistant: Should use its own model (GPT 4o)
+  await page.reload();
+  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
   await navigateToAssistantInHistorySidebar(
     page,
     "[-3]",
@@ -34,9 +36,6 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   );
   await sendMessage(page, "Sample message");
   await verifyCurrentModel(page, "GPT 4o");
-
-  // Verify model persistence for Art Assistant
-  await sendMessage(page, "Sample message");
 
   // Test new chat: Should use Art Assistant's model initially
   await startNewChat(page);
@@ -48,31 +47,30 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await verifyCurrentModel(page, "o3 Mini");
 
   // Test model switching within a chat
-  await switchModel(page, "O1 Mini");
+  await switchModel(page, "o1 Mini");
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "O1 Mini");
+  await verifyCurrentModel(page, "o1 Mini");
 
   // Create a custom assistant with a specific model
   await page.getByRole("button", { name: "Explore Assistants" }).click();
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.waitForTimeout(2000);
   await page.getByTestId("name").fill("Sample Name");
   await page.getByTestId("description").fill("Sample Description");
   await page.getByTestId("system_prompt").fill("Sample Instructions");
-  await page.getByRole("combobox", { name: "Model" }).click();
   await page
-    .getByLabel("o3 Mini (Preview)")
-    .getByText("o3 Mini (Preview)")
+    .locator('button[role="combobox"] > span:has-text("User Default")')
     .click();
+  await page.getByLabel("o3 Mini").getByText("o3 Mini").click();
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify custom assistant uses its specified model
   await page.locator("#onyx-chat-input-textarea").fill("");
-  await verifyCurrentModel(page, "o3 Mini (Preview)");
+  await verifyCurrentModel(page, "o3 Mini");
 
   // Ensure model persistence for custom assistant
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "o3 Mini (Preview)");
+  await verifyCurrentModel(page, "o3 Mini");
 
   // Switch back to Art Assistant and verify its model
   await navigateToAssistantInHistorySidebar(

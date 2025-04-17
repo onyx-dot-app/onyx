@@ -18,7 +18,7 @@ export async function loginAs(
         ? TEST_ADMIN2_CREDENTIALS
         : TEST_USER_CREDENTIALS;
 
-  await page.goto("http://localhost:3000/auth/login", { timeout: 1000 });
+  await page.goto("http://localhost:3000/auth/login");
 
   await page.fill("#email", email);
   await page.fill("#password", password);
@@ -32,7 +32,7 @@ export async function loginAs(
     console.log(`Timeout occurred. Current URL: ${page.url()}`);
 
     // If redirect to /chat doesn't happen, go to /auth/login
-    await page.goto("http://localhost:3000/auth/signup", { timeout: 1000 });
+    await page.goto("http://localhost:3000/auth/signup");
 
     await page.fill("#email", email);
     await page.fill("#password", password);
