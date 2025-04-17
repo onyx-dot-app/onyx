@@ -183,6 +183,10 @@ ENTITY_EXAMPLE_2 = r"""
 {{"entities": ["ACCOUNT:Nike", "CONCERN:performance"], "terms": ["performance issue"]}}
 """.strip()
 
+ENTITY_EXAMPLE_3 = r"""
+{{"entities": ["ACCOUNT:*", "CONCERN:performance"], "terms": ["performance issue"]}}
+""".strip()
+
 MASTER_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction in order to construct a knowledge graph. You are given a text \
 and asked to extract entities, relationships, and terms from it that you can reliably identify.
@@ -303,15 +307,24 @@ then a much more suitable entity and term extraction could be:
 Example 2:
 {ENTITY_EXAMPLE_2}
 
+* Finally, if the question is:
+'Who reported performance issues?'
+then a suitable entity and term extraction could be:
+Example 2:
+{ENTITY_EXAMPLE_3}
+
 - Again,
    -  you should only extract entities belonging to the entity types above - but do extract all that you \
 can reliably identify in the text
-   - use refer to 'all' entities in an entity type listed above by using '*' as the entity name
+   - if you refer to all/any/an unspecified entity of an entity type listed above, use '*' as the entity name
    - keep the terms high-level
    - similarly, if a specific entity type is referred to in general, you should use '*' as the entity name
    - you MUST only use the intial list of entities provided! Ignore the entities in the examples unless \
 the are also part of the initial list of entities! This is essential!
    - don't forget to provide answers also to the event filtering and whether documents need to be inspected!
+   - 'who' often refers to individuals or accounts.
+   - don't just look at the entities that are mentioned in the question but also those that the question \
+may be about.
 
 {SEPARATOR_LINE}
 
@@ -545,9 +558,6 @@ that in order to answer the question, it would be good to first analyze one obje
 results? Or should the information rather be analyzed as a whole? This would be 'yes' or 'no'.
 
 
-
-
-
 To help you, here are the entities, relationships, and terms that you have extracted:
 {SEPARATOR_LINE}
 ---entities---
@@ -647,8 +657,9 @@ IMPORTANT NOTES:
 <source_entity_id_name>__<relationship_type>__<target_entity_id_name>.
 - The relationship id_names are NOT UNIQUE, only the combinations of relationship id_name and source_document_id are unique. \
 That is because each relationship is extracted from a document. So make sure you use the proper 'distincts'!
-- If the SQL ciontains a 'DISTINCT' clause and an ORDER BY clause, then you MUST include the columns in the ORDER BY \
-clause ALSO IN THE DISTINCT CLAUSE! This is very important! (This is a postgres db., so this is a MUST!)
+- If the SQL contains a 'SELECT DISTINCT' clause and an ORDER BY clause, then you MUST include the columns from the ORDER BY \
+clause ALSO IN THE SELECT DISTINCT CLAUSE! This is very important! (This is a postgres db., so this is a MUST!). \
+You MUST NOT have a column in the ORDER BY clause that is not ALSO in the SELECT DISTINCT clause!
 - If you join the relationship table on itself using the source_node or target_node, you need to make sure that you also \
 join on the source_document_id.
 - The id_name of each node/entity has the format <entity_type_id_name>:<name>, where 'entity_type_id_name' \
@@ -662,13 +673,13 @@ Again, DO NOT compose a SQL statement that returns id_name of relationships.
 - Try to be as efficient as possible.
 
 APPROACH:
-Please think through this step by step. Then, when you have it say 'SQL:' followed ONLY by the SQL statement. The SQL statement \
-must end with a ';'. (And make sure you check that you included all columns in the ORDER BY clause also in the DISTINCT clause, \
-if applicable!)
+Please think through this step by step. Make sure that you include all columns in the ORDER BY clause \
+also in the SELECT DISTINCT clause, \
+if applicable! Then, when you have it say 'SQL:' followed ONLY by the SQL statement. The SQL statement \
+must end with a ';'.
 
 Your answer:
 """.strip()
-
 
 SQL_AGGREGATION_REMOVAL_PROMPT = f"""
 You are a SQL expert. You were provided with a SQL statement that returns an aggregation, and you are \
@@ -695,6 +706,7 @@ Please answer in the following text format:
 
 <short reasoning> SQL: <the SQL statement without the aggregate functions>
 """.strip()
+
 
 SEARCH_FILTER_CONSTRUCTION_PROMPT = f"""
 You need to prepare a search across text segments that contain the information necessary to \
@@ -780,6 +792,7 @@ the text, after all, all you need to do here is formatting. \
 
 Your Answer:
 """.strip()
+
 
 OUTPUT_FORMAT_PROMPT = f"""
 You need to format the answers to a research question that targeted one or more objects. \

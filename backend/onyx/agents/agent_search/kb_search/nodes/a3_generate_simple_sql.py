@@ -118,6 +118,8 @@ def generate_simple_sql(
             kg_relationships_view_name=kg_relationships_view_name,
         )
 
+    # prepare SQL query generation
+
     msg = [
         HumanMessage(
             content=simple_sql_prompt,
@@ -177,7 +179,7 @@ def generate_simple_sql(
     #     writer,
     # )
 
-    # CRITICAL: EXECUTION OF SQL NEEDS TO ME MADE SAFE FOR PRODUCTION
+    # SQL Query is executed by using read-only user on the custom view
     with get_kg_readonly_user_session_with_current_tenant() as db_session:
         try:
             result = db_session.execute(text(sql_statement))
@@ -229,18 +231,6 @@ def generate_simple_sql(
             allowed_docs_view_name=allowed_docs_view_name,
             kg_relationships_view_name=kg_relationships_view_name,
         )
-
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=str(query_results),
-    #         level=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-
-    # dispatch_main_answer_stop_info(0, writer)
 
     logger.info(f"query_results: {query_results}")
     logger.debug(f"sql_statement: {sql_statement}")

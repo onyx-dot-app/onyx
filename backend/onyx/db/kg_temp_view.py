@@ -51,7 +51,7 @@ def create_views(
            kgr.type as relationship_description,
            kgr.relationship_type_id_name as relationship_type,
            kgr.source_document as source_document,
-           d.doc_updated_at as event_time
+           d.doc_updated_at as source_date
     FROM kg_relationship kgr
     JOIN {allowed_docs_view_name} AD on AD.allowed_doc_id = kgr.source_document
     JOIN document d on d.id = kgr.source_document

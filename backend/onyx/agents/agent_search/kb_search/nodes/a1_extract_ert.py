@@ -54,9 +54,12 @@ def extract_ert(
         relationship_types=all_relationship_types,
     )
 
-    query_extraction_prompt = query_extraction_pre_prompt.replace(
-        "---content---", question
-    ).replace("---today_date---", today_date)
+    query_extraction_prompt = (
+        query_extraction_pre_prompt.replace("---content---", question)
+        .replace("---today_date---", today_date)
+        .replace("{{", "{")
+        .replace("}}", "}")
+    )
 
     msg = [
         HumanMessage(
@@ -76,6 +79,8 @@ def extract_ert(
 
         cleaned_response = (
             str(llm_response.content)
+            .replace("{{", "{")
+            .replace("}}", "}")
             .replace("```json\n", "")
             .replace("\n```", "")
             .replace("\n", "")
@@ -127,6 +132,8 @@ def extract_ert(
         )
         .replace("---identified_entities---", ert_entities_string)
         .replace("---entity_types---", all_entity_types)
+        .replace("{{", "{")
+        .replace("}}", "}")
     )
 
     msg = [
@@ -147,6 +154,8 @@ def extract_ert(
 
         cleaned_response = (
             str(llm_response.content)
+            .replace("{{", "{")
+            .replace("}}", "}")
             .replace("```json\n", "")
             .replace("\n```", "")
             .replace("\n", "")
@@ -154,6 +163,7 @@ def extract_ert(
         first_bracket = cleaned_response.find("{")
         last_bracket = cleaned_response.rfind("}")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
+        cleaned_response = cleaned_response.replace(" ", "")
         cleaned_response = cleaned_response.replace("{{", '{"')
         cleaned_response = cleaned_response.replace("}}", '"}')
 
