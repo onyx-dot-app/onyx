@@ -1,4 +1,3 @@
-import copy
 import io
 import ipaddress
 import random
@@ -79,6 +78,11 @@ class ScrapeSessionContext:
     last_error: str | None = None
 
     needs_retry: bool = False
+
+
+class ScrapeResult:
+    doc: Document | None = None
+    retry: bool = False
 
 
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
@@ -488,18 +492,18 @@ class WebConnector(LoadConnector):
         self,
         index: int,
         initial_url: str,
-        session_ctx_in: ScrapeSessionContext,
-    ) -> ScrapeSessionContext:
+        session_ctx: ScrapeSessionContext,
+    ) -> ScrapeResult:
         """Returns False if something happened and the page scrape can be retried.
         Return True if the page does not need to be retried."""
-
-        session_ctx = copy.copy(session_ctx_in)
 
         if session_ctx.playwright is None:
             raise RuntimeError("scrape_context.playwright is None")
 
         if session_ctx.playwright_context is None:
             raise RuntimeError("scrape_context.playwright_context is None")
+
+        result = ScrapeResult()
 
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
@@ -518,22 +522,20 @@ class WebConnector(LoadConnector):
             )
             last_modified = response.headers.get("Last-Modified")
 
-            session_ctx.doc_batch.append(
-                Document(
-                    id=initial_url,
-                    sections=[TextSection(link=initial_url, text=page_text)],
-                    source=DocumentSource.WEB,
-                    semantic_identifier=initial_url.split("/")[-1],
-                    metadata=metadata,
-                    doc_updated_at=(
-                        _get_datetime_from_last_modified_header(last_modified)
-                        if last_modified
-                        else None
-                    ),
-                )
+            result.doc = Document(
+                id=initial_url,
+                sections=[TextSection(link=initial_url, text=page_text)],
+                source=DocumentSource.WEB,
+                semantic_identifier=initial_url.split("/")[-1],
+                metadata=metadata,
+                doc_updated_at=(
+                    _get_datetime_from_last_modified_header(last_modified)
+                    if last_modified
+                    else None
+                ),
             )
 
-            return session_ctx
+            return result
 
         page = session_ctx.playwright_context.new_page()
         try:
@@ -563,7 +565,7 @@ class WebConnector(LoadConnector):
                         f"{index}: {initial_url} redirected to {final_url} - already indexed"
                     )
                     page.close()
-                    return session_ctx
+                    return result
 
                 logger.info(f"{index}: {initial_url} redirected to {final_url}")
                 session_ctx.visited_links.add(initial_url)
@@ -595,8 +597,8 @@ class WebConnector(LoadConnector):
             if page_response and str(page_response.status)[0] in ("4", "5"):
                 session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
                 logger.info(session_ctx.last_error)
-                session_ctx.needs_retry = True
-                return session_ctx
+                result.retry = True
+                return result
 
             # after this point, we don't need the caller to retry
             parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
@@ -628,30 +630,26 @@ class WebConnector(LoadConnector):
                 logger.info(
                     f"{index}: Skipping duplicate title + content for {initial_url}"
                 )
-                return session_ctx
+                return result
 
             session_ctx.content_hashes.add(hashed_text)
 
-            session_ctx.doc_batch.append(
-                Document(
-                    id=initial_url,
-                    sections=[
-                        TextSection(link=initial_url, text=parsed_html.cleaned_text)
-                    ],
-                    source=DocumentSource.WEB,
-                    semantic_identifier=parsed_html.title or initial_url,
-                    metadata={},
-                    doc_updated_at=(
-                        _get_datetime_from_last_modified_header(last_modified)
-                        if last_modified
-                        else None
-                    ),
-                )
+            result.doc = Document(
+                id=initial_url,
+                sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
+                source=DocumentSource.WEB,
+                semantic_identifier=parsed_html.title or initial_url,
+                metadata={},
+                doc_updated_at=(
+                    _get_datetime_from_last_modified_header(last_modified)
+                    if last_modified
+                    else None
+                ),
             )
         finally:
             page.close()
 
-        return session_ctx
+        return result
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Traverses through all pages found on the website
@@ -695,9 +693,12 @@ class WebConnector(LoadConnector):
                     time.sleep(delay)
 
                 try:
-                    session_ctx = self._do_scrape(index, initial_url, session_ctx)
-                    if session_ctx.needs_retry:
+                    result = self._do_scrape(index, initial_url, session_ctx)
+                    if result.retry:
                         continue
+
+                    if result.doc:
+                        session_ctx.doc_batch.append(result.doc)
                 except Exception as e:
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
