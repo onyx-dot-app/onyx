@@ -144,51 +144,52 @@ export function WhitelabelingForm() {
               placeholder="Custom name which will replace 'Onyx'"
               disabled={isSubmitting}
             />
+            <div>
+              <Label className="mt-4">Custom Logo</Label>
 
-            <Label className="mt-4">Custom Logo</Label>
+              {values.use_custom_logo ? (
+                <div className="mt-3">
+                  <SubLabel>Current Custom Logo: </SubLabel>
+                  <img
+                    src={"/api/enterprise-settings/logo?u=" + Date.now()}
+                    alt="logo"
+                    style={{ objectFit: "contain" }}
+                    className="w-32 h-32 mb-10 mt-4"
+                  />
 
-            {values.use_custom_logo ? (
-              <div className="mt-3">
-                <SubLabel>Current Custom Logo: </SubLabel>
-                <img
-                  src={"/api/enterprise-settings/logo?u=" + Date.now()}
-                  alt="logo"
-                  style={{ objectFit: "contain" }}
-                  className="w-32 h-32 mb-10 mt-4"
-                />
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    type="button"
+                    className="mb-8"
+                    onClick={async () => {
+                      const valuesWithoutLogo = {
+                        ...values,
+                        use_custom_logo: false,
+                      };
+                      await updateEnterpriseSettings(valuesWithoutLogo);
+                      setValues(valuesWithoutLogo);
+                    }}
+                  >
+                    Delete
+                  </Button>
 
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  type="button"
-                  className="mb-8"
-                  onClick={async () => {
-                    const valuesWithoutLogo = {
-                      ...values,
-                      use_custom_logo: false,
-                    };
-                    await updateEnterpriseSettings(valuesWithoutLogo);
-                    setValues(valuesWithoutLogo);
-                  }}
-                >
-                  Delete
-                </Button>
-
+                  <SubLabel>
+                    Override the current custom logo by uploading a new image
+                    below and clicking the Update button.
+                  </SubLabel>
+                </div>
+              ) : (
                 <SubLabel>
-                  Override the current custom logo by uploading a new image
-                  below and clicking the Update button.
+                  Specify your own logo to replace the standard Onyx logo.
                 </SubLabel>
-              </div>
-            ) : (
-              <SubLabel>
-                Specify your own logo to replace the standard Onyx logo.
-              </SubLabel>
-            )}
+              )}
 
-            <ImageUpload
-              selectedFile={selectedLogo}
-              setSelectedFile={setSelectedLogo}
-            />
+              <ImageUpload
+                selectedFile={selectedLogo}
+                setSelectedFile={setSelectedLogo}
+              />
+            </div>
 
             <Separator />
 

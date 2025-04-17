@@ -379,18 +379,24 @@ export function ClientLayout({
                                     },
                                   ]
                                 : []),
-                              {
-                                name: (
-                                  <div className="flex">
-                                    <FiBarChart2
-                                      className="text-text-700"
-                                      size={18}
-                                    />
-                                    <div className="ml-1">Custom Analytics</div>
-                                  </div>
-                                ),
-                                link: "/admin/performance/custom-analytics",
-                              },
+                              ...(!enableCloud
+                                ? [
+                                    {
+                                      name: (
+                                        <div className="flex">
+                                          <FiBarChart2
+                                            className="text-text-700"
+                                            size={18}
+                                          />
+                                          <div className="ml-1">
+                                            Custom Analytics
+                                          </div>
+                                        </div>
+                                      ),
+                                      link: "/admin/performance/custom-analytics",
+                                    },
+                                  ]
+                                : []),
                             ],
                           },
                         ]
@@ -453,7 +459,7 @@ export function ClientLayout({
           <div className="fixed left-0 gap-x-4 px-4 top-4 h-8 px-0 mb-auto w-full items-start flex justify-end">
             <UserDropdown toggleUserSettings={toggleUserSettings} />
           </div>
-          <div className="pt-20 flex w-full overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">
+          <div className="pt-20 pb-4 flex w-full overflow-y-auto overflow-x-hidden h-full px-4 md:px-12">
             {children}
           </div>
         </div>

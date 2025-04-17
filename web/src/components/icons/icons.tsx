@@ -1303,7 +1303,7 @@ export const ProductboardIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => (
-  <LogoIcon size={size} className={className} src="/Productboard.webp" />
+  <LogoIcon size={size} className={className} src="/Productboard.png" />
 );
 
 export const AzureIcon = ({
