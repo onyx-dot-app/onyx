@@ -36,6 +36,16 @@ export function EmailPasswordForm({
   const { popup, setPopup } = usePopup();
   const router = useRouter();
   const [isWorking, setIsWorking] = useState(false);
+
+  console.log(
+    "TEST",
+    i18n.t,
+    isJoin,
+    i18n.t(k.JOIN),
+    isSignup,
+    i18n.t(k.SIGN_UP),
+    i18n.t(k.LOG_IN)
+  );
   return (
     <>
       {isWorking && <Spinner />}
