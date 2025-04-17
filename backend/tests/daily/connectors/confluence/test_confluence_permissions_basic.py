@@ -81,6 +81,8 @@ def test_confluence_connector_restriction_handling(
         "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
         "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
     }
+    # this prevents redis calls inside of OnyxConfluence
+    mock_provider_instance.is_dynamic.return_value = False
     # Make the class return our configured instance when called
     mock_db_provider_class.return_value = mock_provider_instance
 
