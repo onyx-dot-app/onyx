@@ -76,10 +76,12 @@ export async function loginAsRandomUser(page: Page) {
   // Click the signup button
   await page.click('button[type="submit"]');
   try {
+    // Wait for 2 seconds to ensure the signup process completes
+    await page.waitForTimeout(3000);
     // Refresh the page to ensure everything is loaded properly
-    await page.reload();
+    // await page.reload();
 
-    await page.waitForURL("http://localhost:3000/chat");
+    await page.waitForURL("http://localhost:3000/chat?new_team=true");
     // Wait for the page to be fully loaded after refresh
     await page.waitForLoadState("networkidle");
   } catch (error) {

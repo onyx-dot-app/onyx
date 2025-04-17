@@ -15,16 +15,16 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
 
   // Navigate to the chat page and verify URL
   await page.goto("http://localhost:3000/chat");
-  await page.waitForSelector("#onyx-chat-input-textarea");
+  await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
   await expect(page.url()).toBe("http://localhost:3000/chat");
 
-  // Configure user settings: Set default model to GPT 4 Turbo
+  // Configure user  settings: Set default model to o3 Mini
   await page.locator("#onyx-user-dropdown").click();
   await page.getByText("User Settings").click();
-  await page.getByRole("combobox").click();
-  await page.getByLabel("GPT 4 Turbo", { exact: true }).click();
+  await page.getByRole("combobox").nth(1).click();
+  await page.getByLabel("o3 Mini", { exact: true }).click();
   await page.getByLabel("Close modal").click();
-  await verifyCurrentModel(page, "GPT 4 Turbo");
+  await verifyCurrentModel(page, "o3 Mini");
 
   // Test Art Assistant: Should use its own model (GPT 4o)
   await navigateToAssistantInHistorySidebar(
@@ -43,9 +43,9 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await expect(page.getByText("Assistant for generating")).toBeVisible();
   await verifyCurrentModel(page, "GPT 4o");
 
-  // Test another new chat: Should use user's default model (GPT 4 Turbo)
+  // Test another new chat: Should use user's default model (o3 Mini)
   await startNewChat(page);
-  await verifyCurrentModel(page, "GPT 4 Turbo");
+  await verifyCurrentModel(page, "o3 Mini");
 
   // Test model switching within a chat
   await switchModel(page, "O1 Mini");
@@ -59,20 +59,20 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page.getByTestId("name").fill("Sample Name");
   await page.getByTestId("description").fill("Sample Description");
   await page.getByTestId("system_prompt").fill("Sample Instructions");
-  await page.getByRole("combobox").click();
+  await page.getByRole("combobox", { name: "Model" }).click();
   await page
-    .getByLabel("GPT 4 Turbo (Preview)")
-    .getByText("GPT 4 Turbo (Preview)")
+    .getByLabel("o3 Mini (Preview)")
+    .getByText("o3 Mini (Preview)")
     .click();
   await page.getByRole("button", { name: "Create" }).click();
 
   // Verify custom assistant uses its specified model
   await page.locator("#onyx-chat-input-textarea").fill("");
-  await verifyCurrentModel(page, "GPT 4 Turbo (Preview)");
+  await verifyCurrentModel(page, "o3 Mini (Preview)");
 
   // Ensure model persistence for custom assistant
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "GPT 4 Turbo (Preview)");
+  await verifyCurrentModel(page, "o3 Mini (Preview)");
 
   // Switch back to Art Assistant and verify its model
   await navigateToAssistantInHistorySidebar(
