@@ -1062,8 +1062,8 @@ def connector_indexing_proxy_task(
     last_memory_emit_time = 0.0
 
     # track the last ttl and the time it was observed
-    last_activity_ttl_observed = time.monotonic()
-    last_activity_ttl = 0
+    last_activity_ttl_observed: float = time.monotonic()
+    last_activity_ttl: int = 0
 
     try:
         with get_session_with_current_tenant() as db_session:
@@ -1164,6 +1164,9 @@ def connector_indexing_proxy_task(
                             timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
                         )
                     )
+            else:
+                last_activity_ttl_observed = now
+                last_activity_ttl = ttl
 
             # if the spawned task is still running, restart the check once again
             # if the index attempt is not in a finished status
