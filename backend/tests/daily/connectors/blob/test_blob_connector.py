@@ -41,7 +41,8 @@ def test_blob_s3_connector(
     """
     Plain and document file types should be fully indexed.
 
-    Multimedia and unknown file types will be indexed be skipped.
+    Multimedia and unknown file types will be indexed be skipped unless `set_allow_images`
+    is called with `True`.
 
     This is intentional in order to allow searching by just the title even if we can't
     index the file content.
