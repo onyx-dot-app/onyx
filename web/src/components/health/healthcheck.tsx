@@ -35,7 +35,7 @@ export const HealthCheckBanner = () => {
   useEffect(() => {
     if (userError && userError.status === 403) {
       logout().then(() => {
-        if (!pathname.includes("/auth")) {
+        if ((!pathname.includes("/auth")) && (!pathname.includes("/pages"))) {
           setShowLoggedOutModal(true);
         }
       });
@@ -61,7 +61,7 @@ export const HealthCheckBanner = () => {
       expirationTimeoutRef.current = setTimeout(() => {
         setExpired(true);
 
-        if (!pathname.includes("/auth")) {
+        if ((!pathname.includes("/auth")) && (!pathname.includes("/pages"))) {
           setShowLoggedOutModal(true);
         }
       }, timeUntilExpire);
@@ -205,7 +205,7 @@ export const HealthCheckBanner = () => {
   }
 
   if (error instanceof RedirectError || expired) {
-    if (!pathname.includes("/auth")) {
+    if ((!pathname.includes("/auth")) && (!pathname.includes("/pages"))) {
       setShowLoggedOutModal(true);
     }
     return null;
