@@ -1,3 +1,4 @@
+import copy
 import io
 import ipaddress
 import random
@@ -51,6 +52,19 @@ class ScrapeSessionContext:
         self.base_url = base_url
         self.to_visit = to_visit
 
+    def initialize(self) -> None:
+        self.stop()
+        self.playwright, self.playwright_context = start_playwright()
+
+    def stop(self) -> None:
+        if self.playwright_context:
+            self.playwright_context.close()
+            self.playwright_context = None
+
+        if self.playwright:
+            self.playwright.stop()
+            self.playwright = None
+
     base_url: str
     to_visit: list[str]
     playwright: Playwright | None = None
@@ -61,10 +75,10 @@ class ScrapeSessionContext:
 
     doc_batch: list[Document] = []
 
-    restart_playwright: bool = False
-
     at_least_one_doc: bool = False
     last_error: str | None = None
+
+    needs_retry: bool = False
 
 
 WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS = 20
@@ -474,20 +488,18 @@ class WebConnector(LoadConnector):
         self,
         index: int,
         initial_url: str,
-        session_ctx: ScrapeSessionContext,
-    ) -> bool:
+        session_ctx_in: ScrapeSessionContext,
+    ) -> ScrapeSessionContext:
         """Returns False if something happened and the page scrape can be retried.
         Return True if the page does not need to be retried."""
+
+        session_ctx = copy.copy(session_ctx_in)
 
         if session_ctx.playwright is None:
             raise RuntimeError("scrape_context.playwright is None")
 
         if session_ctx.playwright_context is None:
             raise RuntimeError("scrape_context.playwright_context is None")
-
-        if session_ctx.restart_playwright:
-            session_ctx.playwright, session_ctx.playwright_context = start_playwright()
-            session_ctx.restart_playwright = False
 
         # Handle cookies for the URL
         _handle_cookies(session_ctx.playwright_context, initial_url)
@@ -521,118 +533,125 @@ class WebConnector(LoadConnector):
                 )
             )
 
-            return False
+            return session_ctx
 
         page = session_ctx.playwright_context.new_page()
+        try:
+            if self.add_randomness:
+                # Add random mouse movements and scrolling to mimic human behavior
+                page.mouse.move(random.randint(100, 700), random.randint(100, 500))
 
-        if self.add_randomness:
-            # Add random mouse movements and scrolling to mimic human behavior
-            page.mouse.move(random.randint(100, 700), random.randint(100, 500))
+            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+            page_response = page.goto(
+                initial_url,
+                timeout=30000,  # 30 seconds
+                wait_until="domcontentloaded",  # Wait for DOM to be ready
+            )
 
-        # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
-        page_response = page.goto(
-            initial_url,
-            timeout=30000,  # 30 seconds
-            wait_until="domcontentloaded",  # Wait for DOM to be ready
-        )
+            # Add a small random delay to mimic human behavior
+            time.sleep(random.uniform(0.5, 2.0))
 
-        # Add a small random delay to mimic human behavior
-        time.sleep(random.uniform(0.5, 2.0))
+            last_modified = (
+                page_response.header_value("Last-Modified") if page_response else None
+            )
+            final_url = page.url
+            if final_url != initial_url:
+                protected_url_check(final_url)
+                initial_url = final_url
+                if initial_url in session_ctx.visited_links:
+                    logger.info(
+                        f"{index}: {initial_url} redirected to {final_url} - already indexed"
+                    )
+                    page.close()
+                    return session_ctx
 
-        last_modified = (
-            page_response.header_value("Last-Modified") if page_response else None
-        )
-        final_url = page.url
-        if final_url != initial_url:
-            protected_url_check(final_url)
-            initial_url = final_url
-            if initial_url in session_ctx.visited_links:
+                logger.info(f"{index}: {initial_url} redirected to {final_url}")
+                session_ctx.visited_links.add(initial_url)
+
+            # If we got here, the request was successful
+            if self.scroll_before_scraping:
+                scroll_attempts = 0
+                previous_height = page.evaluate("document.body.scrollHeight")
+                while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
+                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    page.wait_for_load_state("networkidle", timeout=30000)
+                    new_height = page.evaluate("document.body.scrollHeight")
+                    if new_height == previous_height:
+                        break  # Stop scrolling when no more content is loaded
+                    previous_height = new_height
+                    scroll_attempts += 1
+
+            content = page.content()
+            soup = BeautifulSoup(content, "html.parser")
+
+            if self.recursive:
+                internal_links = get_internal_links(
+                    session_ctx.base_url, initial_url, soup
+                )
+                for link in internal_links:
+                    if link not in session_ctx.visited_links:
+                        session_ctx.to_visit.append(link)
+
+            if page_response and str(page_response.status)[0] in ("4", "5"):
+                session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
+                logger.info(session_ctx.last_error)
+                session_ctx.needs_retry = True
+                return session_ctx
+
+            # after this point, we don't need the caller to retry
+            parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
+
+            """For websites containing iframes that need to be scraped,
+            the code below can extract text from within these iframes.
+            """
+            logger.debug(
+                f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}"
+            )
+            if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
+                iframe_count = page.frame_locator("iframe").locator("html").count()
+                if iframe_count > 0:
+                    iframe_texts = (
+                        page.frame_locator("iframe").locator("html").all_inner_texts()
+                    )
+                    document_text = "\n".join(iframe_texts)
+                    """ 700 is the threshold value for the length of the text extracted
+                    from the iframe based on the issue faced """
+                    if len(parsed_html.cleaned_text) < IFRAME_TEXT_LENGTH_THRESHOLD:
+                        parsed_html.cleaned_text = document_text
+                    else:
+                        parsed_html.cleaned_text += "\n" + document_text
+
+            # Sometimes pages with #! will serve duplicate content
+            # There are also just other ways this can happen
+            hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
+            if hashed_text in session_ctx.content_hashes:
                 logger.info(
-                    f"{index}: {initial_url} redirected to {final_url} - already indexed"
+                    f"{index}: Skipping duplicate title + content for {initial_url}"
                 )
-                page.close()
-                return False
+                return session_ctx
 
-            logger.info(f"{index}: {initial_url} redirected to {final_url}")
-            session_ctx.visited_links.add(initial_url)
+            session_ctx.content_hashes.add(hashed_text)
 
-        # after this point, we return True so that the caller does not retry
-
-        # If we got here, the request was successful
-        if self.scroll_before_scraping:
-            scroll_attempts = 0
-            previous_height = page.evaluate("document.body.scrollHeight")
-            while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                page.wait_for_load_state("networkidle", timeout=30000)
-                new_height = page.evaluate("document.body.scrollHeight")
-                if new_height == previous_height:
-                    break  # Stop scrolling when no more content is loaded
-                previous_height = new_height
-                scroll_attempts += 1
-
-        content = page.content()
-        soup = BeautifulSoup(content, "html.parser")
-
-        if self.recursive:
-            internal_links = get_internal_links(session_ctx.base_url, initial_url, soup)
-            for link in internal_links:
-                if link not in session_ctx.visited_links:
-                    session_ctx.to_visit.append(link)
-
-        if page_response and str(page_response.status)[0] in ("4", "5"):
-            session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
-            logger.info(session_ctx.last_error)
-            return True
-
-        parsed_html = web_html_cleanup(soup, self.mintlify_cleanup)
-
-        """For websites containing iframes that need to be scraped,
-        the code below can extract text from within these iframes.
-        """
-        logger.debug(f"{index}: Length of cleaned text {len(parsed_html.cleaned_text)}")
-        if JAVASCRIPT_DISABLED_MESSAGE in parsed_html.cleaned_text:
-            iframe_count = page.frame_locator("iframe").locator("html").count()
-            if iframe_count > 0:
-                iframe_texts = (
-                    page.frame_locator("iframe").locator("html").all_inner_texts()
+            session_ctx.doc_batch.append(
+                Document(
+                    id=initial_url,
+                    sections=[
+                        TextSection(link=initial_url, text=parsed_html.cleaned_text)
+                    ],
+                    source=DocumentSource.WEB,
+                    semantic_identifier=parsed_html.title or initial_url,
+                    metadata={},
+                    doc_updated_at=(
+                        _get_datetime_from_last_modified_header(last_modified)
+                        if last_modified
+                        else None
+                    ),
                 )
-                document_text = "\n".join(iframe_texts)
-                """ 700 is the threshold value for the length of the text extracted
-                from the iframe based on the issue faced """
-                if len(parsed_html.cleaned_text) < IFRAME_TEXT_LENGTH_THRESHOLD:
-                    parsed_html.cleaned_text = document_text
-                else:
-                    parsed_html.cleaned_text += "\n" + document_text
-
-        # Sometimes pages with #! will serve duplicate content
-        # There are also just other ways this can happen
-        hashed_text = hash((parsed_html.title, parsed_html.cleaned_text))
-        if hashed_text in session_ctx.content_hashes:
-            logger.info(
-                f"{index}: Skipping duplicate title + content for {initial_url}"
             )
-            return True
+        finally:
+            page.close()
 
-        session_ctx.content_hashes.add(hashed_text)
-
-        session_ctx.doc_batch.append(
-            Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=parsed_html.cleaned_text)],
-                source=DocumentSource.WEB,
-                semantic_identifier=parsed_html.title or initial_url,
-                metadata={},
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
-            )
-        )
-
-        page.close()
-        return True
+        return session_ctx
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """Traverses through all pages found on the website
@@ -645,8 +664,7 @@ class WebConnector(LoadConnector):
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
         session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
-
-        session_ctx.playwright, session_ctx.playwright_context = start_playwright()
+        session_ctx.initialize()
 
         while session_ctx.to_visit:
             initial_url = session_ctx.to_visit.pop()
@@ -677,30 +695,25 @@ class WebConnector(LoadConnector):
                     time.sleep(delay)
 
                 try:
-                    ok = self._do_scrape(index, initial_url, session_ctx)
-                    if not ok:
+                    session_ctx = self._do_scrape(index, initial_url, session_ctx)
+                    if session_ctx.needs_retry:
                         continue
                 except Exception as e:
                     session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
                     logger.exception(session_ctx.last_error)
-                    session_ctx.playwright_context.close()
-                    session_ctx.playwright.stop()
-                    session_ctx.restart_playwright = True
+                    session_ctx.initialize()
                     continue
                 finally:
                     retry_count += 1
 
             if len(session_ctx.doc_batch) >= self.batch_size:
-                session_ctx.playwright_context.close()
-                session_ctx.playwright.stop()
-                session_ctx.restart_playwright = True
+                session_ctx.initialize()
                 session_ctx.at_least_one_doc = True
                 yield session_ctx.doc_batch
                 session_ctx.doc_batch = []
 
         if session_ctx.doc_batch:
-            session_ctx.playwright_context.close()
-            session_ctx.playwright.stop()
+            session_ctx.stop()
             session_ctx.at_least_one_doc = True
             yield session_ctx.doc_batch
 
@@ -708,6 +721,8 @@ class WebConnector(LoadConnector):
             if session_ctx.last_error:
                 raise RuntimeError(session_ctx.last_error)
             raise RuntimeError("No valid pages found.")
+
+        session_ctx.stop()
 
     def validate_connector_settings(self) -> None:
         # Make sure we have at least one valid URL to check
