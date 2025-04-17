@@ -159,7 +159,7 @@ export const FolderDropdown = forwardRef<HTMLDivElement, FolderDropdownProps>(
         >
           <div
             ref={ref}
-            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1  dark:bg-[#000] relative sticky top-0"
+            className="flex overflow-visible items-center w-full text-text-darker rounded-md p-1 bg-background-sidebar  dark:bg-[#000] relative sticky top-0"
             style={{ zIndex: 10 - index }}
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}

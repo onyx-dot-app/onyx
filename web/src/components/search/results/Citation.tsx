@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/tooltip";
 import { openDocument } from "@/lib/search/utils";
 import { SubQuestionDetail } from "@/app/chat/interfaces";
+import { getFileIconFromFileNameAndLink } from "@/lib/assistantIconUtils";
 
 export interface DocumentCardProps {
   document: LoadedOnyxDocument;
@@ -39,6 +40,13 @@ export function Citation({
   if (!document_info && !question_info) {
     return <>{children}</>;
   }
+  const icon = document_info?.document
+    ? getFileIconFromFileNameAndLink(
+        document_info.document.semantic_identifier || "",
+        document_info.document.link || ""
+      )
+    : null;
+
   return (
     <TooltipProvider delayDuration={0}>
       <Tooltip>
@@ -72,7 +80,7 @@ export function Citation({
             <CompactDocumentCard
               updatePresentingDocument={document_info.updatePresentingDocument}
               url={document_info.url}
-              icon={document_info.icon}
+              icon={icon}
               document={document_info.document}
             />
           ) : (

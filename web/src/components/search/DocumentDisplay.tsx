@@ -437,7 +437,6 @@ export function CompactDocumentCard({
   url?: string;
   updatePresentingDocument: (document: OnyxDocument) => void;
 }) {
-  console.log("document", document);
   return (
     <div
       onClick={() => {

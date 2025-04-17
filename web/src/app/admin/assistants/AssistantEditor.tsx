@@ -232,7 +232,13 @@ export function AssistantEditor({
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
 
-  const { selectedFiles, selectedFolders } = useDocumentsContext();
+  const {
+    selectedFiles,
+    selectedFolders,
+    setSelectedFiles,
+    setSelectedFolders,
+    refreshFolders,
+  } = useDocumentsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
@@ -632,6 +638,9 @@ export function AssistantEditor({
             }
 
             await refreshAssistants();
+            await refreshFolders();
+            setSelectedFiles([]);
+            setSelectedFolders([]);
 
             router.push(
               isAdminPage
@@ -979,6 +988,7 @@ export function AssistantEditor({
                               </div>
                             )}
                             <button
+                              type="button"
                               onClick={() => setFilePickerModalOpen(true)}
                               className="text-primary hover:underline"
                             >

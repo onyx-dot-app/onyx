@@ -130,28 +130,21 @@ export default function MyDocuments() {
   };
 
   const handleDeleteItem = async (itemId: number, isFolder: boolean) => {
-    if (!isFolder) {
-      // For files, keep the old confirmation
-      const confirmDelete = window.confirm(
-        `Are you sure you want to delete this file?`
-      );
-
-      if (confirmDelete) {
-        try {
-          await deleteItem(itemId, isFolder);
-          setPopup({
-            message: `File deleted successfully`,
-            type: "success",
-          });
-          await refreshFolders();
-        } catch (error) {
-          console.error("Error deleting item:", error);
-          setPopup({
-            message: `Failed to delete file`,
-            type: "error",
-          });
-        }
-      }
+    try {
+      await deleteItem(itemId, isFolder);
+      setPopup({
+        message: isFolder
+          ? `Folder deleted successfully`
+          : `File deleted successfully`,
+        type: "success",
+      });
+      await refreshFolders();
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      setPopup({
+        message: `Failed to delete ${isFolder ? "folder" : "file"}`,
+        type: "error",
+      });
     }
   };
 
