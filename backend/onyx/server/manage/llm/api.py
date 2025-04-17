@@ -24,6 +24,7 @@ from onyx.llm.factory import get_llm
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
+from onyx.llm.utils import get_max_input_tokens_from_model_configurations
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
@@ -71,6 +72,9 @@ def test_llm_configuration(
         if existing_provider:
             test_api_key = existing_provider.api_key
 
+    max_input_tokens_for_default_model = get_max_input_tokens_from_model_configurations(
+        test_llm_request.model_configurations, test_llm_request.default_model_name
+    )
     llm = get_llm(
         provider=test_llm_request.provider,
         model=test_llm_request.default_model_name,
@@ -79,6 +83,7 @@ def test_llm_configuration(
         api_version=test_llm_request.api_version,
         custom_config=test_llm_request.custom_config,
         deployment_name=test_llm_request.deployment_name,
+        max_input_tokens=max_input_tokens_for_default_model,
     )
 
     functions_with_args: list[tuple[Callable, tuple]] = [(test_llm, (llm,))]
@@ -87,6 +92,12 @@ def test_llm_configuration(
         and test_llm_request.fast_default_model_name
         != test_llm_request.default_model_name
     ):
+        max_input_tokens_for_fast_default_model = (
+            get_max_input_tokens_from_model_configurations(
+                test_llm_request.model_configurations,
+                test_llm_request.fast_default_model_name,
+            )
+        )
         fast_llm = get_llm(
             provider=test_llm_request.provider,
             model=test_llm_request.fast_default_model_name,
@@ -95,6 +106,7 @@ def test_llm_configuration(
             api_version=test_llm_request.api_version,
             custom_config=test_llm_request.custom_config,
             deployment_name=test_llm_request.deployment_name,
+            max_input_tokens=max_input_tokens_for_fast_default_model,
         )
         functions_with_args.append((test_llm, (fast_llm,)))
 
@@ -362,6 +374,7 @@ def get_provider_contextual_cost(
                 api_base=provider.api_base,
                 api_version=provider.api_version,
                 custom_config=provider.custom_config,
+                max_input_tokens=model_configuration.max_input_tokens,
             )
             cost = get_llm_contextual_cost(llm)
             costs.append(

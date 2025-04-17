@@ -25,6 +25,8 @@ class TestLLMRequest(BaseModel):
     fast_default_model_name: str | None = None
     deployment_name: str | None = None
 
+    model_configurations: list["ModelConfiguration"] = []
+
 
 class LLMProviderDescriptor(BaseModel):
     """A descriptor for an LLM provider that can be safely viewed by
