@@ -66,6 +66,7 @@ export function getLLMProviderOverrideForPersona(
 
 const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "gpt-4o",
+  "gpt-4.1",
   "gpt-4o-mini",
   "gpt-4-vision-preview",
   "gpt-4-turbo",
