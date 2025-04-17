@@ -15,7 +15,6 @@ import { FiPlus, FiTrash, FiX } from "react-icons/fi";
 import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   Label,
-  MultiTextArrayField,
   SubLabel,
   TextFormField,
 } from "@/components/admin/connectors/Field";
@@ -27,6 +26,7 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { ModelConfigurationField } from "./ModelConfigurationField";
 
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
@@ -144,16 +144,21 @@ export function CustomLLMProviderUpdateForm({
           }
         }
 
-        const response = await fetch(LLM_PROVIDERS_ADMIN_URL, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...values,
-            custom_config: customConfigProcessing(values.custom_config_list),
-          }),
-        });
+        const response = await fetch(
+          `${LLM_PROVIDERS_ADMIN_URL}${
+            existingLlmProvider ? "" : "?is_creation=true"
+          }`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...values,
+              custom_config: customConfigProcessing(values.custom_config_list),
+            }),
+          }
+        );
 
         if (!response.ok) {
           const errorMsg = (await response.json()).detail;
@@ -381,28 +386,9 @@ export function CustomLLMProviderUpdateForm({
 
             <Separator />
             {!existingLlmProvider?.deployment_name && (
-              <MultiTextArrayField
+              <ModelConfigurationField
                 name="model_configurations"
-                label="Model Configurations"
-                values={formikProps.values}
-                subtext={
-                  <>
-                    List the individual models that you want to make available
-                    as a part of this provider. At least one must be specified.
-                    For the best experience your [Provider Name]/[Model Name]
-                    should match one of the pairs listed{" "}
-                    <a
-                      target="_blank"
-                      href="https://models.litellm.ai/"
-                      className="text-link"
-                      rel="noreferrer"
-                    >
-                      here
-                    </a>
-                    .
-                  </>
-                }
-                placeholders={["Model Name", "Maximum Input Tokens"]}
+                formikProps={formikProps as any}
               />
             )}
 
