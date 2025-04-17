@@ -1,5 +1,5 @@
 "use client";
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import { FiLock } from "react-icons/fi";
 import ErrorPageLayout from "./ErrorPageLayout";

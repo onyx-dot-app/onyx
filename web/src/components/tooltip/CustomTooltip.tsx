@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import React, {
   ReactNode,
@@ -136,8 +136,8 @@ export const CustomTooltip = ({
             className={`z-[100] overflow-hidden rounded-md text-neutral-50 
               ${className}
               ${citation ? "max-w-[350px]" : "max-w-40"} ${
-                large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
-              } 
+              large ? (medium ? "w-88" : "w-96") : line && "max-w-64 w-auto"
+            } 
             transform -translate-x-1/2 text-xs
             ${
               light

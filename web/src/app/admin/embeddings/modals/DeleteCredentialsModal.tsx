@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../../i18n/keys";
 import React from "react";
 import { Modal } from "@/components/Modal";
@@ -19,7 +19,9 @@ export function DeleteCredentialsModal({
   return (
     <Modal
       width="max-w-3xl"
-      title={`${i18n.t(k.DELETE)} ${modelProvider.provider_type} ${i18n.t(k.CREDENTIALS)}`}
+      title={`${i18n.t(k.DELETE)} ${modelProvider.provider_type} ${i18n.t(
+        k.CREDENTIALS
+      )}`}
       onOutsideClick={onCancel}
     >
       <div className="mb-4">

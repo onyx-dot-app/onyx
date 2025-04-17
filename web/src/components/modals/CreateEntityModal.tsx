@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import React, { useState } from "react";
 import {
@@ -69,7 +69,9 @@ export default function CreateEntityModal({
               onChange={(e) => setName(e.target.value)}
               placeholder={
                 placeholder ||
-                `${i18n.t(k.ENTER)} ${entityName.toLowerCase()} ${i18n.t(k.NAME1)}`
+                `${i18n.t(k.ENTER)} ${entityName.toLowerCase()} ${i18n.t(
+                  k.NAME1
+                )}`
               }
               required
               className="w-full  focus-visible:border focus-visible:border-neutral-200 focus-visible:ring-0 !focus:ring-offset-0 !focus:ring-0 !focus:border-0 !focus:ring-transparent !focus:outline-none"

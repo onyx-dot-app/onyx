@@ -1,5 +1,5 @@
 "use client";
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../../../i18n/keys";
 import { use } from "react";
 
@@ -63,7 +63,9 @@ function Main({ documentSetId }: { documentSetId: number }) {
     return (
       <ErrorCallout
         errorTitle="Document set not found"
-        errorMsg={`${i18n.t(k.DOCUMENT_SET_WITH_ID)} ${documentSetId} ${i18n.t(k.NOT_FOUND)}`}
+        errorMsg={`${i18n.t(k.DOCUMENT_SET_WITH_ID)} ${documentSetId} ${i18n.t(
+          k.NOT_FOUND
+        )}`}
       />
     );
   }

@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../../i18n/keys";
 import {
   type InvitedUserSnapshot,
@@ -114,7 +114,9 @@ export const InviteUserButton = ({
     <>
       {showInviteModal && (
         <GenericConfirmModal
-          title={`${invited ? i18n.t(k.UNINVITE) : i18n.t(k.INVITE)} ${i18n.t(k.USER)}`}
+          title={`${invited ? i18n.t(k.UNINVITE) : i18n.t(k.INVITE)} ${i18n.t(
+            k.USER
+          )}`}
           message={`${i18n.t(k.ARE_YOU_SURE_YOU_WANT_TO)} ${
             invited ? i18n.t(k.UNINVITE1) : i18n.t(k.INVITE1)
           } ${user.email}${i18n.t(k._10)}`}

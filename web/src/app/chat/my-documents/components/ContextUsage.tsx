@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../../i18n/keys";
 import React from "react";
 
@@ -38,8 +38,8 @@ export const ContextUsage: React.FC<ContextUsageProps> = ({
               tokenPercentage > 75
                 ? "bg-red-500"
                 : tokenPercentage > 50
-                  ? "bg-amber-500"
-                  : "bg-emerald-500"
+                ? "bg-amber-500"
+                : "bg-emerald-500"
             }`}
             style={{ width: `${Math.min(tokenPercentage, 100)}%` }}
           />

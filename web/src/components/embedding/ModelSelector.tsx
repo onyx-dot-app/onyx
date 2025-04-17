@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {
@@ -109,17 +109,14 @@ export function ModelSelector({
   modelOptions: HostedEmbeddingModel[];
   setSelectedModel: (model: HostedEmbeddingModel) => void;
 }) {
-  const groupedModelOptions = modelOptions.reduce(
-    (acc, model) => {
-      const [type] = model.model_name.split("/");
-      if (!acc[type]) {
-        acc[type] = [];
-      }
-      acc[type].push(model);
-      return acc;
-    },
-    {} as Record<string, HostedEmbeddingModel[]>
-  );
+  const groupedModelOptions = modelOptions.reduce((acc, model) => {
+    const [type] = model.model_name.split("/");
+    if (!acc[type]) {
+      acc[type] = [];
+    }
+    acc[type].push(model);
+    return acc;
+  }, {} as Record<string, HostedEmbeddingModel[]>);
 
   return (
     <div>

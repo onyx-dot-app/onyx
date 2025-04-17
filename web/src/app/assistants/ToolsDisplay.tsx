@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import { FiImage, FiSearch } from "react-icons/fi";
 import { Persona } from "../admin/assistants/interfaces";
@@ -89,8 +89,8 @@ export function AssistantTools({
                     hovered
                       ? "bg-background-300"
                       : list
-                        ? "bg-background-125"
-                        : "bg-background-100"
+                      ? "bg-background-125"
+                      : "bg-background-100"
                   }`}
                 >
                   <div className="flex gap-x-1">{tool.name}</div>

@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../../i18n/keys";
 import { useFormContext } from "@/components/context/FormContext";
 import { ArrowLeft, ArrowRight } from "@phosphor-icons/react";

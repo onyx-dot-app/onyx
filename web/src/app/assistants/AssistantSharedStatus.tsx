@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import { User } from "@/lib/types";
 import { Persona } from "../admin/assistants/interfaces";
@@ -50,9 +50,9 @@ export function AssistantSharedStatusDisplay({
               : `${assistantSharedUsersWithoutOwner
                   .slice(0, 4)
                   .map((u) => u.email)
-                  .join(
-                    i18n.t(k._3)
-                  )} ${i18n.t(k.AND)} ${assistant.users.length - 4} ${i18n.t(k.OTHERS)}`
+                  .join(i18n.t(k._3))} ${i18n.t(k.AND)} ${
+                  assistant.users.length - 4
+                } ${i18n.t(k.OTHERS)}`
           }`
         ) : (
           <div>

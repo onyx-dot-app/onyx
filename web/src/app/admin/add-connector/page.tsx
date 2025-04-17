@@ -1,5 +1,5 @@
 "use client";
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../i18n/keys";
 import { SourceIcon } from "@/components/SourceIcon";
 import { AdminPageTitle } from "@/components/admin/Title";
@@ -69,18 +69,15 @@ export default function Page() {
 
   const categorizedSources = useMemo(() => {
     const filtered = filterSources(sources);
-    return Object.values(SourceCategory).reduce(
-      (acc, category) => {
-        acc[category] = sources.filter(
-          (source) =>
-            source.category === category &&
-            (filtered.includes(source) ||
-              category.toLowerCase().includes(searchTerm.toLowerCase()))
-        );
-        return acc;
-      },
-      {} as Record<SourceCategory, SourceMetadata[]>
-    );
+    return Object.values(SourceCategory).reduce((acc, category) => {
+      acc[category] = sources.filter(
+        (source) =>
+          source.category === category &&
+          (filtered.includes(source) ||
+            category.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+      return acc;
+    }, {} as Record<SourceCategory, SourceMetadata[]>);
   }, [sources, filterSources, searchTerm]);
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {

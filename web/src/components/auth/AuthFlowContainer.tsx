@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../i18n/keys";
 import Link from "next/link";
 import { Logo } from "../logo/Logo";

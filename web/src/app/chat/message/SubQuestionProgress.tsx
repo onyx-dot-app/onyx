@@ -1,4 +1,4 @@
-import i18n from "i18next";
+import i18n from "@/i18n/init";
 import k from "./../../../i18n/keys";
 import React from "react";
 import { SubQuestionDetail } from "../interfaces";
@@ -78,7 +78,9 @@ const SubQuestionProgress: React.FC<SubQuestionProgressProps> = ({
                 <Popover>
                   <PopoverTrigger>
                     {sq.context_docs
-                      ? `${sq.context_docs.top_documents.length} ${i18n.t(k.DOCS)}`
+                      ? `${sq.context_docs.top_documents.length} ${i18n.t(
+                          k.DOCS
+                        )}`
                       : i18n.t(k.NO_DOCS)}
                   </PopoverTrigger>
                   <PopoverContent>
