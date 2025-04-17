@@ -29,7 +29,7 @@ import { WebVitals } from "./web-vitals";
 import { ThemeProvider } from "next-themes";
 import CloudError from "@/components/errorPages/CloudErrorPage";
 import Error from "@/components/errorPages/ErrorPage";
-import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
+// import AccessRestrictedPage from "@/components/errorPages/AccessRestrictedPage";
 
 
 // declare global {
@@ -139,9 +139,9 @@ export default async function RootLayout({
     </html>
   );
 
-  if (productGating === ApplicationStatus.GATED_ACCESS) {
-    return getPageContent(<AccessRestrictedPage />);
-  }
+//  if (productGating === ApplicationStatus.GATED_ACCESS) {
+//    return getPageContent(<AccessRestrictedPage />);
+//  }
 
   if (!combinedSettings) {
     return getPageContent(
