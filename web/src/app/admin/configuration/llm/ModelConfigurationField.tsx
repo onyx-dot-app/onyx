@@ -1,6 +1,12 @@
 "use client";
 
-import { ArrayHelpers, FieldArray, FormikProps } from "formik";
+import {
+  ArrayHelpers,
+  ErrorMessage,
+  Field,
+  FieldArray,
+  FormikProps,
+} from "formik";
 import { ModelConfiguration } from "./interfaces";
 import { SubLabel, TextFormField } from "@/components/admin/connectors/Field";
 import { FiPlus, FiX } from "react-icons/fi";
@@ -26,30 +32,45 @@ export function ModelConfigurationField({
         name={name}
         render={(arrayHelpers: ArrayHelpers) => (
           <div className="flex flex-col">
-            <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-col gap-4 py-4">
+              <div className="flex">
+                <Label className="flex flex-[2]">Model Name</Label>
+                <Label className="flex flex-[1]">Max Input Tokens</Label>
+                <div className="w-10" />
+              </div>
               {formikProps.values.model_configurations.map((_, index) => (
                 <div key={index} className="flex flex-row w-full gap-4">
-                  <div className="flex flex-1">
+                  <div className="flex flex-[2]">
                     <TextFormField
                       name={`${name}[${index}].name`}
-                      label="Model Name"
                       placeholder={`model-name-${index + 1}`}
+                      label=""
+                      hideError
                     />
                   </div>
-                  <div className="flex flex-2">
+                  <div className="flex flex-[1]">
                     <TextFormField
                       name={`${name}[${index}].max_input_tokens`}
-                      label="Max Input Tokens"
+                      label=""
                       type="number"
-                      min={0}
-                      placeholder="No Limit"
+                      min={1}
+                      placeholder="Default"
+                      hideError
                     />
                   </div>
                   <div className="flex items-end">
-                    <FiX
-                      className="w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
-                      onClick={() => arrayHelpers.remove(index)}
-                    />
+                    <div className={`${index != 0 ? "" : "opacity-20"}`}>
+                      <FiX
+                        className="w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
+                        onClick={() => {
+                          if (
+                            formikProps.values.model_configurations.length > 1
+                          ) {
+                            arrayHelpers.remove(index);
+                          }
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
