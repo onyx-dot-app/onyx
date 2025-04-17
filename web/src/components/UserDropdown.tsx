@@ -287,6 +287,13 @@ export function UserDropdown({
                )}
                 {showPrivacy && (
                   <DropdownOption
+                  href="/pages/privacy-statement"
+                  icon={<FileIcon size={16} className="my-auto" />}
+                  label="Privacy Statement"
+                />
+                )}
+                {showPrivacy && (
+                  <DropdownOption
                   href="/pages/whats-new"
                   icon={<FileIcon size={16} className="my-auto" />}
                   label="What&apos;s new"
