@@ -110,9 +110,12 @@ def extract_ert(
             time_filter="",
         )
 
-    ert_entities_string = f"Entities: {entity_extraction_result.entities}\n"
-    # ert_terms_string = f"Terms: {entity_extraction_result.terms}"
-    # ert_time_filter_string = f"Time Filter: {entity_extraction_result.time_filter}\n"
+    # remove the attribute filters from the entities to for the purpose of the relationship
+    entities_no_attributes = [
+        entity.split("--")[0] for entity in entity_extraction_result.entities
+    ]
+    entities_string_for_relationships = f"Entities: {entities_no_attributes}\n"
+    ert_entities_string = f"Entities: {entities_string_for_relationships}\n"
 
     ### get the relationships
 
@@ -237,9 +240,10 @@ def extract_ert(
     return ERTExtractionUpdate(
         entities_types_str=all_entity_types,
         relationship_types_str=all_relationship_types,
-        entities=entity_extraction_result.entities,
-        relationships=relationship_extraction_result.relationships,
-        terms=entity_extraction_result.terms,
+        extracted_entities_w_attributes=entity_extraction_result.entities,
+        extracted_entities_no_attributes=entities_no_attributes,
+        extracted_relationships=relationship_extraction_result.relationships,
+        extracted_terms=entity_extraction_result.terms,
         time_filter=entity_extraction_result.time_filter,
         log_messages=[
             get_langgraph_node_log_string(

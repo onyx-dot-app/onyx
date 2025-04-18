@@ -95,7 +95,10 @@ def generate_simple_sql(
         SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
         .replace("---relationship_types---", relationship_types_str)
         .replace("---question---", question)
-        .replace("---query_entities---", "\n".join(state.query_graph_entities))
+        .replace(
+            "---query_entities_with_attributes---",
+            "\n".join(state.query_graph_entities_w_attributes),
+        )
         .replace(
             "---query_relationships---", "\n".join(state.query_graph_relationships)
         )
@@ -139,7 +142,9 @@ def generate_simple_sql(
         cleaned_response = (
             str(llm_response.content).replace("```json\n", "").replace("\n```", "")
         )
-        sql_statement = cleaned_response.split("SQL:")[1].strip()
+        sql_statement = (
+            cleaned_response.split("<start sql>")[1].split("<end sql>")[0].strip()
+        )
         sql_statement = sql_statement.split(";")[0].strip() + ";"
         sql_statement = sql_statement.replace("sql", "").strip()
         sql_statement = sql_statement.replace(

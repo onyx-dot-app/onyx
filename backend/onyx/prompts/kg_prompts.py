@@ -9,8 +9,6 @@ NO = "no"
 
 # Framing/Support/Template Prompts
 ENTITY_TYPE_SETTING_PROMPT = f"""
-Here are the entity types that are available for extraction. Please only extract entities \
-of these types (or 'any' object of a type, indicated by a '*').
 {SEPARATOR_LINE}
 {{entity_types}}
 {SEPARATOR_LINE}
@@ -42,7 +40,10 @@ identify in the text, each formatted simply as '<term>'>]
 
 QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
-formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization)>],
+formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization)>. Each entity \
+also should be followed by a list of attribute filters for for the entity, if referred to in the \
+question for that entity. Example: 'ACCOUNT:* -- [account_type: customer]' should the question be \
+'list all customer accounts', and ACCOUNT was an entity type with this attribute key/value allowed.] \
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
 identify in the text, each formatted simply as '<term>'>],
 "time_filter": <if needed, a SQL-like filter for a field called 'event_date'. Do not select anything here \
@@ -176,15 +177,20 @@ Explanation:
 
 
 ENTITY_EXAMPLE_1 = r"""
-{{"entities": ["ACCOUNT:Nike", "CONCERN:*"], "terms": []}}
+{{"entities": ["ACCOUNT:Nike--[]", "CONCERN:*--[]"], "terms": []}}
 """.strip()
 
 ENTITY_EXAMPLE_2 = r"""
-{{"entities": ["ACCOUNT:Nike", "CONCERN:performance"], "terms": ["performance issue"]}}
+{{"entities": ["ACCOUNT:Nike--[]", "CONCERN:performance--[]"], "terms": ["performance issue"]}}
 """.strip()
 
 ENTITY_EXAMPLE_3 = r"""
-{{"entities": ["ACCOUNT:*", "CONCERN:performance"], "terms": ["performance issue"]}}
+{{"entities": ["ACCOUNT:*--[]", "CONCERN:performance--[]", "CONCERN:user_experience--[]"],
+ "terms": ["performance issue", "user experience"]}}
+""".strip()
+
+ENTITY_EXAMPLE_4 = r"""
+{{"entities": ["ACCOUNT:*--[]", "CONCERN:performance--[degree: severe]"], "terms": ["performance issue"]}}
 """.strip()
 
 MASTER_EXTRACTION_PROMPT = f"""
@@ -265,15 +271,17 @@ Here is the text you are asked to extract knowledge from:
 
 QUERY_ENTITY_EXTRACTION_PROMPT = f"""
 You are an expert in the area of knowledge extraction and using knowledge graphs. You are given a question \
-and asked to extract entities and terms from it that you can reliably identify and that then \
+and asked to extract entities (with attributes if applicable) and terms from it that you can reliably identify and that then \
 can later be matched with a known knowledge graph. You are also asked to extract time filters SHOULD \
 there be an explicit mention of a date or time frame in the QUESTION (note: last, first, etc.. DO NOT \
 imply the need for a time filter just because the question asks for something that is not the current date. \
-The will relate to ordering that we will handle separately).
+They will relate to ordering that we will handle separately).
 
 Today is ---today_date---, which may or may not be relevant.
 Here are the entity types that are available for extraction. Some of them may have \
-a description, others should be obvious. You can ONLY extract entities of these types:
+a description, others should be obvious. Also, notice that some may have attributes associated with them, which will \
+be important later.
+You can ONLY extract entities of these types:
 {SEPARATOR_LINE}
 {ENTITY_TYPE_SETTING_PROMPT}
 {SEPARATOR_LINE}
@@ -290,7 +298,8 @@ clearly in the question.
 {SEPARATOR_LINE}
 
 Here are some important additional instructions. (For the purpose of illustration, assume that \
- "ACCOUNT", "CONCERN", "EMAIL", and "FEATURE" are all in the list of entity types above. Note that this \
+ "ACCOUNT", "CONCERN", "EMAIL", and "FEATURE" are all in the list of entity types above, and the \
+attribute options for "CONCERN" include 'degree' with possible values that includes 'severe'. Note that this \
 is just assumed for these examples, but you MUST use only the entities above for the actual extraction!)
 
 - You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
@@ -307,11 +316,17 @@ then a much more suitable entity and term extraction could be:
 Example 2:
 {ENTITY_EXAMPLE_2}
 
-* Finally, if the question is:
+* Then, if the question is:
 'Who reported performance issues?'
 then a suitable entity and term extraction could be:
-Example 2:
+Example 3:
 {ENTITY_EXAMPLE_3}
+
+* Then, if we inquire about a entity with a specific attribute :
+'Who reported severe performance issues?'
+then a suitable entity and term extraction could be:
+Example 3:
+{ENTITY_EXAMPLE_4}
 
 - Again,
    -  you should only extract entities belonging to the entity types above - but do extract all that you \
@@ -323,6 +338,9 @@ can reliably identify in the text
 the are also part of the initial list of entities! This is essential!
    - don't forget to provide answers also to the event filtering and whether documents need to be inspected!
    - 'who' often refers to individuals or accounts.
+   - see whether any of the entities are supposed to be narrowed down by an attribute value. The preciseattribute \
+and the value would need to be taken from the specification, as the question may use different words and the \
+actual attribute may be implied.
    - don't just look at the entities that are mentioned in the question but also those that the question \
 may be about.
 
@@ -596,8 +614,10 @@ It is of the form \
 <source_entity_type>:<source_entity_name>__<relationship_description>__<target_entity_type>:<target_entity_name> \
 [example: ACCOUNT:Nike__has__CONCERN:performance]. Note that this is NOT UNIQUE!
    - source_entity (str): the id of the source ENTITY/NODE in the relationship [example: ACCOUNT:Nike]
+   - source_entity_attributes (json): the attributes of the source entity/node [example: {{"account_type": "customer"}}]
    - target_entity (str): the id of the target ENTITY/NODE in the relationship [example: CONCERN:performance]
-      - source_entity_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
+   - target_entity_attributes (json): the attributes of the target entity/node [example: {{"degree": "severe"}}]
+   - source_entity_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
    below are valid.
    - target_entity_type (str): the type of the target entity/node [example: CONCERN]. Only the entity types provided \
    below are valid.
@@ -611,8 +631,8 @@ id_name and source_document IS UNIQUE!
 {SEPARATOR_LINE}
 
 Importantly, here are the entity (node) types that you can use, with a short description what they mean. You may need to \
-identify the proper entity type through its description.
-
+identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
+their values, if provided.
 {SEPARATOR_LINE}
 ---entity_types---
 {SEPARATOR_LINE}
@@ -630,11 +650,13 @@ Here is the question you are supposed to translate into a SQL statement:
 {SEPARATOR_LINE}
 
 To help you, we already have identified the entities and relationships that the SQL statement likely *should* use (but note the \
-exception below!):
+exception below!). The entities also contain the list of attributes and attribute values that should specify the entity. \
+The format is <entity_type>:<entity_name>--[<attribute_name_1>:<attribute_value_1>, \
+<attribute_name_2>:<attribute_value_2>, ...].
 {SEPARATOR_LINE}
-Identified entities in query:
+Identified entities with attributes in query:
 
----query_entities---
+---query_entities_with_attributes---
 
 --
 
@@ -669,14 +691,20 @@ and 'name' are columns and \
 - the SQL statement MUST ultimately only return NODES/ENTITIES (not relationships!), or aggregations of \
 entities/nodes(count, avg, max, min, etc.). \
 Again, DO NOT compose a SQL statement that returns id_name of relationships.
-- You can ultimately only return i) numbers (if counts are asked), or ii) entity id_names.
+- You CAN ONLY return ENTITIES or counts (or other aggregations) of ENTITIES! DO NOT return \
+source documents or counts of source documents! Those can only appear in where clauses, ordering etc.
+- Attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
+"attributes ->> '<attribute>' = '<attribute value>'".
+- Again, NEVER count or retrieve source documents! Only entities!
+- Please think about whether you are interested in source entities or target entities! For that purpose, \
+consider the allowed relationship types to make sure you select or count the correct one!
 - Try to be as efficient as possible.
 
 APPROACH:
 Please think through this step by step. Make sure that you include all columns in the ORDER BY clause \
 also in the SELECT DISTINCT clause, \
-if applicable! Then, when you have it say 'SQL:' followed ONLY by the SQL statement. The SQL statement \
-must end with a ';'.
+if applicable! Then, when you have it say '<start sql>' followed by the SQL statement that must end \
+with a ';', then say '<end sql>'.
 
 Your answer:
 """.strip()

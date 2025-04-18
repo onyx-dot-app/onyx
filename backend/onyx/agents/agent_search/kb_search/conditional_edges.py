@@ -12,7 +12,10 @@ from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
 def simple_vs_search(
     state: MainState,
 ) -> Literal["process_kg_only_answers", "construct_deep_search_filters"]:
-    if state.strategy == KGAnswerStrategy.DEEP or len(state.relationships) > 0:
+    if (
+        state.strategy == KGAnswerStrategy.DEEP
+        or len(state.extracted_relationships) > 0
+    ):
         return "construct_deep_search_filters"
     else:
         return "process_kg_only_answers"

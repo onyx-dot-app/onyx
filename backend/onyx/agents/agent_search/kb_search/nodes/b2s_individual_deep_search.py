@@ -31,7 +31,7 @@ def individual_deep_search(
     question = graph_config.inputs.search_request.query
 
     entities_types_str = state.entities_types_str
-    entities = state.query_graph_entities
+    entities = state.query_graph_entities_no_attributes
     relationships = state.query_graph_relationships
     simple_sql_query = state.sql_query
 

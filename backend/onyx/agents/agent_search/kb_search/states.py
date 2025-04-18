@@ -42,7 +42,8 @@ class YesNoEnum(str, Enum):
 class AnalysisUpdate(LoggerUpdate):
     normalized_core_entities: list[str] = []
     normalized_core_relationships: list[str] = []
-    query_graph_entities: list[str] = []
+    query_graph_entities_no_attributes: list[str] = []
+    query_graph_entities_w_attributes: list[str] = []
     query_graph_relationships: list[str] = []
     normalized_terms: list[str] = []
     normalized_time_filter: str | None = None
@@ -76,9 +77,10 @@ class ResearchObjectOutput(LoggerUpdate):
 class ERTExtractionUpdate(LoggerUpdate):
     entities_types_str: str = ""
     relationship_types_str: str = ""
-    entities: list[str] = []
-    relationships: list[str] = []
-    terms: list[str] = []
+    extracted_entities_w_attributes: list[str] = []
+    extracted_entities_no_attributes: list[str] = []
+    extracted_relationships: list[str] = []
+    extracted_terms: list[str] = []
     time_filter: str | None = None
 
 

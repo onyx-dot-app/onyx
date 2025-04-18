@@ -19,6 +19,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.kg.clustering.normalizations import normalize_entities
+from onyx.kg.clustering.normalizations import normalize_entities_w_attributes_from_map
 from onyx.kg.clustering.normalizations import normalize_relationships
 from onyx.kg.clustering.normalizations import normalize_terms
 from onyx.prompts.kg_prompts import STRATEGY_GENERATION_PROMPT
@@ -38,12 +39,20 @@ def analyze(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
-    entities = state.entities
-    relationships = state.relationships
-    terms = state.terms
+    entities = (
+        state.extracted_entities_no_attributes
+    )  # attribute knowledge is not required for this step
+    relationships = state.extracted_relationships
+    terms = state.extracted_terms
     time_filter = state.time_filter
 
     normalized_entities = normalize_entities(entities)
+
+    query_graph_entities_w_attributes = normalize_entities_w_attributes_from_map(
+        state.extracted_entities_w_attributes,
+        normalized_entities.entity_normalization_map,
+    )
+
     normalized_relationships = normalize_relationships(
         relationships, normalized_entities.entity_normalization_map
     )
@@ -192,7 +201,8 @@ def analyze(
     return AnalysisUpdate(
         normalized_core_entities=normalized_entities.entities,
         normalized_core_relationships=normalized_relationships.relationships,
-        query_graph_entities=query_graph_entities,
+        query_graph_entities_no_attributes=query_graph_entities,
+        query_graph_entities_w_attributes=query_graph_entities_w_attributes,
         query_graph_relationships=query_graph_relationships,
         normalized_terms=normalized_terms.terms,
         normalized_time_filter=normalized_time_filter,

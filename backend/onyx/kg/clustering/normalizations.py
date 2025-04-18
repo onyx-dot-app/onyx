@@ -63,25 +63,27 @@ def _get_existing_normalized_relationships(
     return relationship_type_map
 
 
-def normalize_entities(raw_entities: List[str]) -> NormalizedEntities:
+def normalize_entities(
+    raw_entities_no_attributes: List[str],
+) -> NormalizedEntities:
     """
     Match each entity against a list of normalized entities using fuzzy matching.
     Returns the best matching normalized entity for each input entity.
 
     Args:
-        entities: List of entity strings to normalize
+        raw_entities_no_attributes: List of entity strings to normalize, w/o attributes
 
     Returns:
         List of normalized entity strings
     """
     # Assume this is your predefined list of normalized entities
-    norm_entities = _get_existing_normalized_entities(raw_entities)
+    norm_entities = _get_existing_normalized_entities(raw_entities_no_attributes)
 
     normalized_results: List[str] = []
     normalized_map: Dict[str, str | None] = {}
     threshold = 80  # Adjust threshold as needed
 
-    for entity in raw_entities:
+    for entity in raw_entities_no_attributes:
         if "*" in entity:
             normalized_results.append(entity)
             normalized_map[entity] = entity
@@ -100,6 +102,32 @@ def normalize_entities(raw_entities: List[str]) -> NormalizedEntities:
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map
     )
+
+
+def normalize_entities_w_attributes_from_map(
+    raw_entities_w_attributes: List[str],
+    entity_normalization_map: Dict[str, Optional[str]],
+) -> List[str]:
+    """
+    Normalize entities with attributes using the entity normalization map.
+    """
+
+    normalized_entities_w_attributes: List[str] = []
+
+    for raw_entities_w_attribute in raw_entities_w_attributes:
+        assert (
+            len(raw_entities_w_attribute.split("--")) == 2
+        ), f"Invalid entity with attributes: {raw_entities_w_attribute}"
+        raw_entity, attributes = raw_entities_w_attribute.split("--")
+        normalized_entity = entity_normalization_map.get(raw_entity.strip())
+        if normalized_entity is None:
+            continue
+        else:
+            normalized_entities_w_attributes.append(
+                f"{normalized_entity}--{raw_entities_w_attribute.split('--')[1].strip()}"
+            )
+
+    return normalized_entities_w_attributes
 
 
 def normalize_relationships(
