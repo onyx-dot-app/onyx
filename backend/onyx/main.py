@@ -223,6 +223,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     SqlEngine.get_engine()
 
+    SqlEngine.init_readonly_engine(
+        pool_size=POSTGRES_API_SERVER_POOL_SIZE,
+        max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
+    )
+
     verify_auth = fetch_versioned_implementation(
         "onyx.auth.users", "verify_auth_setting"
     )

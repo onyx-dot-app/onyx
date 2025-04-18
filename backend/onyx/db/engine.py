@@ -187,7 +187,9 @@ def is_valid_schema_name(name: str) -> bool:
 
 class SqlEngine:
     _engine: Engine | None = None
+    _readonly_engine: Engine | None = None
     _lock: threading.Lock = threading.Lock()
+    _readonly_lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
 
     @classmethod
@@ -253,10 +255,82 @@ class SqlEngine:
             cls._engine = engine
 
     @classmethod
+    def init_readonly_engine(
+        cls,
+        pool_size: int,
+        # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
+        max_overflow: int,
+        **extra_engine_kwargs: Any,
+    ) -> None:
+        """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
+        important args, and if incorrectly specified, we have run into hitting the pool
+        limit / using too many connections and overwhelming the database."""
+        with cls._readonly_lock:
+            if cls._readonly_engine:
+                return
+
+            # Get custom user credentials from environment variables
+            kg_readonly_user = os.getenv("KG_READONLY_DB_USER")
+            kg_read_only_password = os.getenv("KG_READONLY_DB_PASSWORD")
+
+            if not kg_readonly_user or not kg_read_only_password:
+                raise ValueError(
+                    "Custom database user credentials not configured in environment variables"
+                )
+
+            # Build connection string with custom user
+            connection_string = build_connection_string(
+                user=kg_readonly_user,
+                password=kg_read_only_password,
+                use_iam=False,  # Custom users typically don't use IAM auth
+                db_api=SYNC_DB_API,  # Explicitly use sync DB API
+            )
+
+            # Start with base kwargs that are valid for all pool types
+            final_engine_kwargs: dict[str, Any] = {}
+
+            if POSTGRES_USE_NULL_POOL:
+                # if null pool is specified, then we need to make sure that
+                # we remove any passed in kwargs related to pool size that would
+                # cause the initialization to fail
+                final_engine_kwargs.update(extra_engine_kwargs)
+
+                final_engine_kwargs["poolclass"] = pool.NullPool
+                if "pool_size" in final_engine_kwargs:
+                    del final_engine_kwargs["pool_size"]
+                if "max_overflow" in final_engine_kwargs:
+                    del final_engine_kwargs["max_overflow"]
+            else:
+                final_engine_kwargs["pool_size"] = pool_size
+                final_engine_kwargs["max_overflow"] = max_overflow
+                final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
+                final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
+
+                # any passed in kwargs override the defaults
+                final_engine_kwargs.update(extra_engine_kwargs)
+
+            logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+            # echo=True here for inspecting all emitted db queries
+            engine = create_engine(connection_string, **final_engine_kwargs)
+
+            if USE_IAM_AUTH:
+                event.listen(engine, "do_connect", provide_iam_token)
+
+            cls._readonly_engine = engine
+
+    @classmethod
     def get_engine(cls) -> Engine:
         if not cls._engine:
             raise RuntimeError("Engine not initialized. Must call init_engine first.")
         return cls._engine
+
+    @classmethod
+    def get_readonly_engine(cls) -> Engine:
+        if not cls._readonly_engine:
+            raise RuntimeError(
+                "Readonly engine not initialized. Must call init_readonly_engine first."
+            )
+        return cls._readonly_engine
 
     @classmethod
     def set_app_name(cls, app_name: str) -> None:
@@ -305,6 +379,10 @@ def get_all_tenant_ids() -> list[str]:
 
 def get_sqlalchemy_engine() -> Engine:
     return SqlEngine.get_engine()
+
+
+def get_readonly_sqlalchemy_engine() -> Engine:
+    return SqlEngine.get_readonly_engine()
 
 
 async def get_async_connection() -> Any:
@@ -573,38 +651,14 @@ def get_kg_readonly_user_session_with_current_tenant() -> (
     """
     tenant_id = get_current_tenant_id()
 
-    # Get custom user credentials from environment variables
-    kg_readonly_user = os.getenv("KG_READONLY_DB_USER")
-    kg_read_only_password = os.getenv("KG_READONLY_DB_PASSWORD")
+    readonly_engine = get_readonly_sqlalchemy_engine()
 
-    if not kg_readonly_user or not kg_read_only_password:
-        raise ValueError(
-            "Custom database user credentials not configured in environment variables"
-        )
-
-    # Build connection string with custom user
-    connection_string = build_connection_string(
-        user=kg_readonly_user,
-        password=kg_read_only_password,
-        use_iam=False,  # Custom users typically don't use IAM auth
-        db_api=SYNC_DB_API,  # Explicitly use sync DB API
-    )
-
-    # Create a new sync engine with custom credentials
-    engine = create_engine(
-        connection_string,
-        pool_pre_ping=POSTGRES_POOL_PRE_PING,
-        pool_recycle=POSTGRES_POOL_RECYCLE,
-        pool_size=POSTGRES_API_SERVER_POOL_SIZE,
-        max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
-    )
-
-    event.listen(engine, "checkout", set_search_path_on_checkout)
+    event.listen(readonly_engine, "checkout", set_search_path_on_checkout)
 
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
 
-    with engine.connect() as connection:
+    with readonly_engine.connect() as connection:
         dbapi_connection = connection.connection
         cursor = dbapi_connection.cursor()
         try:
