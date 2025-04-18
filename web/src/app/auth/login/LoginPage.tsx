@@ -34,11 +34,20 @@ export default function LoginPage({
           <h2 className="text-center text-xl text-strong font-bold">
             <LoginText />
           </h2>
-
           <SignInButton
             authorizeUrl={authUrl}
             authType={authTypeMetadata?.authType}
           />
+          {authTypeMetadata?.authType === "basic" && (
+            <div className="flex  mt-4 justify-end">
+              <Link
+                href="/auth/forgot-password"
+                className="ml-auto text-link font-medium"
+              >
+                Forgot Password?
+              </Link>
+            </div>
+          )}
         </>
       )}
 

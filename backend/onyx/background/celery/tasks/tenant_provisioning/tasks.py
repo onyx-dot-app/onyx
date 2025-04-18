@@ -112,7 +112,7 @@ def pre_provision_tenant() -> None:
 
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock_provision: RedisLock = r.lock(
-        OnyxRedisLocks.PRE_PROVISION_TENANT_LOCK,
+        OnyxRedisLocks.CLOUD_PRE_PROVISION_TENANT_LOCK,
         timeout=_TENANT_PROVISIONING_SOFT_TIME_LIMIT,
     )
 
