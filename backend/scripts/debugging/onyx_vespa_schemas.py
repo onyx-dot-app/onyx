@@ -13,7 +13,6 @@ logger = setup_logger()
 
 
 def write_schema(index_name: str, dim: int, template: str) -> None:
-    index_name = index_name
     index_filename = index_name + ".sd"
     index_rendered_str = _replace_tenant_template_value_in_schema(
         template, TENANT_ID_REPLACEMENT
