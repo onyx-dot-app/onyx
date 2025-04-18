@@ -155,7 +155,7 @@ schema {{ schema_name }} {
 
     rank-profile default_rank {
         inputs {
-            query(decay_factor) float
+            query(decay_factor) double
         }
 
         function inline document_boost() {
