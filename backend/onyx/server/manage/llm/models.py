@@ -55,10 +55,8 @@ class LLMProviderDescriptor(BaseModel):
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             model_configurations=list(
-                map(
-                    ModelConfiguration.from_model,
-                    llm_provider_model.model_configurations,
-                )
+                ModelConfiguration.from_model(model_configuration)
+                for model_configuration in llm_provider_model.model_configurations
             ),
         )
 
@@ -122,10 +120,8 @@ class LLMProviderView(LLMProvider):
             groups=groups,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=list(
-                map(
-                    ModelConfiguration.from_model,
-                    llm_provider_model.model_configurations,
-                )
+                ModelConfiguration.from_model(model_configuration)
+                for model_configuration in llm_provider_model.model_configurations
             ),
         )
 

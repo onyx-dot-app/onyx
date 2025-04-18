@@ -253,7 +253,6 @@ class DefaultMultiLLM(LLM):
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
-        max_input_tokens: int | None = None,
         custom_llm_provider: str | None = None,
         temperature: float | None = None,
         custom_config: dict[str, str] | None = None,
@@ -279,7 +278,6 @@ class DefaultMultiLLM(LLM):
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._long_term_logger = long_term_logger
-        self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
         # Create a dictionary for model-specific arguments if it's None
@@ -399,7 +397,6 @@ class DefaultMultiLLM(LLM):
                 custom_llm_provider=self._custom_llm_provider or None,
                 # actual input
                 messages=processed_prompt,
-                max_completion_tokens=self._max_input_tokens,
                 tools=tools,
                 tool_choice=tool_choice if tools else None,
                 max_tokens=max_tokens,

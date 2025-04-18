@@ -273,7 +273,8 @@ def configure_default_api_keys(db_session: Session) -> None:
             model_configurations=[
                 ModelConfiguration(
                     name=name,
-                    is_visible=name == "claude-3-5-sonnet-20241022",
+                    is_visible=name
+                    in ["claude-3-5-sonnet-20241022", "claude-3-7-sonnet-20250219"],
                     max_input_tokens=None,
                 )
                 for name in ANTHROPIC_MODEL_NAMES

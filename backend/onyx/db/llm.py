@@ -99,14 +99,14 @@ def upsert_llm_provider(
         db_session.flush()
 
     # Delete existing model configurations
-    db_session.execute(
-        delete(ModelConfiguration).where(
-            ModelConfiguration.llm_provider_id == existing_llm_provider.id
-        )
-    )
+    db_session.query(ModelConfiguration).filter(
+        ModelConfiguration.llm_provider_id == existing_llm_provider.id
+    ).delete(synchronize_session="fetch")
+
+    db_session.flush()
 
     for model_configuration in llm_provider_upsert_request.model_configurations:
-        db_session.execute(
+        db_session.add(
             insert(ModelConfiguration)
             .values(
                 llm_provider_id=existing_llm_provider.id,

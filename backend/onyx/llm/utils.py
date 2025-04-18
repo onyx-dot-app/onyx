@@ -45,7 +45,6 @@ from onyx.llm.interfaces import LLM
 from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.server.manage.llm.models import ModelConfiguration
 from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -616,16 +615,6 @@ def get_max_input_tokens(
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
     return input_toks
-
-
-def get_max_input_tokens_from_model_configurations(
-    model_configurations: list[ModelConfiguration],
-    model_name: str,
-) -> int | None:
-    for model_configuration in model_configurations:
-        if model_configuration.name == model_name:
-            return model_configuration.max_input_tokens
-    return None
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:

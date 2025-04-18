@@ -15,7 +15,6 @@ from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
-from onyx.llm.utils import get_max_input_tokens_from_model_configurations
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -76,9 +75,6 @@ def get_llms_for_persona(
         raise ValueError("No fast model name found")
 
     def _create_llm(model: str) -> LLM:
-        max_input_tokens = get_max_input_tokens_from_model_configurations(
-            llm_provider.model_configurations, model
-        )
         return get_llm(
             provider=llm_provider.provider,
             model=model,
@@ -90,7 +86,6 @@ def get_llms_for_persona(
             temperature=temperature_override,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
-            max_input_tokens=max_input_tokens,
         )
 
     return _create_llm(model), _create_llm(fast_model)
@@ -113,9 +108,6 @@ def get_default_llm_with_vision(
 
     def create_vision_llm(provider: LLMProviderView, model: str) -> LLM:
         """Helper to create an LLM if the provider supports image input."""
-        max_input_tokens = get_max_input_tokens_from_model_configurations(
-            provider.model_configurations, model
-        )
         return get_llm(
             provider=provider.provider,
             model=model,
@@ -128,7 +120,6 @@ def get_default_llm_with_vision(
             temperature=temperature,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
-            max_input_tokens=max_input_tokens,
         )
 
     with get_session_with_current_tenant() as db_session:
@@ -193,9 +184,6 @@ def llm_from_provider(
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
 ) -> LLM:
-    max_input_tokens = get_max_input_tokens_from_model_configurations(
-        llm_provider.model_configurations, model_name
-    )
     return get_llm(
         provider=llm_provider.provider,
         model=model_name,
@@ -208,7 +196,6 @@ def llm_from_provider(
         temperature=temperature,
         additional_headers=additional_headers,
         long_term_logger=long_term_logger,
-        max_input_tokens=max_input_tokens,
     )
 
 
@@ -272,7 +259,6 @@ def get_llm(
     timeout: int | None = None,
     additional_headers: dict[str, str] | None = None,
     long_term_logger: LongTermLogger | None = None,
-    max_input_tokens: int | None = None,
 ) -> LLM:
     if temperature is None:
         temperature = GEN_AI_TEMPERATURE
@@ -289,5 +275,4 @@ def get_llm(
         extra_headers=build_llm_extra_headers(additional_headers),
         model_kwargs=_build_extra_model_kwargs(provider),
         long_term_logger=long_term_logger,
-        max_input_tokens=max_input_tokens,
     )

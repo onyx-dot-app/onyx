@@ -1581,7 +1581,22 @@ class ModelConfiguration(Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Represents whether or not a given model will be usable by the end user or not.
+    # This field is primarily used for "Well Known LLM Providers", since for them,
+    # we have a pre-defined list of LLM models that we allow them to choose from.
+    # For example, for OpenAI, we allow the end-user to choose multiple models from
+    # `["gpt-4", "gpt-4o", etc.]`. Once they make their selections, we set each
+    # selected model to `is_visible = True`.
+    #
+    # For "Custom LLM Providers", we don't provide a comprehensive list of models
+    # for the end-user to choose from; *they provide it themselves*. Therefore,
+    # for Custom LLM Providers, `is_visible` will always be True.
     is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Max input tokens can be null when:
+    # - The end-user configures models through a "Well Known LLM Provider".
+    # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
     max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     llm_provider: Mapped["LLMProvider"] = relationship(
