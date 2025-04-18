@@ -16,6 +16,7 @@ from typing import List
 from uuid import UUID
 
 import httpx  # type: ignore
+import jinja2
 import requests  # type: ignore
 from retry import retry
 
@@ -61,21 +62,16 @@ from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DANSWER_CHUNK_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import DATE_REPLACEMENT
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
 from onyx.document_index.vespa_constants import DOCUMENT_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import EMBEDDING_PRECISION_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
 from onyx.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
-from onyx.document_index.vespa_constants import TENANT_ID_PAT
-from onyx.document_index.vespa_constants import TENANT_ID_REPLACEMENT
 from onyx.document_index.vespa_constants import USER_FILE
 from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
-from onyx.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -118,28 +114,6 @@ def _create_document_xml_lines(doc_names: list[str | None] | list[str]) -> str:
     return "\n".join(doc_lines)
 
 
-def _replace_template_values_in_schema(
-    schema_template: str,
-    index_name: str,
-    embedding_dim: int,
-    embedding_precision: EmbeddingPrecision,
-) -> str:
-    return (
-        schema_template.replace(
-            EMBEDDING_PRECISION_REPLACEMENT_PAT, embedding_precision.value
-        )
-        .replace(DANSWER_CHUNK_REPLACEMENT_PAT, index_name)
-        .replace(VESPA_DIM_REPLACEMENT_PAT, str(embedding_dim))
-    )
-
-
-def _replace_tenant_template_value_in_schema(
-    schema_template: str,
-    tenant_field: str,
-) -> str:
-    return schema_template.replace(TENANT_ID_PAT, tenant_field)
-
-
 def add_ngrams_to_schema(schema_content: str) -> str:
     # Add the match blocks containing gram and gram-size to title and content fields
     schema_content = re.sub(
@@ -156,6 +130,9 @@ def add_ngrams_to_schema(schema_content: str) -> str:
 
 
 class VespaIndex(DocumentIndex):
+
+    VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
+
     def __init__(
         self,
         index_name: str,
@@ -208,7 +185,9 @@ class VespaIndex(DocumentIndex):
         vespa_schema_path = os.path.join(
             os.getcwd(), "onyx", "document_index", "vespa", "app_config"
         )
-        schema_file = os.path.join(vespa_schema_path, "schemas", "danswer_chunk.sd")
+        schema_jinja_file = os.path.join(
+            vespa_schema_path, "schemas", VespaIndex.VESPA_SCHEMA_JINJA_FILENAME
+        )
         services_file = os.path.join(vespa_schema_path, "services.xml")
         overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
 
@@ -247,14 +226,16 @@ class VespaIndex(DocumentIndex):
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
 
-        with open(schema_file, "r") as schema_f:
-            schema_template = schema_f.read()
-        schema = _replace_tenant_template_value_in_schema(schema_template, "")
-        schema = _replace_template_values_in_schema(
-            schema,
-            self.index_name,
-            primary_embedding_dim,
-            primary_embedding_precision,
+        with open(schema_jinja_file, "r") as schema_f:
+            template_str = schema_f.read()
+
+        jinja_env = jinja2.Environment()
+        template = jinja_env.from_string(template_str)
+        schema = template.render(
+            multi_tenant=MULTI_TENANT,
+            schema_name=self.index_name,
+            dim=primary_embedding_dim,
+            embedding_precision=primary_embedding_precision.value,
         )
 
         schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
@@ -266,12 +247,13 @@ class VespaIndex(DocumentIndex):
             if secondary_index_embedding_precision is None:
                 raise ValueError("Secondary index embedding precision is required")
 
-            upcoming_schema = _replace_template_values_in_schema(
-                schema_template,
-                self.secondary_index_name,
-                secondary_index_embedding_dim,
-                secondary_index_embedding_precision,
+            upcoming_schema = template.render(
+                multi_tenant=MULTI_TENANT,
+                schema_name=self.secondary_index_name,
+                dim=secondary_index_embedding_dim,
+                embedding_precision=secondary_index_embedding_precision.value,
             )
+
             zip_dict[f"schemas/{schema_names[1]}.sd"] = upcoming_schema.encode("utf-8")
 
         zip_file = in_memory_zip_from_file_bytes(zip_dict)
@@ -301,7 +283,9 @@ class VespaIndex(DocumentIndex):
         vespa_schema_path = os.path.join(
             os.getcwd(), "onyx", "document_index", "vespa", "app_config"
         )
-        schema_file = os.path.join(vespa_schema_path, "schemas", "danswer_chunk.sd")
+        schema_jinja_file = os.path.join(
+            vespa_schema_path, "schemas", VespaIndex.VESPA_SCHEMA_JINJA_FILENAME
+        )
         services_file = os.path.join(vespa_schema_path, "services.xml")
         overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
 
@@ -344,8 +328,12 @@ class VespaIndex(DocumentIndex):
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
 
-        with open(schema_file, "r") as schema_f:
-            schema_template = schema_f.read()
+        jinja_env = jinja2.Environment()
+
+        with open(schema_jinja_file, "r") as schema_f:
+            template_str = schema_f.read()
+
+        template = jinja_env.from_string(template_str)
 
         for i, index_name in enumerate(indices):
             embedding_dim = embedding_dims[i]
@@ -354,15 +342,11 @@ class VespaIndex(DocumentIndex):
                 f"Creating index: {index_name} with embedding dimension: {embedding_dim}"
             )
 
-            schema = _replace_template_values_in_schema(
-                schema_template, index_name, embedding_dim, embedding_precision
-            )
-
-            tenant_id_replacement = ""
-            if MULTI_TENANT:
-                tenant_id_replacement = TENANT_ID_REPLACEMENT
-            schema = _replace_tenant_template_value_in_schema(
-                schema, tenant_id_replacement
+            schema = template.render(
+                multi_tenant=MULTI_TENANT,
+                schema_name=index_name,
+                dim=embedding_dim,
+                embedding_precision=embedding_precision.value,
             )
 
             schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
