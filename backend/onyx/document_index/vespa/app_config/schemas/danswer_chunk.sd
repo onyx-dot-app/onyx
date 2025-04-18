@@ -149,7 +149,7 @@ schema DANSWER_CHUNK_NAME {
 
     rank-profile default_rank {
         inputs {
-            query(decay_factor) double
+            query(decay_factor) float
         }
 
         function inline document_boost() {
