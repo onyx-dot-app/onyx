@@ -133,6 +133,13 @@ def _replace_template_values_in_schema(
     )
 
 
+def _replace_tenant_template_value_in_schema(
+    schema_template: str,
+    tenant_field: str,
+) -> str:
+    return schema_template.replace(TENANT_ID_PAT, tenant_field)
+
+
 def add_ngrams_to_schema(schema_content: str) -> str:
     # Add the match blocks containing gram and gram-size to title and content fields
     schema_content = re.sub(
@@ -242,17 +249,15 @@ class VespaIndex(DocumentIndex):
 
         with open(schema_file, "r") as schema_f:
             schema_template = schema_f.read()
-        schema_template = schema_template.replace(TENANT_ID_PAT, "")
-
+        schema = _replace_tenant_template_value_in_schema(schema_template, "")
         schema = _replace_template_values_in_schema(
-            schema_template,
+            schema,
             self.index_name,
             primary_embedding_dim,
             primary_embedding_precision,
         )
 
         schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
-        schema = schema.replace(TENANT_ID_PAT, "")
         zip_dict[f"schemas/{schema_names[0]}.sd"] = schema.encode("utf-8")
 
         if self.secondary_index_name:
@@ -352,9 +357,14 @@ class VespaIndex(DocumentIndex):
             schema = _replace_template_values_in_schema(
                 schema_template, index_name, embedding_dim, embedding_precision
             )
-            schema = schema.replace(
-                TENANT_ID_PAT, TENANT_ID_REPLACEMENT if MULTI_TENANT else ""
+
+            tenant_id_replacement = ""
+            if MULTI_TENANT:
+                tenant_id_replacement = TENANT_ID_REPLACEMENT
+            schema = _replace_tenant_template_value_in_schema(
+                schema, tenant_id_replacement
             )
+
             schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
             zip_dict[f"schemas/{index_name}.sd"] = schema.encode("utf-8")
 
