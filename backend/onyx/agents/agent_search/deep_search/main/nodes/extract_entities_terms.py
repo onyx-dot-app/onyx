@@ -74,11 +74,12 @@ def extract_entities_terms(
 
     # Calculation here is only approximate
     doc_context = trim_prompt_piece(
-        graph_config.tooling.fast_llm.config,
-        doc_context,
-        ENTITY_TERM_EXTRACTION_PROMPT
+        config=graph_config.tooling.fast_llm.config,
+        prompt_piece=doc_context,
+        reserved_str=ENTITY_TERM_EXTRACTION_PROMPT
         + question
         + ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE,
+        max_input_tokens=graph_config.behavior.fast_max_input_tokens,
     )
 
     msg = [

@@ -14,7 +14,6 @@ from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_number_of_tokens
-from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 from onyx.prompts.constants import DEFAULT_IGNORE_STATEMENT
@@ -57,9 +56,9 @@ _MISC_BUFFER = 40
 def compute_max_document_tokens(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
+    max_input_tokens: int,
     actual_user_input: str | None = None,
     tool_token_count: int = 0,
-    max_llm_token_override: int | None = None,
 ) -> int:
     """Estimates the number of tokens available for context documents. Formula is roughly:
 
@@ -73,13 +72,6 @@ def compute_max_document_tokens(
     arbitrary "upper bound".
     """
     # if we can't find a number of tokens, just assume some common default
-    max_input_tokens = (
-        max_llm_token_override
-        if max_llm_token_override
-        else get_max_input_tokens(
-            model_name=llm_config.model_name, model_provider=llm_config.model_provider
-        )
-    )
     prompt_tokens = get_prompt_tokens(prompt_config)
 
     user_input_tokens = (
@@ -108,17 +100,13 @@ def compute_max_document_tokens_for_persona(
         prompt_config=PromptConfig.from_model(prompt),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
-        max_llm_token_override=max_llm_token_override,
+        max_input_tokens=max_llm_token_override,
     )
 
 
-def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
+def compute_max_llm_input_tokens(max_input_tokens: int) -> int:
     """Maximum tokens allows in the input to the LLM (of any type)."""
-
-    input_tokens = get_max_input_tokens(
-        model_name=llm_config.model_name, model_provider=llm_config.model_provider
-    )
-    return input_tokens - _MISC_BUFFER
+    return max_input_tokens - _MISC_BUFFER
 
 
 def build_citations_system_message(

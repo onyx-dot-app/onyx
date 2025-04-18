@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.constants import AuthType
+from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -15,6 +16,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
+from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
@@ -243,6 +245,37 @@ def fetch_llm_provider_view(
     if not provider_model:
         return None
     return LLMProviderView.from_model(provider_model)
+
+
+def fetch_max_input_tokens(
+    db_session: Session,
+    provider_name: str,
+    model_name: str,
+    output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
+) -> int:
+    llm_provider = db_session.scalar(
+        select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
+    )
+    if not llm_provider:
+        raise RuntimeError(f"No LLM Provider with the name {provider_name}")
+
+    model_configuration = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == llm_provider.id
+        )
+    )
+    if not model_configuration:
+        raise RuntimeError(f"No LLM model with the name {model_name} is configured")
+
+    return (
+        model_configuration.max_input_tokens
+        if model_configuration.max_input_tokens
+        else get_max_input_tokens(
+            model_provider=provider_name,
+            model_name=model_name,
+            output_tokens=output_tokens,
+        )
+    )
 
 
 def remove_embedding_provider(

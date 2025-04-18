@@ -81,6 +81,7 @@ from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
+from onyx.db.llm import fetch_max_input_tokens
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
@@ -1237,6 +1238,17 @@ def stream_chat_message_objects(
             ),
         )
 
+        max_input_tokens = fetch_max_input_tokens(
+            db_session=db_session,
+            provider_name=llm.config.model_provider,
+            model_name=llm.config.model_name,
+        )
+        fast_max_input_tokens = fetch_max_input_tokens(
+            db_session=db_session,
+            provider_name=fast_llm.config.model_provider,
+            model_name=fast_llm.config.model_name,
+        )
+
         prompt_builder = AnswerPromptBuilder(
             user_message=default_build_user_message(
                 user_query=final_msg.message,
@@ -1250,6 +1262,7 @@ def stream_chat_message_objects(
             raw_user_query=final_msg.message,
             raw_user_uploaded_files=latest_query_files or [],
             single_message_history=single_message_history,
+            max_input_tokens=max_input_tokens,
         )
 
         # LLM prompt building, response capturing, etc.
@@ -1272,6 +1285,8 @@ def stream_chat_message_objects(
                 )
             ),
             fast_llm=fast_llm,
+            max_input_tokens=max_input_tokens,
+            fast_max_input_tokens=fast_max_input_tokens,
             force_use_tool=force_use_tool,
             search_request=search_request,
             chat_session_id=chat_session_id,

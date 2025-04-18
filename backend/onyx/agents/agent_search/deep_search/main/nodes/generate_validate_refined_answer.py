@@ -264,17 +264,23 @@ def generate_validate_refined_answer(
         if AGENT_ANSWER_GENERATION_BY_FAST_LLM
         else graph_config.tooling.primary_llm
     )
+    max_input_tokens = (
+        graph_config.behavior.fast_max_input_tokens
+        if AGENT_ANSWER_GENERATION_BY_FAST_LLM
+        else graph_config.behavior.max_input_tokens
+    )
 
     relevant_docs_str = format_docs(answer_generation_documents.context_documents)
     relevant_docs_str = trim_prompt_piece(
-        model.config,
-        relevant_docs_str,
-        base_prompt
+        config=model.config,
+        prompt_piece=relevant_docs_str,
+        reserved_str=base_prompt
         + question
         + sub_question_answer_str
         + initial_answer
         + persona_contextualized_prompt
         + prompt_enrichment_components.history,
+        max_input_tokens=max_input_tokens,
     )
 
     msg = [

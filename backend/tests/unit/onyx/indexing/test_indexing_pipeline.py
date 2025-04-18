@@ -19,6 +19,7 @@ from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import IndexChunk
+from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.search_nlp_models import (
     ContentClassificationPrediction,
 )
@@ -311,8 +312,13 @@ def test_contextual_rag(
     )
     chunks = chunker.chunk(indexing_documents)
 
+    max_input_tokens = get_max_input_tokens(
+        model_provider=mock_llm.config.model_provider,
+        model_name=mock_llm.config.model_name,
+    )
+
     chunks = add_contextual_summaries(
-        chunks, mock_llm, llm_tokenizer, chunker.chunk_token_limit * 2
+        chunks, mock_llm, llm_tokenizer, chunker.chunk_token_limit * 2, max_input_tokens
     )
 
     assert len(chunks) == 5

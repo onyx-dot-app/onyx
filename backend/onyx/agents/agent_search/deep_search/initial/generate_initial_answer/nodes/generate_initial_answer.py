@@ -241,6 +241,11 @@ def generate_initial_answer(
             if AGENT_ANSWER_GENERATION_BY_FAST_LLM
             else graph_config.tooling.primary_llm
         )
+        max_input_tokens = (
+            graph_config.behavior.fast_max_input_tokens
+            if AGENT_ANSWER_GENERATION_BY_FAST_LLM
+            else graph_config.behavior.max_input_tokens
+        )
 
         doc_context = format_docs(answer_generation_documents.context_documents)
         doc_context = trim_prompt_piece(
@@ -253,6 +258,7 @@ def generate_initial_answer(
                 + prompt_enrichment_components.history
                 + prompt_enrichment_components.date_str
             ),
+            max_input_tokens=max_input_tokens,
         )
 
         msg = [

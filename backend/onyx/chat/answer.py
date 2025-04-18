@@ -46,6 +46,8 @@ class Answer:
         answer_style_config: AnswerStyleConfig,
         llm: LLM,
         fast_llm: LLM,
+        max_input_tokens: int,
+        fast_max_input_tokens: int,
         force_use_tool: ForceUseTool,
         search_request: SearchRequest,
         chat_session_id: UUID,
@@ -129,6 +131,8 @@ class Answer:
             skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
             allow_refinement=True,
             allow_agent_reranking=allow_agent_reranking,
+            max_input_tokens=max_input_tokens,
+            fast_max_input_tokens=fast_max_input_tokens,
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,

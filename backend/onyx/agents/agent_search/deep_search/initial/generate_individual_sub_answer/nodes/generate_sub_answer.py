@@ -110,6 +110,7 @@ def generate_sub_answer(
             docs=context_docs,
             persona_specification=persona_contextualized_prompt,
             config=fast_llm.config,
+            max_input_tokens=graph_config.behavior.fast_max_input_tokens,
         )
 
         dispatch_timings: list[float] = []

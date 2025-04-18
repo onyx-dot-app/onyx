@@ -111,6 +111,7 @@ def consolidate_research(
                 config=graph_config.tooling.primary_llm.config,
                 prompt_piece=dc_formatting_prompt,
                 reserved_str="",
+                max_input_tokens=graph_config.behavior.max_input_tokens,
             ),
         )
     ]
