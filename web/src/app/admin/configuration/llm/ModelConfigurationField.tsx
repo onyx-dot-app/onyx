@@ -35,7 +35,7 @@ function ModelConfigurationRow({
     <div key={index} className="flex flex-row w-full gap-4">
       <div
         className={`flex flex-[2] ${
-          input.touched && input.error ? "border-2 border-error rounded-md" : ""
+          input.touched && input.error ? "border-2 border-error rounded-lg" : ""
         }`}
       >
         <TextFormField
