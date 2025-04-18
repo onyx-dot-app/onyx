@@ -773,8 +773,10 @@ def get_personas_by_ids(
 def delete_persona_by_name(
     persona_name: str, db_session: Session, is_default: bool = True
 ) -> None:
-    stmt = delete(Persona).where(
-        Persona.name == persona_name, Persona.builtin_persona == is_default
+    stmt = (
+        update(Persona)
+        .where(Persona.name == persona_name, Persona.builtin_persona == is_default)
+        .values(deleted=True)
     )
 
     db_session.execute(stmt)
