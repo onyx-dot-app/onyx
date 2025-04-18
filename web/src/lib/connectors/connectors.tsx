@@ -1500,6 +1500,7 @@ export interface LoopioConfig {
 
 export interface FileConfig {
   file_locations: string[];
+  zip_metadata: Record<string, any>;
 }
 
 export interface ZulipConfig {

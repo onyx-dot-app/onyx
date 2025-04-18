@@ -334,9 +334,9 @@ class VespaIndex(DocumentIndex):
         }
 
         with open(schema_jinja_file, "r") as schema_f:
-            template_str = schema_f.read()
+            schema_template_str = schema_f.read()
 
-        template = jinja_env.from_string(template_str)
+        schema_template = jinja_env.from_string(schema_template_str)
 
         for i, index_name in enumerate(indices):
             embedding_dim = embedding_dims[i]
@@ -345,7 +345,7 @@ class VespaIndex(DocumentIndex):
                 f"Creating index: {index_name} with embedding dimension: {embedding_dim}"
             )
 
-            schema = template.render(
+            schema = schema_template.render(
                 multi_tenant=MULTI_TENANT,
                 schema_name=index_name,
                 dim=embedding_dim,

@@ -108,13 +108,18 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     r = get_redis_client(tenant_id=POSTGRES_DEFAULT_SCHEMA)
 
     # Log the role and slave count - being connected to a slave or slave count > 0 could be problematic
-    info: dict[str, Any] = cast(dict, r.info("replication"))
-    role: str = cast(str, info.get("role"))
-    connected_slaves: int = info.get("connected_slaves", 0)
+    replication_info: dict[str, Any] = cast(dict, r.info("replication"))
+    role: str = cast(str, replication_info.get("role", ""))
+    connected_slaves: int = replication_info.get("connected_slaves", 0)
 
     logger.info(
         f"Redis INFO REPLICATION: role={role} connected_slaves={connected_slaves}"
     )
+
+    memory_info: dict[str, Any] = cast(dict, r.info("memory"))
+    maxmemory_policy: str = cast(str, memory_info.get("maxmemory_policy", ""))
+
+    logger.info(f"Redis INFO MEMORY: maxmemory_policy={maxmemory_policy}")
 
     # For the moment, we're assuming that we are the only primary worker
     # that should be running.

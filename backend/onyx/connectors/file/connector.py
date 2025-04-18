@@ -1,5 +1,4 @@
 import os
-from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from pathlib import Path
@@ -23,7 +22,6 @@ from onyx.db.pg_file_store import get_pgfilestore_by_file_name
 from onyx.file_processing.extract_file_text import extract_text_and_images
 from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import is_accepted_file_ext
-from onyx.file_processing.extract_file_text import load_files_from_zip
 from onyx.file_processing.extract_file_text import OnyxExtensionType
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
@@ -32,30 +30,22 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _read_files_and_metadata(
+def _read_file_from_postgres(
     file_name: str,
     db_session: Session,
-) -> Iterator[tuple[str, IO, dict[str, Any]]]:
+) -> IO | None:
     """
-    Reads the file from Postgres. If the file is a .zip, yields subfiles.
+    Gets the content of a file from Postgres.
     """
     extension = get_file_ext(file_name)
-    metadata: dict[str, Any] = {}
-    directory_path = os.path.dirname(file_name)
 
     # Read file from Postgres store
     file_content = get_default_file_store(db_session).read_file(file_name, mode="b")
 
-    # If it's a zip, expand it
-    if extension == ".zip":
-        for file_info, subfile, metadata in load_files_from_zip(
-            file_content, ignore_dirs=True
-        ):
-            yield os.path.join(directory_path, file_info.filename), subfile, metadata
-    elif is_accepted_file_ext(extension, OnyxExtensionType.All):
-        yield file_name, file_content, metadata
-    else:
-        logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
+    if is_accepted_file_ext(extension, OnyxExtensionType.All):
+        return file_content
+    logger.warning(f"Skipping file '{file_name}' with extension '{extension}'")
+    return None
 
 
 def _create_image_section(
@@ -288,16 +278,23 @@ class LocalFileConnector(LoadConnector):
     def __init__(
         self,
         file_locations: list[Path | str],
+        zip_metadata: dict[str, Any],
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
         self.file_locations = [str(loc) for loc in file_locations]
         self.batch_size = batch_size
         self.pdf_pass: str | None = None
+        self.zip_metadata = zip_metadata
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.pdf_pass = credentials.get("pdf_password")
 
         return None
+
+    def _get_file_metadata(self, file_name: str) -> dict[str, Any]:
+        return self.zip_metadata.get(file_name, {}) or self.zip_metadata.get(
+            os.path.basename(file_name), {}
+        )
 
     def load_from_state(self) -> GenerateDocumentsOutput:
         """
@@ -310,35 +307,40 @@ class LocalFileConnector(LoadConnector):
             for file_path in self.file_locations:
                 current_datetime = datetime.now(timezone.utc)
 
-                files_iter = _read_files_and_metadata(
+                file_io = _read_file_from_postgres(
                     file_name=file_path,
                     db_session=db_session,
                 )
+                if not file_io:
+                    # typically an unsupported extension
+                    continue
 
-                for actual_file_name, file, metadata in files_iter:
-                    metadata["time_updated"] = metadata.get(
-                        "time_updated", current_datetime
-                    )
-                    new_docs = _process_file(
-                        file_name=actual_file_name,
-                        file=file,
-                        metadata=metadata,
-                        pdf_pass=self.pdf_pass,
-                        db_session=db_session,
-                    )
-                    documents.extend(new_docs)
+                metadata = self._get_file_metadata(file_path)
+                metadata["time_updated"] = metadata.get(
+                    "time_updated", current_datetime
+                )
+                new_docs = _process_file(
+                    file_name=file_path,
+                    file=file_io,
+                    metadata=metadata,
+                    pdf_pass=self.pdf_pass,
+                    db_session=db_session,
+                )
+                documents.extend(new_docs)
 
-                    if len(documents) >= self.batch_size:
-                        yield documents
+                if len(documents) >= self.batch_size:
+                    yield documents
 
-                        documents = []
+                    documents = []
 
             if documents:
                 yield documents
 
 
 if __name__ == "__main__":
-    connector = LocalFileConnector(file_locations=[os.environ["TEST_FILE"]])
+    connector = LocalFileConnector(
+        file_locations=[os.environ["TEST_FILE"]], zip_metadata={}
+    )
     connector.load_credentials({"pdf_password": os.environ.get("PDF_PASSWORD")})
     doc_batches = connector.load_from_state()
     for batch in doc_batches:
