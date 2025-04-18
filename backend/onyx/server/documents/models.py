@@ -293,7 +293,13 @@ class CCPairFullInfo(BaseModel):
             ),
             last_pruned=cc_pair_model.last_pruned,
             last_permission_sync=(
-                last_index_attempt.time_started if last_index_attempt else None
+                min(
+                    cc_pair_model.last_time_perm_sync,
+                    cc_pair_model.last_time_external_group_sync,
+                )
+                if cc_pair_model.last_time_perm_sync
+                and cc_pair_model.last_time_external_group_sync
+                else None
             ),
             overall_indexing_speed=overall_indexing_speed,
             latest_checkpoint_description=None,
