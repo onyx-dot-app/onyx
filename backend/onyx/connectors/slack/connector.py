@@ -108,14 +108,13 @@ def get_channels(
             channel_types=channel_types,
         )
     except SlackApiError as e:
-        logger.info(
-            f"Unable to fetch private channels due to: {e}. Trying again without private channels."
-        )
-        if get_public:
-            channel_types = ["public_channel"]
-        else:
-            logger.warning("No channels to fetch.")
+        msg = f"Unable to fetch private channels due to: {e}."
+        if not get_public:
+            logger.warning(msg + " Public channels are not enabled.")
             return []
+
+        logger.warning(msg + " Trying again with public channels only.")
+        channel_types = ["public_channel"]
         channels = _collect_paginated_channels(
             client=client,
             exclude_archived=exclude_archived,
@@ -256,7 +255,6 @@ def default_msg_filter(message: MessageType) -> bool:
     # Don't keep messages from bots
     if message.get("bot_id") or message.get("app_id"):
         bot_profile_name = message.get("bot_profile", {}).get("name")
-        print(f"bot_profile_name: {bot_profile_name}")
         if bot_profile_name == "DanswerBot Testing":
             return False
         return True
@@ -615,6 +613,10 @@ class SlackConnector(
             filtered_channels = filter_channels(
                 raw_channels, self.channels, self.channel_regex_enabled
             )
+            logger.info(
+                f"Channels: all={len(raw_channels)} post_filtering={len(filtered_channels)}"
+            )
+
             checkpoint.channel_ids = [c["id"] for c in filtered_channels]
             if len(filtered_channels) == 0:
                 checkpoint.has_more = False
@@ -645,6 +647,7 @@ class SlackConnector(
             )
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
+            num_threads_start = len(seen_thread_ts)
             # Process messages in parallel using ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
                 futures: list[Future[ProcessedSlackMessage]] = []
@@ -678,12 +681,12 @@ class SlackConnector(
                         if thread_or_message_ts not in seen_thread_ts:
                             yield doc
 
-                        assert (
-                            thread_or_message_ts
-                        ), "found non-None doc with None thread_or_message_ts"
                         seen_thread_ts.add(thread_or_message_ts)
                     elif failure:
                         yield failure
+
+            num_threads_processed = len(seen_thread_ts) - num_threads_start
+            logger.info(f"Processed {num_threads_processed} threads.")
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)
             checkpoint.channel_completion_map[channel["id"]] = new_latest

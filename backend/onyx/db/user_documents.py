@@ -40,6 +40,8 @@ def create_user_files(
     db_session: Session,
     link_url: str | None = None,
 ) -> list[UserFile]:
+    # NOTE: At the moment, zip metadata is not used for user files.
+    # Should revisit to decide whether this should be a feature.
     upload_response = upload_files(files, db_session)
     user_files = []
 
@@ -105,6 +107,7 @@ def create_file_connector_credential(
         input_type=InputType.LOAD_STATE,
         connector_specific_config={
             "file_locations": [user_file.file_id],
+            "zip_metadata": {},
         },
         refresh_freq=None,
         prune_freq=None,

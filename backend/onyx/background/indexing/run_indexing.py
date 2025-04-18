@@ -451,6 +451,11 @@ def _run_indexing(
                     if callback.should_stop():
                         raise ConnectorStopSignal("Connector stop signal detected")
 
+                    # NOTE: this progress callback runs on every loop. We've seen cases
+                    # where we loop many times with no new documents and eventually time
+                    # out, so only doing the callback after indexing isn't sufficient.
+                    callback.progress("_run_indexing", 0)
+
                 # TODO: should we move this into the above callback instead?
                 with get_session_with_current_tenant() as db_session_temp:
                     # will exception if the connector/index attempt is marked as paused/failed
