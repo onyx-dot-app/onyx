@@ -18,7 +18,7 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page.waitForSelector("#onyx-chat-input-textarea", { timeout: 10000 });
   await expect(page.url()).toBe("http://localhost:3000/chat");
 
-  // Configure user  settings: Set default model to o3 Mini
+  // Configure user settings: Set default model to o3 Mini
   await page.locator("#onyx-user-dropdown").click();
   await page.getByText("User Settings").click();
   await page.getByRole("combobox").nth(1).click();
