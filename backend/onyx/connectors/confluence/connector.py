@@ -397,7 +397,9 @@ class ConfluenceConnector(
                 )
                 continue
 
-            logger.info(f"Processing attachment: {attachment['title']}")
+            logger.info(
+                f"Processing attachment: {attachment['title']} attached to page {page['title']}"
+            )
 
             # Attempt to get textual content or image summarization:
             object_url = build_confluence_document_id(
