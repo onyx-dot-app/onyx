@@ -56,7 +56,7 @@ function ModelConfigurationRow({
         />
       </div>
       <div className="flex items-end">
-        <div className={`${index != 0 ? "" : "opacity-20"}`}>
+        <div className={`${index != 0 ? "" : "opacity-0"}`}>
           <FiX
             className="w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
             onClick={() => {
