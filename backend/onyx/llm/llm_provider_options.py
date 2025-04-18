@@ -129,6 +129,11 @@ GIGACHAT_MODEL_NAMES = [
     "GigaChat-Max",
 ]
 
+YANDEXGPT_PROVIDER_NAME = "yandexgpt"
+YANDEXGPT_MODEL_NAMES = [
+    "yandexgpt-lite",
+]
+
 
 _PROVIDER_TO_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
@@ -136,6 +141,7 @@ _PROVIDER_TO_MODELS_MAP = {
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
     GIGACHAT_PROVIDER_NAME: GIGACHAT_MODEL_NAMES,
+    YANDEXGPT_PROVIDER_NAME: YANDEXGPT_MODEL_NAMES,
 }
 
 
@@ -157,6 +163,18 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             deployment_name_required=True,
             single_model_supported=True,
             default_model="GigaChat"
+        ),
+        WellKnownLLMProviderDescriptor(
+            name="yandexgpt",
+            display_name="YandexGPT",
+            api_key_required=True,
+            api_base_required=True,
+            api_version_required=False,
+            custom_config_keys=[
+                CustomConfigKey(name="YANDEX_ID_KEY", display_name="Yandex ID Key"),
+            ],
+            llm_names=fetch_models_for_provider(YANDEXGPT_PROVIDER_NAME),
+            default_model="yandexgpt-lite",
         ),
         WellKnownLLMProviderDescriptor(
             name=OPENAI_PROVIDER_NAME,

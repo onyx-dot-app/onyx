@@ -17,6 +17,7 @@ from onyx.llm.gigachat_llm import GigachatModelServer
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.utils import model_supports_image_input
+from onyx.llm.yandex_llm import YandexGPTModelServer
 from onyx.server.manage.llm.models import LLMProvider
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -248,6 +249,12 @@ def get_llm(
             endpoint=api_base,
             model=model,
             custom_config=custom_config
+        )
+    elif provider == "yandexgpt":
+        return YandexGPTModelServer(
+            api_key=api_key,
+            endpoint=api_base,
+            custom_config=custom_config,
         )
     return DefaultMultiLLM(
         model_provider=provider,
