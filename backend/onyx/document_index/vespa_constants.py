@@ -5,10 +5,6 @@ from onyx.configs.app_configs import VESPA_PORT
 from onyx.configs.app_configs import VESPA_TENANT_PORT
 from onyx.configs.constants import SOURCE_TYPE
 
-DOCUMENT_REPLACEMENT_PAT = "DOCUMENT_REPLACEMENT"
-SEARCH_THREAD_NUMBER_PAT = "SEARCH_THREAD_NUMBER"
-DATE_REPLACEMENT = "DATE_REPLACEMENT"
-
 # config server
 
 

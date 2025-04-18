@@ -62,13 +62,10 @@ from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DATE_REPLACEMENT
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import DOCUMENT_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
 from onyx.document_index.vespa_constants import USER_FILE
 from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
@@ -179,6 +176,8 @@ class VespaIndex(DocumentIndex):
             )
             return None
 
+        jinja_env = jinja2.Environment()
+
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
         logger.notice(f"Deploying Vespa application package to {deploy_url}")
 
@@ -188,19 +187,21 @@ class VespaIndex(DocumentIndex):
         schema_jinja_file = os.path.join(
             vespa_schema_path, "schemas", VespaIndex.VESPA_SCHEMA_JINJA_FILENAME
         )
-        services_file = os.path.join(vespa_schema_path, "services.xml")
-        overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
-
-        with open(services_file, "r") as services_f:
-            services_template = services_f.read()
-
-        schema_names = [self.index_name, self.secondary_index_name]
-
-        doc_lines = _create_document_xml_lines(schema_names)
-        services = services_template.replace(DOCUMENT_REPLACEMENT_PAT, doc_lines)
-        services = services.replace(
-            SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
+        services_jinja_file = os.path.join(vespa_schema_path, "services.xml.jinja")
+        overrides_jinja_file = os.path.join(
+            vespa_schema_path, "validation-overrides.xml.jinja"
         )
+
+        with open(services_jinja_file, "r") as services_f:
+            schema_names = [self.index_name, self.secondary_index_name]
+            doc_lines = _create_document_xml_lines(schema_names)
+
+            services_template_str = services_f.read()
+            services_template = jinja_env.from_string(services_template_str)
+            services = services_template.render(
+                document_elements=doc_lines,
+                num_search_threads=str(VESPA_SEARCHER_THREADS),
+            )
 
         kv_store = get_shared_kv_store()
 
@@ -210,16 +211,18 @@ class VespaIndex(DocumentIndex):
         except Exception:
             logger.debug("Could not load the reindexing flag. Using ngrams")
 
-        with open(overrides_file, "r") as overrides_f:
-            overrides_template = overrides_f.read()
-
         # Vespa requires an override to erase data including the indices we're no longer using
         # It also has a 30 day cap from current so we set it to 7 dynamically
-        now = datetime.now()
-        date_in_7_days = now + timedelta(days=7)
-        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+        with open(overrides_jinja_file, "r") as overrides_f:
+            overrides_template_str = overrides_f.read()
+            overrides_template = jinja_env.from_string(overrides_template_str)
 
-        overrides = overrides_template.replace(DATE_REPLACEMENT, formatted_date)
+            now = datetime.now()
+            date_in_7_days = now + timedelta(days=7)
+            formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+            overrides = overrides_template.render(
+                until_date=formatted_date,
+            )
 
         zip_dict = {
             "services.xml": services.encode("utf-8"),
@@ -229,7 +232,6 @@ class VespaIndex(DocumentIndex):
         with open(schema_jinja_file, "r") as schema_f:
             template_str = schema_f.read()
 
-        jinja_env = jinja2.Environment()
         template = jinja_env.from_string(template_str)
         schema = template.render(
             multi_tenant=MULTI_TENANT,
@@ -286,23 +288,24 @@ class VespaIndex(DocumentIndex):
         schema_jinja_file = os.path.join(
             vespa_schema_path, "schemas", VespaIndex.VESPA_SCHEMA_JINJA_FILENAME
         )
-        services_file = os.path.join(vespa_schema_path, "services.xml")
-        overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
+        services_jinja_file = os.path.join(vespa_schema_path, "services.xml.jinja")
+        overrides_jinja_file = os.path.join(
+            vespa_schema_path, "validation-overrides.xml.jinja"
+        )
 
-        with open(services_file, "r") as services_f:
-            services_template = services_f.read()
+        jinja_env = jinja2.Environment()
 
         # Generate schema names from index settings
-        schema_names = [index_name for index_name in indices]
+        with open(services_jinja_file, "r") as services_f:
+            schema_names = [index_name for index_name in indices]
+            doc_lines = _create_document_xml_lines(schema_names)
 
-        full_schemas = schema_names
-
-        doc_lines = _create_document_xml_lines(full_schemas)
-
-        services = services_template.replace(DOCUMENT_REPLACEMENT_PAT, doc_lines)
-        services = services.replace(
-            SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
-        )
+            services_template_str = services_f.read()
+            services_template = jinja_env.from_string(services_template_str)
+            services = services_template.render(
+                document_elements=doc_lines,
+                num_search_threads=str(VESPA_SEARCHER_THREADS),
+            )
 
         kv_store = get_shared_kv_store()
 
@@ -312,23 +315,23 @@ class VespaIndex(DocumentIndex):
         except Exception:
             logger.debug("Could not load the reindexing flag. Using ngrams")
 
-        with open(overrides_file, "r") as overrides_f:
-            overrides_template = overrides_f.read()
-
         # Vespa requires an override to erase data including the indices we're no longer using
         # It also has a 30 day cap from current so we set it to 7 dynamically
-        now = datetime.now()
-        date_in_7_days = now + timedelta(days=7)
-        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+        with open(overrides_jinja_file, "r") as overrides_f:
+            overrides_template_str = overrides_f.read()
+            overrides_template = jinja_env.from_string(overrides_template_str)
 
-        overrides = overrides_template.replace(DATE_REPLACEMENT, formatted_date)
+            now = datetime.now()
+            date_in_7_days = now + timedelta(days=7)
+            formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+            overrides = overrides_template.render(
+                until_date=formatted_date,
+            )
 
         zip_dict = {
             "services.xml": services.encode("utf-8"),
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
-
-        jinja_env = jinja2.Environment()
 
         with open(schema_jinja_file, "r") as schema_f:
             template_str = schema_f.read()
