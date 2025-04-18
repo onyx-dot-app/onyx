@@ -66,7 +66,9 @@ export function CustomLLMProviderUpdateForm({
     default_model_name: existingLlmProvider?.default_model_name ?? null,
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ?? null,
-    model_configurations: existingLlmProvider?.model_configurations ?? [],
+    model_configurations: existingLlmProvider?.model_configurations ?? [
+      { name: "", is_visible: true },
+    ],
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],

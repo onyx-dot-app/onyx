@@ -1,17 +1,76 @@
 "use client";
 
-import {
-  ArrayHelpers,
-  ErrorMessage,
-  Field,
-  FieldArray,
-  FormikProps,
-} from "formik";
+import { ArrayHelpers, FieldArray, FormikProps, useField } from "formik";
 import { ModelConfiguration } from "./interfaces";
-import { SubLabel, TextFormField } from "@/components/admin/connectors/Field";
+import {
+  ManualErrorMessage,
+  SubLabel,
+  TextFormField,
+} from "@/components/admin/connectors/Field";
 import { FiPlus, FiX } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useEffect, useState } from "react";
+
+function ModelConfigurationRow({
+  name,
+  index,
+  arrayHelpers,
+  formikProps,
+  setError,
+}: {
+  name: string;
+  index: number;
+  arrayHelpers: ArrayHelpers;
+  formikProps: FormikProps<{ model_configurations: ModelConfiguration[] }>;
+  setError: (value: string | null) => void;
+}) {
+  const [, input] = useField(`${name}[${index}].name`);
+  useEffect(() => {
+    if (!input.touched) return;
+    setError(input.error ?? null);
+  }, [input.touched, input.error]);
+
+  return (
+    <div key={index} className="flex flex-row w-full gap-4">
+      <div
+        className={`flex flex-[2] ${
+          input.touched && input.error ? "border-2 border-error rounded-md" : ""
+        }`}
+      >
+        <TextFormField
+          name={`${name}[${index}].name`}
+          placeholder={`model-name-${index + 1}`}
+          label=""
+          hideError
+        />
+      </div>
+      <div className="flex flex-[1]">
+        <TextFormField
+          name={`${name}[${index}].max_input_tokens`}
+          label=""
+          type="number"
+          min={1}
+          placeholder="Default"
+          hideError
+        />
+      </div>
+      <div className="flex items-end">
+        <div className={`${index != 0 ? "" : "opacity-20"}`}>
+          <FiX
+            className="w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
+            onClick={() => {
+              if (formikProps.values.model_configurations.length > 1) {
+                setError(null);
+                arrayHelpers.remove(index);
+              }
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ModelConfigurationField({
   name,
@@ -20,6 +79,9 @@ export function ModelConfigurationField({
   name: string;
   formikProps: FormikProps<{ model_configurations: ModelConfiguration[] }>;
 }) {
+  const [errorMap, setErrorMap] = useState<{ [index: number]: string }>({});
+  const [finalError, setFinalError] = useState<string | undefined>();
+
   return (
     <div className="pb-5 flex flex-col w-full">
       <div className="flex flex-col">
@@ -39,42 +101,30 @@ export function ModelConfigurationField({
                 <div className="w-10" />
               </div>
               {formikProps.values.model_configurations.map((_, index) => (
-                <div key={index} className="flex flex-row w-full gap-4">
-                  <div className="flex flex-[2]">
-                    <TextFormField
-                      name={`${name}[${index}].name`}
-                      placeholder={`model-name-${index + 1}`}
-                      label=""
-                      hideError
-                    />
-                  </div>
-                  <div className="flex flex-[1]">
-                    <TextFormField
-                      name={`${name}[${index}].max_input_tokens`}
-                      label=""
-                      type="number"
-                      min={1}
-                      placeholder="Default"
-                      hideError
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <div className={`${index != 0 ? "" : "opacity-20"}`}>
-                      <FiX
-                        className="w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
-                        onClick={() => {
-                          if (
-                            formikProps.values.model_configurations.length > 1
-                          ) {
-                            arrayHelpers.remove(index);
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <ModelConfigurationRow
+                  key={index}
+                  name={name}
+                  formikProps={formikProps}
+                  arrayHelpers={arrayHelpers}
+                  index={index}
+                  setError={(message: string | null) => {
+                    const newErrors = { ...errorMap };
+                    if (message) {
+                      newErrors[index] = message;
+                    } else {
+                      delete newErrors[index];
+                    }
+                    setErrorMap(newErrors);
+                    setFinalError(
+                      Object.values(newErrors).filter((item) => item)[0]
+                    );
+                  }}
+                />
               ))}
             </div>
+            {finalError && (
+              <ManualErrorMessage>{finalError}</ManualErrorMessage>
+            )}
             <div>
               <Button
                 onClick={() => {
