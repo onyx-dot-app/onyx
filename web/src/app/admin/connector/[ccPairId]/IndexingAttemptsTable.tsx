@@ -25,7 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { FaBatteryFull, FaDownload, FaBarsProgress } from "react-icons/fa6";
+import { FaBarsProgress } from "react-icons/fa6";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
