@@ -30,19 +30,22 @@ from typing import TypeVar
 T = TypeVar("T")
 
 
+def _multiproc_wrapper(
+    task: Callable[..., T], kwargs: dict[str, Any], q: Queue
+) -> None:
+    try:
+        result = task(**kwargs)
+        q.put(("success", result))
+    except Exception:
+        q.put(("error", traceback.format_exc()))
+
+
 def run_with_timeout_multiproc(
     task: Callable[..., T], timeout: int, kwargs: dict[str, Any]
 ) -> T:
-    def wrapper(q: Queue) -> None:
-        try:
-            result = task(**kwargs)
-            q.put(("success", result))
-        except Exception:
-            q.put(("error", traceback.format_exc()))
-
     ctx = multiprocessing.get_context("spawn")
     q: Queue = ctx.Queue()
-    p = ctx.Process(target=wrapper, args=(q,))
+    p = ctx.Process(target=_multiproc_wrapper, args=(q,))
     p.start()
     p.join(timeout)
 
