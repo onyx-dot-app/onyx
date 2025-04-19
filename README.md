@@ -2,6 +2,10 @@
 
 <a name="readme-top"></a>
 
+<p align="right">
+English | <a href="https://github.com/onyx-dot-app/onyx/blob/main/README_ja.md">日本語</a>
+</p>
+
 <h2 align="center">
 <a href="https://www.onyx.app/"> <img width="50%" src="https://github.com/onyx-dot-app/onyx/blob/logo/OnyxLogoCropped.jpg?raw=true)" /></a>
 </h2>
