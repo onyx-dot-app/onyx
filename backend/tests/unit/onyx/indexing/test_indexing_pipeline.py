@@ -19,6 +19,7 @@ from onyx.indexing.indexing_pipeline import filter_documents
 from onyx.indexing.indexing_pipeline import process_image_sections
 from onyx.indexing.models import ChunkEmbedding
 from onyx.indexing.models import IndexChunk
+from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.search_nlp_models import (
     ContentClassificationPrediction,
 )
@@ -302,6 +303,9 @@ def test_contextual_rag(
     llm_tokenizer = embedder.embedding_model.tokenizer
 
     mock_llm = Mock()
+    mock_llm.config.max_input_tokens = get_max_input_tokens(
+        model_provider="openai", model_name="gtp-4o"
+    )
     mock_llm.invoke = mock_llm_invoke
 
     chunker = Chunker(
