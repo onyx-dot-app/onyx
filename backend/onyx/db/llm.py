@@ -2,6 +2,7 @@ from sqlalchemy import delete
 from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AUTH_TYPE
@@ -16,7 +17,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
-from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
@@ -254,27 +255,17 @@ def fetch_max_input_tokens(
     output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 ) -> int:
     llm_provider = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.provider == provider_name)
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider_name)
+        .options(selectinload(LLMProviderModel.model_configurations))
     )
     if not llm_provider:
         raise RuntimeError(f"No LLM Provider with the name {provider_name}")
 
-    model_configuration = db_session.scalar(
-        select(ModelConfiguration).where(
-            ModelConfiguration.llm_provider_id == llm_provider.id
-        )
-    )
-    if not model_configuration:
-        raise RuntimeError(f"No LLM model with the name {model_name} is configured")
-
-    return (
-        model_configuration.max_input_tokens
-        if model_configuration.max_input_tokens
-        else get_max_input_tokens(
-            model_provider=provider_name,
-            model_name=model_name,
-            output_tokens=output_tokens,
-        )
+    llm_provider_view = LLMProviderView.from_model(llm_provider)
+    return get_max_input_tokens_from_llm_provider(
+        llm_provider=llm_provider_view,
+        model_name=model_name,
     )
 
 

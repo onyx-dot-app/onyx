@@ -22,7 +22,7 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
-from onyx.llm.factory import get_model_configuration_from_llm_provider
+from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
@@ -373,7 +373,7 @@ def get_provider_contextual_cost(
                 api_base=provider.api_base,
                 api_version=provider.api_version,
                 custom_config=provider.custom_config,
-                max_input_tokens=get_model_configuration_from_llm_provider(
+                max_input_tokens=get_max_input_tokens_from_llm_provider(
                     llm_provider=llm_provider, model_name=model_configuration.name
                 ),
             )

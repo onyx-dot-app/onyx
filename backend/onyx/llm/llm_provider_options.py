@@ -67,6 +67,7 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-3.5-turbo-16k-0613",
     "gpt-3.5-turbo-0301",
 ]
+OPEN_AI_VISIBLE_MODEL_NAMES = ["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"]
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 # need to remove all the weird "bedrock/eu-central-1/anthropic.claude-v1" named
@@ -90,6 +91,10 @@ ANTHROPIC_MODEL_NAMES = [
     for model in litellm.anthropic_models
     if model not in IGNORABLE_ANTHROPIC_MODELS
 ][::-1]
+ANTHROPIC_VISIBLE_MODEL_NAMES = [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-7-sonnet-20250219",
+]
 
 AZURE_PROVIDER_NAME = "azure"
 

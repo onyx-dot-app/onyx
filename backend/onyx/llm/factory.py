@@ -87,7 +87,7 @@ def get_llms_for_persona(
             temperature=temperature_override,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
-            max_input_tokens=get_model_configuration_from_llm_provider(
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
                 llm_provider=llm_provider, model_name=model
             ),
         )
@@ -124,7 +124,7 @@ def get_default_llm_with_vision(
             temperature=temperature,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
-            max_input_tokens=get_model_configuration_from_llm_provider(
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
                 llm_provider=provider, model_name=model
             ),
         )
@@ -203,13 +203,13 @@ def llm_from_provider(
         temperature=temperature,
         additional_headers=additional_headers,
         long_term_logger=long_term_logger,
-        max_input_tokens=get_model_configuration_from_llm_provider(
+        max_input_tokens=get_max_input_tokens_from_llm_provider(
             llm_provider=llm_provider, model_name=model_name
         ),
     )
 
 
-def get_model_configuration_from_llm_provider(
+def get_max_input_tokens_from_llm_provider(
     llm_provider: LLMProviderView,
     model_name: str,
 ) -> int:
