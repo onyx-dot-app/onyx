@@ -50,6 +50,17 @@ class ScrapeSessionContext:
     def __init__(self, base_url: str, to_visit: list[str]):
         self.base_url = base_url
         self.to_visit = to_visit
+        self.visited_links: set[str] = set()
+        self.content_hashes: set[int] = set()
+
+        self.doc_batch: list[Document] = []
+
+        self.at_least_one_doc: bool = False
+        self.last_error: str | None = None
+        self.needs_retry: bool = False
+
+        self.playwright: Playwright | None = None
+        self.playwright_context: BrowserContext | None = None
 
     def initialize(self) -> None:
         self.stop()
@@ -63,21 +74,6 @@ class ScrapeSessionContext:
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
-
-    base_url: str
-    to_visit: list[str]
-    playwright: Playwright | None = None
-    playwright_context: BrowserContext | None = None
-
-    visited_links: set[str] = set()
-    content_hashes: set[int] = set()
-
-    doc_batch: list[Document] = []
-
-    at_least_one_doc: bool = False
-    last_error: str | None = None
-
-    needs_retry: bool = False
 
 
 class ScrapeResult:
