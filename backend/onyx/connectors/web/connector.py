@@ -565,22 +565,19 @@ class WebConnector(LoadConnector):
 
             # If we got here, the request was successful
             if self.scroll_before_scraping:
-                did_scroll = False
                 scroll_attempts = 0
                 previous_height = page.evaluate("document.body.scrollHeight")
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    # wait for the content to load if we scrolled
                     page.wait_for_load_state("networkidle", timeout=30000)
+                    time.sleep(0.5)  # let javascript run
+
                     new_height = page.evaluate("document.body.scrollHeight")
                     if new_height == previous_height:
                         break  # Stop scrolling when no more content is loaded
                     previous_height = new_height
                     scroll_attempts += 1
-                    did_scroll = True
-
-                # wait for the content to load if we scrolled
-                if did_scroll:
-                    time.sleep(0.5)
 
             content = page.content()
             soup = BeautifulSoup(content, "html.parser")
