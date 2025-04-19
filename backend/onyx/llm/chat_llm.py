@@ -249,6 +249,7 @@ class DefaultMultiLLM(LLM):
         api_key: str | None,
         model_provider: str,
         model_name: str,
+        max_input_tokens: int,
         timeout: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
@@ -278,6 +279,7 @@ class DefaultMultiLLM(LLM):
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._long_term_logger = long_term_logger
+        self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
         # Create a dictionary for model-specific arguments if it's None
@@ -458,6 +460,7 @@ class DefaultMultiLLM(LLM):
             api_version=self._api_version,
             deployment_name=self._deployment_name,
             credentials_file=credentials_file,
+            max_input_tokens=self._max_input_tokens,
         )
 
     def _invoke_implementation(

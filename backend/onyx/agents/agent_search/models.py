@@ -68,8 +68,6 @@ class GraphSearchConfig(BaseModel):
     allow_refinement: bool = True
     skip_gen_ai_answer_generation: bool = False
     allow_agent_reranking: bool = False
-    max_input_tokens: int
-    fast_max_input_tokens: int
 
 
 class GraphConfig(BaseModel):

@@ -96,11 +96,10 @@ class AnswerPromptBuilder:
         llm_config: LLMConfig,
         raw_user_query: str,
         raw_user_uploaded_files: list[InMemoryChatFile],
-        max_input_tokens: int,
         single_message_history: str | None = None,
         system_message: SystemMessage | None = None,
     ) -> None:
-        self.max_tokens = compute_max_llm_input_tokens(max_input_tokens)
+        self.max_tokens = compute_max_llm_input_tokens(llm_config)
 
         llm_tokenizer = get_tokenizer(
             provider_type=llm_config.model_provider,

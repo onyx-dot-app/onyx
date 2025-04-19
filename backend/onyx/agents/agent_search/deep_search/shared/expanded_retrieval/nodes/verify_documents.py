@@ -74,7 +74,6 @@ def verify_documents(
         config=fast_llm.config,
         prompt_piece=document_content,
         reserved_str=DOCUMENT_VERIFICATION_PROMPT + question,
-        max_input_tokens=graph_config.behavior.fast_max_input_tokens,
     )
 
     msg = [

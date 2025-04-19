@@ -56,7 +56,6 @@ _MISC_BUFFER = 40
 def compute_max_document_tokens(
     prompt_config: PromptConfig,
     llm_config: LLMConfig,
-    max_input_tokens: int,
     actual_user_input: str | None = None,
     tool_token_count: int = 0,
 ) -> int:
@@ -81,7 +80,7 @@ def compute_max_document_tokens(
     )
 
     return (
-        max_input_tokens
+        llm_config.max_input_tokens
         - prompt_tokens
         - user_input_tokens
         - tool_token_count
@@ -93,20 +92,18 @@ def compute_max_document_tokens_for_persona(
     db_session: Session,
     persona: Persona,
     actual_user_input: str | None = None,
-    max_llm_token_override: int | None = None,
 ) -> int:
     prompt = persona.prompts[0] if persona.prompts else get_default_prompt(db_session)
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(prompt),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
-        max_input_tokens=max_llm_token_override,
     )
 
 
-def compute_max_llm_input_tokens(max_input_tokens: int) -> int:
+def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
     """Maximum tokens allows in the input to the LLM (of any type)."""
-    return max_input_tokens - _MISC_BUFFER
+    return llm_config.max_input_tokens - _MISC_BUFFER
 
 
 def build_citations_system_message(

@@ -79,7 +79,6 @@ def extract_entities_terms(
         reserved_str=ENTITY_TERM_EXTRACTION_PROMPT
         + question
         + ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE,
-        max_input_tokens=graph_config.behavior.fast_max_input_tokens,
     )
 
     msg = [

@@ -33,7 +33,6 @@ def build_sub_question_answer_prompt(
     docs: list[InferenceSection],
     persona_specification: str,
     config: LLMConfig,
-    max_input_tokens: int,
 ) -> list[SystemMessage | HumanMessage | AIMessage | ToolMessage]:
     system_message = SystemMessage(
         content=persona_specification,
@@ -47,7 +46,6 @@ def build_sub_question_answer_prompt(
         config=config,
         prompt_piece=docs_str,
         reserved_str=SUB_QUESTION_RAG_PROMPT + question + original_question + date_str,
-        max_input_tokens=max_input_tokens,
     )
     human_message = HumanMessage(
         content=SUB_QUESTION_RAG_PROMPT.format(
@@ -61,12 +59,10 @@ def build_sub_question_answer_prompt(
     return [system_message, human_message]
 
 
-def trim_prompt_piece(
-    config: LLMConfig, prompt_piece: str, reserved_str: str, max_input_tokens: int
-) -> str:
+def trim_prompt_piece(config: LLMConfig, prompt_piece: str, reserved_str: str) -> str:
     # no need to trim if a conservative estimate of one token
     # per character is already less than the max tokens
-    if len(prompt_piece) + len(reserved_str) < max_input_tokens:
+    if len(prompt_piece) + len(reserved_str) < config.max_input_tokens:
         return prompt_piece
 
     llm_tokenizer = get_tokenizer(
@@ -77,7 +73,8 @@ def trim_prompt_piece(
     # slightly conservative trimming
     return tokenizer_trim_content(
         content=prompt_piece,
-        desired_length=max_input_tokens - len(llm_tokenizer.encode(reserved_str)),
+        desired_length=config.max_input_tokens
+        - len(llm_tokenizer.encode(reserved_str)),
         tokenizer=llm_tokenizer,
     )
 

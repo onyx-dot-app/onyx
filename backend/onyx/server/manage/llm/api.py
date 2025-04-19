@@ -14,6 +14,7 @@ from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_llm_providers_for_user
+from onyx.db.llm import fetch_max_input_tokens
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
@@ -21,6 +22,7 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
+from onyx.llm.factory import get_model_configuration_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
 from onyx.llm.utils import get_llm_contextual_cost
@@ -71,6 +73,12 @@ def test_llm_configuration(
         if existing_provider:
             test_api_key = existing_provider.api_key
 
+    max_input_tokens = fetch_max_input_tokens(
+        db_session=db_session,
+        provider_name=test_llm_request.provider,
+        model_name=test_llm_request.name or test_llm_request.default_model_name,
+    )
+
     llm = get_llm(
         provider=test_llm_request.provider,
         model=test_llm_request.default_model_name,
@@ -79,6 +87,7 @@ def test_llm_configuration(
         api_version=test_llm_request.api_version,
         custom_config=test_llm_request.custom_config,
         deployment_name=test_llm_request.deployment_name,
+        max_input_tokens=max_input_tokens,
     )
 
     functions_with_args: list[tuple[Callable, tuple]] = [(test_llm, (llm,))]
@@ -95,6 +104,7 @@ def test_llm_configuration(
             api_version=test_llm_request.api_version,
             custom_config=test_llm_request.custom_config,
             deployment_name=test_llm_request.deployment_name,
+            max_input_tokens=max_input_tokens,
         )
         functions_with_args.append((test_llm, (fast_llm,)))
 
@@ -354,6 +364,7 @@ def get_provider_contextual_cost(
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:
+            llm_provider = LLMProviderView.from_model(provider)
             llm = get_llm(
                 provider=provider.provider,
                 model=model_configuration.name,
@@ -362,7 +373,9 @@ def get_provider_contextual_cost(
                 api_base=provider.api_base,
                 api_version=provider.api_version,
                 custom_config=provider.custom_config,
-                max_input_tokens=model_configuration.max_input_tokens,
+                max_input_tokens=get_model_configuration_from_llm_provider(
+                    llm_provider=llm_provider, model_name=model_configuration.name
+                ),
             )
             cost = get_llm_contextual_cost(llm)
             costs.append(

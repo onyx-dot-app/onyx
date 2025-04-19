@@ -15,6 +15,7 @@ from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
@@ -86,6 +87,9 @@ def get_llms_for_persona(
             temperature=temperature_override,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            max_input_tokens=get_model_configuration_from_llm_provider(
+                llm_provider=llm_provider, model_name=model
+            ),
         )
 
     return _create_llm(model), _create_llm(fast_model)
@@ -120,6 +124,9 @@ def get_default_llm_with_vision(
             temperature=temperature,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            max_input_tokens=get_model_configuration_from_llm_provider(
+                llm_provider=provider, model_name=model
+            ),
         )
 
     with get_session_with_current_tenant() as db_session:
@@ -196,6 +203,27 @@ def llm_from_provider(
         temperature=temperature,
         additional_headers=additional_headers,
         long_term_logger=long_term_logger,
+        max_input_tokens=get_model_configuration_from_llm_provider(
+            llm_provider=llm_provider, model_name=model_name
+        ),
+    )
+
+
+def get_model_configuration_from_llm_provider(
+    llm_provider: LLMProviderView,
+    model_name: str,
+) -> int:
+    max_input_tokens = None
+    for model_configuration in llm_provider.model_configurations:
+        if model_configuration.name == model_name:
+            max_input_tokens = model_configuration.max_input_tokens
+    return (
+        max_input_tokens
+        if max_input_tokens
+        else get_max_input_tokens(
+            model_provider=llm_provider.name,
+            model_name=model_name,
+        )
     )
 
 
@@ -250,6 +278,7 @@ def get_default_llms(
 def get_llm(
     provider: str,
     model: str,
+    max_input_tokens: int,
     deployment_name: str | None,
     api_key: str | None = None,
     api_base: str | None = None,
@@ -275,4 +304,5 @@ def get_llm(
         extra_headers=build_llm_extra_headers(additional_headers),
         model_kwargs=_build_extra_model_kwargs(provider),
         long_term_logger=long_term_logger,
+        max_input_tokens=max_input_tokens,
     )

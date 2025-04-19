@@ -150,7 +150,6 @@ def research_object_source(
                 config=graph_config.tooling.primary_llm.config,
                 prompt_piece=dc_object_source_research_prompt,
                 reserved_str="",
-                max_input_tokens=graph_config.behavior.max_input_tokens,
             ),
         )
     ]

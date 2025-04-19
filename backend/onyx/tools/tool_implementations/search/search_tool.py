@@ -34,7 +34,6 @@ from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SearchRequest
 from onyx.context.search.pipeline import SearchPipeline
 from onyx.context.search.pipeline import section_relevance_list_impl
-from onyx.db.llm import fetch_max_input_tokens
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.llm.interfaces import LLM
@@ -148,13 +147,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         # The 3 here for at least minimum 1 above, 1 below and 1 for the middle chunk
 
         max_input_tokens = compute_max_llm_input_tokens(
-            fetch_max_input_tokens(
-                provider_name=llm.config.model_provider,
-                model_name=llm.config.model_name,
-                db_session=db_session,
-            )
+            llm_config=llm.config,
         )
-
         if max_input_tokens < 3 * GEN_AI_MODEL_FALLBACK_MAX_TOKENS:
             self.chunks_above = 0
             self.chunks_below = 0

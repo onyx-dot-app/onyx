@@ -41,7 +41,6 @@ from onyx.db.chat import create_chat_session
 from onyx.db.chat import create_new_chat_message
 from onyx.db.chat import get_or_create_root_message
 from onyx.db.engine import get_session
-from onyx.db.llm import fetch_max_input_tokens
 from onyx.db.models import User
 from onyx.llm.factory import get_llms_for_persona
 from onyx.natural_language_processing.utils import get_tokenizer
@@ -339,12 +338,7 @@ def handle_send_message_simple_with_history(
         provider_type=llm.config.model_provider,
     )
 
-    input_tokens = fetch_max_input_tokens(
-        db_session=db_session,
-        model_name=llm.config.model_name,
-        provider_name=llm.config.model_provider,
-    )
-    max_history_tokens = int(input_tokens * CHAT_TARGET_CHUNK_PERCENTAGE)
+    max_history_tokens = int(llm.config.max_input_tokens * CHAT_TARGET_CHUNK_PERCENTAGE)
 
     # Every chat Session begins with an empty root message
     root_message = get_or_create_root_message(

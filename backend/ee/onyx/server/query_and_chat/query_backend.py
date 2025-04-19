@@ -32,7 +32,6 @@ from onyx.context.search.utils import drop_llm_indices
 from onyx.context.search.utils import relevant_sections_to_indices
 from onyx.db.chat import get_prompt_by_id
 from onyx.db.engine import get_session
-from onyx.db.llm import fetch_max_input_tokens
 from onyx.db.models import Persona
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
@@ -177,12 +176,9 @@ def get_answer_stream(
         provider_type=llm.config.model_provider,
     )
 
-    input_tokens = fetch_max_input_tokens(
-        db_session=db_session,
-        model_name=llm.config.model_name,
-        provider_name=llm.config.model_provider,
+    max_history_tokens = int(
+        llm.config.max_input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE
     )
-    max_history_tokens = int(input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE)
 
     combined_message = combine_message_thread(
         messages=query_request.messages,
