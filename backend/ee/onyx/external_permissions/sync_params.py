@@ -61,6 +61,11 @@ GROUP_PERMISSIONS_FUNC_MAP: dict[DocumentSource, GroupSyncFuncType] = {
 }
 
 
+def source_requires_external_group_sync(source: DocumentSource) -> bool:
+    """Checks if the given DocumentSource requires external group syncing."""
+    return source in GROUP_PERMISSIONS_FUNC_MAP
+
+
 GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC: set[DocumentSource] = {
     DocumentSource.CONFLUENCE,
 }

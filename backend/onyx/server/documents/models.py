@@ -25,6 +25,7 @@ from onyx.db.models import TaskStatus
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.utils import mask_credential_dict
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
 class DocumentSyncStatus(BaseModel):
@@ -227,9 +228,33 @@ class CCPairFullInfo(BaseModel):
     # information on syncing/indexing
     last_indexed: datetime | None
     last_pruned: datetime | None
-    last_permission_sync: datetime | None
+    # accounts for both doc sync and group sync
+    last_full_permission_sync: datetime | None
     overall_indexing_speed: float | None
     latest_checkpoint_description: str | None
+
+    @classmethod
+    def _get_last_full_permission_sync(
+        cls, cc_pair_model: ConnectorCredentialPair
+    ) -> datetime | None:
+        check_if_source_requires_external_group_sync = fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_requires_external_group_sync",
+            noop_return_value=False,
+        )
+        if check_if_source_requires_external_group_sync(cc_pair_model.connector.source):
+            if (
+                not cc_pair_model.last_time_perm_sync
+                or not cc_pair_model.last_time_external_group_sync
+            ):
+                return None
+
+            return min(
+                cc_pair_model.last_time_perm_sync,
+                cc_pair_model.last_time_external_group_sync,
+            )
+
+        return cc_pair_model.last_time_perm_sync
 
     @classmethod
     def from_models(
@@ -292,15 +317,7 @@ class CCPairFullInfo(BaseModel):
                 last_index_attempt.time_started if last_index_attempt else None
             ),
             last_pruned=cc_pair_model.last_pruned,
-            last_permission_sync=(
-                min(
-                    cc_pair_model.last_time_perm_sync,
-                    cc_pair_model.last_time_external_group_sync,
-                )
-                if cc_pair_model.last_time_perm_sync
-                and cc_pair_model.last_time_external_group_sync
-                else None
-            ),
+            last_full_permission_sync=cls._get_last_full_permission_sync(cc_pair_model),
             overall_indexing_speed=overall_indexing_speed,
             latest_checkpoint_description=None,
         )

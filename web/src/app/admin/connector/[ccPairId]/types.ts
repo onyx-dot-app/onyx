@@ -49,7 +49,7 @@ export interface CCPairFullInfo {
 
   last_indexed: string | null;
   last_pruned: string | null;
-  last_permission_sync: string | null;
+  last_full_permission_sync: string | null;
   overall_indexing_speed: number | null;
   latest_checkpoint_description: string | null;
 }
