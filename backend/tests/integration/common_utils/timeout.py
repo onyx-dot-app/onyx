@@ -45,7 +45,14 @@ def run_with_timeout_multiproc(
 ) -> T:
     ctx = multiprocessing.get_context("spawn")
     q: Queue = ctx.Queue()
-    p = ctx.Process(target=_multiproc_wrapper, args=(q,))
+    p = ctx.Process(
+        target=_multiproc_wrapper,
+        args=(
+            task,
+            kwargs,
+            q,
+        ),
+    )
     p.start()
     p.join(timeout)
 
