@@ -81,6 +81,7 @@ export function ModelConfigurationField({
 }) {
   const [errorMap, setErrorMap] = useState<{ [index: number]: string }>({});
   const [finalError, setFinalError] = useState<string | undefined>();
+  console.log(errorMap);
 
   return (
     <div className="pb-5 flex flex-col w-full">
@@ -113,6 +114,13 @@ export function ModelConfigurationField({
                       newErrors[index] = message;
                     } else {
                       delete newErrors[index];
+                      for (const key in newErrors) {
+                        const numKey = Number(key);
+                        if (numKey > index) {
+                          newErrors[numKey - 1] = newErrors[key];
+                          delete newErrors[numKey];
+                        }
+                      }
                     }
                     setErrorMap(newErrors);
                     setFinalError(
