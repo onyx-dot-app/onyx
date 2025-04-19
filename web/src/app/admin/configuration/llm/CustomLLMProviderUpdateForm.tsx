@@ -66,9 +66,14 @@ export function CustomLLMProviderUpdateForm({
     default_model_name: existingLlmProvider?.default_model_name ?? null,
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ?? null,
-    model_configurations: existingLlmProvider?.model_configurations ?? [
-      { name: "", is_visible: true },
-    ],
+    model_configurations: existingLlmProvider?.model_configurations.map(
+      (modelConfiguration) => ({
+        ...modelConfiguration,
+        max_input_tokens:
+          modelConfiguration.max_input_tokens ??
+          ("" as string | number | null | undefined),
+      })
+    ) ?? [{ name: "", is_visible: true, max_input_tokens: "" }],
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],
@@ -108,6 +113,16 @@ export function CustomLLMProviderUpdateForm({
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
+
+        values.model_configurations.forEach((modelConfiguration) => {
+          if (
+            modelConfiguration.max_input_tokens === "" ||
+            modelConfiguration.max_input_tokens === null ||
+            modelConfiguration.max_input_tokens === undefined
+          ) {
+            modelConfiguration.max_input_tokens = null;
+          }
+        });
 
         if (values.model_configurations.length === 0) {
           const fullErrorMsg = "At least one model name is required";

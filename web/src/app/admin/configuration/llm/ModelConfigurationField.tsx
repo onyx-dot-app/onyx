@@ -25,10 +25,10 @@ function ModelConfigurationRow({
   formikProps: FormikProps<{ model_configurations: ModelConfiguration[] }>;
   setError: (value: string | null) => void;
 }) {
-  const [, input] = useField(`${name}[${index}].name`);
+  const [, input] = useField(`${name}[${index}]`);
   useEffect(() => {
     if (!input.touched) return;
-    setError(input.error ?? null);
+    setError((input.error as { name: string } | undefined)?.name ?? null);
   }, [input.touched, input.error]);
 
   return (
@@ -40,8 +40,9 @@ function ModelConfigurationRow({
       >
         <TextFormField
           name={`${name}[${index}].name`}
-          placeholder={`model-name-${index + 1}`}
           label=""
+          placeholder={`model-name-${index + 1}`}
+          removeLabel
           hideError
         />
       </div>
@@ -49,14 +50,21 @@ function ModelConfigurationRow({
         <TextFormField
           name={`${name}[${index}].max_input_tokens`}
           label=""
+          placeholder="Default"
+          removeLabel
+          hideError
           type="number"
           min={1}
-          placeholder="Default"
-          hideError
         />
       </div>
       <div className="flex items-end">
-        <div className={`${index != 0 ? "" : "opacity-20"}`}>
+        <div
+          className={`${
+            formikProps.values.model_configurations.length >= 2
+              ? ""
+              : "opacity-20"
+          }`}
+        >
           <FiX
             className="w-10 h-10 cursor-pointer hover:bg-accent-background-hovered rounded p-2"
             onClick={() => {
@@ -81,7 +89,6 @@ export function ModelConfigurationField({
 }) {
   const [errorMap, setErrorMap] = useState<{ [index: number]: string }>({});
   const [finalError, setFinalError] = useState<string | undefined>();
-  console.log(errorMap);
 
   return (
     <div className="pb-5 flex flex-col w-full">
@@ -136,7 +143,11 @@ export function ModelConfigurationField({
             <div>
               <Button
                 onClick={() => {
-                  arrayHelpers.push({ name: "", is_visible: true });
+                  arrayHelpers.push({
+                    name: "",
+                    is_visible: true,
+                    max_input_tokens: "",
+                  });
                 }}
                 className="mt-3"
                 variant="next"
