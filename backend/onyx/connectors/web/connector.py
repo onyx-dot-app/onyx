@@ -177,9 +177,6 @@ def check_internet_connection(url: str) -> None:
         session = requests.Session()
         session.headers.update(DEFAULT_HEADERS)
 
-        # Add a random delay to mimic human behavior
-        time.sleep(random.uniform(0.1, 0.5))
-
         response = session.get(url, timeout=5, allow_redirects=True)
 
         response.raise_for_status()
@@ -549,9 +546,6 @@ class WebConnector(LoadConnector):
                 wait_until="domcontentloaded",  # Wait for DOM to be ready
             )
 
-            # Add a small random delay to mimic human behavior
-            time.sleep(random.uniform(0.5, 2.0))
-
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
             )
@@ -586,7 +580,7 @@ class WebConnector(LoadConnector):
 
                 # wait for the content to load if we scrolled
                 if did_scroll:
-                    time.sleep(0.1)
+                    time.sleep(0.5)
 
             content = page.content()
             soup = BeautifulSoup(content, "html.parser")
