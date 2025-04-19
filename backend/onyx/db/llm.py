@@ -254,7 +254,7 @@ def fetch_max_input_tokens(
     output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 ) -> int:
     llm_provider = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
+        select(LLMProviderModel).where(LLMProviderModel.provider == provider_name)
     )
     if not llm_provider:
         raise RuntimeError(f"No LLM Provider with the name {provider_name}")
