@@ -111,16 +111,16 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
         }
         field primary_owners type array<string> {
-            indexing : summary | attribute
+            indexing: summary | attribute
         }
         field secondary_owners type array<string> {
-            indexing : summary | attribute
+            indexing: summary | attribute
         }
         field access_control_list type weightedset<string> {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search
-        } 
+        }
         field document_sets type weightedset<string> {
             indexing: summary | attribute
             rank: filter
@@ -149,7 +149,7 @@ schema DANSWER_CHUNK_NAME {
 
     rank-profile default_rank {
         inputs {
-            query(decay_factor) float
+            query(decay_factor) double
         }
 
         function inline document_boost() {
@@ -316,12 +316,6 @@ schema DANSWER_CHUNK_NAME {
     rank-profile admin_search inherits default, default_rank {
         first-phase {
             expression: bm25(content) + (5 * bm25(title))
-        }
-    }
-
-    rank-profile random_ {
-        first-phase {
-            expression: random.match
         }
     }
 }
