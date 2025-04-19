@@ -17,7 +17,7 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
-from onyx.llm.factory import get_max_input_tokens_from_llm_provider
+from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
