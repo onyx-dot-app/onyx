@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from datetime import UTC
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -242,19 +243,34 @@ class CCPairFullInfo(BaseModel):
             "source_requires_external_group_sync",
             noop_return_value=False,
         )
-        if check_if_source_requires_external_group_sync(cc_pair_model.connector.source):
-            if (
-                not cc_pair_model.last_time_perm_sync
-                or not cc_pair_model.last_time_external_group_sync
-            ):
-                return None
+        check_if_source_requires_doc_sync = fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_requires_doc_sync",
+            noop_return_value=False,
+        )
 
-            return min(
-                cc_pair_model.last_time_perm_sync,
-                cc_pair_model.last_time_external_group_sync,
-            )
+        needs_group_sync = check_if_source_requires_external_group_sync(
+            cc_pair_model.connector.source
+        )
+        needs_doc_sync = check_if_source_requires_doc_sync(
+            cc_pair_model.connector.source
+        )
 
-        return cc_pair_model.last_time_perm_sync
+        last_group_sync = (
+            cc_pair_model.last_time_external_group_sync
+            if needs_group_sync
+            else datetime.now(UTC)
+        )
+        last_doc_sync = (
+            cc_pair_model.last_time_perm_sync if needs_doc_sync else datetime.now(UTC)
+        )
+
+        # if either is still None at this point, it means sync is necessary but
+        # has never completed.
+        if last_group_sync is None or last_doc_sync is None:
+            return None
+
+        return min(last_group_sync, last_doc_sync)
 
     @classmethod
     def from_models(

@@ -50,6 +50,12 @@ DOC_PERMISSIONS_FUNC_MAP: dict[DocumentSource, DocSyncFuncType] = {
     DocumentSource.GMAIL: gmail_doc_sync,
 }
 
+
+def source_requires_doc_sync(source: DocumentSource) -> bool:
+    """Checks if the given DocumentSource requires doc syncing."""
+    return source in DOC_PERMISSIONS_FUNC_MAP
+
+
 # These functions update:
 # - the user_email <-> external_user_group_id mapping
 # in postgres without committing
