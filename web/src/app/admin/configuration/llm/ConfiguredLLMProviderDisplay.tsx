@@ -8,7 +8,6 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import isEqual from "lodash/isEqual";
 import { isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({
