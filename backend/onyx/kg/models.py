@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Dict
 
 from pydantic import BaseModel
@@ -121,3 +122,11 @@ class KGDocumentClassificationPrompt(BaseModel):
     """
 
     llm_prompt: str | None
+
+
+class KGStage(str, Enum):
+    EXTRACTED = "extracted"
+    NORMALIZED = "normalized"
+    FAILED = "failed"
+    SKIPPED = "skipped"
+    EXTRACTION_READY = "extraction_ready"

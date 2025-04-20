@@ -9,8 +9,8 @@ from langchain.schema import HumanMessage
 from sklearn.cluster import SpectralClustering  # type: ignore
 from thefuzz import fuzz  # type: ignore
 
-from onyx.db.document import get_all_kg_processed_documents_info
-from onyx.db.document import get_kg_processed_document_ids
+from onyx.db.document import get_all_kg_extracted_documents_info
+from onyx.db.document import get_kg_extracted_document_ids
 from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
@@ -28,6 +28,7 @@ from onyx.db.relationships import get_all_relationship_types
 from onyx.db.relationships import get_all_relationships
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
+from onyx.kg.models import KGStage
 from onyx.kg.utils.embeddings import encode_string_batch
 from onyx.kg.utils.formatting_utils import format_entity
 from onyx.kg.utils.formatting_utils import format_relationship
@@ -883,6 +884,7 @@ Only output the category name, nothing else."""
 
             add_relationship_type(
                 db_session,
+                KGStage.NORMALIZED,
                 source_entity_type=source_type_str,
                 relationship_type=rel_name,
                 target_entity_type=target_type_str,
@@ -903,9 +905,10 @@ Only output the category name, nothing else."""
 
             add_entity(
                 db_session,
+                KGStage.NORMALIZED,
                 entity_type=entity_type,
                 name=entity_name,
-                cluster_count=entity_count,
+                occurances=entity_count,
             )
 
             db_session.commit()
@@ -915,7 +918,11 @@ Only output the category name, nothing else."""
     with get_session_with_current_tenant() as db_session:
         for rel, rel_count_8 in reverse_relationship_replacements_count.items():
             add_relationship(
-                db_session, relationship_id_name=rel, cluster_count=rel_count_8
+                db_session,
+                KGStage.NORMALIZED,
+                relationship_id_name=rel,
+                source_document_id="",  # TODO: fix
+                occurances=rel_count_8,
             )
 
             db_session.commit()
@@ -923,7 +930,7 @@ Only output the category name, nothing else."""
     # replace with clustering results in vespa database
 
     with get_session_with_current_tenant() as db_session:
-        kg_processed_document_ids = get_kg_processed_document_ids(db_session)
+        kg_processed_document_ids = get_kg_extracted_document_ids(db_session)
 
         for document_id in kg_processed_document_ids:
             formatted_chunk_batches = get_document_chunks_for_kg_processing(
@@ -978,7 +985,7 @@ Only output the category name, nothing else."""
     # Update document kg info
 
     with get_session_with_current_tenant() as db_session:
-        all_kg_processed_documents_info = get_all_kg_processed_documents_info(
+        all_kg_processed_documents_info = get_all_kg_extracted_documents_info(
             db_session
         )
 

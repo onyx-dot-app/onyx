@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import List
+from typing import Type
 
 from sqlalchemy import literal_column
 from sqlalchemy import select
@@ -7,7 +8,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGEntity
+from onyx.db.models import KGEntityExtractionTemp
 from onyx.db.models import KGEntityType
+from onyx.kg.models import KGStage
 
 
 def get_entity_types(
@@ -30,19 +33,21 @@ def get_entity_types(
 
 def add_entity(
     db_session: Session,
+    kg_stage: KGStage,
     entity_type: str,
     name: str,
     document_id: str | None = None,
-    cluster_count: int = 0,
+    occurances: int = 0,
     event_time: datetime | None = None,
-) -> "KGEntity | None":
+) -> "KGEntity | KGEntityExtractionTemp | None":
     """Add a new entity to the database.
 
     Args:
         db_session: SQLAlchemy session
+        kg_stage: KGStage of the entity
         entity_type: Type of the entity (must match an existing KGEntityType)
         name: Name of the entity
-        cluster_count: Number of clusters this entity has been found
+        occurances: Number of clusters this entity has been found
 
     Returns:
         KGEntity: The created entity
@@ -51,23 +56,31 @@ def add_entity(
     name = name.title()
     id_name = f"{entity_type}:{name}"
 
+    _KGEntityObject: Type[KGEntity | KGEntityExtractionTemp]
+    if kg_stage == KGStage.EXTRACTED:
+        _KGEntityObject = KGEntityExtractionTemp
+    elif kg_stage == KGStage.NORMALIZED:
+        _KGEntityObject = KGEntity
+    else:
+        raise ValueError(f"Invalid KGStage: {kg_stage}")
+
     # Create new entity
     stmt = (
-        pg_insert(KGEntity)
+        pg_insert(_KGEntityObject)
         .values(
             id_name=id_name,
             entity_type_id_name=entity_type,
             document_id=document_id,
             name=name,
-            cluster_count=cluster_count,
+            occurances=occurances,
             event_time=event_time,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
             set_=dict(
                 # Direct numeric addition without text()
-                cluster_count=KGEntity.cluster_count
-                + literal_column("EXCLUDED.cluster_count"),
+                occurances=_KGEntityObject.occurances
+                + literal_column("EXCLUDED.occurances"),
                 # Keep other fields updated as before
                 entity_type_id_name=entity_type,
                 document_id=document_id,
@@ -75,7 +88,7 @@ def add_entity(
                 event_time=event_time,
             ),
         )
-        .returning(KGEntity)
+        .returning(_KGEntityObject)
     )
 
     result = db_session.execute(stmt).scalar()

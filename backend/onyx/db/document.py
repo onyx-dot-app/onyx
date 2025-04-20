@@ -40,6 +40,7 @@ from onyx.db.models import User
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 
@@ -863,59 +864,49 @@ def fetch_chunk_count_for_document(
     return db_session.execute(stmt).scalar_one_or_none()
 
 
-def get_unprocessed_kg_documents_for_connector(
+def get_unprocessed_kg_document_batch_for_connector(
     db_session: Session,
     connector_id: int,
     batch_size: int = 100,
-) -> Generator[DbDocument, None, None]:
+) -> list[DbDocument]:
     """
-    Retrieves all documents associated with a connector that have not yet been processed
-    for knowledge graph extraction. Uses a generator pattern to handle large result sets.
+    Retrieves a batch of documents that have not been processed for knowledge graph extraction.
     Args:
         db_session (Session): The database session to use
-        connector_id (int): The ID of the connector to check
-        batch_size (int): Number of documents to fetch per batch, defaults to 100
-    Yields:
-        DbDocument: Documents that haven't been KG processed, one at a time
+        connector_id (int): The ID of the connector to get documents for
+        batch_size (int): The maximum number of documents to retrieve
+    Returns:
+        list[DbDocument]: List of documents that need KG processing
     """
-    offset = 0
-    while True:
-        stmt = (
-            select(DbDocument)
-            .join(
-                DocumentByConnectorCredentialPair,
-                DbDocument.id == DocumentByConnectorCredentialPair.id,
-            )
-            .where(
-                and_(
-                    DocumentByConnectorCredentialPair.connector_id == connector_id,
-                    or_(
-                        DocumentByConnectorCredentialPair.has_been_kg_processed.is_(
-                            None
-                        ),
-                        DocumentByConnectorCredentialPair.has_been_kg_processed.is_(
-                            False
-                        ),
-                    ),
-                    DbDocument.kg_processed.is_(False),
-                )
-            )
-            .distinct()
-            .limit(batch_size)
-            .offset(offset)
+
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
         )
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                or_(
+                    DocumentByConnectorCredentialPair.kg_stage is None,
+                    DocumentByConnectorCredentialPair.kg_stage
+                    == KGStage.EXTRACTION_READY.value,
+                ),
+                or_(
+                    DbDocument.kg_stage == KGStage.EXTRACTION_READY.value,
+                    DbDocument.kg_stage is None,
+                ),
+            )
+        )
+        .distinct()
+        .limit(batch_size)
+    )
 
-        batch = list(db_session.scalars(stmt).all())
-        if not batch:
-            break
-
-        for document in batch:
-            yield document
-
-        offset += batch_size
+    return list(db_session.scalars(stmt).all())
 
 
-def get_kg_processed_document_ids(db_session: Session) -> list[str]:
+def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
     """
     Retrieves all document IDs where kg_processed is True.
     Args:
@@ -923,21 +914,22 @@ def get_kg_processed_document_ids(db_session: Session) -> list[str]:
     Returns:
         list[str]: List of document IDs that have been KG processed
     """
-    stmt = select(DbDocument.id).where(DbDocument.kg_processed.is_(True))
+    stmt = select(DbDocument.id).where(and_(DbDocument.kg_stage.is_(KGStage.EXTRACTED)))
+
     return list(db_session.scalars(stmt).all())
 
 
 def update_document_kg_info(
     db_session: Session,
     document_id: str,
-    kg_processed: bool,
+    kg_stage: KGStage,
     kg_data: dict,
 ) -> None:
     """Updates the knowledge graph related information for a document.
     Args:
         db_session (Session): The database session to use
         document_id (str): The ID of the document to update
-        kg_processed (bool): Whether the document has been processed for KG extraction
+        kg_stage (KGStage): The stage of the knowledge graph processing for the document
         kg_data (dict): Dictionary containing KG data with 'entities', 'relationships', and 'terms' keys
     Raises:
         ValueError: If the document with the given ID is not found
@@ -946,7 +938,7 @@ def update_document_kg_info(
         update(DbDocument)
         .where(DbDocument.id == document_id)
         .values(
-            kg_processed=kg_processed,
+            kg_stage=kg_stage,
             kg_data=kg_data,
         )
     )
@@ -956,7 +948,7 @@ def update_document_kg_info(
 def get_document_kg_info(
     db_session: Session,
     document_id: str,
-) -> tuple[bool, dict] | None:
+) -> tuple[KGStage, dict] | None:
     """Retrieves the knowledge graph processing status and data for a document.
     Args:
         db_session (Session): The database session to use
@@ -967,7 +959,7 @@ def get_document_kg_info(
             - dict: The KG data containing 'entities', 'relationships', and 'terms'
             Returns None if the document is not found
     """
-    stmt = select(DbDocument.kg_processed, DbDocument.kg_data).where(
+    stmt = select(DbDocument.kg_stage, DbDocument.kg_data).where(
         DbDocument.id == document_id
     )
     result = db_session.execute(stmt).one_or_none()
@@ -978,7 +970,7 @@ def get_document_kg_info(
     return result.kg_processed, result.kg_data or {}
 
 
-def get_all_kg_processed_documents_info(
+def get_all_kg_extracted_documents_info(
     db_session: Session,
 ) -> list[tuple[str, dict]]:
     """Retrieves the knowledge graph data for all documents that have been processed.
@@ -992,7 +984,7 @@ def get_all_kg_processed_documents_info(
     """
     stmt = (
         select(DbDocument.id, DbDocument.kg_data)
-        .where(DbDocument.kg_processed.is_(True))
+        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
         .order_by(DbDocument.id)
     )
 

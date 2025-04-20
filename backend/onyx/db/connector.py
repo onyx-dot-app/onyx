@@ -345,7 +345,7 @@ def get_unprocessed_connector_ids(db_session: Session) -> list[int]:
         list[int]: List of connector IDs that have enabled KG extraction but have unprocessed documents
     """
     try:
-        stmt = select(Connector.id).where(Connector.kg_extraction_enabled)
+        stmt = select(Connector.id).where(Connector.kg_processing_enabled)
         result = db_session.execute(stmt)
         return [row[0] for row in result.fetchall()]
 

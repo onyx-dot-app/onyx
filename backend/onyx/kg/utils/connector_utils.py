@@ -1,8 +1,10 @@
+from sqlalchemy import or_
 from sqlalchemy import select
 
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import Connector
 from onyx.db.models import DocumentByConnectorCredentialPair
+from onyx.kg.models import KGStage
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -28,8 +30,12 @@ def get_unprocessed_connector_ids(tenant_id: str) -> list[int]:
                 .distinct()
                 .join(DocumentByConnectorCredentialPair)
                 .where(
-                    Connector.kg_extraction_enabled,
-                    DocumentByConnectorCredentialPair.has_been_kg_processed.is_(False),
+                    Connector.kg_processing_enabled,
+                    or_(
+                        DocumentByConnectorCredentialPair.kg_stage
+                        == KGStage.EXTRACTION_READY,
+                        DocumentByConnectorCredentialPair.kg_stage is None,
+                    ),
                 )
             )
 

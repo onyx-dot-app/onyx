@@ -70,6 +70,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
 from onyx.context.search.enums import RecencyBiasSetting
+from onyx.kg.models import KGStage
 from onyx.utils.encryption import decrypt_bytes_to_string
 from onyx.utils.encryption import encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -588,11 +589,9 @@ class Document(Base):
     is_public: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # tables for the knowledge graph data
-    kg_processed: Mapped[bool] = mapped_column(
-        Boolean,
-        nullable=False,
-        default=False,
-        comment="Whether this document has been processed for knowledge graph extraction",
+    kg_stage: Mapped[KGStage] = mapped_column(
+        Enum(KGStage, native_enum=False),
+        comment="Status of knowledge graph extraction for this document",
     )
 
     kg_data: Mapped[dict] = mapped_column(
@@ -662,7 +661,7 @@ class KGEntityType(Base):
         comment="Pre-extraction classification requirements and instructions",
     )
 
-    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     extraction_sources: Mapped[dict] = mapped_column(
         postgresql.JSONB,
@@ -681,6 +680,77 @@ class KGEntityType(Base):
     )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class KGEntityTypeExtractionTemp(Base):
+    __tablename__ = "kg_entity_type_extraction_temp"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        String, primary_key=True, nullable=False, index=True
+    )
+
+    description: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
+
+    grounding: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=False, index=False
+    )
+    grounded_source_name: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=False, index=False
+    )
+
+    ge_determine_instructions: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+
+    ge_grounding_signature: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=False, default=None
+    )
+
+    clustering: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Clustering information for this entity type",
+    )
+
+    classification_requirements: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Pre-extraction classification requirements and instructions",
+    )
+
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    extraction_sources: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        comment="Sources and methods used to extract this entity",
+    )
+
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_kg_entity_type_extraction_temp_id_name",
+            id_name,
+            unique=True,
+        ),
     )
 
 
@@ -730,7 +800,7 @@ class KGRelationshipType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -755,6 +825,77 @@ class KGRelationshipType(Base):
     )
 
 
+class KGRelationshipTypeExtractionTemp(Base):
+    __tablename__ = "kg_relationship_type_extraction_temp"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
+
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    source_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    definition: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether this relationship type represents a definition",
+    )
+
+    clustering: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Clustering information for this relationship type",
+    )
+
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to EntityType
+    source_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType",
+        foreign_keys=[source_entity_type_id_name],
+        backref="source_relationship_type_temp",
+    )
+    target_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType",
+        foreign_keys=[target_entity_type_id_name],
+        backref="target_relationship_type_temp",
+    )
+
+
 class KGEntity(Base):
     __tablename__ = "kg_entity"
 
@@ -765,6 +906,14 @@ class KGEntity(Base):
 
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
 
     document_id: Mapped[str | None] = mapped_column(
         NullFilteredString, nullable=True, index=True
@@ -791,7 +940,86 @@ class KGEntity(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Access control
+    acl: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Boosts - using JSON for flexibility
+    boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
+
+    event_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Time of the event being processed",
+    )
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        # Fixed column names in indexes
+        Index("ix_entity_type_acl", entity_type_id_name, acl),
+        Index("ix_entity_name_search", name, entity_type_id_name),
+    )
+
+
+class KGEntityExtractionTemp(Base):
+    __tablename__ = "kg_entity_extraction_temp"
+
+    # Primary identifier
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, index=True
+    )
+
+    # Basic entity information
+    name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
+
+    document_id: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    alternative_names: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    # Reference to KGEntityType
+    entity_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationship to KGEntityType
+    entity_type: Mapped["KGEntityType"] = relationship(
+        "KGEntityType", backref="entity_temp"
+    )
+
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
+
+    keywords: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -873,7 +1101,7 @@ class KGRelationship(Base):
         "KGRelationshipType", backref="relationship"
     )
 
-    cluster_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -888,6 +1116,101 @@ class KGRelationship(Base):
     # Relationships to Entity table
     source: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[source_node])
     target: Mapped["KGEntity"] = relationship("KGEntity", foreign_keys=[target_node])
+    document: Mapped["Document"] = relationship(
+        "Document", foreign_keys=[source_document]
+    )
+
+    __table_args__ = (
+        # Composite primary key
+        PrimaryKeyConstraint("id_name", "source_document"),
+        # Index for querying relationships by type
+        Index("ix_kg_relationship_type", type),
+        # Composite index for source/target queries
+        Index("ix_kg_relationship_nodes", source_node, target_node),
+        # Ensure unique relationships between nodes of a specific type
+        UniqueConstraint(
+            "source_node",
+            "target_node",
+            "type",
+            name="uq_kg_relationship_source_target_type",
+        ),
+    )
+
+
+class KGRelationshipExtractionTemp(Base):
+    __tablename__ = "kg_relationship_extraction_temp"
+
+    # Primary identifier - now part of composite key
+    id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
+
+    source_document: Mapped[str | None] = mapped_column(
+        NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
+    )
+
+    # Source and target nodes (foreign keys to Entity table)
+    source_node: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_extraction_temp.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_node: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_extraction_temp.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    source_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    target_node_type: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_type.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Relationship type
+    type: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
+
+    # Add new relationship type reference
+    relationship_type_id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_relationship_type_extraction_temp.id_name"),
+        nullable=False,
+        index=True,
+    )
+
+    # Add the SQLAlchemy relationship property
+    relationship_type: Mapped["KGRelationshipTypeExtractionTemp"] = relationship(
+        "KGRelationshipTypeExtractionTemp", backref="relationship_temp"
+    )
+
+    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # Tracking fields
+    time_updated: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+    time_created: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    # Relationships to Entity table
+    source: Mapped["KGEntityExtractionTemp"] = relationship(
+        "KGEntityExtractionTemp", foreign_keys=[source_node]
+    )
+    target: Mapped["KGEntityExtractionTemp"] = relationship(
+        "KGEntityExtractionTemp", foreign_keys=[target_node]
+    )
     document: Mapped["Document"] = relationship(
         "Document", foreign_keys=[source_document]
     )
@@ -1028,7 +1351,7 @@ class Connector(Base):
         DateTime, nullable=True
     )
 
-    kg_extraction_enabled: Mapped[bool] = mapped_column(
+    kg_processing_enabled: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
         default=False,
@@ -1478,10 +1801,9 @@ class DocumentByConnectorCredentialPair(Base):
     # the actual indexing is complete
     has_been_indexed: Mapped[bool] = mapped_column(Boolean)
 
-    has_been_kg_processed: Mapped[bool | None] = mapped_column(
-        Boolean,
-        nullable=True,
-        comment="Whether this document has been processed for knowledge graph extraction",
+    kg_stage: Mapped[KGStage] = mapped_column(
+        Enum(KGStage, native_enum=False),
+        comment="Status of knowledge graph extraction for this document",
     )
 
     connector: Mapped[Connector] = relationship(

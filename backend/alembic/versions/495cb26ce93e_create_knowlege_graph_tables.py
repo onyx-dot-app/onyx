@@ -10,7 +10,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-
 # revision identifiers, used by Alembic.
 revision = "495cb26ce93e"
 down_revision = "d961aca62eb3"
@@ -31,7 +30,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("cluster_count", sa.Integer(), nullable=True),
+        sa.Column("occurances", sa.Integer(), nullable=True),
         sa.Column(
             "extraction_sources", postgresql.JSONB, nullable=False, server_default="{}"
         ),
@@ -50,6 +49,9 @@ def upgrade() -> None:
             "ge_determine_instructions", postgresql.ARRAY(sa.String()), nullable=True
         ),
         sa.Column("ge_grounding_signature", sa.String(), nullable=True),
+        sa.Column(
+            "allowed_attributes", postgresql.JSONB, nullable=False, server_default="{}"
+        ),
     )
 
     # Create KGRelationshipType table
@@ -65,7 +67,40 @@ def upgrade() -> None:
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
         sa.Column("clustering", postgresql.JSONB, nullable=False, server_default="{}"),
-        sa.Column("cluster_count", sa.Integer(), nullable=True),
+        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("type", sa.String(), nullable=False, index=True),
+        sa.Column("active", sa.Boolean(), nullable=False, default=True),
+        sa.Column(
+            "time_updated",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            onupdate=sa.text("now()"),
+        ),
+        sa.Column(
+            "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
+        ),
+        sa.ForeignKeyConstraint(
+            ["source_entity_type_id_name"], ["kg_entity_type.id_name"]
+        ),
+        sa.ForeignKeyConstraint(
+            ["target_entity_type_id_name"], ["kg_entity_type.id_name"]
+        ),
+    )
+
+    # Create KGRelationshipTypeExtractionTemp table
+    op.create_table(
+        "kg_relationship_type_extraction_temp",
+        sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
+        sa.Column("name", sa.String(), nullable=False, index=True),
+        sa.Column(
+            "source_entity_type_id_name", sa.String(), nullable=False, index=True
+        ),
+        sa.Column(
+            "target_entity_type_id_name", sa.String(), nullable=False, index=True
+        ),
+        sa.Column("definition", sa.Boolean(), nullable=False, default=False),
+        sa.Column("clustering", postgresql.JSONB, nullable=False, server_default="{}"),
+        sa.Column("occurances", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -106,11 +141,12 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("cluster_count", sa.Integer(), nullable=True),
+        sa.Column("occurances", sa.Integer(), nullable=True),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
         sa.Column("boosts", postgresql.JSONB, nullable=False, server_default="{}"),
+        sa.Column("attributes", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("event_time", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
             "time_updated",
@@ -128,6 +164,56 @@ def upgrade() -> None:
         "ix_entity_name_search", "kg_entity", ["name", "entity_type_id_name"]
     )
 
+    # Create KGEntityExtractionTemp table
+    op.create_table(
+        "kg_entity_extraction_temp",
+        sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
+        sa.Column("name", sa.String(), nullable=False, index=True),
+        sa.Column("sub_type", sa.String(), nullable=True, index=True),
+        sa.Column("document_id", sa.String(), nullable=True, index=True),
+        sa.Column(
+            "alternative_names",
+            postgresql.ARRAY(sa.String()),
+            nullable=False,
+            server_default="{}",
+        ),
+        sa.Column("entity_type_id_name", sa.String(), nullable=False, index=True),
+        sa.Column("description", sa.String(), nullable=True),
+        sa.Column(
+            "keywords",
+            postgresql.ARRAY(sa.String()),
+            nullable=False,
+            server_default="{}",
+        ),
+        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column(
+            "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
+        ),
+        sa.Column("boosts", postgresql.JSONB, nullable=False, server_default="{}"),
+        sa.Column("attributes", postgresql.JSONB, nullable=False, server_default="{}"),
+        sa.Column("event_time", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "time_updated",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            onupdate=sa.text("now()"),
+        ),
+        sa.Column(
+            "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
+        ),
+        sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
+    )
+    op.create_index(
+        "ix_entity_extraction_temp_acl",
+        "kg_entity_extraction_temp",
+        ["entity_type_id_name", "acl"],
+    )
+    op.create_index(
+        "ix_entity_extraction_temp_name_search",
+        "kg_entity_extraction_temp",
+        ["name", "entity_type_id_name"],
+    )
+
     # Create KGRelationship table
     op.create_table(
         "kg_relationship",
@@ -139,7 +225,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("cluster_count", sa.Integer(), nullable=True),
+        sa.Column("occurances", sa.Integer(), nullable=True),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -169,6 +255,50 @@ def upgrade() -> None:
         "ix_kg_relationship_nodes", "kg_relationship", ["source_node", "target_node"]
     )
 
+    # Create KGRelationshipExtractionTemp table
+    op.create_table(
+        "kg_relationship_extraction_temp",
+        sa.Column("id_name", sa.String(), nullable=False, index=True),
+        sa.Column("source_node", sa.String(), nullable=False, index=True),
+        sa.Column("target_node", sa.String(), nullable=False, index=True),
+        sa.Column("source_node_type", sa.String(), nullable=False, index=True),
+        sa.Column("target_node_type", sa.String(), nullable=False, index=True),
+        sa.Column("source_document", sa.String(), nullable=True, index=True),
+        sa.Column("type", sa.String(), nullable=False, index=True),
+        sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
+        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column(
+            "time_updated",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            onupdate=sa.text("now()"),
+        ),
+        sa.Column(
+            "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
+        ),
+        sa.ForeignKeyConstraint(["source_node"], ["kg_entity_extraction_temp.id_name"]),
+        sa.ForeignKeyConstraint(["target_node"], ["kg_entity_extraction_temp.id_name"]),
+        sa.ForeignKeyConstraint(["source_node_type"], ["kg_entity_type.id_name"]),
+        sa.ForeignKeyConstraint(["target_node_type"], ["kg_entity_type.id_name"]),
+        sa.ForeignKeyConstraint(["source_document"], ["document.id"]),
+        sa.ForeignKeyConstraint(
+            ["relationship_type_id_name"],
+            ["kg_relationship_type_extraction_temp.id_name"],
+        ),
+        sa.UniqueConstraint(
+            "source_node",
+            "target_node",
+            "type",
+            name="uq_kg_relationship_extraction_temp_source_target_type",
+        ),
+        sa.PrimaryKeyConstraint("id_name", "source_document"),
+    )
+    op.create_index(
+        "ix_kg_relationship_extraction_temp_nodes",
+        "kg_relationship_extraction_temp",
+        ["source_node", "target_node"],
+    )
+
     # Create KGTerm table
     op.create_table(
         "kg_term",
@@ -191,9 +321,10 @@ def upgrade() -> None:
     )
     op.create_index("ix_search_term_entities", "kg_term", ["entity_types"])
     op.create_index("ix_search_term_term", "kg_term", ["id_term"])
+
     op.add_column(
         "document",
-        sa.Column("kg_processed", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column("kg_stage", sa.String(), nullable=True, index=True),
     )
     op.add_column(
         "document",
@@ -202,16 +333,16 @@ def upgrade() -> None:
     op.add_column(
         "connector",
         sa.Column(
-            "kg_extraction_enabled",
+            "kg_processing_enabled",
             sa.Boolean(),
-            nullable=False,
+            nullable=True,
             server_default="false",
         ),
     )
 
     op.add_column(
         "document_by_connector_credential_pair",
-        sa.Column("has_been_kg_processed", sa.Boolean(), nullable=True),
+        sa.Column("kg_stage", sa.String(), nullable=True, index=True),
     )
 
 
@@ -221,8 +352,11 @@ def downgrade() -> None:
     op.drop_table("kg_relationship")
     op.drop_table("kg_entity")
     op.drop_table("kg_relationship_type")
+    op.drop_table("kg_relationship_type_extraction_temp")
+    op.drop_table("kg_relationship_extraction_temp")
+    op.drop_table("kg_entity_extraction_temp")
     op.drop_table("kg_entity_type")
-    op.drop_column("connector", "kg_extraction_enabled")
-    op.drop_column("document_by_connector_credential_pair", "has_been_kg_processed")
+    op.drop_column("connector", "kg_processing_enabled")
+    op.drop_column("document_by_connector_credential_pair", "kg_stage")
     op.drop_column("document", "kg_data")
-    op.drop_column("document", "kg_processed")
+    op.drop_column("document", "kg_stage")

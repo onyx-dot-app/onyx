@@ -18,6 +18,7 @@ from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
+from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
 from onyx.prompts.kg_prompts import SQL_AGGREGATION_REMOVAL_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
@@ -63,6 +64,44 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
         sql_statement = cleaned_response.split("SQL:")[1].strip()
         sql_statement = sql_statement.split(";")[0].strip() + ";"
         sql_statement = sql_statement.replace("sql", "").strip()
+
+    except Exception as e:
+        logger.error(f"Error in strategy generation: {e}")
+        raise e
+
+    return sql_statement
+
+
+def _get_source_documents(sql_statement: str, llm: LLM) -> str:
+    """
+    Remove aggregate functions from the SQL statement.
+    """
+
+    source_detection_prompt = SOURCE_DETECTION_PROMPT.replace(
+        "---SOURCE_DETECTION_PROMPT---", sql_statement
+    )
+
+    msg = [
+        HumanMessage(
+            content=source_detection_prompt,
+        )
+    ]
+
+    # Grader
+    try:
+        llm_response = run_with_timeout(
+            15,
+            llm.invoke,
+            prompt=msg,
+            timeout_override=25,
+            max_tokens=800,
+        )
+
+        cleaned_response = (
+            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+        )
+        sql_statement = cleaned_response.split("<sql>")[1].strip()
+        sql_statement = sql_statement.split("</sql>")[0].strip()
 
     except Exception as e:
         logger.error(f"Error in strategy generation: {e}")
@@ -128,12 +167,12 @@ def generate_simple_sql(
             content=simple_sql_prompt,
         )
     ]
-    fast_llm = graph_config.tooling.primary_llm
+    primary_llm = graph_config.tooling.primary_llm
     # Grader
     try:
         llm_response = run_with_timeout(
             15,
-            fast_llm.invoke,
+            primary_llm.invoke,
             prompt=msg,
             timeout_override=25,
             max_tokens=800,
@@ -156,6 +195,11 @@ def generate_simple_sql(
     except Exception as e:
         logger.error(f"Error in strategy generation: {e}")
         raise e
+
+    # Get SQL for source documents
+    source_documents_sql = _get_source_documents(sql_statement, llm=primary_llm)
+
+    logger.debug(f"source_documents_sql: {source_documents_sql}")
 
     # if _sql_is_aggregate_query(sql_statement):
     #     individualized_sql_query = _remove_aggregation(sql_statement, llm=fast_llm)
@@ -185,6 +229,8 @@ def generate_simple_sql(
     # )
 
     # SQL Query is executed by using read-only user on the custom view
+    scalar_result = None
+    query_results = None
     with get_kg_readonly_user_session_with_current_tenant() as db_session:
         try:
             result = db_session.execute(text(sql_statement))

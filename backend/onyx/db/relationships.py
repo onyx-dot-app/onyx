@@ -1,10 +1,15 @@
+from typing import cast
 from typing import List
+from typing import Union
 
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGRelationship
+from onyx.db.models import KGRelationshipExtractionTemp
 from onyx.db.models import KGRelationshipType
+from onyx.db.models import KGRelationshipTypeExtractionTemp
+from onyx.db.models import KGStage
 from onyx.kg.utils.formatting_utils import format_entity
 from onyx.kg.utils.formatting_utils import format_relationship
 from onyx.kg.utils.formatting_utils import generate_relationship_type
@@ -12,10 +17,11 @@ from onyx.kg.utils.formatting_utils import generate_relationship_type
 
 def add_relationship(
     db_session: Session,
+    kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-    cluster_count: int | None = None,
-) -> "KGRelationship":
+    occurances: int | None = None,
+) -> Union["KGRelationship", "KGRelationshipExtractionTemp"]:
     """
     Add a relationship between two entities to the database.
 
@@ -23,7 +29,7 @@ def add_relationship(
         db_session: SQLAlchemy database session
         relationship_type: Type of relationship
         source_document_id: ID of the source document
-        cluster_count: Optional count of similar relationships clustered together
+        occurances: Optional count of similar relationships clustered together
 
     Returns:
         The created KGRelationship object
@@ -46,18 +52,25 @@ def add_relationship(
     relationship_id_name = format_relationship(relationship_id_name)
     relationship_type = generate_relationship_type(relationship_id_name)
 
-    # Create new relationship
-    relationship = KGRelationship(
-        id_name=relationship_id_name,
-        source_node=source_entity_id_name,
-        target_node=target_entity_id_name,
-        source_node_type=source_entity_type,
-        target_node_type=target_entity_type,
-        type=relationship_string.lower(),
-        relationship_type_id_name=relationship_type,
-        source_document=source_document_id,
-        cluster_count=cluster_count,
-    )
+    relationship_data = {
+        "id_name": relationship_id_name,
+        "source_node": source_entity_id_name,
+        "target_node": target_entity_id_name,
+        "source_node_type": source_entity_type,
+        "target_node_type": target_entity_type,
+        "type": relationship_string.lower(),
+        "relationship_type_id_name": relationship_type,
+        "source_document": source_document_id,
+        "occurances": occurances,
+    }
+
+    relationship: KGRelationship | KGRelationshipExtractionTemp
+    if kg_stage == KGStage.EXTRACTED:
+        relationship = KGRelationshipExtractionTemp(**relationship_data)
+    elif kg_stage == KGStage.NORMALIZED:
+        relationship = KGRelationship(**relationship_data)
+    else:
+        raise ValueError(f"Invalid kg_stage: {kg_stage}")
 
     db_session.add(relationship)
     db_session.flush()  # Flush to get any DB errors early
@@ -67,12 +80,14 @@ def add_relationship(
 
 def add_or_increment_relationship(
     db_session: Session,
+    kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-) -> "KGRelationship":
+    new_occurances: int = 1,
+) -> KGRelationship | KGRelationshipExtractionTemp:
     """
     Add a relationship between two entities to the database if it doesn't exist,
-    or increment its cluster_count by 1 if it already exists.
+    or increment its occurances by 1 if it already exists.
 
     Args:
         db_session: SQLAlchemy database session
@@ -87,36 +102,53 @@ def add_or_increment_relationship(
     # Format the relationship_id_name
     relationship_id_name = format_relationship(relationship_id_name)
 
+    _KGTable: type[KGRelationship] | type[KGRelationshipExtractionTemp]
+    if kg_stage == KGStage.EXTRACTED:
+        _KGTable = KGRelationshipExtractionTemp
+    elif kg_stage == KGStage.NORMALIZED:
+        _KGTable = KGRelationship
+    else:
+        raise ValueError(f"Invalid kg_stage: {kg_stage}")
+
     # Check if the relationship already exists
     existing_relationship = (
-        db_session.query(KGRelationship)
-        .filter(KGRelationship.id_name == relationship_id_name)
-        .filter(KGRelationship.source_document == source_document_id)
+        db_session.query(_KGTable)
+        .filter(_KGTable.id_name == relationship_id_name)
+        .filter(_KGTable.source_document == source_document_id)
         .first()
     )
 
     if existing_relationship:
-        # If it exists, increment the cluster_count
-        existing_relationship.cluster_count = (
-            existing_relationship.cluster_count or 0
-        ) + 1
+        # If it exists, increment the occurances
+        existing_relationship = cast(
+            KGRelationship | KGRelationshipExtractionTemp, existing_relationship
+        )
+        existing_relationship.occurances = (
+            existing_relationship.occurances or 0
+        ) + new_occurances
         db_session.flush()
         return existing_relationship
     else:
-        # If it doesn't exist, add it with cluster_count=1
+        # If it doesn't exist, add it with occurances=1
+        db_session.flush()
         return add_relationship(
-            db_session, relationship_id_name, source_document_id, cluster_count=1
+            db_session,
+            KGStage(kg_stage),
+            relationship_id_name,
+            source_document_id,
+            occurances=new_occurances,
         )
 
 
 def add_relationship_type(
     db_session: Session,
+    kg_stage: KGStage,
     source_entity_type: str,
     relationship_type: str,
     target_entity_type: str,
     definition: bool = False,
     extraction_count: int = 0,
-) -> "KGRelationshipType":
+) -> Union["KGRelationshipType", "KGRelationshipExtractionTemp"]:
     """
     Add a new relationship type to the database.
 
@@ -136,16 +168,26 @@ def add_relationship_type(
 
     id_name = f"{source_entity_type.upper()}__{relationship_type}__{target_entity_type.upper()}"
     # Create new relationship type
-    rel_type = KGRelationshipType(
-        id_name=id_name,
-        name=relationship_type,
-        source_entity_type_id_name=source_entity_type.upper(),
-        target_entity_type_id_name=target_entity_type.upper(),
-        definition=definition,
-        cluster_count=extraction_count,
-        type=relationship_type,  # Using the relationship_type as the type
-        active=True,  # Setting as active by default
-    )
+
+    relationship_data = {
+        "id_name": id_name,
+        "name": relationship_type,
+        "source_entity_type_id_name": source_entity_type.upper(),
+        "target_entity_type_id_name": target_entity_type.upper(),
+        "definition": definition,
+        "occurances": extraction_count,
+        "type": relationship_type,  # Using the relationship_type as the type
+        "active": True,  # Setting as active by default
+    }
+
+    rel_type: KGRelationshipType | KGRelationshipTypeExtractionTemp
+
+    if kg_stage == KGStage.EXTRACTED:
+        rel_type = KGRelationshipTypeExtractionTemp(**relationship_data)
+    elif kg_stage == KGStage.NORMALIZED:
+        rel_type = KGRelationshipType(**relationship_data)
+    else:
+        raise ValueError(f"Invalid kg_stage: {kg_stage}")
 
     db_session.add(rel_type)
     db_session.flush()  # Flush to get any DB errors early
@@ -153,7 +195,9 @@ def add_relationship_type(
     return rel_type
 
 
-def get_all_relationship_types(db_session: Session) -> list["KGRelationshipType"]:
+def get_all_relationship_types(
+    db_session: Session, kg_stage: str
+) -> list["KGRelationshipType"] | list["KGRelationshipExtractionTemp"]:
     """
     Retrieve all relationship types from the database.
 
@@ -161,9 +205,14 @@ def get_all_relationship_types(db_session: Session) -> list["KGRelationshipType"
         db_session: SQLAlchemy database session
 
     Returns:
-        List of KGRelationshipType objects
+        List of KGRelationshipType or KGRelationshipExtractionTemp objects
     """
-    return db_session.query(KGRelationshipType).all()
+    if kg_stage == KGStage.EXTRACTED:
+        return db_session.query(KGRelationshipExtractionTemp).all()
+    elif kg_stage == KGStage.NORMALIZED:
+        return db_session.query(KGRelationshipType).all()
+    else:
+        raise ValueError(f"Invalid kg_stage: {kg_stage}")
 
 
 def get_all_relationships(db_session: Session) -> list["KGRelationship"]:
