@@ -3,12 +3,16 @@ from fastapi import Depends
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from onyx.auth.schemas import UserRole
 from onyx.auth.users import api_key_dep
 from onyx.configs.constants import DEFAULT_CC_PAIR_ID
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
+from onyx.context.search.models import IndexFilters
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.document import delete_documents_complete__no_commit
+from onyx.db.document import get_document
 from onyx.db.document import get_documents_by_cc_pair
 from onyx.db.document import get_ingestion_documents
 from onyx.db.engine import get_session
@@ -17,11 +21,14 @@ from onyx.db.search_settings import get_active_search_settings
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.search_settings import get_secondary_search_settings
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.interfaces import VespaChunkRequest
+from onyx.file_store.file_store import get_default_file_store
 from onyx.indexing.embedder import DefaultIndexingEmbedder
 from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
+from onyx.server.onyx_api.models import DeleteIngestionResult
 from onyx.server.onyx_api.models import DocMinimalInfo
 from onyx.server.onyx_api.models import IngestionDocument
 from onyx.server.onyx_api.models import IngestionResult
@@ -162,4 +169,58 @@ def upsert_ingestion_doc(
     return IngestionResult(
         document_id=document.id,
         already_existed=indexing_pipeline_result.new_docs > 0,
+    )
+
+
+@router.delete("/ingestion/{document_id}")
+def delete_ingestion_doc(
+    document_id: str,
+    user: User | None = Depends(api_key_dep),
+    db_session: Session = Depends(get_session),
+) -> DeleteIngestionResult:
+    tenant_id = get_current_tenant_id()
+    if user is None or user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=403, detail="User does not have permission to delete documents"
+        )
+
+    document = get_document(document_id, db_session)
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    active_search_settings = get_active_search_settings(db_session)
+    doc_index = get_default_document_index(
+        active_search_settings.primary,
+        active_search_settings.secondary,
+    )
+
+    # A document might have image chunks that its associated with, with
+    # each of these storing an image in the file store. Thus, we have to first
+    # retrieve the chunks, then delete the related image sections from the file store.
+    chunks = doc_index.id_based_retrieval(
+        [VespaChunkRequest(document_id=document.id)],
+        filters=IndexFilters(access_control_list=None, tenant_id=tenant_id),
+    )
+
+    # TODO: add error recovery so that if any of these operations fail,
+    #       we can revert back to the original state with all documents
+    #       and chunks intact.
+    file_store = get_default_file_store(db_session)
+    for chunk in chunks:
+        if chunk.image_file_name:
+            file_store.delete_file(chunk.image_file_name)
+
+    # Completely delete the document from the vector index.
+    doc_index.delete_single(
+        document.id,
+        tenant_id=tenant_id,
+        chunk_count=document.chunk_count,
+    )
+
+    # Completely delete the document from the database, including
+    # all foreign key relationships.
+    delete_documents_complete__no_commit(db_session, [document.id])
+    db_session.commit()
+    return DeleteIngestionResult(
+        document_id=document.id,
     )

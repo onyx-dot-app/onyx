@@ -13,6 +13,10 @@ class IngestionResult(BaseModel):
     already_existed: bool
 
 
+class DeleteIngestionResult(BaseModel):
+    document_id: str
+
+
 class DocMinimalInfo(BaseModel):
     document_id: str
     semantic_id: str
