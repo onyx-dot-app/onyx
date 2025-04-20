@@ -311,7 +311,7 @@ export const connectorConfigs: Record<
         name: "ingest_tags",
         optional: true,
         description:
-          "List of comma-delimited tags to be ingested. If not set, documents with any or no " +
+          "List of comma-delimited tags to be ingested (case-insensitive). If not set, documents with any or no " +
           "tags will be ingested, limited only by the user token permissions and any username filters.",
       },
       {
@@ -320,7 +320,7 @@ export const connectorConfigs: Record<
         name: "ingest_usernames",
         optional: true,
         description:
-          "List of comma-delimited Paperless-ngx usernames of document owners to be ingested. " +
+          "List of comma-delimited Paperless-ngx usernames of document owners to be ingested (case-insensitive). " +
           "If not set, documents from all users and with no owner will be ingested, " +
           "limited only by the user token permissions and any tag filters.",
       },
@@ -329,17 +329,10 @@ export const connectorConfigs: Record<
         label: "Ingest No Owner Documents Filter",
         name: "ingest_noowner",
         default: false,
+        optional: true,
         description:
           "Check to ingest documents with no owner set. Only has an effect if users filter is also set. " +
           "Otherwise, they are always included by default.",
-      },
-      {
-        type: "text",
-        label: "Documents Endpoint",
-        name: "documents_endpoint",
-        optional: true,
-        description:
-          "Only set if you need to change the documents endpoint (default: '/api/documents') for your instance.",
       },
     ],
   },
