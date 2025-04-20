@@ -93,6 +93,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 raise ConnectorValidationError(
                     f"Could not parse start_date: {start_date}. Error: {e}"
                 )
+        else:
+            self.start_date = None
 
         try:
             self.ingest_tags: List[str] = (
