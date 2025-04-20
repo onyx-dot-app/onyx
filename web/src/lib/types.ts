@@ -392,6 +392,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  PaperlessNgx = "paperless_ngx",
 }
 
 export const validAutoSyncSources = [

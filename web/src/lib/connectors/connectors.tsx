@@ -291,6 +291,58 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  paperless_ngx: {
+    description: "Configure Paperless-ngx connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the instance url (https://paperless.example.com):",
+        label: "Paperless-ngx URL",
+        name: "api_url",
+        optional: true,
+        description:
+          "Only optional if the environment variable 'PAPERLESS_API_URL' is set, which you can override here.",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "text",
+        label: "Ingest Only From Tags Filter",
+        name: "ingest_tags",
+        optional: true,
+        description:
+          "List of comma-delimited tags to be ingested. If not set, documents with any or no " +
+          "tags will be ingested, limited only by the user token permissions and any username filters.",
+      },
+      {
+        type: "text",
+        label: "Ingest Only From Users Filter",
+        name: "ingest_usernames",
+        optional: true,
+        description:
+          "List of comma-delimited Paperless-ngx usernames of document owners to be ingested. " +
+          "If not set, documents from all users and with no owner will be ingested, " +
+          "limited only by the user token permissions and any tag filters.",
+      },
+      {
+        type: "checkbox",
+        label: "Ingest No Owner Documents Filter",
+        name: "ingest_noowner",
+        default: false,
+        description:
+          "Check to ingest documents with no owner set. Only has an effect if users filter is also set. " +
+          "Otherwise, they are always included by default.",
+      },
+      {
+        type: "text",
+        label: "Documents Endpoint",
+        name: "documents_endpoint",
+        optional: true,
+        description:
+          "Only set if you need to change the documents endpoint (default: '/api/documents') for your instance.",
+      },
+    ],
+  },
   google_drive: {
     description: "Configure Google Drive connector",
     values: [
