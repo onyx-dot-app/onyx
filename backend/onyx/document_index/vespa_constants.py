@@ -5,20 +5,6 @@ from onyx.configs.app_configs import VESPA_PORT
 from onyx.configs.app_configs import VESPA_TENANT_PORT
 from onyx.configs.constants import SOURCE_TYPE
 
-VESPA_DIM_REPLACEMENT_PAT = "VARIABLE_DIM"
-EMBEDDING_PRECISION_REPLACEMENT_PAT = "EMBEDDING_PRECISION"
-DANSWER_CHUNK_REPLACEMENT_PAT = "DANSWER_CHUNK_NAME"
-DOCUMENT_REPLACEMENT_PAT = "DOCUMENT_REPLACEMENT"
-SEARCH_THREAD_NUMBER_PAT = "SEARCH_THREAD_NUMBER"
-DATE_REPLACEMENT = "DATE_REPLACEMENT"
-SEARCH_THREAD_NUMBER_PAT = "SEARCH_THREAD_NUMBER"
-TENANT_ID_PAT = "TENANT_ID_REPLACEMENT"
-
-TENANT_ID_REPLACEMENT = """field tenant_id type string {
-            indexing: summary | attribute
-            rank: filter
-            attribute: fast-search
-        }"""
 # config server
 
 
@@ -31,7 +17,7 @@ VESPA_APPLICATION_ENDPOINT = f"{VESPA_CONFIG_SERVER_URL}/application/v2"
 VESPA_APP_CONTAINER_URL = VESPA_CLOUD_URL or f"http://{VESPA_HOST}:{VESPA_PORT}"
 
 
-# danswer_chunk below is defined in vespa/app_configs/schemas/danswer_chunk.sd
+# danswer_chunk below is defined in vespa/app_configs/schemas/danswer_chunk.sd.jinja
 DOCUMENT_ID_ENDPOINT = (
     f"{VESPA_APP_CONTAINER_URL}/document/v1/default/{{index_name}}/docid"
 )
