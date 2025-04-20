@@ -3,9 +3,14 @@ from unittest.mock import MagicMock
 from unittest.mock import patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import ConnectorFailure
+from onyx.connectors.models import Document
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_FOLDER_3_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import (
     assert_expected_docs_in_retrieved_docs,
+)
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    DONWLOAD_REVOKED_FILE_ID,
 )
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_2_FILE_IDS
@@ -13,6 +18,9 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_FILE_I
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_1_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
 from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    load_all_docs_with_failures,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import SHARED_DRIVE_1_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_EMAIL
 from tests.daily.connectors.google_drive.consts_and_utils import TEST_USER_1_FILE_IDS
@@ -36,7 +44,7 @@ def test_all(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs = load_all_docs(connector)
+    retrieved_docs_failures = load_all_docs_with_failures(connector)
 
     expected_file_ids = (
         # These are the files from my drive
@@ -50,6 +58,22 @@ def test_all(
         + ADMIN_FOLDER_3_FILE_IDS
         + list(range(0, 2))
     )
+
+    retrieved_docs = [
+        doc for doc in retrieved_docs_failures if isinstance(doc, Document)
+    ]
+    retrieved_failures = [
+        failure
+        for failure in retrieved_docs_failures
+        if isinstance(failure, ConnectorFailure)
+    ]
+    assert len(retrieved_failures) == 1
+    fail_msg = retrieved_failures[0].failure_message
+    assert "403 Client Error: Forbidden" in fail_msg
+    assert str(DONWLOAD_REVOKED_FILE_ID) in fail_msg
+
+    expected_file_ids.remove(DONWLOAD_REVOKED_FILE_ID)
+
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,

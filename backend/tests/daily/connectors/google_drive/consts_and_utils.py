@@ -2,9 +2,11 @@ import time
 from collections.abc import Sequence
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))
@@ -25,6 +27,8 @@ FOLDER_2_1_FILE_IDS = list(range(50, 55))
 FOLDER_2_2_FILE_IDS = list(range(55, 60))
 SECTIONS_FILE_IDS = [61]
 FOLDER_3_FILE_IDS = list(range(62, 65))
+
+DONWLOAD_REVOKED_FILE_ID = 21
 
 PUBLIC_FOLDER_RANGE = FOLDER_1_2_FILE_IDS
 PUBLIC_FILE_IDS = list(range(55, 57))
@@ -230,6 +234,16 @@ def assert_expected_docs_in_retrieved_docs(
 
 def load_all_docs(connector: GoogleDriveConnector) -> list[Document]:
     return load_all_docs_from_checkpoint_connector(
+        connector,
+        0,
+        time.time(),
+    )
+
+
+def load_all_docs_with_failures(
+    connector: GoogleDriveConnector,
+) -> list[Document | ConnectorFailure]:
+    return load_everything_from_checkpoint_connector(
         connector,
         0,
         time.time(),
