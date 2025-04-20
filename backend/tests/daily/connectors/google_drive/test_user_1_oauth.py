@@ -69,8 +69,8 @@ def test_all(
     ]
     assert len(retrieved_failures) == 1
     fail_msg = retrieved_failures[0].failure_message
-    assert "403 Client Error: Forbidden" in fail_msg
-    assert str(DONWLOAD_REVOKED_FILE_ID) in fail_msg
+    assert "HttpError 403" in fail_msg
+    assert f"file_{DONWLOAD_REVOKED_FILE_ID}.txt" in fail_msg
 
     expected_file_ids.remove(DONWLOAD_REVOKED_FILE_ID)
 
