@@ -249,11 +249,11 @@ class DefaultMultiLLM(LLM):
         api_key: str | None,
         model_provider: str,
         model_name: str,
+        max_input_tokens: int,
         timeout: int | None = None,
         api_base: str | None = None,
         api_version: str | None = None,
         deployment_name: str | None = None,
-        max_output_tokens: int | None = None,
         custom_llm_provider: str | None = None,
         temperature: float | None = None,
         custom_config: dict[str, str] | None = None,
@@ -279,17 +279,7 @@ class DefaultMultiLLM(LLM):
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._long_term_logger = long_term_logger
-
-        # This can be used to store the maximum output tokens for this model.
-        # self._max_output_tokens = (
-        #     max_output_tokens
-        #     if max_output_tokens is not None
-        #     else get_llm_max_output_tokens(
-        #         model_map=litellm.model_cost,
-        #         model_name=model_name,
-        #         model_provider=model_provider,
-        #     )
-        # )
+        self._max_input_tokens = max_input_tokens
         self._custom_config = custom_config
 
         # Create a dictionary for model-specific arguments if it's None
@@ -372,30 +362,6 @@ class DefaultMultiLLM(LLM):
                 },
                 category=_LLM_PROMPT_LONG_TERM_LOG_CATEGORY,
             )
-
-    # def _calculate_max_output_tokens(self, prompt: LanguageModelInput) -> int:
-    #     # NOTE: This method can be used for calculating the maximum tokens for the stream,
-    #     # but it isn't used in practice due to the computational cost of counting tokens
-    #     # and because LLM providers automatically cut off at the maximum output.
-    #     # The implementation is kept for potential future use or debugging purposes.
-
-    #     # Get max input tokens for the model
-    #     max_context_tokens = get_max_input_tokens(
-    #         model_name=self.config.model_name, model_provider=self.config.model_provider
-    #     )
-
-    #     llm_tokenizer = get_tokenizer(
-    #         model_name=self.config.model_name,
-    #         provider_type=self.config.model_provider,
-    #     )
-    #     # Calculate tokens in the input prompt
-    #     input_tokens = sum(len(llm_tokenizer.encode(str(m))) for m in prompt)
-
-    #     # Calculate available tokens for output
-    #     available_output_tokens = max_context_tokens - input_tokens
-
-    #     # Return the lesser of available tokens or configured max
-    #     return min(self._max_output_tokens, available_output_tokens)
 
     def _completion(
         self,
@@ -494,6 +460,7 @@ class DefaultMultiLLM(LLM):
             api_version=self._api_version,
             deployment_name=self._deployment_name,
             credentials_file=credentials_file,
+            max_input_tokens=self._max_input_tokens,
         )
 
     def _invoke_implementation(

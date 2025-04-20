@@ -267,9 +267,9 @@ def generate_validate_refined_answer(
 
     relevant_docs_str = format_docs(answer_generation_documents.context_documents)
     relevant_docs_str = trim_prompt_piece(
-        model.config,
-        relevant_docs_str,
-        base_prompt
+        config=model.config,
+        prompt_piece=relevant_docs_str,
+        reserved_str=base_prompt
         + question
         + sub_question_answer_str
         + initial_answer

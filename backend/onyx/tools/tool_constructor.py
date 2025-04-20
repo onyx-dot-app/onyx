@@ -57,6 +57,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             api_key=llm.config.api_key,
             api_base=llm.config.api_base,
             api_version=llm.config.api_version,
+            max_input_tokens=llm.config.max_input_tokens,
         )
 
     if llm.config.model_provider == "azure" and AZURE_DALLE_API_KEY is not None:
@@ -67,6 +68,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
             api_key=AZURE_DALLE_API_KEY,
             api_base=AZURE_DALLE_API_BASE,
             api_version=AZURE_DALLE_API_VERSION,
+            max_input_tokens=llm.config.max_input_tokens,
         )
 
     # Fallback to checking for OpenAI provider in database
@@ -92,6 +94,7 @@ def _get_image_generation_config(llm: LLM, db_session: Session) -> LLMConfig:
         api_key=openai_provider.api_key,
         api_base=openai_provider.api_base,
         api_version=openai_provider.api_version,
+        max_input_tokens=llm.config.max_input_tokens,
     )
 
 

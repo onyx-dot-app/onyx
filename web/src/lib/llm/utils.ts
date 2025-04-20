@@ -48,7 +48,9 @@ export function getLLMProviderOverrideForPersona(
   const matchingProvider = llmProviders.find(
     (provider) =>
       (overrideProvider ? provider.name === overrideProvider : true) &&
-      provider.model_names.includes(overrideModel)
+      provider.model_configurations
+        .map((modelConfiguration) => modelConfiguration.name)
+        .includes(overrideModel)
   );
 
   if (matchingProvider) {
@@ -171,6 +173,10 @@ export const findProviderForModel = (
   llmProviders: LLMProviderDescriptor[],
   modelName: string
 ): string => {
-  const provider = llmProviders.find((p) => p.model_names.includes(modelName));
+  const provider = llmProviders.find((p) =>
+    p.model_configurations
+      .map((modelConfiguration) => modelConfiguration.name)
+      .includes(modelName)
+  );
   return provider ? provider.provider : "";
 };

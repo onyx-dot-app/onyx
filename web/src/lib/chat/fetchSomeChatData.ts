@@ -55,8 +55,8 @@ type FetchOption =
   | "llmProviders"
   | "folders";
 
-/* 
-NOTE: currently unused, but leaving here for future use. 
+/*
+NOTE: currently unused, but leaving here for future use.
 */
 export async function fetchSomeChatData(
   searchParams: { [key: string]: string },
@@ -173,7 +173,9 @@ export async function fetchSomeChatData(
     const hasImageCompatibleModel = result.llmProviders?.some(
       (provider) =>
         provider.provider === "openai" ||
-        provider.model_names.some((model) => checkLLMSupportsImageInput(model))
+        provider.model_configurations.some((modelConfiguration) =>
+          checkLLMSupportsImageInput(modelConfiguration.name)
+        )
     );
 
     if (!hasImageCompatibleModel) {

@@ -38,7 +38,6 @@ from onyx.db.persona import get_persona_by_id
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
-from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
@@ -177,10 +176,9 @@ def get_answer_stream(
         provider_type=llm.config.model_provider,
     )
 
-    input_tokens = get_max_input_tokens(
-        model_name=llm.config.model_name, model_provider=llm.config.model_provider
+    max_history_tokens = int(
+        llm.config.max_input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE
     )
-    max_history_tokens = int(input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE)
 
     combined_message = combine_message_thread(
         messages=query_request.messages,

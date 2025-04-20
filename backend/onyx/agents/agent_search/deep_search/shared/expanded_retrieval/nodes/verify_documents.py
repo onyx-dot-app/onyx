@@ -71,7 +71,9 @@ def verify_documents(
     fast_llm = graph_config.tooling.fast_llm
 
     document_content = trim_prompt_piece(
-        fast_llm.config, document_content, DOCUMENT_VERIFICATION_PROMPT + question
+        config=fast_llm.config,
+        prompt_piece=document_content,
+        reserved_str=DOCUMENT_VERIFICATION_PROMPT + question,
     )
 
     msg = [

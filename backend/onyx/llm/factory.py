@@ -15,8 +15,8 @@ from onyx.llm.chat_llm import DefaultMultiLLM
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.interfaces import LLM
 from onyx.llm.override_models import LLMOverride
+from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
-from onyx.server.manage.llm.models import LLMProvider
 from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.headers import build_llm_extra_headers
 from onyx.utils.logger import setup_logger
@@ -87,6 +87,9 @@ def get_llms_for_persona(
             temperature=temperature_override,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=llm_provider, model_name=model
+            ),
         )
 
     return _create_llm(model), _create_llm(fast_model)
@@ -121,6 +124,9 @@ def get_default_llm_with_vision(
             temperature=temperature,
             additional_headers=additional_headers,
             long_term_logger=long_term_logger,
+            max_input_tokens=get_max_input_tokens_from_llm_provider(
+                llm_provider=provider, model_name=model
+            ),
         )
 
     with get_session_with_current_tenant() as db_session:
@@ -150,8 +156,8 @@ def get_default_llm_with_vision(
         ):
             return create_vision_llm(provider_view, provider.default_vision_model)
 
-        # If no model_names are specified, try default models in priority order
-        if not provider.model_names:
+        # If no model-configurations are specified, try default models in priority order
+        if not provider.model_configurations:
             # Try default_model_name
             if provider.default_model_name and model_supports_image_input(
                 provider.default_model_name, provider.provider
@@ -165,18 +171,21 @@ def get_default_llm_with_vision(
                 return create_vision_llm(
                     provider_view, provider.fast_default_model_name
                 )
+
+        # Otherwise, if model-configurations are specified, check each model
         else:
-            # If model_names is specified, check each model
-            for model_name in provider.model_names:
-                if model_supports_image_input(model_name, provider.provider):
-                    return create_vision_llm(provider_view, model_name)
+            for model_configuration in provider.model_configurations:
+                if model_supports_image_input(
+                    model_configuration.name, provider.provider
+                ):
+                    return create_vision_llm(provider_view, model_configuration.name)
 
     return None
 
 
 def llm_from_provider(
     model_name: str,
-    llm_provider: LLMProvider,
+    llm_provider: LLMProviderView,
     timeout: int | None = None,
     temperature: float | None = None,
     additional_headers: dict[str, str] | None = None,
@@ -194,6 +203,9 @@ def llm_from_provider(
         temperature=temperature,
         additional_headers=additional_headers,
         long_term_logger=long_term_logger,
+        max_input_tokens=get_max_input_tokens_from_llm_provider(
+            llm_provider=llm_provider, model_name=model_name
+        ),
     )
 
 
@@ -248,6 +260,7 @@ def get_default_llms(
 def get_llm(
     provider: str,
     model: str,
+    max_input_tokens: int,
     deployment_name: str | None,
     api_key: str | None = None,
     api_base: str | None = None,
@@ -273,4 +286,5 @@ def get_llm(
         extra_headers=build_llm_extra_headers(additional_headers),
         model_kwargs=_build_extra_model_kwargs(provider),
         long_term_logger=long_term_logger,
+        max_input_tokens=max_input_tokens,
     )

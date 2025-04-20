@@ -486,7 +486,9 @@ export function useLlmManager(
       const model = destructureValue(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
-          p.model_names.includes(modelName)
+          p.model_configurations
+            .map((modelConfiguration) => modelConfiguration.name)
+            .includes(modelName)
         );
         if (provider) {
           return {
@@ -498,7 +500,9 @@ export function useLlmManager(
       }
 
       const provider = llmProviders.find((p) =>
-        p.model_names.includes(model.modelName)
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(model.modelName)
       );
 
       if (provider) {

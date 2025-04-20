@@ -16,6 +16,7 @@ from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.utils import get_max_input_tokens
 from onyx.tools.models import ToolResponse
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.search_like_tool_utils import (
@@ -43,14 +44,21 @@ def prompt_config() -> PromptConfig:
 
 @pytest.fixture
 def mock_llm() -> MagicMock:
+    model_provider = "openai"
+    model_name = "gpt-4o"
+
     mock_llm_obj = MagicMock(spec=LLM)
     mock_llm_obj.config = LLMConfig(
-        model_provider="openai",
-        model_name="gpt-4o",
+        model_provider=model_provider,
+        model_name=model_name,
         temperature=0.0,
         api_key=None,
         api_base=None,
         api_version=None,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
     )
     return mock_llm_obj
 

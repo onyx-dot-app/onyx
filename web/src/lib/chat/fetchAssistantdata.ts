@@ -46,7 +46,9 @@ export async function fetchAssistantData(): Promise<AssistantData> {
     const hasImageCompatibleModel = llmProviders.some(
       (provider) =>
         provider.provider === "openai" ||
-        provider.model_names.some((model) => checkLLMSupportsImageInput(model))
+        provider.model_configurations.some((modelConfiguration) =>
+          checkLLMSupportsImageInput(modelConfiguration.name)
+        )
     );
 
     let filteredAssistants = filterAssistants(

@@ -11,6 +11,7 @@ from litellm.types.utils import Function as LiteLLMFunction
 
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
 from onyx.llm.chat_llm import DefaultMultiLLM
+from onyx.llm.utils import get_max_input_tokens
 
 
 def _create_delta(
@@ -27,11 +28,18 @@ def _create_delta(
 
 @pytest.fixture
 def default_multi_llm() -> DefaultMultiLLM:
+    model_provider = "openai"
+    model_name = "gpt-3.5-turbo"
+
     return DefaultMultiLLM(
         api_key="test_key",
         timeout=30,
-        model_provider="openai",
-        model_name="gpt-3.5-turbo",
+        model_provider=model_provider,
+        model_name=model_name,
+        max_input_tokens=get_max_input_tokens(
+            model_provider=model_provider,
+            model_name=model_name,
+        ),
     )
 
 

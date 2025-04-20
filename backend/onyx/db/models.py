@@ -1552,18 +1552,6 @@ class LLMProvider(Base):
     default_model_name: Mapped[str] = mapped_column(String)
     fast_default_model_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    # Models to actually display to users
-    # If nulled out, we assume in the application logic we should present all
-    display_model_names: Mapped[list[str] | None] = mapped_column(
-        postgresql.ARRAY(String), nullable=True
-    )
-    # The LLMs that are available for this provider. Only required if not a default provider.
-    # If a default provider, then the LLM options are pulled from the `options.py` file.
-    # If needed, can be pulled out as a separate table in the future.
-    model_names: Mapped[list[str] | None] = mapped_column(
-        postgresql.ARRAY(String), nullable=True
-    )
-
     deployment_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # should only be set for a single provider
@@ -1576,6 +1564,44 @@ class LLMProvider(Base):
         "UserGroup",
         secondary="llm_provider__user_group",
         viewonly=True,
+    )
+    model_configurations: Mapped[list["ModelConfiguration"]] = relationship(
+        "ModelConfiguration",
+        back_populates="llm_provider",
+        foreign_keys="ModelConfiguration.llm_provider_id",
+    )
+
+
+class ModelConfiguration(Base):
+    __tablename__ = "model_configuration"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    llm_provider_id: Mapped[int] = mapped_column(
+        ForeignKey("llm_provider.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+
+    # Represents whether or not a given model will be usable by the end user or not.
+    # This field is primarily used for "Well Known LLM Providers", since for them,
+    # we have a pre-defined list of LLM models that we allow them to choose from.
+    # For example, for OpenAI, we allow the end-user to choose multiple models from
+    # `["gpt-4", "gpt-4o", etc.]`. Once they make their selections, we set each
+    # selected model to `is_visible = True`.
+    #
+    # For "Custom LLM Providers", we don't provide a comprehensive list of models
+    # for the end-user to choose from; *they provide it themselves*. Therefore,
+    # for Custom LLM Providers, `is_visible` will always be True.
+    is_visible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Max input tokens can be null when:
+    # - The end-user configures models through a "Well Known LLM Provider".
+    # - The end-user is configuring a model and chooses not to set a max-input-tokens limit.
+    max_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    llm_provider: Mapped["LLMProvider"] = relationship(
+        "LLMProvider",
+        back_populates="model_configurations",
     )
 
 
@@ -1593,7 +1619,6 @@ class CloudEmbeddingProvider(Base):
     search_settings: Mapped[list["SearchSettings"]] = relationship(
         "SearchSettings",
         back_populates="cloud_provider",
-        foreign_keys="SearchSettings.provider_type",
     )
 
     def __repr__(self) -> str:
