@@ -41,7 +41,7 @@ test("Chat workflow", async ({ page }) => {
 
   // Test creation of a new assistant
   await page.getByRole("button", { name: "Explore Assistants" }).click();
-  await page.getByRole("button", { name: "Create" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByTestId("name").click();
   await page.getByTestId("name").fill("Test Assistant");
   await page.getByTestId("description").click();

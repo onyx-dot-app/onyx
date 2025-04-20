@@ -36,13 +36,11 @@ export async function verifyCurrentModel(page: Page, modelName: string) {
 // Start of Selection
 export async function switchModel(page: Page, modelName: string) {
   await page.getByTestId("llm-popover-trigger").click();
-  await page
-    .getByRole("button", { name: `Logo ${modelName}`, exact: true })
-    .click();
+  await page.getByRole("button", { name: new RegExp(modelName, "i") }).click();
   await page.waitForTimeout(1000);
 }
 
 export async function startNewChat(page: Page) {
-  await page.getByRole("link", { name: "Start New Chat" }).click();
+  await page.getByRole("link", { name: "New Chat" }).click();
   await expect(page.locator('div[data-testid="chat-intro"]')).toBeVisible();
 }
