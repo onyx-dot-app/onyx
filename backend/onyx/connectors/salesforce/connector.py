@@ -111,43 +111,19 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
     @staticmethod
     def _download_object_csvs(
-        sf_db: OnyxSalesforceSQLite,
+        all_types_to_filter: dict[str, bool],
         directory: str,
-        parent_object_list: list[str],
         sf_client: Salesforce,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> None:
-        all_types: set[str] = set(parent_object_list)
-
-        logger.info(
-            f"Parent object types: num={len(parent_object_list)} list={parent_object_list}"
-        )
-
-        # This takes like 20 seconds
-        for parent_object_type in parent_object_list:
-            child_types = get_all_children_of_sf_type(sf_client, parent_object_type)
-            logger.debug(
-                f"Found {len(child_types)} child types for {parent_object_type}"
-            )
-
-            all_types.update(child_types)
-
-        # Always want to make sure user is grabbed for permissioning purposes
-        all_types.add("User")
-
-        logger.info(f"All object types: num={len(all_types)} list={all_types}")
-
-        # gc.collect()
-
         # checkpoint - we've found all object types, now time to fetch the data
         logger.info("Fetching CSVs for all object types")
 
         # This takes like 30 minutes first time and <2 minutes for updates
         object_type_to_csv_path = fetch_all_csvs_in_parallel(
-            sf_db=sf_db,
             sf_client=sf_client,
-            object_types=all_types,
+            all_types_to_filter=all_types_to_filter,
             start=start,
             end=end,
             target_dir=directory,
@@ -224,6 +200,30 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
         return updated_ids
 
+    @staticmethod
+    def _get_all_types(parent_types: list[str], sf_client: Salesforce) -> set[str]:
+        all_types: set[str] = set(parent_types)
+
+        # Step 1 - get all object types
+        logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
+
+        # This takes like 20 seconds
+        for parent_object_type in parent_types:
+            child_types = get_all_children_of_sf_type(sf_client, parent_object_type)
+            logger.debug(
+                f"Found {len(child_types)} child types for {parent_object_type}"
+            )
+
+            all_types.update(child_types)
+
+        # Always want to make sure user is grabbed for permissioning purposes
+        all_types.add("User")
+
+        logger.info(f"All object types: num={len(all_types)} list={all_types}")
+
+        # gc.collect()
+        return all_types
+
     def _fetch_from_salesforce(
         self,
         temp_dir: str,
@@ -244,9 +244,24 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             sf_db.apply_schema()
             sf_db.log_stats()
 
-            # Step 1 - download
+            # Step 1.1 - add child object types + "User" type to the list of types
+            all_types = SalesforceConnector._get_all_types(
+                self.parent_object_list, self._sf_client
+            )
+
+            """Only add time filter if there is at least one object of the type
+            in the database. We aren't worried about partially completed object update runs
+            because this occurs after we check for existing csvs which covers this case"""
+            all_types_to_filter: dict[str, bool] = {}
+            for sf_type in all_types:
+                if sf_db.has_at_least_one_object_of_type(sf_type):
+                    all_types_to_filter[sf_type] = True
+                else:
+                    all_types_to_filter[sf_type] = False
+
+            # Step 1.2 - bulk download the CSV for each object type
             SalesforceConnector._download_object_csvs(
-                sf_db, temp_dir, self.parent_object_list, self._sf_client, start, end
+                all_types_to_filter, temp_dir, self._sf_client, start, end
             )
             gc.collect()
 
