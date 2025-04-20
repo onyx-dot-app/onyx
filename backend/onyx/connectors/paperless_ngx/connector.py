@@ -27,7 +27,12 @@ from onyx.connectors.models import TextSection
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DOCUMENTS_ENDPOINT = "/api/documents/"
+DOCUMENTS_ENDPOINT = "/api/documents/"
+TAGS_ENDPOINT = "/api/tags/"
+USERS_ENDPOINT = "/api/users/"
+CORRESPONDENTS_ENDPOINT = "/api/correspondents/"
+DOCUMENT_TYPES_ENDPOINT = "/api/document_types/"
+# CUSTOM_FIELDS_ENDPOINT = "/api/custom_fields/"
 
 
 class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
@@ -42,13 +47,12 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         ingest_tags: Optional[str] = None,
         ingest_usernames: Optional[str] = None,
         ingest_noowner: Optional[bool] = False,
-        documents_endpoint: Optional[str] = DEFAULT_DOCUMENTS_ENDPOINT,
     ) -> None:
         self.api_url = api_url
 
         if not self.api_url:
             self.api_url = os.environ.get("PAPERLESS_API_URL")
-            logger.info("Loaded API URL from environment variables")
+            logger.debug("Loaded API URL from environment variables")
         else:
             logger.debug("Using web user-provided API URL")
 
@@ -66,6 +70,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         # - yyyy/mm/dd
         # - dd.mm.yyyy
         # - mm.dd.yyyy
+        self.start_date: Optional[str] = None
         if start_date:
             try:
                 for fmt in [
@@ -93,8 +98,6 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 raise ConnectorValidationError(
                     f"Could not parse start_date: {start_date}. Error: {e}"
                 )
-        else:
-            self.start_date = None
 
         try:
             self.ingest_tags: List[str] = (
@@ -118,12 +121,6 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         self.ingest_noowner = ingest_noowner
 
-        self.documents_endpoint = (
-            documents_endpoint
-            or os.environ.get("PAPERLESS_DOCUMENTS_ENDPOINT")
-            or DEFAULT_DOCUMENTS_ENDPOINT
-        )
-
         logger.info("Initialized PaperlessNgxConnector")
 
     @override
@@ -135,7 +132,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         if not self.auth_token:
             self.auth_token = os.environ.get("PAPERLESS_AUTH_TOKEN")
-            logger.info("Loaded auth token from environment variables")
+            logger.debug("Loaded auth token from environment variables")
         else:
             logger.debug("Using web user-provided auth token")
 
@@ -214,6 +211,14 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         Returns:
             A list of document data dictionaries from the Paperless API
         """
+
+        # update attribute lists so they can be added as needed for filters and when documents parsed
+        self.all_tags = self._make_request(TAGS_ENDPOINT)
+        self.all_users = self._make_request(USERS_ENDPOINT)
+        self.all_correspondents = self._make_request(CORRESPONDENTS_ENDPOINT)
+        self.all_document_types = self._make_request(DOCUMENT_TYPES_ENDPOINT)
+        # self.all_custom_fields = self._make_request(CUSTOM_FIELDS_ENDPOINT)
+
         # Build base parameters dict with date filters
         params = {}
         if start_date:
@@ -227,9 +232,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         # Get tag IDs if tags are specified
         tag_ids = []
         if self.ingest_tags:
-            logger.info(f"Finding tag IDs for: {self.ingest_tags}")
-            all_tags = self._make_request("/api/tags/")
-            tag_name_to_id = {tag["name"].lower(): tag["id"] for tag in all_tags}
+            logger.debug(f"Finding tag IDs for: {self.ingest_tags}")
+            tag_name_to_id = {tag["name"].lower(): tag["id"] for tag in self.all_tags}
 
             for tag_name in self.ingest_tags:
                 tag_name_lower = tag_name.lower()
@@ -246,10 +250,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         # Get user IDs if usernames are specified
         user_ids = []
         if self.ingest_usernames:
-            logger.info(f"Finding user IDs for: {self.ingest_usernames}")
-            all_users = self._make_request("/api/users/")
+            logger.debug(f"Finding user IDs for: {self.ingest_usernames}")
             username_to_id = {
-                user["username"].lower(): user["id"] for user in all_users
+                user["username"].lower(): user["id"] for user in self.all_users
             }
 
             for username in self.ingest_usernames:
@@ -267,11 +270,11 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         # Handle different filtering combinations
         if self.ingest_tags and not self.ingest_usernames:
             # Only filter by tags
-            logger.info(f"Retrieving documents with tags: {self.ingest_tags}")
+            logger.debug(f"Retrieving documents with tags: {self.ingest_tags}")
             if not tag_ids:
                 logger.warning("No valid tags found, returning empty result")
                 return []
-            docs = self._make_request(self.documents_endpoint, params=params)
+            docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
         elif self.ingest_usernames and not self.ingest_tags:
             # Filter by users with optional no-owner inclusion
             if not user_ids and not self.ingest_noowner:
@@ -281,15 +284,13 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 return []
 
             if self.ingest_noowner:
-                logger.info(
+                logger.debug(
                     f"Retrieving documents for users: {self.ingest_usernames} and documents with no owner"
                 )
                 # We need to make two requests and combine the results
                 user_docs = []
                 if user_ids:
-                    user_docs = self._make_request(
-                        self.documents_endpoint, params=params
-                    )
+                    user_docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
 
                 # Make a separate request for no-owner documents
                 noowner_params = params.copy()
@@ -297,7 +298,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                     del noowner_params["owner__id__in"]
                 noowner_params["owner__isnull"] = "true"
                 noowner_docs = self._make_request(
-                    self.documents_endpoint, params=noowner_params
+                    DOCUMENTS_ENDPOINT, params=noowner_params
                 )
 
                 # Combine and deduplicate
@@ -310,8 +311,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                             seen_ids.add(doc_id)
                             docs.append(doc)
             else:
-                logger.info(f"Retrieving documents for users: {self.ingest_usernames}")
-                docs = self._make_request(self.documents_endpoint, params=params)
+                logger.debug(f"Retrieving documents for users: {self.ingest_usernames}")
+                docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
         elif self.ingest_tags and self.ingest_usernames:
             # Combined filter: documents with specified tags AND (specified users OR no owner if enabled)
             if not tag_ids:
@@ -325,16 +326,14 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 return []
 
             if self.ingest_noowner:
-                logger.info(
+                logger.debug(
                     f"Retrieving documents with tags: {self.ingest_tags} "
                     + f"for users: {self.ingest_usernames} and documents with no owner"
                 )
                 # We need to make two requests and combine the results
                 user_docs = []
                 if user_ids:
-                    user_docs = self._make_request(
-                        self.documents_endpoint, params=params
-                    )
+                    user_docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
 
                 # Make a separate request for no-owner documents
                 noowner_params = params.copy()
@@ -342,7 +341,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                     del noowner_params["owner__id__in"]
                 noowner_params["owner__isnull"] = "true"
                 noowner_docs = self._make_request(
-                    self.documents_endpoint, params=noowner_params
+                    DOCUMENTS_ENDPOINT, params=noowner_params
                 )
 
                 # Combine and deduplicate
@@ -355,16 +354,16 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                             seen_ids.add(doc_id)
                             docs.append(doc)
             else:
-                logger.info(
+                logger.debug(
                     f"Retrieving documents with tags: {self.ingest_tags} for users: {self.ingest_usernames}"
                 )
-                docs = self._make_request(self.documents_endpoint, params=params)
+                docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
         else:
             # No specific filters, get all documents
-            logger.info("No filters specified, retrieving all documents")
-            docs = self._make_request(self.documents_endpoint, params=params)
+            logger.debug("No filters specified, retrieving all documents")
+            docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
 
-        logger.info(f"Retrieved {len(docs)} documents matching the specified filters")
+        logger.debug(f"Retrieved {len(docs)} documents matching the specified filters")
         return docs
 
     def _parse_document(self, doc_data: Dict[str, Any]) -> Optional[Document]:
@@ -376,6 +375,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         content = doc_data.get("content")
         added_timestamp_str = doc_data.get("added")
         modified_timestamp_str = doc_data.get("modified")
+        image_file_name = doc_data.get("archived_file_name")
 
         # Defensive checks and parse
         if (
@@ -395,11 +395,15 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             else (self.api_url or "")
         )
         uri = f"{base_url}/documents/{doc_id}/details"
+        file_uri = f"{base_url}/api/documents/{doc_id}/preview/"
 
         try:
             updated_at = datetime.fromisoformat(
                 modified_timestamp_str.replace("Z", "+00:00")
             )
+            # Ensure datetime is in UTC
+            if updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError, AttributeError):
             logger.warning(
                 f"Could not parse timestamp for document {doc_id}: {modified_timestamp_str}"
@@ -408,28 +412,92 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         # Only allow str or List[str] in metadata => coerce all metadata fields to str or list[str]
         metadata: Dict[str, Union[str, List[str]]] = {
-            "source": "paperless_ngx",
-            "original_created": str(added_timestamp_str),
+            "source": DocumentSource.PAPERLESS_NGX.value,
+            "added_date": str(added_timestamp_str),
             "uri": uri,
-            "tags": [str(t) for t in (doc_data.get("tags") or [])],
-            "correspondent": (
-                str(doc_data.get("correspondent"))
-                if doc_data.get("correspondent") is not None
-                else ""
+            "file_uri": file_uri,
+            "tag_ids": ",".join(map(str, doc_data.get("tags", []))),
+            "tag_names": ",".join(
+                map(
+                    str,
+                    [
+                        tag["name"]
+                        for tag in self.all_tags
+                        if tag["id"] in doc_data.get("tags", [])
+                    ],
+                )
             ),
-            "document_type": (
-                str(doc_data.get("document_type"))
-                if doc_data.get("document_type") is not None
-                else ""
+            "correspondent_id": (
+                ""
+                if doc_data.get("correspondent") is None
+                else str(doc_data.get("correspondent"))
             ),
+            "correspondent_name": next(
+                (
+                    corr["name"]
+                    for corr in self.all_correspondents
+                    if corr["id"] == doc_data.get("correspondent")
+                ),
+                "",
+            ),
+            "owner_id": (
+                "" if doc_data.get("owner") is None else str(doc_data.get("owner"))
+            ),
+            "owner_name": next(
+                (
+                    user["username"]
+                    for user in self.all_users
+                    if user["id"] == doc_data.get("owner")
+                ),
+                "",
+            ),
+            "document_type_id": (
+                ""
+                if doc_data.get("document_type") is None
+                else str(doc_data.get("document_type"))
+            ),
+            "document_type_name": next(
+                (
+                    doc_type["name"]
+                    for doc_type in self.all_document_types
+                    if doc_type["id"] == doc_data.get("document_type")
+                ),
+                "",
+            ),
+            "page_count": (
+                ""
+                if doc_data.get("page_count") is None
+                else str(doc_data.get("page_count"))
+            ),
+            "created_date": doc_data.get("created_date", ""),
+            "mime_type": doc_data.get("mime_type", ""),
+            "archive_serial_number": (
+                ""
+                if doc_data.get("archive_serial_number") is None
+                else str(doc_data.get("archive_serial_number"))
+            ),
+            "notes": "\n".join(
+                [
+                    f"{note.get('note', '')} (created at {note.get('created', '')} "
+                    + f"by {next((user['username'] for user in self.all_users \
+                                if user['id'] == note.get('user', {}).get('id')), '')})"
+                    for note in doc_data.get("notes", [])
+                ]
+            ),
+            # TODO: add custom fields
+            #       add original_file_name?
+            #       handle images?
+            #       generate shareable link?
         }
 
-        sections: List[Union[TextSection, ImageSection]] = [TextSection(text=content)]
+        sections: List[Union[TextSection, ImageSection]] = [
+            TextSection(link=uri, text=content, image_file_name=image_file_name)
+        ]
 
         return Document(
             id=str(doc_id),
             sections=sections,
-            source=DocumentSource.INGESTION_API,
+            source=DocumentSource.PAPERLESS_NGX,
             semantic_identifier=title,
             metadata=metadata,
             doc_updated_at=updated_at,
