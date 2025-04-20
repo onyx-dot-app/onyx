@@ -334,3 +334,21 @@ def mark_ccpair_with_indexing_trigger(
     except Exception:
         db_session.rollback()
         raise
+
+
+def get_unprocessed_connector_ids(db_session: Session) -> list[int]:
+    """
+    Retrieves a list of connector IDs that have not been KG processed for a given tenant.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        list[int]: List of connector IDs that have enabled KG extraction but have unprocessed documents
+    """
+    try:
+        stmt = select(Connector.id).where(Connector.kg_extraction_enabled)
+        result = db_session.execute(stmt)
+        return [row[0] for row in result.fetchall()]
+
+    except Exception as e:
+        logger.error(f"Error fetching unprocessed connector IDs: {str(e)}")
+        raise e

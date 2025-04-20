@@ -27,6 +27,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+logger = setup_logger()
+
 
 def build_sub_question_answer_prompt(
     question: str,

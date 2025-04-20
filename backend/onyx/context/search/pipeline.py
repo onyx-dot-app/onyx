@@ -68,6 +68,7 @@ class SearchPipeline:
     ):
         # NOTE: The Search Request contains a lot of fields that are overrides, many of them can be None
         # and typically are None. The preprocessing will fetch default values to replace these empty overrides.
+
         self.search_request = search_request
         self.user = user
         self.llm = llm

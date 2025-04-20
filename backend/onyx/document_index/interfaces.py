@@ -98,7 +98,7 @@ class VespaDocumentFields:
     understandable like this for now.
     """
 
-    # all other fields except these 4 will always be left alone by the update request
+    # all other fields except these 4 and knowledge graph will always be left alone by the update request
     access: DocumentAccess | None = None
     document_sets: set[str] | None = None
     boost: float | None = None

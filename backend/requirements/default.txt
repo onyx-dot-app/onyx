@@ -80,6 +80,7 @@ slack-sdk==3.20.2
 SQLAlchemy[mypy]==2.0.15
 starlette==0.46.1
 supervisor==4.2.5
+thefuzz==0.22.1
 tiktoken==0.7.0
 timeago==1.0.16
 transformers==4.49.0

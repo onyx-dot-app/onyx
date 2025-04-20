@@ -113,6 +113,9 @@ class BaseFilters(BaseModel):
     tags: list[Tag] | None = None
     user_file_ids: list[int] | None = None
     user_folder_ids: list[int] | None = None
+    kg_entities: list[str] | None = None
+    kg_relationships: list[str] | None = None
+    kg_terms: list[str] | None = None
 
 
 class IndexFilters(BaseFilters):

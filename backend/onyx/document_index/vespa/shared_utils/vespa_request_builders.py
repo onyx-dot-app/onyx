@@ -5,7 +5,6 @@ from datetime import timezone
 from onyx.configs.constants import INDEX_SEPARATOR
 from onyx.context.search.models import IndexFilters
 from onyx.document_index.interfaces import VespaChunkRequest
-from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import CHUNK_ID
 from onyx.document_index.vespa_constants import DOC_UPDATED_AT
 from onyx.document_index.vespa_constants import DOCUMENT_ID
@@ -67,6 +66,29 @@ def build_vespa_filters(
             return f"!({DOC_UPDATED_AT} < {cutoff_secs}) and "
         return f"({DOC_UPDATED_AT} >= {cutoff_secs}) and "
 
+    def _build_kg_filter(
+        kg_entities: list[str] | None,
+        kg_relationships: list[str] | None,
+        kg_terms: list[str] | None,
+    ) -> str:
+        if not kg_entities and not kg_relationships and not kg_terms:
+            return ""
+
+        filter_parts = []
+
+        # Process each filter type using the same pattern
+        for filter_type, values in [
+            ("kg_entities", kg_entities),
+            ("kg_relationships", kg_relationships),
+            ("kg_terms", kg_terms),
+        ]:
+            if values:
+                filter_parts.append(
+                    " and ".join(f'({filter_type} contains "{val}") ' for val in values)
+                )
+
+        return f"({' and '.join(filter_parts)}) and "
+
     # Start building the filter string
     filter_str = f"!({HIDDEN}=true) and " if not include_hidden else ""
 
@@ -105,6 +127,13 @@ def build_vespa_filters(
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
+
+    # KG filter
+    filter_str += _build_kg_filter(
+        kg_entities=filters.kg_entities,
+        kg_relationships=filters.kg_relationships,
+        kg_terms=filters.kg_terms,
+    )
 
     # Trim trailing " and "
     if remove_trailing_and and filter_str.endswith(" and "):

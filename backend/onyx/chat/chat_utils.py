@@ -13,6 +13,7 @@ from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import ThreadMessage
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.configs.constants import MessageType
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
@@ -97,6 +98,39 @@ def llm_doc_from_inference_section(inference_section: InferenceSection) -> LlmDo
         ),
         source_links=inference_section.center_chunk.source_links,
         match_highlights=inference_section.center_chunk.match_highlights,
+    )
+
+
+def inference_section_from_llm_doc(llm_doc: LlmDoc) -> InferenceSection:
+    # Create a center chunk first
+    center_chunk = InferenceChunk(
+        document_id=llm_doc.document_id,
+        chunk_id=0,  # Default to 0 since LlmDoc doesn't have this info
+        content=llm_doc.content,
+        blurb=llm_doc.blurb,
+        semantic_identifier=llm_doc.semantic_identifier,
+        source_type=llm_doc.source_type,
+        metadata=llm_doc.metadata,
+        updated_at=llm_doc.updated_at,
+        source_links=llm_doc.source_links or {},
+        match_highlights=llm_doc.match_highlights or [],
+        section_continuation=False,
+        image_file_name=None,
+        title=None,
+        boost=1,
+        recency_bias=1.0,
+        score=None,
+        hidden=False,
+        doc_summary="",
+        chunk_context="",
+    )
+
+    # Create InferenceSection with the center chunk
+    # Since we don't have access to the original chunks, we'll use an empty list
+    return InferenceSection(
+        center_chunk=center_chunk,
+        chunks=[],  # Original surrounding chunks are not available in LlmDoc
+        combined_content=llm_doc.content,
     )
 
 
