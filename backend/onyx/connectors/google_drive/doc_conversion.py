@@ -43,6 +43,8 @@ logger = setup_logger()
 SMART_CHIP_CHAR = "\ue907"
 WEB_VIEW_LINK_KEY = "webViewLink"
 
+MAX_RETRIEVER_EMAILS = 20
+
 # Mapping of Google Drive mime types to export formats
 GOOGLE_MIME_TYPES_TO_EXPORT = {
     GDriveMimeType.DOC.value: "text/plain",
@@ -317,7 +319,7 @@ def convert_drive_item_to_document(
     doc_or_failure = None
     # use seen instead of list(set()) to avoid re-ordering the retriever emails
     seen = set()
-    for retriever_email in retriever_emails:
+    for retriever_email in retriever_emails[:MAX_RETRIEVER_EMAILS]:
         if retriever_email in seen:
             continue
         seen.add(retriever_email)
