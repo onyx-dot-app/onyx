@@ -40,6 +40,7 @@ from onyx.connectors.google_drive.models import RetrievedDriveFile
 from onyx.connectors.google_drive.models import StageCompletion
 from onyx.connectors.google_utils.google_auth import get_google_creds
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
+from onyx.connectors.google_utils.google_utils import get_file_owners
 from onyx.connectors.google_utils.google_utils import GoogleFields
 from onyx.connectors.google_utils.resources import get_admin_service
 from onyx.connectors.google_utils.resources import get_drive_service
@@ -949,7 +950,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     (
                         convert_func,
                         (
-                            file.user_email,
+                            [file.user_email, self.primary_admin_email]
+                            + get_file_owners(file.drive_file),
                             file.drive_file,
                         ),
                     )

@@ -297,12 +297,52 @@ def align_basic_advanced(
     return new_sections
 
 
-# We used to always get the user email from the file owners when available,
-# but this was causing issues with shared folders where the owner was not included in the service account
-# now we use the email of the account that successfully listed the file. Leaving this in case we end up
-# wanting to retry with file owners and/or admin email at some point.
-# user_email = file.get("owners", [{}])[0].get("emailAddress") or primary_admin_email
 def convert_drive_item_to_document(
+    creds: Any,
+    allow_images: bool,
+    size_threshold: int,
+    retriever_emails: list[str],
+    file: GoogleDriveFileType,
+) -> Document | ConnectorFailure | None:
+    """
+    Attempt to convert a drive item to a document with each retriever email
+    in order. returns upon a successful retrieval or a non-403 error.
+
+    We used to always get the user email from the file owners when available,
+    but this was causing issues with shared folders where the owner was not included in the service account
+    now we use the email of the account that successfully listed the file. There are cases where a
+    user that can list a file cannot download it, so we retry with file owners and admin email.
+    """
+    first_error = None
+    doc_or_failure = None
+    # use seen instead of list(set()) to avoid re-ordering the retriever emails
+    seen = set()
+    for retriever_email in retriever_emails:
+        if retriever_email in seen:
+            continue
+        seen.add(retriever_email)
+        doc_or_failure = _convert_drive_item_to_document(
+            creds, allow_images, size_threshold, retriever_email, file
+        )
+        if (
+            doc_or_failure is None
+            or isinstance(doc_or_failure, Document)
+            or not (
+                isinstance(doc_or_failure.exception, HttpError)
+                and doc_or_failure.exception.status_code == 403
+            )
+        ):
+            return doc_or_failure
+
+        if first_error is None:
+            first_error = doc_or_failure
+        else:
+            first_error.failure_message += f"\n\n{doc_or_failure.failure_message}"
+
+    return first_error
+
+
+def _convert_drive_item_to_document(
     creds: Any,
     allow_images: bool,
     size_threshold: int,
@@ -392,7 +432,9 @@ def convert_drive_item_to_document(
         )
     except Exception as e:
         file_name = file.get("name")
-        error_str = f"Error converting file '{file_name}' to Document: {e}"
+        error_str = (
+            f"Error converting file '{file_name}' to Document as {retriever_email}: {e}"
+        )
         if isinstance(e, HttpError) and e.status_code == 403:
             logger.warning(
                 f"Uncommon permissions error while downloading file. User "
