@@ -334,7 +334,7 @@ class OnyxRedisLocks:
     CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
-    PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
+    CLOUD_PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
 
     CONNECTOR_DOC_PERMISSIONS_SYNC_LOCK_PREFIX = (
         "da_lock:connector_doc_permissions_sync"
@@ -406,7 +406,7 @@ class OnyxCeleryTask:
     )
 
     # Tenant pre-provisioning
-    PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
+    CLOUD_PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
     UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"

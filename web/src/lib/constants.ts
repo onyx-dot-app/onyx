@@ -77,7 +77,8 @@ export const SERVER_SIDE_ONLY__CLOUD_ENABLED =
   process.env.NEXT_PUBLIC_CLOUD_ENABLED?.toLowerCase() === "true";
 
 export const NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED =
-  process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true";
+  process.env.NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED?.toLowerCase() === "true" &&
+  !NEXT_PUBLIC_CLOUD_ENABLED;
 
 export const NEXT_PUBLIC_TEST_ENV =
   process.env.NEXT_PUBLIC_TEST_ENV?.toLowerCase() === "true";

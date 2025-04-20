@@ -103,9 +103,7 @@ import {
   SIDEBAR_TOGGLED_COOKIE_NAME,
 } from "@/components/resizable/constants";
 import FixedLogo from "@/components/logo/FixedLogo";
-
 import ExceptionTraceModal from "@/components/modals/ExceptionTraceModal";
-
 import { SEARCH_TOOL_ID, SEARCH_TOOL_NAME } from "./tools/constants";
 import { useUser } from "@/components/user/UserProvider";
 import { ApiKeyModal } from "@/components/llm/ApiKeyModal";
@@ -177,12 +175,10 @@ export function ChatPage({
     selectedFolders,
     addSelectedFile,
     addSelectedFolder,
-    removeSelectedFolder,
     clearSelectedItems,
     folders: userFolders,
     files: allUserFiles,
     uploadFile,
-    removeSelectedFile,
     currentMessageFiles,
     setCurrentMessageFiles,
   } = useDocumentsContext();
@@ -223,7 +219,6 @@ export function ChatPage({
   const settings = useContext(SettingsContext);
   const enterpriseSettings = settings?.enterpriseSettings;
 
-  const [viewingFilePicker, setViewingFilePicker] = useState(false);
   const [toggleDocSelection, setToggleDocSelection] = useState(false);
   const [documentSidebarVisible, setDocumentSidebarVisible] = useState(false);
   const [proSearchEnabled, setProSearchEnabled] = useState(proSearchToggled);
@@ -311,10 +306,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-        ? availableAssistants.find(
-            (assistant) => assistant.id === defaultAssistantId
-          )
-        : undefined
+      ? availableAssistants.find(
+          (assistant) => assistant.id === defaultAssistantId
+        )
+      : undefined
   );
   // Gather default temperature settings
   const search_param_temperature = searchParams?.get(
@@ -1170,6 +1165,12 @@ export function ChatPage({
     };
   }, [autoScrollEnabled, screenHeight, currentSessionHasSentLocalUserMessage]);
 
+  const reset = () => {
+    setMessage("");
+    setCurrentMessageFiles([]);
+    setLoadingError(null);
+  };
+
   const onSubmit = async ({
     messageIdToResend,
     messageOverride,
@@ -1199,6 +1200,46 @@ export function ChatPage({
 
     // Mark that we've sent a message for this session in the current page load
     markSessionMessageSent(frozenSessionId);
+
+    // Check if the last message was an error and remove it before proceeding with a new message
+    // Ensure this isn't a regeneration or resend, as those operations should preserve the history leading up to the point of regeneration/resend.
+    const currentMap = currentMessageMap(completeMessageDetail);
+    const currentHistory = buildLatestMessageChain(currentMap);
+    const lastMessage = currentHistory[currentHistory.length - 1];
+
+    if (
+      lastMessage &&
+      lastMessage.type === "error" &&
+      !messageIdToResend &&
+      !regenerationRequest
+    ) {
+      const newMap = new Map(currentMap);
+      const parentId = lastMessage.parentMessageId;
+
+      // Remove the error message itself
+      newMap.delete(lastMessage.messageId);
+
+      // Update the parent message to remove links to the error message
+      if (parentId !== null && parentId !== undefined) {
+        const parentOfError = newMap.get(parentId);
+        if (parentOfError) {
+          // Create a new object for the parent to ensure state updates correctly
+          const updatedParentOfError = {
+            ...parentOfError,
+            // Assuming the error was the latest child, set it to null.
+            // If branching history is complex, this might need adjustment, but for typical linear errors, this is fine.
+            latestChildMessageId: null,
+            childrenMessageIds: (parentOfError.childrenMessageIds || []).filter(
+              (id) => id !== lastMessage.messageId
+            ),
+          };
+          newMap.set(parentId, updatedParentOfError);
+        }
+      }
+      // Update the state immediately so subsequent logic uses the cleaned map
+      updateCompleteMessageDetail(frozenSessionId, newMap);
+      console.log("Removed previous error message ID:", lastMessage.messageId);
+    }
 
     if (currentChatState() != "input") {
       if (currentChatState() == "uploading") {
@@ -1715,10 +1756,14 @@ export function ChatPage({
                   ] as [number, number][])
                 : null;
 
+              // Get the *current* map state directly here, instead of using the potentially stale frozenMessageMap
+              const latestMapState = currentMessageMap(completeMessageDetail);
+
               return upsertToCompleteMessageMap({
                 messages: messages,
                 replacementsMap: replacementsMap,
-                completeMessageMapOverride: frozenMessageMap,
+                // Pass the latest map state
+                completeMessageMapOverride: latestMapState,
                 chatSessionId: frozenSessionId!,
               });
             };
@@ -1909,15 +1954,28 @@ export function ChatPage({
 
     updateChatState("uploading", currentSessionId());
 
-    const [uploadedFiles, error] = await uploadFilesForChat(acceptedFiles);
-    if (error) {
-      setPopup({
-        type: "error",
-        message: error,
-      });
-    }
+    for (let file of acceptedFiles) {
+      const formData = new FormData();
+      formData.append("files", file);
+      const response = await uploadFile(formData, null);
 
-    setCurrentMessageFiles((prev) => [...prev, ...uploadedFiles]);
+      if (response.length > 0) {
+        const uploadedFile = response[0];
+        addSelectedFile(uploadedFile);
+        // setCurrentMessageFiles((prev) => [...prev, uploadedFile]);
+      } else {
+        setPopup({
+          type: "error",
+          message: "Failed to upload file",
+        });
+      }
+    }
+    // if (error) {
+    //   setPopup({
+    //     type: "error",
+    //     message: error,
+    //   });
+    // }
 
     updateChatState("input", currentSessionId());
   };
@@ -2396,7 +2454,7 @@ export function ChatPage({
                   liveAssistant={liveAssistant}
                   setShowAssistantsModal={setShowAssistantsModal}
                   explicitlyUntoggle={explicitlyUntoggle}
-                  reset={() => setMessage("")}
+                  reset={reset}
                   page="chat"
                   ref={innerSidebarElementRef}
                   toggleSidebar={toggleSidebar}
@@ -3294,7 +3352,7 @@ export function ChatPage({
                               : "w-[0px]"
                           }
                       `}
-                      ></div>
+                      />
                     </div>
                   )}
                 </Dropzone>

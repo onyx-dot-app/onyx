@@ -94,7 +94,7 @@ def check_available_tenants(self: Task) -> None:
             from celery import current_app
 
             current_app.send_task(
-                OnyxCeleryTask.PRE_PROVISION_TENANT,
+                OnyxCeleryTask.CLOUD_PRE_PROVISION_TENANT,
                 priority=OnyxCeleryPriority.LOW,
             )
 
@@ -106,7 +106,7 @@ def check_available_tenants(self: Task) -> None:
 
 
 @shared_task(
-    name=OnyxCeleryTask.PRE_PROVISION_TENANT,
+    name=OnyxCeleryTask.CLOUD_PRE_PROVISION_TENANT,
     ignore_result=True,
     soft_time_limit=_TENANT_PROVISIONING_SOFT_TIME_LIMIT,
     time_limit=_TENANT_PROVISIONING_TIME_LIMIT,
@@ -124,7 +124,7 @@ def pre_provision_tenant(self: Task) -> None:
 
     r = get_redis_client()
     lock_provision: RedisLock = r.lock(
-        OnyxRedisLocks.PRE_PROVISION_TENANT_LOCK,
+        OnyxRedisLocks.CLOUD_PRE_PROVISION_TENANT_LOCK,
         timeout=_TENANT_PROVISIONING_SOFT_TIME_LIMIT,
     )
 

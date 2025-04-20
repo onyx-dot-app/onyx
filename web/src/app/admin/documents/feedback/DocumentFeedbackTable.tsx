@@ -17,6 +17,7 @@ import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
 import { CustomCheckbox } from "@/components/CustomCheckbox";
 import { ScoreSection } from "../ScoreEditor";
+import { truncateString } from "@/lib/utils";
 
 const IsVisibleSection = ({
   document,
@@ -109,12 +110,12 @@ export const DocumentFeedbackTable = ({
                 <TableRow key={document.document_id}>
                   <TableCell className="whitespace-normal break-all">
                     <a
-                      className="text-blue-600"
+                      className="text-blue-600 dark:text-blue-300"
                       href={document.link}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
-                      {document.semantic_id}
+                      {truncateString(document.semantic_id, 100)}
                     </a>
                   </TableCell>
                   <TableCell>

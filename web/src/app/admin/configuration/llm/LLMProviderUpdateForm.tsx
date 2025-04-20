@@ -396,7 +396,6 @@ export function LLMProviderUpdateForm({
                         />
                       </div>
                     )}
-
                     <IsPublicGroupSelector
                       formikProps={formikProps}
                       objectName="LLM Provider"

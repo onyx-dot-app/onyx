@@ -160,6 +160,7 @@ export const DocumentsProvider: React.FC<DocumentsProviderProps> = ({
 
   const refreshFolders = async () => {
     try {
+      console.log("fetching folders");
       const data = await documentsService.fetchFolders();
       setFolders(data);
     } catch (error) {

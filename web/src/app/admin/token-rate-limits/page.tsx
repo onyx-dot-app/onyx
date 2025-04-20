@@ -144,6 +144,7 @@ function Main() {
       />
       {isPaidEnterpriseFeaturesEnabled && (
         <Tabs
+          className="mt-2"
           value={tabIndex.toString()}
           onValueChange={(val) => setTabIndex(parseInt(val))}
         >

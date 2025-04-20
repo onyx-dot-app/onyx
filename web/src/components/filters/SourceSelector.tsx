@@ -327,7 +327,7 @@ export function HorizontalFilters({
   );
 
   return (
-    <div>
+    <div className="b">
       <div className="flex gap-x-3">
         <div className="w-52">
           <DateRangeSelector value={timeRange} onValueChange={setTimeRange} />
@@ -387,7 +387,7 @@ export function HorizontalFilters({
         )}
       </div>
 
-      <div className="flex pb-4 mt-2 h-12">
+      <div className="flex  mt-2">
         <div className="flex flex-wrap gap-x-2">
           {timeRange && timeRange.selectValue && (
             <SelectedBubble onClick={() => setTimeRange(null)}>

@@ -11,6 +11,7 @@ from onyx.server.features.persona.models import PersonaSharedNotificationData
 
 def make_persona_private(
     persona_id: int,
+    creator_user_id: UUID | None,
     user_ids: list[UUID] | None,
     group_ids: list[int] | None,
     db_session: Session,
@@ -29,15 +30,15 @@ def make_persona_private(
         user_ids_set = set(user_ids)
         for user_id in user_ids_set:
             db_session.add(Persona__User(persona_id=persona_id, user_id=user_id))
-
-            create_notification(
-                user_id=user_id,
-                notif_type=NotificationType.PERSONA_SHARED,
-                db_session=db_session,
-                additional_data=PersonaSharedNotificationData(
-                    persona_id=persona_id,
-                ).model_dump(),
-            )
+            if user_id != creator_user_id:
+                create_notification(
+                    user_id=user_id,
+                    notif_type=NotificationType.PERSONA_SHARED,
+                    db_session=db_session,
+                    additional_data=PersonaSharedNotificationData(
+                        persona_id=persona_id,
+                    ).model_dump(),
+                )
 
     if group_ids:
         group_ids_set = set(group_ids)

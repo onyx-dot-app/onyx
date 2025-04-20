@@ -36,7 +36,10 @@ export const MemoizedAnchor = memo(
       if (match) {
         const isUserFileCitation = userFiles?.length && userFiles.length > 0;
         if (isUserFileCitation) {
-          const index = parseInt(match[2], 10) - 1;
+          const index = Math.min(
+            parseInt(match[2], 10) - 1,
+            userFiles?.length - 1
+          );
           const associatedUserFile = userFiles?.[index];
           if (!associatedUserFile) {
             return <a href={children as string}>{children}</a>;
