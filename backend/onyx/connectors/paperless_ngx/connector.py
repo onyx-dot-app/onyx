@@ -384,10 +384,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         try:
             updated_at = datetime.fromisoformat(
                 modified_timestamp_str.replace("Z", "+00:00")
-            )
-            # Ensure datetime is in UTC
-            if updated_at.tzinfo is None:
-                updated_at = updated_at.replace(tzinfo=timezone.utc)
+            ).astimezone(timezone.utc)
         except (ValueError, TypeError, AttributeError):
             logger.warning(
                 f"Could not parse timestamp for document {doc_id}: {modified_timestamp_str}"

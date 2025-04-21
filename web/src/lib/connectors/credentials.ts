@@ -31,6 +31,7 @@ export interface GithubCredentialJson {
   github_access_token: string;
 }
 export interface PaperlessNgxCredentialJson {
+  paperless_ngx_api_url: string;
   paperless_ngx_auth_token: string;
 }
 
@@ -238,7 +239,10 @@ export interface HighspotCredentialJson {
 
 export const credentialTemplates: Record<ValidSources, any> = {
   github: { github_access_token: "" } as GithubCredentialJson,
-  paperless_ngx: { paperless_ngx_auth_token: "" } as PaperlessNgxCredentialJson,
+  paperless_ngx: {
+    paperless_ngx_api_url: "",
+    paperless_ngx_auth_token: "",
+  } as PaperlessNgxCredentialJson,
   gitlab: {
     gitlab_url: "",
     gitlab_access_token: "",
@@ -511,6 +515,8 @@ export const credentialDisplayNames: Record<string, string> = {
   highspot_secret: "Highspot Secret",
 
   // Paperless
+  paperless_ngx_api_url:
+    "Paperless-ngx API base URL (eg. https://paperless.example.com)",
   paperless_ngx_auth_token: "Paperless-ngx user token",
 };
 

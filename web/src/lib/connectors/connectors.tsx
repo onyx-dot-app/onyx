@@ -296,22 +296,11 @@ export const connectorConfigs: Record<
     values: [
       {
         type: "text",
-        query: "Enter the instance url (https://paperless.example.com):",
-        label: "Paperless-ngx URL",
-        name: "api_url",
-        optional: true,
-        description:
-          "Only optional if the environment variable 'PAPERLESS_API_URL' is set, which you can override here.",
-      },
-    ],
-    advanced_values: [
-      {
-        type: "text",
         label: "Ingest Only From Tags Filter",
         name: "ingest_tags",
         optional: true,
         description:
-          "List of comma-delimited tags to be ingested (case-insensitive). If not set, documents with any or no " +
+          "Comma-delimited list of tags to be ingested (case-insensitive). If not set, documents with any or no " +
           "tags will be ingested, limited only by the user token permissions and any username filters.",
       },
       {
@@ -320,7 +309,7 @@ export const connectorConfigs: Record<
         name: "ingest_usernames",
         optional: true,
         description:
-          "List of comma-delimited Paperless-ngx usernames of document owners to be ingested (case-insensitive). " +
+          "Comma-delimited list of Paperless-ngx usernames of document owners to be ingested (case-insensitive). " +
           "If not set, documents from all users and with no owner will be ingested, " +
           "limited only by the user token permissions and any tag filters.",
       },
@@ -335,6 +324,7 @@ export const connectorConfigs: Record<
           "Otherwise, they are always included by default.",
       },
     ],
+    advanced_values: [],
   },
   google_drive: {
     description: "Configure Google Drive connector",
