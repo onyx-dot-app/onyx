@@ -478,9 +478,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             ),
             "notes": "\n".join(
                 [
-                    f"{note.get('note', '')} (created at {note.get('created', '')} "
-                    + f"by {next((user['username'] for user in self.all_users \
-                                if user['id'] == note.get('user', {}).get('id')), '')})"
+                    f"{note.get('note', '')} (created at {note.get('created', '')} by "
+                    + f"{next((user['username'] for user in self.all_users if user['id'] == note.get('user', {}).get('id')),'')})"
                     for note in doc_data.get("notes", [])
                 ]
             ),
