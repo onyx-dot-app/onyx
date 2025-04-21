@@ -98,10 +98,9 @@ def handle_regular_answer(
     # to public docs.
 
     user = None
-    if message_info.is_bot_dm or send_as_ephemeral:
-        if message_info.email:
-            with get_session_with_current_tenant() as db_session:
-                user = get_user_by_email(message_info.email, db_session)
+    if message_info.email:
+        with get_session_with_current_tenant() as db_session:
+            user = get_user_by_email(message_info.email, db_session)
 
     target_thread_ts = (
         None
