@@ -3,6 +3,7 @@ import io
 import ipaddress
 import random
 import socket
+import functools
 import time
 from datetime import datetime
 from datetime import timezone
@@ -148,9 +149,11 @@ class WEB_CONNECTOR_VALID_SETTINGS(str, Enum):
     UPLOAD = "upload"
 
 
+@functools.lru_cache(maxsize=1024)
 def protected_url_check(url: str) -> None:
     """Couple considerations:
-    - DNS mapping changes over time so we don't want to cache the results
+    - DNS mapping changes over time, but caching is applied here assuming changes are infrequent
+      enough for the typical use case, prioritizing performance.
     - Fetching this is assumed to be relatively fast compared to other bottlenecks like reading
       the page or embedding the contents
     - To be extra safe, all IPs associated with the URL must be global
