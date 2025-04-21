@@ -410,12 +410,18 @@ def _get_datetime_from_last_modified_header(last_modified: str) -> datetime | No
         return None
 
 
-def _handle_cookies(context: BrowserContext, url: str) -> None:
-    """Handle cookies for the given URL to help with bot detection"""
+def _handle_cookies(
+    context: BrowserContext, url: str, session_ctx: ScrapeSessionContext
+) -> None:
+    """Handle cookies for the given URL to help with bot detection, once per domain."""
     try:
         # Parse the URL to get the domain
         parsed_url = urlparse(url)
         domain = parsed_url.netloc
+
+        # Only add cookies once per domain per session
+        if domain in session_ctx.seen_domains:
+            return
 
         # Add some common cookies that might help with bot detection
         cookies: list[dict[str, str]] = [
@@ -439,12 +445,14 @@ def _handle_cookies(context: BrowserContext, url: str) -> None:
             },
         ]
 
-        # Add cookies to the context
-        for cookie in cookies:
-            try:
-                context.add_cookies([cookie])  # type: ignore
-            except Exception as e:
-                logger.debug(f"Failed to add cookie {cookie['name']} for {domain}: {e}")
+        # Add cookies to the context in a single call
+        try:
+            context.add_cookies(cookies)  # type: ignore
+        except Exception as e:
+            logger.warning(f"Failed to add one or more cookies for {domain}: {e}")
+
+        # Mark domain as seen after attempting to add cookies
+        session_ctx.seen_domains.add(domain)
     except Exception:
         logger.exception(
             f"Unexpected error while handling cookies for Web Connector with URL {url}"
@@ -518,10 +526,11 @@ class WebConnector(LoadConnector):
 
         result = ScrapeResult()
 
-        # Handle cookies for the URL
-        _handle_cookies(session_ctx.playwright_context, initial_url)
+        # Handle cookies for the URL (now passes session_ctx)
+        _handle_cookies(session_ctx.playwright_context, initial_url, session_ctx)
 
-        # First do a HEAD request to check content type without downloading the entire content
+        # --- PDF Handling ---
+        # Optimize: Only do HEAD request if URL explicitly ends with .pdf
         head_response = requests.head(
             initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
         )
