@@ -226,6 +226,10 @@ class CustomToolResponse(BaseModel):
     response: ToolResultType
     tool_name: str
 
+class LangflowToolResponse(BaseModel):
+    response: ToolResultType
+    tool_name: str
+
 
 class ToolConfig(BaseModel):
     id: int
@@ -265,6 +269,7 @@ AnswerQuestionPossibleReturn = (
     | CitationInfo
     | FileChatDisplay
     | CustomToolResponse
+    | LangflowToolResponse
     | StreamingError
     | StreamStopInfo
 )
