@@ -3,6 +3,7 @@ import os
 import time
 from datetime import datetime
 from datetime import timezone
+from enum import Enum
 from typing import Any
 from typing import Dict
 from typing import List
@@ -17,6 +18,7 @@ from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
+from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
@@ -25,7 +27,6 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 
-# Import necessary interfaces
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,23 @@ TAGS_ENDPOINT = "/api/tags/"
 USERS_ENDPOINT = "/api/users/"
 CORRESPONDENTS_ENDPOINT = "/api/correspondents/"
 DOCUMENT_TYPES_ENDPOINT = "/api/document_types/"
+
+# TODO: handle custom fields?
 # CUSTOM_FIELDS_ENDPOINT = "/api/custom_fields/"
+
+
+class DateField(Enum):
+    """
+    Enum for date fields filtering in Paperless-ngx API.
+    """
+
+    ADDED_DATE = ("added_date", "added__date__")
+    CREATED_DATE = ("created_date", "created__date__")
+    MODIFIED_DATE = ("modified_date", "modified__date__")
+
+    def __init__(self, ui_name: str, query_name: str):
+        self.ui_name = ui_name
+        self.query_name = query_name
 
 
 class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
@@ -44,48 +61,15 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
     def __init__(
         self,
-        start_date: Optional[str] = None,
         ingest_tags: Optional[str] = None,
         ingest_usernames: Optional[str] = None,
         ingest_noowner: Optional[bool] = False,
+        # TODO: add master start date to UI_min_start_date? may be more complicated than it's worth/not needed?
+        ui_min_start_date: Optional[str] = None,
+        # TODO: add master date field selection to UI or allow only indexer to handle?
+        ui_date_field: Optional[str] = None,
+        # TODO: implement UI changes for the above in web\src\lib\connectors\connectors.tsx?
     ) -> None:
-        # Allowed start_date formats:
-        # - yyyy-mm-dd
-        # - mm/dd/yyyy
-        # - dd/mm/yyyy
-        # - mm-dd-yyyy
-        # - dd-mm-yyyy
-        # - yyyy/mm/dd
-        # - dd.mm.yyyy
-        # - mm.dd.yyyy
-        self.start_date: Optional[str] = None
-        if start_date:
-            try:
-                for fmt in [
-                    "%Y-%m-%d",
-                    "%m/%d/%Y",
-                    "%d/%m/%Y",
-                    "%m-%d-%Y",
-                    "%d-%m-%Y",
-                    "%Y/%m/%d",
-                    "%d.%m.%Y",
-                    "%m.%d.%Y",
-                ]:
-                    try:
-                        parsed_date = datetime.strptime(start_date, fmt)
-                        self.start_date = parsed_date.strftime("%Y-%m-%d")
-                        break
-                    except ValueError:
-                        continue
-                if not hasattr(self, "start_date"):
-                    raise ValueError("Could not parse date with any format")
-            except ValueError as e:
-                logger.warning(
-                    f"Could not parse start_date: {start_date}. Using None. Error: {e}"
-                )
-                raise ConnectorValidationError(
-                    f"Could not parse start_date: {start_date}. Error: {e}"
-                )
 
         try:
             self.ingest_tags: List[str] = (
@@ -109,12 +93,60 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         self.ingest_noowner = ingest_noowner
 
+        # Allowed ui_min_start_date formats:
+        # - yyyy-mm-dd
+        # - mm/dd/yyyy
+        # - dd/mm/yyyy
+        # - mm-dd-yyyy
+        # - dd-mm-yyyy
+        # - yyyy/mm/dd
+        # - dd.mm.yyyy
+        # - mm.dd.yyyy
+        self.master_start_date: Optional[str] = None
+        if ui_min_start_date:
+            try:
+                for fmt in [
+                    "%Y-%m-%d",
+                    "%m/%d/%Y",
+                    "%d/%m/%Y",
+                    "%m-%d-%Y",
+                    "%d-%m-%Y",
+                    "%Y/%m/%d",
+                    "%d.%m.%Y",
+                    "%m.%d.%Y",
+                ]:
+                    try:
+                        parsed_date = datetime.strptime(ui_min_start_date, fmt)
+                        self.master_start_date = parsed_date.strftime("%Y-%m-%d")
+                        break
+                    except ValueError:
+                        continue
+                if not hasattr(self, "ui_min_start_date"):
+                    raise ValueError("Could not parse date with any format")
+            except ValueError as e:
+                raise ConnectorValidationError(
+                    f"Could not parse ui_min_start_date: {ui_min_start_date}. Error: {e}"
+                )
+
+        # match ui_name in Datefield from ui_date_field str from UI
+        if ui_date_field:
+            for date_field in DateField:
+                if date_field.ui_name == ui_date_field:
+                    self.master_date_field = date_field
+                    break
+            raise ConnectorValidationError(
+                f"Could not parse ui_date_field: {ui_date_field}."
+            )
+        else:
+            self.master_date_field: Optional[DateField] = DateField.MODIFIED_DATE
+
         logger.info("Initialized PaperlessNgxConnector")
 
     @override
     def load_credentials(self, credentials: Dict[str, Any]) -> None:
-        # """
-        # Loads Token from web user-provided credentials.
+        """
+        Loads Token from web user-provided credentials.
+        """
 
         self.api_url = credentials["paperless_ngx_api_url"]
 
@@ -124,7 +156,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             raise PermissionError("Paperless-ngx API URL not found in  settings.")
 
         if not self.auth_token:
-            raise PermissionError("Auth token not found in settings.")
+            raise PermissionError("Paperless-ngx auth token not found in settings.")
 
     def _get_headers(self) -> Dict[str, str]:
         """Returns authentication headers."""
@@ -178,7 +210,10 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         return results
 
     def _get_docs(
-        self, start_date: Optional[str] = None, end_date: Optional[str] = None
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        date_field: Optional[DateField] = None,
     ) -> List[Dict[str, Any]]:
         """
         Retrieves documents based on configured filters (tags, usernames, no owner) and optional date range.
@@ -191,7 +226,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         1. Tags (using tags__id__in parameter)
         2. Owners/users (using owner__id__in parameter)
         3. Documents with no owner (using owner__isnull parameter)
-        4. Date ranges (using created__date__gte and created__date__lte)
+        4. Date ranges (using <date_field date type>__gte and <date_field date type>__lte)
 
         Returns:
             A list of document data dictionaries from the Paperless API
@@ -202,17 +237,58 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         self.all_users = self._make_request(USERS_ENDPOINT)
         self.all_correspondents = self._make_request(CORRESPONDENTS_ENDPOINT)
         self.all_doc_types = self._make_request(DOCUMENT_TYPES_ENDPOINT)
+
+        # TODO: handle custom fields?
         # self.all_custom_fields = self._make_request(CUSTOM_FIELDS_ENDPOINT)
 
         # Build base parameters dict with date filters
         params = {}
-        if start_date:
-            params["created__date__gte"] = start_date
-        elif self.start_date:
-            params["created__date__gte"] = self.start_date
 
-        if end_date:
-            params["created__date__lte"] = end_date
+        date_field = date_field or self.master_date_field
+        start_date = start_date or self.master_start_date
+
+        # Set the start date in params
+        # TODO: Set up start, consider both master and local start dates/fields?
+        if start_date and date_field:
+            params[date_field.query_name + "gte"] = start_date
+        # if self.master_date_field != date_field:
+        #     if self.master_start_date and self.master_date_field:
+        #         params[self.master_date_field.query_name + "gte"] = self.master_start_date
+        #     elif date_field:
+        #         params[date_field.query_name + "gte"] = self.master_start_date
+        #     if start_date:
+        #         params[date_field.query_name + "gte"] = start_date
+
+        # elif start_date and self.master_start_date:
+        #     if start_date > self.master_start_date and date_field:
+        #         params[date_field.query_name + "gte"] = start_date
+        #     elif self.master_date_field:
+        #         params[self.master_date_field.query_name + "gte"] = self.master_start_date
+
+        # elif start_date and not self.master_start_date:
+        #     if date_field:
+        #         params[date_field.query_name + "gte"] = start_date
+        #     elif self.master_date_field:
+        #         params[self.master_date_field.query_name + "gte"] = start_date
+        # elif self.master_start_date and not start_date:
+        #     if self.master_date_field:
+        #         params[self.master_date_field.query_name + "gte"] = self.master_start_date
+        #     elif date_field:
+        #         params[date_field.query_name + "gte"] = self.master_start_date
+        # if self.start_date and date_field:  # Added line to check self.start_date
+        #     params[date_field.query_name + "gte"] = self.start_date
+        logger.debug(
+            f"Getting docs with start date set to: {start_date} for field: {date_field}"
+        )
+
+        # Set the end date in params
+        # TODO: Set up end for master date field?
+        if end_date and date_field:
+            params[date_field.query_name + "lte"] = end_date
+
+        logger.debug(
+            f"Getting docs with end date set to: {end_date} for field: {date_field}"
+        )
 
         # Get tag IDs if tags are specified
         tag_ids = []
@@ -398,6 +474,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         # Only allow str or List[str] in metadata => coerce all metadata fields to str or list[str]
         metadata: Dict[str, Union[str, List[str]]] = {
+            # TODO: trim number of tags or allow selection in UI?
             "source": DocumentSource.PAPERLESS_NGX.value,
             "paperless_scan_date": (
                 str(added_timestamp_str.split("T")[0]) if added_timestamp_str else ""
@@ -501,7 +578,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         yield documents
 
     @override
-    def poll_source(self, start: float, end: float) -> GenerateDocumentsOutput:
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
         """
         Polls for documents modified between start and end.
         Args:
@@ -519,7 +598,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             f"Polling Paperless-ngx for documents modified between {start_iso} and {end_iso}."
         )
 
-        updated_doc_data = self._get_docs(start_date=start_iso, end_date=end_iso)
+        updated_doc_data = self._get_docs(
+            start_date=start_iso, end_date=end_iso, date_field=DateField.MODIFIED_DATE
+        )
 
         documents = []
         for doc_data in updated_doc_data:
@@ -540,8 +621,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
     @override
     def retrieve_all_slim_documents(
         self,
-        start: Optional[float] = None,
-        end: Optional[float] = None,
+        start: Optional[SecondsSinceUnixEpoch] = None,
+        end: Optional[SecondsSinceUnixEpoch] = None,
         callback: Optional[Any] = None,
     ) -> GenerateSlimDocumentOutput:
         """
@@ -574,7 +655,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             logger.info(f"Filtering slim documents until {end_iso}")
 
         # Get only the IDs by making the request and extracting minimal information
-        doc_data = self._get_docs(start_date=start_iso, end_date=end_iso)
+        doc_data = self._get_docs(
+            start_date=start_iso, end_date=end_iso, date_field=DateField.MODIFIED_DATE
+        )
 
         # Convert to SlimDocument objects
         slim_docs = []
@@ -614,6 +697,7 @@ if __name__ == "__main__":
     import os
     import sys
     from pathlib import Path
+    from datetime import timedelta
 
     # Configure logging to print to console
     logging.basicConfig(
@@ -668,8 +752,8 @@ if __name__ == "__main__":
             f"Testing PaperlessNgxConnector with URL: {api_url} and Key: {masked_key}"
         )
         test_connector = PaperlessNgxConnector(
-            # ingest_tags="INBOX, TODO",
-            ingest_tags="ai-process",
+            ingest_tags="INBOX, TODO",
+            # ingest_tags="ai-process",
             # ingest_usernames="cbrown",
             # ingest_noowner=True,
         )
@@ -715,3 +799,23 @@ if __name__ == "__main__":
                 print(f"First slim document sample ID: {slim_docs[0].id}")
         except Exception as e:
             print(f"Error during retrieve_all_slim_documents: {e}", file=sys.stderr)
+
+        print("\n------- Testing start/end dates -------")
+        try:
+            # Test with start and end dates
+            start_date = datetime.now(timezone.utc) - timedelta(days=12)
+            end_date = datetime.now(timezone.utc)
+
+            print(f"Testing with start date: {start_date}")
+            print(f"Testing with end date: {end_date}")
+
+            # Call the method with the specified dates
+            docs_iter = test_connector.poll_source(
+                start=start_date.timestamp(), end=end_date.timestamp()
+            )
+            docs = next(docs_iter, [])
+            print(f"Documents polled between {start_date} and {end_date}: {len(docs)}")
+            if docs:
+                print(f"First document in range: {docs[0].title} (ID: {docs[0].id})")
+        except Exception as e:
+            print(f"Error during date range test: {e}", file=sys.stderr)
