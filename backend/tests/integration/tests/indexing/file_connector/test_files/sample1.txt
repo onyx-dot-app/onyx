@@ -1,0 +1,19 @@
+The following contains some excerpts from our docs.
+
+The File Connector indexes user uploaded files. Currently supports .txt, .pdf, .docx, .pptx, .xlsx, .csv, .md, .mdx, .conf, .log, .json, .tsv, .xml, .yml, .yaml, .eml, and .epub files. 
+You can also upload a .zip containing these files - If there are other file types in the zip, the other file types are ignored. 
+There is also an optional metadata line that supports links, document owners, and time updated as metadata for Onyx’s retrieval and AI Answer.
+
+The metadata line should be placed at the very top of the file and can take one of two formats:
+
+#ONYX_METADATA={"link": "<LINK>"}
+<!-- ONYX_METADATA={"link": "<LINK>"} -->
+Where ONYX_METADATA= is followed by a json. The valid json keys are:
+
+link
+primary_owners
+secondary_owners
+doc_updated_at
+file_display_name
+You can also include arbitrary key/value pairs which will be understood as “tags”. 
+These tags can then be used in the UI as a filter if you want to constrain your search / conversation to only documents with certain tag(s) attached

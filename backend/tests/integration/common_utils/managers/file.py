@@ -66,7 +66,10 @@ class FileManager:
 
     @staticmethod
     def upload_file_for_connector(
-        file_path: str, file_name: str, user_performing_action: DATestUser
+        file_path: str,
+        file_name: str,
+        user_performing_action: DATestUser,
+        content_type: str = "application/octet-stream",
     ) -> dict:
         # Read the file content
         with open(file_path, "rb") as f:
@@ -76,7 +79,7 @@ class FileManager:
         file_obj = io.BytesIO(file_content)
 
         # The 'files' form field expects a list of files
-        files = [("files", (file_name, file_obj, "application/octet-stream"))]
+        files = [("files", (file_name, file_obj, content_type))]
 
         # Use the user's headers but without Content-Type
         # as requests will set the correct multipart/form-data Content-Type for us

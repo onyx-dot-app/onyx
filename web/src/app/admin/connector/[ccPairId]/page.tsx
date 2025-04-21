@@ -17,7 +17,11 @@ import Title from "@/components/ui/title";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState, use } from "react";
 import useSWR, { mutate } from "swr";
-import { AdvancedConfigDisplay, ConfigDisplay } from "./ConfigDisplay";
+import {
+  AdvancedConfigDisplay,
+  buildConfigEntries,
+  ConfigDisplay,
+} from "./ConfigDisplay";
 import DeletionErrorStatus from "./DeletionErrorStatus";
 import { IndexingAttemptsTable } from "./IndexingAttemptsTable";
 
@@ -648,7 +652,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
                 Last Permission Synced
               </div>
               <div className="text-sm text-text-default">
-                {timeAgo(ccPair.last_permission_sync) ?? "-"}
+                {timeAgo(ccPair.last_full_permission_sync) ?? "-"}
               </div>
             </div>
           )}
@@ -672,16 +676,23 @@ function Main({ ccPairId }: { ccPairId: number }) {
           </>
         )}
 
-      <Title size="md" className="mt-10 mb-2">
-        Connector Configuration
-      </Title>
+      {ccPair.connector.connector_specific_config &&
+        ccPair.connector.connector_specific_config.length > 0 && (
+          <>
+            <Title size="md" className="mt-10 mb-2">
+              Connector Configuration
+            </Title>
 
-      <Card className="px-8 py-4">
-        <ConfigDisplay
-          connectorSpecificConfig={ccPair.connector.connector_specific_config}
-          sourceType={ccPair.connector.source}
-        />
-      </Card>
+            <Card className="px-8 py-4">
+              <ConfigDisplay
+                configEntries={buildConfigEntries(
+                  ccPair.connector.connector_specific_config,
+                  ccPair.connector.source
+                )}
+              />
+            </Card>
+          </>
+        )}
 
       <div className="mt-6">
         <div className="flex">

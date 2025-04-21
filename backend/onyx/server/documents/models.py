@@ -1,5 +1,6 @@
 from datetime import datetime
 from datetime import timezone
+from datetime import UTC
 from typing import Any
 from typing import Generic
 from typing import TypeVar
@@ -25,6 +26,7 @@ from onyx.db.models import TaskStatus
 from onyx.server.models import FullUserSnapshot
 from onyx.server.models import InvitedUserSnapshot
 from onyx.server.utils import mask_credential_dict
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
 
 class DocumentSyncStatus(BaseModel):
@@ -227,9 +229,48 @@ class CCPairFullInfo(BaseModel):
     # information on syncing/indexing
     last_indexed: datetime | None
     last_pruned: datetime | None
-    last_permission_sync: datetime | None
+    # accounts for both doc sync and group sync
+    last_full_permission_sync: datetime | None
     overall_indexing_speed: float | None
     latest_checkpoint_description: str | None
+
+    @classmethod
+    def _get_last_full_permission_sync(
+        cls, cc_pair_model: ConnectorCredentialPair
+    ) -> datetime | None:
+        check_if_source_requires_external_group_sync = fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_requires_external_group_sync",
+            noop_return_value=False,
+        )
+        check_if_source_requires_doc_sync = fetch_ee_implementation_or_noop(
+            "onyx.external_permissions.sync_params",
+            "source_requires_doc_sync",
+            noop_return_value=False,
+        )
+
+        needs_group_sync = check_if_source_requires_external_group_sync(
+            cc_pair_model.connector.source
+        )
+        needs_doc_sync = check_if_source_requires_doc_sync(
+            cc_pair_model.connector.source
+        )
+
+        last_group_sync = (
+            cc_pair_model.last_time_external_group_sync
+            if needs_group_sync
+            else datetime.now(UTC)
+        )
+        last_doc_sync = (
+            cc_pair_model.last_time_perm_sync if needs_doc_sync else datetime.now(UTC)
+        )
+
+        # if either is still None at this point, it means sync is necessary but
+        # has never completed.
+        if last_group_sync is None or last_doc_sync is None:
+            return None
+
+        return min(last_group_sync, last_doc_sync)
 
     @classmethod
     def from_models(
@@ -292,9 +333,7 @@ class CCPairFullInfo(BaseModel):
                 last_index_attempt.time_started if last_index_attempt else None
             ),
             last_pruned=cc_pair_model.last_pruned,
-            last_permission_sync=(
-                last_index_attempt.time_started if last_index_attempt else None
-            ),
+            last_full_permission_sync=cls._get_last_full_permission_sync(cc_pair_model),
             overall_indexing_speed=overall_indexing_speed,
             latest_checkpoint_description=None,
         )
