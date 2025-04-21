@@ -307,7 +307,7 @@ export default function MyDocuments() {
     provider: "Unknown",
     maxTokens: 0,
   };
-  const maxTokens = selectedModel.maxTokens;
+  const maxTokens = selectedModel.maxTokens!;
   const tokenPercentage = (totalTokens / maxTokens) * 100;
 
   return (
