@@ -317,9 +317,10 @@ def convert_drive_item_to_document(
     """
     first_error = None
     doc_or_failure = None
+    retriever_emails = retriever_emails[:MAX_RETRIEVER_EMAILS]
     # use seen instead of list(set()) to avoid re-ordering the retriever emails
     seen = set()
-    for retriever_email in retriever_emails[:MAX_RETRIEVER_EMAILS]:
+    for retriever_email in retriever_emails:
         if retriever_email in seen:
             continue
         seen.add(retriever_email)
@@ -341,6 +342,19 @@ def convert_drive_item_to_document(
         else:
             first_error.failure_message += f"\n\n{doc_or_failure.failure_message}"
 
+    if (
+        first_error
+        and isinstance(first_error.exception, HttpError)
+        and first_error.exception.status_code == 403
+    ):
+        # This SHOULD happen very rarely, and we don't want to break the indexing process when
+        # a high volume of 403s occurs early. We leave a verbose log to help investigate.
+        logger.error(
+            f"Skipping file id: {file.get('id')} name: {file.get('name')} due to 403 error."
+            f"Attempted to retrieve with {retriever_emails},"
+            f"got the following errors: {first_error.failure_message}"
+        )
+        return None
     return first_error
 
 
