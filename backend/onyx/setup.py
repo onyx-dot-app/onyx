@@ -47,7 +47,7 @@ from onyx.natural_language_processing.search_nlp_models import warm_up_cross_enc
 from onyx.seeding.load_docs import seed_initial_documents
 from onyx.seeding.load_yamls import load_chat_yamls
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfiguration
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.tools.built_in_tools import auto_add_search_tool_to_personas
@@ -313,7 +313,7 @@ def setup_postgres(db_session: Session) -> None:
             is_public=True,
             groups=[],
             model_configurations=[
-                ModelConfiguration(name=name, is_visible=True)
+                ModelConfigurationUpsertRequest(name=name, is_visible=True)
                 for name in OPEN_AI_MODEL_NAMES
             ],
             api_key_changed=True,

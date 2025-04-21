@@ -33,7 +33,7 @@ from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
-from onyx.server.manage.llm.models import ModelConfiguration
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
@@ -230,7 +230,8 @@ def put_llm_provider(
         default_inserts.add(llm_provider_upsert_request.fast_default_model_name)
 
     llm_provider_upsert_request.model_configurations.extend(
-        ModelConfiguration(name=name, is_visible=True) for name in default_inserts
+        ModelConfigurationUpsertRequest(name=name, is_visible=True)
+        for name in default_inserts
     )
 
     # the llm api key is sanitized when returned to clients, so the only time we

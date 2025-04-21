@@ -45,7 +45,7 @@ from onyx.llm.llm_provider_options import OPEN_AI_VISIBLE_MODEL_NAMES
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
-from onyx.server.manage.llm.models import ModelConfiguration
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.configs import MULTI_TENANT
@@ -273,7 +273,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             default_model_name="claude-3-7-sonnet-20250219",
             fast_default_model_name="claude-3-5-sonnet-20241022",
             model_configurations=[
-                ModelConfiguration(
+                ModelConfigurationUpsertRequest(
                     name=name,
                     is_visible=name in ANTHROPIC_VISIBLE_MODEL_NAMES,
                     max_input_tokens=None,
@@ -300,7 +300,7 @@ def configure_default_api_keys(db_session: Session) -> None:
             default_model_name="gpt-4o",
             fast_default_model_name="gpt-4o-mini",
             model_configurations=[
-                ModelConfiguration(
+                ModelConfigurationUpsertRequest(
                     name=model_name,
                     is_visible=model_name in OPEN_AI_VISIBLE_MODEL_NAMES,
                     max_input_tokens=None,

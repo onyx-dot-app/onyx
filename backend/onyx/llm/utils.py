@@ -5,6 +5,7 @@ from collections.abc import Callable
 from collections.abc import Iterator
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 
 import litellm  # type: ignore
 import tiktoken
@@ -45,11 +46,15 @@ from onyx.llm.interfaces import LLM
 from onyx.prompts.chat_prompts import CONTEXTUAL_RAG_TOKEN_ESTIMATE
 from onyx.prompts.chat_prompts import DOCUMENT_SUMMARY_TOKEN_ESTIMATE
 from onyx.prompts.constants import CODE_BLOCK_PAT
-from onyx.server.manage.llm.models import LLMProviderView
 from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
+
+
+if TYPE_CHECKING:
+    from onyx.server.manage.llm.models import LLMProviderView
+
 
 logger = setup_logger()
 
@@ -619,7 +624,7 @@ def get_max_input_tokens(
 
 
 def get_max_input_tokens_from_llm_provider(
-    llm_provider: LLMProviderView,
+    llm_provider: "LLMProviderView",
     model_name: str,
 ) -> int:
     max_input_tokens = None

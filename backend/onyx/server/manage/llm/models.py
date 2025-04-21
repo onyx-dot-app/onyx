@@ -3,6 +3,8 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 from pydantic import Field
 
+from onyx.llm.utils import get_max_input_tokens
+
 
 if TYPE_CHECKING:
     from onyx.db.models import (
@@ -25,7 +27,7 @@ class TestLLMRequest(BaseModel):
     fast_default_model_name: str | None = None
     deployment_name: str | None = None
 
-    model_configurations: list["ModelConfiguration"] = []
+    model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
 
 class LLMProviderDescriptor(BaseModel):
@@ -39,7 +41,7 @@ class LLMProviderDescriptor(BaseModel):
     is_default_provider: bool | None
     is_default_vision_provider: bool | None
     default_vision_model: str | None
-    model_configurations: list["ModelConfiguration"]
+    model_configurations: list["ModelConfigurationView"]
 
     @classmethod
     def from_model(
@@ -55,7 +57,9 @@ class LLMProviderDescriptor(BaseModel):
             is_default_vision_provider=llm_provider_model.is_default_vision_provider,
             default_vision_model=llm_provider_model.default_vision_model,
             model_configurations=list(
-                ModelConfiguration.from_model(model_configuration)
+                ModelConfigurationView.from_model(
+                    model_configuration, llm_provider_model.provider
+                )
                 for model_configuration in llm_provider_model.model_configurations
             ),
         )
@@ -80,7 +84,7 @@ class LLMProviderUpsertRequest(LLMProvider):
     # should only be used for a "custom" provider
     # for default providers, the built-in model names are used
     api_key_changed: bool = False
-    model_configurations: list["ModelConfiguration"] = []
+    model_configurations: list["ModelConfigurationUpsertRequest"] = []
 
 
 class LLMProviderView(LLMProvider):
@@ -89,7 +93,7 @@ class LLMProviderView(LLMProvider):
     id: int
     is_default_provider: bool | None = None
     is_default_vision_provider: bool | None = None
-    model_configurations: list["ModelConfiguration"]
+    model_configurations: list["ModelConfigurationView"]
 
     @classmethod
     def from_model(
@@ -120,13 +124,15 @@ class LLMProviderView(LLMProvider):
             groups=groups,
             deployment_name=llm_provider_model.deployment_name,
             model_configurations=list(
-                ModelConfiguration.from_model(model_configuration)
+                ModelConfigurationView.from_model(
+                    model_configuration, llm_provider_model.provider
+                )
                 for model_configuration in llm_provider_model.model_configurations
             ),
         )
 
 
-class ModelConfiguration(BaseModel):
+class ModelConfigurationUpsertRequest(BaseModel):
     name: str
     is_visible: bool | None = False
     max_input_tokens: int | None = None
@@ -134,11 +140,32 @@ class ModelConfiguration(BaseModel):
     @classmethod
     def from_model(
         cls, model_configuration_model: "ModelConfigurationModel"
-    ) -> "ModelConfiguration":
+    ) -> "ModelConfigurationUpsertRequest":
         return cls(
             name=model_configuration_model.name,
             is_visible=model_configuration_model.is_visible,
             max_input_tokens=model_configuration_model.max_input_tokens,
+        )
+
+
+class ModelConfigurationView(BaseModel):
+    name: str
+    is_visible: bool | None = False
+    max_input_tokens: int | None = None
+
+    @classmethod
+    def from_model(
+        cls,
+        model_configuration_model: "ModelConfigurationModel",
+        provider_name: str,
+    ) -> "ModelConfigurationView":
+        return cls(
+            name=model_configuration_model.name,
+            is_visible=model_configuration_model.is_visible,
+            max_input_tokens=model_configuration_model.max_input_tokens
+            or get_max_input_tokens(
+                model_name=model_configuration_model.name, model_provider=provider_name
+            ),
         )
 
 

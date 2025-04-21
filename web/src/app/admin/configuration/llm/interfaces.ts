@@ -70,7 +70,7 @@ export interface LLMProviderView extends LLMProvider {
 export interface ModelConfiguration {
   name: string;
   is_visible: boolean;
-  max_input_tokens?: number | null;
+  max_input_tokens: number;
 }
 
 export interface VisionProvider extends LLMProviderView {

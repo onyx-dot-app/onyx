@@ -4,7 +4,7 @@ import pytest
 import requests
 from requests.models import Response
 
-from onyx.server.manage.llm.models import ModelConfiguration
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
@@ -28,7 +28,7 @@ def assert_response_is_equivalent(
     admin_user: DATestUser,
     response: Response,
     default_model_name: str,
-    model_configurations: list[ModelConfiguration],
+    model_configurations: list[ModelConfigurationUpsertRequest],
     api_key: str | None = None,
 ) -> None:
     assert response.status_code == 200
@@ -61,8 +61,16 @@ def assert_response_is_equivalent(
         # Test the case in which a basic model-configuration is passed.
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=4096)],
-            [ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=4096)],
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4", is_visible=True, max_input_tokens=4096
+                )
+            ],
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4", is_visible=True, max_input_tokens=4096
+                )
+            ],
         ),
         # Test the case in which the basic model-configuration is passed, but its visibility is not
         # specified (and thus defaulted to False).
@@ -70,23 +78,26 @@ def assert_response_is_equivalent(
         # visibility should be overriden to True.
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4")],
-            [ModelConfiguration(name="gpt-4", is_visible=True)],
+            [ModelConfigurationUpsertRequest(name="gpt-4")],
+            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
         # Test the case in which multiple model-configuration are passed.
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4"), ModelConfiguration(name="gpt-4o")],
             [
-                ModelConfiguration(name="gpt-4", is_visible=True),
-                ModelConfiguration(name="gpt-4o"),
+                ModelConfigurationUpsertRequest(name="gpt-4"),
+                ModelConfigurationUpsertRequest(name="gpt-4o"),
+            ],
+            [
+                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-4o"),
             ],
         ),
         # Test the case in which duplicate model-configuration are passed.
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4")] * 4,
-            [ModelConfiguration(name="gpt-4", is_visible=True)],
+            [ModelConfigurationUpsertRequest(name="gpt-4")] * 4,
+            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
         # Test the case in which no model-configurations are passed.
         # In this case, a model-configuration for "gpt-4" should be inferred
@@ -94,17 +105,17 @@ def assert_response_is_equivalent(
         (
             "gpt-4",
             [],
-            [ModelConfiguration(name="gpt-4", is_visible=True)],
+            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
         # Test the case in which the default-model-name is not contained inside of the model-configurations list.
         # Once again, in this case, a model-configuration for "gpt-4" should be inferred
         # (`ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=None)`).
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4o", max_input_tokens=4096)],
+            [ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096)],
             [
-                ModelConfiguration(name="gpt-4", is_visible=True),
-                ModelConfiguration(name="gpt-4o", max_input_tokens=4096),
+                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096),
             ],
         ),
     ],
@@ -112,8 +123,8 @@ def assert_response_is_equivalent(
 def test_create_llm_provider(
     reset: None,
     default_model_name: str,
-    model_configurations: list[ModelConfiguration],
-    expected: list[ModelConfiguration],
+    model_configurations: list[ModelConfigurationUpsertRequest],
+    expected: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
@@ -151,14 +162,18 @@ def test_create_llm_provider(
         (
             (
                 "gpt-4",
-                [ModelConfiguration(name="gpt-4", max_input_tokens=4096)],
+                [ModelConfigurationUpsertRequest(name="gpt-4", max_input_tokens=4096)],
             ),
-            [ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=4096)],
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4", is_visible=True, max_input_tokens=4096
+                )
+            ],
             (
                 "gpt-4",
-                [ModelConfiguration(name="gpt-4")],
+                [ModelConfigurationUpsertRequest(name="gpt-4")],
             ),
-            [ModelConfiguration(name="gpt-4", is_visible=True)],
+            [ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True)],
         ),
         # Test the case where we insert 2 model-configurations, and then in the update the first,
         # we update one and delete the second.
@@ -166,28 +181,34 @@ def test_create_llm_provider(
             (
                 "gpt-4",
                 [
-                    ModelConfiguration(name="gpt-4"),
-                    ModelConfiguration(name="gpt-4o", max_input_tokens=4096),
+                    ModelConfigurationUpsertRequest(name="gpt-4"),
+                    ModelConfigurationUpsertRequest(
+                        name="gpt-4o", max_input_tokens=4096
+                    ),
                 ],
             ),
             [
-                ModelConfiguration(name="gpt-4", is_visible=True),
-                ModelConfiguration(name="gpt-4o", max_input_tokens=4096),
+                ModelConfigurationUpsertRequest(name="gpt-4", is_visible=True),
+                ModelConfigurationUpsertRequest(name="gpt-4o", max_input_tokens=4096),
             ],
             (
                 "gpt-4",
-                [ModelConfiguration(name="gpt-4", max_input_tokens=4096)],
+                [ModelConfigurationUpsertRequest(name="gpt-4", max_input_tokens=4096)],
             ),
-            [ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=4096)],
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4", is_visible=True, max_input_tokens=4096
+                )
+            ],
         ),
     ],
 )
 def test_update_model_configurations(
     reset: None,
-    initial: tuple[str, list[ModelConfiguration]],
-    initial_expected: list[ModelConfiguration],
-    updated: tuple[str, list[ModelConfiguration]],
-    updated_expected: list[ModelConfiguration],
+    initial: tuple[str, list[ModelConfigurationUpsertRequest]],
+    initial_expected: list[ModelConfigurationUpsertRequest],
+    updated: tuple[str, list[ModelConfigurationUpsertRequest]],
+    updated_expected: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
@@ -278,18 +299,25 @@ def test_update_model_configurations(
     [
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4", is_visible=True, max_input_tokens=4096)],
+            [
+                ModelConfigurationUpsertRequest(
+                    name="gpt-4", is_visible=True, max_input_tokens=4096
+                )
+            ],
         ),
         (
             "gpt-4",
-            [ModelConfiguration(name="gpt-4o"), ModelConfiguration(name="gpt-4")],
+            [
+                ModelConfigurationUpsertRequest(name="gpt-4o"),
+                ModelConfigurationUpsertRequest(name="gpt-4"),
+            ],
         ),
     ],
 )
 def test_delete_llm_provider(
     reset: None,
     default_model_name: str,
-    model_configurations: list[ModelConfiguration],
+    model_configurations: list[ModelConfigurationUpsertRequest],
 ) -> None:
     admin_user = UserManager.create(name="admin_user")
 
