@@ -73,10 +73,8 @@ def upsert_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
     db_session: Session,
 ) -> LLMProviderView:
-    existing_llm_provider = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.name == llm_provider_upsert_request.name
-        )
+    existing_llm_provider = fetch_existing_llm_provider(
+        llm_provider_upsert_request.name, db_session
     )
 
     if not existing_llm_provider:
@@ -155,8 +153,13 @@ def fetch_existing_tools(db_session: Session, tool_ids: list[int]) -> list[ToolM
 
 def fetch_existing_llm_providers(
     db_session: Session,
+    only_public: bool = False,
 ) -> list[LLMProviderModel]:
-    stmt = select(LLMProviderModel)
+    stmt = select(LLMProviderModel).options(
+        selectinload(LLMProviderModel.model_configurations)
+    )
+    if only_public:
+        stmt = stmt.where(LLMProviderModel.is_public == True)  # noqa: E712
     return list(db_session.scalars(stmt).all())
 
 
@@ -164,7 +167,9 @@ def fetch_existing_llm_provider(
     provider_name: str, db_session: Session
 ) -> LLMProviderModel | None:
     provider_model = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
+        select(LLMProviderModel)
+        .where(LLMProviderModel.name == provider_name)
+        .options(selectinload(LLMProviderModel.model_configurations))
     )
 
     return provider_model
@@ -174,21 +179,18 @@ def fetch_existing_llm_providers_for_user(
     db_session: Session,
     user: User | None = None,
 ) -> list[LLMProviderModel]:
+    # if user is anonymous
     if not user:
-        if AUTH_TYPE != AuthType.DISABLED:
-            # User is anonymous
-            return list(
-                db_session.scalars(
-                    select(LLMProviderModel).where(
-                        LLMProviderModel.is_public == True  # noqa: E712
-                    )
-                ).all()
-            )
-        else:
-            # If auth is disabled, user has access to all providers
-            return fetch_existing_llm_providers(db_session)
+        # Only fetch public providers if auth is turned on
+        return fetch_existing_llm_providers(
+            db_session, only_public=AUTH_TYPE != AuthType.DISABLED
+        )
 
-    stmt = select(LLMProviderModel).distinct()
+    stmt = (
+        select(LLMProviderModel)
+        .options(selectinload(LLMProviderModel.model_configurations))
+        .distinct()
+    )
     user_groups_select = select(User__UserGroup.user_group_id).where(
         User__UserGroup.user_id == user.id
     )
@@ -217,9 +219,9 @@ def fetch_embedding_provider(
 
 def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
     provider_model = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.is_default_provider == True  # noqa: E712
-        )
+        select(LLMProviderModel)
+        .where(LLMProviderModel.is_default_provider == True)  # noqa: E712
+        .options(selectinload(LLMProviderModel.model_configurations))
     )
     if not provider_model:
         return None
@@ -228,9 +230,9 @@ def fetch_default_provider(db_session: Session) -> LLMProviderView | None:
 
 def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None:
     provider_model = db_session.scalar(
-        select(LLMProviderModel).where(
-            LLMProviderModel.is_default_vision_provider == True  # noqa: E712
-        )
+        select(LLMProviderModel)
+        .where(LLMProviderModel.is_default_vision_provider == True)  # noqa: E712
+        .options(selectinload(LLMProviderModel.model_configurations))
     )
     if not provider_model:
         return None
@@ -240,9 +242,7 @@ def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None
 def fetch_llm_provider_view(
     db_session: Session, provider_name: str
 ) -> LLMProviderView | None:
-    provider_model = db_session.scalar(
-        select(LLMProviderModel).where(LLMProviderModel.name == provider_name)
-    )
+    provider_model = fetch_existing_llm_provider(provider_name, db_session)
     if not provider_model:
         return None
     return LLMProviderView.from_model(provider_model)
@@ -254,11 +254,7 @@ def fetch_max_input_tokens(
     model_name: str,
     output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
 ) -> int:
-    llm_provider = db_session.scalar(
-        select(LLMProviderModel)
-        .where(LLMProviderModel.provider == provider_name)
-        .options(selectinload(LLMProviderModel.model_configurations))
-    )
+    llm_provider = fetch_existing_llm_provider(provider_name, db_session)
     if not llm_provider:
         raise RuntimeError(f"No LLM Provider with the name {provider_name}")
 
