@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 from datetime import datetime
 from datetime import timezone
@@ -416,17 +417,12 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             "added_date": str(added_timestamp_str),
             "uri": uri,
             "file_uri": file_uri,
-            "tag_ids": ",".join(map(str, doc_data.get("tags", []))),
-            "tag_names": ",".join(
-                map(
-                    str,
-                    [
-                        tag["name"]
-                        for tag in self.all_tags
-                        if tag["id"] in doc_data.get("tags", [])
-                    ],
-                )
-            ),
+            "tag_ids": doc_data.get("tags", []),
+            "tag_names": [
+                tag["name"]
+                for tag in self.all_tags
+                if tag["id"] in doc_data.get("tags", [])
+            ],
             "correspondent_id": (
                 ""
                 if doc_data.get("correspondent") is None
