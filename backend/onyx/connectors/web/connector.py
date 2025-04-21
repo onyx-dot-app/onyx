@@ -357,7 +357,7 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         response = requests.get(sitemap_url, headers=DEFAULT_HEADERS)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.content, "html.parser")
+        soup = BeautifulSoup(response.content, "lxml")
         urls = [
             _ensure_absolute_url(sitemap_url, loc_tag.text)
             for loc_tag in soup.find_all("loc")
