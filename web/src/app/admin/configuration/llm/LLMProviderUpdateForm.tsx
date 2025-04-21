@@ -154,7 +154,7 @@ export function LLMProviderUpdateForm({
             ({
               name,
               is_visible: visibleModels.has(name),
-              max_input_tokens: undefined,
+              max_input_tokens: null,
             }) as ModelConfiguration
         );
 
