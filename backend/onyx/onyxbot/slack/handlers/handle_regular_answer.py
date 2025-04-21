@@ -399,7 +399,7 @@ def handle_regular_answer(
         skip_ai_feedback = True
     else:
         offer_ephemeral_publication = False
-        skip_ai_feedback = False if feedback_reminder_id else True
+        skip_ai_feedback = False
 
     all_blocks = build_slack_response_blocks(
         message_info=message_info,
