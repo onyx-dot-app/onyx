@@ -4,6 +4,7 @@ import pytest
 import requests
 from requests.models import Response
 
+from onyx.llm.utils import get_max_input_tokens
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
@@ -39,12 +40,24 @@ def assert_response_is_equivalent(
 
     assert provider_data["default_model_name"] == default_model_name
 
+    def fill_max_input_tokens_if_none(
+        req: ModelConfigurationUpsertRequest,
+    ) -> ModelConfigurationUpsertRequest:
+        return ModelConfigurationUpsertRequest(
+            name=req.name,
+            is_visible=req.is_visible,
+            max_input_tokens=req.max_input_tokens
+            or get_max_input_tokens(
+                model_name=req.name, model_provider=default_model_name
+            ),
+        )
+
     actual = set(
         tuple(model_configuration.items())
         for model_configuration in provider_data["model_configurations"]
     )
     expected = set(
-        tuple(model_configuration.dict().items())
+        tuple(fill_max_input_tokens_if_none(model_configuration).dict().items())
         for model_configuration in model_configurations
     )
     assert actual == expected
