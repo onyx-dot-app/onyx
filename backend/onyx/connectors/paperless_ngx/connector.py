@@ -18,6 +18,7 @@ from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentSource
 from onyx.connectors.models import ImageSection
@@ -359,7 +360,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         content = doc_data.get("content")
         added_timestamp_str = doc_data.get("added")
         modified_timestamp_str = doc_data.get("modified")
-        image_file_name = doc_data.get("archived_file_name")
+        archived_file_name = doc_data.get("archived_file_name", None)
 
         # Defensive checks and parse
         if (
@@ -379,7 +380,6 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             else (self.api_url or "")
         )
         uri = f"{base_url}/documents/{doc_id}/details"
-        file_uri = f"{base_url}/api/documents/{doc_id}/preview/"
 
         try:
             updated_at = datetime.fromisoformat(
@@ -391,14 +391,19 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             )
             updated_at = datetime.now(timezone.utc)
 
+        doc_owner = next(
+            (user for user in self.all_users if user["id"] == doc_data.get("owner")),
+            None,
+        )
+
         # Only allow str or List[str] in metadata => coerce all metadata fields to str or list[str]
         metadata: Dict[str, Union[str, List[str]]] = {
             "source": DocumentSource.PAPERLESS_NGX.value,
-            "added_date": str(added_timestamp_str),
-            "uri": uri,
-            "file_uri": file_uri,
-            "tag_ids": ",".join(map(str, doc_data.get("tags", []))),
-            "tag_names": ",".join(
+            "paperless_scan_date": (
+                str(added_timestamp_str.split("T")[0]) if added_timestamp_str else ""
+            ),
+            "archived_file_name": archived_file_name or "",
+            "tags": ",".join(
                 map(
                     str,
                     [
@@ -408,12 +413,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                     ],
                 )
             ),
-            "correspondent_id": (
-                ""
-                if doc_data.get("correspondent") is None
-                else str(doc_data.get("correspondent"))
-            ),
-            "correspondent_name": next(
+            "correspondent": next(
                 (
                     corr["name"]
                     for corr in self.all_correspondents
@@ -421,23 +421,14 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 ),
                 "",
             ),
-            "owner_id": (
-                "" if doc_data.get("owner") is None else str(doc_data.get("owner"))
+            "owner_username": doc_owner.get("username", "") if doc_owner else "",
+            "owner_name": (
+                f"{doc_owner.get('first_name', '')} {doc_owner.get('last_name', '')}"
+                if doc_owner
+                else ""
             ),
-            "owner_name": next(
-                (
-                    user["username"]
-                    for user in self.all_users
-                    if user["id"] == doc_data.get("owner")
-                ),
-                "",
-            ),
-            "document_type_id": (
-                ""
-                if doc_data.get("document_type") is None
-                else str(doc_data.get("document_type"))
-            ),
-            "document_type_name": next(
+            "owner_email": doc_owner.get("email", "") if doc_owner else "",
+            "document_type": next(
                 (
                     doc_type["name"]
                     for doc_type in self.all_doc_types
@@ -464,15 +455,24 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                     for note in doc_data.get("notes", [])
                 ]
             ),
-            # TODO: add custom fields
-            #       add original_file_name?
-            #       handle images?
-            #       generate shareable link?
+            # TODO: add custom fields?
         }
 
         sections: List[Union[TextSection, ImageSection]] = [
-            TextSection(link=uri, text=content, image_file_name=image_file_name)
+            TextSection(link=uri, text=content, image_file_name=archived_file_name)
         ]
+
+        primary_owners: List[BasicExpertInfo] = (
+            [
+                BasicExpertInfo(
+                    first_name=doc_owner.get("first_name", None),
+                    last_name=doc_owner.get("last_name", None),
+                    email=doc_owner.get("email", None),
+                )
+            ]
+            if doc_owner
+            else None
+        )
 
         return Document(
             id=str(doc_id),
@@ -482,6 +482,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             metadata=metadata,
             doc_updated_at=updated_at,
             title=title,
+            primary_owners=primary_owners,
         )
 
     @override
@@ -668,8 +669,8 @@ if __name__ == "__main__":
         )
         test_connector = PaperlessNgxConnector(
             # ingest_tags="INBOX, TODO",
-            # ingest_tags="ai-process",
-            ingest_usernames="cbrown",
+            ingest_tags="ai-process",
+            # ingest_usernames="cbrown",
             # ingest_noowner=True,
         )
         test_connector.load_credentials(
