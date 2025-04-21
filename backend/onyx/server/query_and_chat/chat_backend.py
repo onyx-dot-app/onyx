@@ -261,13 +261,36 @@ def create_new_chat_session(
     db_session: Session = Depends(get_session),
 ) -> CreateChatSessionID:
     user_id = user.id if user is not None else None
+
+    try:
+        # Check if the persona exists and is valid for this user.
+        # An exception will be thrown if the persona is not valid.
+        persona = get_persona_by_id(
+            persona_id=chat_session_creation_request.persona_id,
+            user=user,
+            db_session=db_session,
+            is_for_edit=False,
+        )
+
+        # Ensure the persona is visible
+        if not persona.is_visible:
+            raise Exception("Persona is not visible to the user.")
+
+    except Exception as e:
+        logger.exception(e)
+        raise HTTPException(
+            status_code=400,
+            detail="The given user does not have access to this Persona.",
+        )
+        return
+
     try:
         new_chat_session = create_chat_session(
             db_session=db_session,
             description=chat_session_creation_request.description
             or "",  # Leave the naming till later to prevent delay
             user_id=user_id,
-            persona_id=chat_session_creation_request.persona_id,
+            persona_id=persona.id,
         )
     except Exception as e:
         logger.exception(e)
