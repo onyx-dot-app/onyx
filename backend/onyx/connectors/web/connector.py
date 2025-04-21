@@ -268,7 +268,7 @@ def is_pdf_content(response: requests.Response) -> bool:
     return any(pdf_type in content_type for pdf_type in PDF_MIME_TYPES)
 
 
-def start_playwright() -> Tuple[Playwright, BrowserContext]:
+def start_playwright() -> Tuple[Playwright, Browser, BrowserContext]:
     playwright = sync_playwright().start()
 
     # Launch browser with more realistic settings
@@ -295,6 +295,11 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
         bypass_csp=True,
         ignore_https_errors=True,
     )
+
+    # SYNAPSE: Block heavy/unneeded resources
+    context.route("**/*", lambda route: 
+        route.abort() if route.request.resource_type in ("image", "stylesheet", "font", "media", "websocket", "other")
+        else route.continue_())
 
     # Set additional headers to mimic a real browser
     context.set_extra_http_headers(
@@ -344,7 +349,7 @@ def start_playwright() -> Tuple[Playwright, BrowserContext]:
             {"Authorization": "Bearer {}".format(token["access_token"])}
         )
 
-    return playwright, context
+    return playwright, browser, context
 
 
 def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
