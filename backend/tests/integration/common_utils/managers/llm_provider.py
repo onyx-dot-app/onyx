@@ -42,7 +42,7 @@ class LLMProviderManager:
         )
 
         llm_response = requests.put(
-            f"{API_SERVER_URL}/admin/llm/provider",
+            f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
             json=llm_provider.model_dump(),
             headers=(
                 user_performing_action.headers
