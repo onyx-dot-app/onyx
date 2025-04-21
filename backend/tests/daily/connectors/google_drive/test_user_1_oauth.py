@@ -234,10 +234,9 @@ def test_shared_drive_folder(
         shared_drive_urls=None,
         my_drive_emails=None,
     )
-    retrieved_docs_failures = load_all_docs_with_failures(connector)
+    retrieved_docs = load_all_docs(connector)
 
     expected_file_ids = FOLDER_1_FILE_IDS + FOLDER_1_1_FILE_IDS + FOLDER_1_2_FILE_IDS
-    retrieved_docs = _check_for_error(retrieved_docs_failures, expected_file_ids)
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
