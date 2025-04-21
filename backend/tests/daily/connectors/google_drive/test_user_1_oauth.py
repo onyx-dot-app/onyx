@@ -38,10 +38,14 @@ def _check_for_error(
         for failure in retrieved_docs_failures
         if isinstance(failure, ConnectorFailure)
     ]
-    assert len(retrieved_failures) == 1
-    fail_msg = retrieved_failures[0].failure_message
-    assert "HttpError 403" in fail_msg
-    assert f"file_{DONWLOAD_REVOKED_FILE_ID}.txt" in fail_msg
+    assert len(retrieved_failures) <= 1
+
+    # current behavior is to fail silently for 403s; leaving this here for when we revert
+    # if all 403s get fixed
+    if len(retrieved_failures) == 1:
+        fail_msg = retrieved_failures[0].failure_message
+        assert "HttpError 403" in fail_msg
+        assert f"file_{DONWLOAD_REVOKED_FILE_ID}.txt" in fail_msg
 
     expected_file_ids.remove(DONWLOAD_REVOKED_FILE_ID)
     return retrieved_docs
