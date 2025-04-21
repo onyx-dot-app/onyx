@@ -1,3 +1,4 @@
+import gc
 import io
 import ipaddress
 import random
@@ -15,6 +16,7 @@ from urllib.parse import urlparse
 import requests
 from bs4 import BeautifulSoup
 from oauthlib.oauth2 import BackendApplicationClient
+from playwright.sync_api import Browser
 from playwright.sync_api import BrowserContext
 from playwright.sync_api import Playwright
 from playwright.sync_api import sync_playwright
@@ -52,28 +54,41 @@ class ScrapeSessionContext:
         self.to_visit = to_visit
         self.visited_links: set[str] = set()
         self.content_hashes: set[int] = set()
-
+        self.seen_domains: set[str] = set()
         self.doc_batch: list[Document] = []
 
         self.at_least_one_doc: bool = False
         self.last_error: str | None = None
         self.needs_retry: bool = False
-
         self.playwright: Playwright | None = None
+        self.browser: Browser | None = None
         self.playwright_context: BrowserContext | None = None
+        self.page: Any | None = None  # Reusable page object (type: Page)
 
     def initialize(self) -> None:
         self.stop()
-        self.playwright, self.playwright_context = start_playwright()
+        self.playwright, self.browser, self.playwright_context = start_playwright()
+        if self.playwright_context:
+            self.page = self.playwright_context.new_page()
 
     def stop(self) -> None:
+        if self.page:
+            self.page.close()
+            self.page = None
+
         if self.playwright_context:
             self.playwright_context.close()
             self.playwright_context = None
 
+        if self.browser:
+            self.browser.close()
+            self.browser = None
+
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
+
+        gc.collect()
 
 
 class ScrapeResult:
@@ -527,9 +542,15 @@ class WebConnector(LoadConnector):
 
             return result
 
-        page = session_ctx.playwright_context.new_page()
+
+        # --- HTML/Other Content Handling (using Playwright) ---
+        # This block runs if it wasn't a confirmed PDF OR if the .pdf check failed
+        page = session_ctx.page
+        if not page:
+            raise RuntimeError("Session context page not initialized")
+
         try:
-            # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
+            # Use Playwright to fetch the page content
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
@@ -547,8 +568,8 @@ class WebConnector(LoadConnector):
                     logger.info(
                         f"{index}: {initial_url} redirected to {final_url} - already indexed"
                     )
-                    page.close()
-                    return result
+                    # No need to close page here, managed by context
+                    return result # Return empty result as it's already visited
 
                 logger.info(f"{index}: {initial_url} redirected to {final_url}")
                 session_ctx.visited_links.add(initial_url)
@@ -633,7 +654,8 @@ class WebConnector(LoadConnector):
                 ),
             )
         finally:
-            page.close()
+            # No longer need to close the page here, it's managed by ScrapeSessionContext.stop()
+            pass  # Keep the finally block structure
 
         return result
 
@@ -648,70 +670,92 @@ class WebConnector(LoadConnector):
         check_internet_connection(base_url)  # make sure we can connect to the base url
 
         session_ctx = ScrapeSessionContext(base_url, self.to_visit_list)
-        session_ctx.initialize()
+        session_ctx.initialize()  # Initialize ONCE here
 
-        while session_ctx.to_visit:
-            initial_url = session_ctx.to_visit.pop()
-            if initial_url in session_ctx.visited_links:
-                continue
-            session_ctx.visited_links.add(initial_url)
-
-            try:
-                protected_url_check(initial_url)
-            except Exception as e:
-                session_ctx.last_error = f"Invalid URL {initial_url} due to {e}"
-                logger.warning(session_ctx.last_error)
-                continue
-
-            index = len(session_ctx.visited_links)
-            logger.info(f"{index}: Visiting {initial_url}")
-
-            # Add retry mechanism with exponential backoff
-            retry_count = 0
-
-            while retry_count < self.MAX_RETRIES:
-                if retry_count > 0:
-                    # Add a random delay between retries (exponential backoff)
-                    delay = min(2**retry_count + random.uniform(0, 1), 10)
-                    logger.info(
-                        f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
-                    )
-                    time.sleep(delay)
+        try:  # Ensure stop is called even if errors occur in the loop
+            while session_ctx.to_visit:
+                initial_url = session_ctx.to_visit.pop()
+                if initial_url in session_ctx.visited_links:
+                    continue
+                session_ctx.visited_links.add(initial_url)
 
                 try:
-                    result = self._do_scrape(index, initial_url, session_ctx)
-                    if result.retry:
-                        continue
-
-                    if result.doc:
-                        session_ctx.doc_batch.append(result.doc)
+                    protected_url_check(initial_url)
                 except Exception as e:
-                    session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
-                    logger.exception(session_ctx.last_error)
-                    session_ctx.initialize()
+                    session_ctx.last_error = f"Invalid URL {initial_url} due to {e}"
+                    logger.warning(session_ctx.last_error)
                     continue
-                finally:
-                    retry_count += 1
 
-                break  # success / don't retry
+                index = len(session_ctx.visited_links)
+                logger.info(f"{index}: Visiting {initial_url}")
 
-            if len(session_ctx.doc_batch) >= self.batch_size:
-                session_ctx.initialize()
+                # Add retry mechanism with exponential backoff
+                retry_count = 0
+                scraped_successfully = False
+                while retry_count < self.MAX_RETRIES:
+                    if retry_count > 0:
+                        # Add a random delay between retries (exponential backoff)
+                        delay = min(2**retry_count + random.uniform(0, 1), 10)
+                        logger.info(
+                            f"Retry {retry_count}/{self.MAX_RETRIES} for {initial_url} after {delay:.2f}s delay"
+                        )
+                        time.sleep(delay)
+
+                    try:
+                        result = self._do_scrape(index, initial_url, session_ctx)
+                        if result.retry:
+                            # If _do_scrape signals a retryable error (like HTTP 4xx/5xx)
+                            # we increment retry_count and continue the inner loop.
+                            # We don't re-initialize here.
+                            logger.info(f"Retrying {initial_url} due to server response.")
+                            retry_count += 1
+                            continue  # Continue to the next retry iteration
+
+                        # If scrape was successful (even if result.doc is None)
+                        if result.doc:
+                            session_ctx.doc_batch.append(result.doc)
+                        scraped_successfully = True
+                        break  # Exit retry loop on success or non-retryable issue from _do_scrape
+
+                    except Exception as e:
+                        # This catches exceptions *within* the _do_scrape call itself
+                        # or potentially issues setting up the call.
+                        session_ctx.last_error = f"Failed to fetch '{initial_url}': {e}"
+                        logger.exception(session_ctx.last_error)
+                        # DO NOT re-initialize here.
+                        # Increment retry count and continue the retry loop for unexpected exceptions
+                        retry_count += 1
+                        continue # Continue to the next retry iteration
+
+                if not scraped_successfully:
+                     logger.error(f"Failed to scrape {initial_url} after {self.MAX_RETRIES} retries.")
+                     # Optionally continue to the next URL or raise an error depending on desired behavior
+                     continue
+
+
+                # --- Batch Handling ---
+                if len(session_ctx.doc_batch) >= self.batch_size:
+                    # REMOVE session_ctx.initialize() here
+                    session_ctx.at_least_one_doc = True
+                    yield session_ctx.doc_batch
+                    session_ctx.doc_batch = []  # Just clear the batch
+
+            # --- Final Batch ---
+            if session_ctx.doc_batch:
+                # No need to call stop() here, it's handled in finally
                 session_ctx.at_least_one_doc = True
                 yield session_ctx.doc_batch
-                session_ctx.doc_batch = []
 
-        if session_ctx.doc_batch:
-            session_ctx.stop()
-            session_ctx.at_least_one_doc = True
-            yield session_ctx.doc_batch
+            if not session_ctx.at_least_one_doc:
+                if session_ctx.last_error:
+                    # Raise the last known error if no documents were processed at all
+                    raise RuntimeError(session_ctx.last_error)
+                # If there were no errors but still no docs (e.g., empty sitemap), raise a generic error
+                raise RuntimeError("No valid pages found or processed.")
 
-        if not session_ctx.at_least_one_doc:
-            if session_ctx.last_error:
-                raise RuntimeError(session_ctx.last_error)
-            raise RuntimeError("No valid pages found.")
-
-        session_ctx.stop()
+        finally:
+            self._http.close()  # Close the requests session
+            session_ctx.stop()  # Ensure Playwright cleanup happens
 
     def validate_connector_settings(self) -> None:
         # Make sure we have at least one valid URL to check
