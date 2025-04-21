@@ -298,7 +298,7 @@ export default function MyDocuments() {
     provider.model_configurations.map((modelConfiguration) => ({
       modelName: modelConfiguration.name,
       provider: provider.provider,
-      maxTokens: modelConfiguration.max_input_tokens,
+      maxTokens: modelConfiguration.max_input_tokens!,
     }))
   );
 
@@ -307,7 +307,7 @@ export default function MyDocuments() {
     provider: "Unknown",
     maxTokens: 0,
   };
-  const maxTokens = selectedModel.maxTokens!;
+  const maxTokens = selectedModel.maxTokens;
   const tokenPercentage = (totalTokens / maxTokens) * 100;
 
   return (
