@@ -43,25 +43,11 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
     def __init__(
         self,
-        api_url: Optional[str] = None,
         start_date: Optional[str] = None,
         ingest_tags: Optional[str] = None,
         ingest_usernames: Optional[str] = None,
         ingest_noowner: Optional[bool] = False,
     ) -> None:
-        self.api_url = api_url
-
-        if not self.api_url:
-            self.api_url = os.environ.get("PAPERLESS_API_URL")
-            logger.debug("Loaded API URL from environment variables")
-        else:
-            logger.debug("Using web user-provided API URL")
-
-        if not self.api_url:
-            raise ConnectorValidationError(
-                "API URL not found in environment variables or settings."
-            )
-
         # Allowed start_date formats:
         # - yyyy-mm-dd
         # - mm/dd/yyyy
@@ -127,20 +113,17 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
     @override
     def load_credentials(self, credentials: Dict[str, Any]) -> None:
         # """
-        # Loads Token from environment variables if not set with web user-provided credentials.
+        # Loads Token from web user-provided credentials.
+
+        self.api_url = credentials["paperless_ngx_api_url"]
 
         self.auth_token = credentials["paperless_ngx_auth_token"]
 
-        if not self.auth_token:
-            self.auth_token = os.environ.get("PAPERLESS_AUTH_TOKEN")
-            logger.debug("Loaded auth token from environment variables")
-        else:
-            logger.debug("Using web user-provided auth token")
+        if not self.api_url:
+            raise PermissionError("Paperless-ngx API URL not found in  settings.")
 
         if not self.auth_token:
-            raise PermissionError(
-                "Auth token not found in environment variables or settings."
-            )
+            raise PermissionError("Auth token not found in settings.")
 
     def _get_headers(self) -> Dict[str, str]:
         """Returns authentication headers."""
@@ -663,7 +646,7 @@ if __name__ == "__main__":
 
     if not api_url or not auth_token:
         print(
-            "Error: PAPERLESS_API_URL and/or PAPERLESS_AUTH_TOKEN not found in environment or .env file.",
+            "Error: PAPERLESS_API_URL and/or PAPERLESS_AUTH_TOKEN not found in environment or .env file for testing.",
             file=sys.stderr,
         )
         print(
@@ -682,7 +665,6 @@ if __name__ == "__main__":
             f"Testing PaperlessNgxConnector with URL: {api_url} and Key: {masked_key}"
         )
         test_connector = PaperlessNgxConnector(
-            api_url=api_url,
             # ingest_tags="INBOX, TODO",
             # ingest_tags="ai-process",
             ingest_usernames="cbrown",
@@ -690,6 +672,7 @@ if __name__ == "__main__":
         )
         test_connector.load_credentials(
             {
+                "paperless_ngx_api_url": api_url,
                 "paperless_ngx_auth_token": auth_token,
             }
         )
