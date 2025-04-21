@@ -19,9 +19,11 @@ class LoggerUpdate(BaseModel):
     log_messages: Annotated[list[str], add] = []
 
 
-class KGVespaFilterResults(BaseModel):
+class KGFilterConstructionResults(BaseModel):
     entity_filters: list[str]
     relationship_filters: list[str]
+    source_document_filters: list[str]
+    structure: list[str]
 
 
 class KGAnswerStrategy(Enum):
@@ -55,9 +57,11 @@ class AnalysisUpdate(LoggerUpdate):
 
 class SQLSimpleGenerationUpdate(LoggerUpdate):
     sql_query: str | None = None
-    query_results: list[Dict[Any, Any]] | None = None
+    sql_query_results: list[Dict[Any, Any]] | None = None
     individualized_sql_query: str | None = None
     individualized_query_results: list[Dict[Any, Any]] | None = None
+    source_documents_sql: str | None = None
+    source_document_results: list[Dict[Any, Any]] | None = None
 
 
 class ConsolidatedResearchUpdate(LoggerUpdate):
@@ -65,7 +69,7 @@ class ConsolidatedResearchUpdate(LoggerUpdate):
 
 
 class DeepSearchFilterUpdate(LoggerUpdate):
-    vespa_filter_results: KGVespaFilterResults | None = None
+    vespa_filter_results: KGFilterConstructionResults | None = None
     div_con_entities: list[str] | None = None
     source_division: bool | None = None
 
@@ -126,5 +130,5 @@ class MainOutput(TypedDict):
 class ResearchObjectInput(LoggerUpdate):
     entity: str
     broken_down_question: str
-    vespa_filter_results: KGVespaFilterResults
+    vespa_filter_results: KGFilterConstructionResults
     source_division: bool | None

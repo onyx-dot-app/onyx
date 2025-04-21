@@ -78,7 +78,7 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str:
     """
 
     source_detection_prompt = SOURCE_DETECTION_PROMPT.replace(
-        "---SOURCE_DETECTION_PROMPT---", sql_statement
+        "---original_sql_statement---", sql_statement
     )
 
     msg = [
@@ -276,6 +276,21 @@ def generate_simple_sql(
     else:
         individualized_query_results = None
 
+    source_document_results = None
+    if source_documents_sql is not None and source_documents_sql != sql_statement:
+        with get_kg_readonly_user_session_with_current_tenant() as db_session:
+            try:
+                result = db_session.execute(text(source_documents_sql))
+                rows = result.fetchall()
+                source_document_results = [dict(row._mapping) for row in rows]
+            except Exception as e:
+                # No stopping here, the individualized SQL query is not mandatory
+                logger.error(f"Error executing Individualized SQL query: {e}")
+                individualized_query_results = None
+
+    else:
+        individualized_query_results = None
+
     with get_session_with_current_tenant() as db_session:
         drop_views(
             db_session,
@@ -288,9 +303,11 @@ def generate_simple_sql(
 
     return SQLSimpleGenerationUpdate(
         sql_query=sql_statement,
-        query_results=query_results,
+        sql_query_results=query_results,
         individualized_sql_query=individualized_sql_query,
         individualized_query_results=individualized_query_results,
+        source_documents_sql=source_documents_sql,
+        source_document_results=source_document_results,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

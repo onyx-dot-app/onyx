@@ -631,7 +631,9 @@ id_name and source_document IS UNIQUE!
    - source_date (str): the 'event' date of the source document [example: 2021-01-01]
 
 Specifically, the table contains the 'source_document' column, which is the id of the source document that \
-contains the relationship of the table row.
+contains the relationship of the table row. Make sure that you do not return more documents, i.e. if there \
+is a limit on source documents in the original SQL statement, the new SQL statement needs to have \
+the same limit.
 
 Your task is then to create a new SQL statement that returns the source documents that are relevant to what the \
 original SQL statement is returning. So the source document of every row used in the original SQL statement should \
@@ -642,7 +644,7 @@ Here is the *original* SQL statement:
 ---original_sql_statement---
 {SEPARATOR_LINE}
 
-Please answer in the following json format:
+Please answer in the following string format:
 
 <reasoning> - think briefly through the problem step by step - </reasoning> \
 <sql> - the new SQL statement that returns the source documents involved in the original SQL statement - </sql>
@@ -785,54 +787,118 @@ Please answer in the following text format:
 SEARCH_FILTER_CONSTRUCTION_PROMPT = f"""
 You need to prepare a search across text segments that contain the information necessary to \
 answer a question. The text segments have tags that can be used to filter for the relevant segments. \
+Key are suitable entities and relationships of a knowledge graph, as well as underlying source documents.
 
-Your task is to find the filters that are needed to find the relevant segments from a list of \
-options. Filters can be entities or relationships. Selected text filters are required \
-to be tagged with the entity and relationship filters you select.
+Your overall task is to find the filters and structures that are needed to filtering a database to \
+properly address a user question.
 
-Here are the options you have:
+You will be given:
+  - the user question
+  - a description of all of the potential entity types involved
+  - a list of 'global' entities and relationships that should be filtered by, given the question
+  - the structure of a schema that was used to derive additional entity filters
+  - a SQL statement that was generated to derive those filters
+  - the results that were generated using the SQL statement. This can have multiple rows, \
+and those will be the 'local' filters (which will later mean that each retrieved result will \
+needc to match at least one of the conditions that you will generate).
+  - the results of another query that asked for the underlying source documents that resulted \
+in the answers of the SQL statement
+
+
+Here is the information:
+
+1) The overall user question
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+2) Here is a description of all of the entity types:
+{SEPARATOR_LINE}
+---entity_type_descriptions---
+{SEPARATOR_LINE}
+
+3) Here are the lists of entity and relationship filters that were derived from the question:
 {SEPARATOR_LINE}
 Entity filters:
 
 ---entity_filters---
 
-{SEPARATOR_LINE}
+--
+
 Relationship filters:
 
 ---relationship_filters---
 
 {SEPARATOR_LINE}
 
-Note that entity filters are of the form <entity_type>:<entity_name>, and relationship filters are of the form \
-<source_entity_type>:<source_entity_name>__<relationship_type>__<target_entity_type>:<target_entity_name>.
+4) Here are the columns of a table in a database that has a lot of knowledge about the \
+data:
+{SEPARATOR_LINE}
+   - relationship (str): The name of the RELATIONSHIP, combining the nature of the relationship and the names of the entities. \
+It is of the form \
+<source_entity_type>:<source_entity_name>__<relationship_description>__<target_entity_type>:<target_entity_name> \
+[example: ACCOUNT:Nike__has__CONCERN:performance]. Note that this is NOT UNIQUE!
+   - source_entity (str): the id of the source ENTITY/NODE in the relationship [example: ACCOUNT:Nike]
+   - source_entity_attributes (json): the attributes of the source entity/node [example: {{"account_type": "customer"}}]
+   - target_entity (str): the id of the target ENTITY/NODE in the relationship [example: CONCERN:performance]
+   - target_entity_attributes (json): the attributes of the target entity/node [example: {{"degree": "severe"}}]
+   - source_entity_type (str): the type of the source entity/node [example: ACCOUNT]. Only the entity types provided \
+   below are valid.
+   - target_entity_type (str): the type of the target entity/node [example: CONCERN]. Only the entity types provided \
+   below are valid.
+   - relationship_type (str): the type of the relationship, formatted as  \
+<source_entity_type>__<relationship_description>__<target_entity_type>.   So the explicit entity_names have \
+been removed. [example: ACCOUNT__has__CONCERN]
+   - source_document (str): the id of the document that contains the relationship. Note that the combination of \
+id_name and source_document IS UNIQUE!
+   - source_date (str): the 'event' date of the source document [example: 2021-01-01]
 
-It is useful to understand what the entity types represent:
 {SEPARATOR_LINE}
 
----entity_type_descriptions---
-
-{SEPARATOR_LINE}
-
-Also - for your information - the following SQL statement was generated to help find our count \
-relevant objects:
+5) Here is a query that was generated for that table to provide additional filters:
 {SEPARATOR_LINE}
 ---sql_query---
 {SEPARATOR_LINE}
 
-Finally, here is the question you are supposed to answer:
+6) Here are the results to that SQL query. (Consider the schema description and the \
+structure of the entities to interpret the results)
+{SEPARATOR_LINE}
+---sql_results---
+{SEPARATOR_LINE}
+
+7) Here are the results of the other query that provided the underlying source documnents \
+using the schema:
+{SEPARATOR_LINE}
+---source_document_results---
+{SEPARATOR_LINE}
+
+Here is the detailed set of tasks that you should perform, including the proper output format for you:
+
+Please reply as a json dictionary in this form:
+
+{{
+    "global_entity_filters": <a list of entity filters>,
+    "global_relationship_filters": <a list of relationship filters, derived from the 'global' \
+relationship filers above.>,
+    "local_entity_filters": <a list of lists of 'local' entity filters, which were obtained from the \
+SQL results in 6 above. Each inner list can have one or more entities, which will correspond to the \
+rows in the sql results in point 6 above.>,
+    "source_document_filters": <a list of strings, derived from the source document filters above. \
+You are essentially only formatting here, so do not change the content of the strings.>,
+    "structure": <Think about the user question. What would the user maybe want to see as a bullet point list? \
+More specifically, think about how (and if) the user would naturally want the answer to be divided up in \
+*equivalent and parallel* sub-investigations. For example, if the question were something like 'what was discussed \
+in the last 5 calls', the user probably expects to see a bullet point list, one bullet point for each call that \
+then shows the summary. In that case for this part of the task you would just respond with a list of the calls, which \
+should be entities and part of the sql results in 6 above. (The actual 'what was discussed' will be addressed later)>
+}}
+
+Again - DO NOT FORGET - here is the user question that motivates this whole task:
 {SEPARATOR_LINE}
 ---question---
 {SEPARATOR_LINE}
 
-Again, your task is to select the filters that are implied by the question, and that therefore \
-should be used to filter the text segments.
-
-Please answer in the following json dictionary format:
-
-{{
-    "entity_filters": <a list of entity filters>,
-    "relationship_filters": <a list of relationship filters>
-}}
+Your json dictionary answer:
 """.strip()
 
 OUTPUT_FORMAT_NO_EXAMPLES_PROMPT = f"""

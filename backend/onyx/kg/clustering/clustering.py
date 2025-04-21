@@ -946,7 +946,8 @@ Only output the category name, nothing else."""
                 len(relationship.id_name.split("__")) == 3
             ), f"Invalid relationship: {relationship}"
 
-            used_source_documents.add(relationship.source_document)
+            if relationship.source_document:
+                used_source_documents.add(relationship.source_document)
 
             source_entity, relationship_type, target_entity = (
                 relationship.id_name.split("__")
@@ -1074,7 +1075,7 @@ Only output the category name, nothing else."""
             )
             db_session.commit()
 
-    # update document status
+    # Update the kg stage for all of the source documents that were used in the relationships
 
     for source_document_id in used_source_documents:
         with get_session_with_current_tenant() as db_session:

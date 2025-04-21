@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.states import DeepSearchFilterUpdate
-from onyx.agents.agent_search.kb_search.states import KGVespaFilterResults
+from onyx.agents.agent_search.kb_search.states import KGFilterConstructionResults
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -87,27 +87,27 @@ def individual_deep_search(
         cleaned_response = cleaned_response.replace("}}", '"}')
 
         try:
-            vespa_filter_results = KGVespaFilterResults.model_validate_json(
+            vespa_filter_results = KGFilterConstructionResults.model_validate_json(
                 cleaned_response
             )
         except ValueError:
             logger.error(
                 "Failed to parse LLM response as JSON in Entity-Term Extraction"
             )
-            vespa_filter_results = KGVespaFilterResults(
+            vespa_filter_results = KGFilterConstructionResults(
                 entity_filters=[],
                 relationship_filters=[],
             )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
-        vespa_filter_results = KGVespaFilterResults(
+        vespa_filter_results = KGFilterConstructionResults(
             entity_filters=[],
             relationship_filters=[],
         )
 
-    if state.query_results:
+    if state.sql_query_results:
         div_con_entities = [
-            x["id_name"] for x in state.query_results if x["id_name"] is not None
+            x["id_name"] for x in state.sql_query_results if x["id_name"] is not None
         ]
     else:
         div_con_entities = []

@@ -75,7 +75,7 @@ def process_kg_only_answers(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     graph_config.inputs.search_request.query
-    query_results = state.query_results
+    query_results = state.sql_query_results
     individualized_query_results = state.individualized_query_results
 
     query_results_list = []

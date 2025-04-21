@@ -6,7 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.states import DeepSearchFilterUpdate
-from onyx.agents.agent_search.kb_search.states import KGVespaFilterResults
+from onyx.agents.agent_search.kb_search.states import KGFilterConstructionResults
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
@@ -36,6 +36,18 @@ def construct_deep_search_filters(
     entities = state.query_graph_entities_no_attributes
     relationships = state.query_graph_relationships
     simple_sql_query = state.sql_query
+    simple_sql_results = state.sql_query_results
+    source_document_results = state.source_document_results
+    if simple_sql_results:
+        simple_sql_results_str = "\n".join([str(x) for x in simple_sql_results])
+    else:
+        simple_sql_results_str = "(no SQL results generated)"
+    if source_document_results:
+        source_document_results_str = "\n".join(
+            [str(x) for x in source_document_results]
+        )
+    else:
+        source_document_results_str = "(no source document results generated)"
 
     search_filter_construction_prompt = (
         SEARCH_FILTER_CONSTRUCTION_PROMPT.replace(
@@ -53,6 +65,14 @@ def construct_deep_search_filters(
         .replace(
             "---sql_query---",
             simple_sql_query or "(no SQL generated)",
+        )
+        .replace(
+            "---sql_results---",
+            simple_sql_results_str or "(no SQL results generated)",
+        )
+        .replace(
+            "---source_document_results---",
+            source_document_results_str or "(no source document results generated)",
         )
         .replace(
             "---question---",
@@ -89,41 +109,32 @@ def construct_deep_search_filters(
         cleaned_response = cleaned_response.replace("}}", '"}')
 
         try:
-            vespa_filter_results = KGVespaFilterResults.model_validate_json(
+
+            filter_results = KGFilterConstructionResults.model_validate_json(
                 cleaned_response
             )
         except ValueError:
             logger.error(
                 "Failed to parse LLM response as JSON in Entity-Term Extraction"
             )
-            vespa_filter_results = KGVespaFilterResults(
+            filter_results = KGFilterConstructionResults(
                 entity_filters=[],
                 relationship_filters=[],
+                source_document_filters=[],
+                structure=[],
             )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
-        vespa_filter_results = KGVespaFilterResults(
+        filter_results = KGFilterConstructionResults(
             entity_filters=[],
             relationship_filters=[],
+            source_document_filters=[],
+            structure=[],
         )
 
-    if (
-        state.individualized_query_results
-        and len(state.individualized_query_results) > 0
-    ):
-        div_con_entities = [
-            x["id_name"]
-            for x in state.individualized_query_results
-            if x["id_name"] is not None and "*" not in x["id_name"]
-        ]
-    elif state.query_results:
+    div_con_structure = filter_results.structure
 
-        div_con_base_values = [x.values() for x in state.query_results]
-        div_con_entities = list(set([x for xs in div_con_base_values for x in xs]))
-    else:
-        div_con_entities = []
-
-    logger.info(f"div_con_entities: {div_con_entities}")
+    logger.info(f"div_con_structure: {div_con_structure}")
 
     with get_session_with_current_tenant() as db_session:
         double_grounded_entity_types = get_entity_types_with_grounded_source_name(
@@ -132,17 +143,15 @@ def construct_deep_search_filters(
 
     source_division = False
 
-    if div_con_entities:
+    if div_con_structure:
         for entity_type in double_grounded_entity_types:
-            if entity_type.grounded_source_name.lower() in div_con_entities[0].lower():
+            if entity_type.grounded_source_name.lower() in div_con_structure[0].lower():
                 source_division = True
                 break
-    else:
-        raise ValueError("No div_con_entities found")
 
     return DeepSearchFilterUpdate(
-        vespa_filter_results=vespa_filter_results,
-        div_con_entities=div_con_entities,
+        vespa_filter_results=filter_results,
+        div_con_entities=div_con_structure,
         source_division=source_division,
         log_messages=[
             get_langgraph_node_log_string(

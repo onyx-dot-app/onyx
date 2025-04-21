@@ -14,8 +14,8 @@ from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import get_entity_types
-from onyx.db.models import KGRelationshipExtractionTemp
 from onyx.db.models import KGRelationshipType
+from onyx.db.models import KGRelationshipTypeExtractionTemp
 from onyx.db.models import KGStage
 from onyx.db.relationships import add_or_increment_relationship
 from onyx.db.relationships import add_relationship
@@ -128,20 +128,23 @@ def get_relationship_types_str(active: bool | None = None) -> str:
     from onyx.db.relationships import get_all_relationship_types
 
     with get_session_with_current_tenant() as db_session:
-        relationship_types = get_all_relationship_types(db_session, KGStage.EXTRACTED)
+        relationship_types = get_all_relationship_types(db_session, KGStage.NORMALIZED)
 
         # Filter by active status if specified
 
-        relationship_types = cast(
-            list[KGRelationshipType], list[KGRelationshipExtractionTemp]
-        )
         if active is not None:
-            relationship_types = [
-                rt for rt in relationship_types if rt.active == active
-            ]
+            active_relationship_types = cast(
+                list[KGRelationshipType] | list[KGRelationshipTypeExtractionTemp],
+                [rt for rt in relationship_types if rt.active == active],
+            )
+        else:
+            active_relationship_types = cast(
+                list[KGRelationshipType] | list[KGRelationshipTypeExtractionTemp],
+                relationship_types,
+            )
 
         relationship_types_list = []
-        for rel_type in relationship_types:
+        for rel_type in active_relationship_types:
             # Format as "source_type__relationship_type__target_type"
             formatted_type = f"{rel_type.source_entity_type_id_name}__{rel_type.type}__{rel_type.target_entity_type_id_name}"
             relationship_types_list.append(formatted_type)
