@@ -11,6 +11,7 @@ pandas==2.2.3
 posthog==3.7.4
 pre-commit==3.2.2
 pytest-asyncio==0.22.0
+pytest-xdist==3.6.1
 pytest==8.3.5
 reorder-python-imports-black==3.14.0
 ruff==0.0.286

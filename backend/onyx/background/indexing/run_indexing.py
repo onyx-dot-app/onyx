@@ -407,8 +407,12 @@ def _run_indexing(
 
             # don't use a checkpoint if we're explicitly indexing from
             # the beginning in order to avoid weird interactions between
-            # checkpointing / failure handling.
-            if index_attempt.from_beginning:
+            # checkpointing / failure handling
+            # OR
+            # if the last attempt was successful
+            if index_attempt.from_beginning or (
+                most_recent_attempt and most_recent_attempt.status.is_successful()
+            ):
                 checkpoint = connector_runner.connector.build_dummy_checkpoint()
             else:
                 checkpoint = get_latest_valid_checkpoint(

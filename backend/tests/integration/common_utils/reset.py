@@ -156,7 +156,7 @@ def reset_postgres(
     """Reset the Postgres database."""
     # this seems to hang due to locking issues, so run with a timeout with a few retries
     NUM_TRIES = 10
-    TIMEOUT = 10
+    TIMEOUT = 40
     success = False
     for _ in range(NUM_TRIES):
         logger.info(f"Downgrading Postgres... ({_ + 1}/{NUM_TRIES})")
