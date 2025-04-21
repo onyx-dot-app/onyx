@@ -14,23 +14,23 @@ const AdvancedFormPage = () => {
 
       <NumberInput
         description={`
-          ${i18n.t(k.CHECKS_ALL_DOCUMENTS_AGAINST_T)}
-        `}
-        label="Prune Frequency (days)"
+${i18n.t(k.CHECKS_ALL_DOCUMENTS_AGAINST_T)}
+`}
+        label="Частота удаления (дней)"
         name="pruneFreq"
       />
 
       <NumberInput
-        description="This is how frequently we pull new documents from the source (in minutes). If you input 0, we will never pull new documents for this connector."
-        label="Refresh Frequency (minutes)"
+        description="Это частота, с которой мы извлекаем новые документы из источника (в минутах). Если ввести 0, мы никогда не будем извлекать новые документы для этого коннектора."
+        label="Частота обновления (минут)"
         name="refreshFreq"
       />
 
       <TextFormField
         type="date"
-        subtext="Documents prior to this date will not be pulled in"
+        subtext="Документы до этой даты не будут извлечены"
         optional
-        label="Indexing Start Date"
+        label="Дата начала индексации"
         name="indexingStart"
       />
 

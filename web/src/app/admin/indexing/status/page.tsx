@@ -39,7 +39,7 @@ function Main() {
       <div className="text-error">
         {indexAttemptError?.info?.detail ||
           editableIndexAttemptError?.info?.detail ||
-          "Error loading indexing history."}
+          "Ошибка загрузки истории индексации."}
       </div>
     );
   }
@@ -78,11 +78,11 @@ function Main() {
 export default function Status() {
   const { popup } = usePopupFromQuery({
     "connector-created": {
-      message: "Connector created successfully",
+      message: "Коннектор успешно создан",
       type: "success",
     },
     "connector-deleted": {
-      message: "Connector deleted successfully",
+      message: "Коннектор успешно удален",
       type: "success",
     },
   });

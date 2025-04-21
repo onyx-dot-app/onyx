@@ -87,8 +87,8 @@ export const UserGroupCreationForm = ({
               <div className="py-4">
                 <TextFormField
                   name="name"
-                  label="Name:"
-                  placeholder="Имя для группы пользователей"
+                  label="Название:"
+                  placeholder="Название для группы пользователей"
                   disabled={isUpdate}
                   autoCompleteDisabled={true}
                 />

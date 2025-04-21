@@ -21,7 +21,7 @@ function BackButton({
   isCurator: boolean;
   user: User | null;
 }) {
-  const buttonText = isAdmin ? "Admin Page" : "Curator Page";
+  const buttonText = isAdmin ? "Панель администратора" : "Панель куратора";
 
   if (!isAdmin && !isCurator) {
     console.error(
@@ -58,10 +58,10 @@ export default function Sidebar() {
   const noCredential = credentialTemplates[connector] == null;
 
   const settingSteps = [
-    ...(!noCredential ? ["Credential"] : []),
+    ...(!noCredential ? ["Учетные данные"] : []),
     i18n.t(k.CONNECTOR),
 
-    ...(connector == "file" ? [] : ["Advanced (optional)"]),
+    ...(connector == "file" ? [] : ["Расширенный (необязательно)"]),
   ];
 
   return (
@@ -103,8 +103,8 @@ export default function Sidebar() {
                 )}
                 {settingSteps.map((step, index) => {
                   const allowed =
-                    (step == "Connector" && allowCreate) ||
-                    (step == "Advanced (optional)" && allowAdvanced) ||
+                    (step == "Коннектор" && allowCreate) ||
+                    (step == "Расширенный (необязательно)" && allowAdvanced) ||
                     index <= formStep;
 
                   return (

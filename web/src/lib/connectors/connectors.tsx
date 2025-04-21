@@ -299,7 +299,7 @@ export const connectorConfigs: Record<
       {
         type: "text",
         query: "Введите URL-адрес проекта Redmine:",
-        label: "название redmine",
+        label: "Название redmine",
         name: "redmine_project_url",
         optional: false,
       },
@@ -581,8 +581,8 @@ export function createConnectorValidationSchema(
   const configuration = connectorConfigs[connector];
 
   const object = Yup.object().shape({
-    access_type: Yup.string().required("Access Type is required"),
-    name: Yup.string().required("Connector Name is required"),
+    access_type: Yup.string().required("Требуется тип доступа"),
+    name: Yup.string().required("Требуется имя коннектора"),
     ...[...configuration.values, ...configuration.advanced_values].reduce(
       (acc, field) => {
         let schema: any =
@@ -597,7 +597,7 @@ export function createConnectorValidationSchema(
             : Yup.string();
 
         if (!field.optional) {
-          schema = schema.required(`${field.label} is required`);
+          schema = schema.required(`Требуется ${field.label}`);
         }
 
         acc[field.name] = schema;
@@ -607,8 +607,14 @@ export function createConnectorValidationSchema(
     ),
     // These are advanced settings
     indexingStart: Yup.string().nullable(),
-    pruneFreq: Yup.number().min(0, "Prune frequency must be non-negative"),
-    refreshFreq: Yup.number().min(0, "Refresh frequency must be non-negative"),
+    pruneFreq: Yup.number().min(
+      0,
+      "Частота обрезки должна быть неотрицательной"
+    ),
+    refreshFreq: Yup.number().min(
+      0,
+      "Частота обновления должна быть неотрицательной"
+    ),
   });
 
   return object;

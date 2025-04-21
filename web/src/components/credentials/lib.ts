@@ -37,9 +37,9 @@ export function createValidationSchema(json_values: Record<string, any>) {
       schemaFields[key] = Yup.string()
         .trim()
         // This ensures user cannot enter an empty string:
-        .min(1, `${displayName} cannot be empty`)
+        .min(1, `${displayName} не может быть пустым.`)
         // The required message is shown if the field is missing
-        .required(`Please enter your ${displayName}`);
+        .required(`Пожалуйста введите ${displayName}`);
     }
   }
 

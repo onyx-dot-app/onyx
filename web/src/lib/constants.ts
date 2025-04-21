@@ -48,14 +48,12 @@ export const NEXT_PUBLIC_CUSTOM_REFRESH_URL =
 
 // NOTE: this should ONLY be used on the server-side. If used client side,
 // it will not be accurate (will always be false).
-export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED =
-  process.env.ENABLE_PAID_ENTERPRISE_EDITION_FEATURES?.toLowerCase() === "true";
+export const SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED = true;
 // NOTE: since this is a `NEXT_PUBLIC_` variable, it will be set at
 // build-time
 // TODO: consider moving this to an API call so that the api_server
 // can be the single source of truth
-export const EE_ENABLED =
-  process.env.NEXT_PUBLIC_ENABLE_PAID_EE_FEATURES?.toLowerCase() === "true";
+export const EE_ENABLED = true;
 
 export const CUSTOM_ANALYTICS_ENABLED = process.env.CUSTOM_ANALYTICS_SECRET_KEY
   ? true

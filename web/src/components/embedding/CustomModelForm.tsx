@@ -51,7 +51,7 @@ export function CustomModelForm({
           <Form>
             <TextFormField
               name="model_name"
-              label="Name:"
+              label="Название:"
               subtext="Имя модели на Hugging Face"
               placeholder="Например, 'nomic-ai/nomic-embed-text-v1'"
               autoCompleteDisabled={true}
