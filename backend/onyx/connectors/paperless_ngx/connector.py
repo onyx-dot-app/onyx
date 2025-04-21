@@ -216,7 +216,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         self.all_tags = self._make_request(TAGS_ENDPOINT)
         self.all_users = self._make_request(USERS_ENDPOINT)
         self.all_correspondents = self._make_request(CORRESPONDENTS_ENDPOINT)
-        self.all_document_types = self._make_request(DOCUMENT_TYPES_ENDPOINT)
+        self.all_doc_types = self._make_request(DOCUMENT_TYPES_ENDPOINT)
         # self.all_custom_fields = self._make_request(CUSTOM_FIELDS_ENDPOINT)
 
         # Build base parameters dict with date filters
@@ -459,7 +459,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             "document_type_name": next(
                 (
                     doc_type["name"]
-                    for doc_type in self.all_document_types
+                    for doc_type in self.all_doc_types
                     if doc_type["id"] == doc_data.get("document_type")
                 ),
                 "",
@@ -479,7 +479,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             "notes": "\n".join(
                 [
                     f"{note.get('note', '')} (created at {note.get('created', '')} by "
-                    + f"{next((user['username'] for user in self.all_users if user['id'] == note.get('user', {}).get('id')),'')})"
+                    + f"{next((user['username'] for user in self.all_users if user['id']==note.get('user', {}).get('id')), '')})"
                     for note in doc_data.get("notes", [])
                 ]
             ),
@@ -687,9 +687,10 @@ if __name__ == "__main__":
         )
         test_connector = PaperlessNgxConnector(
             api_url=api_url,
-            ingest_tags="INBOX, TODO",
+            # ingest_tags="INBOX, TODO",
+            # ingest_tags="ai-process",
             ingest_usernames="cbrown",
-            ingest_noowner=True,
+            # ingest_noowner=True,
         )
         test_connector.load_credentials(
             {
