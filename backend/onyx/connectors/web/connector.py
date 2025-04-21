@@ -471,6 +471,14 @@ class WebConnector(LoadConnector):
         scroll_before_scraping: bool = False,
         **kwargs: Any,
     ) -> None:
+        # one per connector instance
+        self._http = requests.Session()
+        self._http.headers.update(DEFAULT_HEADERS)
+        # Add connection pooling
+        adapter = requests.adapters.HTTPAdapter(pool_connections=100, pool_maxsize=100)
+        self._http.mount('http://', adapter)
+        self._http.mount('https://', adapter)
+
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
@@ -531,33 +539,62 @@ class WebConnector(LoadConnector):
 
         # --- PDF Handling ---
         # Optimize: Only do HEAD request if URL explicitly ends with .pdf
-        head_response = requests.head(
-            initial_url, headers=DEFAULT_HEADERS, allow_redirects=True
-        )
-        is_pdf = is_pdf_content(head_response)
+        # Otherwise, rely on Playwright which handles redirects and content fetching.
+        if initial_url.lower().endswith(".pdf"):
+            head_response = None
+            is_pdf_confirmed = False
+            try:
+                head_response = self._http.head(initial_url, allow_redirects=True)
+                # Allow redirects might change the final URL, check content type
+                if head_response.ok and is_pdf_content(head_response):
+                    is_pdf_confirmed = True
+            except requests.RequestException as e:
+                 logger.warning(f"HEAD request failed for potential PDF {initial_url}: {e}")
+            finally:
+                if head_response:
+                    head_response.close()
 
-        if is_pdf or initial_url.lower().endswith(".pdf"):
-            # PDF files are not checked for links
-            response = requests.get(initial_url, headers=DEFAULT_HEADERS)
-            page_text, metadata, images = read_pdf_file(
-                file=io.BytesIO(response.content)
-            )
-            last_modified = response.headers.get("Last-Modified")
+            if is_pdf_confirmed:
+                # Confirmed PDF, proceed with streaming download
+                response = None
+                pdf_buffer = io.BytesIO()
+                try:
+                    # Use stream=True to avoid loading the whole PDF into memory
+                    response = self._http.get(initial_url, stream=True)
+                    response.raise_for_status()  # Check for HTTP errors
 
-            result.doc = Document(
-                id=initial_url,
-                sections=[TextSection(link=initial_url, text=page_text)],
-                source=DocumentSource.WEB,
-                semantic_identifier=initial_url.split("/")[-1],
-                metadata=metadata,
-                doc_updated_at=(
-                    _get_datetime_from_last_modified_header(last_modified)
-                    if last_modified
-                    else None
-                ),
-            )
+                    # Download in chunks and write to buffer
+                    chunk_size = 128 * 1024  # 128 kB chunks
+                    for chunk in response.iter_content(chunk_size=chunk_size):
+                        pdf_buffer.write(chunk)
 
-            return result
+                    # Reset buffer position to the beginning for reading
+                    pdf_buffer.seek(0)
+
+                    # Process the PDF from the buffer
+                    page_text, metadata, images = read_pdf_file(file=pdf_buffer)
+                    last_modified = response.headers.get("Last-Modified")
+
+                    result.doc = Document(
+                        id=initial_url, # Use initial_url as ID even if redirected by HEAD
+                        sections=[TextSection(link=initial_url, text=page_text)],
+                        source=DocumentSource.WEB,
+                        semantic_identifier=initial_url.split("/")[-1],
+                        metadata=metadata,
+                        doc_updated_at=(
+                            _get_datetime_from_last_modified_header(last_modified)
+                            if last_modified
+                            else None
+                        ),
+                    )
+                finally:
+                    if response:
+                        response.close()  # Ensure the connection is closed
+                    pdf_buffer.close() # Close the BytesIO buffer
+                # Return early as PDF processing is complete
+                return result
+            else:
+                 logger.info(f"URL {initial_url} ends with .pdf but HEAD request did not confirm PDF content type. Proceeding with Playwright.")
 
 
         # --- HTML/Other Content Handling (using Playwright) ---
