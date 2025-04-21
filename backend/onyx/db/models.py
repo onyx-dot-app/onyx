@@ -672,68 +672,9 @@ class KGEntityType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+    ge_deep_extraction: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
     )
-    time_created: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
-
-
-class KGEntityTypeExtractionTemp(Base):
-    __tablename__ = "kg_entity_type_extraction_temp"
-
-    # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        String, primary_key=True, nullable=False, index=True
-    )
-
-    description: Mapped[str | None] = mapped_column(NullFilteredString, nullable=True)
-
-    grounding: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=False
-    )
-    grounded_source_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=False
-    )
-
-    ge_determine_instructions: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), nullable=True, default=None
-    )
-
-    ge_grounding_signature: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=False, default=None
-    )
-
-    clustering: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Clustering information for this entity type",
-    )
-
-    classification_requirements: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Pre-extraction classification requirements and instructions",
-    )
-
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-    extraction_sources: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        comment="Sources and methods used to extract this entity",
-    )
-
-    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -743,14 +684,6 @@ class KGEntityTypeExtractionTemp(Base):
     )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
-    )
-
-    __table_args__ = (
-        Index(
-            "ix_kg_entity_type_extraction_temp_id_name",
-            id_name,
-            unique=True,
-        ),
     )
 
 

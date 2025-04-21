@@ -2,7 +2,6 @@ from datetime import datetime
 from typing import List
 from typing import Type
 
-from sqlalchemy import literal_column
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -39,6 +38,7 @@ def add_entity(
     document_id: str | None = None,
     occurances: int = 0,
     event_time: datetime | None = None,
+    attributes: dict[str, str] | None = None,
 ) -> "KGEntity | KGEntityExtractionTemp | None":
     """Add a new entity to the database.
 
@@ -74,18 +74,19 @@ def add_entity(
             name=name,
             occurances=occurances,
             event_time=event_time,
+            attributes=attributes,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
             set_=dict(
                 # Direct numeric addition without text()
-                occurances=_KGEntityObject.occurances
-                + literal_column("EXCLUDED.occurances"),
+                occurances=_KGEntityObject.occurances + occurances,
                 # Keep other fields updated as before
                 entity_type_id_name=entity_type,
                 document_id=document_id,
                 name=name,
                 event_time=event_time,
+                attributes=attributes,
             ),
         )
         .returning(_KGEntityObject)
@@ -128,7 +129,9 @@ def get_ungrounded_entities(db_session: Session) -> List[KGEntity]:
     )
 
 
-def get_grounded_entities(db_session: Session) -> List[KGEntity]:
+def get_entities_by_grounding(
+    db_session: Session, kg_stage: KGStage, grounding: str
+) -> List[KGEntity] | List[KGEntityExtractionTemp]:
     """Get all entities whose entity type has grounding = 'UE' (ungrounded entities).
 
     Args:
@@ -137,12 +140,33 @@ def get_grounded_entities(db_session: Session) -> List[KGEntity]:
     Returns:
         List of KGEntity objects belonging to ungrounded entity types
     """
-    return (
-        db_session.query(KGEntity)
-        .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
-        .filter(KGEntityType.grounding == "GE")
-        .all()
-    )
+
+    _KGEntityObject: Type[KGEntity | KGEntityExtractionTemp]
+
+    if kg_stage == KGStage.EXTRACTED:
+        _KGEntityObject = KGEntityExtractionTemp
+        return (
+            db_session.query(_KGEntityObject)
+            .join(
+                KGEntityType,
+                _KGEntityObject.entity_type_id_name == KGEntityType.id_name,
+            )
+            .filter(KGEntityType.grounding == grounding)
+            .all()
+        )
+    elif kg_stage == KGStage.NORMALIZED:
+        _KGEntityObject = KGEntity
+        return (
+            db_session.query(_KGEntityObject)
+            .join(
+                KGEntityType,
+                _KGEntityObject.entity_type_id_name == KGEntityType.id_name,
+            )
+            .filter(KGEntityType.grounding == grounding)
+            .all()
+        )
+    else:
+        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
 
 
 def get_determined_grounded_entity_types(db_session: Session) -> List[KGEntityType]:

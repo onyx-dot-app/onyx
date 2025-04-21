@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Any
 from typing import Dict
 
 from pydantic import BaseModel
@@ -17,6 +18,7 @@ class KGChunkFormat(BaseModel):
     entities: Dict[str, int] = {}
     relationships: Dict[str, int] = {}
     terms: Dict[str, int] = {}
+    deep_extraction: bool = False
 
 
 class KGChunkExtraction(BaseModel):
@@ -86,12 +88,14 @@ class KGClassificationContent(BaseModel):
     document_id: str
     classification_content: str
     source_type: str
+    source_metadata: dict[str, Any] | None = None
 
 
 class KGClassificationDecisions(BaseModel):
     document_id: str
     classification_decision: bool
     classification_class: str | None
+    source_metadata: dict[str, Any] | None = None
 
 
 class KGClassificationRule(BaseModel):
@@ -102,6 +106,16 @@ class KGClassificationRule(BaseModel):
 class KGClassificationInstructionStrings(BaseModel):
     classification_options: str
     classification_class_definitions: dict[str, Dict[str, str | bool]]
+
+
+class KGExtractionInstructions(BaseModel):
+    deep_extraction: bool
+    active: bool
+
+
+class KGEntityTypeInstructions(BaseModel):
+    classification_instructions: KGClassificationInstructionStrings
+    extraction_instructions: KGExtractionInstructions
 
 
 class ContextPreparation(BaseModel):
@@ -122,6 +136,11 @@ class KGDocumentClassificationPrompt(BaseModel):
     """
 
     llm_prompt: str | None
+
+
+class KGConnectorData(BaseModel):
+    id: int
+    source: str
 
 
 class KGStage(str, Enum):

@@ -148,7 +148,7 @@ def add_relationship_type(
     target_entity_type: str,
     definition: bool = False,
     extraction_count: int = 0,
-) -> Union["KGRelationshipType", "KGRelationshipExtractionTemp"]:
+) -> Union["KGRelationshipType", "KGRelationshipTypeExtractionTemp"]:
     """
     Add a new relationship type to the database.
 
@@ -197,7 +197,7 @@ def add_relationship_type(
 
 def get_all_relationship_types(
     db_session: Session, kg_stage: str
-) -> list["KGRelationshipType"] | list["KGRelationshipExtractionTemp"]:
+) -> list["KGRelationshipType"] | list["KGRelationshipTypeExtractionTemp"]:
     """
     Retrieve all relationship types from the database.
 
@@ -208,14 +208,16 @@ def get_all_relationship_types(
         List of KGRelationshipType or KGRelationshipExtractionTemp objects
     """
     if kg_stage == KGStage.EXTRACTED:
-        return db_session.query(KGRelationshipExtractionTemp).all()
+        return db_session.query(KGRelationshipTypeExtractionTemp).all()
     elif kg_stage == KGStage.NORMALIZED:
         return db_session.query(KGRelationshipType).all()
     else:
         raise ValueError(f"Invalid kg_stage: {kg_stage}")
 
 
-def get_all_relationships(db_session: Session) -> list["KGRelationship"]:
+def get_all_relationships(
+    db_session: Session, kg_stage: KGStage
+) -> list["KGRelationship"] | list["KGRelationshipExtractionTemp"]:
     """
     Retrieve all relationships from the database.
 
@@ -225,7 +227,12 @@ def get_all_relationships(db_session: Session) -> list["KGRelationship"]:
     Returns:
         List of KGRelationship objects
     """
-    return db_session.query(KGRelationship).all()
+    if kg_stage == KGStage.EXTRACTED:
+        return db_session.query(KGRelationshipExtractionTemp).all()
+    elif kg_stage == KGStage.NORMALIZED:
+        return db_session.query(KGRelationship).all()
+    else:
+        raise ValueError(f"Invalid kg_stage: {kg_stage}")
 
 
 def delete_relationships_by_id_names(db_session: Session, id_names: list[str]) -> int:

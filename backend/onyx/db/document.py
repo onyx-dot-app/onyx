@@ -889,13 +889,13 @@ def get_unprocessed_kg_document_batch_for_connector(
             and_(
                 DocumentByConnectorCredentialPair.connector_id == connector_id,
                 or_(
-                    DocumentByConnectorCredentialPair.kg_stage is None,
+                    DocumentByConnectorCredentialPair.kg_stage.is_(None),
                     DocumentByConnectorCredentialPair.kg_stage
                     == KGStage.EXTRACTION_READY.value,
                 ),
                 or_(
                     DbDocument.kg_stage == KGStage.EXTRACTION_READY.value,
-                    DbDocument.kg_stage is None,
+                    DbDocument.kg_stage.is_(None),
                 ),
             )
         )
@@ -914,7 +914,7 @@ def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
     Returns:
         list[str]: List of document IDs that have been KG processed
     """
-    stmt = select(DbDocument.id).where(and_(DbDocument.kg_stage.is_(KGStage.EXTRACTED)))
+    stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.EXTRACTED)
 
     return list(db_session.scalars(stmt).all())
 
@@ -941,6 +941,17 @@ def update_document_kg_info(
             kg_stage=kg_stage,
             kg_data=kg_data,
         )
+    )
+    db_session.execute(stmt)
+
+
+def update_document_kg_stage(
+    db_session: Session,
+    document_id: str,
+    kg_stage: KGStage,
+) -> None:
+    stmt = (
+        update(DbDocument).where(DbDocument.id == document_id).values(kg_stage=kg_stage)
     )
     db_session.execute(stmt)
 

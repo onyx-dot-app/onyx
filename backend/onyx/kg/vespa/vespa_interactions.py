@@ -13,6 +13,7 @@ from onyx.kg.utils.formatting_utils import kg_email_processing
 
 def get_document_classification_content_for_kg_processing(
     document_ids: list[str],
+    source: str,
     index_name: str,
     batch_size: int = 8,
     num_classification_chunks: int = 3,
@@ -57,6 +58,11 @@ def get_document_classification_content_for_kg_processing(
                 first_num_classification_chunks
             )
 
+            metadata = first_num_classification_chunks[0]["fields"]["metadata"]
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
+            assert isinstance(metadata, dict) or metadata is None
+
             classification_content_list.append(
                 KGClassificationContent(
                     document_id=document_id,
@@ -64,6 +70,7 @@ def get_document_classification_content_for_kg_processing(
                     source_type=first_num_classification_chunks[0]["fields"][
                         "source_type"
                     ],
+                    source_metadata=metadata,
                 )
             )
 
@@ -79,6 +86,7 @@ def get_document_classification_content_for_kg_processing(
 
 def get_document_chunks_for_kg_processing(
     document_id: str,
+    deep_extraction: bool,
     index_name: str,
     batch_size: int = 8,
 ) -> Generator[list[KGChunkFormat], None, None]:
@@ -138,6 +146,7 @@ def get_document_chunks_for_kg_processing(
                 entities=fields.get("kg_entities", {}),
                 relationships=fields.get("kg_relationships", {}),
                 terms=fields.get("kg_terms", {}),
+                deep_extraction=deep_extraction,
             )
         )
 

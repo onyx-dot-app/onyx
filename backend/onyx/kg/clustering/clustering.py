@@ -12,14 +12,14 @@ from thefuzz import fuzz  # type: ignore
 from onyx.db.document import get_all_kg_extracted_documents_info
 from onyx.db.document import get_kg_extracted_document_ids
 from onyx.db.document import update_document_kg_info
+from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import delete_entities_by_id_names
 from onyx.db.entities import get_determined_grounded_entity_types
+from onyx.db.entities import get_entities_by_grounding
 from onyx.db.entities import get_entity_types_with_grounding_signature
 from onyx.db.entities import get_ge_entities_by_types
-from onyx.db.entities import get_grounded_entities
-from onyx.db.entities import get_ungrounded_entities
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_relationship_types_by_id_names
@@ -308,6 +308,8 @@ def _create_relationship_mapping(
         source_node = entity_replacements.get(rel.source_node, rel.source_node)
         target_node = entity_replacements.get(rel.target_node, rel.target_node)
 
+        rel.source_document
+
         # Create the relationship type ID
         source_type = rel.source_node.split(":")[0]
         target_type = rel.target_node.split(":")[0]
@@ -326,7 +328,7 @@ def _create_relationship_mapping(
         clustered_id = f"{source_node}__{rel_name}__{target_node}"
 
         relationship_replacements[original_id] = clustered_id
-        reverse_relationship_replacements_count[clustered_id] += rel.cluster_count
+        reverse_relationship_replacements_count[clustered_id] += rel.occurances or 1
 
     return relationship_replacements, reverse_relationship_replacements_count
 
@@ -510,12 +512,20 @@ def kg_clustering(
 
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
 
+    used_source_documents: Set[str] = set()
+
     primary_llm, fast_llm = get_default_llms()
 
     with get_session_with_current_tenant() as db_session:
-        relationship_types = get_all_relationship_types(db_session)
-        ungrounded_entities = get_ungrounded_entities(db_session)
-        grounded_entities = get_grounded_entities(db_session)
+        relationship_types = get_all_relationship_types(
+            db_session, kg_stage=KGStage.EXTRACTED
+        )
+        ungrounded_entities = get_entities_by_grounding(
+            db_session, KGStage.EXTRACTED, "UE"
+        )
+        grounded_entities = get_entities_by_grounding(
+            db_session, KGStage.EXTRACTED, "GE"
+        )
 
     # cluster 'semi-grounded' entities - TODO: re-think once all grounded entities are actually grounded
     # TODO: make less manual - this is POC only!
@@ -585,9 +595,7 @@ def kg_clustering(
     for rel_type_obj in relationship_types:
         relationship_mapping[rel_type_obj.source_entity_type_id_name][
             rel_type_obj.target_entity_type_id_name
-        ].append(
-            {"name": rel_type_obj.name, "cluster_count": rel_type_obj.cluster_count}
-        )
+        ].append({"name": rel_type_obj.name, "occurrences": rel_type_obj.occurances})
 
     # Store clustering results
     clustering_results: Dict[str, Dict[str, Dict[int, List[str]]]] = defaultdict(
@@ -686,7 +694,7 @@ Only output the relationship name, nothing else."""
         entity_mapping[ungrounded_entity.entity_type_id_name].append(
             {
                 "name": ungrounded_entity.name,
-                "cluster_count": ungrounded_entity.cluster_count or 1,
+                "occurrences": ungrounded_entity.occurances or 1,
             }
         )
 
@@ -791,7 +799,9 @@ Only output the category name, nothing else."""
     # 3. relations: generate the replacement dict if not available
 
     with get_session_with_current_tenant() as db_session:
-        relationships = get_all_relationships(db_session)  # Need to add this function
+        relationships = get_all_relationships(
+            db_session, KGStage.EXTRACTED
+        )  # Need to add this function
 
     (
         relationship_replacements,
@@ -913,16 +923,51 @@ Only output the category name, nothing else."""
 
             db_session.commit()
 
+    # add grounded entities
+
+    for grounded_entity in grounded_entities:
+        with get_session_with_current_tenant() as db_session:
+            add_entity(
+                db_session,
+                KGStage.NORMALIZED,
+                entity_type=grounded_entity.entity_type_id_name,
+                name=grounded_entity.name,
+                occurances=grounded_entity.occurances or 1,
+            )
+            db_session.commit()
+
     # add relationships
 
     with get_session_with_current_tenant() as db_session:
-        for rel, rel_count_8 in reverse_relationship_replacements_count.items():
+
+        for relationship in relationships:
+
+            assert (
+                len(relationship.id_name.split("__")) == 3
+            ), f"Invalid relationship: {relationship}"
+
+            used_source_documents.add(relationship.source_document)
+
+            source_entity, relationship_type, target_entity = (
+                relationship.id_name.split("__")
+            )
+
+            if source_entity in entity_replacements:
+                source_entity = entity_replacements[source_entity]
+
+            if target_entity in entity_replacements:
+                target_entity = entity_replacements[target_entity]
+
+            if relationship.id_name in relationship_replacements:
+                relationship_id_name = relationship_replacements[relationship.id_name]
+
+            # for rel, rel_count_8 in reverse_relationship_replacements_count.items():
             add_relationship(
                 db_session,
                 KGStage.NORMALIZED,
-                relationship_id_name=rel,
-                source_document_id="",  # TODO: fix
-                occurances=rel_count_8,
+                relationship_id_name=relationship_id_name,
+                source_document_id=relationship.source_document or "",
+                occurances=relationship.occurances or 1,
             )
 
             db_session.commit()
@@ -935,7 +980,8 @@ Only output the category name, nothing else."""
         for document_id in kg_processed_document_ids:
             formatted_chunk_batches = get_document_chunks_for_kg_processing(
                 document_id,
-                index_name,
+                deep_extraction=False,
+                index_name=index_name,
                 batch_size=processing_chunk_batch_size,
             )
 
@@ -1023,7 +1069,17 @@ Only output the category name, nothing else."""
             update_document_kg_info(
                 db_session,
                 document_id=document_id,
-                kg_processed=True,
+                kg_stage=KGStage.NORMALIZED,
                 kg_data=replacement_kg_data,
             )
             db_session.commit()
+
+    # update document status
+
+    for source_document_id in used_source_documents:
+        with get_session_with_current_tenant() as db_session:
+            update_document_kg_stage(
+                db_session,
+                document_id=source_document_id,
+                kg_stage=KGStage.NORMALIZED,
+            )

@@ -6,10 +6,11 @@ from typing import Dict
 
 from langchain_core.messages import HumanMessage
 
-from onyx.db.connector import get_unprocessed_connector_ids
+from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
 from onyx.db.document import update_document_kg_info
+from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import get_entity_types
@@ -31,6 +32,8 @@ from onyx.kg.models import KGChunkId
 from onyx.kg.models import KGClassificationContent
 from onyx.kg.models import KGClassificationDecisions
 from onyx.kg.models import KGClassificationInstructionStrings
+from onyx.kg.models import KGEntityTypeInstructions
+from onyx.kg.models import KGExtractionInstructions
 from onyx.kg.utils.chunk_preprocessing import prepare_llm_content_extraction
 from onyx.kg.utils.chunk_preprocessing import prepare_llm_document_content
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
@@ -49,12 +52,14 @@ from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 logger = setup_logger()
 
 
-def _get_classification_instructions() -> Dict[str, KGClassificationInstructionStrings]:
+def _get_classification_extraction_instructions() -> (
+    Dict[str, KGEntityTypeInstructions]
+):
     """
     Prepare the classification instructions for the given source.
     """
 
-    classification_instructions_dict: Dict[str, KGClassificationInstructionStrings] = {}
+    classification_instructions_dict: Dict[str, KGEntityTypeInstructions] = {}
 
     with get_session_with_current_tenant() as db_session:
         entity_types = get_entity_types(db_session, active=None)
@@ -68,9 +73,15 @@ def _get_classification_instructions() -> Dict[str, KGClassificationInstructionS
         classification_options = ", ".join(classification_class_definitions.keys())
 
         classification_instructions_dict[grounded_source_name] = (
-            KGClassificationInstructionStrings(
-                classification_options=classification_options,
-                classification_class_definitions=classification_class_definitions,
+            KGEntityTypeInstructions(
+                classification_instructions=KGClassificationInstructionStrings(
+                    classification_options=classification_options,
+                    classification_class_definitions=classification_class_definitions,
+                ),
+                extraction_instructions=KGExtractionInstructions(
+                    deep_extraction=entity_type.ge_deep_extraction,
+                    active=entity_type.active,
+                ),
             )
         )
 
@@ -170,7 +181,7 @@ def kg_extraction(
     # get connector ids that are enabled for KG extraction
 
     with get_session_with_current_tenant() as db_session:
-        connector_ids = get_unprocessed_connector_ids(db_session)
+        kg_enabled_connectors = get_kg_enabled_connectors(db_session)
 
     connector_extraction_stats: list[ConnectorExtractionStats] = []
     document_kg_updates: Dict[str, KGUDocumentUpdateRequest] = {}
@@ -179,11 +190,15 @@ def kg_extraction(
     carryover_chunks: list[KGChunkFormat] = []
     connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions] = []
 
-    document_classification_instructions = _get_classification_instructions()
+    document_classification_extraction_instructions = (
+        _get_classification_extraction_instructions()
+    )
 
     # Iterate over connectors that are enabled for KG extraction
 
-    for connector_id in connector_ids:
+    for kg_enabled_connector in kg_enabled_connectors:
+        connector_id = kg_enabled_connector.id
+        connector_source = kg_enabled_connector.source
         connector_failed_chunk_extractions: list[KGChunkId] = []
         connector_succeeded_chunk_extractions: list[KGChunkId] = []
         connector_aggregated_kg_extractions: KGAggregatedExtractions = (
@@ -207,7 +222,7 @@ def kg_extraction(
                     get_unprocessed_kg_document_batch_for_connector(
                         db_session,
                         connector_id,
-                        batch_size=2,
+                        batch_size=4,
                     )
                 )
 
@@ -231,6 +246,7 @@ def kg_extraction(
                         unprocessed_document.id
                         for unprocessed_document in unprocessed_document_batch
                     ],
+                    connector_source,
                     index_name,
                     batch_size=processing_chunk_batch_size,
                 )
@@ -239,7 +255,7 @@ def kg_extraction(
             classification_outcomes: list[tuple[bool, KGClassificationDecisions]] = []
 
             documents_to_process = []
-            document_classifications = []
+            document_classifications: dict[str, KGClassificationDecisions] = {}
 
             # Document classification
             #    - Decide whether a document should be processed and
@@ -249,7 +265,7 @@ def kg_extraction(
                 classification_outcomes.extend(
                     _kg_document_classification(
                         document_classification_content,
-                        document_classification_instructions,
+                        document_classification_extraction_instructions,
                     )
                 )
 
@@ -261,13 +277,22 @@ def kg_extraction(
                     and document_classification_outcome[1].classification_decision
                 ):
                     documents_to_process.append(document_to_process)
-                    document_classifications.append(document_classification_outcome[1])
+                    document_classification_result = document_classification_outcome[1]
+                    document_classifications[
+                        document_classification_result.document_id
+                    ] = document_classification_result
 
             # perform KG extraction on the documents that should be processed
 
+            deep_extraction = document_classification_extraction_instructions[
+                connector_source
+            ].extraction_instructions.deep_extraction
+
             for document_to_process in documents_to_process:
+
                 formatted_chunk_batches = get_document_chunks_for_kg_processing(
                     document_to_process.id,
+                    deep_extraction,
                     index_name,
                     batch_size=processing_chunk_batch_size,
                 )
@@ -440,6 +465,7 @@ def kg_extraction(
 
                 updated_chunk_batches = get_document_chunks_for_kg_processing(
                     processed_document.id,
+                    deep_extraction,
                     index_name,
                     batch_size=processing_chunk_batch_size,
                 )
@@ -459,87 +485,134 @@ def kg_extraction(
                             chunk_terms
                         )
 
-        aggregated_kg_extractions = aggregate_kg_extractions(
-            connector_aggregated_kg_extractions_list
-        )
+            aggregated_kg_extractions = aggregate_kg_extractions(
+                connector_aggregated_kg_extractions_list
+            )
 
-        with get_session_with_current_tenant() as db_session:
-            tracked_entity_types = [
-                x.id_name for x in get_entity_types(db_session, active=None)
-            ]
+            with get_session_with_current_tenant() as db_session:
+                tracked_entity_types = [
+                    x.id_name for x in get_entity_types(db_session, active=None)
+                ]
 
-        # Populate the KG database with the extracted entities, relationships, and terms
-        for (
-            entity,
-            extraction_count,
-        ) in aggregated_kg_extractions.entities.items():
-            if len(entity.split(":")) != 2:
-                logger.error(
-                    f"Invalid entity {entity} in aggregated_kg_extractions.entities"
-                )
-                continue
+            # Populate the KG database with the extracted entities, relationships, and terms
+            for (
+                entity,
+                extraction_count,
+            ) in aggregated_kg_extractions.entities.items():
+                if len(entity.split(":")) != 2:
+                    logger.error(
+                        f"Invalid entity {entity} in aggregated_kg_extractions.entities"
+                    )
+                    continue
 
-            entity_type, entity_name = entity.split(":")
-            entity_type = entity_type.upper()
-            entity_name = entity_name.capitalize()
+                entity_type, entity_name = entity.split(":")
+                entity_type = entity_type.upper()
+                entity_name = entity_name.capitalize()
 
-            if entity_type not in tracked_entity_types:
-                continue
+                if entity_type not in tracked_entity_types:
+                    continue
 
-            try:
-                with get_session_with_current_tenant() as db_session:
-                    if (
-                        entity
-                        not in aggregated_kg_extractions.grounded_entities_document_ids
-                    ):
-                        add_entity(
-                            db_session=db_session,
-                            kg_stage=KGStage.EXTRACTED,
-                            entity_type=entity_type,
-                            name=entity_name,
-                            occurances=extraction_count,
-                        )
-                    else:
-                        event_time = get_document_updated_at(
-                            entity,
-                            db_session,
-                        )
-                        add_entity(
-                            db_session=db_session,
-                            kg_stage=KGStage.EXTRACTED,
-                            entity_type=entity_type,
-                            name=entity_name,
-                            occurances=extraction_count,
-                            document_id=aggregated_kg_extractions.grounded_entities_document_ids[
+                try:
+                    with get_session_with_current_tenant() as db_session:
+                        if (
+                            entity
+                            not in aggregated_kg_extractions.grounded_entities_document_ids
+                        ):
+                            add_entity(
+                                db_session=db_session,
+                                kg_stage=KGStage.EXTRACTED,
+                                entity_type=entity_type,
+                                name=entity_name,
+                                occurances=extraction_count,
+                            )
+                        else:
+                            event_time = get_document_updated_at(
+                                entity,
+                                db_session,
+                            )
+
+                            document_id = aggregated_kg_extractions.grounded_entities_document_ids[
                                 entity
-                            ],
-                            event_time=event_time,
-                        )
+                            ]
+                            document_classification_result = document_classifications[
+                                document_id
+                            ]
 
-                    db_session.commit()
-            except Exception as e:
-                logger.error(f"Error adding entity {entity} to the database: {e}")
+                            attributes: dict[str, str] = {}
 
-        relationship_type_counter: dict[str, int] = defaultdict(int)
+                            if document_classification_result.classification_class:
+                                attributes["object_type"] = (
+                                    document_classification_result.classification_class
+                                )
 
-        for (
-            relationship,
-            relationship_data,
-        ) in aggregated_kg_extractions.relationships.items():
-            for source_document_id, extraction_count in relationship_data.items():
-                relationship_split = relationship.split("__")
+                            metadata_attributes = (
+                                document_classification_result.source_metadata
+                            )
+                            if metadata_attributes:
+                                for key, value in metadata_attributes.items():
+                                    if value and isinstance(value, str):
+                                        attributes[key] = value
 
-                source_entity, relationship_type_, target_entity = relationship.split(
-                    "__"
-                )
-                source_entity = relationship_split[0]
-                relationship_type = " ".join(relationship_split[1:-1]).replace(
-                    "__", "_"
-                )
-                target_entity = relationship_split[-1]
+                            add_entity(
+                                db_session=db_session,
+                                kg_stage=KGStage.EXTRACTED,
+                                entity_type=entity_type,
+                                name=entity_name,
+                                occurances=extraction_count,
+                                document_id=document_id,
+                                event_time=event_time,
+                                attributes=attributes,
+                            )
 
-                source_entity_type = source_entity.split(":")[0]
-                target_entity_type = target_entity.split(":")[0]
+                        db_session.commit()
+                except Exception as e:
+                    logger.error(f"Error adding entity {entity} to the database: {e}")
+
+            relationship_type_counter: dict[str, int] = defaultdict(int)
+
+            for (
+                relationship,
+                relationship_data,
+            ) in aggregated_kg_extractions.relationships.items():
+                for source_document_id, extraction_count in relationship_data.items():
+                    relationship_split = relationship.split("__")
+
+                    source_entity, _, target_entity = relationship.split("__")
+                    source_entity = relationship_split[0]
+                    relationship_type = " ".join(relationship_split[1:-1]).replace(
+                        "__", "_"
+                    )
+                    target_entity = relationship_split[-1]
+
+                    source_entity_type = source_entity.split(":")[0]
+                    target_entity_type = target_entity.split(":")[0]
+
+                    if (
+                        source_entity_type not in tracked_entity_types
+                        or target_entity_type not in tracked_entity_types
+                    ):
+                        continue
+
+                    source_entity_general = f"{source_entity_type.upper()}"
+                    target_entity_general = f"{target_entity_type.upper()}"
+                    relationship_type_id_name = (
+                        f"{source_entity_general}__{relationship_type.lower()}__"
+                        f"{target_entity_general}"
+                    )
+
+                    relationship_type_counter[
+                        relationship_type_id_name
+                    ] += extraction_count
+
+            for (
+                relationship_type_id_name,
+                extraction_count,
+            ) in relationship_type_counter.items():
+                (
+                    source_entity_type,
+                    relationship_type,
+                    target_entity_type,
+                ) = relationship_type_id_name.split("__")
 
                 if (
                     source_entity_type not in tracked_entity_types
@@ -547,112 +620,109 @@ def kg_extraction(
                 ):
                     continue
 
-                source_entity_general = f"{source_entity_type.upper()}"
-                target_entity_general = f"{target_entity_type.upper()}"
-                relationship_type_id_name = (
-                    f"{source_entity_general}__{relationship_type.lower()}__"
-                    f"{target_entity_general}"
-                )
-
-                relationship_type_counter[relationship_type_id_name] += extraction_count
-
-        for (
-            relationship_type_id_name,
-            extraction_count,
-        ) in relationship_type_counter.items():
-            (
-                source_entity_type,
-                relationship_type,
-                target_entity_type,
-            ) = relationship_type_id_name.split("__")
-
-            if (
-                source_entity_type not in tracked_entity_types
-                or target_entity_type not in tracked_entity_types
-            ):
-                continue
-
-            try:
-                with get_session_with_current_tenant() as db_session:
-                    try:
-                        add_relationship_type(
-                            db_session=db_session,
-                            source_entity_type=source_entity_type.upper(),
-                            relationship_type=relationship_type,
-                            target_entity_type=target_entity_type.upper(),
-                            definition=False,
-                            extraction_count=extraction_count,
-                            kg_stage=KGStage.EXTRACTED,
-                        )
-                        db_session.commit()
-                    except Exception as e:
-                        logger.error(
-                            f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
-                        )
-            except Exception as e:
-                logger.error(
-                    f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
-                )
-
-        for (
-            relationship,
-            relationship_data,
-        ) in aggregated_kg_extractions.relationships.items():
-            for source_document_id, extraction_count in relationship_data.items():
-                relationship_split = relationship.split("__")
-
-                source_entity, relationship_type_, target_entity = relationship.split(
-                    "__"
-                )
-                source_entity = relationship_split[0]
-                relationship_type = (
-                    " ".join(relationship_split[1:-1])
-                    .replace("__", " ")
-                    .replace("_", " ")
-                )
-                target_entity = relationship_split[-1]
-
-                source_entity_type = source_entity.split(":")[0]
-                target_entity_type = target_entity.split(":")[0]
-
                 try:
                     with get_session_with_current_tenant() as db_session:
-                        add_relationship(
-                            db_session,
-                            KGStage.EXTRACTED,
-                            relationship,
-                            source_document_id,
-                            extraction_count,
-                        )
-                        db_session.commit()
+                        try:
+                            add_relationship_type(
+                                db_session=db_session,
+                                source_entity_type=source_entity_type.upper(),
+                                relationship_type=relationship_type,
+                                target_entity_type=target_entity_type.upper(),
+                                definition=False,
+                                extraction_count=extraction_count,
+                                kg_stage=KGStage.EXTRACTED,
+                            )
+                            db_session.commit()
+                        except Exception as e:
+                            logger.error(
+                                f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
+                            )
                 except Exception as e:
                     logger.error(
-                        f"Error adding relationship {relationship} to the database: {e}"
+                        f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
                     )
+
+            for (
+                relationship,
+                relationship_data,
+            ) in aggregated_kg_extractions.relationships.items():
+                for source_document_id, extraction_count in relationship_data.items():
+                    relationship_split = relationship.split("__")
+
+                    source_entity, relationship_type_, target_entity = (
+                        relationship.split("__")
+                    )
+                    source_entity = relationship_split[0]
+                    relationship_type = (
+                        " ".join(relationship_split[1:-1])
+                        .replace("__", " ")
+                        .replace("_", " ")
+                    )
+                    target_entity = relationship_split[-1]
+
+                    source_entity_type = source_entity.split(":")[0]
+                    target_entity_type = target_entity.split(":")[0]
+
+                    try:
+                        with get_session_with_current_tenant() as db_session:
+                            add_relationship(
+                                db_session,
+                                KGStage.EXTRACTED,
+                                relationship,
+                                source_document_id,
+                                extraction_count,
+                            )
+                            db_session.commit()
+                    except Exception as e:
+                        logger.error(
+                            f"Error adding relationship {relationship} to the database: {e}"
+                        )
+                        with get_session_with_current_tenant() as db_session:
+                            add_or_increment_relationship(
+                                db_session,
+                                KGStage.EXTRACTED,
+                                relationship,
+                                source_document_id,
+                            )
+                            db_session.commit()
+
+            # Populate the Documents table with the kg information for the documents
+
+            for document_id, document_kg_update in document_kg_updates.items():
+                with get_session_with_current_tenant() as db_session:
+                    update_document_kg_info(
+                        db_session,
+                        document_id,
+                        kg_stage=KGStage.EXTRACTED,
+                        kg_data={
+                            "entities": list(document_kg_update.entities),
+                            "relationships": list(document_kg_update.relationships),
+                            "terms": list(document_kg_update.terms),
+                        },
+                    )
+                    db_session.commit()
+
+            # Update the document table
+            for classification_outcome in classification_outcomes:
+                classification_result = classification_outcome[1]
+                if classification_result.classification_decision:
+                    document_id = classification_result.document_id
+
                     with get_session_with_current_tenant() as db_session:
-                        add_or_increment_relationship(
+                        update_document_kg_stage(
                             db_session,
+                            document_id,
                             KGStage.EXTRACTED,
-                            relationship,
-                            source_document_id,
                         )
                         db_session.commit()
-
-        # Populate the Documents table with the kg information for the documents
-
-        for document_id, document_kg_update in document_kg_updates.items():
-            with get_session_with_current_tenant() as db_session:
-                update_document_kg_info(
-                    db_session,
-                    document_id,
-                    kg_stage=KGStage.EXTRACTED,
-                    kg_data={
-                        "entities": list(document_kg_update.entities),
-                        "relationships": list(document_kg_update.relationships),
-                        "terms": list(document_kg_update.terms),
-                    },
-                )
-                db_session.commit()
+                else:
+                    with get_session_with_current_tenant() as db_session:
+                        update_document_kg_stage(
+                            db_session,
+                            document_id,
+                            KGStage.SKIPPED,
+                        )
+                        db_session.commit()
 
     return connector_extraction_stats
 
@@ -682,28 +752,38 @@ def _kg_chunk_batch_extraction(
 
         llm_preprocessing = prepare_llm_content_extraction(chunk)
 
-        formatted_prompt = preformatted_prompt.replace(
-            "---content---", llm_preprocessing.llm_context
-        )
+        if chunk.deep_extraction:
 
-        msg = [
-            HumanMessage(
-                content=formatted_prompt,
+            formatted_prompt = preformatted_prompt.replace(
+                "---content---", llm_preprocessing.llm_context
             )
-        ]
+
+            msg = [
+                HumanMessage(
+                    content=formatted_prompt,
+                )
+            ]
 
         try:
             logger.info(
                 f"LLM Extraction from chunk {chunk.chunk_id} from doc {chunk.document_id}"
             )
-            raw_extraction_result = fast_llm.invoke(msg)
-            extraction_result = message_to_string(raw_extraction_result)
 
             try:
-                cleaned_result = (
-                    extraction_result.replace("```json", "").replace("```", "").strip()
-                )
-                parsed_result = json.loads(cleaned_result)
+                if chunk.deep_extraction:
+                    raw_extraction_result = fast_llm.invoke(msg)
+                    extraction_result = message_to_string(raw_extraction_result)
+
+                    cleaned_result = (
+                        extraction_result.replace("```json", "")
+                        .replace("```", "")
+                        .strip()
+                    )
+                    parsed_result = json.loads(cleaned_result)
+
+                else:
+                    parsed_result = {}
+
                 extracted_entities = parsed_result.get("entities", [])
                 extracted_relationships = [
                     relationship.replace(" ", "_")
@@ -885,20 +965,20 @@ def _kg_chunk_batch_extraction(
 
 def _kg_document_classification(
     document_classification_content_list: list[KGClassificationContent],
-    classification_instructions: dict[str, KGClassificationInstructionStrings],
+    classification_extraction_instructions: dict[str, KGEntityTypeInstructions],
 ) -> list[tuple[bool, KGClassificationDecisions]]:
     primary_llm, fast_llm = get_default_llms()
 
     def classify_single_document(
         document_classification_content: KGClassificationContent,
-        classification_instructions: dict[str, KGClassificationInstructionStrings],
+        classification_extraction_instructions: dict[str, KGEntityTypeInstructions],
     ) -> tuple[bool, KGClassificationDecisions]:
         """Classify a single document whether it should be kg-processed or not"""
 
         source = document_classification_content.source_type
         document_id = document_classification_content.document_id
 
-        if source not in classification_instructions:
+        if source not in classification_extraction_instructions:
             logger.info(
                 f"Source {source} did not have kg classification instructions. No content analysis."
             )
@@ -906,14 +986,17 @@ def _kg_document_classification(
                 document_id=document_id,
                 classification_decision=False,
                 classification_class=None,
+                source_metadata=document_classification_content.source_metadata,
             )
 
         classification_prompt = prepare_llm_document_content(
             document_classification_content,
-            category_list=classification_instructions[source].classification_options,
-            category_definitions=classification_instructions[
+            category_list=classification_extraction_instructions[
                 source
-            ].classification_class_definitions,
+            ].classification_instructions.classification_options,
+            category_definitions=classification_extraction_instructions[
+                source
+            ].classification_instructions.classification_class_definitions,
         )
 
         if classification_prompt.llm_prompt is None:
@@ -924,6 +1007,7 @@ def _kg_document_classification(
                 document_id=document_id,
                 classification_decision=False,
                 classification_class=None,
+                source_metadata=document_classification_content.source_metadata,
             )
 
         msg = [
@@ -948,13 +1032,17 @@ def _kg_document_classification(
 
             if (
                 classification_class
-                in classification_instructions[source].classification_class_definitions
+                in classification_extraction_instructions[
+                    source
+                ].classification_instructions.classification_class_definitions
             ):
                 extraction_decision = cast(
                     bool,
-                    classification_instructions[
+                    classification_extraction_instructions[
                         source
-                    ].classification_class_definitions[classification_class][
+                    ].classification_instructions.classification_class_definitions[
+                        classification_class
+                    ][
                         "extraction"
                     ],
                 )
@@ -965,6 +1053,7 @@ def _kg_document_classification(
                 document_id=document_id,
                 classification_decision=extraction_decision,
                 classification_class=classification_class,
+                source_metadata=document_classification_content.source_metadata,
             )
         except Exception as e:
             logger.error(
@@ -974,6 +1063,7 @@ def _kg_document_classification(
                 document_id=document_id,
                 classification_decision=False,
                 classification_class=None,
+                source_metadata=document_classification_content.source_metadata,
             )
 
     # Assume for prototype: use_threads = True. TODO: Make thread safe!
@@ -981,7 +1071,7 @@ def _kg_document_classification(
     functions_with_args: list[tuple[Callable, tuple]] = [
         (
             classify_single_document,
-            (document_classification_content, classification_instructions),
+            (document_classification_content, classification_extraction_instructions),
         )
         for document_classification_content in document_classification_content_list
     ]
@@ -1019,7 +1109,7 @@ def _kg_document_classification(
 #         grounded_entities_document_ids=defaultdict(str),
 #         entities=defaultdict(int),
 #         relationships=defaultdict(int),
-#         terms=defaultdict(int),
+#         terms=defaultdict(int)
 #     )
 
 #     for chunk_result in succeeded_chunk_extraction:

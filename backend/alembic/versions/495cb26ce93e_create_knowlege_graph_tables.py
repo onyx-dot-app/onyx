@@ -35,6 +35,7 @@ def upgrade() -> None:
             "extraction_sources", postgresql.JSONB, nullable=False, server_default="{}"
         ),
         sa.Column("active", sa.Boolean(), nullable=False, default=False),
+        sa.Column("ge_deep_extraction", sa.Boolean(), nullable=False, default=False),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),

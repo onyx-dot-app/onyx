@@ -60,7 +60,6 @@ def prepare_llm_content_extraction(chunk: KGChunkFormat) -> ContextPreparation:
     else:
         core_document_id_name = f"{chunk.source_type.upper()}:{document_id}"
 
-    # Do we need this here?
     # implied_entities.add(f"VENDOR:{KG_OWN_COMPANY}")
     implied_entities.add(f"{core_document_id_name}")
     implied_entities.add(f"{chunk.source_type.upper()}:*")

@@ -34,7 +34,7 @@ def get_unprocessed_connector_ids(tenant_id: str) -> list[int]:
                     or_(
                         DocumentByConnectorCredentialPair.kg_stage
                         == KGStage.EXTRACTION_READY,
-                        DocumentByConnectorCredentialPair.kg_stage is None,
+                        DocumentByConnectorCredentialPair.kg_stage.is_(None),
                     ),
                 )
             )
