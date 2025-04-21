@@ -807,9 +807,8 @@ class WebConnector(LoadConnector):
                         continue # Continue to the next retry iteration
 
                 if not scraped_successfully:
-                     logger.error(f"Failed to scrape {initial_url} after {self.MAX_RETRIES} retries.")
-                     # Optionally continue to the next URL or raise an error depending on desired behavior
-                     continue
+                    logger.error(f"Failed to scrape {initial_url} after {self.MAX_RETRIES} retries.")
+                    # Optionally continue to the next URL or raise an error depending on desired behavior
 
 
                 # --- Batch Handling ---
