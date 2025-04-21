@@ -611,6 +611,20 @@ class WebConnector(LoadConnector):
                 wait_until="domcontentloaded",  # Wait for DOM to be ready
             )
 
+            # --- Content-Type Check ---
+            # Ensure we only process HTML-like content with Playwright
+            allowed_html_types = ("text/html", "application/xhtml+xml")
+            if page_response:
+                content_type_header = page_response.header_value("Content-Type")
+                # Normalize header (lowercase, remove parameters like charset)
+                normalized_content_type = (content_type_header or "").lower().split(";")[0].strip()
+                if normalized_content_type and not normalized_content_type.startswith(allowed_html_types):
+                    logger.info(
+                        f"Skipping non-HTML content type '{content_type_header}' for URL: {page.url}"
+                    )
+                    return result # Return empty result, skip processing
+
+            # --- Redirect Handling & Further Processing ---
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
             )
@@ -628,32 +642,43 @@ class WebConnector(LoadConnector):
                 logger.info(f"{index}: {initial_url} redirected to {final_url}")
                 session_ctx.visited_links.add(initial_url)
 
-            # If we got here, the request was successful
+            # If we got here, the request was successful (or handled redirect)
             if self.scroll_before_scraping:
-                scroll_attempts = 0
-                previous_height = page.evaluate("document.body.scrollHeight")
-                while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
-                    page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    # wait for the content to load if we scrolled
-                    page.wait_for_load_state("networkidle", timeout=30000)
-                    time.sleep(0.5)  # let javascript run
-
-                    new_height = page.evaluate("document.body.scrollHeight")
-                    if new_height == previous_height:
-                        break  # Stop scrolling when no more content is loaded
-                    previous_height = new_height
-                    scroll_attempts += 1
+                # Execute the scrolling logic entirely within the browser's JS context
+                page.evaluate("""
+                    async () => {
+                        let lastHeight = -1;
+                        let unchangedCount = 0;
+                        
+                        for (let i = 0; i < 20; i++) {
+                            const currentHeight = document.body.scrollHeight;
+                            if (currentHeight === lastHeight) {
+                                unchangedCount++;
+                                if (unchangedCount >= 3) break; // Stop earlier if height doesn't change
+                            } else {
+                                unchangedCount = 0;
+                            }
+                            window.scrollTo(0, currentHeight);
+                            lastHeight = currentHeight;
+                            await new Promise(resolve => setTimeout(resolve, 300)); // Reduced wait time
+                        }
+                    }
+                """)
+                # Add a small final pause after the JS loop finishes, just in case
+                time.sleep(0.5)
 
             content = page.content()
-            soup = BeautifulSoup(content, "html.parser")
+            soup = BeautifulSoup(content, "lxml")
 
             if self.recursive:
                 internal_links = get_internal_links(
-                    session_ctx.base_url, initial_url, soup
+                    session_ctx.base_url, initial_url, soup # Use final URL for relative links
                 )
-                for link in internal_links:
-                    if link not in session_ctx.visited_links:
-                        session_ctx.to_visit.append(link)
+                # Filter out already visited links and extend the list in bulk
+                new_links = [link for link in internal_links
+                             if link not in session_ctx.visited_links]
+                if new_links:
+                    session_ctx.to_visit.extend(new_links)
 
             if page_response and str(page_response.status)[0] in ("4", "5"):
                 session_ctx.last_error = f"Skipped indexing {initial_url} due to HTTP {page_response.status} response"
