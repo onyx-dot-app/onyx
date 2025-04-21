@@ -325,7 +325,7 @@ const StandardAnswersTable = ({
         )}
         {paginatedStandardAnswers.length > 0 && (
           <>
-            <div className="mt-4">
+            {/* <div className="mt-4">
               <Text>
                 {i18n.t(k.ENSURE_THAT_YOU_HAVE_ADDED_THE)}{" "}
                 <a className="text-link" href="/admin/bots">
@@ -333,7 +333,7 @@ const StandardAnswersTable = ({
                 </a>
                 {i18n.t(k._8)}
               </Text>
-            </div>
+            </div> */}
             <div className="mt-4 flex justify-center">
               <PageSelector
                 currentPage={currentPage}

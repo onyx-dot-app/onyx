@@ -37,7 +37,7 @@ export default function SelectInput({
       >
         <option value="">{i18n.t(k.SELECT_AN_OPTION)}</option>
         {options?.map((option: any) => (
-          <option key={option.name} value={option.name}>
+          <option key={option.name} value={option.value}>
             {option.name}
           </option>
         ))}

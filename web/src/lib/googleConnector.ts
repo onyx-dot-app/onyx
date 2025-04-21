@@ -35,9 +35,7 @@ export const useGoogleServiceAccountKey = (
   );
 };
 
-export const useGoogleCredentials = (
-  source: ValidSources.Gmail | ValidSources.GoogleDrive
-) => {
+export const useGoogleCredentials = (source: ValidSources.Gmail) => {
   return useSWR<Credential<any>[]>(
     buildSimilarCredentialInfoURL(source),
     errorHandlingFetcher,
@@ -79,7 +77,7 @@ export const checkCredentialsFetched = (
 };
 
 export const filterUploadedCredentials = <
-  T extends { authentication_method?: string },
+  T extends { authentication_method?: string }
 >(
   credentials: Credential<T>[] | undefined
 ): { credential_id: number | null; uploadedCredentials: Credential<T>[] } => {
@@ -106,9 +104,7 @@ export const checkConnectorsExist = (
   return !!connectors && connectors.length > 0;
 };
 
-export const refreshAllGoogleData = (
-  source: ValidSources.Gmail | ValidSources.GoogleDrive
-) => {
+export const refreshAllGoogleData = (source: ValidSources.Gmail) => {
   mutate(buildSimilarCredentialInfoURL(source));
 
   const service =

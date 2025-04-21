@@ -12,7 +12,6 @@ import {
 import { Form, Formik, FormikHelpers } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { getSourceDocLink } from "@/lib/sources";
-import GDriveMain from "@/app/admin/connectors/[connector]/pages/gdrive/GoogleDrivePage";
 import { Connector } from "@/lib/connectors/connectors";
 import {
   Credential,
@@ -155,10 +154,6 @@ export default function CreateCredential({
 
   if (sourceType == "gmail") {
     return <GmailMain />;
-  }
-
-  if (sourceType == "google_drive") {
-    return <GDriveMain setPopup={setPopup} />;
   }
 
   const credentialTemplate: dictionaryType = credentialTemplates[sourceType];

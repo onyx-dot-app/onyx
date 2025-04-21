@@ -202,16 +202,16 @@ export function ClientLayout({
                   },
                   ...(!isCurator
                     ? [
-                        {
-                          name: (
-                            <div className="flex">
-                              <SlackIconSkeleton className="text-text-700" />
-                              <div className="ml-1">{i18n.t(k.SLACK_BOTS)}</div>
-                            </div>
-                          ),
+                        // {
+                        //   name: (
+                        //     <div className="flex">
+                        //       <SlackIconSkeleton className="text-text-700" />
+                        //       <div className="ml-1">{i18n.t(k.SLACK_BOTS)}</div>
+                        //     </div>
+                        //   ),
 
-                          link: i18n.t(k.ADMIN_BOTS1),
-                        },
+                        //   link: i18n.t(k.ADMIN_BOTS1),
+                        // },
                         {
                           name: (
                             <div className="flex">

@@ -74,26 +74,6 @@ export const ConnectorTitle = ({
       "Jira Project URL",
       typedConnector.connector_specific_config.jira_project_url
     );
-  } else if (connector.source === "slack") {
-    const typedConnector = connector as Connector<SlackConfig>;
-    if (
-      typedConnector.connector_specific_config?.channels &&
-      typedConnector.connector_specific_config?.channels.length > 0
-    ) {
-      additionalMetadata.set(
-        "Channels",
-        typedConnector.connector_specific_config.channels.join(", ")
-      );
-    }
-    if (typedConnector.connector_specific_config.channel_regex_enabled) {
-      additionalMetadata.set("Channel Regex Enabled", "True");
-    }
-  } else if (connector.source === "zulip") {
-    const typedConnector = connector as Connector<ZulipConfig>;
-    additionalMetadata.set(
-      "Realm",
-      typedConnector.connector_specific_config.realm_name
-    );
   }
 
   const mainSectionClassName = `text-blue-500 dark:text-blue-100 flex w-fit ${className}`;

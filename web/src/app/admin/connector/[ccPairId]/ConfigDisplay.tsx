@@ -38,10 +38,6 @@ function buildConfigEntries(
           file_names: obj.file_locations.map(getNameFromPath),
         }
       : {};
-  } else if (sourceType === ValidSources.GoogleSites) {
-    return {
-      base_url: obj.base_url,
-    };
   }
   return obj;
 }

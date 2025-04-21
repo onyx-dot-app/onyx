@@ -15,7 +15,6 @@ import { SourceIcon } from "@/components/SourceIcon";
 import { useEffect, useState } from "react";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
-import { submitGoogleSite } from "./pages/utils/google_site";
 import AdvancedFormPage from "./pages/Advanced";
 import DynamicConnectionForm from "./pages/DynamicConnectorCreationForm";
 import CreateCredential from "@/components/credentials/actions/CreateCredential";
@@ -196,7 +195,7 @@ export default function AddConnector({
 
   // Check if credential is activated
   const credentialActivated =
-    (connector === "google_drive" && liveGDriveCredential) ||
+    liveGDriveCredential ||
     (connector === "gmail" && liveGmailCredential) ||
     currentCredential;
 
@@ -357,24 +356,6 @@ export default function AddConnector({
           ? [values.file_locations]
           : [];
 
-        // Google sites-specific handling
-        if (connector == "google_sites") {
-          const response = await submitGoogleSite(
-            selectedFiles,
-            values?.base_url,
-            setPopup,
-            advancedConfiguration.refreshFreq,
-            advancedConfiguration.pruneFreq,
-            advancedConfiguration.indexingStart,
-            values.access_type,
-            groups,
-            name
-          );
-          if (response) {
-            onSuccess();
-          }
-          return;
-        }
         // File-specific handling
         if (connector == "file") {
           setUploading(true);
@@ -460,7 +441,7 @@ export default function AddConnector({
             {popup}
 
             {uploading && (
-              <TemporaryLoadingModal content="Uploading files..." />
+              <TemporaryLoadingModal content="Загрузка файлов..." />
             )}
 
             <AdminPageTitle

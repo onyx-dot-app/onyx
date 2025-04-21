@@ -210,12 +210,27 @@ export interface FreshdeskCredentialJson {
   freshdesk_api_key: string;
 }
 
+export interface BitrixCredentialJson {
+  bitrix_username: string;
+  bitrix_password: string;
+}
+
 export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
 export interface MediaWikiCredentialJson {}
 export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
+
+export interface YandexCredentialJson {
+  email: string;
+  password: string;
+}
+
+export interface MailruCredentialJson {
+  email: string;
+  password: string;
+}
 
 export interface EgnyteCredentialJson {
   domain: string;
@@ -226,6 +241,11 @@ export interface AirtableCredentialJson {
   airtable_access_token: string;
 }
 
+export interface RedmineCredentialJson {
+  redmine_username: string;
+  redmine_password: string;
+}
+
 export interface HighspotCredentialJson {
   highspot_url: string;
   highspot_key: string;
@@ -233,12 +253,6 @@ export interface HighspotCredentialJson {
 }
 
 export const credentialTemplates: Record<ValidSources, any> = {
-  github: { github_access_token: "" } as GithubCredentialJson,
-  gitlab: {
-    gitlab_url: "",
-    gitlab_access_token: "",
-  } as GitlabCredentialJson,
-  slack: { slack_bot_token: "" } as SlackCredentialJson,
   bookstack: {
     bookstack_base_url: "",
     bookstack_api_token_id: "",
@@ -252,118 +266,41 @@ export const credentialTemplates: Record<ValidSources, any> = {
     jira_user_email: null,
     jira_api_token: "",
   } as JiraCredentialJson,
-  productboard: { productboard_access_token: "" } as ProductboardCredentialJson,
-  slab: { slab_bot_token: "" } as SlabCredentialJson,
+  redmine: {
+    redmine_username: "",
+    redmine_password: "",
+  } as RedmineCredentialJson,
+  bitrix: {
+    bitrix_username: "",
+    bitrix_password: "",
+  } as BitrixCredentialJson,
   notion: { notion_integration_token: "" } as NotionCredentialJson,
-  guru: { guru_user: "", guru_user_token: "" } as GuruCredentialJson,
-  gong: {
-    gong_access_key: "",
-    gong_access_key_secret: "",
-  } as GongCredentialJson,
-  zulip: { zuliprc_content: "" } as ZulipCredentialJson,
-  linear: { linear_access_token: "" } as LinearCredentialJson,
-  hubspot: { hubspot_access_token: "" } as HubSpotCredentialJson,
-  document360: {
-    portal_id: "",
-    document360_api_token: "",
-  } as Document360CredentialJson,
-  loopio: {
-    loopio_subdomain: "",
-    loopio_client_id: "",
-    loopio_client_token: "",
-  } as LoopioCredentialJson,
-  dropbox: { dropbox_access_token: "" } as DropboxCredentialJson,
-  salesforce: {
-    sf_username: "",
-    sf_password: "",
-    sf_security_token: "",
-    is_sandbox: false,
-  } as SalesforceCredentialJson,
+  file: null,
+  web: null,
+  github: { github_access_token: "" } as GithubCredentialJson,
+  gitlab: {
+    gitlab_url: "",
+    gitlab_access_token: "",
+  } as GitlabCredentialJson,
+  gmail: { google_tokens: "" } as GmailCredentialJson,
   sharepoint: {
     sp_client_id: "",
     sp_client_secret: "",
     sp_directory_id: "",
   } as SharepointCredentialJson,
-  asana: {
-    asana_api_token_secret: "",
-  } as AsanaCredentialJson,
-  teams: {
-    teams_client_id: "",
-    teams_client_secret: "",
-    teams_directory_id: "",
-  } as TeamsCredentialJson,
-  zendesk: {
-    zendesk_subdomain: "",
-    zendesk_email: "",
-    zendesk_token: "",
-  } as ZendeskCredentialJson,
-  discourse: {
-    discourse_api_key: "",
-    discourse_api_username: "",
-  } as DiscourseCredentialJson,
-  axero: {
-    base_url: "",
-    axero_api_token: "",
-  } as AxeroCredentialJson,
-  clickup: {
-    clickup_api_token: "",
-    clickup_team_id: "",
-  } as ClickupCredentialJson,
-  s3: {
+  wikipedia: null,
+  minio: {
     aws_access_key_id: "",
     aws_secret_access_key: "",
   } as S3CredentialJson,
-  r2: {
-    account_id: "",
-    r2_access_key_id: "",
-    r2_secret_access_key: "",
-  } as R2CredentialJson,
-  google_cloud_storage: {
-    access_key_id: "",
-    secret_access_key: "",
-  } as GCSCredentialJson,
-  oci_storage: {
-    namespace: "",
-    region: "",
-    access_key_id: "",
-    secret_access_key: "",
-  } as OCICredentialJson,
-  freshdesk: {
-    freshdesk_domain: "",
-    freshdesk_password: "",
-    freshdesk_api_key: "",
-  } as FreshdeskCredentialJson,
-  fireflies: {
-    fireflies_api_key: "",
-  } as FirefliesCredentialJson,
-  egnyte: {
-    domain: "",
-    access_token: "",
-  } as EgnyteCredentialJson,
-  airtable: {
-    airtable_access_token: "",
-  } as AirtableCredentialJson,
-  xenforo: null,
-  google_sites: null,
-  file: null,
-  wikipedia: null,
-  mediawiki: null,
-  web: null,
-  not_applicable: null,
-  ingestion_api: null,
-  discord: { discord_bot_token: "" } as DiscordCredentialJson,
-
-  // NOTE: These are Special Cases
-  google_drive: { google_tokens: "" } as GoogleDriveCredentialJson,
-  gmail: { google_tokens: "" } as GmailCredentialJson,
-  gitbook: {
-    gitbook_api_key: "",
-  } as GitbookCredentialJson,
-  highspot: {
-    highspot_url: "",
-    highspot_key: "",
-    highspot_secret: "",
-  } as HighspotCredentialJson,
+  yandex: {
+    email: "",
+    password: "",
+  } as YandexCredentialJson,
+  mailru: {
+    email: "",
+    password: "",
+  } as MailruCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {

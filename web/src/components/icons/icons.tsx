@@ -54,6 +54,8 @@ import microsoftIcon from "../../../public/microsoft.png";
 import microsoftSVG from "../../../public/Microsoft.svg";
 import mixedBreadSVG from "../../../public/Mixedbread.png";
 import OCIStorageSVG from "../../../public/OCI.svg";
+import yandexIcon from "../../../public/Yandex.png";
+import mailruIcon from "../../../public/Mailru.png";
 import googleCloudStorageIcon from "../../../public/GoogleCloudStorage.png";
 import guruIcon from "../../../public/Guru.svg";
 import gongIcon from "../../../public/Gong.png";
@@ -81,6 +83,8 @@ import mediawikiIcon from "../../../public/MediaWiki.svg";
 import wikipediaIcon from "../../../public/Wikipedia.png";
 import discourseIcon from "../../../public/Discourse.png";
 import clickupIcon from "../../../public/Clickup.svg";
+import redmineSVG from "../../../public/Redmine.svg";
+import bitrixSVG from "../../../public/Bitrix.svg";
 import cohereIcon from "../../../public/Cohere.svg";
 import googleIcon from "../../../public/Google.png";
 import xenforoIcon from "../../../public/Xenforo.svg";
@@ -546,6 +550,48 @@ export const ChevronsDownIcon = ({
 }: IconProps) => {
   return <FiChevronsDown size={size} className={className} />;
 };
+
+export const RedmineIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <div
+      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
+      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
+    >
+      <Image src={redmineSVG} alt="Logo" width="96" height="96" />
+    </div>
+  );
+};
+
+export const BitrixIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => {
+  return (
+    <div
+      style={{ width: `${size + 4}px`, height: `${size + 4}px` }}
+      className={`w-[${size + 4}px] h-[${size + 4}px] -m-0.5 ` + className}
+    >
+      <Image src={bitrixSVG} alt="Logo" width="96" height="96" />
+    </div>
+  );
+};
+
+export const YandexIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={yandexIcon} />
+);
+
+export const MailruIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={mailruIcon} />
+);
 
 export const ChevronUpIcon = ({
   size = 16,

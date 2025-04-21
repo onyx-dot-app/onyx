@@ -665,69 +665,64 @@ export function CCPairIndexingStatusTable({
           </div>
         </div>
         <TableBody>
-          {displaySources
-            .filter(
-              (source) =>
-                source != "not_applicable" && source != "ingestion_api"
-            )
-            .map((source, ind) => {
-              const sourceMatches = source
+          {displaySources.map((source, ind) => {
+            const sourceMatches = source
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase());
+
+            const statuses =
+              filteredGroupedStatuses[source] || groupedStatuses[source];
+
+            const matchingConnectors = statuses.filter((status) =>
+              (status.name || "")
                 .toLowerCase()
-                .includes(searchTerm.toLowerCase());
+                .includes(searchTerm.toLowerCase())
+            );
 
-              const statuses =
-                filteredGroupedStatuses[source] || groupedStatuses[source];
+            if (sourceMatches || matchingConnectors.length > 0) {
+              return (
+                <React.Fragment key={ind}>
+                  <br className="mt-4" />
+                  <SummaryRow
+                    source={source}
+                    summary={groupSummaries[source]}
+                    isOpen={connectorsToggled[source] || false}
+                    onToggle={() => toggleSource(source)}
+                  />
 
-              const matchingConnectors = statuses.filter((status) =>
-                (status.name || "")
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase())
-              );
-
-              if (sourceMatches || matchingConnectors.length > 0) {
-                return (
-                  <React.Fragment key={ind}>
-                    <br className="mt-4" />
-                    <SummaryRow
-                      source={source}
-                      summary={groupSummaries[source]}
-                      isOpen={connectorsToggled[source] || false}
-                      onToggle={() => toggleSource(source)}
-                    />
-
-                    {connectorsToggled[source] && (
-                      <>
-                        <TableRow className="border border-border dark:border-neutral-700">
-                          <TableHead>{i18n.t(k.NAME)}</TableHead>
-                          <TableHead>{i18n.t(k.LAST_INDEXED)}</TableHead>
-                          <TableHead>{i18n.t(k.ACTIVITY)}</TableHead>
-                          {isPaidEnterpriseFeaturesEnabled && (
-                            <TableHead>{i18n.t(k.PERMISSIONS)}</TableHead>
-                          )}
-                          <TableHead>{i18n.t(k.TOTAL_DOCS)}</TableHead>
-                          <TableHead>{i18n.t(k.LAST_STATUS)}</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                        {(sourceMatches ? statuses : matchingConnectors).map(
-                          (ccPairsIndexingStatus) => (
-                            <ConnectorRow
-                              key={ccPairsIndexingStatus.cc_pair_id}
-                              ccPairsIndexingStatus={ccPairsIndexingStatus}
-                              isEditable={editableCcPairsIndexingStatuses.some(
-                                (e) =>
-                                  e.cc_pair_id ===
-                                  ccPairsIndexingStatus.cc_pair_id
-                              )}
-                            />
-                          )
+                  {connectorsToggled[source] && (
+                    <>
+                      <TableRow className="border border-border dark:border-neutral-700">
+                        <TableHead>{i18n.t(k.NAME)}</TableHead>
+                        <TableHead>{i18n.t(k.LAST_INDEXED)}</TableHead>
+                        <TableHead>{i18n.t(k.ACTIVITY)}</TableHead>
+                        {isPaidEnterpriseFeaturesEnabled && (
+                          <TableHead>{i18n.t(k.PERMISSIONS)}</TableHead>
                         )}
-                      </>
-                    )}
-                  </React.Fragment>
-                );
-              }
-              return null;
-            })}
+                        <TableHead>{i18n.t(k.TOTAL_DOCS)}</TableHead>
+                        <TableHead>{i18n.t(k.LAST_STATUS)}</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                      {(sourceMatches ? statuses : matchingConnectors).map(
+                        (ccPairsIndexingStatus) => (
+                          <ConnectorRow
+                            key={ccPairsIndexingStatus.cc_pair_id}
+                            ccPairsIndexingStatus={ccPairsIndexingStatus}
+                            isEditable={editableCcPairsIndexingStatuses.some(
+                              (e) =>
+                                e.cc_pair_id ===
+                                ccPairsIndexingStatus.cc_pair_id
+                            )}
+                          />
+                        )
+                      )}
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            }
+            return null;
+          })}
         </TableBody>
       </Table>
     </>

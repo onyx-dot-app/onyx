@@ -305,6 +305,14 @@ export interface SlackChannelConfig {
   is_default: boolean;
 }
 
+export interface RedmineConfig {
+  redmine_project_url: string;
+}
+
+export interface BitrixConfig {
+  bitrix_webhook_url: string;
+}
+
 export interface SlackChannelDescriptor {
   id: string;
   name: string;
@@ -348,69 +356,32 @@ export enum ValidSources {
   Web = "web",
   GitHub = "github",
   GitLab = "gitlab",
-  Slack = "slack",
-  GoogleDrive = "google_drive",
   Gmail = "gmail",
   Bookstack = "bookstack",
   Confluence = "confluence",
   Jira = "jira",
-  Productboard = "productboard",
-  Slab = "slab",
   Notion = "notion",
-  Guru = "guru",
-  Gong = "gong",
-  Zulip = "zulip",
-  Linear = "linear",
-  Hubspot = "hubspot",
-  Document360 = "document360",
   File = "file",
-  GoogleSites = "google_sites",
-  Loopio = "loopio",
-  Dropbox = "dropbox",
-  Discord = "discord",
-  Salesforce = "salesforce",
   Sharepoint = "sharepoint",
-  Teams = "teams",
-  Zendesk = "zendesk",
-  Discourse = "discourse",
-  Axero = "axero",
-  Clickup = "clickup",
   Wikipedia = "wikipedia",
-  Mediawiki = "mediawiki",
-  Asana = "asana",
-  S3 = "s3",
-  R2 = "r2",
-  GoogleCloudStorage = "google_cloud_storage",
-  Xenforo = "xenforo",
-  OciStorage = "oci_storage",
-  NotApplicable = "not_applicable",
-  IngestionApi = "ingestion_api",
-  Freshdesk = "freshdesk",
-  Fireflies = "fireflies",
-  Egnyte = "egnyte",
-  Airtable = "airtable",
-  Gitbook = "gitbook",
-  Highspot = "highspot",
+  Redmine = "redmine",
+  Bitrix = "bitrix",
+  S3 = "minio",
+  Yandex = "yandex",
+  Mailru = "mailru",
 }
 
 export const validAutoSyncSources = [
   ValidSources.Confluence,
-  ValidSources.GoogleDrive,
   ValidSources.Gmail,
-  ValidSources.Slack,
-  ValidSources.Salesforce,
 ] as const;
 
 // Create a type from the array elements
 export type ValidAutoSyncSource = (typeof validAutoSyncSources)[number];
 
-export type ConfigurableSources = Exclude<
-  ValidSources,
-  ValidSources.NotApplicable | ValidSources.IngestionApi
->;
+export type ConfigurableSources = ValidSources;
 
 export const oauthSupportedSources: ConfigurableSources[] = [
-  ValidSources.Slack,
   // NOTE: temporarily disabled until our GDrive App is approved
   // ValidSources.GoogleDrive,
   ValidSources.Confluence,

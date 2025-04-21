@@ -128,7 +128,7 @@ export default function Page() {
             <div className="flex mt-8">
               <Title>{category}</Title>
             </div>
-            <p>{getCategoryDescription(category as SourceCategory)}</p>
+            {/* <p>{getCategoryDescription(category as SourceCategory)}</p> */}
             <div className="flex flex-wrap gap-4 p-4">
               {sources.map((source, sourceInd) => (
                 <SourceTile
@@ -146,23 +146,23 @@ export default function Page() {
   );
 }
 
-function getCategoryDescription(category: SourceCategory): string {
-  switch (category) {
-    case SourceCategory.Messaging:
-      return "Интеграция с платформами обмена сообщениями и общения.";
-    case SourceCategory.ProjectManagement:
-      return "Ссылка на инструменты управления проектами и отслеживания задач.";
-    case SourceCategory.CustomerSupport:
-      return "Подключение к системам поддержки клиентов и справочной службы.";
-    case SourceCategory.CodeRepository:
-      return "Интеграция с репозиториями кода и системами контроля версий.";
-    case SourceCategory.Storage:
-      return "Подключение к облачным хранилищам и службам хостинга файлов.";
-    case SourceCategory.Wiki:
-      return "Ссылка на платформы вики и базы знаний.";
-    case SourceCategory.Other:
-      return "Подключение к другим различным источникам знаний.";
-    default:
-      return "Подключение к различным источникам знаний.";
-  }
-}
+// function getCategoryDescription(category: SourceCategory): string {
+//   switch (category) {
+//     case SourceCategory.Messaging:
+//       return "Интеграция с платформами обмена сообщениями и общения.";
+//     case SourceCategory.ProjectManagement:
+//       return "Ссылка на инструменты управления проектами и отслеживания задач.";
+//     case SourceCategory.CustomerSupport:
+//       return "Подключение к системам поддержки клиентов и справочной службы.";
+//     case SourceCategory.CodeRepository:
+//       return "Интеграция с репозиториями кода и системами контроля версий.";
+//     case SourceCategory.Storage:
+//       return "Подключение к облачным хранилищам и службам хостинга файлов.";
+//     case SourceCategory.Wiki:
+//       return "Ссылка на платформы вики и базы знаний.";
+//     case SourceCategory.Other:
+//       return "Подключение к другим различным источникам знаний.";
+//     default:
+//       return "Подключение к различным источникам знаний.";
+//   }
+// }
