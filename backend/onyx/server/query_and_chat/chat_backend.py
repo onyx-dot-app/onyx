@@ -282,7 +282,6 @@ def create_new_chat_session(
             status_code=400,
             detail="The given user does not have access to this Persona.",
         )
-        return
 
     try:
         new_chat_session = create_chat_session(

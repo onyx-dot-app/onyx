@@ -202,6 +202,7 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 MinimalUserSnapshot(id=user.id, email=user.email)
                 for user in persona.users
             ],
+            groups=[user_group.id for user_group in persona.groups],
             search_start_date=persona.search_start_date,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
             llm_relevance_filter=persona.llm_relevance_filter,
