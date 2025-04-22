@@ -20,6 +20,7 @@ def research(
     kg_entities: list[str] | None = None,
     kg_relationships: list[str] | None = None,
     kg_terms: list[str] | None = None,
+    kg_sources: list[str] | None = None,
 ) -> list[LlmDoc]:
     # new db session to avoid concurrency issues
 
@@ -39,6 +40,7 @@ def research(
                 kg_entities=kg_entities,
                 kg_relationships=kg_relationships,
                 kg_terms=kg_terms,
+                kg_sources=kg_sources,
             ),
         ):
             # get retrieved docs to send to the rest of the graph

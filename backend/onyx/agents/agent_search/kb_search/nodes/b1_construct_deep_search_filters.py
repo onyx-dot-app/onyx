@@ -158,10 +158,6 @@ def construct_deep_search_filters(
                 source_division = True
                 break
 
-    source_entity_filters = _convert_document_ids_to_entities(
-        filter_results.source_document_filters
-    )
-
     return DeepSearchFilterUpdate(
         vespa_filter_results=filter_results,
         div_con_entities=div_con_structure,
@@ -169,7 +165,7 @@ def construct_deep_search_filters(
         global_entity_filters=filter_results.global_entity_filters,
         global_relationship_filters=filter_results.global_relationship_filters,
         local_entity_filters=filter_results.local_entity_filters,
-        source_entity_filters=source_entity_filters,
+        source_filters=filter_results.source_document_filters,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

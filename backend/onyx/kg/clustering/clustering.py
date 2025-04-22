@@ -918,7 +918,7 @@ Only output the category name, nothing else."""
                 KGStage.NORMALIZED,
                 entity_type=entity_type,
                 name=entity_name,
-                occurances=entity_count,
+                occurances=entity_count,  # TODO: add document_id and attributes
             )
 
             db_session.commit()

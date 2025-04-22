@@ -81,6 +81,7 @@ class SearchToolOverrideKwargs(BaseModel):
     kg_entities: list[str] | None = None
     kg_relationships: list[str] | None = None
     kg_terms: list[str] | None = None
+    kg_sources: list[str] | None = None
 
     class Config:
         arbitrary_types_allowed = True

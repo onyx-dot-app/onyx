@@ -283,6 +283,10 @@ def generate_simple_sql(
                 result = db_session.execute(text(source_documents_sql))
                 rows = result.fetchall()
                 source_document_results = [dict(row._mapping) for row in rows]
+                source_document_results = [
+                    source_document_result["source_document"]
+                    for source_document_result in source_document_results
+                ]
             except Exception as e:
                 # No stopping here, the individualized SQL query is not mandatory
                 logger.error(f"Error executing Individualized SQL query: {e}")

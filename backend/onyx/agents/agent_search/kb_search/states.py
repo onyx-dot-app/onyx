@@ -62,7 +62,7 @@ class SQLSimpleGenerationUpdate(LoggerUpdate):
     individualized_sql_query: str | None = None
     individualized_query_results: list[Dict[Any, Any]] | None = None
     source_documents_sql: str | None = None
-    source_document_results: list[Dict[Any, Any]] | None = None
+    source_document_results: list[str] | None = None
 
 
 class ConsolidatedResearchUpdate(LoggerUpdate):
@@ -76,7 +76,7 @@ class DeepSearchFilterUpdate(LoggerUpdate):
     global_entity_filters: list[str] | None = None
     global_relationship_filters: list[str] | None = None
     local_entity_filters: list[list[str]] | None = None
-    source_entity_filters: list[str] | None = None
+    source_filters: list[str] | None = None
 
 
 class ResearchObjectOutput(LoggerUpdate):

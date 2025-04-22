@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import List
 from typing import Type
 
+from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
@@ -320,6 +321,9 @@ def get_entities_by_document_ids(
     Returns:
         List of entity id_names belonging to the specified document ids
     """
-    stmt = select(KGEntity.id_name).where(KGEntity.document_id.in_(document_ids))
+    document_ids = [id.lower() for id in document_ids]
+    stmt = select(KGEntity.id_name).where(
+        func.lower(KGEntity.document_id).in_(document_ids)
+    )
     result = db_session.execute(stmt).scalars().all()
     return list(result)

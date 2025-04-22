@@ -311,6 +311,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             kg_entities = override_kwargs.kg_entities
             kg_relationships = override_kwargs.kg_relationships
             kg_terms = override_kwargs.kg_terms
+            kg_sources = override_kwargs.kg_sources
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)
@@ -342,6 +343,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             retrieval_options.filters.kg_relationships = kg_relationships
         if kg_terms:
             retrieval_options.filters.kg_terms = kg_terms
+        if kg_sources:
+            retrieval_options.filters.kg_sources = kg_sources
 
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(
