@@ -46,9 +46,9 @@ class DateField(Enum):
     Enum for date fields filtering in Paperless-ngx API.
     """
 
-    ADDED_DATE = ("added_date", "added__date__")
-    CREATED_DATE = ("created_date", "created__date__")
-    MODIFIED_DATE = ("modified_date", "modified__date__")
+    ADDED_DATE = ("added_date", "added__")
+    CREATED_DATE = ("created_date", "created__")
+    MODIFIED_DATE = ("modified_date", "modified__")
 
     def __init__(self, ui_name: str, query_name: str):
         self.ui_name = ui_name
@@ -95,6 +95,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         self.ingest_noowner = ingest_noowner
 
         # Allowed ui_min_start_date formats:
+        # TODO: write code to allow for date-time?
         # - yyyy-mm-dd
         # - mm/dd/yyyy
         # - dd/mm/yyyy
@@ -220,8 +221,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         Retrieves documents based on configured filters (tags, usernames, no owner) and optional date range.
 
         Args:
-            start_date: Optional start date in ISO format (YYYY-MM-DD)
-            end_date: Optional end date in ISO format (YYYY-MM-DD)
+            start_date: Optional start date in ISO format (YYYY-MM-DDTHH:MM:SS+00:00)
+            end_date: Optional end date in ISO format (YYYY-MM-DDTHH:MM:SS+00:00)
 
         This function uses the Paperless-ngx API to filter documents by:
         1. Tags (using tags__id__in parameter)
@@ -592,8 +593,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         end_dt = datetime.fromtimestamp(end, timezone.utc)
 
         # Format dates for API query in ISO format
-        start_iso = start_dt.strftime("%Y-%m-%d")
-        end_iso = end_dt.strftime("%Y-%m-%d")
+        start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        end_iso = end_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
 
         logger.info(
             f"Polling Paperless-ngx for documents modified between {start_iso} and {end_iso}."
@@ -753,7 +754,7 @@ if __name__ == "__main__":
             f"Testing PaperlessNgxConnector with URL: {api_url} and Key: {masked_key}"
         )
         test_connector = PaperlessNgxConnector(
-            ingest_tags="INBOX, TODO",
+            # ingest_tags="INBOX, TODO",
             # ingest_tags="ai-process",
             # ingest_usernames="cbrown",
             # ingest_noowner=True,
@@ -804,7 +805,7 @@ if __name__ == "__main__":
         print("\n------- Testing start/end dates -------")
         try:
             # Test with start and end dates
-            start_date = datetime.now(timezone.utc) - timedelta(days=12)
+            start_date = datetime.now(timezone.utc) - timedelta(hours=2)
             end_date = datetime.now(timezone.utc)
 
             print(f"Testing with start date: {start_date}")
