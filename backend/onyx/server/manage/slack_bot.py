@@ -366,8 +366,8 @@ def get_all_channels_from_slack_api(
     _: User | None = Depends(current_admin_user),
 ) -> list[SlackChannel]:
     """
-    NOTE: This endpoint is temporarily unused due to needing more fleshing out. Raising an
-    exception when the channels list is too large is too aggressive.
+    Returns a list of available slack channels for the slack bot, limited to
+    SLACK_MAX_RETURNED_CHANNELS.
 
     Fetches all channels in the Slack workspace using the conversations_list API.
     This includes both public and private channels that are visible to the app,
