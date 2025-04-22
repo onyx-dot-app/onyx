@@ -30,7 +30,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def _read_file_from_postgres(
+def _read_file_from_filestore(
     file_name: str,
     db_session: Session,
 ) -> IO | None:
@@ -307,7 +307,7 @@ class LocalFileConnector(LoadConnector):
             for file_path in self.file_locations:
                 current_datetime = datetime.now(timezone.utc)
 
-                file_io = _read_file_from_postgres(
+                file_io = _read_file_from_filestore(
                     file_name=file_path,
                     db_session=db_session,
                 )

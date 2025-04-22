@@ -1,11 +1,17 @@
-schema DANSWER_CHUNK_NAME {
-    document DANSWER_CHUNK_NAME {
-        TENANT_ID_REPLACEMENT
+schema {{ schema_name }} {
+    document {{ schema_name }} {
+        {% if multi_tenant %}
+        field tenant_id type string {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        {% endif %}
         # Not to be confused with the UUID generated for this chunk which is called documentid by default
         field document_id type string {
             indexing: summary | attribute
-            attribute: fast-search
             rank: filter
+            attribute: fast-search
         }
         field chunk_id type int {
             indexing: summary | attribute
@@ -37,7 +43,7 @@ schema DANSWER_CHUNK_NAME {
             summary: dynamic
         }
         # Title embedding (x1)
-        field title_embedding type tensor<EMBEDDING_PRECISION>(x[VARIABLE_DIM]) {
+        field title_embedding type tensor<{{ embedding_precision }}>(x[{{ dim }}]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
@@ -45,7 +51,7 @@ schema DANSWER_CHUNK_NAME {
         }
         # Content embeddings (chunk + optional mini chunks embeddings)
         # "t" and "x" are arbitrary names, not special keywords
-        field embeddings type tensor<EMBEDDING_PRECISION>(t{},x[VARIABLE_DIM]) {
+        field embeddings type tensor<{{ embedding_precision }}>(t{},x[{{ dim }}]) {
             indexing: attribute | index
             attribute {
                 distance-metric: angular
@@ -111,16 +117,16 @@ schema DANSWER_CHUNK_NAME {
             indexing: summary | attribute
         }
         field primary_owners type array<string> {
-            indexing : summary | attribute
+            indexing: summary | attribute
         }
         field secondary_owners type array<string> {
-            indexing : summary | attribute
+            indexing: summary | attribute
         }
         field access_control_list type weightedset<string> {
             indexing: summary | attribute
             rank: filter
             attribute: fast-search
-        } 
+        }
         field document_sets type weightedset<string> {
             indexing: summary | attribute
             rank: filter
@@ -149,7 +155,7 @@ schema DANSWER_CHUNK_NAME {
 
     rank-profile default_rank {
         inputs {
-            query(decay_factor) float
+            query(decay_factor) double
         }
 
         function inline document_boost() {
@@ -176,9 +182,9 @@ schema DANSWER_CHUNK_NAME {
         match-features: recency_bias
     }
 
-    rank-profile hybrid_search_semantic_base_VARIABLE_DIM inherits default, default_rank {
+    rank-profile hybrid_search_semantic_base_{{ dim }} inherits default, default_rank {
         inputs {
-            query(query_embedding) tensor<float>(x[VARIABLE_DIM])
+            query(query_embedding) tensor<float>(x[{{ dim }}])
         }
 
         function title_vector_score() {
@@ -244,9 +250,9 @@ schema DANSWER_CHUNK_NAME {
     }
 
 
-    rank-profile hybrid_search_keyword_base_VARIABLE_DIM inherits default, default_rank {
+    rank-profile hybrid_search_keyword_base_{{ dim }} inherits default, default_rank {
         inputs {
-            query(query_embedding) tensor<float>(x[VARIABLE_DIM])
+            query(query_embedding) tensor<float>(x[{{ dim }}])
         }
 
         function title_vector_score() {
@@ -316,12 +322,6 @@ schema DANSWER_CHUNK_NAME {
     rank-profile admin_search inherits default, default_rank {
         first-phase {
             expression: bm25(content) + (5 * bm25(title))
-        }
-    }
-
-    rank-profile random_ {
-        first-phase {
-            expression: random.match
         }
     }
 }

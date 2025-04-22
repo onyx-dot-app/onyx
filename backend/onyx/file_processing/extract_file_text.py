@@ -148,7 +148,7 @@ def load_files_from_zip(
     ignore_dirs: bool = True,
 ) -> Iterator[tuple[zipfile.ZipInfo, IO[Any]]]:
     """
-    If there's a .onyx_metadata.json in the zip, attach those metadata to each subfile.
+    Iterates through files in a zip archive, yielding (ZipInfo, file handle) pairs.
     """
     with zipfile.ZipFile(zip_file_io, "r") as zip_file:
         for file_info in zip_file.infolist():

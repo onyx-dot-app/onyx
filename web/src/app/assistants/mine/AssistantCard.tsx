@@ -180,6 +180,7 @@ const AssistantCard: React.FC<{
                     <button
                       type="button"
                       className="hover:bg-neutral-200 dark:hover:bg-neutral-700 p-1 -my-1 rounded-full"
+                      aria-label="More Options"
                     >
                       <FiMoreHorizontal size={16} />
                     </button>

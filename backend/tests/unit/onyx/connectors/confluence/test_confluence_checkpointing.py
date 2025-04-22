@@ -148,7 +148,7 @@ def test_load_from_checkpoint_happy_path(
     assert confluence_client is not None, "bad test setup"
     paginated_cql_mock = cast(MagicMock, confluence_client.paginated_cql_retrieval)
     paginated_cql_mock.side_effect = [
-        [mock_page1, mock_page2],
+        [mock_page1, mock_page2, mock_page3],
         [],  # comments
         [],  # attachments
         [],  # comments
@@ -366,20 +366,14 @@ def test_checkpoint_progress(
         confluence_connector, 0, end_time
     )
 
-    assert len(outputs) == 2
+    assert len(outputs) == 1
 
     first_checkpoint = outputs[0].next_checkpoint
-    last_checkpoint = outputs[-1].next_checkpoint
 
     assert first_checkpoint == ConfluenceCheckpoint(
         last_updated=later_timestamp.timestamp(),
-        has_more=True,
+        has_more=False,
         last_seen_doc_ids=["1", "2"],
-    )
-
-    # Verify checkpoint contains both document IDs and latest timestamp
-    assert last_checkpoint == ConfluenceCheckpoint(
-        last_updated=later_timestamp.timestamp(), has_more=False, last_seen_doc_ids=[]
     )
 
     assert len(outputs[0].items) == 2
@@ -404,11 +398,12 @@ def test_checkpoint_progress(
     ]
 
     # Use the checkpoint from first run
+    first_checkpoint.has_more = True
     outputs_with_checkpoint = load_everything_from_checkpoint_connector_from_checkpoint(
         confluence_connector, 0, end_time, first_checkpoint
     )
 
-    # Verify no documents were processed since they were in last_seen_doc_ids
+    # Verify only the new page was processed since the others were in last_seen_doc_ids
     assert len(outputs_with_checkpoint) == 1
     assert len(outputs_with_checkpoint[0].items) == 1
     assert isinstance(outputs_with_checkpoint[0].items[0], Document)

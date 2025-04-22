@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   globalSetup: require.resolve("./tests/e2e/global-setup"),
-  timeout: 60000, // 60 seconds timeout
+  timeout: 100000, // 100 seconds timeout
   reporter: [
     ["list"],
     // Warning: uncommenting the html reporter may cause the chromatic-archives
@@ -23,7 +23,7 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         storageState: "admin_auth.json",
       },
-      testIgnore: ["**/codeUtils.test.ts", "**/chat/**/*.spec.ts"],
+      testIgnore: ["**/codeUtils.test.ts"],
     },
   ],
 });

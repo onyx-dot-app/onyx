@@ -486,7 +486,9 @@ export function useLlmManager(
       const model = destructureValue(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
-          p.model_names.includes(modelName)
+          p.model_configurations
+            .map((modelConfiguration) => modelConfiguration.name)
+            .includes(modelName)
         );
         if (provider) {
           return {
@@ -498,7 +500,9 @@ export function useLlmManager(
       }
 
       const provider = llmProviders.find((p) =>
-        p.model_names.includes(model.modelName)
+        p.model_configurations
+          .map((modelConfiguration) => modelConfiguration.name)
+          .includes(model.modelName)
       );
 
       if (provider) {
@@ -676,6 +680,8 @@ const MODEL_DISPLAY_NAMES: { [key: string]: string } = {
   "gpt-4.1": "GPT 4.1",
   "gpt-4": "GPT 4",
   "gpt-4o": "GPT 4o",
+  "o4-mini": "o4 Mini",
+  o3: "o3",
   "gpt-4o-2024-08-06": "GPT 4o (Structured Outputs)",
   "gpt-4o-mini": "GPT 4o Mini",
   "gpt-4-0314": "GPT 4 (March 2023)",
@@ -822,6 +828,8 @@ export const defaultModelsByProvider: { [name: string]: string[] } = {
     "o3-mini",
     "o1-mini",
     "o1",
+    "o4-mini",
+    "o3",
   ],
   bedrock: [
     "meta.llama3-1-70b-instruct-v1:0",

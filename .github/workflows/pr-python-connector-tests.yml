@@ -95,7 +95,15 @@ jobs:
 
       - name: Run Tests
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
-        run: py.test -o junit_family=xunit2 -xv --ff backend/tests/daily/connectors
+        run: |
+          py.test \
+            -n 8 \
+            --dist loadfile \
+            --durations=8 \
+            -o junit_family=xunit2 \
+            -xv \
+            --ff \
+            backend/tests/daily/connectors
 
       - name: Alert on Failure
         if: failure() && github.event_name == 'schedule'

@@ -55,18 +55,22 @@ export interface LLMProvider {
   fast_default_model_name: string | null;
   is_public: boolean;
   groups: number[];
-  display_model_names: string[] | null;
   deployment_name: string | null;
-  model_token_limits: { [key: string]: number } | null;
   default_vision_model: string | null;
   is_default_vision_provider: boolean | null;
+  model_configurations: ModelConfiguration[];
 }
 
 export interface LLMProviderView extends LLMProvider {
   id: number;
   is_default_provider: boolean | null;
-  model_names: string[];
   icon?: React.FC<{ size?: number; className?: string }>;
+}
+
+export interface ModelConfiguration {
+  name: string;
+  is_visible: boolean;
+  max_input_tokens: number | null;
 }
 
 export interface VisionProvider extends LLMProviderView {
@@ -76,14 +80,12 @@ export interface VisionProvider extends LLMProviderView {
 export interface LLMProviderDescriptor {
   name: string;
   provider: string;
-  model_names: string[];
   default_model_name: string;
   fast_default_model_name: string | null;
   is_default_provider: boolean | null;
   is_public: boolean;
   groups: number[];
-  display_model_names: string[] | null;
-  model_token_limits: { [key: string]: number } | null;
+  model_configurations: ModelConfiguration[];
 }
 
 export const getProviderIcon = (providerName: string, modelName?: string) => {

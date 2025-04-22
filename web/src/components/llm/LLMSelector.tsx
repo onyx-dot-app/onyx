@@ -35,19 +35,23 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
   const seenModelNames = new Set();
 
   const llmOptions = llmProviders.flatMap((provider) => {
-    return (provider.display_model_names || provider.model_names)
-      .filter((modelName) => {
-        const displayName = getDisplayNameForModel(modelName);
+    return provider.model_configurations
+      .filter((modelConfiguration) => {
+        const displayName = getDisplayNameForModel(modelConfiguration.name);
         if (seenModelNames.has(displayName)) {
           return false;
         }
         seenModelNames.add(displayName);
         return true;
       })
-      .map((modelName) => ({
-        name: getDisplayNameForModel(modelName),
-        value: structureValue(provider.name, provider.provider, modelName),
-        icon: getProviderIcon(provider.provider, modelName),
+      .map((modelConfiguration) => ({
+        name: getDisplayNameForModel(modelConfiguration.name),
+        value: structureValue(
+          provider.name,
+          provider.provider,
+          modelConfiguration.name
+        ),
+        icon: getProviderIcon(provider.provider, modelConfiguration.name),
       }));
   });
 

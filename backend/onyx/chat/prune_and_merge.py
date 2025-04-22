@@ -213,8 +213,12 @@ def _apply_pruning(
     try:
         logger.debug(f"Number of documents after pruning: {ind + 1}")
         logger.debug("Number of tokens per document (pruned):")
+
+        log_tokens_per_document: dict[int, int] = {}
         for x, y in section_idx_token_count.items():
-            logger.debug(f"{x + 1}: {y}")
+            log_tokens_per_document[x + 1] = y
+        logger.debug(f"Tokens per document: {log_tokens_per_document}")
+
     except Exception as e:
         logger.error(f"Error logging prune statistics: {e}")
 
@@ -421,8 +425,14 @@ def _merge_sections(sections: list[InferenceSection]) -> list[InferenceSection]:
         )
 
         logger.debug("Number of chunks per document (new ranking):")
+
+        log_chunks_per_document: dict[int, int] = {}
+
         for x, y in enumerate(new_sections):
-            logger.debug(f"{x + 1}: {len(y.chunks)}")
+            log_chunks_per_document[x + 1] = len(y.chunks)
+
+        logger.debug(f"Chunks per document: {log_chunks_per_document}")
+
     except Exception as e:
         logger.error(f"Error logging merge statistics: {e}")
 

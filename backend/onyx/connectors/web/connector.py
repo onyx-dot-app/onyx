@@ -50,6 +50,17 @@ class ScrapeSessionContext:
     def __init__(self, base_url: str, to_visit: list[str]):
         self.base_url = base_url
         self.to_visit = to_visit
+        self.visited_links: set[str] = set()
+        self.content_hashes: set[int] = set()
+
+        self.doc_batch: list[Document] = []
+
+        self.at_least_one_doc: bool = False
+        self.last_error: str | None = None
+        self.needs_retry: bool = False
+
+        self.playwright: Playwright | None = None
+        self.playwright_context: BrowserContext | None = None
 
     def initialize(self) -> None:
         self.stop()
@@ -63,21 +74,6 @@ class ScrapeSessionContext:
         if self.playwright:
             self.playwright.stop()
             self.playwright = None
-
-    base_url: str
-    to_visit: list[str]
-    playwright: Playwright | None = None
-    playwright_context: BrowserContext | None = None
-
-    visited_links: set[str] = set()
-    content_hashes: set[int] = set()
-
-    doc_batch: list[Document] = []
-
-    at_least_one_doc: bool = False
-    last_error: str | None = None
-
-    needs_retry: bool = False
 
 
 class ScrapeResult:
@@ -176,9 +172,6 @@ def check_internet_connection(url: str) -> None:
         # Use a more realistic browser-like request
         session = requests.Session()
         session.headers.update(DEFAULT_HEADERS)
-
-        # Add a random delay to mimic human behavior
-        time.sleep(random.uniform(0.1, 0.5))
 
         response = session.get(url, timeout=5, allow_redirects=True)
 
@@ -445,7 +438,6 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
         scroll_before_scraping: bool = False,
-        add_randomness: bool = True,
         **kwargs: Any,
     ) -> None:
         self.mintlify_cleanup = mintlify_cleanup
@@ -453,7 +445,6 @@ class WebConnector(LoadConnector):
         self.recursive = False
         self.scroll_before_scraping = scroll_before_scraping
         self.web_connector_type = web_connector_type
-        self.add_randomness = add_randomness
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
             self.to_visit_list = [_ensure_valid_url(base_url)]
@@ -538,19 +529,12 @@ class WebConnector(LoadConnector):
 
         page = session_ctx.playwright_context.new_page()
         try:
-            if self.add_randomness:
-                # Add random mouse movements and scrolling to mimic human behavior
-                page.mouse.move(random.randint(100, 700), random.randint(100, 500))
-
             # Can't use wait_until="networkidle" because it interferes with the scrolling behavior
             page_response = page.goto(
                 initial_url,
                 timeout=30000,  # 30 seconds
                 wait_until="domcontentloaded",  # Wait for DOM to be ready
             )
-
-            # Add a small random delay to mimic human behavior
-            time.sleep(random.uniform(0.5, 2.0))
 
             last_modified = (
                 page_response.header_value("Last-Modified") if page_response else None
@@ -575,7 +559,10 @@ class WebConnector(LoadConnector):
                 previous_height = page.evaluate("document.body.scrollHeight")
                 while scroll_attempts < WEB_CONNECTOR_MAX_SCROLL_ATTEMPTS:
                     page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    # wait for the content to load if we scrolled
                     page.wait_for_load_state("networkidle", timeout=30000)
+                    time.sleep(0.5)  # let javascript run
+
                     new_height = page.evaluate("document.body.scrollHeight")
                     if new_height == previous_height:
                         break  # Stop scrolling when no more content is loaded

@@ -265,6 +265,7 @@ class ConfluenceConnector(
             # Extract basic page information
             page_id = page["id"]
             page_title = page["title"]
+            logger.info(f"Converting page {page_title} to document")
             page_url = build_confluence_document_id(
                 self.wiki_base, page["_links"]["webui"], self.is_cloud
             )
@@ -396,7 +397,9 @@ class ConfluenceConnector(
                 )
                 continue
 
-            logger.info(f"Processing attachment: {attachment['title']}")
+            logger.info(
+                f"Processing attachment: {attachment['title']} attached to page {page['title']}"
+            )
 
             # Attempt to get textual content or image summarization:
             object_url = build_confluence_document_id(
@@ -458,7 +461,9 @@ class ConfluenceConnector(
              - Attempt to convert it with convert_attachment_to_content(...)
              - If successful, create a new Section with the extracted text or summary.
         """
-        doc_count = 0
+
+        # number of documents/errors yielded
+        yield_count = 0
 
         checkpoint = copy.deepcopy(checkpoint)
         prev_doc_ids = checkpoint.last_seen_doc_ids
@@ -474,12 +479,17 @@ class ConfluenceConnector(
             expand=",".join(_PAGE_EXPANSION_FIELDS),
             limit=2 * self.batch_size,
         ):
+            # create checkpoint after enough documents have been processed
+            if yield_count >= self.batch_size:
+                return checkpoint
+
             if page["id"] in prev_doc_ids:
                 # There are a few seconds of fuzziness in the request,
                 # so we skip if we saw this page on the last run
                 continue
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
+            yield_count += 1
 
             if isinstance(doc_or_failure, ConnectorFailure):
                 yield doc_or_failure
@@ -497,13 +507,9 @@ class ConfluenceConnector(
                 continue
 
             # yield completed document
-            doc_count += 1
+
             checkpoint.last_seen_doc_ids.append(page["id"])
             yield doc_or_failure
-
-            # create checkpoint after enough documents have been processed
-            if doc_count >= self.batch_size:
-                return checkpoint
 
         checkpoint.has_more = False
         return checkpoint

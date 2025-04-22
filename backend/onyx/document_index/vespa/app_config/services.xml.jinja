@@ -14,7 +14,7 @@
         <redundancy>1</redundancy>
         <documents>
             <!-- <document type="danswer_chunk" mode="index" /> -->
-            DOCUMENT_REPLACEMENT
+            {{ document_elements }}
         </documents>
         <nodes>
             <node hostalias="danswer-node" distribution-key="0" />
@@ -31,7 +31,7 @@
                 <tuning>
                     <searchnode>
                         <requestthreads>
-                            <persearch>SEARCH_THREAD_NUMBER</persearch>
+                            <persearch>{{ num_search_threads }}</persearch>
                         </requestthreads>
                     </searchnode>
                 </tuning>

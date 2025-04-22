@@ -95,24 +95,24 @@ class PersonaSnapshot(BaseModel):
     description: str
     is_public: bool
     is_visible: bool
-    icon_shape: int | None = None
-    icon_color: str | None = None
-    uploaded_image_id: str | None = None
-    user_file_ids: list[int] = Field(default_factory=list)
-    user_folder_ids: list[int] = Field(default_factory=list)
-    display_priority: int | None = None
-    is_default_persona: bool = False
-    builtin_persona: bool = False
-    starter_messages: list[StarterMessage] | None = None
-    tools: list[ToolSnapshot] = Field(default_factory=list)
-    labels: list["PersonaLabelSnapshot"] = Field(default_factory=list)
-    owner: MinimalUserSnapshot | None = None
-    users: list[MinimalUserSnapshot] = Field(default_factory=list)
-    groups: list[int] = Field(default_factory=list)
-    document_sets: list[DocumentSet] = Field(default_factory=list)
-    llm_model_provider_override: str | None = None
-    llm_model_version_override: str | None = None
-    num_chunks: float | None = None
+    icon_shape: int | None
+    icon_color: str | None
+    uploaded_image_id: str | None
+    user_file_ids: list[int]
+    user_folder_ids: list[int]
+    display_priority: int | None
+    is_default_persona: bool
+    builtin_persona: bool
+    starter_messages: list[StarterMessage] | None
+    tools: list[ToolSnapshot]
+    labels: list["PersonaLabelSnapshot"]
+    owner: MinimalUserSnapshot | None
+    users: list[MinimalUserSnapshot]
+    groups: list[int]
+    document_sets: list[DocumentSet]
+    llm_model_provider_override: str | None
+    llm_model_version_override: str | None
+    num_chunks: float | None
 
     @classmethod
     def from_model(cls, persona: Persona) -> "PersonaSnapshot":
@@ -187,6 +187,11 @@ class FullPersonaSnapshot(PersonaSnapshot):
             is_default_persona=persona.is_default_persona,
             builtin_persona=persona.builtin_persona,
             starter_messages=persona.starter_messages,
+            users=[
+                MinimalUserSnapshot(id=user.id, email=user.email)
+                for user in persona.users
+            ],
+            groups=[user_group.id for user_group in persona.groups],
             tools=[ToolSnapshot.from_model(tool) for tool in persona.tools],
             labels=[PersonaLabelSnapshot.from_model(label) for label in persona.labels],
             owner=(
@@ -198,10 +203,13 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
+            num_chunks=persona.num_chunks,
             search_start_date=persona.search_start_date,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
             llm_relevance_filter=persona.llm_relevance_filter,
             llm_filter_extraction=persona.llm_filter_extraction,
+            llm_model_provider_override=persona.llm_model_provider_override,
+            llm_model_version_override=persona.llm_model_version_override,
         )
 
 
