@@ -135,6 +135,9 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # timestamp part is not used for folder crawling.
     completion_map: ThreadSafeDict[str, StageCompletion]
 
+    # only used for folder crawling. maps from parent folder id to seen file ids.
+    processed_folder_file_ids: ThreadSafeDict[str, set[str]] = ThreadSafeDict()
+
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
     folder_ids_to_retrieve: list[str] | None = None
@@ -154,3 +157,16 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         return ThreadSafeDict(
             {k: StageCompletion.model_validate(v) for k, v in v.items()}
         )
+
+    @field_serializer("processed_folder_file_ids")
+    def serialize_processed_folder_file_ids(
+        self, processed_folder_file_ids: ThreadSafeDict[str, set[str]], _info: Any
+    ) -> dict[str, set[str]]:
+        return processed_folder_file_ids._dict
+
+    @field_validator("processed_folder_file_ids", mode="before")
+    def validate_processed_folder_file_ids(
+        cls, v: Any
+    ) -> ThreadSafeDict[str, set[str]]:
+        assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
+        return ThreadSafeDict({k: set(v) for k, v in v.items()})
