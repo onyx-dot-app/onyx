@@ -37,6 +37,7 @@ def process_individual_deep_search(
     search_tool = graph_config.tooling.search_tool
     question = state.broken_down_question
     source_division = state.source_division
+    source_entity_filters = state.source_entity_filters
 
     if not search_tool:
         raise ValueError("search_tool is not provided")
@@ -49,10 +50,15 @@ def process_individual_deep_search(
         extended_question = f"{question} in regards to {object}"
 
     kg_entity_filters = copy.deepcopy(
-        state.vespa_filter_results.entity_filters + [state.entity]
+        list(
+            set(
+                (state.vespa_filter_results.global_entity_filters + [state.entity])
+                + (source_entity_filters or [])
+            )
+        )
     )
     kg_relationship_filters = copy.deepcopy(
-        state.vespa_filter_results.relationship_filters
+        state.vespa_filter_results.global_relationship_filters
     )
 
     logger.info("Research for object: " + object)

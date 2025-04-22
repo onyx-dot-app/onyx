@@ -38,6 +38,16 @@ def build_vespa_filters(
         or_clause = " or ".join(eq_elems)
         return f"({or_clause}) and "
 
+    def _build_all_and_filters(key: str, vals: list[str] | None) -> str:
+        """For string-based 'contains' that all need to be satisfied, e.g. KG entity filters"""
+        if not key or not vals:
+            return ""
+        eq_elems = [f'{key} contains "{val}"' for val in vals if val]
+        if not eq_elems:
+            return ""
+        and_clause = " and ".join(eq_elems)
+        return f"({and_clause}) and "
+
     def _build_int_or_filters(key: str, vals: list[int] | None) -> str:
         """
         For an integer field filter.
@@ -105,6 +115,14 @@ def build_vespa_filters(
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
+
+    # Knowledge Graph Filters - Entities
+
+    filter_str += _build_all_and_filters("kg_entity", filters.kg_entities)
+
+    # Knowledge Graph Filters - Relationships
+
+    filter_str += _build_all_and_filters("kg_relationship", filters.kg_relationships)
 
     # Trim trailing " and "
     if remove_trailing_and and filter_str.endswith(" and "):

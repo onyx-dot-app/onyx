@@ -20,8 +20,9 @@ class LoggerUpdate(BaseModel):
 
 
 class KGFilterConstructionResults(BaseModel):
-    entity_filters: list[str]
-    relationship_filters: list[str]
+    global_entity_filters: list[str]
+    global_relationship_filters: list[str]
+    local_entity_filters: list[list[str]]
     source_document_filters: list[str]
     structure: list[str]
 
@@ -72,6 +73,10 @@ class DeepSearchFilterUpdate(LoggerUpdate):
     vespa_filter_results: KGFilterConstructionResults | None = None
     div_con_entities: list[str] | None = None
     source_division: bool | None = None
+    global_entity_filters: list[str] | None = None
+    global_relationship_filters: list[str] | None = None
+    local_entity_filters: list[list[str]] | None = None
+    source_entity_filters: list[str] | None = None
 
 
 class ResearchObjectOutput(LoggerUpdate):
@@ -132,3 +137,4 @@ class ResearchObjectInput(LoggerUpdate):
     broken_down_question: str
     vespa_filter_results: KGFilterConstructionResults
     source_division: bool | None
+    source_entity_filters: list[str] | None

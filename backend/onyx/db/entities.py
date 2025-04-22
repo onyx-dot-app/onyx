@@ -306,3 +306,20 @@ def get_entity_type_by_grounded_source_name(
         return None
 
     return entity_type
+
+
+def get_entities_by_document_ids(
+    db_session: Session, document_ids: list[str]
+) -> List[str]:
+    """Get all entity id_names that belong to the specified document ids.
+
+    Args:
+        db_session: SQLAlchemy database session
+        document_ids: List of document ids to filter by
+
+    Returns:
+        List of entity id_names belonging to the specified document ids
+    """
+    stmt = select(KGEntity.id_name).where(KGEntity.document_id.in_(document_ids))
+    result = db_session.execute(stmt).scalars().all()
+    return list(result)

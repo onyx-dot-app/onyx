@@ -48,6 +48,7 @@ def research_individual_object(
                 broken_down_question=state.broken_down_question,
                 vespa_filter_results=state.vespa_filter_results,
                 source_division=state.source_division,
+                source_entity_filters=state.source_entity_filters,
                 log_messages=[
                     f"{edge_start_time} -- Main Edge - Parallelize Initial Sub-question Answering"
                 ],
