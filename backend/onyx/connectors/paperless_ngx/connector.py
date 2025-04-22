@@ -30,6 +30,7 @@ from onyx.connectors.models import TextSection
 
 logger = logging.getLogger(__name__)
 
+LINK_URL_PATH = "/documents/{doc_id}/preview"
 DOCUMENTS_ENDPOINT = "/api/documents/"
 TAGS_ENDPOINT = "/api/tags/"
 USERS_ENDPOINT = "/api/users/"
@@ -455,7 +456,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             if self.api_url and "/api/" in self.api_url
             else (self.api_url or "")
         )
-        uri = f"{base_url}/documents/{doc_id}/details"
+        uri = f"{base_url}{LINK_URL_PATH.format(doc_id=doc_id)}"
 
         try:
             updated_at = datetime.fromisoformat(
