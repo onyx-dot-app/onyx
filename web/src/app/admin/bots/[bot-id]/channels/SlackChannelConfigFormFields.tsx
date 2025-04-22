@@ -203,9 +203,7 @@ export function SlackChannelConfigFormFields({
 
     let helpText = `Select a channel from the dropdown list or type any channel name in directly.`;
     if (channelOptions.length >= 500) {
-      return (
-        `Retrieved the first ${channelOptions.length} channels. ` + helpText
-      );
+      return `${helpText} (Retrieved the first ${channelOptions.length} channels.)`;
     }
 
     return helpText;
