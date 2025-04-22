@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import AUTH_TYPE
 from onyx.configs.constants import AuthType
-from onyx.configs.model_configs import GEN_AI_NUM_RESERVED_OUTPUT_TOKENS
 from onyx.db.models import CloudEmbeddingProvider as CloudEmbeddingProviderModel
 from onyx.db.models import DocumentSet
 from onyx.db.models import LLMProvider as LLMProviderModel
@@ -17,7 +16,6 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import Tool as ToolModel
 from onyx.db.models import User
 from onyx.db.models import User__UserGroup
-from onyx.llm.utils import get_max_input_tokens_from_llm_provider
 from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.embedding.models import CloudEmbeddingProvider
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
@@ -74,7 +72,7 @@ def upsert_llm_provider(
     db_session: Session,
 ) -> LLMProviderView:
     existing_llm_provider = fetch_existing_llm_provider(
-        llm_provider_upsert_request.name, db_session
+        name=llm_provider_upsert_request.name, db_session=db_session
     )
 
     if not existing_llm_provider:
@@ -164,11 +162,11 @@ def fetch_existing_llm_providers(
 
 
 def fetch_existing_llm_provider(
-    provider_name: str, db_session: Session
+    name: str, db_session: Session
 ) -> LLMProviderModel | None:
     provider_model = db_session.scalar(
         select(LLMProviderModel)
-        .where(LLMProviderModel.name == provider_name)
+        .where(LLMProviderModel.name == name)
         .options(selectinload(LLMProviderModel.model_configurations))
     )
 
@@ -242,27 +240,12 @@ def fetch_default_vision_provider(db_session: Session) -> LLMProviderView | None
 def fetch_llm_provider_view(
     db_session: Session, provider_name: str
 ) -> LLMProviderView | None:
-    provider_model = fetch_existing_llm_provider(provider_name, db_session)
+    provider_model = fetch_existing_llm_provider(
+        name=provider_name, db_session=db_session
+    )
     if not provider_model:
         return None
     return LLMProviderView.from_model(provider_model)
-
-
-def fetch_max_input_tokens(
-    db_session: Session,
-    provider_name: str,
-    model_name: str,
-    output_tokens: int = GEN_AI_NUM_RESERVED_OUTPUT_TOKENS,
-) -> int:
-    llm_provider = fetch_existing_llm_provider(provider_name, db_session)
-    if not llm_provider:
-        raise RuntimeError(f"No LLM Provider with the name {provider_name}")
-
-    llm_provider_view = LLMProviderView.from_model(llm_provider)
-    return get_max_input_tokens_from_llm_provider(
-        llm_provider=llm_provider_view,
-        model_name=model_name,
-    )
 
 
 def remove_embedding_provider(

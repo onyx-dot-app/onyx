@@ -358,7 +358,7 @@ def query_vespa(
         num_retrieved_document_ids = len(
             set([chunk.document_id for chunk in inference_chunks])
         )
-        logger.debug(
+        logger.info(
             f"Retrieved {num_retrieved_inference_chunks} inference chunks for {num_retrieved_document_ids} documents"
         )
     except Exception as e:

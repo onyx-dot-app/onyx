@@ -822,6 +822,8 @@ class VespaIndex(DocumentIndex):
         else:
             ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
 
+        logger.info(f"Selected ranking profile: {ranking_profile}")
+
         logger.debug(f"Query YQL: {yql}")
 
         params: dict[str, str | int | float] = {
