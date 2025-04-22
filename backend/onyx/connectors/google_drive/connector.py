@@ -85,6 +85,14 @@ def _extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
 
 
+def _cleanup_folder_file_ids(
+    checkpoint: GoogleDriveCheckpoint,
+) -> None:
+    for folder_id in checkpoint.processed_folder_file_ids._dict:
+        if folder_id in checkpoint.retrieved_folder_and_drive_ids:
+            checkpoint.processed_folder_file_ids._dict[folder_id] = set()
+
+
 def _clean_requested_drive_ids(
     requested_drive_ids: set[str],
     requested_folder_ids: set[str],
@@ -1034,6 +1042,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
                 if batches_complete > BATCHES_PER_CHECKPOINT:
                     checkpoint.retrieved_folder_and_drive_ids = self._retrieved_ids
+                    _cleanup_folder_file_ids(checkpoint)
                     return  # create a new checkpoint
 
             # Process any remaining files
