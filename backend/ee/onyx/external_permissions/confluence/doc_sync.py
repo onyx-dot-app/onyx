@@ -172,8 +172,8 @@ def _get_space_permissions(
             logger.warning(
                 f"No permissions found for space '{space_key}'. This is very unlikely"
                 "to be correct and is more likely caused by an access token with"
-                "insufficient permissions. Please check the space permissions for"
-                f" space '{space_key}'"
+                "insufficient permissions. Make sure that the access token has Admin"
+                f"permissions for space '{space_key}'"
             )
 
     return space_permissions_by_space_key
