@@ -92,7 +92,7 @@ def patch_persona_visibility(
 
 
 @basic_router.patch("/{persona_id}/public")
-def patch_user_presona_public_status(
+def patch_user_persona_public_status(
     persona_id: int,
     is_public_request: IsPublicRequest,
     user: User | None = Depends(current_user),

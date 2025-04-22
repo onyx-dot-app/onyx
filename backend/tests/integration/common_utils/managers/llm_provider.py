@@ -24,7 +24,11 @@ class LLMProviderManager:
         is_public: bool | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
-        print("Seeding LLM Providers...")
+        email = "Unknown"
+        if user_performing_action:
+            email = user_performing_action.email
+
+        print(f"Seeding LLM Providers for {email}...")
 
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",

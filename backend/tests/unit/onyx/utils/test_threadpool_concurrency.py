@@ -197,7 +197,7 @@ def test_thread_safe_dict_concurrent_access() -> None:
         for i in range(iterations):
             key = str(i % 5)  # Use 5 different keys
             # Get current value or 0 if not exists, increment, then store
-            d[key] = d.get(key, 0) + 1
+            d.atomic_get_set(key, lambda x: x + 1, 0)
 
     # Create and start threads
     threads = []

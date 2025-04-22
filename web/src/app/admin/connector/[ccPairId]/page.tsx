@@ -677,7 +677,7 @@ function Main({ ccPairId }: { ccPairId: number }) {
         )}
 
       {ccPair.connector.connector_specific_config &&
-        ccPair.connector.connector_specific_config.length > 0 && (
+        Object.keys(ccPair.connector.connector_specific_config).length > 0 && (
           <>
             <Title size="md" className="mt-10 mb-2">
               Connector Configuration
