@@ -61,7 +61,6 @@ def test_llm_configuration(
 
     # the api key is sanitized if we are testing a provider already in the system
 
-    existing_provider = None
     test_api_key = test_llm_request.api_key
     if test_llm_request.name:
         # NOTE: we are querying by name. we probably should be querying by an invariant id, but
