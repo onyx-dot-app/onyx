@@ -50,6 +50,12 @@ DOC_PERMISSIONS_FUNC_MAP: dict[DocumentSource, DocSyncFuncType] = {
     DocumentSource.GMAIL: gmail_doc_sync,
 }
 
+
+def source_requires_doc_sync(source: DocumentSource) -> bool:
+    """Checks if the given DocumentSource requires doc syncing."""
+    return source in DOC_PERMISSIONS_FUNC_MAP
+
+
 # These functions update:
 # - the user_email <-> external_user_group_id mapping
 # in postgres without committing
@@ -59,6 +65,11 @@ GROUP_PERMISSIONS_FUNC_MAP: dict[DocumentSource, GroupSyncFuncType] = {
     DocumentSource.CONFLUENCE: confluence_group_sync,
     DocumentSource.SLACK: slack_group_sync,
 }
+
+
+def source_requires_external_group_sync(source: DocumentSource) -> bool:
+    """Checks if the given DocumentSource requires external group syncing."""
+    return source in GROUP_PERMISSIONS_FUNC_MAP
 
 
 GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC: set[DocumentSource] = {

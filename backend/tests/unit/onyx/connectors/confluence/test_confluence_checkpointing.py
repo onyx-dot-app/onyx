@@ -23,6 +23,9 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
 from onyx.connectors.models import SlimDocument
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
+from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector_from_checkpoint,
+)
 
 PAGE_SIZE = 2
 
@@ -145,7 +148,7 @@ def test_load_from_checkpoint_happy_path(
     assert confluence_client is not None, "bad test setup"
     paginated_cql_mock = cast(MagicMock, confluence_client.paginated_cql_retrieval)
     paginated_cql_mock.side_effect = [
-        [mock_page1, mock_page2],
+        [mock_page1, mock_page2, mock_page3],
         [],  # comments
         [],  # attachments
         [],  # comments
@@ -175,6 +178,7 @@ def test_load_from_checkpoint_happy_path(
     assert checkpoint_output1.next_checkpoint == ConfluenceCheckpoint(
         last_updated=first_updated.timestamp(),
         has_more=True,
+        last_seen_doc_ids=["1", "2"],
     )
 
     checkpoint_output2 = outputs[1]
@@ -183,8 +187,7 @@ def test_load_from_checkpoint_happy_path(
     assert isinstance(document3, Document)
     assert document3.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/3"
     assert checkpoint_output2.next_checkpoint == ConfluenceCheckpoint(
-        last_updated=last_updated.timestamp(),
-        has_more=False,
+        last_updated=last_updated.timestamp(), has_more=False, last_seen_doc_ids=["3"]
     )
 
 
@@ -332,7 +335,8 @@ def test_checkpoint_progress(
     confluence_connector: ConfluenceConnector,
     create_mock_page: Callable[..., dict[str, Any]],
 ) -> None:
-    """Test that the checkpoint's last_updated field is properly updated after processing pages"""
+    """Test that the checkpoint's last_updated field is properly updated after processing pages
+    and that processed document IDs are stored to avoid reprocessing."""
     # Set up mocked pages with different timestamps
     earlier_timestamp = datetime(2023, 1, 1, 12, 0, tzinfo=timezone.utc)
     later_timestamp = datetime(2023, 1, 2, 12, 0, tzinfo=timezone.utc)
@@ -356,28 +360,56 @@ def test_checkpoint_progress(
         [],  # No more pages
     ]
 
-    # Call load_from_checkpoint
+    # First run - process both pages
     end_time = datetime(2023, 1, 3, tzinfo=timezone.utc).timestamp()
-
     outputs = load_everything_from_checkpoint_connector(
         confluence_connector, 0, end_time
     )
 
-    last_checkpoint = outputs[-1].next_checkpoint
+    assert len(outputs) == 1
 
-    assert last_checkpoint == ConfluenceCheckpoint(
+    first_checkpoint = outputs[0].next_checkpoint
+
+    assert first_checkpoint == ConfluenceCheckpoint(
         last_updated=later_timestamp.timestamp(),
         has_more=False,
+        last_seen_doc_ids=["1", "2"],
     )
-    # Convert the expected timestamp to epoch seconds
-    expected_timestamp = datetime(2023, 1, 2, 12, 0, tzinfo=timezone.utc).timestamp()
 
-    # The checkpoint's last_updated should be set to the latest page's timestamp
-    assert last_checkpoint.last_updated == expected_timestamp
-    assert not last_checkpoint.has_more  # No more pages to process
-
-    assert len(outputs) == 2
-    # Verify we got both documents
     assert len(outputs[0].items) == 2
     assert isinstance(outputs[0].items[0], Document)
+    assert outputs[0].items[0].semantic_identifier == "Page 1"
     assert isinstance(outputs[0].items[1], Document)
+    assert outputs[0].items[1].semantic_identifier == "Page 2"
+
+    latest_timestamp = datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc)
+    mock_page3 = create_mock_page(
+        id="3", title="Page 3", updated=latest_timestamp.isoformat()
+    )
+    # Second run - same time range but with checkpoint from first run
+    # Reset the mock to return the same pages
+    paginated_cql_mock.side_effect = [
+        [mock_page1, mock_page2, mock_page3],  # Return both pages
+        [],  # No comments for page 1
+        [],  # No attachments for page 1
+        [],  # No comments for page 2
+        [],  # No attachments for page 2
+        [],  # No more pages
+    ]
+
+    # Use the checkpoint from first run
+    first_checkpoint.has_more = True
+    outputs_with_checkpoint = load_everything_from_checkpoint_connector_from_checkpoint(
+        confluence_connector, 0, end_time, first_checkpoint
+    )
+
+    # Verify only the new page was processed since the others were in last_seen_doc_ids
+    assert len(outputs_with_checkpoint) == 1
+    assert len(outputs_with_checkpoint[0].items) == 1
+    assert isinstance(outputs_with_checkpoint[0].items[0], Document)
+    assert outputs_with_checkpoint[0].items[0].semantic_identifier == "Page 3"
+    assert outputs_with_checkpoint[0].next_checkpoint == ConfluenceCheckpoint(
+        last_updated=latest_timestamp.timestamp(),
+        has_more=False,
+        last_seen_doc_ids=["3"],
+    )

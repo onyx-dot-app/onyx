@@ -198,12 +198,12 @@ export function AssistantEditor({
 
   const modelOptionsByProvider = new Map<string, Option<string>[]>();
   llmProviders.forEach((llmProvider) => {
-    const providerOptions = llmProvider.model_names.map((modelName) => {
-      return {
-        name: getDisplayNameForModel(modelName),
-        value: modelName,
-      };
-    });
+    const providerOptions = llmProvider.model_configurations.map(
+      (modelConfiguration) => ({
+        name: getDisplayNameForModel(modelConfiguration.name),
+        value: modelConfiguration.name,
+      })
+    );
     modelOptionsByProvider.set(llmProvider.name, providerOptions);
   });
 

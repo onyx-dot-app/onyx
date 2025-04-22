@@ -48,7 +48,9 @@ export function getLLMProviderOverrideForPersona(
   const matchingProvider = llmProviders.find(
     (provider) =>
       (overrideProvider ? provider.name === overrideProvider : true) &&
-      provider.model_names.includes(overrideModel)
+      provider.model_configurations
+        .map((modelConfiguration) => modelConfiguration.name)
+        .includes(overrideModel)
   );
 
   if (matchingProvider) {
@@ -64,6 +66,7 @@ export function getLLMProviderOverrideForPersona(
 
 const MODEL_NAMES_SUPPORTING_IMAGE_INPUT = [
   "gpt-4o",
+  "gpt-4.1",
   "gpt-4o-mini",
   "gpt-4-vision-preview",
   "gpt-4-turbo",
@@ -170,6 +173,10 @@ export const findProviderForModel = (
   llmProviders: LLMProviderDescriptor[],
   modelName: string
 ): string => {
-  const provider = llmProviders.find((p) => p.model_names.includes(modelName));
+  const provider = llmProviders.find((p) =>
+    p.model_configurations
+      .map((modelConfiguration) => modelConfiguration.name)
+      .includes(modelName)
+  );
   return provider ? provider.provider : "";
 };

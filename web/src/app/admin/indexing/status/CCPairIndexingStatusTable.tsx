@@ -484,6 +484,7 @@ export function CCPairIndexingStatusTable({
                 input_type: "poll",
                 connector_specific_config: {
                   file_locations: ["/path/to/sample/file.txt"],
+                  zip_metadata: {},
                 },
                 refresh_freq: 86400,
                 prune_freq: null,

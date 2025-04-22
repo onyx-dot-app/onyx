@@ -8,7 +8,7 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import { mutate } from "swr";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import isEqual from "lodash/isEqual";
+import { isSubset } from "@/lib/utils";
 
 function LLMProviderUpdateModal({
   llmProviderDescriptor,
@@ -176,7 +176,14 @@ export function ConfiguredLLMProviderDisplay({
             // then the provider is custom - don't use the default
             // provider descriptor
             llmProviderDescriptor={
-              isEqual(provider.model_names, defaultProviderDesciptor?.llm_names)
+              isSubset(
+                defaultProviderDesciptor
+                  ? defaultProviderDesciptor.llm_names
+                  : [],
+                provider.model_configurations.map(
+                  (model_configuration) => model_configuration.name
+                )
+              )
                 ? defaultProviderDesciptor
                 : null
             }

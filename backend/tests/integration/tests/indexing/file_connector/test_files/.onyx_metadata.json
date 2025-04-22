@@ -1,0 +1,16 @@
+[
+    {
+        "filename": "sample1.txt",
+        "link": "https://www.google.com",
+        "file_display_name": "Basically Google",
+        "primary_owners": ["evan@onyx.app"],
+        "status": "bingle bongle"
+    },
+    {
+        "filename": "sample2.txt",
+        "link": "https://www.youtube.com",
+        "file_display_name": "Pretty much youtube",
+        "primary_owners": ["chris@onyx.app"],
+        "status": "not bingle bongle"
+    }
+]

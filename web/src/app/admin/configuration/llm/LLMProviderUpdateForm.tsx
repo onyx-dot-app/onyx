@@ -14,8 +14,11 @@ import {
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { defaultModelsByProvider } from "@/lib/hooks";
-import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
+import {
+  LLMProviderView,
+  ModelConfiguration,
+  WellKnownLLMProviderDescriptor,
+} from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -72,12 +75,19 @@ export function LLMProviderUpdateForm({
       ),
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
-    display_model_names:
-      existingLlmProvider?.display_model_names ||
-      defaultModelsByProvider[llmProviderDescriptor.name] ||
-      [],
+    model_configurations: [] as ModelConfiguration[],
     deployment_name: existingLlmProvider?.deployment_name,
     api_key_changed: false,
+
+    // This field only exists to store the selected model-names.
+    // It is *not* passed into the JSON body that is submitted to the backend APIs.
+    // It will be deleted from the map prior to submission.
+    selected_model_names: (existingLlmProvider?.model_configurations
+      .filter((modelConfiguration) => modelConfiguration.is_visible)
+      .map((modelConfiguration) => modelConfiguration.name) ?? []) as
+      | string[]
+      | null
+      | undefined,
   };
 
   // Setup validation schema if required
@@ -119,7 +129,13 @@ export function LLMProviderUpdateForm({
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
-    display_model_names: Yup.array().of(Yup.string()),
+    model_configurations: Yup.array(
+      Yup.object({
+        name: Yup.string().required("Model name is required"),
+        is_visible: Yup.boolean().required("Visibility is required"),
+        max_input_tokens: Yup.number().nullable().optional(),
+      })
+    ),
     api_key_changed: Yup.boolean(),
   });
 
@@ -131,6 +147,18 @@ export function LLMProviderUpdateForm({
         setSubmitting(true);
 
         values.api_key_changed = values.api_key !== initialValues.api_key;
+
+        const visibleModels = new Set(values.selected_model_names);
+        values.model_configurations = llmProviderDescriptor.llm_names.map(
+          (name) =>
+            ({
+              name,
+              is_visible: visibleModels.has(name),
+              max_input_tokens: null,
+            }) as ModelConfiguration
+        );
+
+        delete values.selected_model_names;
 
         // test the configuration
         if (!isEqual(values, initialValues)) {
@@ -374,9 +402,9 @@ export function LLMProviderUpdateForm({
                       <div className="w-full">
                         <MultiSelectField
                           selectedInitially={
-                            formikProps.values.display_model_names
+                            formikProps.values.selected_model_names ?? []
                           }
-                          name="display_model_names"
+                          name="selected_model_names"
                           label="Display Models"
                           subtext="Select the models to make available to users. Unselected models will not be available."
                           options={llmProviderDescriptor.llm_names.map(
@@ -389,7 +417,7 @@ export function LLMProviderUpdateForm({
                           )}
                           onChange={(selected) =>
                             formikProps.setFieldValue(
-                              "display_model_names",
+                              "selected_model_names",
                               selected
                             )
                           }

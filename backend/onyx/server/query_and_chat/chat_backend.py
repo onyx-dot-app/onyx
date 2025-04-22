@@ -785,6 +785,7 @@ def upload_files_for_chat(
                 input_type=InputType.LOAD_STATE,
                 connector_specific_config={
                     "file_locations": [user_file.file_id],
+                    "zip_metadata": {},
                 },
                 refresh_freq=None,
                 prune_freq=None,

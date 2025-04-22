@@ -23,8 +23,8 @@ JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
 def best_effort_basic_expert_info(obj: Any) -> BasicExpertInfo | None:
     display_name = None
     email = None
-    if hasattr(obj, "display_name"):
-        display_name = obj.display_name
+    if hasattr(obj, "displayName"):
+        display_name = obj.displayName
     else:
         display_name = obj.get("displayName")
 
