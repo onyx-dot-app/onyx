@@ -203,11 +203,6 @@ class FullPersonaSnapshot(PersonaSnapshot):
                 DocumentSet.from_model(document_set_model)
                 for document_set_model in persona.document_sets
             ],
-            users=[
-                MinimalUserSnapshot(id=user.id, email=user.email)
-                for user in persona.users
-            ],
-            groups=[user_group.id for user_group in persona.groups],
             num_chunks=persona.num_chunks,
             search_start_date=persona.search_start_date,
             prompts=[PromptSnapshot.from_model(prompt) for prompt in persona.prompts],
