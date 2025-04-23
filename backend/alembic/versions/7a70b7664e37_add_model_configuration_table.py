@@ -36,18 +36,36 @@ def resolve(
 
     # if only the model-names are defined,
     elif models and not display_models:
-        new = fetch_model_names_for_provider_as_set(provider_name)
-        display_models = models.union(new) if new else set(models)
+        default_models_for_provider = fetch_model_names_for_provider_as_set(
+            provider_name
+        )
+        display_models = (
+            models.union(default_models_for_provider)
+            if default_models_for_provider
+            else set(models)
+        )
 
     # if only the display-model-names are defined, then
     elif not models and display_models:
-        new = fetch_model_names_for_provider_as_set(provider_name)
-        models = display_models.union(new) if new else set(display_models)
+        default_models_for_provider = fetch_model_names_for_provider_as_set(
+            provider_name
+        )
+        models = (
+            display_models.union(default_models_for_provider)
+            if default_models_for_provider
+            else set(display_models)
+        )
 
     else:
-        new = fetch_model_names_for_provider_as_set(provider_name)
-        models = set(new) if new else set()
-        display_models = set(new) if new else set()
+        default_models_for_provider = fetch_model_names_for_provider_as_set(
+            provider_name
+        )
+        models = (
+            set(default_models_for_provider) if default_models_for_provider else set()
+        )
+        display_models = (
+            set(default_models_for_provider) if default_models_for_provider else set()
+        )
 
     models.add(default_model_name)
     models.add(fast_default_model_name)
