@@ -228,3 +228,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
     return _PROVIDER_TO_MODELS_MAP.get(provider_name, [])
+
+
+def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None:
+    model_names: list[str] | None = _PROVIDER_TO_MODELS_MAP.get(provider_name)
+    return set(model_names) if model_names else None
