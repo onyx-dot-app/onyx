@@ -287,6 +287,10 @@ def _get_all_page_restrictions(
             # if inheriting restrictions from the parent, then the first one we run into
             # should be applied (the reason why we'd traverse more than one ancestor is if
             # the ancestor also is in "inherit" mode.)
+            logger.info(
+                f"Found user restrictions {ancestor_user_emails} and group restrictions {ancestor_group_names}"
+                f"for document {perm_sync_data.get('id')} based on ancestor {ancestor}"
+            )
             return ExternalAccess(
                 external_user_emails=ancestor_user_emails,
                 external_user_group_ids=ancestor_group_names,
