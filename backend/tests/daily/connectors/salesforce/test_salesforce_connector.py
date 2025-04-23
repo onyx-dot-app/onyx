@@ -1,6 +1,8 @@
 import json
 import os
 import time
+from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from typing import Any
 from typing import cast
@@ -118,6 +120,28 @@ def test_salesforce_connector_basic(salesforce_connector: SalesforceConnector) -
     )
     assert secondary_owners == test_data["secondary_owners"]
     assert target_test_doc.title == test_data["title"]
+
+
+def test_salesforce_connector_poll_source(
+    salesforce_connector: SalesforceConnector,
+) -> None:
+
+    intermediate_time = datetime(2024, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    all_docs_1: list[Document] = []
+    for doc_batch in salesforce_connector.poll_source(0, intermediate_time.timestamp()):
+        for doc in doc_batch:
+            all_docs_1.append(doc)
+
+    all_docs_2: list[Document] = []
+    for doc_batch in salesforce_connector.poll_source(
+        intermediate_time.timestamp(), time.time()
+    ):
+        for doc in doc_batch:
+            all_docs_2.append(doc)
+
+    print(f"all_docs_1 length: {len(all_docs_1)}")
+    print(f"all_docs_2 length: {len(all_docs_2)}")
 
 
 # TODO: make the credentials not expire

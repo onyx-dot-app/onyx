@@ -1,3 +1,4 @@
+import csv
 import gc
 import os
 import sys
@@ -182,11 +183,20 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
             # Go through each csv path and use it to update the db
             for csv_path in csv_paths:
+                num_records = 0
+
                 logger.debug(
                     f"Processing CSV: object_type={object_type} "
                     f"csv={csv_path} "
-                    f"len={Path(csv_path).stat().st_size}"
+                    f"len={Path(csv_path).stat().st_size} "
+                    f"records={num_records}"
                 )
+
+                with open(csv_path, "r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        num_records += 1
+
                 new_ids = sf_db.update_from_csv(
                     object_type=object_type,
                     csv_download_path=csv_path,
@@ -196,6 +206,12 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     f"Added {len(new_ids)} new/updated records for {object_type}"
                 )
 
+                logger.info(
+                    f"Processed CSV: object_type={object_type} "
+                    f"csv={csv_path} "
+                    f"len={Path(csv_path).stat().st_size} "
+                    f"records={num_records}"
+                )
                 os.remove(csv_path)
 
         return updated_ids
@@ -230,6 +246,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
+        type_to_processed: dict[str, int] = {}
+
         logger.info("_fetch_from_salesforce starting.")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
@@ -292,6 +310,10 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     f"processed={docs_processed} "
                     f"remaining={len(updated_ids) - docs_processed}"
                 )
+                type_to_processed[parent_type] = (
+                    type_to_processed.get(parent_type, 0) + 1
+                )
+
                 for parent_id in parent_id_batch:
                     parent_object = sf_db.get_record(parent_id, parent_type)
                     if not parent_object:
@@ -332,6 +354,8 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 f"remaining={len(updated_ids) - docs_processed}"
             )
 
+            logger.info(f"Top level object types processed: {type_to_processed}")
+
             sf_db.close()
 
     def load_from_state(self) -> GenerateDocumentsOutput:
@@ -364,7 +388,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 os.remove(sqlite_db_path)
 
-        return self._fetch_from_salesforce(BASE_DATA_PATH)
+        return self._fetch_from_salesforce(BASE_DATA_PATH, start=start, end=end)
 
     def retrieve_all_slim_documents(
         self,
