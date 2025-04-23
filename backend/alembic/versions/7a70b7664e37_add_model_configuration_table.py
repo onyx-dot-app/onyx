@@ -38,6 +38,8 @@ def upgrade() -> None:
         sa.column("id", sa.Integer),
         sa.column("model_names", postgresql.ARRAY(sa.String)),
         sa.column("display_model_names", postgresql.ARRAY(sa.String)),
+        sa.column("default_model_name", sa.String),
+        sa.column("fast_default_model_name", sa.String),
     )
     model_configuration_table = sa.sql.table(
         "model_configuration",
@@ -60,6 +62,13 @@ def upgrade() -> None:
         provider_id = llm_provider[0]
         model_names_set = set(llm_provider[1] or [])
         display_names_set = set(llm_provider[2] or [])
+        default_model_name = llm_provider[3]
+        fast_default_model_name = llm_provider[4]
+
+        model_names_set.add(default_model_name)
+        model_names_set.add(fast_default_model_name)
+        display_names_set.add(default_model_name)
+        display_names_set.add(fast_default_model_name)
 
         # Insert all models from model_names
         for model_name in model_names_set:
