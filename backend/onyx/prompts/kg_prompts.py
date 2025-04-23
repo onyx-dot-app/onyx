@@ -743,13 +743,24 @@ and 'name' are columns and \
 - the SQL statement MUST ultimately only return NODES/ENTITIES (not relationships!), or aggregations of \
 entities/nodes(count, avg, max, min, etc.). \
 Again, DO NOT compose a SQL statement that returns id_name of relationships.
-- You CAN ONLY return ENTITIES or counts (or other aggregations) of ENTITIES! DO NOT return \
-source documents or counts of source documents! Those can only appear in where clauses, ordering etc.
+- You CAN ONLY return ENTITIES or COUNTS (or other aggregations) of ENTITIES, or you can return \
+source_date (but only if the question asks for event dates or times). DO NOT return \
+source documents or counts of source documents, or relationships or counts of relationships! \
+Those can only appear in where clauses, ordering etc., but they cannot be returned or ultimately \
+counted here! source_date and date poperations can appear in select statements, particularly if \
+there is time ordering or grouping involved.
+- ENTITIES can be target_entity or source_entity. Think about the allowed relationships and the \
+question to decide which one you want!
+- It is ok to generate nested SQL as long as it correct postgres syntax!
 - Attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
 "attributes ->> '<attribute>' = '<attribute value>'".
-- Again, NEVER count or retrieve source documents! Only entities!
+- Again, NEVER count or retrieve source documents! Only entities, or in incases the question was about dates or times, \
+source_date.
 - Please think about whether you are interested in source entities or target entities! For that purpose, \
 consider the allowed relationship types to make sure you select or count the correct one!
+- Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \
+of that in the reasoning.
+- Again, NO 'relationship' or 'source_document' in the SELECT CLAUSE, be it as direct columns are in aggregations!
 - Try to be as efficient as possible.
 
 APPROACH:

@@ -933,6 +933,8 @@ Only output the category name, nothing else."""
                 entity_type=grounded_entity.entity_type_id_name,
                 name=grounded_entity.name,
                 occurances=grounded_entity.occurances or 1,
+                document_id=grounded_entity.document_id or None,
+                attributes=grounded_entity.attributes or None,
             )
             db_session.commit()
 

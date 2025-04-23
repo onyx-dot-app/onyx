@@ -38,9 +38,9 @@ def generate_answer(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
-    state.entities_types_str
+
     introductory_answer = state.query_results_data_str
-    state.reference_results
+
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
         raise ValueError("Search tool is not set")
@@ -51,7 +51,11 @@ def generate_answer(
 
     question = graph_config.inputs.search_request.query
 
-    output_format = state.output_format
+    if state.output_format is None:
+        output_format = "<you be the judge how to best present the data>"
+    else:
+        output_format = state.output_format.value
+
     if state.reference_results:
         examples = (
             state.reference_results.citations

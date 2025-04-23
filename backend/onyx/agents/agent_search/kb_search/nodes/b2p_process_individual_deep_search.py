@@ -16,9 +16,12 @@ from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
 from onyx.prompts.kg_prompts import KG_OBJECT_SOURCE_RESEARCH_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
+
 
 logger = setup_logger()
 
@@ -62,6 +65,17 @@ def process_individual_deep_search(
 
     # Add random wait between 1-3 seconds
     # time.sleep(random.uniform(0, 3))
+
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece=f"Researching {object}...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
 
     retrieved_docs = research(
         question=extended_question,

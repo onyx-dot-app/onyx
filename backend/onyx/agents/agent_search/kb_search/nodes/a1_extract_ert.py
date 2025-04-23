@@ -17,6 +17,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.relationships import get_allowed_relationship_type_pairs
 from onyx.kg.extractions.extraction_processing import get_entity_types_str
@@ -46,6 +48,17 @@ def extract_ert(
 
     all_entity_types = get_entity_types_str(active=None)
     all_relationship_types = get_relationship_types_str(active=None)
+
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece="Analyzing the question...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
 
     ### get the entities, terms, and filters
 

@@ -100,7 +100,7 @@ def construct_deep_search_filters(
             llm.invoke,
             prompt=msg,
             timeout_override=15,
-            max_tokens=300,
+            max_tokens=700,
         )
 
         cleaned_response = (
@@ -111,6 +111,9 @@ def construct_deep_search_filters(
         )
         first_bracket = cleaned_response.find("{")
         last_bracket = cleaned_response.rfind("}")
+
+        if last_bracket == -1 or first_bracket == -1:
+            raise ValueError("No valid JSON found in LLM response - no brackets found")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
         cleaned_response = cleaned_response.replace("{{", '{"')
         cleaned_response = cleaned_response.replace("}}", '"}')

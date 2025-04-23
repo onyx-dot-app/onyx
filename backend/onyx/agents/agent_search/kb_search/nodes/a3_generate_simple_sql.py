@@ -12,6 +12,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
 from onyx.db.engine import get_kg_readonly_user_session_with_current_tenant
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
@@ -22,6 +24,7 @@ from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
 from onyx.prompts.kg_prompts import SQL_AGGREGATION_REMOVAL_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
+
 
 logger = setup_logger()
 
@@ -94,7 +97,7 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str:
             llm.invoke,
             prompt=msg,
             timeout_override=25,
-            max_tokens=800,
+            max_tokens=1200,
         )
 
         cleaned_response = (
@@ -167,6 +170,18 @@ def generate_simple_sql(
             content=simple_sql_prompt,
         )
     ]
+
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece="Generating the SQL query...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
     primary_llm = graph_config.tooling.primary_llm
     # Grader
     try:
@@ -197,6 +212,18 @@ def generate_simple_sql(
         raise e
 
     # Get SQL for source documents
+
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece="Generating the query for the underlyng source documents...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
     source_documents_sql = _get_source_documents(sql_statement, llm=primary_llm)
 
     logger.debug(f"source_documents_sql: {source_documents_sql}")
@@ -229,6 +256,18 @@ def generate_simple_sql(
     # )
 
     # SQL Query is executed by using read-only user on the custom view
+
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece="Executing the SQL query...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
     scalar_result = None
     query_results = None
     with get_kg_readonly_user_session_with_current_tenant() as db_session:
@@ -276,16 +315,27 @@ def generate_simple_sql(
     else:
         individualized_query_results = None
 
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece="Finding the underlying source documents...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
     source_document_results = None
     if source_documents_sql is not None and source_documents_sql != sql_statement:
         with get_kg_readonly_user_session_with_current_tenant() as db_session:
             try:
                 result = db_session.execute(text(source_documents_sql))
                 rows = result.fetchall()
-                source_document_results = [dict(row._mapping) for row in rows]
+                query_source_document_results = [dict(row._mapping) for row in rows]
                 source_document_results = [
                     source_document_result["source_document"]
-                    for source_document_result in source_document_results
+                    for source_document_result in query_source_document_results
                 ]
             except Exception as e:
                 # No stopping here, the individualized SQL query is not mandatory
@@ -311,7 +361,7 @@ def generate_simple_sql(
         individualized_sql_query=individualized_sql_query,
         individualized_query_results=individualized_query_results,
         source_documents_sql=source_documents_sql,
-        source_document_results=source_document_results,
+        source_document_results=source_document_results or [],
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
