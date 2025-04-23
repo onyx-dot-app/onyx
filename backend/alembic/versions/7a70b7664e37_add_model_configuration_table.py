@@ -1,7 +1,7 @@
 """Add model-configuration table
 
 Revision ID: 7a70b7664e37
-Revises: cf90764725d8
+Revises: d961aca62eb3
 Create Date: 2025-04-10 15:00:35.984669
 
 """
