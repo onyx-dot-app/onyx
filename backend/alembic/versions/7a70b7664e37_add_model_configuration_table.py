@@ -10,18 +10,13 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from onyx.llm.llm_provider_options import PROVIDER_TO_MODELS_MAP
+from onyx.llm.llm_provider_options import fetch_model_names_for_provider_as_set
 
 # revision identifiers, used by Alembic.
 revision = "7a70b7664e37"
 down_revision = "d961aca62eb3"
 branch_labels = None
 depends_on = None
-
-
-def get(provider_name: str) -> set[str] | None:
-    model_names: list[str] | None = PROVIDER_TO_MODELS_MAP.get(provider_name)
-    return set(model_names) if model_names else None
 
 
 def resolve(
@@ -41,16 +36,16 @@ def resolve(
 
     # if only the model-names are defined,
     elif models and not display_models:
-        new = get(provider_name)
+        new = fetch_model_names_for_provider_as_set(provider_name)
         display_models = models.union(new) if new else set(models)
 
     # if only the display-model-names are defined, then
     elif not models and display_models:
-        new = get(provider_name)
+        new = fetch_model_names_for_provider_as_set(provider_name)
         models = display_models.union(new) if new else set(display_models)
 
     else:
-        new = get(provider_name)
+        new = fetch_model_names_for_provider_as_set(provider_name)
         models = set(new) if new else set()
         display_models = set(new) if new else set()
 
