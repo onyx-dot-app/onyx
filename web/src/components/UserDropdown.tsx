@@ -244,14 +244,14 @@ export function UserDropdown({
                   <DropdownOption
                     href="/admin/indexing/status"
                     icon={<LightSettingsIcon size={16} className="my-auto" />}
-                    label="Admin Panel"
+                    label="Панель администратора"
                   />
                 ) : (
                   showCuratorPanel && (
                     <DropdownOption
                       href="/admin/indexing/status"
                       icon={<LightSettingsIcon size={16} className="my-auto" />}
-                      label="Curator Panel"
+                      label="Панель куратора"
                     />
                   )
                 )}
@@ -260,7 +260,7 @@ export function UserDropdown({
                   <DropdownOption
                     onClick={toggleUserSettings}
                     icon={<UserIcon size={16} className="my-auto" />}
-                    label="User Settings"
+                    label="Настройки пользователя"
                   />
                 )}
 
@@ -288,7 +288,7 @@ export function UserDropdown({
                   <DropdownOption
                     onClick={handleLogout}
                     icon={<FiLogOut size={16} className="my-auto" />}
-                    label="Log out"
+                    label="Выйти"
                   />
                 )}
               </>

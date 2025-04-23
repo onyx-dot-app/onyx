@@ -1160,18 +1160,19 @@ export function AssistantEditor({
                           }
                         }}
                         name="is_default_persona"
-                        label="Featured Assistant"
-                        subtext="If set, this assistant will be pinned for all new users and appear in the Featured list in the assistant explorer. This also makes the assistant public."
+                        label="Избранный помощник"
+                        subtext="Если установлено, этот помощник будет закреплен для всех новых пользователей и появится в списке избранных в проводнике помощника. Это также сделает помощника общедоступным."
                       />
                     )}
 
                     <Separator />
 
                     <div className="flex gap-x-2 items-center ">
-                      <div className="block font-medium text-sm">Access</div>
+                      <div className="block font-medium text-sm">Доступ</div>
                     </div>
                     <SubLabel>
-                      Control who can access and use this assistant
+                      Управление теми, кто может получить доступ и использовать
+                      этого помощника
                     </SubLabel>
 
                     <div className="min-h-[100px]">
@@ -1208,15 +1209,15 @@ export function AssistantEditor({
                             </TooltipTrigger>
                             {values.is_default_persona && (
                               <TooltipContent side="top" align="center">
-                                Default persona must be public. Set
-                                &quot;Default Persona&quot; to false to change
-                                visibility.
+                                Персона по умолчанию должна быть общедоступной.
+                                Установите "Персона по умолчанию" на false,
+                                чтобы изменить видимость.
                               </TooltipContent>
                             )}
                           </Tooltip>
                         </TooltipProvider>
                         <span className="text-sm ml-2">
-                          Organization Public
+                          Организация Публичная
                         </span>
                       </div>
 
@@ -1224,26 +1225,26 @@ export function AssistantEditor({
                         <div className="flex items-center text-warning mt-2">
                           <InfoIcon size={16} className="mr-2" />
                           <span className="text-sm">
-                            Default persona must be public. Visibility has been
-                            automatically set to organization public.
+                            Персона по умолчанию должна быть общедоступной.
+                            Видимость автоматически установлена ​​на организацию
+                            Публичная.
                           </span>
                         </div>
                       )}
 
                       {values.is_public ? (
                         <p className="text-sm text-text-dark">
-                          This assistant will be available to everyone in your
-                          organization
+                          Этот помощник будет доступен всем в вашей организации
                         </p>
                       ) : (
                         <>
                           <p className="text-sm text-text-dark mb-2">
-                            This assistant will only be available to specific
-                            users and groups
+                            Этот помощник будет доступен только определенным
+                            пользователям и группам
                           </p>
                           <div className="mt-2">
                             <Label className="mb-2" small>
-                              Share with Users and Groups
+                              Поделиться с пользователями и группами
                             </Label>
 
                             <SearchMultiSelectDropdown
@@ -1344,14 +1345,15 @@ export function AssistantEditor({
                   <div className="w-full flex flex-col">
                     <div className="flex gap-x-2 items-center">
                       <div className="block font-medium text-sm">
-                        [Необязательно] Starter Messages
+                        [Необязательно] Начальные сообщения
                       </div>
                     </div>
 
                     <SubLabel>
-                      Sample messages that help users understand what this
-                      assistant can do and how to interact with it effectively.
-                      New input fields will appear automatically as you type.
+                      Примеры сообщений, которые помогают пользователям понять,
+                      что может делать этот помощник и как эффективно с ним
+                      взаимодействовать. Новые поля ввода будут появляться
+                      автоматически по мере ввода текста.
                     </SubLabel>
 
                     <div className="w-full">
@@ -1378,13 +1380,13 @@ export function AssistantEditor({
                   <div className=" w-full max-w-4xl">
                     <Separator />
                     <div className="flex gap-x-2 items-center mt-4 ">
-                      <div className="block font-medium text-sm">Labels</div>
+                      <div className="block font-medium text-sm">Метки</div>
                     </div>
                     <p
                       className="text-sm text-subtle"
                       style={{ color: "rgb(113, 114, 121)" }}
                     >
-                      Select labels to categorize this assistant
+                      Выберите метки, чтобы классифицировать этого помощника
                     </p>
                     <div className="mt-3">
                       <SearchMultiSelectDropdown
@@ -1487,7 +1489,7 @@ export function AssistantEditor({
 
                   <div className="flex flex-col gap-y-4">
                     <div className="flex flex-col gap-y-4">
-                      <h3 className="font-medium text-sm">Knowledge Options</h3>
+                      <h3 className="font-medium text-sm">Знания Варианты</h3>
                       <div className="flex flex-col gap-y-4 ml-4">
                         <TextFormField
                           small={true}
@@ -1535,7 +1537,7 @@ export function AssistantEditor({
                     small
                     removeIndent
                     name="datetime_aware"
-                    label="Date and Time Aware"
+                    label="С учетом даты и времени"
                     subtext='Включите эту опцию, чтобы сообщить помощнику текущую дату и время (в формате: "Четверг, 1 января 1970 г., 00:01"). Чтобы вставить ее в определенное место в подсказке, используйте шаблон [[CURRENT_DATETIME]]'
                   />
 

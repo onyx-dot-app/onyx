@@ -92,17 +92,14 @@ export const OnyxApiKeyForm = ({
 
               <TextFormField
                 name="name"
-                label="Name (optional):"
+                label="Название (необязательно):"
                 autoCompleteDisabled={true}
               />
 
               <SelectorFormField
                 // defaultValue is managed by Formik
-                label="Role:"
-                subtext="Select the role for this API key.
-                         Limited has access to simple public API's.
-                         Basic has access to regular user API's.
-                         Admin has access to admin level APIs."
+                label="Роль:"
+                subtext="Выберите роль для этого ключа API. Ограниченный доступ имеет доступ к простым публичным API. Базовый доступ имеет доступ к API обычного пользователя. Администратор имеет доступ к API уровня администратора."
                 name="role"
                 options={[
                   {

@@ -77,7 +77,7 @@ export function WhitelabelingForm() {
           auto_scroll: Yup.boolean().nullable(),
           application_name: Yup.string()
             .trim()
-            .min(1, "Application name cannot be empty")
+            .min(1, "Название приложения не может быть пустым")
             .nullable(),
           use_custom_logo: Yup.boolean().required(),
           use_custom_logotype: Yup.boolean().required(),
@@ -140,7 +140,7 @@ export function WhitelabelingForm() {
         {({ isSubmitting, values, setValues }) => (
           <Form>
             <TextFormField
-              label="Application Name"
+              label="Название приложения"
               name="application_name"
               subtext={`${i18n.t(k.THE_CUSTOM_NAME_YOU_ARE_GIVING)}`}
               placeholder="Пользовательское имя, которое заменит 'SmartSearch'"
