@@ -29,23 +29,31 @@ def _resolve(
     models = set(model_names) if model_names else None
     display_models = set(display_model_names) if display_model_names else None
 
-    # if both are defined, we need to make sure that `model_names` is a superset of `display_model_names`
+    # If both are defined, we need to make sure that `model_names` is a superset of `display_model_names`.
     if models and display_models:
         if not display_models.issubset(models):
             models = display_models.union(models)
 
-    # if only the model-names are defined,
+    # If only `model_names` is defined, then:
+    #   - If default-model-names are available for the `provider_name`, then set `display_model_names` to it
+    #     and set `model_names` to the union of those default-model-names with itself.
+    #   - If no default-model-names are available, then set `display_models` to `models`.
+    #
+    # This preserves the invariant that `display_models` is a subset of `models`.
     elif models and not display_models:
         default_models_for_provider = fetch_model_names_for_provider_as_set(
             provider_name
         )
-        display_models = (
-            models.union(default_models_for_provider)
-            if default_models_for_provider
-            else set(models)
-        )
+        if default_models_for_provider:
+            display_models = set(default_models_for_provider)
+            models = models.union(set(default_models_for_provider))
+        else:
+            display_models = set(models)
 
-    # if only the display-model-names are defined, then
+    # If only the `display_model_names` are defined, then set `models` to the union of `display_model_names`
+    # and the default-model-names for that provider.
+    #
+    # This will also preserve the invariant that `display_models` is a subset of `models`.
     elif not models and display_models:
         default_models_for_provider = fetch_model_names_for_provider_as_set(
             provider_name
@@ -56,6 +64,9 @@ def _resolve(
             else set(display_models)
         )
 
+    # If neither are defined, then set `models` and `display_models` to the default-model-names for the given provider.
+    #
+    # This will also preserve the invariant that `display_models` is a subset of `models`.
     else:
         default_models_for_provider = fetch_model_names_for_provider_as_set(
             provider_name
@@ -67,6 +78,8 @@ def _resolve(
             set(default_models_for_provider) if default_models_for_provider else set()
         )
 
+    # It is possible that `default_model_name` is not in `models` and is not in `display_models`.
+    # It is also possible that `fast_default_model_name` is not in `models` and is not in `display_models`.
     models.add(default_model_name)
     models.add(fast_default_model_name)
     display_models.add(default_model_name)
