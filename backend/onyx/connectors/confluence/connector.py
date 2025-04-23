@@ -1,4 +1,5 @@
 import copy
+import time
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -465,11 +466,13 @@ class ConfluenceConnector(
         # number of documents/errors yielded
         yield_count = 0
 
+        end = (end or time.time()) + 3600 * 24
         checkpoint = copy.deepcopy(checkpoint)
         prev_doc_ids = checkpoint.last_seen_doc_ids
         checkpoint.last_seen_doc_ids = []
         # use "start" when last_updated is 0
-        page_query = self._construct_page_query(checkpoint.last_updated or start, end)
+        start_ts = checkpoint.last_updated or start
+        page_query = self._construct_page_query(start_ts, end)
         logger.debug(f"page_query: {page_query}")
 
         # most requests will include a few pages to skip, so we limit each page to
@@ -487,6 +490,16 @@ class ConfluenceConnector(
                 # There are a few seconds of fuzziness in the request,
                 # so we skip if we saw this page on the last run
                 continue
+
+            ts = datetime_from_string(page["version"]["when"]).timestamp()
+
+            if ts < checkpoint.last_updated:
+                logger.warning(
+                    f"Confluence Returned results out of order. Request start time: {start_ts}, "
+                    f"current item time: {ts}, checkpoint.last_updated: {checkpoint.last_updated}"
+                )
+                continue
+
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
             yield_count += 1
@@ -495,9 +508,7 @@ class ConfluenceConnector(
                 yield doc_or_failure
                 continue
 
-            checkpoint.last_updated = datetime_from_string(
-                page["version"]["when"]
-            ).timestamp()
+            checkpoint.last_updated = ts
 
             # Now get attachments for that page:
             doc_or_failure = self._fetch_page_attachments(page, doc_or_failure)
