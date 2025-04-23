@@ -1,8 +1,8 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiTool } from "react-icons/fi";
 import { fetchSS } from "@/lib/utilsSS";
-import { Callout, Text } from "@tremor/react";
-import { Button } from "@tremor/react";
+import Text from "@/components/ui/text";
+import { Button } from "@/components/ui/button";
 
 import RedirectBackOnCondition from "@/components/RedirectBackOnCondition";
 
