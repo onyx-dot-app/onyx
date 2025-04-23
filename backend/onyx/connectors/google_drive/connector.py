@@ -476,6 +476,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 logger.info(
                     f"Getting files in shared drive '{drive_id}' as '{user_email}'"
                 )
+                curr_stage.completed_until = 0
+                curr_stage.completed_until_parent_id = drive_id
                 yield from _yield_from_drive(drive_id, start)
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
             resuming = False  # we are starting the next stage for the first time
