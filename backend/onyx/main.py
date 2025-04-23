@@ -23,6 +23,7 @@ from sentry_sdk.integrations.starlette import StarletteIntegration
 from sqlalchemy.orm import Session
 from starlette.types import Lifespan
 
+from ee.onyx.server.auth_check import check_ee_router_auth
 from onyx import __version__
 from onyx.auth.schemas import UserCreate
 from onyx.auth.schemas import UserRead
@@ -90,6 +91,19 @@ from onyx.server.onyx_api.ingestion import router as onyx_api_router
 from onyx.server.openai_assistants_api.full_openai_assistants_api import (
     get_full_openai_assistants_api_router,
 )
+from ee.onyx.server.enterprise_settings.api import (
+    admin_router as enterprise_settings_admin_router,
+)
+from ee.onyx.server.enterprise_settings.api import (
+    basic_router as enterprise_settings_router,
+)
+
+from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
+from ee.onyx.server.user_group.api import router as user_group_router
+from ee.onyx.server.analytics.api import router as analytics_router
+from ee.onyx.server.query_history.api import router as query_history_router
+from ee.onyx.server.manage.standard_answer import router as standard_answer_router
+from ee.onyx.server.oauth.api import router as ee_oauth_router
 from onyx.server.query_and_chat.chat_backend import router as chat_router
 from onyx.server.query_and_chat.query_backend import (
     admin_router as admin_query_router,
@@ -344,6 +358,26 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, long_term_logs_router)
     include_router_with_global_prefix_prepended(application, api_key_router)
     include_router_with_global_prefix_prepended(application, standard_oauth_router)
+    include_router_with_global_prefix_prepended(application, user_group_router)
+    # Analytics endpoints
+    include_router_with_global_prefix_prepended(application, analytics_router)
+    include_router_with_global_prefix_prepended(application, query_history_router)
+    # EE only backend APIs
+    include_router_with_global_prefix_prepended(application, query_router)
+    include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, standard_answer_router)
+    include_router_with_global_prefix_prepended(application, ee_oauth_router)
+
+    # Enterprise-only global settings
+    include_router_with_global_prefix_prepended(
+        application, enterprise_settings_admin_router
+    )
+    # Token rate limit settings
+    include_router_with_global_prefix_prepended(
+        application, token_rate_limit_settings_router
+    )
+    include_router_with_global_prefix_prepended(application, enterprise_settings_router)
+    include_router_with_global_prefix_prepended(application, usage_export_router)
 
     if AUTH_TYPE == AuthType.DISABLED:
         # Server logs this during auth setup verification step
@@ -440,7 +474,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     add_onyx_request_id_middleware(application, "API", logger)
 
     # Ensure all routes have auth enabled or are explicitly marked as public
-    check_router_auth(application)
+    # check_router_auth(application)
+    check_ee_router_auth(application)
 
     # Initialize and instrument the app
     Instrumentator().instrument(application).expose(application)
