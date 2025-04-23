@@ -24,6 +24,10 @@ from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
+from onyx.db.engine import SqlEngine
+
+# required for sql to function
+SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
