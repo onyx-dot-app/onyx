@@ -128,7 +128,7 @@ VERTEXAI_MODEL_NAMES = [
 ]
 
 
-_PROVIDER_TO_MODELS_MAP = {
+PROVIDER_TO_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_MODEL_NAMES,
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
@@ -227,4 +227,4 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
-    return _PROVIDER_TO_MODELS_MAP.get(provider_name, [])
+    return PROVIDER_TO_MODELS_MAP.get(provider_name, [])
