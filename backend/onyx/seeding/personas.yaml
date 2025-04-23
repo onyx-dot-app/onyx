@@ -14,11 +14,13 @@ personas:
     # Default number of chunks to include as context, set to 0 to disable retrieval
     # Remove the field to set to the system default number of chunks/tokens to pass to Gen AI
     # Each chunk is 512 tokens long
-    num_chunks: 10
+    num_chunks: 25
     # Enable/Disable usage of the LLM chunk filter feature whereby each chunk is passed to the LLM to determine
     # if the chunk is useful or not towards the latest user query
     # This feature can be overriden for all personas via DISABLE_LLM_DOC_RELEVANCE env variable
-    llm_relevance_filter: true
+    # Disabling by default since for many deployments, it causes the user to hit rate limits with
+    # their LLM provider (e.g. Azure) or causes extremely slow results (Ollama).
+    llm_relevance_filter: false
     # Enable/Disable usage of the LLM to extract query time filters including source type and time range filters
     llm_filter_extraction: true
     # Decay documents priority as they age, options are:

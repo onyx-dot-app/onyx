@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 from collections.abc import AsyncGenerator
@@ -8,6 +9,7 @@ import sentry_sdk
 import torch
 import uvicorn
 from fastapi import FastAPI
+from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
 from transformers import logging as transformer_logging  # type:ignore
@@ -20,6 +22,9 @@ from model_server.management_endpoints import router as management_router
 from model_server.utils import get_gpu_type
 from onyx import __version__
 from onyx.utils.logger import setup_logger
+from onyx.utils.logger import setup_uvicorn_logger
+from onyx.utils.middleware import add_onyx_request_id_middleware
+from onyx.utils.middleware import add_onyx_tenant_id_middleware
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import MIN_THREADS_ML_MODELS
 from shared_configs.configs import MODEL_SERVER_ALLOWED_HOST
@@ -35,6 +40,12 @@ TEMP_HF_CACHE_PATH = Path(os.path.expanduser("~")) / ".cache/temp_huggingface"
 transformer_logging.set_verbosity_error()
 
 logger = setup_logger()
+
+file_handlers = [
+    h for h in logger.logger.handlers if isinstance(h, logging.FileHandler)
+]
+
+setup_uvicorn_logger(shared_file_handlers=file_handlers)
 
 
 def _move_files_recursively(source: Path, dest: Path, overwrite: bool = False) -> None:
@@ -111,6 +122,16 @@ def get_model_app() -> FastAPI:
     application.include_router(management_router)
     application.include_router(encoders_router)
     application.include_router(custom_models_router)
+
+    request_id_prefix = "INF"
+    if INDEXING_ONLY:
+        request_id_prefix = "IDX"
+
+    add_onyx_tenant_id_middleware(application, logger)
+    add_onyx_request_id_middleware(application, request_id_prefix, logger)
+
+    # Initialize and instrument the app
+    Instrumentator().instrument(application).expose(application)
 
     return application
 

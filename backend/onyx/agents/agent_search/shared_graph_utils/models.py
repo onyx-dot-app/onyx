@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel
@@ -153,3 +154,8 @@ class AnswerGenerationDocuments(BaseModel):
 
 
 BaseMessage_Content = str | list[str | dict[str, Any]]
+
+
+class QueryExpansionType(Enum):
+    KEYWORD = "keyword"
+    SEMANTIC = "semantic"

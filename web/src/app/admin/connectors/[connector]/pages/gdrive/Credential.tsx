@@ -10,7 +10,6 @@ import Cookies from "js-cookie";
 import {
   TextFormField,
   SectionHeader,
-  SubLabel,
 } from "@/components/admin/connectors/Field";
 import { Form, Formik } from "formik";
 import { User } from "@/lib/types";
@@ -23,14 +22,7 @@ import {
 import { refreshAllGoogleData } from "@/lib/googleConnector";
 import { ValidSources } from "@/lib/types";
 import { buildSimilarCredentialInfoURL } from "@/app/admin/connector/[ccPairId]/lib";
-import {
-  FiFile,
-  FiUpload,
-  FiTrash2,
-  FiCheck,
-  FiLink,
-  FiAlertTriangle,
-} from "react-icons/fi";
+import { FiFile, FiCheck, FiLink, FiAlertTriangle } from "react-icons/fi";
 import { cn, truncateString } from "@/lib/utils";
 
 type GoogleDriveCredentialJsonTypes = "authorized_user" | "service_account";

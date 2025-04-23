@@ -2,7 +2,6 @@
 import { Separator } from "@/components/ui/separator";
 import { IconProps, XIcon } from "./icons/icons";
 import { useRef } from "react";
-import { isEventWithinRef } from "@/lib/contains";
 import ReactDOM from "react-dom";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -23,6 +22,8 @@ interface ModalProps {
   heightOverride?: string;
   removeBottomPadding?: boolean;
   removePadding?: boolean;
+  increasedPadding?: boolean;
+  hideOverflow?: boolean;
 }
 
 export function Modal({
@@ -41,6 +42,8 @@ export function Modal({
   heightOverride,
   removeBottomPadding,
   removePadding,
+  increasedPadding,
+  hideOverflow,
 }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [isMounted, setIsMounted] = useState(false);
@@ -90,7 +93,7 @@ export function Modal({
           flex
           flex-col
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
-          overflow-auto
+          ${hideOverflow ? "overflow-hidden" : "overflow-auto"}
         `}
       >
         {onOutsideClick && !hideCloseButton && (
@@ -111,7 +114,7 @@ export function Modal({
                 <h2
                   className={`my-auto flex content-start gap-x-4 font-bold ${
                     titleSize || "text-2xl"
-                  }`}
+                  } ${increasedPadding && "px-6"}`}
                 >
                   {title}
                   {icon && icon({ size: 30 })}

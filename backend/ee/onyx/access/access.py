@@ -93,12 +93,12 @@ def _get_access_for_documents(
         )
 
         # To avoid collisions of group namings between connectors, they need to be prefixed
-        access_map[document_id] = DocumentAccess(
-            user_emails=non_ee_access.user_emails,
-            user_groups=set(user_group_info.get(document_id, [])),
+        access_map[document_id] = DocumentAccess.build(
+            user_emails=list(non_ee_access.user_emails),
+            user_groups=user_group_info.get(document_id, []),
             is_public=is_public_anywhere,
-            external_user_emails=ext_u_emails,
-            external_user_group_ids=ext_u_groups,
+            external_user_emails=list(ext_u_emails),
+            external_user_group_ids=list(ext_u_groups),
         )
     return access_map
 

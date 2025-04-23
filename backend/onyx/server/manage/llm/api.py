@@ -1,4 +1,6 @@
 from collections.abc import Callable
+from datetime import datetime
+from datetime import timezone
 
 from fastapi import APIRouter
 from fastapi import Depends
@@ -19,14 +21,18 @@ from onyx.db.llm import upsert_llm_provider
 from onyx.db.models import User
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm
+from onyx.llm.factory import get_max_input_tokens_from_llm_provider
 from onyx.llm.llm_provider_options import fetch_available_well_known_llms
 from onyx.llm.llm_provider_options import WellKnownLLMProviderDescriptor
+from onyx.llm.utils import get_llm_contextual_cost
 from onyx.llm.utils import litellm_exception_to_error_msg
 from onyx.llm.utils import model_supports_image_input
 from onyx.llm.utils import test_llm
+from onyx.server.manage.llm.models import LLMCost
 from onyx.server.manage.llm.models import LLMProviderDescriptor
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
 from onyx.server.manage.llm.models import LLMProviderView
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.manage.llm.models import TestLLMRequest
 from onyx.server.manage.llm.models import VisionProviderResponse
 from onyx.utils.logger import setup_logger
@@ -61,10 +67,14 @@ def test_llm_configuration(
         # as it turns out the name is not editable in the UI and other code also keys off name,
         # so we won't rock the boat just yet.
         existing_provider = fetch_existing_llm_provider(
-            test_llm_request.name, db_session
+            name=test_llm_request.name, db_session=db_session
         )
         if existing_provider:
             test_api_key = existing_provider.api_key
+
+    # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
+    # Therefore, instead of performing additional, more complex logic, we just use a dummy value
+    max_input_tokens = -1
 
     llm = get_llm(
         provider=test_llm_request.provider,
@@ -74,6 +84,7 @@ def test_llm_configuration(
         api_version=test_llm_request.api_version,
         custom_config=test_llm_request.custom_config,
         deployment_name=test_llm_request.deployment_name,
+        max_input_tokens=max_input_tokens,
     )
 
     functions_with_args: list[tuple[Callable, tuple]] = [(test_llm, (llm,))]
@@ -90,6 +101,7 @@ def test_llm_configuration(
             api_version=test_llm_request.api_version,
             custom_config=test_llm_request.custom_config,
             deployment_name=test_llm_request.deployment_name,
+            max_input_tokens=max_input_tokens,
         )
         functions_with_args.append((test_llm, (fast_llm,)))
 
@@ -136,21 +148,35 @@ def list_llm_providers(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderView]:
+    start_time = datetime.now(timezone.utc)
+    logger.debug("Starting to fetch LLM providers")
+
     llm_provider_list: list[LLMProviderView] = []
     for llm_provider_model in fetch_existing_llm_providers(db_session):
+        from_model_start = datetime.now(timezone.utc)
         full_llm_provider = LLMProviderView.from_model(llm_provider_model)
+        from_model_end = datetime.now(timezone.utc)
+        from_model_duration = (from_model_end - from_model_start).total_seconds()
+        logger.debug(
+            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
+        )
+
         if full_llm_provider.api_key:
             full_llm_provider.api_key = (
                 full_llm_provider.api_key[:4] + "****" + full_llm_provider.api_key[-4:]
             )
         llm_provider_list.append(full_llm_provider)
 
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(f"Completed fetching LLM providers in {duration:.2f} seconds")
+
     return llm_provider_list
 
 
 @admin_router.put("/provider")
 def put_llm_provider(
-    llm_provider: LLMProviderUpsertRequest,
+    llm_provider_upsert_request: LLMProviderUpsertRequest,
     is_creation: bool = Query(
         False,
         description="True if updating an existing provider, False if creating a new one",
@@ -161,36 +187,58 @@ def put_llm_provider(
     # validate request (e.g. if we're intending to create but the name already exists we should throw an error)
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
-    existing_provider = fetch_existing_llm_provider(llm_provider.name, db_session)
+    existing_provider = fetch_existing_llm_provider(
+        name=llm_provider_upsert_request.name, db_session=db_session
+    )
     if existing_provider and is_creation:
         raise HTTPException(
             status_code=400,
-            detail=f"LLM Provider with name {llm_provider.name} already exists",
+            detail=f"LLM Provider with name {llm_provider_upsert_request.name} already exists",
+        )
+    elif not existing_provider and not is_creation:
+        raise HTTPException(
+            status_code=400,
+            detail=f"LLM Provider with name {llm_provider_upsert_request.name} does not exist",
         )
 
-    if llm_provider.display_model_names is not None:
-        # Ensure default_model_name and fast_default_model_name are in display_model_names
-        # This is necessary for custom models and Bedrock/Azure models
-        if llm_provider.default_model_name not in llm_provider.display_model_names:
-            llm_provider.display_model_names.append(llm_provider.default_model_name)
+    default_model_found = False
+    default_fast_model_found = False
 
+    for model_configuration in llm_provider_upsert_request.model_configurations:
+        if model_configuration.name == llm_provider_upsert_request.default_model_name:
+            model_configuration.is_visible = True
+            default_model_found = True
         if (
-            llm_provider.fast_default_model_name
-            and llm_provider.fast_default_model_name
-            not in llm_provider.display_model_names
+            llm_provider_upsert_request.fast_default_model_name
+            and llm_provider_upsert_request.fast_default_model_name
+            == model_configuration.name
         ):
-            llm_provider.display_model_names.append(
-                llm_provider.fast_default_model_name
-            )
+            model_configuration.is_visible = True
+            default_fast_model_found = True
+
+    default_inserts = set()
+    if not default_model_found:
+        default_inserts.add(llm_provider_upsert_request.default_model_name)
+
+    if (
+        llm_provider_upsert_request.fast_default_model_name
+        and not default_fast_model_found
+    ):
+        default_inserts.add(llm_provider_upsert_request.fast_default_model_name)
+
+    llm_provider_upsert_request.model_configurations.extend(
+        ModelConfigurationUpsertRequest(name=name, is_visible=True)
+        for name in default_inserts
+    )
 
     # the llm api key is sanitized when returned to clients, so the only time we
     # should get a real key is when it is explicitly changed
-    if existing_provider and not llm_provider.api_key_changed:
-        llm_provider.api_key = existing_provider.api_key
+    if existing_provider and not llm_provider_upsert_request.api_key_changed:
+        llm_provider_upsert_request.api_key = existing_provider.api_key
 
     try:
         return upsert_llm_provider(
-            llm_provider=llm_provider,
+            llm_provider_upsert_request=llm_provider_upsert_request,
             db_session=db_session,
         )
     except ValueError as e:
@@ -219,8 +267,9 @@ def set_provider_as_default(
 @admin_router.post("/provider/{provider_id}/default-vision")
 def set_provider_as_default_vision(
     provider_id: int,
-    vision_model: str
-    | None = Query(None, description="The default vision model to use"),
+    vision_model: str | None = Query(
+        None, description="The default vision model to use"
+    ),
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> None:
@@ -244,20 +293,13 @@ def get_vision_capable_providers(
     for provider in providers:
         vision_models = []
 
-        # Check model names in priority order
-        model_names_to_check = []
-        if provider.model_names:
-            model_names_to_check = provider.model_names
-        elif provider.display_model_names:
-            model_names_to_check = provider.display_model_names
-        elif provider.default_model_name:
-            model_names_to_check = [provider.default_model_name]
-
         # Check each model for vision capability
-        for model_name in model_names_to_check:
-            if model_supports_image_input(model_name, provider.provider):
-                vision_models.append(model_name)
-                logger.debug(f"Vision model found: {provider.provider}/{model_name}")
+        for model_configuration in provider.model_configurations:
+            if model_supports_image_input(model_configuration.name, provider.provider):
+                vision_models.append(model_configuration.name)
+                logger.debug(
+                    f"Vision model found: {provider.provider}/{model_configuration.name}"
+                )
 
         # Only include providers with at least one vision-capable model
         if vision_models:
@@ -280,9 +322,66 @@ def list_llm_provider_basics(
     user: User | None = Depends(current_chat_accessible_user),
     db_session: Session = Depends(get_session),
 ) -> list[LLMProviderDescriptor]:
-    return [
-        LLMProviderDescriptor.from_model(llm_provider_model)
-        for llm_provider_model in fetch_existing_llm_providers_for_user(
-            db_session, user
+    start_time = datetime.now(timezone.utc)
+    logger.debug("Starting to fetch basic LLM providers for user")
+
+    llm_provider_list: list[LLMProviderDescriptor] = []
+    for llm_provider_model in fetch_existing_llm_providers_for_user(db_session, user):
+        from_model_start = datetime.now(timezone.utc)
+        full_llm_provider = LLMProviderDescriptor.from_model(llm_provider_model)
+        from_model_end = datetime.now(timezone.utc)
+        from_model_duration = (from_model_end - from_model_start).total_seconds()
+        logger.debug(
+            f"LLMProviderView.from_model took {from_model_duration:.2f} seconds"
         )
-    ]
+        llm_provider_list.append(full_llm_provider)
+
+    end_time = datetime.now(timezone.utc)
+    duration = (end_time - start_time).total_seconds()
+    logger.debug(f"Completed fetching basic LLM providers in {duration:.2f} seconds")
+
+    return llm_provider_list
+
+
+@admin_router.get("/provider-contextual-cost")
+def get_provider_contextual_cost(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[LLMCost]:
+    """
+    Get the cost of Re-indexing all documents for contextual retrieval.
+
+    See https://docs.litellm.ai/docs/completion/token_usage#5-cost_per_token
+    This includes:
+    - The cost of invoking the LLM on each chunk-document pair to get
+      - the doc_summary
+      - the chunk_context
+    - The per-token cost of the LLM used to generate the doc_summary and chunk_context
+    """
+    providers = fetch_existing_llm_providers(db_session)
+    costs = []
+    for provider in providers:
+        for model_configuration in provider.model_configurations:
+            llm_provider = LLMProviderView.from_model(provider)
+            llm = get_llm(
+                provider=provider.provider,
+                model=model_configuration.name,
+                deployment_name=provider.deployment_name,
+                api_key=provider.api_key,
+                api_base=provider.api_base,
+                api_version=provider.api_version,
+                custom_config=provider.custom_config,
+                max_input_tokens=get_max_input_tokens_from_llm_provider(
+                    llm_provider=llm_provider, model_name=model_configuration.name
+                ),
+            )
+            cost = get_llm_contextual_cost(llm)
+            costs.append(
+                LLMCost(
+                    provider=provider.name,
+                    model_name=model_configuration.name,
+                    cost=cost,
+                )
+            )
+
+    return costs

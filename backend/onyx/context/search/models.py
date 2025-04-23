@@ -18,9 +18,15 @@ from onyx.indexing.models import IndexingSetting
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
 
+
 MAX_METRICS_CONTENT = (
     200  # Just need enough characters to identify where in the doc the chunk is
 )
+
+
+class QueryExpansions(BaseModel):
+    keywords_expansions: list[str] | None = None
+    semantic_expansions: list[str] | None = None
 
 
 class RerankingDetails(BaseModel):
@@ -60,7 +66,7 @@ class SearchSettingsCreationRequest(InferenceSettings, IndexingSetting):
         inference_settings = InferenceSettings.from_db_model(search_settings)
         indexing_setting = IndexingSetting.from_db_model(search_settings)
 
-        return cls(**inference_settings.dict(), **indexing_setting.dict())
+        return cls(**inference_settings.model_dump(), **indexing_setting.model_dump())
 
 
 class SavedSearchSettings(InferenceSettings, IndexingSetting):
@@ -80,6 +86,9 @@ class SavedSearchSettings(InferenceSettings, IndexingSetting):
             reduced_dimension=search_settings.reduced_dimension,
             # Whether switching to this model requires re-indexing
             background_reindex_enabled=search_settings.background_reindex_enabled,
+            enable_contextual_rag=search_settings.enable_contextual_rag,
+            contextual_rag_llm_name=search_settings.contextual_rag_llm_name,
+            contextual_rag_llm_provider=search_settings.contextual_rag_llm_provider,
             # Reranking Details
             rerank_model_name=search_settings.rerank_model_name,
             rerank_provider_type=search_settings.rerank_provider_type,
@@ -102,6 +111,8 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
+    user_file_ids: list[int] | None = None
+    user_folder_ids: list[int] | None = None
 
 
 class IndexFilters(BaseFilters):
@@ -134,6 +145,8 @@ class ChunkContext(BaseModel):
 class SearchRequest(ChunkContext):
     query: str
 
+    expanded_queries: QueryExpansions | None = None
+
     search_type: SearchType = SearchType.SEMANTIC
 
     human_selected_filters: BaseFilters | None = None
@@ -158,6 +171,7 @@ class SearchRequest(ChunkContext):
 
 class SearchQuery(ChunkContext):
     "Processed Request that is directly passed to the SearchPipeline"
+
     query: str
     processed_keywords: list[str]
     search_type: SearchType
@@ -180,6 +194,8 @@ class SearchQuery(ChunkContext):
     model_config = ConfigDict(frozen=True)
 
     precomputed_query_embedding: Embedding | None = None
+
+    expanded_queries: QueryExpansions | None = None
 
 
 class RetrievalDetails(ChunkContext):
@@ -218,6 +234,8 @@ class InferenceChunk(BaseChunk):
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
+    doc_summary: str
+    chunk_context: str
 
     # when the doc was last updated
     updated_at: datetime | None

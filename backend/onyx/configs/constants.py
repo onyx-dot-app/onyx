@@ -35,7 +35,7 @@ SECTION_SEPARATOR = "\n\n"
 INDEX_SEPARATOR = "==="
 
 # For File Connector Metadata override file
-DANSWER_METADATA_FILENAME = ".onyx_metadata.json"
+ONYX_METADATA_FILENAME = ".onyx_metadata.json"
 
 # Messages
 DISABLED_GEN_AI_MSG = (
@@ -101,6 +101,8 @@ KV_DOCUMENTS_SEEDED_KEY = "documents_seeded"
 CELERY_GENERIC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT = 120
+
+CELERY_USER_FILE_FOLDER_SYNC_BEAT_LOCK_TIMEOUT = 120
 
 CELERY_PRIMARY_WORKER_LOCK_TIMEOUT = 120
 
@@ -269,6 +271,7 @@ class FileOrigin(str, Enum):
     CONNECTOR = "connector"
     GENERATED_REPORT = "generated_report"
     INDEXING_CHECKPOINT = "indexing_checkpoint"
+    PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
 
 
@@ -309,6 +312,7 @@ class OnyxCeleryQueues:
 
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"
+    USER_FILES_INDEXING = "user_files_indexing"
 
     # Monitoring queue
     MONITORING = "monitoring"
@@ -327,6 +331,7 @@ class OnyxRedisLocks:
     CHECK_CONNECTOR_EXTERNAL_GROUP_SYNC_BEAT_LOCK = (
         "da_lock:check_connector_external_group_sync_beat"
     )
+    CHECK_USER_FILE_FOLDER_SYNC_BEAT_LOCK = "da_lock:check_user_file_folder_sync_beat"
     MONITOR_BACKGROUND_PROCESSES_LOCK = "da_lock:monitor_background_processes"
     CHECK_AVAILABLE_TENANTS_LOCK = "da_lock:check_available_tenants"
     PRE_PROVISION_TENANT_LOCK = "da_lock:pre_provision_tenant"
@@ -393,10 +398,16 @@ class OnyxCeleryTask:
     CLOUD_MONITOR_CELERY_QUEUES = (
         f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_queues"
     )
-    CHECK_AVAILABLE_TENANTS = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
+    CLOUD_CHECK_AVAILABLE_TENANTS = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_check_available_tenants"
+    )
+    CLOUD_MONITOR_CELERY_PIDBOX = (
+        f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor_celery_pidbox"
+    )
 
     # Tenant pre-provisioning
     PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
+    UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
     CHECK_FOR_VESPA_SYNC_TASK = "check_for_vespa_sync_task"
@@ -405,6 +416,7 @@ class OnyxCeleryTask:
     CHECK_FOR_DOC_PERMISSIONS_SYNC = "check_for_doc_permissions_sync"
     CHECK_FOR_EXTERNAL_GROUP_SYNC = "check_for_external_group_sync"
     CHECK_FOR_LLM_MODEL_UPDATE = "check_for_llm_model_update"
+    CHECK_FOR_USER_FILE_FOLDER_SYNC = "check_for_user_file_folder_sync"
 
     # Connector checkpoint cleanup
     CHECK_FOR_CHECKPOINT_CLEANUP = "check_for_checkpoint_cleanup"
@@ -413,6 +425,7 @@ class OnyxCeleryTask:
     MONITOR_BACKGROUND_PROCESSES = "monitor_background_processes"
     MONITOR_CELERY_QUEUES = "monitor_celery_queues"
     MONITOR_PROCESS_MEMORY = "monitor_process_memory"
+    CELERY_BEAT_HEARTBEAT = "celery_beat_heartbeat"
 
     KOMBU_MESSAGE_CLEANUP_TASK = "kombu_message_cleanup_task"
     CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK = (
@@ -431,6 +444,9 @@ class OnyxCeleryTask:
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
 
+
+# this needs to correspond to the matching entry in supervisord
+ONYX_CELERY_BEAT_HEARTBEAT_KEY = "onyx:celery:beat:heartbeat"
 
 REDIS_SOCKET_KEEPALIVE_OPTIONS = {}
 REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPINTVL] = 15

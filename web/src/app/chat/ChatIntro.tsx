@@ -1,6 +1,5 @@
 import { AssistantIcon } from "@/components/assistants/AssistantIcon";
 import { Persona } from "../admin/assistants/interfaces";
-import { OnyxIcon } from "@/components/icons/icons";
 
 export function ChatIntro({ selectedPersona }: { selectedPersona: Persona }) {
   return (

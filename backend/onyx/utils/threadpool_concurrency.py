@@ -103,12 +103,10 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
             return self._dict.copy()
 
     @overload
-    def get(self, key: KT) -> VT | None:
-        ...
+    def get(self, key: KT) -> VT | None: ...
 
     @overload
-    def get(self, key: KT, default: VT | _T) -> VT | _T:
-        ...
+    def get(self, key: KT, default: VT | _T) -> VT | _T: ...
 
     def get(self, key: KT, default: Any = None) -> Any:
         """Get a value with a default, atomically."""
@@ -147,10 +145,33 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
         with self.lock:
             return collections.abc.ValuesView(self)
 
+    @overload
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[VT], VT], default: VT
+    ) -> tuple[VT, VT]: ...
+
+    @overload
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[VT | _T], VT], default: VT | _T
+    ) -> tuple[VT | _T, VT]: ...
+
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[Any], VT], default: Any = None
+    ) -> tuple[Any, VT]:
+        """Replace a value from the dict with a function applied to the previous value, atomically.
+
+        Returns:
+            A tuple of the previous value and the new value.
+        """
+        with self.lock:
+            val = self._dict.get(key, default)
+            new_val = value_callback(val)
+            self._dict[key] = new_val
+            return val, new_val
+
 
 class CallableProtocol(Protocol):
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        ...
+    def __call__(self, *args: Any, **kwargs: Any) -> Any: ...
 
 
 def run_functions_tuples_in_parallel(
@@ -332,14 +353,23 @@ def wait_on_background(task: TimeoutThread[R]) -> R:
     return task.result
 
 
-def _next_or_none(ind: int, g: Iterator[R]) -> tuple[int, R | None]:
-    return ind, next(g, None)
+def _next_or_none(ind: int, gen: Iterator[R]) -> tuple[int, R | None]:
+    return ind, next(gen, None)
 
 
 def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R]:
+    """
+    Runs the list of generators with thread-level parallelism, yielding
+    results as available. The asynchronous nature of this yielding means
+    that stopping the returned iterator early DOES NOT GUARANTEE THAT NO
+    FURTHER ITEMS WERE PRODUCED by the input gens. Only use this function
+    if you are consuming all elements from the generators OR it is acceptable
+    for some extra generator code to run and not have the result(s) yielded.
+    """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_index: dict[Future[tuple[int, R | None]], int] = {
-            executor.submit(_next_or_none, i, g): i for i, g in enumerate(gens)
+            executor.submit(_next_or_none, ind, gen): ind
+            for ind, gen in enumerate(gens)
         }
 
         next_ind = len(gens)
@@ -349,8 +379,8 @@ def parallel_yield(gens: list[Iterator[R]], max_workers: int = 10) -> Iterator[R
                 ind, result = future.result()
                 if result is not None:
                     yield result
-                    future_to_index[
-                        executor.submit(_next_or_none, ind, gens[ind])
-                    ] = next_ind
+                    future_to_index[executor.submit(_next_or_none, ind, gens[ind])] = (
+                        next_ind
+                    )
                     next_ind += 1
                 del future_to_index[future]

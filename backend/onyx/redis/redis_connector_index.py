@@ -165,6 +165,16 @@ class RedisConnectorIndex:
 
         return False
 
+    def connector_active_ttl(self) -> int:
+        """Refer to https://redis.io/docs/latest/commands/ttl/
+
+        -2 means the key does not exist
+        -1 means the key exists but has no associated expire
+        Otherwise, returns the actual TTL of the key
+        """
+        ttl = cast(int, self.redis.ttl(self.connector_active_key))
+        return ttl
+
     def generator_locked(self) -> bool:
         return bool(self.redis.exists(self.generator_lock_key))
 

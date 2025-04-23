@@ -38,7 +38,6 @@ from onyx.db.persona import get_persona_by_id
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
-from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.utils import get_json_line
 from onyx.utils.logger import setup_logger
@@ -95,9 +94,11 @@ def handle_search_request(
             chunk_ind=section.center_chunk.chunk_id,
             content=section.center_chunk.content,
             semantic_identifier=section.center_chunk.semantic_identifier or "Unknown",
-            link=section.center_chunk.source_links.get(0)
-            if section.center_chunk.source_links
-            else None,
+            link=(
+                section.center_chunk.source_links.get(0)
+                if section.center_chunk.source_links
+                else None
+            ),
             blurb=section.center_chunk.blurb,
             source_type=section.center_chunk.source_type,
             boost=section.center_chunk.boost,
@@ -175,10 +176,9 @@ def get_answer_stream(
         provider_type=llm.config.model_provider,
     )
 
-    input_tokens = get_max_input_tokens(
-        model_name=llm.config.model_name, model_provider=llm.config.model_provider
+    max_history_tokens = int(
+        llm.config.max_input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE
     )
-    max_history_tokens = int(input_tokens * MAX_THREAD_CONTEXT_PERCENTAGE)
 
     combined_message = combine_message_thread(
         messages=query_request.messages,

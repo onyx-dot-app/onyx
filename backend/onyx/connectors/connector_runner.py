@@ -6,7 +6,7 @@ from typing import Generic
 from typing import TypeVar
 
 from onyx.connectors.interfaces import BaseConnector
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
@@ -88,18 +88,16 @@ class ConnectorRunner(Generic[CT]):
 
         self.doc_batch: list[Document] = []
 
-    def run(
-        self, checkpoint: CT
-    ) -> Generator[
+    def run(self, checkpoint: CT) -> Generator[
         tuple[list[Document] | None, ConnectorFailure | None, CT | None],
         None,
         None,
     ]:
         """Adds additional exception logging to the connector."""
         try:
-            if isinstance(self.connector, CheckpointConnector):
+            if isinstance(self.connector, CheckpointedConnector):
                 if self.time_range is None:
-                    raise ValueError("time_range is required for CheckpointConnector")
+                    raise ValueError("time_range is required for CheckpointedConnector")
 
                 start = time.monotonic()
                 checkpoint_connector_generator = self.connector.load_from_checkpoint(

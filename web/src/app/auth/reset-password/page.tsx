@@ -2,7 +2,6 @@
 import React, { useState, useEffect } from "react";
 import { resetPassword } from "../forgot-password/utils";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
-import CardSection from "@/components/admin/CardSection";
 import Title from "@/components/ui/title";
 import Text from "@/components/ui/text";
 import Link from "next/link";
@@ -23,8 +22,8 @@ const ResetPasswordPage: React.FC = () => {
   const { popup, setPopup } = usePopup();
   const [isWorking, setIsWorking] = useState(false);
   const searchParams = useSearchParams();
-  const token = searchParams.get("token");
-  const tenantId = searchParams.get(TENANT_ID_COOKIE_NAME);
+  const token = searchParams?.get("token");
+  const tenantId = searchParams?.get(TENANT_ID_COOKIE_NAME);
   // Keep search param same name as cookie for simplicity
 
   useEffect(() => {

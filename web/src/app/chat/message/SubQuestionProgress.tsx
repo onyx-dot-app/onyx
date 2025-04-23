@@ -1,14 +1,7 @@
 import React from "react";
 import { SubQuestionDetail } from "../interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
 
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 import {
   Popover,

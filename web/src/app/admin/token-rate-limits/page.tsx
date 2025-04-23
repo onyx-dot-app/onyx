@@ -1,7 +1,6 @@
 "use client";
 
 import { AdminPageTitle } from "@/components/admin/Title";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import Text from "@/components/ui/text";
 import { useState } from "react";

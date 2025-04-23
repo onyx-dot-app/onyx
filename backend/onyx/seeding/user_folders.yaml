@@ -1,0 +1,6 @@
+user_folders:
+  - id: -1
+    name: "Recent Documents"
+    description: "Documents uploaded by the user"
+    files: []
+    assistants: []

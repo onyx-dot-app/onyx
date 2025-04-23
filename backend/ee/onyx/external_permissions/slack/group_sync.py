@@ -4,6 +4,7 @@ WHEN USERGROUPS ARE ADDED TO A CHANNEL, IT JUST RESOLVES ALL THE USERS TO THAT C
 SO WHEN CHECKING IF A USER CAN ACCESS A DOCUMENT, WE ONLY NEED TO CHECK THEIR EMAIL
 THERE IS NO USERGROUP <-> DOCUMENT PERMISSION MAPPING
 """
+
 from slack_sdk import WebClient
 
 from ee.onyx.db.external_perm import ExternalUserGroup
@@ -51,6 +52,7 @@ def _get_slack_group_members_email(
 
 
 def slack_group_sync(
+    tenant_id: str,
     cc_pair: ConnectorCredentialPair,
 ) -> list[ExternalUserGroup]:
     slack_client = WebClient(

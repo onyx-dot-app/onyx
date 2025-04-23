@@ -20,7 +20,7 @@ from onyx.context.search.models import SearchRequest
 from onyx.context.search.preprocessing.access_filters import (
     build_access_filters_for_user,
 )
-from onyx.context.search.retrieval.search_runner import (
+from onyx.context.search.utils import (
     remove_stop_words_and_punctuation,
 )
 from onyx.db.models import User
@@ -35,7 +35,6 @@ from onyx.utils.threadpool_concurrency import run_functions_in_parallel
 from onyx.utils.timing import log_function_time
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
-
 
 logger = setup_logger()
 
@@ -165,7 +164,18 @@ def retrieval_preprocessing(
     user_acl_filters = (
         None if bypass_acl else build_access_filters_for_user(user, db_session)
     )
+    user_file_ids = preset_filters.user_file_ids or []
+    user_folder_ids = preset_filters.user_folder_ids or []
+    if persona and persona.user_files:
+        user_file_ids = user_file_ids + [
+            file.id
+            for file in persona.user_files
+            if file.id not in (preset_filters.user_file_ids or [])
+        ]
+
     final_filters = IndexFilters(
+        user_file_ids=user_file_ids,
+        user_folder_ids=user_folder_ids,
         source_type=preset_filters.source_type or predicted_source_filters,
         document_set=preset_filters.document_set,
         time_cutoff=time_filter or predicted_time_cutoff,
@@ -246,11 +256,12 @@ def retrieval_preprocessing(
         # Should match the LLM filtering to the same as the reranked, it's understood as this is the number of results
         # the user wants to do heavier processing on, so do the same for the LLM if reranking is on
         # if no reranking settings are set, then use the global default
-        max_llm_filter_sections=rerank_settings.num_rerank
-        if rerank_settings
-        else NUM_POSTPROCESSED_RESULTS,
+        max_llm_filter_sections=(
+            rerank_settings.num_rerank if rerank_settings else NUM_POSTPROCESSED_RESULTS
+        ),
         chunks_above=chunks_above,
         chunks_below=chunks_below,
         full_doc=search_request.full_doc,
         precomputed_query_embedding=search_request.precomputed_query_embedding,
+        expanded_queries=search_request.expanded_queries,
     )

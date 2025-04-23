@@ -19,7 +19,11 @@ import { ChatSession } from "../interfaces";
 import { Folder } from "../folders/interfaces";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 
-import { DocumentIcon2, NewChatIcon } from "@/components/icons/icons";
+import {
+  DocumentIcon2,
+  KnowledgeGroupIcon,
+  NewChatIcon,
+} from "@/components/icons/icons";
 import { PagesTab } from "./PagesTab";
 import { pageType } from "./types";
 import LogoWithText from "@/components/header/LogoWithText";
@@ -302,6 +306,18 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                   New Chat
                 </p>
               </Link>
+              <Link
+                className="w-full px-2 py-1  rounded-md items-center hover:bg-hover cursor-pointer transition-all duration-150 flex gap-x-2"
+                href="/chat/my-documents"
+              >
+                <KnowledgeGroupIcon
+                  size={20}
+                  className="flex-none text-text-history-sidebar-button"
+                />
+                <p className="my-auto flex font-normal items-center text-base">
+                  My Documents
+                </p>
+              </Link>
               {user?.preferences?.shortcut_enabled && (
                 <Link
                   className="w-full px-2 py-1  rounded-md items-center hover:bg-accent-background-hovered cursor-pointer transition-all duration-150 flex gap-x-2"
@@ -386,6 +402,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
 
             <div className="w-full px-4">
               <button
+                aria-label="Explore Assistants"
                 onClick={() => setShowAssistantsModal(true)}
                 className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
               >

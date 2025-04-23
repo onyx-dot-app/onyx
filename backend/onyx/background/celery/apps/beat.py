@@ -41,10 +41,15 @@ class DynamicTenantScheduler(PersistentScheduler):
 
         # Let the parent class handle store initialization
         self.setup_schedule()
-        self._try_updating_schedule()
         task_logger.info(
             f"DynamicTenantScheduler initialized: reload_interval={self._reload_interval}"
         )
+
+        # do not set the initial schedule here because we don't have db access yet.
+        # do it in beat_init after the db engine is initialized
+
+        # An initial schedule is required ... otherwise, the scheduler will delay
+        # for 5 minutes before calling tick()
 
     def setup_schedule(self) -> None:
         super().setup_schedule()
@@ -147,7 +152,10 @@ class DynamicTenantScheduler(PersistentScheduler):
         current_schedule = self.schedule.items()
 
         # get potential new state
-        beat_multiplier = OnyxRuntime.get_beat_multiplier()
+        try:
+            beat_multiplier = OnyxRuntime.get_beat_multiplier()
+        except Exception:
+            beat_multiplier = CLOUD_BEAT_MULTIPLIER_DEFAULT
 
         new_schedule = self._generate_schedule(tenant_ids, beat_multiplier)
 
@@ -233,6 +241,10 @@ def on_beat_init(sender: Any, **kwargs: Any) -> None:
     SqlEngine.init_engine(pool_size=2, max_overflow=0)
 
     app_base.wait_for_redis(sender, **kwargs)
+
+    # first time init of the scheduler after db has been init'ed
+    scheduler: DynamicTenantScheduler = sender.scheduler
+    scheduler._try_updating_schedule()
 
 
 @signals.setup_logging.connect

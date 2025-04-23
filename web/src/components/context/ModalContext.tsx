@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, { createContext, useContext, useState } from "react";
 import { NewTeamModal } from "../modals/NewTeamModal";
 import NewTenantModal from "../modals/NewTenantModal";
 import { User, NewTenantInfo } from "@/lib/types";

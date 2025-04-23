@@ -9,7 +9,7 @@ import {
 import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
-import { FiPlus, FiTrash2, FiCheck, FiX } from "react-icons/fi";
+import { FiPlus, FiCheck, FiX } from "react-icons/fi";
 import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
 import { useState, useCallback, useRef, useContext, useEffect } from "react";
@@ -193,9 +193,10 @@ export function PagesTab({
         } catch (error) {
           console.error("Failed to create folder:", error);
           setPopup({
-            message: `Failed to create folder: ${
-              error instanceof Error ? error.message : "Unknown error"
-            }`,
+            message:
+              error instanceof Error
+                ? error.message
+                : "Failed to create folder",
             type: "error",
           });
         }

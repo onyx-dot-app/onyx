@@ -1,3 +1,4 @@
+import io
 import mimetypes
 from typing import cast
 from typing import IO
@@ -54,9 +55,54 @@ class FileManager:
     ) -> bytes:
         response = requests.get(
             f"{API_SERVER_URL}/chat/file/{file_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return response.content
+
+    @staticmethod
+    def upload_file_for_connector(
+        file_path: str,
+        file_name: str,
+        user_performing_action: DATestUser,
+        content_type: str = "application/octet-stream",
+    ) -> dict:
+        # Read the file content
+        with open(file_path, "rb") as f:
+            file_content = f.read()
+
+        # Create a file-like object
+        file_obj = io.BytesIO(file_content)
+
+        # The 'files' form field expects a list of files
+        files = [("files", (file_name, file_obj, content_type))]
+
+        # Use the user's headers but without Content-Type
+        # as requests will set the correct multipart/form-data Content-Type for us
+        headers = user_performing_action.headers.copy()
+        if "Content-Type" in headers:
+            del headers["Content-Type"]
+
+        # Make the request
+        response = requests.post(
+            f"{API_SERVER_URL}/manage/admin/connector/file/upload",
+            files=files,
+            headers=headers,
+        )
+
+        if not response.ok:
+            try:
+                error_detail = response.json().get("detail", "Unknown error")
+            except Exception:
+                error_detail = response.text
+
+            raise Exception(
+                f"Unable to upload files - {error_detail} (Status code: {response.status_code})"
+            )
+
+        response_json = response.json()
+        return response_json

@@ -72,12 +72,14 @@ class OnyxConfluence:
 
     CREDENTIAL_PREFIX = "connector:confluence:credential"
     CREDENTIAL_TTL = 300  # 5 min
+    PROBE_TIMEOUT = 5  # 5 seconds
 
     def __init__(
         self,
         is_cloud: bool,
         url: str,
         credentials_provider: CredentialsProviderInterface,
+        timeout: int | None = None,
     ) -> None:
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
@@ -100,11 +102,13 @@ class OnyxConfluence:
 
         self._kwargs: Any = None
 
-        self.shared_base_kwargs = {
+        self.shared_base_kwargs: dict[str, str | int | bool] = {
             "api_version": "cloud" if is_cloud else "latest",
             "backoff_and_retry": True,
             "cloud": is_cloud,
         }
+        if timeout:
+            self.shared_base_kwargs["timeout"] = timeout
 
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
@@ -191,6 +195,8 @@ class OnyxConfluence:
         **kwargs: Any,
     ) -> None:
         merged_kwargs = {**self.shared_base_kwargs, **kwargs}
+        # add special timeout to make sure that we don't hang indefinitely
+        merged_kwargs["timeout"] = self.PROBE_TIMEOUT
 
         with self._credentials_provider:
             credentials, _ = self._renew_credentials()
@@ -397,9 +403,9 @@ class OnyxConfluence:
             return attr
 
         # wrap the method with our retry handler
-        rate_limited_method: Callable[
-            ..., Any
-        ] = self._make_rate_limited_confluence_method(name, self._credentials_provider)
+        rate_limited_method: Callable[..., Any] = (
+            self._make_rate_limited_confluence_method(name, self._credentials_provider)
+        )
 
         def wrapped_method(*args: Any, **kwargs: Any) -> Any:
             return rate_limited_method(*args, **kwargs)
@@ -487,6 +493,16 @@ class OnyxConfluence:
 
             old_url_suffix = url_suffix
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
+
+            # we've observed that Confluence sometimes returns a next link despite giving
+            # 0 results. This is a bug with Confluence, so we need to check for it and
+            # stop paginating.
+            if url_suffix and not results:
+                logger.info(
+                    f"No results found for call '{old_url_suffix}' despite next link "
+                    "being present. Stopping pagination."
+                )
+                break
 
             # make sure we don't update the start by more than the amount
             # of results we were able to retrieve. The Confluence API has a

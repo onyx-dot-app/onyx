@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<services version="1.0">
+    <container id="default" version="1.0">
+        <document-api/>
+        <search/>
+        <http>
+            <server id="default" port="8081"/>
+        </http>
+        <nodes>
+            <node hostalias="danswer-node" />
+        </nodes>
+    </container>
+    <content id="danswer_index" version="1.0">
+        <redundancy>1</redundancy>
+        <documents>
+            <!-- <document type="danswer_chunk" mode="index" /> -->
+            {{ document_elements }}
+        </documents>
+        <nodes>
+            <node hostalias="danswer-node" distribution-key="0" />
+        </nodes>
+        <tuning>
+            <resource-limits>
+                <!-- Default is 75% but this can be increased for Dockerized deployments -->
+                <!-- https://docs.vespa.ai/en/operations/feed-block.html -->
+                <disk>0.85</disk>
+            </resource-limits>
+        </tuning>
+        <engine>    
+            <proton>
+                <tuning>
+                    <searchnode>
+                        <requestthreads>
+                            <persearch>{{ num_search_threads }}</persearch>
+                        </requestthreads>
+                    </searchnode>
+                </tuning>
+            </proton>
+        </engine>
+        <config name="vespa.config.search.summary.juniperrc">
+            <max_matches>3</max_matches>
+            <length>750</length>
+            <surround_max>350</surround_max>
+            <min_length>300</min_length>
+        </config>
+    </content>
+</services>

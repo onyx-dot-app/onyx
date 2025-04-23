@@ -42,9 +42,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import * as Yup from "yup";
-import CollapsibleSection from "./CollapsibleSection";
-import { SuccessfulPersonaUpdateRedirectType } from "./enums";
-import { Persona, PersonaLabel, StarterMessage } from "./interfaces";
+import { FullPersona, PersonaLabel, StarterMessage } from "./interfaces";
 import {
   PersonaUpsertParameters,
   createPersona,
@@ -64,10 +62,9 @@ import { debounce } from "lodash";
 import { LLMProviderView } from "../configuration/llm/interfaces";
 import StarterMessagesList from "./StarterMessageList";
 
-import { Switch, SwitchField } from "@/components/ui/switch";
+import { SwitchField } from "@/components/ui/switch";
 import { generateIdenticon } from "@/components/assistants/AssistantIcon";
 import { BackButton } from "@/components/BackButton";
-import { Checkbox, CheckboxField } from "@/components/ui/checkbox";
 import { AdvancedOptionsToggle } from "@/components/AdvancedOptionsToggle";
 import { MinimalUserSnapshot } from "@/lib/types";
 import { useUserGroups } from "@/lib/hooks";
@@ -76,13 +73,26 @@ import {
   Option as DropdownOption,
 } from "@/components/Dropdown";
 import { SourceChip } from "@/app/chat/input/ChatInputBar";
-import { TagIcon, UserIcon, XIcon, InfoIcon } from "lucide-react";
+import {
+  TagIcon,
+  UserIcon,
+  FileIcon,
+  FolderIcon,
+  InfoIcon,
+  BookIcon,
+} from "lucide-react";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
-import Title from "@/components/ui/title";
+
+import { FilePickerModal } from "@/app/chat/my-documents/components/FilePicker";
+import { useDocumentsContext } from "@/app/chat/my-documents/DocumentsContext";
+
 import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
+import TextView from "@/components/chat/TextView";
+import { MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -118,7 +128,7 @@ export function AssistantEditor({
   shouldAddAssistantToUserPreferences,
   admin,
 }: {
-  existingPersona?: Persona | null;
+  existingPersona?: FullPersona | null;
   ccPairs: CCPairBasicInfo[];
   documentSets: DocumentSet[];
   user: User | null;
@@ -131,7 +141,7 @@ export function AssistantEditor({
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isAdminPage = searchParams.get("admin") === "true";
+  const isAdminPage = searchParams?.get("admin") === "true";
 
   const { popup, setPopup } = usePopup();
   const { labels, refreshLabels, createLabel, updateLabel, deleteLabel } =
@@ -147,6 +157,9 @@ export function AssistantEditor({
     "#6FFFFF",
   ];
 
+  const [presentingDocument, setPresentingDocument] =
+    useState<MinimalOnyxDocument | null>(null);
+  const [filePickerModalOpen, setFilePickerModalOpen] = useState(false);
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false);
 
   // state to persist across formik reformatting
@@ -162,8 +175,6 @@ export function AssistantEditor({
       setDefaultIconShape(generateRandomIconShape().encodedGrid);
     }
   }, [defaultIconShape]);
-
-  const [isIconDropdownOpen, setIsIconDropdownOpen] = useState(false);
 
   const [removePersonaImage, setRemovePersonaImage] = useState(false);
 
@@ -187,12 +198,12 @@ export function AssistantEditor({
 
   const modelOptionsByProvider = new Map<string, Option<string>[]>();
   llmProviders.forEach((llmProvider) => {
-    const providerOptions = llmProvider.model_names.map((modelName) => {
-      return {
-        name: getDisplayNameForModel(modelName),
-        value: modelName,
-      };
-    });
+    const providerOptions = llmProvider.model_configurations.map(
+      (modelConfiguration) => ({
+        name: getDisplayNameForModel(modelConfiguration.name),
+        value: modelConfiguration.name,
+      })
+    );
     modelOptionsByProvider.set(llmProvider.name, providerOptions);
   });
 
@@ -220,6 +231,8 @@ export function AssistantEditor({
   availableTools.forEach((tool) => {
     enabledToolsMap[tool.id] = personaCurrentToolIds.includes(tool.id);
   });
+
+  const { selectedFiles, selectedFolders } = useDocumentsContext();
 
   const [showVisibilityWarning, setShowVisibilityWarning] = useState(false);
 
@@ -259,6 +272,13 @@ export function AssistantEditor({
         (u) => u.id !== existingPersona.owner?.id
       ) ?? [],
     selectedGroups: existingPersona?.groups ?? [],
+    user_file_ids: existingPersona?.user_file_ids ?? [],
+    user_folder_ids: existingPersona?.user_folder_ids ?? [],
+    knowledge_source:
+      (existingPersona?.user_file_ids?.length ?? 0) > 0 ||
+      (existingPersona?.user_folder_ids?.length ?? 0) > 0
+        ? "user_files"
+        : "team_knowledge",
     is_default_persona: existingPersona?.is_default_persona ?? false,
   };
 
@@ -353,6 +373,11 @@ export function AssistantEditor({
     }
   };
 
+  const canShowKnowledgeSource =
+    ccPairs.length > 0 &&
+    searchTool &&
+    !(user?.role != "admin" && documentSets.length === 0);
+
   return (
     <div className="mx-auto max-w-4xl">
       <style>
@@ -368,7 +393,26 @@ export function AssistantEditor({
           <BackButton />
         </div>
       )}
+      {filePickerModalOpen && (
+        <FilePickerModal
+          setPresentingDocument={setPresentingDocument}
+          isOpen={filePickerModalOpen}
+          onClose={() => {
+            setFilePickerModalOpen(false);
+          }}
+          onSave={() => {
+            setFilePickerModalOpen(false);
+          }}
+          buttonContent="Add to Assistant"
+        />
+      )}
 
+      {presentingDocument && (
+        <TextView
+          presentingDocument={presentingDocument}
+          onClose={() => setPresentingDocument(null)}
+        />
+      )}
       {labelToDelete && (
         <ConfirmEntityModal
           entityType="label"
@@ -412,8 +456,14 @@ export function AssistantEditor({
             description: Yup.string().required(
               "Must provide a description for the Assistant"
             ),
-            system_prompt: Yup.string(),
-            task_prompt: Yup.string(),
+            system_prompt: Yup.string().max(
+              MAX_CHARACTERS_PERSONA_DESCRIPTION,
+              "Instructions must be less than 5000000 characters"
+            ),
+            task_prompt: Yup.string().max(
+              MAX_CHARACTERS_PERSONA_DESCRIPTION,
+              "Reminders must be less than 5000000 characters"
+            ),
             is_public: Yup.boolean().required(),
             document_set_ids: Yup.array().of(Yup.number()),
             num_chunks: Yup.number().nullable(),
@@ -434,6 +484,7 @@ export function AssistantEditor({
             label_ids: Yup.array().of(Yup.number()),
             selectedUsers: Yup.array().of(Yup.object()),
             selectedGroups: Yup.array().of(Yup.number()),
+            knowledge_source: Yup.string().required(),
             is_default_persona: Yup.boolean().required(),
           })
           .test(
@@ -522,9 +573,12 @@ export function AssistantEditor({
               ? new Date(values.search_start_date)
               : null,
             num_chunks: numChunks,
+            user_file_ids: selectedFiles.map((file) => file.id),
+            user_folder_ids: selectedFolders.map((folder) => folder.id),
           };
 
           let personaResponse;
+
           if (isUpdate) {
             personaResponse = await updatePersona(
               existingPersona.id,
@@ -792,10 +846,7 @@ export function AssistantEditor({
                       <Separator />
                       <div className="flex gap-x-2 py-2 flex justify-start">
                         <div>
-                          <div
-                            className="flex items-start gap-x-2
-                          "
-                          >
+                          <div className="flex items-start gap-x-2">
                             <p className="block font-medium text-sm">
                               Knowledge
                             </p>
@@ -834,92 +885,171 @@ export function AssistantEditor({
                               </TooltipProvider>
                             </div>
                           </div>
-                          <p className="text-sm text-neutral-700 dark:text-neutral-400">
-                            Attach additional unique knowledge to this assistant
-                          </p>
                         </div>
                       </div>
                     </>
                   )}
-                  {ccPairs.length > 0 &&
-                    searchTool &&
-                    values.enabled_tools_map[searchTool.id] &&
-                    !(user?.role != "admin" && documentSets.length === 0) && (
-                      <CollapsibleSection>
-                        <div className="mt-2">
-                          {ccPairs.length > 0 && (
-                            <>
-                              <Label small>Document Sets</Label>
-                              <div>
-                                <SubLabel>
-                                  <>
-                                    Select which{" "}
-                                    {!user || user.role === "admin" ? (
-                                      <Link
-                                        href="/admin/documents/sets"
-                                        className="font-semibold underline hover:underline text-text"
-                                        target="_blank"
-                                      >
-                                        Document Sets
-                                      </Link>
-                                    ) : (
-                                      "Document Sets"
-                                    )}{" "}
-                                    this Assistant should use to inform its
-                                    responses. If none are specified, the
-                                    Assistant will reference all available
-                                    documents.
-                                  </>
-                                </SubLabel>
+
+                  {searchTool && values.enabled_tools_map[searchTool.id] && (
+                    <div>
+                      {canShowKnowledgeSource && (
+                        <>
+                          <div className="mt-1.5 mb-2.5">
+                            <div className="flex gap-2.5">
+                              <div
+                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                  values.knowledge_source === "team_knowledge"
+                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                }`}
+                                onClick={() =>
+                                  setFieldValue(
+                                    "knowledge_source",
+                                    "team_knowledge"
+                                  )
+                                }
+                              >
+                                <div className="text-blue-500 mb-2">
+                                  <BookIcon size={24} />
+                                </div>
+                                <p className="font-medium text-xs">
+                                  Team Knowledge
+                                </p>
                               </div>
 
-                              {documentSets.length > 0 ? (
-                                <FieldArray
-                                  name="document_set_ids"
-                                  render={(arrayHelpers: ArrayHelpers) => (
-                                    <div>
-                                      <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
-                                        {documentSets.map((documentSet) => (
-                                          <DocumentSetSelectable
-                                            key={documentSet.id}
-                                            documentSet={documentSet}
-                                            isSelected={values.document_set_ids.includes(
-                                              documentSet.id
-                                            )}
-                                            onSelect={() => {
-                                              const index =
-                                                values.document_set_ids.indexOf(
-                                                  documentSet.id
-                                                );
-                                              if (index !== -1) {
-                                                arrayHelpers.remove(index);
-                                              } else {
-                                                arrayHelpers.push(
-                                                  documentSet.id
-                                                );
-                                              }
-                                            }}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
-                                />
-                              ) : (
-                                <p className="text-sm">
-                                  <Link
-                                    href="/admin/documents/sets/new"
-                                    className="text-primary hover:underline"
-                                  >
-                                    + Create Document Set
-                                  </Link>
+                              <div
+                                className={`w-[150px] h-[110px] rounded-lg border flex flex-col items-center justify-center cursor-pointer transition-all ${
+                                  values.knowledge_source === "user_files"
+                                    ? "border-2 border-blue-500 bg-blue-50 dark:bg-blue-950/20"
+                                    : "border-gray-200 hover:border-gray-300 dark:border-gray-700 dark:hover:border-gray-600"
+                                }`}
+                                onClick={() =>
+                                  setFieldValue(
+                                    "knowledge_source",
+                                    "user_files"
+                                  )
+                                }
+                              >
+                                <div className="text-blue-500 mb-2">
+                                  <FileIcon size={24} />
+                                </div>
+                                <p className="font-medium text-xs">
+                                  User Knowledge
                                 </p>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </CollapsibleSection>
-                    )}
+                              </div>
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {values.knowledge_source === "user_files" &&
+                        !existingPersona?.is_default_persona &&
+                        !admin && (
+                          <div className="text-sm flex flex-col items-start">
+                            <SubLabel>
+                              Click below to add documents or folders from the
+                              My Document feature
+                            </SubLabel>
+                            {(selectedFiles.length > 0 ||
+                              selectedFolders.length > 0) && (
+                              <div className="flex flex-wrap mb-2 max-w-sm gap-2">
+                                {selectedFiles.map((file) => (
+                                  <SourceChip
+                                    key={file.id}
+                                    onRemove={() => {}}
+                                    title={file.name}
+                                    icon={<FileIcon size={16} />}
+                                  />
+                                ))}
+                                {selectedFolders.map((folder) => (
+                                  <SourceChip
+                                    key={folder.id}
+                                    onRemove={() => {}}
+                                    title={folder.name}
+                                    icon={<FolderIcon size={16} />}
+                                  />
+                                ))}
+                              </div>
+                            )}
+                            <button
+                              onClick={() => setFilePickerModalOpen(true)}
+                              className="text-primary hover:underline"
+                            >
+                              + Add User Files
+                            </button>
+                          </div>
+                        )}
+
+                      {values.knowledge_source === "team_knowledge" &&
+                        ccPairs.length > 0 && (
+                          <div className="mt-4">
+                            <div>
+                              <SubLabel>
+                                <>
+                                  Select which{" "}
+                                  {!user || user.role === "admin" ? (
+                                    <Link
+                                      href="/admin/documents/sets"
+                                      className="font-semibold underline hover:underline text-text"
+                                      target="_blank"
+                                    >
+                                      Document Sets
+                                    </Link>
+                                  ) : (
+                                    "Team Document Sets"
+                                  )}{" "}
+                                  this Assistant should use to inform its
+                                  responses. If none are specified, the
+                                  Assistant will reference all available
+                                  documents.
+                                </>
+                              </SubLabel>
+                            </div>
+
+                            {documentSets.length > 0 ? (
+                              <FieldArray
+                                name="document_set_ids"
+                                render={(arrayHelpers: ArrayHelpers) => (
+                                  <div>
+                                    <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                                      {documentSets.map((documentSet) => (
+                                        <DocumentSetSelectable
+                                          key={documentSet.id}
+                                          documentSet={documentSet}
+                                          isSelected={values.document_set_ids.includes(
+                                            documentSet.id
+                                          )}
+                                          onSelect={() => {
+                                            const index =
+                                              values.document_set_ids.indexOf(
+                                                documentSet.id
+                                              );
+                                            if (index !== -1) {
+                                              arrayHelpers.remove(index);
+                                            } else {
+                                              arrayHelpers.push(documentSet.id);
+                                            }
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              />
+                            ) : (
+                              <p className="text-sm">
+                                <Link
+                                  href="/admin/documents/sets/new"
+                                  className="text-primary hover:underline"
+                                >
+                                  + Create Document Set
+                                </Link>
+                              </p>
+                            )}
+                          </div>
+                        )}
+                    </div>
+                  )}
 
                   <Separator />
                   <div className="py-2">

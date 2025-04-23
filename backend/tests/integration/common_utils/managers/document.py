@@ -112,7 +112,8 @@ class DocumentManager:
             )
             response.raise_for_status()
 
-        print("Seeding completed successfully.")
+        api_key_id = api_key.api_key_id if api_key else ""
+        print(f"Seeding docs for api_key_id={api_key_id} completed successfully.")
         return [
             SimpleTestDocument(
                 id=document["document"]["id"],
@@ -140,7 +141,8 @@ class DocumentManager:
         )
         response.raise_for_status()
 
-        print("Seeding completed successfully.")
+        api_key_id = api_key.api_key_id if api_key else ""
+        print(f"Seeding doc for api_key_id={api_key_id} completed successfully.")
 
         return SimpleTestDocument(
             id=document["document"]["id"],
@@ -165,8 +167,12 @@ class DocumentManager:
             doc["fields"]["document_id"]: doc["fields"] for doc in retrieved_docs_dict
         }
 
+        # NOTE(rkuo): too much log spam
         # Left this here for debugging purposes.
         # import json
+
+        # print("DEBUGGING DOCUMENTS")
+        # print(retrieved_docs)
         # for doc in retrieved_docs.values():
         #     printable_doc = doc.copy()
         #     print(printable_doc.keys())
@@ -178,6 +184,9 @@ class DocumentManager:
             retrieved_doc = retrieved_docs.get(document.id)
             if not retrieved_doc:
                 if not verify_deleted:
+                    print(f"Document not found: {document.id}")
+                    print(retrieved_docs.keys())
+                    print(retrieved_docs.values())
                     raise ValueError(f"Document not found: {document.id}")
                 continue
             if verify_deleted:
@@ -224,6 +233,11 @@ class DocumentManager:
         for doc_dict in retrieved_docs_dict:
             doc_id = doc_dict["fields"]["document_id"]
             doc_content = doc_dict["fields"]["content"]
-            final_docs.append(SimpleTestDocument(id=doc_id, content=doc_content))
+            image_file_name = doc_dict["fields"].get("image_file_name", None)
+            final_docs.append(
+                SimpleTestDocument(
+                    id=doc_id, content=doc_content, image_file_name=image_file_name
+                )
+            )
 
         return final_docs

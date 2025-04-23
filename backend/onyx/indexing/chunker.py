@@ -1,7 +1,10 @@
+from onyx.configs.app_configs import AVERAGE_SUMMARY_EMBEDDINGS
 from onyx.configs.app_configs import BLURB_SIZE
 from onyx.configs.app_configs import LARGE_CHUNK_RATIO
 from onyx.configs.app_configs import MINI_CHUNK_SIZE
 from onyx.configs.app_configs import SKIP_METADATA_IN_CHUNK
+from onyx.configs.app_configs import USE_CHUNK_SUMMARY
+from onyx.configs.app_configs import USE_DOCUMENT_SUMMARY
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import RETURN_SEPARATOR
 from onyx.configs.constants import SECTION_SEPARATOR
@@ -13,6 +16,7 @@ from onyx.connectors.models import IndexingDocument
 from onyx.connectors.models import Section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.indexing.models import DocAwareChunk
+from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import clean_text
@@ -82,6 +86,9 @@ def _combine_chunks(chunks: list[DocAwareChunk], large_chunk_id: int) -> DocAwar
         large_chunk_reference_ids=[chunk.chunk_id for chunk in chunks],
         mini_chunk_texts=None,
         large_chunk_id=large_chunk_id,
+        chunk_context="",
+        doc_summary="",
+        contextual_rag_reserved_tokens=0,
     )
 
     offset = 0
@@ -120,6 +127,7 @@ class Chunker:
         tokenizer: BaseTokenizer,
         enable_multipass: bool = False,
         enable_large_chunks: bool = False,
+        enable_contextual_rag: bool = False,
         blurb_size: int = BLURB_SIZE,
         include_metadata: bool = not SKIP_METADATA_IN_CHUNK,
         chunk_token_limit: int = DOC_EMBEDDING_CONTEXT_SIZE,
@@ -127,14 +135,26 @@ class Chunker:
         mini_chunk_size: int = MINI_CHUNK_SIZE,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> None:
-        from llama_index.text_splitter import SentenceSplitter
+        # importing llama_index uses a lot of RAM, so we only import it when needed.
+        from llama_index.core.node_parser import SentenceSplitter
 
         self.include_metadata = include_metadata
         self.chunk_token_limit = chunk_token_limit
         self.enable_multipass = enable_multipass
         self.enable_large_chunks = enable_large_chunks
+        self.enable_contextual_rag = enable_contextual_rag
+        if enable_contextual_rag:
+            assert (
+                USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY
+            ), "Contextual RAG requires at least one of chunk summary and document summary enabled"
+        self.default_contextual_rag_reserved_tokens = MAX_CONTEXT_TOKENS * (
+            int(USE_CHUNK_SUMMARY) + int(USE_DOCUMENT_SUMMARY)
+        )
         self.tokenizer = tokenizer
         self.callback = callback
+
+        self.max_context = 0
+        self.prompt_tokens = 0
 
         self.blurb_splitter = SentenceSplitter(
             tokenizer=tokenizer.tokenize,
@@ -221,29 +241,11 @@ class Chunker:
             metadata_suffix_keyword=metadata_suffix_keyword,
             mini_chunk_texts=self._get_mini_chunk_texts(text),
             large_chunk_id=None,
+            doc_summary="",
+            chunk_context="",
+            contextual_rag_reserved_tokens=0,  # set per-document in _handle_single_document
         )
         chunks_list.append(new_chunk)
-
-    def _chunk_document(
-        self,
-        document: IndexingDocument,
-        title_prefix: str,
-        metadata_suffix_semantic: str,
-        metadata_suffix_keyword: str,
-        content_token_limit: int,
-    ) -> list[DocAwareChunk]:
-        """
-        Legacy method for backward compatibility.
-        Calls _chunk_document_with_sections with document.sections.
-        """
-        return self._chunk_document_with_sections(
-            document,
-            document.processed_sections,
-            title_prefix,
-            metadata_suffix_semantic,
-            metadata_suffix_keyword,
-            content_token_limit,
-        )
 
     def _chunk_document_with_sections(
         self,
@@ -264,7 +266,7 @@ class Chunker:
 
         for section_idx, section in enumerate(sections):
             # Get section text and other attributes
-            section_text = clean_text(section.text or "")
+            section_text = clean_text(str(section.text or ""))
             section_link_text = section.link or ""
             image_url = section.image_file_name
 
@@ -309,7 +311,7 @@ class Chunker:
                 continue
 
             # CASE 2: Normal text section
-            section_token_count = len(self.tokenizer.tokenize(section_text))
+            section_token_count = len(self.tokenizer.encode(section_text))
 
             # If the section is large on its own, split it separately
             if section_token_count > content_token_limit:
@@ -332,8 +334,7 @@ class Chunker:
                     # If even the split_text is bigger than strict limit, further split
                     if (
                         STRICT_CHUNK_TOKEN_LIMIT
-                        and len(self.tokenizer.tokenize(split_text))
-                        > content_token_limit
+                        and len(self.tokenizer.encode(split_text)) > content_token_limit
                     ):
                         smaller_chunks = self._split_oversized_chunk(
                             split_text, content_token_limit
@@ -363,10 +364,10 @@ class Chunker:
                 continue
 
             # If we can still fit this section into the current chunk, do so
-            current_token_count = len(self.tokenizer.tokenize(chunk_text))
+            current_token_count = len(self.tokenizer.encode(chunk_text))
             current_offset = len(shared_precompare_cleanup(chunk_text))
             next_section_tokens = (
-                len(self.tokenizer.tokenize(SECTION_SEPARATOR)) + section_token_count
+                len(self.tokenizer.encode(SECTION_SEPARATOR)) + section_token_count
             )
 
             if next_section_tokens + current_token_count <= content_token_limit:
@@ -414,7 +415,7 @@ class Chunker:
         # Title prep
         title = self._extract_blurb(document.get_title_for_document_index() or "")
         title_prefix = title + RETURN_SEPARATOR if title else ""
-        title_tokens = len(self.tokenizer.tokenize(title_prefix))
+        title_tokens = len(self.tokenizer.encode(title_prefix))
 
         # Metadata prep
         metadata_suffix_semantic = ""
@@ -427,15 +428,50 @@ class Chunker:
             ) = _get_metadata_suffix_for_document_index(
                 document.metadata, include_separator=True
             )
-            metadata_tokens = len(self.tokenizer.tokenize(metadata_suffix_semantic))
+            metadata_tokens = len(self.tokenizer.encode(metadata_suffix_semantic))
 
         # If metadata is too large, skip it in the semantic content
         if metadata_tokens >= self.chunk_token_limit * MAX_METADATA_PERCENTAGE:
             metadata_suffix_semantic = ""
             metadata_tokens = 0
 
+        single_chunk_fits = True
+        doc_token_count = 0
+        if self.enable_contextual_rag:
+            doc_content = document.get_text_content()
+            tokenized_doc = self.tokenizer.tokenize(doc_content)
+            doc_token_count = len(tokenized_doc)
+
+            # check if doc + title + metadata fits in a single chunk. If so, no need for contextual RAG
+            single_chunk_fits = (
+                doc_token_count + title_tokens + metadata_tokens
+                <= self.chunk_token_limit
+            )
+
+        # expand the size of the context used for contextual rag based on whether chunk context and doc summary are used
+        context_size = 0
+        if (
+            self.enable_contextual_rag
+            and not single_chunk_fits
+            and not AVERAGE_SUMMARY_EMBEDDINGS
+        ):
+            context_size += self.default_contextual_rag_reserved_tokens
+
         # Adjust content token limit to accommodate title + metadata
-        content_token_limit = self.chunk_token_limit - title_tokens - metadata_tokens
+        content_token_limit = (
+            self.chunk_token_limit - title_tokens - metadata_tokens - context_size
+        )
+
+        # first check: if there is not enough actual chunk content when including contextual rag,
+        # then don't do contextual rag
+        if content_token_limit <= CHUNK_MIN_CONTENT:
+            context_size = 0  # Don't do contextual RAG
+            # revert to previous content token limit
+            content_token_limit = (
+                self.chunk_token_limit - title_tokens - metadata_tokens
+            )
+
+        # If there is not enough context remaining then just index the chunk with no prefix/suffix
         if content_token_limit <= CHUNK_MIN_CONTENT:
             # Not enough space left, so revert to full chunk without the prefix
             content_token_limit = self.chunk_token_limit
@@ -458,6 +494,9 @@ class Chunker:
         if self.enable_multipass and self.enable_large_chunks:
             large_chunks = generate_large_chunks(normal_chunks)
             normal_chunks.extend(large_chunks)
+
+        for chunk in normal_chunks:
+            chunk.contextual_rag_reserved_tokens = context_size
 
         return normal_chunks
 

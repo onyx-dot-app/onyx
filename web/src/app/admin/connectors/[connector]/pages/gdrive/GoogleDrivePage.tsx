@@ -1,10 +1,9 @@
 "use client";
 
 import React from "react";
-import { FetchError } from "@/lib/fetcher";
 import { ErrorCallout } from "@/components/ErrorCallout";
 import { LoadingAnimation } from "@/components/Loading";
-import { PopupSpec, usePopup } from "@/components/admin/connectors/Popup";
+import { PopupSpec } from "@/components/admin/connectors/Popup";
 import { ValidSources } from "@/lib/types";
 import { usePublicCredentials } from "@/lib/hooks";
 import Title from "@/components/ui/title";

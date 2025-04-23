@@ -5,12 +5,21 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 
 # Context variable for the current tenant id
-CURRENT_TENANT_ID_CONTEXTVAR: contextvars.ContextVar[
-    str | None
-] = contextvars.ContextVar(
-    "current_tenant_id", default=None if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA
+CURRENT_TENANT_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
+    contextvars.ContextVar(
+        "current_tenant_id", default=None if MULTI_TENANT else POSTGRES_DEFAULT_SCHEMA
+    )
 )
 
+# set by every route in the API server
+INDEXING_REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = (
+    contextvars.ContextVar("indexing_request_id", default=None)
+)
+
+# set by every route in the API server
+ONYX_REQUEST_ID_CONTEXTVAR: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "onyx_request_id", default=None
+)
 
 """Utils related to contextvars"""
 

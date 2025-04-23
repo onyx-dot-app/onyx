@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from datetime import timedelta
 from urllib.parse import urlencode
@@ -100,9 +101,11 @@ class IndexAttemptManager:
         )
         response = requests.get(
             url=url,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         data = response.json()
@@ -191,7 +194,7 @@ class IndexAttemptManager:
         user_performing_action: DATestUser | None = None,
     ) -> None:
         """Wait for an IndexAttempt to complete"""
-        start = datetime.now()
+        start = time.monotonic()
         while True:
             index_attempt = IndexAttemptManager.get_index_attempt_by_id(
                 index_attempt_id=index_attempt_id,
@@ -203,7 +206,7 @@ class IndexAttemptManager:
                 print(f"IndexAttempt {index_attempt_id} completed")
                 return
 
-            elapsed = (datetime.now() - start).total_seconds()
+            elapsed = time.monotonic() - start
             if elapsed > timeout:
                 raise TimeoutError(
                     f"IndexAttempt {index_attempt_id} did not complete within {timeout} seconds"
@@ -225,9 +228,11 @@ class IndexAttemptManager:
             url += "&include_resolved=true"
         response = requests.get(
             url=url,
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         data = response.json()

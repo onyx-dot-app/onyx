@@ -173,11 +173,13 @@ class CompareAnalysis:
                     changes.append(
                         {
                             "previous_rank": pos,
-                            "new_rank": pos
-                            if content_key == "score"
-                            else {
-                                "x": k for k, v in new_content.items() if v == data
-                            }.get("x", "not_ranked"),
+                            "new_rank": (
+                                pos
+                                if content_key == "score"
+                                else {
+                                    "x": k for k, v in new_content.items() if v == data
+                                }.get("x", "not_ranked")
+                            ),
                             "document_id": self._previous_content[pos]["document_id"],
                             "previous_score": self._previous_content[pos]["score"],
                             "new_score": self._new_content[pos]["score"],
@@ -186,7 +188,9 @@ class CompareAnalysis:
                     )
         return changes
 
-    def check_config_changes(self, previous_doc_rank: int, new_doc_rank: int) -> None:
+    def check_config_changes(
+        self, previous_doc_rank: int | str, new_doc_rank: int
+    ) -> None:
         """Try to identify possible reasons why a change has been detected by
             checking the latest document update date or the boost value.
 
@@ -194,7 +198,7 @@ class CompareAnalysis:
             previous_doc_rank (int): The document rank for the previous analysis
             new_doc_rank (int): The document rank for the new analysis
         """
-        if new_doc_rank == "not_ranked":
+        if isinstance(new_doc_rank, str) and new_doc_rank == "not_ranked":
             color_output(
                 (
                     "NOTE: The document is missing in the 'current' analysis file. "

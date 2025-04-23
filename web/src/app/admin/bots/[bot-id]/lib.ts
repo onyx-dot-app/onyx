@@ -1,8 +1,4 @@
-import {
-  ChannelConfig,
-  SlackBotResponseType,
-  SlackBotTokens,
-} from "@/lib/types";
+import { SlackBotResponseType } from "@/lib/types";
 import { Persona } from "@/app/admin/assistants/interfaces";
 
 interface SlackChannelConfigCreationRequest {

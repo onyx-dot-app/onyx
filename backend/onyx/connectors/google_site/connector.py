@@ -77,7 +77,7 @@ class GoogleSitesConnector(LoadConnector):
         # load the HTML files
         files = load_files_from_zip(file_content_io)
         count = 0
-        for file_info, file_io, _metadata in files:
+        for file_info, file_io in files:
             # skip non-published files
             if "/PUBLISHED/" not in file_info.filename:
                 continue
@@ -119,9 +119,11 @@ class GoogleSitesConnector(LoadConnector):
                     semantic_identifier=title,
                     sections=[
                         TextSection(
-                            link=(self.base_url.rstrip("/") + "/" + path.lstrip("/"))
-                            if path
-                            else "",
+                            link=(
+                                (self.base_url.rstrip("/") + "/" + path.lstrip("/"))
+                                if path
+                                else ""
+                            ),
                             text=parsed_html.cleaned_text,
                         )
                     ],

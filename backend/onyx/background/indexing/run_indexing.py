@@ -56,9 +56,9 @@ from onyx.indexing.indexing_pipeline import build_indexing_pipeline
 from onyx.natural_language_processing.search_nlp_models import (
     InformationContentClassificationModel,
 )
-from onyx.redis.redis_connector import RedisConnector
 from onyx.utils.logger import setup_logger
 from onyx.utils.logger import TaskAttemptSingleton
+from onyx.utils.middleware import make_randomized_onyx_request_id
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
@@ -274,7 +274,6 @@ def _run_indexing(
                 "Search settings must be set for indexing. This should not be possible."
             )
 
-        # search_settings = index_attempt_start.search_settings
         db_connector = index_attempt_start.connector_credential_pair.connector
         db_credential = index_attempt_start.connector_credential_pair.credential
         ctx = RunIndexingContext(
@@ -381,6 +380,7 @@ def _run_indexing(
     memory_tracer.start()
 
     index_attempt_md = IndexAttemptMetadata(
+        attempt_id=index_attempt_id,
         connector_id=ctx.connector_id,
         credential_id=ctx.credential_id,
     )
@@ -407,8 +407,12 @@ def _run_indexing(
 
             # don't use a checkpoint if we're explicitly indexing from
             # the beginning in order to avoid weird interactions between
-            # checkpointing / failure handling.
-            if index_attempt.from_beginning:
+            # checkpointing / failure handling
+            # OR
+            # if the last attempt was successful
+            if index_attempt.from_beginning or (
+                most_recent_attempt and most_recent_attempt.status.is_successful()
+            ):
                 checkpoint = connector_runner.connector.build_dummy_checkpoint()
             else:
                 checkpoint = get_latest_valid_checkpoint(
@@ -425,9 +429,9 @@ def _run_indexing(
                 unresolved_only=True,
                 db_session=db_session_temp,
             )
-            doc_id_to_unresolved_errors: dict[
-                str, list[IndexAttemptError]
-            ] = defaultdict(list)
+            doc_id_to_unresolved_errors: dict[str, list[IndexAttemptError]] = (
+                defaultdict(list)
+            )
             for error in unresolved_errors:
                 if error.document_id:
                     doc_id_to_unresolved_errors[error.document_id].append(error)
@@ -450,6 +454,11 @@ def _run_indexing(
                 if callback:
                     if callback.should_stop():
                         raise ConnectorStopSignal("Connector stop signal detected")
+
+                    # NOTE: this progress callback runs on every loop. We've seen cases
+                    # where we loop many times with no new documents and eventually time
+                    # out, so only doing the callback after indexing isn't sufficient.
+                    callback.progress("_run_indexing", 0)
 
                 # TODO: should we move this into the above callback instead?
                 with get_session_with_current_tenant() as db_session_temp:
@@ -483,6 +492,8 @@ def _run_indexing(
 
                 batch_description = []
 
+                # Generate an ID that can be used to correlate activity between here
+                # and the embedding model server
                 doc_batch_cleaned = strip_null_characters(document_batch)
                 for doc in doc_batch_cleaned:
                     batch_description.append(doc.to_short_descriptor())
@@ -504,6 +515,10 @@ def _run_indexing(
 
                 logger.debug(f"Indexing batch of documents: {batch_description}")
 
+                index_attempt_md.request_id = make_randomized_onyx_request_id("CIX")
+                index_attempt_md.structured_id = (
+                    f"{tenant_id}:{ctx.cc_pair_id}:{index_attempt_id}:{batch_num}"
+                )
                 index_attempt_md.batch_num = batch_num + 1  # use 1-index for this
 
                 # real work happens here!
@@ -579,11 +594,8 @@ def _run_indexing(
                     data={
                         "index_attempt_id": index_attempt_id,
                         "cc_pair_id": ctx.cc_pair_id,
-                        "connector_id": ctx.connector_id,
-                        "credential_id": ctx.credential_id,
-                        "total_docs_indexed": document_count,
-                        "total_chunks": chunk_count,
-                        "batch_num": batch_num,
+                        "current_docs_indexed": document_count,
+                        "current_chunks_indexed": chunk_count,
                         "source": ctx.source.value,
                     },
                     tenant_id=tenant_id,
@@ -604,26 +616,15 @@ def _run_indexing(
                     checkpoint=checkpoint,
                 )
 
-        # Add telemetry for completed indexing
-        redis_connector = RedisConnector(tenant_id, ctx.cc_pair_id)
-        redis_connector_index = redis_connector.new_index(
-            index_attempt_start.search_settings_id
-        )
-        final_progress = redis_connector_index.get_progress() or 0
-
         optional_telemetry(
             record_type=RecordType.INDEXING_COMPLETE,
             data={
                 "index_attempt_id": index_attempt_id,
                 "cc_pair_id": ctx.cc_pair_id,
-                "connector_id": ctx.connector_id,
-                "credential_id": ctx.credential_id,
                 "total_docs_indexed": document_count,
                 "total_chunks": chunk_count,
-                "batch_count": batch_num,
                 "time_elapsed_seconds": time.monotonic() - start_time,
                 "source": ctx.source.value,
-                "redis_progress": final_progress,
             },
             tenant_id=tenant_id,
         )
@@ -638,6 +639,9 @@ def _run_indexing(
             # and mark the CCPair as invalid. This prevents the connector from being
             # used in the future until the credentials are updated.
             with get_session_with_current_tenant() as db_session_temp:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to validation error."
+                )
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session_temp,
@@ -684,6 +688,9 @@ def _run_indexing(
 
         elif isinstance(e, ConnectorStopSignal):
             with get_session_with_current_tenant() as db_session_temp:
+                logger.exception(
+                    f"Marking attempt {index_attempt_id} as canceled due to stop signal."
+                )
                 mark_attempt_canceled(
                     index_attempt_id,
                     db_session_temp,
@@ -746,6 +753,7 @@ def _run_indexing(
                 f"Connector succeeded: "
                 f"docs={document_count} chunks={chunk_count} elapsed={elapsed_time:.2f}s"
             )
+
         else:
             mark_attempt_partially_succeeded(index_attempt_id, db_session_temp)
             logger.info(

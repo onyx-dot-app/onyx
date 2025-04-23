@@ -14,7 +14,6 @@ from ee.onyx.server.query_and_chat.models import (
     BasicCreateChatMessageWithHistoryRequest,
 )
 from ee.onyx.server.query_and_chat.models import ChatBasicResponse
-from ee.onyx.server.query_and_chat.models import SimpleDoc
 from onyx.auth.users import current_user
 from onyx.chat.chat_utils import combine_message_thread
 from onyx.chat.chat_utils import create_chat_chain
@@ -44,7 +43,6 @@ from onyx.db.chat import get_or_create_root_message
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.llm.factory import get_llms_for_persona
-from onyx.llm.utils import get_max_input_tokens
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.secondary_llm_flows.query_expansion import thread_based_query_rephrase
 from onyx.server.query_and_chat.models import ChatMessageDetail
@@ -54,25 +52,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 router = APIRouter(prefix="/chat")
-
-
-def _translate_doc_response_to_simple_doc(
-    doc_response: QADocsResponse,
-) -> list[SimpleDoc]:
-    return [
-        SimpleDoc(
-            id=doc.document_id,
-            semantic_identifier=doc.semantic_identifier,
-            link=doc.link,
-            blurb=doc.blurb,
-            match_highlights=[
-                highlight for highlight in doc.match_highlights if highlight
-            ],
-            source_type=doc.source_type,
-            metadata=doc.metadata,
-        )
-        for doc in doc_response.top_documents
-    ]
 
 
 def _get_final_context_doc_indices(
@@ -110,9 +89,6 @@ def _convert_packet_stream_to_response(
             answer += packet.answer_piece
         elif isinstance(packet, QADocsResponse):
             response.top_documents = packet.top_documents
-
-            # TODO: deprecate `simple_search_docs`
-            response.simple_search_docs = _translate_doc_response_to_simple_doc(packet)
 
             # This is a no-op if agent_sub_questions hasn't already been filled
             if packet.level is not None and packet.level_question_num is not None:
@@ -362,10 +338,7 @@ def handle_send_message_simple_with_history(
         provider_type=llm.config.model_provider,
     )
 
-    input_tokens = get_max_input_tokens(
-        model_name=llm.config.model_name, model_provider=llm.config.model_provider
-    )
-    max_history_tokens = int(input_tokens * CHAT_TARGET_CHUNK_PERCENTAGE)
+    max_history_tokens = int(llm.config.max_input_tokens * CHAT_TARGET_CHUNK_PERCENTAGE)
 
     # Every chat Session begins with an empty root message
     root_message = get_or_create_root_message(

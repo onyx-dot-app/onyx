@@ -14,7 +14,6 @@ from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_number_of_tokens
-from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 from onyx.prompts.constants import DEFAULT_IGNORE_STATEMENT
@@ -59,7 +58,6 @@ def compute_max_document_tokens(
     llm_config: LLMConfig,
     actual_user_input: str | None = None,
     tool_token_count: int = 0,
-    max_llm_token_override: int | None = None,
 ) -> int:
     """Estimates the number of tokens available for context documents. Formula is roughly:
 
@@ -73,13 +71,6 @@ def compute_max_document_tokens(
     arbitrary "upper bound".
     """
     # if we can't find a number of tokens, just assume some common default
-    max_input_tokens = (
-        max_llm_token_override
-        if max_llm_token_override
-        else get_max_input_tokens(
-            model_name=llm_config.model_name, model_provider=llm_config.model_provider
-        )
-    )
     prompt_tokens = get_prompt_tokens(prompt_config)
 
     user_input_tokens = (
@@ -89,7 +80,7 @@ def compute_max_document_tokens(
     )
 
     return (
-        max_input_tokens
+        llm_config.max_input_tokens
         - prompt_tokens
         - user_input_tokens
         - tool_token_count
@@ -101,24 +92,18 @@ def compute_max_document_tokens_for_persona(
     db_session: Session,
     persona: Persona,
     actual_user_input: str | None = None,
-    max_llm_token_override: int | None = None,
 ) -> int:
     prompt = persona.prompts[0] if persona.prompts else get_default_prompt(db_session)
     return compute_max_document_tokens(
         prompt_config=PromptConfig.from_model(prompt),
         llm_config=get_main_llm_from_tuple(get_llms_for_persona(persona)).config,
         actual_user_input=actual_user_input,
-        max_llm_token_override=max_llm_token_override,
     )
 
 
 def compute_max_llm_input_tokens(llm_config: LLMConfig) -> int:
     """Maximum tokens allows in the input to the LLM (of any type)."""
-
-    input_tokens = get_max_input_tokens(
-        model_name=llm_config.model_name, model_provider=llm_config.model_provider
-    )
-    return input_tokens - _MISC_BUFFER
+    return llm_config.max_input_tokens - _MISC_BUFFER
 
 
 def build_citations_system_message(
@@ -175,9 +160,11 @@ def build_citations_user_message(
 
     user_prompt = user_prompt.strip()
     user_msg = HumanMessage(
-        content=build_content_with_imgs(user_prompt, img_urls=img_urls)
-        if img_urls
-        else user_prompt
+        content=(
+            build_content_with_imgs(user_prompt, img_urls=img_urls)
+            if img_urls
+            else user_prompt
+        )
     )
 
     return user_msg

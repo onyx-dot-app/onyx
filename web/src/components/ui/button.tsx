@@ -11,6 +11,7 @@ const buttonVariants = cva(
       variant: {
         agent:
           "bg-agent text-white hover:bg-agent-hovered dark:bg-agent dark:text-white dark:hover:bg-agent/90",
+        menu: "w-full justify-start text-neutral-500 !gap-x-2 !py-0 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-50",
         success:
           "bg-green-100 text-green-600 hover:bg-green-500/90 dark:bg-green-700 dark:text-green-100 dark:hover:bg-green-600/90",
         "success-reverse":
@@ -55,11 +56,30 @@ const buttonVariants = cva(
         next: "bg-neutral-700 text-neutral-50 hover:bg-neutral-700/90 dark:bg-neutral-300 dark:text-neutral-900 dark:hover:bg-neutral-400",
         "next-reverse":
           "bg-neutral-50 text-neutral-700 hover:bg-neutral-50/90 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700",
+        "time-day":
+          "border border-neutral-200 bg-blue-50/70 text-blue-700 hover:bg-blue-50 hover:border-blue-200 dark:border-blue-900/40 dark:bg-blue-950/30 dark:text-blue-300 dark:hover:bg-blue-950/40 dark:hover:border-blue-900/50",
+        "time-day-selected":
+          "border border-neutral-200 bg-blue-50 text-blue-700 dark:border-blue-900/40 dark:bg-blue-950/40 dark:text-blue-300",
+
+        "time-week":
+          "border border-neutral-200 bg-green-50/70 text-green-700 hover:bg-green-50 hover:border-green-200 dark:border-green-900/40 dark:bg-green-950/30 dark:text-green-300 dark:hover:bg-green-950/40 dark:hover:border-green-900/50",
+        "time-week-selected":
+          "border border-neutral-200 bg-green-50 text-green-700 dark:border-green-900/40 dark:bg-green-950/40 dark:text-green-300",
+
+        "time-month":
+          "border border-neutral-200 bg-purple-50/70 text-purple-700 hover:bg-purple-50 hover:border-purple-200 dark:border-purple-900/40 dark:bg-purple-950/30 dark:text-purple-300 dark:hover:bg-purple-950/40 dark:hover:border-purple-900/50",
+        "time-month-selected":
+          "border border-neutral-200 bg-purple-50 text-purple-700 dark:border-purple-900/40 dark:bg-purple-950/40 dark:text-purple-300",
+
+        "time-all":
+          "border border-neutral-200 bg-red-50/70 text-red-700 hover:bg-red-50 hover:border-red-200 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 dark:hover:bg-red-950/40 dark:hover:border-red-900/50",
+        "time-all-selected":
+          "border border-neutral-200 bg-red-50 text-red-700 dark:border-red-900/40 dark:bg-red-950/40 dark:text-red-300",
       },
       size: {
         default: "h-10 px-4 py-2",
-        xs: "h-8 px-3 py-1",
         sm: "h-9 px-3",
+        xs: "h-7 rounded-md px-2",
         lg: "h-11 px-8",
         icon: "h-10 w-10",
       },
@@ -99,6 +119,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       asChild = false,
       icon: Icon,
       tooltip,
+      disabled,
       ...props
     },
     ref
@@ -114,6 +135,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           })
         )}
         ref={ref}
+        disabled={disabled}
         {...props}
       >
         {Icon && <Icon />}
@@ -125,8 +147,10 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       return (
         <TooltipProvider>
           <Tooltip>
-            <TooltipTrigger>
-              <div>{button}</div>
+            <TooltipTrigger asChild>
+              <div className={disabled ? "cursor-not-allowed" : ""}>
+                {button}
+              </div>
             </TooltipTrigger>
             <TooltipContent showTick={true}>
               <p>{tooltip}</p>

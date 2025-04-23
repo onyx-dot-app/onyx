@@ -13,7 +13,6 @@ import {
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
 import { DocumentSet } from "@/lib/types";
 import { useState } from "react";
 import { useDocumentSets } from "./hooks";
@@ -30,7 +29,6 @@ import {
   FiUnlock,
 } from "react-icons/fi";
 import { DeleteButton } from "@/components/DeleteButton";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TableHeader } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";

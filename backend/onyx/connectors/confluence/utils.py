@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 from typing import TypeVar
 from urllib.parse import parse_qs
 from urllib.parse import quote
+from urllib.parse import urljoin
 from urllib.parse import urlparse
 
 import requests
@@ -33,7 +34,11 @@ from onyx.db.models import PGFileStore
 from onyx.db.pg_file_store import create_populate_lobj
 from onyx.db.pg_file_store import save_bytes_to_pgfilestore
 from onyx.db.pg_file_store import upsert_pgfilestore
-from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import (
+    OnyxExtensionType,
+    extract_file_text,
+    is_accepted_file_ext,
+)
 from onyx.file_processing.file_validation import is_valid_image_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.logger import setup_logger
@@ -58,16 +63,17 @@ def validate_attachment_filetype(
     """
     Validates if the attachment is a supported file type.
     """
-    attachment.get("metadata", {})
     media_type = attachment.get("metadata", {}).get("mediaType", "")
-
     if media_type.startswith("image/"):
         return is_valid_image_type(media_type)
 
     # For non-image files, check if we support the extension
     title = attachment.get("title", "")
     extension = Path(title).suffix.lstrip(".").lower() if "." in title else ""
-    return extension in ["pdf", "doc", "docx", "txt", "md", "rtf"]
+
+    return is_accepted_file_ext(
+        "." + extension, OnyxExtensionType.Plain | OnyxExtensionType.Document
+    )
 
 
 class AttachmentProcessingResult(BaseModel):
@@ -342,9 +348,14 @@ def build_confluence_document_id(
     Returns:
         str: The document id
     """
-    if is_cloud and not base_url.endswith("/wiki"):
-        base_url += "/wiki"
-    return f"{base_url}{content_url}"
+
+    # NOTE: urljoin is tricky and will drop the last segment of the base if it doesn't
+    # end with "/" because it believes that makes it a file.
+    final_url = base_url.rstrip("/") + "/"
+    if is_cloud and not final_url.endswith("/wiki/"):
+        final_url = urljoin(final_url, "wiki") + "/"
+    final_url = urljoin(final_url, content_url.lstrip("/"))
+    return final_url
 
 
 def datetime_from_string(datetime_string: str) -> datetime:
@@ -452,6 +463,19 @@ def _handle_http_error(e: requests.HTTPError, attempt: int) -> int:
     # Check if the response or headers are None to avoid potential AttributeError
     if e.response is None or e.response.headers is None:
         logger.warning("HTTPError with `None` as response or as headers")
+        raise e
+
+    # Confluence Server returns 403 when rate limited
+    if e.response.status_code == 403:
+        FORBIDDEN_MAX_RETRY_ATTEMPTS = 7
+        FORBIDDEN_RETRY_DELAY = 10
+        if attempt < FORBIDDEN_MAX_RETRY_ATTEMPTS:
+            logger.warning(
+                "403 error. This sometimes happens when we hit "
+                f"Confluence rate limits. Retrying in {FORBIDDEN_RETRY_DELAY} seconds..."
+            )
+            return FORBIDDEN_RETRY_DELAY
+
         raise e
 
     if (

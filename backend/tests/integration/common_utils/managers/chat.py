@@ -5,6 +5,7 @@ import requests
 from requests.models import Response
 
 from onyx.context.search.models import RetrievalDetails
+from onyx.context.search.models import SavedSearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
 from onyx.llm.override_models import PromptOverride
@@ -31,9 +32,11 @@ class ChatSessionManager:
         response = requests.post(
             f"{API_SERVER_URL}/chat/create-chat-session",
             json=chat_session_creation_req.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         chat_session_id = response.json()["chat_session_id"]
@@ -75,13 +78,19 @@ class ChatSessionManager:
             use_existing_user_message=use_existing_user_message,
         )
 
+        headers = (
+            user_performing_action.headers
+            if user_performing_action
+            else GENERAL_HEADERS
+        )
+        cookies = user_performing_action.cookies if user_performing_action else None
+
         response = requests.post(
             f"{API_SERVER_URL}/chat/send-message",
             json=chat_message_req.model_dump(),
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=headers,
             stream=True,
+            cookies=cookies,
         )
 
         return ChatSessionManager.analyze_response(response)
@@ -97,17 +106,24 @@ class ChatSessionManager:
         for data in response_data:
             if "rephrased_query" in data:
                 analyzed.rephrased_query = data["rephrased_query"]
-            elif "tool_name" in data:
+            if "tool_name" in data:
                 analyzed.tool_name = data["tool_name"]
                 analyzed.tool_result = (
                     data.get("tool_result")
                     if analyzed.tool_name == "run_search"
                     else None
                 )
-            elif "relevance_summaries" in data:
+            if "relevance_summaries" in data:
                 analyzed.relevance_summaries = data["relevance_summaries"]
-            elif "answer_piece" in data and data["answer_piece"]:
+            if "answer_piece" in data and data["answer_piece"]:
                 analyzed.full_message += data["answer_piece"]
+            if "top_documents" in data:
+                assert (
+                    analyzed.top_documents is None
+                ), "top_documents should only be set once"
+                analyzed.top_documents = [
+                    SavedSearchDoc(**doc) for doc in data["top_documents"]
+                ]
 
         return analyzed
 
@@ -118,9 +134,11 @@ class ChatSessionManager:
     ) -> list[DATestChatMessage]:
         response = requests.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
 
@@ -150,8 +168,10 @@ class ChatSessionManager:
                 "feedback_text": feedback_text,
                 "predefined_feedback": predefined_feedback,
             },
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()

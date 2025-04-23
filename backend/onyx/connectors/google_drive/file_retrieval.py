@@ -4,6 +4,7 @@ from datetime import datetime
 from datetime import timezone
 
 from googleapiclient.discovery import Resource  # type: ignore
+from googleapiclient.errors import HttpError  # type: ignore
 
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.constants import DRIVE_SHORTCUT_TYPE
@@ -25,7 +26,7 @@ FILE_FIELDS = (
     "shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
-    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type), "
+    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type, domain), "
     "permissionIds, webViewLink, owners(emailAddress))"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
@@ -122,25 +123,35 @@ def crawl_folders_for_files(
                 start=start,
                 end=end,
             ):
-                found_files = True
                 logger.info(f"Found file: {file['name']}, user email: {user_email}")
+                found_files = True
                 yield RetrievedDriveFile(
                     drive_file=file,
                     user_email=user_email,
                     parent_id=parent_id,
                     completion_stage=DriveRetrievalStage.FOLDER_FILES,
                 )
+            # Only mark a folder as done if it was fully traversed without errors
+            # This usually indicates that the owner of the folder was impersonated.
+            # In cases where this never happens, most likely the folder owner is
+            # not part of the google workspace in question (or for oauth, the authenticated
+            # user doesn't own the folder)
+            if found_files:
+                update_traversed_ids_func(parent_id)
         except Exception as e:
-            logger.error(f"Error getting files in parent {parent_id}: {e}")
-            yield RetrievedDriveFile(
-                drive_file=file,
-                user_email=user_email,
-                parent_id=parent_id,
-                completion_stage=DriveRetrievalStage.FOLDER_FILES,
-                error=e,
-            )
-        if found_files:
-            update_traversed_ids_func(parent_id)
+            if isinstance(e, HttpError) and e.status_code == 403:
+                # don't yield an error here because this is expected behavior
+                # when a user doesn't have access to a folder
+                logger.debug(f"Error getting files in parent {parent_id}: {e}")
+            else:
+                logger.error(f"Error getting files in parent {parent_id}: {e}")
+                yield RetrievedDriveFile(
+                    drive_file=file,
+                    user_email=user_email,
+                    parent_id=parent_id,
+                    completion_stage=DriveRetrievalStage.FOLDER_FILES,
+                    error=e,
+                )
     else:
         logger.info(f"Skipping subfolder files since already traversed: {parent_id}")
 
@@ -214,10 +225,11 @@ def get_files_in_shared_drive(
         yield file
 
 
-def get_all_files_in_my_drive(
+def get_all_files_in_my_drive_and_shared(
     service: GoogleDriveService,
     update_traversed_ids_func: Callable,
     is_slim: bool,
+    include_shared_with_me: bool,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> Iterator[GoogleDriveFileType]:
@@ -229,7 +241,8 @@ def get_all_files_in_my_drive(
     # Get all folders being queried and add them to the traversed set
     folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
     folder_query += " and trashed = false"
-    folder_query += " and 'me' in owners"
+    if not include_shared_with_me:
+        folder_query += " and 'me' in owners"
     found_folders = False
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -246,7 +259,8 @@ def get_all_files_in_my_drive(
     # Then get the files
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
     file_query += " and trashed = false"
-    file_query += " and 'me' in owners"
+    if not include_shared_with_me:
+        file_query += " and 'me' in owners"
     file_query += _generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,

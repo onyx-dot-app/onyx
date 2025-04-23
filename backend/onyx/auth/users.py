@@ -56,6 +56,7 @@ from httpx_oauth.oauth2 import OAuth2Token
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ee.onyx.configs.app_configs import ANONYMOUS_USER_COOKIE_NAME
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.email_utils import send_forgot_password_email
 from onyx.auth.email_utils import send_user_verification_email
@@ -104,6 +105,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
+from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -319,7 +321,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             except exceptions.UserAlreadyExists:
                 user = await self.get_by_email(user_create.email)
                 # Handle case where user has used product outside of web and is now creating an account through web
-                if not user.role.is_web_login() and user_create.role.is_web_login():
+
+                if (
+                    not user.role.is_web_login()
+                    and isinstance(user_create, UserCreate)
+                    and user_create.role.is_web_login()
+                ):
                     user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
@@ -360,9 +367,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 reason="Password must contain at least one special character from the following set: "
                 f"{PASSWORD_SPECIAL_CHARS}."
             )
-
         return
 
+    @log_function_time(print_only=True)
     async def oauth_callback(
         self,
         oauth_name: str,
@@ -514,6 +521,25 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             return user
 
+    async def on_after_login(
+        self,
+        user: User,
+        request: Optional[Request] = None,
+        response: Optional[Response] = None,
+    ) -> None:
+        try:
+            if response and request and ANONYMOUS_USER_COOKIE_NAME in request.cookies:
+                response.delete_cookie(
+                    ANONYMOUS_USER_COOKIE_NAME,
+                    # Ensure cookie deletion doesn't override other cookies by setting the same path/domain
+                    path="/",
+                    domain=None,
+                    secure=WEB_DOMAIN.startswith("https"),
+                )
+                logger.debug(f"Deleted anonymous user cookie for user {user.email}")
+        except Exception:
+            logger.exception("Error deleting anonymous user cookie")
+
     async def on_after_register(
         self, user: User, request: Optional[Request] = None
     ) -> None:
@@ -590,6 +616,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             user.email, token, new_organization=user_count == 1
         )
 
+    @log_function_time(print_only=True)
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -1216,6 +1243,7 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
+    @log_function_time(print_only=True)
     @router.get(
         "/callback",
         name=callback_route_name,
@@ -1303,6 +1331,7 @@ def get_oauth_router(
         # Login user
         response = await backend.login(strategy, user)
         await user_manager.on_after_login(user, request, response)
+
         # Prepare redirect response
         if tenant_id is None:
             # Use URL utility to add parameters
@@ -1312,9 +1341,14 @@ def get_oauth_router(
             # No parameters to add
             redirect_response = RedirectResponse(next_url, status_code=302)
 
-        # Copy headers and other attributes from 'response' to 'redirect_response'
+        # Copy headers from auth response to redirect response, with special handling for Set-Cookie
         for header_name, header_value in response.headers.items():
-            redirect_response.headers[header_name] = header_value
+            # FastAPI can have multiple Set-Cookie headers as a list
+            if header_name.lower() == "set-cookie" and isinstance(header_value, list):
+                for cookie_value in header_value:
+                    redirect_response.headers.append(header_name, cookie_value)
+            else:
+                redirect_response.headers[header_name] = header_value
 
         if hasattr(response, "body"):
             redirect_response.body = response.body

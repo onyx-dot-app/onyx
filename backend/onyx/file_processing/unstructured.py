@@ -37,6 +37,7 @@ def delete_unstructured_api_key() -> None:
 def _sdk_partition_request(
     file: IO[Any], file_name: str, **kwargs: Any
 ) -> operations.PartitionRequest:
+    file.seek(0, 0)
     try:
         request = operations.PartitionRequest(
             partition_parameters=shared.PartitionParameters(

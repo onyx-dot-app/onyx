@@ -1,0 +1,327 @@
+schema {{ schema_name }} {
+    document {{ schema_name }} {
+        {% if multi_tenant %}
+        field tenant_id type string {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        {% endif %}
+        # Not to be confused with the UUID generated for this chunk which is called documentid by default
+        field document_id type string {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field chunk_id type int {
+            indexing: summary | attribute
+        }
+        # Displayed in the UI as the main identifier for the doc
+        field semantic_identifier type string {
+            indexing: summary | attribute
+        }
+        # Must have an additional field for whether to skip title embeddings
+        # This information cannot be extracted from either the title field nor title embedding
+        field skip_title type bool {
+            indexing: attribute 
+        }
+        # May not always match the `semantic_identifier` e.g. for Slack docs the
+        # `semantic_identifier` will be the channel name, but the `title` will be empty
+        field title type string {
+            indexing: summary | index | attribute
+            index: enable-bm25
+        }
+        field content type string {
+            indexing: summary | index
+            index: enable-bm25
+        }
+        # duplication of `content` is far from ideal, but is needed for 
+        # non-gram based highlighting for now. If the capability to re-use a 
+        # single field to do both is added, `content_summary` should be removed
+        field content_summary type string {
+            indexing: summary | index
+            summary: dynamic
+        }
+        # Title embedding (x1)
+        field title_embedding type tensor<{{ embedding_precision }}>(x[{{ dim }}]) {
+            indexing: attribute | index
+            attribute {
+                distance-metric: angular
+            }
+        }
+        # Content embeddings (chunk + optional mini chunks embeddings)
+        # "t" and "x" are arbitrary names, not special keywords
+        field embeddings type tensor<{{ embedding_precision }}>(t{},x[{{ dim }}]) {
+            indexing: attribute | index
+            attribute {
+                distance-metric: angular
+            }
+        }
+        # Starting section of the doc, currently unused as it has been replaced by match highlighting
+        field blurb type string {
+            indexing: summary | attribute
+        }
+        field image_file_name type string {
+            indexing: summary | attribute
+        }
+        # https://docs.vespa.ai/en/attributes.html potential enum store for speed, but probably not worth it
+        field source_type type string {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        # Can also index links https://docs.vespa.ai/en/reference/schema-reference.html#attribute
+        # URL type matching
+        field source_links type string {
+            indexing: summary | attribute
+        }
+        field section_continuation type bool {
+            indexing: summary | attribute
+        }
+        # Technically this one should be int, but can't change without causing breaks to existing index
+        field boost type float {
+            indexing: summary | attribute
+        }
+        field hidden type bool {
+            indexing: summary | attribute
+            rank: filter
+        }
+        # Field to indicate whether a short chunk is a low content chunk
+        field aggregated_chunk_boost_factor type float {
+            indexing: attribute
+        }
+
+        # Needs to have a separate Attribute list for efficient filtering
+        field metadata_list type array<string> {
+            indexing: summary | attribute
+            rank:filter
+            attribute: fast-search
+        }
+        # If chunk is a large chunk, this will contain the ids of the smaller chunks
+        field large_chunk_reference_ids type array<int> {
+            indexing: summary | attribute
+        }
+        field metadata type string {
+            indexing: summary | attribute
+        }
+        field chunk_context type string {
+            indexing: summary | attribute
+        }
+        field doc_summary type string {
+            indexing: summary | attribute
+        }
+        field metadata_suffix type string {
+            indexing: summary | attribute
+        }
+        field doc_updated_at type int {
+            indexing: summary | attribute
+        }
+        field primary_owners type array<string> {
+            indexing: summary | attribute
+        }
+        field secondary_owners type array<string> {
+            indexing: summary | attribute
+        }
+        field access_control_list type weightedset<string> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field document_sets type weightedset<string> {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field user_file type int {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+        field user_folder type int {
+            indexing: summary | attribute
+            rank: filter
+            attribute: fast-search
+        }
+    }
+
+    # If using different tokenization settings, the fieldset has to be removed, and the field must
+    # be specified in the yql like:
+    # + 'or ({grammar: "weakAnd", defaultIndex:"title"}userInput(@query)) '
+    # + 'or ({grammar: "weakAnd", defaultIndex:"content"}userInput(@query)) '
+    # Note: for BM-25, the ngram size (and whether ngrams are used) changes the range of the scores
+    fieldset default {
+        fields: content, title
+    }
+
+    rank-profile default_rank {
+        inputs {
+            query(decay_factor) double
+        }
+
+        function inline document_boost() {
+            # 0.5 to 2x score: piecewise sigmoid function stretched out by factor of 3
+            # meaning requires 3x the number of feedback votes to have default sigmoid effect
+            expression: if(attribute(boost) < 0, 0.5 + (1 / (1 + exp(-attribute(boost) / 3))), 2 / (1 + exp(-attribute(boost) / 3)))
+        }
+
+        function inline document_age() {
+            # Time in years (91.3 days ~= 3 Months ~= 1 fiscal quarter if no age found)
+            expression: max(if(isNan(attribute(doc_updated_at)) == 1, 7890000, now() - attribute(doc_updated_at)) / 31536000, 0)
+        }
+
+        function inline aggregated_chunk_boost() {
+            # Aggregated boost factor, currently only used for information content classification
+            expression: if(isNan(attribute(aggregated_chunk_boost_factor)) == 1, 1.0, attribute(aggregated_chunk_boost_factor))
+        }
+
+        # Document score decays from 1 to 0.75 as age of last updated time increases
+        function inline recency_bias() {
+            expression: max(1 / (1 + query(decay_factor) * document_age), 0.75)
+        }
+
+        match-features: recency_bias
+    }
+
+    rank-profile hybrid_search_semantic_base_{{ dim }} inherits default, default_rank {
+        inputs {
+            query(query_embedding) tensor<float>(x[{{ dim }}])
+        }
+
+        function title_vector_score() {
+            expression {
+                # If no good matching titles, then it should use the context embeddings rather than having some
+                # irrelevant title have a vector score of 1. This way at least it will be the doc with the highest
+                # matching content score getting the full score
+                max(closeness(field, embeddings), closeness(field, title_embedding))
+            }
+        }
+
+        # First phase must be vector to allow hits that have no keyword matches
+        first-phase {
+            expression: query(title_content_ratio) * closeness(field, title_embedding) + (1 - query(title_content_ratio)) * closeness(field, embeddings)
+        }
+
+        # Weighted average between Vector Search and BM-25
+        global-phase {
+            expression {
+                (
+                    # Weighted Vector Similarity Score
+                    (
+                        query(alpha) * (
+                            (query(title_content_ratio) * normalize_linear(title_vector_score))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(closeness(field, embeddings)))
+                        )
+                    )
+
+                    +
+
+                    # Weighted Keyword Similarity Score
+                    # Note: for the BM25 Title score, it requires decent stopword removal in the query
+                    # This needs to be the case so there aren't irrelevant titles being normalized to a score of 1
+                    (
+                        (1 - query(alpha)) * (
+                            (query(title_content_ratio) * normalize_linear(bm25(title)))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(bm25(content)))
+                        )
+                    )
+                )
+                # Boost based on user feedback
+                * document_boost
+                # Decay factor based on time document was last updated
+                * recency_bias
+                # Boost based on aggregated boost calculation
+                * aggregated_chunk_boost
+            }
+            rerank-count: 1000
+        }
+
+        match-features {
+            bm25(title)
+            bm25(content)
+            closeness(field, title_embedding)
+            closeness(field, embeddings)
+            document_boost
+            recency_bias
+            aggregated_chunk_boost
+            closest(embeddings)
+        }
+    }
+
+
+    rank-profile hybrid_search_keyword_base_{{ dim }} inherits default, default_rank {
+        inputs {
+            query(query_embedding) tensor<float>(x[{{ dim }}])
+        }
+
+        function title_vector_score() {
+            expression {
+                # If no good matching titles, then it should use the context embeddings rather than having some
+                # irrelevant title have a vector score of 1. This way at least it will be the doc with the highest
+                # matching content score getting the full score
+                max(closeness(field, embeddings), closeness(field, title_embedding))
+            }
+        }
+
+        # First phase must be vector to allow hits that have no keyword matches
+        first-phase {
+            expression: query(title_content_ratio) * bm25(title) + (1 - query(title_content_ratio)) * bm25(content)
+        }
+
+        # Weighted average between Vector Search and BM-25
+        global-phase {
+            expression {
+                (
+                    # Weighted Vector Similarity Score
+                    (
+                        query(alpha) * (
+                            (query(title_content_ratio) * normalize_linear(title_vector_score))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(closeness(field, embeddings)))
+                        )
+                    )
+
+                    +
+
+                    # Weighted Keyword Similarity Score
+                    # Note: for the BM25 Title score, it requires decent stopword removal in the query
+                    # This needs to be the case so there aren't irrelevant titles being normalized to a score of 1
+                    (
+                        (1 - query(alpha)) * (
+                            (query(title_content_ratio) * normalize_linear(bm25(title)))
+                            +
+                            ((1 - query(title_content_ratio)) * normalize_linear(bm25(content)))
+                        )
+                    )
+                )
+                # Boost based on user feedback
+                * document_boost
+                # Decay factor based on time document was last updated
+                * recency_bias
+                # Boost based on aggregated boost calculation
+                * aggregated_chunk_boost
+            }
+            rerank-count: 1000
+        }
+
+        match-features {
+            bm25(title)
+            bm25(content)
+            closeness(field, title_embedding)
+            closeness(field, embeddings)
+            document_boost
+            recency_bias
+            aggregated_chunk_boost
+            closest(embeddings)
+        }
+    }
+
+    # Used when searching from the admin UI for a specific doc to hide / boost
+    # Very heavily prioritize title
+    rank-profile admin_search inherits default, default_rank {
+        first-phase {
+            expression: bm25(content) + (5 * bm25(title))
+        }
+    }
+}

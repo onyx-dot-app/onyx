@@ -31,6 +31,7 @@ export const submitFiles = async (
   }
 
   const filePaths = responseJson.file_paths as string[];
+  const zipMetadata = responseJson.zip_metadata as Record<string, any>;
 
   const [connectorErrorMsg, connector] = await createConnector<FileConfig>({
     name: "FileConnector-" + Date.now(),
@@ -38,6 +39,7 @@ export const submitFiles = async (
     input_type: "load_state",
     connector_specific_config: {
       file_locations: filePaths,
+      zip_metadata: zipMetadata,
     },
     refresh_freq: null,
     prune_freq: null,

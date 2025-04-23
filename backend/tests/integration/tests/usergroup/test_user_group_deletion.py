@@ -8,6 +8,11 @@ This tests the deletion of a user group with the following foreign key constrain
 - token_rate_limit (Not Implemented)
 - persona
 """
+
+import os
+
+import pytest
+
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -25,6 +30,10 @@ from tests.integration.common_utils.test_models import DATestUserGroup
 from tests.integration.common_utils.vespa import vespa_fixture
 
 
+@pytest.mark.skipif(
+    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    reason="User group tests are enterprise only",
+)
 def test_user_group_deletion(reset: None, vespa_client: vespa_fixture) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")

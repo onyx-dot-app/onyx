@@ -1,18 +1,13 @@
 "use client";
 
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useRef,
-} from "react";
+import React, { createContext, useContext, useState, useEffect } from "react";
 import { User, UserRole } from "@/lib/types";
 import { getCurrentUser } from "@/lib/user";
 import { usePostHog } from "posthog-js/react";
 import { CombinedSettings } from "@/app/admin/settings/interfaces";
 import { SettingsContext } from "../settings/SettingsProvider";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh";
+import { AuthTypeMetadata } from "@/lib/userSS";
 
 interface UserContextType {
   user: User | null;
@@ -33,10 +28,12 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({
+  authTypeMetadata,
   children,
   user,
   settings,
 }: {
+  authTypeMetadata: AuthTypeMetadata;
   children: React.ReactNode;
   user: User | null;
   settings: CombinedSettings;
@@ -102,7 +99,7 @@ export function UserProvider({
   };
 
   // Use the custom token refresh hook
-  useTokenRefresh(upToDateUser, fetchUser);
+  useTokenRefresh(upToDateUser, authTypeMetadata, fetchUser);
 
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {

@@ -17,7 +17,7 @@ from onyx.connectors.cross_connector_utils.miscellaneous_utils import (
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.interfaces import CheckpointConnector
+from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorFailure
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
@@ -353,7 +353,9 @@ class ZendeskConnectorCheckpoint(ConnectorCheckpoint):
     cached_content_tags: dict[str, str] | None
 
 
-class ZendeskConnector(SlimConnector, CheckpointConnector[ZendeskConnectorCheckpoint]):
+class ZendeskConnector(
+    SlimConnector, CheckpointedConnector[ZendeskConnectorCheckpoint]
+):
     def __init__(
         self,
         content_type: str = "articles",

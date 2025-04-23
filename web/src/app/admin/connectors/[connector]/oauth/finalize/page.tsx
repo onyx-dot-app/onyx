@@ -4,13 +4,11 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { Button } from "@/components/ui/button";
-import Title from "@/components/ui/title";
 import { KeyIcon } from "@/components/icons/icons";
 import { getSourceMetadata, isValidSource } from "@/lib/sources";
 import { ConfluenceAccessibleResource, ValidSources } from "@/lib/types";
 import CardSection from "@/components/admin/CardSection";
 import {
-  handleOAuthAuthorizationResponse,
   handleOAuthConfluenceFinalize,
   handleOAuthPrepareFinalization,
 } from "@/lib/oauth_utils";
@@ -74,7 +72,7 @@ export default function OAuthFinalizePage() {
   >([]);
 
   // Extract query parameters
-  const credentialParam = searchParams.get("credential");
+  const credentialParam = searchParams?.get("credential");
   const credential = credentialParam ? parseInt(credentialParam, 10) : NaN;
   const pathname = usePathname();
   const connector = pathname?.split("/")[3];
@@ -85,7 +83,7 @@ export default function OAuthFinalizePage() {
       // connector (url segment)= "google-drive"
       // sourceType (for looking up metadata) = "google_drive"
 
-      if (isNaN(credential)) {
+      if (isNaN(credential) || !connector) {
         setStatusMessage("Improperly formed OAuth finalization request.");
         setStatusDetails("Invalid or missing credential id.");
         setIsError(true);

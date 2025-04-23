@@ -4,6 +4,7 @@ not follow the expected behavior, etc.
 
 NOTE: cannot use Celery directly due to
 https://github.com/celery/celery/issues/7007#issuecomment-1740139367"""
+
 import multiprocessing as mp
 import sys
 import traceback
@@ -16,7 +17,7 @@ from typing import Optional
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine import SqlEngine
-from onyx.setup import setup_logger
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.configs import TENANT_ID_PREFIX
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

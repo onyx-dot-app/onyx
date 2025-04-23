@@ -1,4 +1,5 @@
 from typing import Any
+from typing import cast
 
 from celery import Celery
 from celery import signals
@@ -59,7 +60,8 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
     logger.info("worker_init signal received.")
 
     SqlEngine.set_app_name(POSTGRES_CELERY_WORKER_HEAVY_APP_NAME)
-    SqlEngine.init_engine(pool_size=sender.concurrency, max_overflow=8)  # type: ignore
+    pool_size = cast(int, sender.concurrency)  # type: ignore
+    SqlEngine.init_engine(pool_size=pool_size, max_overflow=8)
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)

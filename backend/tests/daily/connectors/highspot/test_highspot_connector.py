@@ -1,7 +1,10 @@
 import json
 import os
 import time
+from datetime import datetime
 from pathlib import Path
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
 import pytest
 
@@ -40,10 +43,13 @@ def highspot_connector() -> HighspotConnector:
     return connector
 
 
-@pytest.mark.xfail(
-    reason="Accessing postgres that isn't available in connector only tests",
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
 )
-def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None:
+def test_highspot_connector_basic(
+    mock_get_api_key: MagicMock, highspot_connector: HighspotConnector
+) -> None:
     """Test basic functionality of the Highspot connector."""
     all_docs: list[Document] = []
     test_data = load_test_data()
@@ -76,10 +82,13 @@ def test_highspot_connector_basic(highspot_connector: HighspotConnector) -> None
         assert len(section.text) > 0
 
 
-@pytest.mark.xfail(
-    reason="Possibly accessing postgres that isn't available in connector only tests",
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
 )
-def test_highspot_connector_slim(highspot_connector: HighspotConnector) -> None:
+def test_highspot_connector_slim(
+    mock_get_api_key: MagicMock, highspot_connector: HighspotConnector
+) -> None:
     """Test slim document retrieval."""
     # Get all doc IDs from the full connector
     all_full_doc_ids = set()
@@ -95,6 +104,59 @@ def test_highspot_connector_slim(highspot_connector: HighspotConnector) -> None:
     assert all_full_doc_ids.issubset(all_slim_doc_ids)
     # Make sure we actually got some documents
     assert len(all_slim_doc_ids) > 0
+
+
+"""This test might fail because of how Highspot handles changes to the document's
+"updated at" property. It is marked as expected to fail until we can confirm the behavior."""
+
+
+@pytest.mark.xfail(reason="Highspot is not returning updated documents as expected.")
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
+def test_highspot_connector_poll_source(
+    mock_get_api_key: MagicMock, highspot_connector: HighspotConnector
+) -> None:
+    """Test poll_source functionality with date range filtering."""
+    # Define date range: April 3, 2025 to April 4, 2025
+    start_date = datetime(2025, 4, 3, 0, 0, 0)
+    end_date = datetime(2025, 4, 4, 23, 59, 59)
+
+    # Convert to seconds since Unix epoch
+    start_time = int(time.mktime(start_date.timetuple()))
+    end_time = int(time.mktime(end_date.timetuple()))
+
+    # Load test data for assertions
+    test_data = load_test_data()
+    poll_source_data = test_data.get("poll_source", {})
+    target_doc_id = poll_source_data.get("target_doc_id")
+
+    # Call poll_source with date range
+    all_docs: list[Document] = []
+    target_doc: Document | None = None
+
+    for doc_batch in highspot_connector.poll_source(start_time, end_time):
+        for doc in doc_batch:
+            all_docs.append(doc)
+            if doc.id == f"HIGHSPOT_{target_doc_id}":
+                target_doc = doc
+
+    # Verify documents were loaded
+    assert len(all_docs) > 0
+
+    # Verify the specific test document was found and has correct properties
+    assert target_doc is not None
+    assert target_doc.semantic_identifier == poll_source_data.get("semantic_identifier")
+    assert target_doc.source == DocumentSource.HIGHSPOT
+    assert target_doc.metadata is not None
+
+    # Verify sections
+    assert len(target_doc.sections) == 1
+    section = target_doc.sections[0]
+    assert section.link == poll_source_data.get("link")
+    assert section.text is not None
+    assert len(section.text) > 0
 
 
 def test_highspot_connector_validate_credentials(

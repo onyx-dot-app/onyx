@@ -30,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { RefreshCcw } from "lucide-react";
 import { useUser } from "@/components/user/UserProvider";
 import { LeaveOrganizationButton } from "./buttons/LeaveOrganizationButton";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
@@ -181,7 +180,7 @@ const SignedUpUserTable = ({
                 : "All Roles"}
             </SelectValue>
           </SelectTrigger>
-          <SelectContent className="bg-background">
+          <SelectContent className="bg-background-50">
             {Object.entries(USER_ROLE_LABELS)
               .filter(([role]) => role !== UserRole.EXT_PERM_USER)
               .map(([role, label]) => (

@@ -2,9 +2,11 @@ import time
 from collections.abc import Sequence
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
+from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
 ALL_FILES = list(range(0, 60))
 SHARED_DRIVE_FILES = list(range(20, 25))
@@ -25,6 +27,8 @@ FOLDER_2_1_FILE_IDS = list(range(50, 55))
 FOLDER_2_2_FILE_IDS = list(range(55, 60))
 SECTIONS_FILE_IDS = [61]
 FOLDER_3_FILE_IDS = list(range(62, 65))
+
+DONWLOAD_REVOKED_FILE_ID = 21
 
 PUBLIC_FOLDER_RANGE = FOLDER_1_2_FILE_IDS
 PUBLIC_FILE_IDS = list(range(55, 57))
@@ -56,6 +60,16 @@ FOLDER_3_URL = (
 )
 SECTIONS_FOLDER_URL = (
     "https://drive.google.com/drive/u/5/folders/1loe6XJ-pJxu9YYPv7cF3Hmz296VNzA33"
+)
+
+EXTERNAL_SHARED_FOLDER_URL = (
+    "https://drive.google.com/drive/folders/1sWC7Oi0aQGgifLiMnhTjvkhRWVeDa-XS"
+)
+EXTERNAL_SHARED_DOCS_IN_FOLDER = [
+    "https://docs.google.com/document/d/1Sywmv1-H6ENk2GcgieKou3kQHR_0te1mhIUcq8XlcdY"
+]
+EXTERNAL_SHARED_DOC_SINGLETON = (
+    "https://docs.google.com/document/d/11kmisDfdvNcw5LYZbkdPVjTOdj-Uc5ma6Jep68xzeeA"
 )
 
 SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
@@ -113,15 +127,15 @@ ACCESS_MAPPING: dict[str, list[int]] = {
 
 SPECIAL_FILE_ID_TO_CONTENT_MAP: dict[int, str] = {
     61: (
-        "Title\n\n"
+        "Title\n"
         "This is a Google Doc with sections - "
-        "Section 1\n\n"
+        "Section 1\n"
         "Section 1 content - "
-        "Sub-Section 1-1\n\n"
+        "Sub-Section 1-1\n"
         "Sub-Section 1-1 content - "
-        "Sub-Section 1-2\n\n"
+        "Sub-Section 1-2\n"
         "Sub-Section 1-2 content - "
-        "Section 2\n\n"
+        "Section 2\n"
         "Section 2 content"
     ),
 }
@@ -220,6 +234,16 @@ def assert_expected_docs_in_retrieved_docs(
 
 def load_all_docs(connector: GoogleDriveConnector) -> list[Document]:
     return load_all_docs_from_checkpoint_connector(
+        connector,
+        0,
+        time.time(),
+    )
+
+
+def load_all_docs_with_failures(
+    connector: GoogleDriveConnector,
+) -> list[Document | ConnectorFailure]:
+    return load_everything_from_checkpoint_connector(
         connector,
         0,
         time.time(),

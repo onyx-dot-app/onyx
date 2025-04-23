@@ -36,15 +36,11 @@ from tests.integration.connector_job_tests.google.google_drive_api_utils import 
 
 
 @pytest.fixture()
-def google_drive_test_env_setup() -> (
-    Generator[
-        tuple[
-            GoogleDriveService, str, DATestCCPair, DATestUser, DATestUser, DATestUser
-        ],
-        None,
-        None,
-    ]
-):
+def google_drive_test_env_setup() -> Generator[
+    tuple[GoogleDriveService, str, DATestCCPair, DATestUser, DATestUser, DATestUser],
+    None,
+    None,
+]:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(email="admin@onyx-test.com")
     # Creating a non-admin user

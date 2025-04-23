@@ -576,9 +576,9 @@ class NotionConnector(LoadConnector, PollConnector):
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Applies integration token to headers"""
-        self.headers[
-            "Authorization"
-        ] = f'Bearer {credentials["notion_integration_token"]}'
+        self.headers["Authorization"] = (
+            f'Bearer {credentials["notion_integration_token"]}'
+        )
         return None
 
     def load_from_state(self) -> GenerateDocumentsOutput:

@@ -251,9 +251,11 @@ def handle_publish_ephemeral_message_button(
             citations=citation_list,
             chat_message_id=chat_message_id,
             docs=QADocsResponse(
-                top_documents=chat_message_detail.context_docs.top_documents
-                if chat_message_detail.context_docs
-                else [],
+                top_documents=(
+                    chat_message_detail.context_docs.top_documents
+                    if chat_message_detail.context_docs
+                    else []
+                ),
                 predicted_flow=None,
                 predicted_search=None,
                 applied_source_filters=None,

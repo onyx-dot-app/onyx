@@ -1,7 +1,6 @@
 import { Form, Formik } from "formik";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import {
-  BooleanFormField,
   SelectorFormField,
   TextFormField,
 } from "@/components/admin/connectors/Field";

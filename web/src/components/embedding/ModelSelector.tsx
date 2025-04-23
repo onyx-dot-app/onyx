@@ -1,7 +1,5 @@
 import { getCurrentModelCopy } from "@/app/admin/embeddings/interfaces";
 import {
-  AVAILABLE_CLOUD_PROVIDERS,
-  AVAILABLE_MODELS,
   EmbeddingModelDescriptor,
   getIconForRerankType,
   getTitleForRerankType,

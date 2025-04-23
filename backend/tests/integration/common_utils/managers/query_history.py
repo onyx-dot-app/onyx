@@ -37,9 +37,11 @@ class QueryHistoryManager:
 
         response = requests.get(
             url=f"{API_SERVER_URL}/admin/chat-session-history?{urlencode(query_params, doseq=True)}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         data = response.json()
@@ -55,9 +57,11 @@ class QueryHistoryManager:
     ) -> ChatSessionSnapshot:
         response = requests.get(
             url=f"{API_SERVER_URL}/admin/chat-session-history/{chat_session_id}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return ChatSessionSnapshot(**response.json())
@@ -76,9 +80,11 @@ class QueryHistoryManager:
 
         response = requests.get(
             url=f"{API_SERVER_URL}/admin/query-history-csv?{urlencode(query_params, doseq=True)}",
-            headers=user_performing_action.headers
-            if user_performing_action
-            else GENERAL_HEADERS,
+            headers=(
+                user_performing_action.headers
+                if user_performing_action
+                else GENERAL_HEADERS
+            ),
         )
         response.raise_for_status()
         return response.headers, response.content.decode()
