@@ -524,9 +524,7 @@ def get_single_param_from_url(url: str, param: str) -> str | None:
 def get_start_param_from_url(url: str) -> int:
     """Get the start parameter from a url"""
     start_str = get_single_param_from_url(url, "start")
-    if start_str is None:
-        return 0
-    return int(start_str)
+    return int(start_str) if start_str else 0
 
 
 def update_param_in_path(path: str, param: str, value: str) -> str:

@@ -1,5 +1,4 @@
 import copy
-import time
 from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
@@ -70,9 +69,8 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
-MAX_CACHED_IDS = 100
-
 ONE_HOUR = 3600
+ONE_DAY = ONE_HOUR * 24
 
 
 def _should_propagate_error(e: Exception) -> bool:
@@ -80,8 +78,7 @@ def _should_propagate_error(e: Exception) -> bool:
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
-    last_updated: SecondsSinceUnixEpoch
-    last_seen_doc_ids: list[str]
+    next_start: int
 
 
 class ConfluenceConnector(
@@ -464,49 +461,26 @@ class ConfluenceConnector(
              - Attempt to convert it with convert_attachment_to_content(...)
              - If successful, create a new Section with the extracted text or summary.
         """
-
-        # number of documents/errors yielded
-        yield_count = 0
-
-        end = (end or time.time()) + 3600 * 24
         checkpoint = copy.deepcopy(checkpoint)
-        prev_doc_ids = checkpoint.last_seen_doc_ids
 
-        seen_cutoff = max(0, len(prev_doc_ids) - MAX_CACHED_IDS)
-        checkpoint.last_seen_doc_ids = checkpoint.last_seen_doc_ids[seen_cutoff:]
         # use "start" when last_updated is 0
-        start_ts = checkpoint.last_updated or start
-        page_query = self._construct_page_query(start_ts, end)
+        page_query = self._construct_page_query(start, end)
         logger.debug(f"page_query: {page_query}")
+
+        def store_next_page_start(next_page_start: int) -> None:
+            checkpoint.next_start = next_page_start
 
         # most requests will include a few pages to skip, so we limit each page to
         # 2 * batch_size to only need a single request for most checkpoint runs
-        for page in self.confluence_client.paginated_cql_retrieval(
-            cql=page_query,
-            expand=",".join(_PAGE_EXPANSION_FIELDS),
-            limit=2 * self.batch_size,
+        for yield_count, page in enumerate(
+            self.confluence_client.paginated_cql_retrieval(
+                cql=page_query,
+                expand=",".join(_PAGE_EXPANSION_FIELDS),
+                limit=self.batch_size + 1,  # + 1 to fetch one page per call
+                start=checkpoint.next_start,
+                next_page_callback=store_next_page_start,
+            )
         ):
-            # create checkpoint after enough documents have been processed
-            if yield_count >= self.batch_size:
-                return checkpoint
-
-            if page["id"] in prev_doc_ids:
-                # There is a discrepancy between the lastmodified field confluence uses
-                # for the query and the actual modification time files they return.
-                # We skip the page if it's within the last MAX_CACHED_IDS pages
-                continue
-
-            ts = datetime_from_string(page["version"]["when"]).timestamp()
-
-            if ts < checkpoint.last_updated:
-                # NOTE: this is a known issue on confluence server deployments. We mitigate by
-                # not counting
-                logger.debug(
-                    f"Confluence Returned results out of order. Request start time: {start_ts}, "
-                    f"current item time: {ts}, checkpoint.last_updated: {checkpoint.last_updated}"
-                )
-            else:
-                yield_count += 1
 
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
@@ -515,19 +489,15 @@ class ConfluenceConnector(
                 yield doc_or_failure
                 continue
 
-            checkpoint.last_updated = ts
-
             # Now get attachments for that page:
             doc_or_failure = self._fetch_page_attachments(page, doc_or_failure)
 
-            if isinstance(doc_or_failure, ConnectorFailure):
-                yield doc_or_failure
-                continue
-
-            # yield completed document
-
-            checkpoint.last_seen_doc_ids.append(page["id"])
+            # yield completed document (or failure)
             yield doc_or_failure
+
+            # create checkpoint after enough documents have been processed
+            if yield_count >= self.batch_size - 1:  # 0-indexing
+                return checkpoint
 
         checkpoint.has_more = False
         return checkpoint
@@ -539,6 +509,7 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch,
         checkpoint: ConfluenceCheckpoint,
     ) -> CheckpointOutput[ConfluenceCheckpoint]:
+        end += ONE_DAY  # handle time zone weirdness
         try:
             return self._fetch_document_batches(checkpoint, start, end)
         except Exception as e:
@@ -553,7 +524,7 @@ class ConfluenceConnector(
 
     @override
     def build_dummy_checkpoint(self) -> ConfluenceCheckpoint:
-        return ConfluenceCheckpoint(last_updated=0, has_more=True, last_seen_doc_ids=[])
+        return ConfluenceCheckpoint(next_start=0, has_more=True)
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConfluenceCheckpoint:
@@ -569,6 +540,7 @@ class ConfluenceConnector(
         Return 'slim' docs (IDs + minimal permission data).
         Does not fetch actual text. Used primarily for incremental permission sync.
         """
+        print("Retrieving all slim documents")
         doc_metadata_list: list[SlimDocument] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 
