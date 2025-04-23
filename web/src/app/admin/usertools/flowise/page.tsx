@@ -1,10 +1,8 @@
 import { AdminPageTitle } from "@/components/admin/Title";
 import { FiTool } from "react-icons/fi";
-import { fetchSS } from "@/lib/utilsSS";
 import Text from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
-
-import RedirectBackOnCondition from "@/components/RedirectBackOnCondition";
+import { redirect } from "next/navigation";
 
 export default async function Page() {
   const isFlowiseEditorEnable =
@@ -14,7 +12,7 @@ export default async function Page() {
     process.env.NEXT_PUBLIC_ENABLE_FLOWISE_EDITOR
   );
   if (!isFlowiseEditorEnable) {
-    return <RedirectBackOnCondition condition={!isFlowiseEditorEnable} />;
+    return redirect("/chat");
   }
 
   return (
@@ -49,7 +47,7 @@ export default async function Page() {
         target="_blank"
         rel="noopener noreferrer"
       >
-        <Button className="mx-auto" color="green" size="md" type="button">
+        <Button className="mx-auto" color="green" type="button">
           {"Открыть редактор Flowise"}
         </Button>
       </a>
