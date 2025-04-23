@@ -1,4 +1,4 @@
-"""Add models-configuration table
+"""Add model-configuration table
 
 Revision ID: 7a70b7664e37
 Revises: cf90764725d8
@@ -58,16 +58,13 @@ def upgrade() -> None:
 
     for llm_provider in llm_providers:
         provider_id = llm_provider[0]
-        model_names = llm_provider[1] or []
-        display_model_names = llm_provider[2] or []
-
-        # Create a set of display models for quick lookup
-        display_set = set(display_model_names)
+        model_names_set = set(llm_provider[1] or [])
+        display_names_set = set(llm_provider[2] or [])
 
         # Insert all models from model_names
-        for model_name in model_names:
+        for model_name in model_names_set:
             # If model is in display_model_names, set is_visible to True
-            is_visible = model_name in display_set
+            is_visible = model_name in display_names_set
 
             connection.execute(
                 model_configuration_table.insert().values(
