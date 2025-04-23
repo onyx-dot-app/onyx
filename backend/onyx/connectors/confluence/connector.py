@@ -483,8 +483,8 @@ class ConfluenceConnector(
             limit=2 * self.batch_size,
         ):
             # create checkpoint after enough documents have been processed
-            if yield_count >= self.batch_size:
-                return checkpoint
+            # if yield_count >= self.batch_size:
+            #     return checkpoint
 
             if page["id"] in prev_doc_ids:
                 # There are a few seconds of fuzziness in the request,
