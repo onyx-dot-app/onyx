@@ -133,12 +133,18 @@ def test_salesforce_connector_poll_source(
         for doc in doc_batch:
             all_docs_1.append(doc)
 
+    len_1 = len(all_docs_1)
+    assert len_1 > 1100 and len_1 < 1200
+
     all_docs_2: list[Document] = []
     for doc_batch in salesforce_connector.poll_source(
         intermediate_time.timestamp(), time.time()
     ):
         for doc in doc_batch:
             all_docs_2.append(doc)
+
+    len_2 = len(all_docs_2)
+    assert len_2 > 31000
 
     print(f"all_docs_1 length: {len(all_docs_1)}")
     print(f"all_docs_2 length: {len(all_docs_2)}")

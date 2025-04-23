@@ -2,8 +2,22 @@ import csv
 import os
 import shutil
 import tempfile
+from datetime import datetime
+from datetime import timezone
 
+from simple_salesforce import Salesforce
+
+from onyx.connectors.salesforce.salesforce_calls import _bulk_retrieve_from_salesforce
+from onyx.connectors.salesforce.salesforce_calls import (
+    _get_all_queryable_fields_of_sf_type,
+)
+from onyx.connectors.salesforce.salesforce_calls import _get_time_filter_for_sf_type
+from onyx.connectors.salesforce.salesforce_calls import _get_time_filtered_query
 from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
+
 
 _VALID_SALESFORCE_IDS = [
     "001bm00000fd9Z3AAI",
@@ -757,3 +771,72 @@ def test_salesforce_sqlite() -> None:
         sf_db.close()
 
         _clear_sf_db(directory)
+
+
+def test_salesforce_bulk_retrieve() -> None:
+
+    username = os.environ["SF_USERNAME"]
+    password = os.environ["SF_PASSWORD"]
+    security_token = os.environ["SF_SECURITY_TOKEN"]
+
+    sf_client = Salesforce(
+        username=username,
+        password=password,
+        security_token=security_token,
+        domain=None,
+    )
+
+    sf_type = "Contact"
+    intermediate_time = datetime(2024, 7, 1, 0, 0, 0, tzinfo=timezone.utc)
+
+    queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
+    time_filter = _get_time_filter_for_sf_type(
+        queryable_fields, 0, intermediate_time.timestamp()
+    )
+    assert time_filter
+
+    query = _get_time_filtered_query(queryable_fields, sf_type, time_filter)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        object_type, csv_paths = _bulk_retrieve_from_salesforce(
+            sf_type, query, temp_dir, sf_client
+        )
+
+        assert csv_paths
+
+        # Count rows in the downloaded CSV(s)
+        total_data_rows = 0
+        csv_files_found = []
+        for filename in os.listdir(temp_dir):
+            # Ensure we only process files ending with .csv and belonging to the correct object type
+            # The filename format is expected to be "ObjectType.some_random_id.csv"
+            if filename.endswith(".csv") and filename.startswith(f"{object_type}."):
+                filepath = os.path.join(temp_dir, filename)
+                csv_files_found.append(filepath)
+                try:
+                    with open(filepath, "r", encoding="utf-8") as f:
+                        reader = csv.reader(f)
+                        try:
+                            next(reader)  # Attempt to skip header
+                            # Count data rows
+                            num_data_rows = sum(1 for _ in reader)
+                            logger.info(
+                                f"Counted {num_data_rows} data rows in {filename}"
+                            )
+                            total_data_rows += num_data_rows
+                        except StopIteration:
+                            # Handle empty file or file with only header
+                            logger.info(
+                                f"File {filename} is empty or contains only a header."
+                            )
+                except Exception as e:
+                    logger.error(f"Error reading or counting rows in {filename}: {e}")
+
+        logger.info(
+            f"Found {len(csv_files_found)} CSV files for {object_type} in {temp_dir}."
+        )
+        logger.info(
+            f"Total data rows across all CSVs for {object_type}: {total_data_rows}"
+        )
+
+        assert total_data_rows > 1100 and total_data_rows < 1200

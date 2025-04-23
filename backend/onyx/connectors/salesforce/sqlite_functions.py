@@ -269,6 +269,9 @@ class OnyxSalesforceSQLite:
     ) -> Iterator[tuple[str, set[str]]]:
         """Get IDs of objects that are of the specified parent types and are either in the
         updated_ids or have children in the updated_ids. Yields tuples of (parent_type, affected_ids).
+
+        This function has some interesting behavior ... it creates batches of id's
+        and yields back once for each parent type within that batch.
         """
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
