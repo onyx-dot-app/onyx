@@ -70,6 +70,8 @@ _RESTRICTIONS_EXPANSION_FIELDS = [
 
 _SLIM_DOC_BATCH_SIZE = 5000
 
+MAX_CACHED_IDS = 100
+
 ONE_HOUR = 3600
 
 
@@ -469,7 +471,9 @@ class ConfluenceConnector(
         end = (end or time.time()) + 3600 * 24
         checkpoint = copy.deepcopy(checkpoint)
         prev_doc_ids = checkpoint.last_seen_doc_ids
-        checkpoint.last_seen_doc_ids = []
+
+        seen_cutoff = max(0, len(prev_doc_ids) - MAX_CACHED_IDS)
+        checkpoint.last_seen_doc_ids = checkpoint.last_seen_doc_ids[seen_cutoff:]
         # use "start" when last_updated is 0
         start_ts = checkpoint.last_updated or start
         page_query = self._construct_page_query(start_ts, end)
@@ -483,26 +487,29 @@ class ConfluenceConnector(
             limit=2 * self.batch_size,
         ):
             # create checkpoint after enough documents have been processed
-            # if yield_count >= self.batch_size:
-            #     return checkpoint
+            if yield_count >= self.batch_size:
+                return checkpoint
 
             if page["id"] in prev_doc_ids:
-                # There are a few seconds of fuzziness in the request,
-                # so we skip if we saw this page on the last run
+                # There is a discrepancy between the lastmodified field confluence uses
+                # for the query and the actual modification time files they return.
+                # We skip the page if it's within the last MAX_CACHED_IDS pages
                 continue
 
             ts = datetime_from_string(page["version"]["when"]).timestamp()
 
-            # if ts < checkpoint.last_updated:
-            #     logger.warning(
-            #         f"Confluence Returned results out of order. Request start time: {start_ts}, "
-            #         f"current item time: {ts}, checkpoint.last_updated: {checkpoint.last_updated}"
-            #     )
-            #     continue
+            if ts < checkpoint.last_updated:
+                # NOTE: this is a known issue on confluence server deployments. We mitigate by
+                # not counting
+                logger.debug(
+                    f"Confluence Returned results out of order. Request start time: {start_ts}, "
+                    f"current item time: {ts}, checkpoint.last_updated: {checkpoint.last_updated}"
+                )
+            else:
+                yield_count += 1
 
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
-            yield_count += 1
 
             if isinstance(doc_or_failure, ConnectorFailure):
                 yield doc_or_failure
