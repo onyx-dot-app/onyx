@@ -493,12 +493,12 @@ class ConfluenceConnector(
 
             ts = datetime_from_string(page["version"]["when"]).timestamp()
 
-            if ts < checkpoint.last_updated:
-                logger.warning(
-                    f"Confluence Returned results out of order. Request start time: {start_ts}, "
-                    f"current item time: {ts}, checkpoint.last_updated: {checkpoint.last_updated}"
-                )
-                continue
+            # if ts < checkpoint.last_updated:
+            #     logger.warning(
+            #         f"Confluence Returned results out of order. Request start time: {start_ts}, "
+            #         f"current item time: {ts}, checkpoint.last_updated: {checkpoint.last_updated}"
+            #     )
+            #     continue
 
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
