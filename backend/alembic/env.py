@@ -26,9 +26,6 @@ from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
 from onyx.db.engine import SqlEngine
 
-# required for sql to function
-SqlEngine.init_engine(pool_size=20, max_overflow=5)
-
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
 
@@ -151,6 +148,9 @@ async def run_async_migrations() -> None:
         continue_on_error,
     ) = get_schema_options()
 
+    # without init_engine, subsequent engine calls fail hard intentionally
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
+
     engine = create_async_engine(
         build_connection_string(),
         poolclass=pool.NullPool,
@@ -206,9 +206,20 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_offline() -> None:
-    """This doesn't really get used when we migrate in the cloud."""
+    """
+    NOTE(rkuo): This generates a sql script that can be used to migrate the database ...
+    instead of migrating the db live via an open connection
+
+    Not clear on when this would be used by us or if it even works.
+
+    If it is offline, then why are there calls to the db engine?
+
+    This doesn't really get used when we migrate in the cloud."""
 
     logger.info("run_migrations_offline starting.")
+
+    # without init_engine, subsequent engine calls fail hard intentionally
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     schema_name, _, upgrade_all_tenants, continue_on_error = get_schema_options()
     url = build_connection_string()
