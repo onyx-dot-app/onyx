@@ -19,7 +19,7 @@ branch_labels = None
 depends_on = None
 
 
-def resolve(
+def _resolve(
     provider_name: str,
     model_names: list[str] | None,
     display_model_names: list[str] | None,
@@ -125,7 +125,7 @@ def upgrade() -> None:
         default_model_name = llm_provider[4]
         fast_default_model_name = llm_provider[5]
 
-        model_configurations = resolve(
+        model_configurations = _resolve(
             provider_name=provider_name,
             model_names=model_names,
             display_model_names=display_model_names,
