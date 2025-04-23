@@ -112,8 +112,11 @@ def upgrade() -> None:
     llm_providers = connection.execute(
         sa.select(
             llm_provider_table.c.id,
+            llm_provider_table.c.provider,
             llm_provider_table.c.model_names,
             llm_provider_table.c.display_model_names,
+            llm_provider_table.c.default_model_name,
+            llm_provider_table.c.fast_default_model_name,
         )
     ).fetchall()
 
