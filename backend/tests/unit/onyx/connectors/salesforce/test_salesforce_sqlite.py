@@ -6,6 +6,7 @@ from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 
+import pytest
 from simple_salesforce import Salesforce
 
 from onyx.connectors.salesforce.salesforce_calls import _bulk_retrieve_from_salesforce
@@ -782,6 +783,7 @@ def test_salesforce_sqlite() -> None:
         _clear_sf_db(directory)
 
 
+@pytest.mark.skip(reason="Enable when credentials are available")
 def test_salesforce_bulk_retrieve() -> None:
 
     username = os.environ["SF_USERNAME"]
