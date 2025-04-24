@@ -42,7 +42,7 @@ def upgrade() -> None:
     llm_provider_table = sa.sql.table(
         "llm_provider",
         sa.column("id", sa.Integer),
-        sa.column("provider", sa.Integer),
+        sa.column("provider", sa.String),
         sa.column("model_names", postgresql.ARRAY(sa.String)),
         sa.column("display_model_names", postgresql.ARRAY(sa.String)),
         sa.column("default_model_name", sa.String),
@@ -54,7 +54,6 @@ def upgrade() -> None:
         sa.column("llm_provider_id", sa.Integer),
         sa.column("name", sa.String),
         sa.column("is_visible", sa.Boolean),
-        sa.column("max_input_tokens", sa.Integer),
     )
 
     connection = op.get_bind()
@@ -82,7 +81,6 @@ def upgrade() -> None:
                     model_configuration_table.c.id,
                     model_configuration_table.c.llm_provider_id,
                     model_configuration_table.c.name,
-                    model_configuration_table.c.is_visible,
                 ).where(model_configuration_table.c.llm_provider_id == llm_provider_id)
             ).fetchall()
         )
