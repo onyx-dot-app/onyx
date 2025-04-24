@@ -45,6 +45,7 @@ import {
   processRawChatHistory,
   removeMessage,
   sendMessage,
+  SendMessageParams,
   setMessageAsLatest,
   updateLlmOverrideForChatSession,
   updateParentChildren,
@@ -1080,7 +1081,7 @@ export function ChatPage({
 
   async function updateCurrentMessageFIFO(
     stack: CurrentMessageFIFO,
-    params: any
+    params: SendMessageParams
   ) {
     try {
       for await (const packet of sendMessage(params)) {
@@ -1374,7 +1375,6 @@ export function ChatPage({
           regenerationRequest?.parentMessage.messageId ||
           lastSuccessfulMessageId,
         chatSessionId: currChatSessionId,
-        promptId: null,
         filters: buildFilters(
           filterManager.selectedSources,
           filterManager.selectedDocumentSets,
