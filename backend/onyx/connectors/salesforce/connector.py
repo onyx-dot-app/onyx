@@ -3,6 +3,7 @@ import gc
 import os
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -260,7 +261,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             raise RuntimeError("self._sf_client is None!")
 
         updated_ids: set[str] = set()
-        docs_processed = 0
+        parents_changed = 0
 
         sf_db = OnyxSalesforceSQLite(os.path.join(temp_dir, "salesforce_db.sqlite"))
         sf_db.connect()
@@ -299,66 +300,73 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             )
 
             # Step 3 - extract and index docs
-            batches_processed = 0
             docs_to_yield: list[Document] = []
             docs_to_yield_bytes = 0
 
+            last_log_time = 0.0
+
             # Takes 15-20 seconds per batch
             # this yields batches in a rather unintuitive manner, see docstring
-            for parent_type, parent_id_batch in sf_db.get_affected_parent_ids_by_type(
+            for (
+                parent_type,
+                parent_id,
+                examined_ids,
+            ) in sf_db.get_affected_parent_ids_by_type(
                 updated_ids=list(updated_ids),
                 parent_types=self.parent_object_list,
             ):
-                batches_processed += 1
-                logger.info(
-                    f"Processing batch: index={batches_processed} "
-                    f"object_type={parent_type} "
-                    f"len={len(parent_id_batch)} "
-                    f"processed={docs_processed} "
-                    f"remaining={len(updated_ids) - docs_processed}"
-                )
+                now = time.monotonic()
+
+                if now - last_log_time > 10.0:
+                    logger.info(
+                        f"Processing stats: {type_to_processed} "
+                        f"processed={examined_ids} "
+                        f"remaining={len(updated_ids) - examined_ids}"
+                    )
+                    last_log_time = now
+
                 type_to_processed[parent_type] = (
                     type_to_processed.get(parent_type, 0) + 1
                 )
 
-                for parent_id in parent_id_batch:
-                    parent_object = sf_db.get_record(parent_id, parent_type)
-                    if not parent_object:
-                        logger.warning(
-                            f"Failed to get parent object {parent_id} for {parent_type}"
-                        )
-                        continue
-
-                    doc = convert_sf_object_to_doc(
-                        sf_db,
-                        sf_object=parent_object,
-                        sf_instance=self.sf_client.sf_instance,
+                parent_object = sf_db.get_record(parent_id, parent_type)
+                if not parent_object:
+                    logger.warning(
+                        f"Failed to get parent object {parent_id} for {parent_type}"
                     )
-                    doc_sizeof = sys.getsizeof(doc)
-                    docs_to_yield_bytes += doc_sizeof
-                    docs_to_yield.append(doc)
-                    docs_processed += 1
+                    continue
 
-                    # memory usage is sensitive to the input length, so we're yielding immediately
-                    # if the batch exceeds a certain byte length
-                    if (
-                        len(docs_to_yield) >= self.batch_size
-                        or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
-                    ):
-                        yield docs_to_yield
-                        docs_to_yield = []
-                        docs_to_yield_bytes = 0
+                doc = convert_sf_object_to_doc(
+                    sf_db,
+                    sf_object=parent_object,
+                    sf_instance=self.sf_client.sf_instance,
+                )
+                doc_sizeof = sys.getsizeof(doc)
+                docs_to_yield_bytes += doc_sizeof
+                docs_to_yield.append(doc)
+                parents_changed += 1
 
-                        # observed a memory leak / size issue with the account table if we don't gc.collect here.
-                        gc.collect()
+                # memory usage is sensitive to the input length, so we're yielding immediately
+                # if the batch exceeds a certain byte length
+                if (
+                    len(docs_to_yield) >= self.batch_size
+                    or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
+                ):
+                    yield docs_to_yield
+                    docs_to_yield = []
+                    docs_to_yield_bytes = 0
+
+                    # observed a memory leak / size issue with the account table if we don't gc.collect here.
+                    gc.collect()
 
             yield docs_to_yield
 
         finally:
             logger.info(
                 f"Final processing stats: "
-                f"processed={docs_processed} "
-                f"remaining={len(updated_ids) - docs_processed}"
+                f"examined={examined_ids} "
+                f"parents_changed={parents_changed} "
+                f"remaining={len(updated_ids) - examined_ids}"
             )
 
             logger.info(f"Top level object types processed: {type_to_processed}")

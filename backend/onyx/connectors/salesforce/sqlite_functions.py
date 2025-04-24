@@ -266,24 +266,32 @@ class OnyxSalesforceSQLite:
         updated_ids: list[str],
         parent_types: list[str],
         batch_size: int = 500,
-    ) -> Iterator[tuple[str, set[str]]]:
+    ) -> Iterator[tuple[str, str, int]]:
         """Get IDs of objects that are of the specified parent types and are either in the
         updated_ids or have children in the updated_ids. Yields tuples of (parent_type, affected_ids).
 
         This function has some interesting behavior ... it creates batches of id's
         and yields back once for each parent type within that batch.
+
+        NOTE(rkuo): this function queries for parent id's, but across
         """
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
 
+        updated_parent_ids: set[str] = (
+            set()
+        )  # dedupes parent id's that have already been yielded
+
         # SQLite typically has a limit of 999 variables
+        num_examined = 0
         updated_ids_batches = batch_list(updated_ids, batch_size)
-        updated_parent_ids: set[str] = set()
 
         with self._conn:
             cursor = self._conn.cursor()
 
             for batch_ids in updated_ids_batches:
+                num_examined += len(batch_ids)
+
                 batch_ids = list(set(batch_ids) - updated_parent_ids)
                 if not batch_ids:
                     continue
@@ -317,12 +325,14 @@ class OnyxSalesforceSQLite:
                     affected_ids.update(row[0] for row in cursor.fetchall())
 
                     # Remove any parent IDs that have already been processed
-                    new_affected_ids = affected_ids - updated_parent_ids
+                    newly_affected_ids = affected_ids - updated_parent_ids
                     # Add the new affected IDs to the set of updated parent IDs
-                    updated_parent_ids.update(new_affected_ids)
+                    if newly_affected_ids:
+                        # Yield each newly affected ID individually
+                        for parent_id in newly_affected_ids:
+                            yield parent_type, parent_id, num_examined
 
-                    if new_affected_ids:
-                        yield parent_type, new_affected_ids
+                        updated_parent_ids.update(newly_affected_ids)
 
     def has_at_least_one_object_of_type(self, object_type: str) -> bool:
         """Check if there is at least one object of the specified type in the database.

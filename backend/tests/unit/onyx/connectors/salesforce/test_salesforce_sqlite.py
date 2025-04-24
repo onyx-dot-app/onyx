@@ -2,6 +2,7 @@ import csv
 import os
 import shutil
 import tempfile
+from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
 
@@ -706,9 +707,11 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
     parent_types = ["Account"]
-    affected_ids_by_type = dict(
-        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
-    )
+    affected_ids_by_type = defaultdict(set)
+    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+        updated_ids, parent_types
+    ):
+        affected_ids_by_type[parent_type].add(parent_id)
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
         _VALID_SALESFORCE_IDS[1] in affected_ids_by_type["Account"]
@@ -717,9 +720,11 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
     parent_types = ["Account"]
-    affected_ids_by_type = dict(
-        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
-    )
+    affected_ids_by_type = defaultdict(set)
+    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+        updated_ids, parent_types
+    ):
+        affected_ids_by_type[parent_type].add(parent_id)
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     assert (
         _VALID_SALESFORCE_IDS[0] in affected_ids_by_type["Account"]
@@ -728,9 +733,11 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
     parent_types = ["Account"]
-    affected_ids_by_type = dict(
-        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
-    )
+    affected_ids_by_type = defaultdict(set)
+    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+        updated_ids, parent_types
+    ):
+        affected_ids_by_type[parent_type].add(parent_id)
     assert "Account" in affected_ids_by_type, "Account type not in affected_ids_by_type"
     affected_ids = affected_ids_by_type["Account"]
     assert len(affected_ids) == 2, "Expected exactly two affected parent IDs"
@@ -743,9 +750,11 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
     # Test Case 4: No matches
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
     parent_types = ["Opportunity"]  # Wrong type
-    affected_ids_by_type = dict(
-        sf_db.get_affected_parent_ids_by_type(updated_ids, parent_types)
-    )
+    affected_ids_by_type = defaultdict(set)
+    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+        updated_ids, parent_types
+    ):
+        affected_ids_by_type[parent_type].add(parent_id)
     assert len(affected_ids_by_type) == 0, "Should return empty dict when no matches"
 
     print("All get_affected_parent_ids tests passed successfully!")

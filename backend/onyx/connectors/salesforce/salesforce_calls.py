@@ -71,13 +71,22 @@ def _is_valid_child_object(
 def get_all_children_of_sf_type(sf_client: Salesforce, sf_type: str) -> set[str]:
     object_description = _get_sf_type_object_json(sf_client, sf_type)
 
+    index = 0
+    len_relationships = object_description["childRelationships"]
     child_object_types = set()
     for child_relationship in object_description["childRelationships"]:
         if _is_valid_child_object(sf_client, child_relationship):
             logger.debug(
-                f"Found valid child object {child_relationship['childSObject']}"
+                f"{index}/{len_relationships} - Found valid child object: "
+                f"parent={sf_type} child={child_relationship['childSObject']}"
             )
             child_object_types.add(child_relationship["childSObject"])
+        else:
+            logger.debug(
+                f"{index}/{len_relationships} - Invalid child object: "
+                f"parent={sf_type} child={child_relationship['childSObject']}"
+            )
+
     return child_object_types
 
 
@@ -273,7 +282,7 @@ def fetch_all_csvs_in_parallel(
             break
 
         if _is_object_type_is_empty(sf_client, sf_type, time_filter):
-            logger.warning(f"Skipping object (no data available): type={sf_type}")
+            logger.warning(f"Object skipped (no data available): type={sf_type}")
             continue
 
         query = _get_time_filtered_query(queryable_fields, sf_type, time_filter)
