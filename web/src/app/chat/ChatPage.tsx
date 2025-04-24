@@ -1076,7 +1076,7 @@ export function ChatPage({
     error: string | null = null;
 
     push(packetBunch: PacketType) {
-      this.stack.push(packetBunch);
+      this.stack?.push(packetBunch);
     }
 
     nextPacket(): PacketType | undefined {
@@ -1097,7 +1097,7 @@ export function ChatPage({
         if (params.signal?.aborted) {
           throw new Error("AbortError");
         }
-        stack.push(packet);
+        stack?.push(packet);
       }
     } catch (error: unknown) {
       if (error instanceof Error) {
@@ -1475,7 +1475,7 @@ export function ChatPage({
             ];
 
             if (parentMessage && !regenerationRequest) {
-              messageUpdates.push({
+              messageUpdates?.push({
                 ...parentMessage,
                 childrenMessageIds: (
                   parentMessage.childrenMessageIds || []
@@ -1851,7 +1851,7 @@ export function ChatPage({
         // current page is like /chat
 
         if (pathname == "/chat" && !navigatingAway.current) {
-          router.push(newUrl, { scroll: false });
+          router?.push(newUrl, { scroll: false });
         }
       }
     }
@@ -2070,7 +2070,7 @@ export function ChatPage({
 
         const data = await response.json();
 
-        router.push(data.redirect_url);
+        router?.push(data.redirect_url);
       } catch (error) {
         console.error("Ошибка при загрузке чата из Slack:", error);
         setPopup({
