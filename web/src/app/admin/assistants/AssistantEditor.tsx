@@ -1210,8 +1210,8 @@ export function AssistantEditor({
                             {values.is_default_persona && (
                               <TooltipContent side="top" align="center">
                                 Персона по умолчанию должна быть общедоступной.
-                                Установите "Персона по умолчанию" на false,
-                                чтобы изменить видимость.
+                                Установите &quot;Персона по умолчанию&quot; на
+                                false, чтобы изменить видимость.
                               </TooltipContent>
                             )}
                           </Tooltip>
