@@ -395,7 +395,7 @@ def upsert_documents(
                     last_modified=datetime.now(timezone.utc),
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
-                    kg_processed=False,
+                    kg_stage=KGStage.NOT_STARTED,
                 )
             )
             for doc in seen_documents.values()
@@ -891,10 +891,10 @@ def get_unprocessed_kg_document_batch_for_connector(
                 or_(
                     DocumentByConnectorCredentialPair.kg_stage.is_(None),
                     DocumentByConnectorCredentialPair.kg_stage
-                    == KGStage.EXTRACTION_READY.value,
+                    == KGStage.NOT_STARTED.value,
                 ),
                 or_(
-                    DbDocument.kg_stage == KGStage.EXTRACTION_READY.value,
+                    DbDocument.kg_stage == KGStage.NOT_STARTED.value,
                     DbDocument.kg_stage.is_(None),
                 ),
             )
@@ -908,7 +908,7 @@ def get_unprocessed_kg_document_batch_for_connector(
 
 def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
     """
-    Retrieves all document IDs where kg_processed is True.
+    Retrieves all document IDs where kg_stage is EXTRACTED.
     Args:
         db_session (Session): The database session to use
     Returns:
@@ -978,7 +978,7 @@ def get_document_kg_info(
     if result is None:
         return None
 
-    return result.kg_processed, result.kg_data or {}
+    return result.kg_stage, result.kg_data or {}
 
 
 def get_all_kg_extracted_documents_info(
@@ -991,7 +991,7 @@ def get_all_kg_extracted_documents_info(
         List[Tuple[str, dict]]: A list of tuples containing:
             - str: The document ID
             - dict: The KG data containing 'entities', 'relationships', and 'terms'
-        Only returns documents where kg_processed is True
+        Only returns documents where kg_stage is EXTRACTED
     """
     stmt = (
         select(DbDocument.id, DbDocument.kg_data)

@@ -61,6 +61,17 @@ def analyze(
     normalized_terms = normalize_terms(terms)
     normalized_time_filter = time_filter
 
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece="Normalizing and strategizing...  -  ",
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
     # Expand the entities and relationships to make sure that entities are connected
 
     graph_expansion = create_minimal_connected_query_graph(
@@ -133,17 +144,6 @@ def analyze(
     except Exception as e:
         logger.error(f"Error in strategy generation: {e}")
         raise e
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Normalizing and strategizing...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
 
     # write_custom_event(
     #     "initial_agent_answer",

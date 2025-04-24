@@ -104,6 +104,7 @@ class KGClassificationRule(BaseModel):
 
 
 class KGClassificationInstructionStrings(BaseModel):
+    classification_enabled: bool
     classification_options: str
     classification_class_definitions: dict[str, Dict[str, str | bool]]
 
@@ -148,4 +149,13 @@ class KGStage(str, Enum):
     NORMALIZED = "normalized"
     FAILED = "failed"
     SKIPPED = "skipped"
-    EXTRACTION_READY = "extraction_ready"
+    NOT_STARTED = "not_started"
+
+
+class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
+    kg_core_document_id_name: str
+    implied_entities: set[str]
+    implied_relationships: set[str]
+    converted_relationships_to_attributes: dict[str, list[str]]
+    company_participant_emails: set[str]
+    account_participant_emails: set[str]

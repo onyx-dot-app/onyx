@@ -168,8 +168,12 @@ def _get_classification_content_from_call_chunks(
 
     assert isinstance(KG_IGNORE_EMAIL_DOMAINS, list)
 
-    primary_owners = first_num_classification_chunks[0]["fields"]["primary_owners"]
-    secondary_owners = first_num_classification_chunks[0]["fields"]["secondary_owners"]
+    primary_owners = first_num_classification_chunks[0]["fields"].get(
+        "primary_owners", []
+    )
+    secondary_owners = first_num_classification_chunks[0]["fields"].get(
+        "secondary_owners", []
+    )
 
     company_participant_emails = set()
     account_participant_emails = set()

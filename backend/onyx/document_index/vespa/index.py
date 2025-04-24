@@ -113,6 +113,7 @@ class KGUChunkUpdateRequest(BaseModel):
     entities: set[str] | None = None
     relationships: set[str] | None = None
     terms: set[str] | None = None
+    converted_attributes: set[str] | None = None
 
 
 class KGUDocumentUpdateRequest(BaseModel):

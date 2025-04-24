@@ -6,6 +6,7 @@ from typing import Dict
 
 from langchain_core.messages import HumanMessage
 
+from onyx.configs.kg_configs import KG_OWN_COMPANY
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
@@ -32,13 +33,18 @@ from onyx.kg.models import KGChunkId
 from onyx.kg.models import KGClassificationContent
 from onyx.kg.models import KGClassificationDecisions
 from onyx.kg.models import KGClassificationInstructionStrings
+from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
 from onyx.kg.models import KGEntityTypeInstructions
 from onyx.kg.models import KGExtractionInstructions
-from onyx.kg.utils.chunk_preprocessing import prepare_llm_content_extraction
-from onyx.kg.utils.chunk_preprocessing import prepare_llm_document_content
+from onyx.kg.utils.extraction_utils import is_email
+from onyx.kg.utils.extraction_utils import (
+    kg_document_entities_relationships_attribute_generation,
+)
+from onyx.kg.utils.extraction_utils import kg_process_person
+from onyx.kg.utils.extraction_utils import prepare_llm_content_extraction
+from onyx.kg.utils.extraction_utils import prepare_llm_document_content
 from onyx.kg.utils.formatting_utils import aggregate_kg_extractions
 from onyx.kg.utils.formatting_utils import generalize_entities
-from onyx.kg.utils.formatting_utils import generalize_relationships
 from onyx.kg.vespa.vespa_interactions import get_document_chunks_for_kg_processing
 from onyx.kg.vespa.vespa_interactions import (
     get_document_classification_content_for_kg_processing,
@@ -72,9 +78,18 @@ def _get_classification_extraction_instructions() -> (
 
         classification_options = ", ".join(classification_class_definitions.keys())
 
+        if (
+            len(classification_options) > 0
+            and len(classification_class_definitions) > 0
+        ):
+            classification_enabled = True
+        else:
+            classification_enabled = False
+
         classification_instructions_dict[grounded_source_name] = (
             KGEntityTypeInstructions(
                 classification_instructions=KGClassificationInstructionStrings(
+                    classification_enabled=classification_enabled,
                     classification_options=classification_options,
                     classification_class_definitions=classification_class_definitions,
                 ),
@@ -189,8 +204,12 @@ def kg_extraction(
     connector_extraction_stats: list[ConnectorExtractionStats] = []
     document_kg_updates: Dict[str, KGUDocumentUpdateRequest] = {}
 
-    processing_chunks: list[KGChunkFormat] = []
-    carryover_chunks: list[KGChunkFormat] = []
+    processing_chunk_doc_extractions: list[
+        tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
+    ] = []
+    carryover_chunk_doc_extractions: list[
+        tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
+    ] = []
     connector_aggregated_kg_extractions_list: list[KGAggregatedExtractions] = []
 
     document_classification_extraction_instructions = (
@@ -217,6 +236,7 @@ def kg_extraction(
 
         document_batch_counter = 0
 
+        # iterate over un-kg-processed documents in connector
         while True:
 
             # get a batch of unprocessed documents
@@ -229,7 +249,9 @@ def kg_extraction(
                     )
                 )
 
-            if len(unprocessed_document_batch) == 0 or document_batch_counter > 0:
+            if (
+                len(unprocessed_document_batch) == 0 or document_batch_counter > 0
+            ):  # testing time only
                 break
 
             document_batch_counter += 1
@@ -241,37 +263,71 @@ def kg_extraction(
             #   - Store results in postgres:
             #      - entities and relationships in temp kg extraction tables
             #      - document classification in temp kg entity etraction table
-            #      - set kg_extracted = True in document table [kg_clustered will be set during clustering]
-
-            document_classification_content_list = (
-                get_document_classification_content_for_kg_processing(
-                    [
-                        unprocessed_document.id
-                        for unprocessed_document in unprocessed_document_batch
-                    ],
-                    connector_source,
-                    index_name,
-                    batch_size=processing_chunk_batch_size,
-                )
-            )
+            #      - set kg_stage = extracted in document table
 
             classification_outcomes: list[tuple[bool, KGClassificationDecisions]] = []
-
-            documents_to_process = []
+            documents_to_process = (
+                []
+            )  # unprocessed documents that are not filtered out by classification
             document_classifications: dict[str, KGClassificationDecisions] = {}
 
-            # Document classification
-            #    - Decide whether a document should be processed and
-            #    - Store document type in postgres later
+            # should documents be classified?
+            connector_docs_classfication_enabled = (
+                document_classification_extraction_instructions[
+                    connector_source
+                ].classification_instructions.classification_enabled
+            )
 
-            for document_classification_content in document_classification_content_list:
-                classification_outcomes.extend(
-                    _kg_document_classification(
-                        document_classification_content,
-                        document_classification_extraction_instructions,
+            # should documents undergo LLM-extraction?
+            deep_extraction = document_classification_extraction_instructions[
+                connector_source
+            ].extraction_instructions.deep_extraction
+
+            # run this only for primary grounded sources that have a classification approach configured
+            if connector_docs_classfication_enabled:
+
+                document_classification_content_list = (
+                    get_document_classification_content_for_kg_processing(
+                        [
+                            unprocessed_document.id
+                            for unprocessed_document in unprocessed_document_batch
+                        ],
+                        connector_source,
+                        index_name,
+                        batch_size=processing_chunk_batch_size,
                     )
                 )
 
+                # Document classification
+                #    - Decide whether a document should be processed or ignored, and
+                #    - Store document type in postgres later
+
+                for (
+                    document_classification_content
+                ) in document_classification_content_list:
+                    classification_outcomes.extend(
+                        _kg_document_classification(
+                            document_classification_content,
+                            document_classification_extraction_instructions,
+                        )
+                    )
+
+            else:
+                # set 'process' doc to True and use a dummy classification outcome
+                classification_outcomes = [
+                    (
+                        True,
+                        KGClassificationDecisions(
+                            document_id=unprocessed_document.id,
+                            classification_decision=True,
+                            classification_class=None,
+                            source_metadata=None,
+                        ),
+                    )
+                    for unprocessed_document in unprocessed_document_batch
+                ]
+
+            # collect documents to process in batch and capture classification results
             for document_to_process, document_classification_outcome in zip(
                 unprocessed_document_batch, classification_outcomes
             ):
@@ -285,36 +341,61 @@ def kg_extraction(
                         document_classification_result.document_id
                     ] = document_classification_result
 
-            # perform KG extraction on the documents that should be processed
-
-            deep_extraction = document_classification_extraction_instructions[
-                connector_source
-            ].extraction_instructions.deep_extraction
-
             for document_to_process in documents_to_process:
 
+                # 1. perform (implicit) KG 'extractions' on the documents that should be processed
+                # This is really about assigning document meta-data to KG entities/relationships or KG entity attrbutes
+                # General approach:
+                #    - vendor emails to Employee-type entities + relationship to current primary grounded entity
+                #    - external account emails to Account-type entities + relationship to current primary grounded entity
+                #    - non-email owners to KG current entity's attributes, no relationships
+                # We also collect email addresses of vendors and external accounts to inform chunk processing
+
+                kg_document_extractions = (
+                    kg_document_entities_relationships_attribute_generation(
+                        document_to_process, connector_source
+                    )
+                )
+
+                # 2. perform KG extraction on the chunks that should be processed
+
                 formatted_chunk_batches = get_document_chunks_for_kg_processing(
-                    document_to_process.id,
-                    deep_extraction,
-                    index_name,
+                    document_id=document_to_process.id,
+                    deep_extraction=deep_extraction,
+                    index_name=index_name,
                     batch_size=processing_chunk_batch_size,
                 )
 
-                formatted_chunk_batches_list = list(formatted_chunk_batches)
+                formatted_chunk_doc_batches_list = list(formatted_chunk_batches)
 
-                for formatted_chunk_batch in formatted_chunk_batches_list:
-                    processing_chunks.extend(formatted_chunk_batch)
+                for formatted_chunk_doc_batch in formatted_chunk_doc_batches_list:
 
-                    if len(processing_chunks) >= processing_chunk_batch_size:
-                        carryover_chunks.extend(
-                            processing_chunks[processing_chunk_batch_size:]
-                        )
-                        processing_chunks = processing_chunks[
-                            :processing_chunk_batch_size
+                    processing_chunk_doc_extractions.extend(
+                        [
+                            (chunk, kg_document_extractions)
+                            for chunk in formatted_chunk_doc_batch
                         ]
+                    )
+
+                    if (
+                        len(processing_chunk_doc_extractions)
+                        >= processing_chunk_batch_size
+                    ):
+                        carryover_chunk_doc_extractions.extend(
+                            processing_chunk_doc_extractions[
+                                processing_chunk_batch_size:
+                            ]
+                        )
+                        processing_chunk_doc_extractions = (
+                            processing_chunk_doc_extractions[
+                                :processing_chunk_batch_size
+                            ]
+                        )
 
                         chunk_processing_batch_results = _kg_chunk_batch_extraction(
-                            processing_chunks, index_name, tenant_id
+                            chunk_doc_extractions=processing_chunk_doc_extractions,
+                            index_name=index_name,
+                            tenant_id=tenant_id,
                         )
 
                         # Consider removing the stats expressions here and rather write to the db(?)
@@ -379,16 +460,20 @@ def kg_extraction(
                                 num_succeeded=len(
                                     connector_succeeded_chunk_extractions
                                 ),
-                                num_processed=len(processing_chunks),
+                                num_processed=len(processing_chunk_doc_extractions),
                             )
                         )
 
-                        processing_chunks = carryover_chunks.copy()
-                        carryover_chunks = []
+                        processing_chunk_doc_extractions = (
+                            carryover_chunk_doc_extractions.copy()
+                        )
+                        carryover_chunk_doc_extractions = []
 
             # processes remaining chunks
             chunk_processing_batch_results = _kg_chunk_batch_extraction(
-                processing_chunks, index_name, tenant_id
+                chunk_doc_extractions=processing_chunk_doc_extractions,
+                index_name=index_name,
+                tenant_id=tenant_id,
             )
 
             # Consider removing the stats expressions here and rather write to the db(?)
@@ -441,12 +526,12 @@ def kg_extraction(
                     connector_id=connector_id,
                     num_failed=len(connector_failed_chunk_extractions),
                     num_succeeded=len(connector_succeeded_chunk_extractions),
-                    num_processed=len(processing_chunks),
+                    num_processed=len(processing_chunk_doc_extractions),
                 )
             )
 
-            processing_chunks = []
-            carryover_chunks = []
+            processing_chunk_doc_extractions = []
+            carryover_chunk_doc_extractions = []
 
             connector_aggregated_kg_extractions_list.append(
                 connector_aggregated_kg_extractions
@@ -731,7 +816,9 @@ def kg_extraction(
 
 
 def _kg_chunk_batch_extraction(
-    chunks: list[KGChunkFormat],
+    chunk_doc_extractions: list[
+        tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
+    ],
     index_name: str,
     tenant_id: str,
 ) -> KGBatchExtractionStats:
@@ -741,24 +828,114 @@ def _kg_chunk_batch_extraction(
     failed_chunk_id: list[KGChunkId] = []
     succeeded_chunk_extraction: list[KGChunkExtraction] = []
 
-    preformatted_prompt = MASTER_EXTRACTION_PROMPT.format(
-        entity_types=get_entity_types_str(active=True)
-    )
+    # preformatted_prompt = MASTER_EXTRACTION_PROMPT.format(
+    #     entity_types=get_entity_types_str(active=True)
+    # )
 
     def process_single_chunk(
-        chunk: KGChunkFormat, preformatted_prompt: str
+        chunk_doc_extraction: tuple[
+            KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes
+        ],
+        preformatted_prompt: str,
     ) -> tuple[bool, KGUChunkUpdateRequest]:
-        """Process a single chunk and return success status and chunk ID."""
+        """Process a single chunk and return update request and other important KG processing information"""
 
-        # For now, we're just processing the content
-        # TODO: Implement actual prompt application logic
+        # Chunk treatment variables
 
-        llm_preprocessing = prepare_llm_content_extraction(chunk)
+        chunk, kg_document_extractions = chunk_doc_extraction
 
-        if chunk.deep_extraction:
+        # chunk_is_from_call = chunk.source_type.lower() in [
+        #     call_type.value.lower() for call_type in OnyxCallTypes
+        # ]
 
-            formatted_prompt = preformatted_prompt.replace(
-                "---content---", llm_preprocessing.llm_context
+        chunk_needs_deep_extraction = chunk.deep_extraction
+
+        # Get core entity
+
+        chunk.document_id
+        chunk.primary_owners
+        chunk.secondary_owners
+        chunk.content
+        chunk.title.capitalize()
+
+        # Get implied entities and relationships from  chunk attributes
+
+        implied_attribute_entities: set[str] = set()
+        implied_attribute_relationships: set[str] = set()
+        converted_attributes_to_relationships: set[str] = set()
+        attribute_company_participant_emails: set[str] = set()
+        attribute_account_participant_emails: set[str] = set()
+
+        kg_attributes = dict[str, str | list[str]]()
+
+        if chunk.metadata:
+            for attribute, value in chunk.metadata.items():
+                if isinstance(value, str):
+                    if is_email(value):
+                        (
+                            implied_attribute_entities,
+                            implied_attribute_relationships,
+                            attribute_company_participant_emails,
+                            attribute_account_participant_emails,
+                        ) = kg_process_person(
+                            person=value,
+                            core_document_id_name=kg_document_extractions.kg_core_document_id_name,
+                            implied_entities=implied_attribute_entities,
+                            implied_relationships=implied_attribute_relationships,
+                            company_participant_emails=attribute_company_participant_emails,
+                            account_participant_emails=attribute_account_participant_emails,
+                            relationship_type=f"is_{attribute}_of",
+                        )
+
+                        converted_attributes_to_relationships.add(attribute)
+                    else:
+                        kg_attributes[attribute] = value
+
+                elif isinstance(value, list):
+                    email_attribute = False
+                    for item in value:
+                        if is_email(item):
+                            (
+                                implied_attribute_entities,
+                                implied_attribute_relationships,
+                                attribute_company_participant_emails,
+                                attribute_account_participant_emails,
+                            ) = kg_process_person(
+                                person=item,
+                                core_document_id_name=kg_document_extractions.kg_core_document_id_name,
+                                implied_entities=implied_attribute_entities,
+                                implied_relationships=implied_attribute_relationships,
+                                company_participant_emails=attribute_company_participant_emails,
+                                account_participant_emails=attribute_account_participant_emails,
+                                relationship_type=f"is_{attribute}_of",
+                            )
+                            email_attribute = True
+                            converted_attributes_to_relationships.add(attribute)
+                    if not email_attribute:
+                        kg_attributes[attribute] = value
+
+        company_participant_emails = (
+            kg_document_extractions.company_participant_emails
+            | set(attribute_company_participant_emails)
+        )
+        account_participant_emails = (
+            kg_document_extractions.account_participant_emails
+            | set(attribute_account_participant_emails)
+        )
+
+        # Initialize common variables
+        extracted_entities: list[str] = []
+        extracted_relationships: list[str] = []
+        implied_extracted_relationships: list[str] = []
+        extracted_terms: list[str] = []
+
+        if chunk_needs_deep_extraction:
+            llm_context = prepare_llm_content_extraction(
+                chunk, company_participant_emails, account_participant_emails
+            )
+
+            formatted_prompt = MASTER_EXTRACTION_PROMPT.replace(
+                "---content---", llm_context
             )
 
             msg = [
@@ -767,25 +944,17 @@ def _kg_chunk_batch_extraction(
                 )
             ]
 
-        try:
             logger.info(
                 f"LLM Extraction from chunk {chunk.chunk_id} from doc {chunk.document_id}"
             )
 
             try:
-                if chunk.deep_extraction:
-                    raw_extraction_result = fast_llm.invoke(msg)
-                    extraction_result = message_to_string(raw_extraction_result)
-
-                    cleaned_result = (
-                        extraction_result.replace("```json", "")
-                        .replace("```", "")
-                        .strip()
-                    )
-                    parsed_result = json.loads(cleaned_result)
-
-                else:
-                    parsed_result = {}
+                raw_extraction_result = fast_llm.invoke(msg)
+                extraction_result = message_to_string(raw_extraction_result)
+                cleaned_result = (
+                    extraction_result.replace("```json", "").replace("```", "").strip()
+                )
+                parsed_result = json.loads(cleaned_result)
 
                 extracted_entities = parsed_result.get("entities", [])
                 extracted_relationships = [
@@ -793,91 +962,84 @@ def _kg_chunk_batch_extraction(
                     for relationship in parsed_result.get("relationships", [])
                 ]
                 extracted_terms = parsed_result.get("terms", [])
-
-                implied_extracted_relationships = [
-                    llm_preprocessing.core_entity + "__" + "mentions" + "__" + entity
-                    for entity in extracted_entities
-                ]
-
-                all_entities = set(
-                    list(extracted_entities)
-                    + list(llm_preprocessing.implied_entities)
-                    + list(
-                        generalize_entities(
-                            extracted_entities + llm_preprocessing.implied_entities
-                        )
-                    )
-                )
-
-                logger.info(f"All entities: {all_entities}")
-
-                all_relationships = (
-                    extracted_relationships
-                    + llm_preprocessing.implied_relationships
-                    + implied_extracted_relationships
-                )
-                all_relationships = list(
-                    set(
-                        list(all_relationships)
-                        + list(generalize_relationships(all_relationships))
-                    )
-                )
-
-                kg_updates = [
-                    KGUChunkUpdateRequest(
-                        document_id=chunk.document_id,
-                        chunk_id=chunk.chunk_id,
-                        core_entity=llm_preprocessing.core_entity,
-                        entities=all_entities,
-                        relationships=set(all_relationships),
-                        terms=set(extracted_terms),
-                    ),
-                ]
-
-                update_kg_chunks_vespa_info(
-                    kg_update_requests=kg_updates,
-                    index_name=index_name,
-                    tenant_id=tenant_id,
-                )
-
-                logger.info(
-                    f"KG updated: {chunk.chunk_id} from doc {chunk.document_id}"
-                )
-
-                return True, kg_updates[0]  # only single chunk
-
-            except json.JSONDecodeError as e:
+            except Exception as e:
                 logger.error(
-                    f"Invalid JSON format for extraction of chunk {chunk.chunk_id} \
-                             from doc {chunk.document_id}: {str(e)}"
+                    f"Failed to process chunk {chunk.chunk_id} from doc {chunk.document_id}: {str(e)}"
                 )
-                logger.error(f"Raw output: {extraction_result}")
                 return False, KGUChunkUpdateRequest(
                     document_id=chunk.document_id,
                     chunk_id=chunk.chunk_id,
-                    core_entity=llm_preprocessing.core_entity,
+                    core_entity=kg_document_extractions.kg_core_document_id_name,
                     entities=set(),
                     relationships=set(),
                     terms=set(),
                 )
 
-        except Exception as e:
-            logger.error(
-                f"Failed to process chunk {chunk.chunk_id} from doc {chunk.document_id}: {str(e)}"
+        implied_extracted_relationships = [
+            kg_document_extractions.kg_core_document_id_name
+            + "__"
+            + "mentions"
+            + "__"
+            + extracted_entity
+            for extracted_entity in extracted_entities
+        ]
+
+        all_entities = set(
+            list(extracted_entities)
+            + list(kg_document_extractions.implied_entities)
+            + list(
+                generalize_entities(
+                    extracted_entities + list(kg_document_extractions.implied_entities)
+                )
             )
-            return False, KGUChunkUpdateRequest(
+        )
+
+        logger.debug(f"All entities: {all_entities}")
+
+        all_relationships = (
+            extracted_relationships
+            + list(kg_document_extractions.implied_relationships)
+            + implied_extracted_relationships
+        )
+        all_relationships = list(set(all_relationships))
+
+        # Add vendor relationship if no relationship established yet
+
+        if not all_relationships:
+            all_relationships.append(
+                f"VENDOR:{KG_OWN_COMPANY}"
+                + "__"
+                + "relates_to"
+                + "__"
+                + kg_document_extractions.kg_core_document_id_name
+            )
+
+        kg_updates = [
+            KGUChunkUpdateRequest(
                 document_id=chunk.document_id,
                 chunk_id=chunk.chunk_id,
-                core_entity="",
-                entities=set(),
-                relationships=set(),
-                terms=set(),
-            )
+                core_entity=kg_document_extractions.kg_core_document_id_name,
+                entities=all_entities,
+                relationships=set(all_relationships),
+                terms=set(extracted_terms),
+            ),
+        ]
+
+        update_kg_chunks_vespa_info(
+            kg_update_requests=kg_updates,
+            index_name=index_name,
+            tenant_id=tenant_id,
+        )
+
+        logger.info(f"KG updated: {chunk.chunk_id} from doc {chunk.document_id}")
+
+        return True, kg_updates[0]  # only single chunk
 
     # Assume for prototype: use_threads = True. TODO: Make thread safe!
 
     functions_with_args: list[tuple[Callable, tuple]] = [
-        (process_single_chunk, (chunk, preformatted_prompt)) for chunk in chunks
+        (process_single_chunk, (chunk_doc_extraction, ""))
+        for chunk_doc_extraction in chunk_doc_extractions
     ]
 
     logger.debug("Running KG extraction on chunks in parallel")
@@ -959,7 +1121,9 @@ def _kg_chunk_batch_extraction(
                 aggregated_kg_extractions.terms[kg_term] += 1
 
     return KGBatchExtractionStats(
-        connector_id=chunks[0].connector_id if chunks else None,  # TODO: Update!
+        connector_id=(
+            chunk_doc_extractions[0][0].connector_id if chunk_doc_extractions else None
+        ),  # All have same connector_id
         succeeded=succeeded_chunk_id,
         failed=failed_chunk_id,
         aggregated_kg_extractions=aggregated_kg_extractions,

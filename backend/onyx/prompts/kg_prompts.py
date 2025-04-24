@@ -263,7 +263,7 @@ the are also part of the initial list of entities! This is essential!
 
 {SEPARATOR_LINE}
 
-Here is the text you are asked to extract knowledge from:
+Here is the text you are asked to extract knowledge from, if needed with additional information about any participants:
 {SEPARATOR_LINE}
 ---content---
 {SEPARATOR_LINE}
@@ -448,7 +448,7 @@ Here is the question you are asked to extract desired entities, relationships, a
 GENERAL_CHUNK_PREPROCESSING_PROMPT = f"""
 This is a part of a document that you need to extract information from.
 
-Here are the primary owners of the document:
+Here are the vendor participants of the document:
 {{primary_owner_emails}}
 
 Here are the secondary owners of the document:
@@ -531,11 +531,11 @@ Here are more instructions:
 
 a) Regarding the strategy: there are two types of strategies available to you:
 
-1. SIMPLE: You think you can awnswer the question using a atabase that is aware of the entities, relationships, \
-and terms, and is generally suitable if it is enough to either list or count entities or relationships. Usually, \
-'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often).
+1. SIMPLE: You think you can awnswer the question using a database that is aware of the entities, relationships, \
+and terms, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
+'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', etc.
 2. DEEP: You think you really should ALSO leverage the actual text of sources to answer the question, which sits \
-in a vector database.
+in a vector database. Examples are 'what is discussed in...', 'how does... relate to...', etc.
 
 Your task is to decide which of the two strategies to use.
 
@@ -754,8 +754,12 @@ question to decide which one you want!
 - It is ok to generate nested SQL as long as it correct postgres syntax!
 - Attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
 "attributes ->> '<attribute>' = '<attribute value>'".
-- Again, NEVER count or retrieve source documents! Only entities, or in incases the question was about dates or times, \
-source_date.
+-  The SELECT clause MUST only contain entities or aggregations/counts of entities, or in cases the \
+question was about dates or times, then it can source_date. But source_document MUST NEVER appear \
+in the SELECT clause!
+- Again, NEVER count or retrieve source documents in SELECT CLAUSE, whether it is in combination with \
+entities, with a dictinct, etc. NO source_document in SELECT CLAUSE! So NEVER produce a \
+'SELECT COOUNT(source_entity, source_document)...'
 - Please think about whether you are interested in source entities or target entities! For that purpose, \
 consider the allowed relationship types to make sure you select or count the correct one!
 - Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \

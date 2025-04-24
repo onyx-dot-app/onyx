@@ -978,9 +978,9 @@ Only output the category name, nothing else."""
     # replace with clustering results in vespa database
 
     with get_session_with_current_tenant() as db_session:
-        kg_processed_document_ids = get_kg_extracted_document_ids(db_session)
+        kg_extracted_document_ids = get_kg_extracted_document_ids(db_session)
 
-        for document_id in kg_processed_document_ids:
+        for document_id in kg_extracted_document_ids:
             formatted_chunk_batches = get_document_chunks_for_kg_processing(
                 document_id,
                 deep_extraction=False,
@@ -1034,11 +1034,11 @@ Only output the category name, nothing else."""
     # Update document kg info
 
     with get_session_with_current_tenant() as db_session:
-        all_kg_processed_documents_info = get_all_kg_extracted_documents_info(
+        all_kg_extracted_documents_info = get_all_kg_extracted_documents_info(
             db_session
         )
 
-    for document_id, document_kg_info in all_kg_processed_documents_info:
+    for document_id, document_kg_info in all_kg_extracted_documents_info:
         original_doc_entities = document_kg_info["entities"]
         original_doc_relationships = document_kg_info["relationships"]
         original_doc_terms = document_kg_info["terms"]
