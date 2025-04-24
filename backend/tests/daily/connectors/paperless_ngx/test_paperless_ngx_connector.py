@@ -1,127 +1,188 @@
-from collections.abc import Callable
-from typing import Any
+from datetime import datetime
+from datetime import timezone
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
-from onyx.connectors.models import Document
+import pytest
+import requests
+
 from onyx.connectors.models import SlimDocument
+from onyx.connectors.paperless_ngx.connector import CORRESPONDENTS_ENDPOINT
+from onyx.connectors.paperless_ngx.connector import DOCUMENT_TYPES_ENDPOINT
+from onyx.connectors.paperless_ngx.connector import DOCUMENTS_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import PaperlessNgxConnector
+from onyx.connectors.paperless_ngx.connector import TAGS_ENDPOINT
+from onyx.connectors.paperless_ngx.connector import USERS_ENDPOINT
 
 
-_THREAD_1_START_TIME = 1730568700
-_THREAD_1_END_TIME = 1730569000
-
-"""
-This thread was 4 emails long:
-    admin@onyx-test.com -> test-group-1@onyx-test.com (conaining test_user_1 and test_user_2)
-    test_user_1@onyx-test.com -> admin@onyx-test.com
-    admin@onyx-test.com -> test_user_2@onyx-test.com + BCC: test_user_3@onyx-test.com
-    test_user_3@onyx-test.com -> admin@onyx-test.com
-"""
-_THREAD_1_BY_ID: dict[str, dict[str, Any]] = {
-    "192edefb315737c3": {
-        "email": "admin@onyx-test.com",
-        "sections_count": 4,
-        "primary_owners": set(
-            [
-                "admin@onyx-test.com",
-                "test_user_1@onyx-test.com",
-                "test_user_3@onyx-test.com",
-            ]
-        ),
-        "secondary_owners": set(
-            [
-                "test-group-1@onyx-test.com",
-                "admin@onyx-test.com",
-                "test_user_2@onyx-test.com",
-                "test_user_3@onyx-test.com",
-            ]
-        ),
-    },
-    "192edf020d2f5def": {
-        "email": "test_user_1@onyx-test.com",
-        "sections_count": 2,
-        "primary_owners": set(["admin@onyx-test.com", "test_user_1@onyx-test.com"]),
-        "secondary_owners": set(["test-group-1@onyx-test.com", "admin@onyx-test.com"]),
-    },
-    "192edf020ae90aab": {
-        "email": "test_user_2@onyx-test.com",
-        "sections_count": 2,
-        "primary_owners": set(["admin@onyx-test.com"]),
-        "secondary_owners": set(
-            ["test-group-1@onyx-test.com", "test_user_2@onyx-test.com"]
-        ),
-    },
-    "192edf18316015fa": {
-        "email": "test_user_3@onyx-test.com",
-        "sections_count": 2,
-        "primary_owners": set(["admin@onyx-test.com", "test_user_3@onyx-test.com"]),
-        "secondary_owners": set(
-            [
-                "admin@onyx-test.com",
-                "test_user_2@onyx-test.com",
-                "test_user_3@onyx-test.com",
-            ]
-        ),
-    },
-}
+@pytest.fixture
+def connector():
+    return PaperlessNgxConnector()
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
-def test_slim_docs_retrieval(
-    mock_get_api_key: MagicMock,
-    google_gmail_service_acct_connector_factory: Callable[..., PaperlessNgxConnector],
-) -> None:
-    print("\n\nRunning test_slim_docs_retrieval")
-    connector = google_gmail_service_acct_connector_factory()
-    retrieved_slim_docs: list[SlimDocument] = []
-    for doc_batch in connector.retrieve_all_slim_documents(
-        _THREAD_1_START_TIME, _THREAD_1_END_TIME
-    ):
-        retrieved_slim_docs.extend(doc_batch)
-
-    assert len(retrieved_slim_docs) == 4
-
-    for doc in retrieved_slim_docs:
-        permission_info = doc.perm_sync_data
-        assert isinstance(permission_info, dict)
-        user_email = permission_info["user_email"]
-        assert _THREAD_1_BY_ID[doc.id]["email"] == user_email
+@pytest.fixture
+def mock_document_response():
+    return {
+        "id": 1,
+        "title": "Test Document",
+        "content": "Test content",
+        "created": "2023-01-01T00:00:00Z",
+        "modified": "2023-01-02T00:00:00Z",
+        "added": "2023-01-03T00:00:00Z",
+        "original_file_name": "test.pdf",
+        "download_url": f"{DOCUMENTS_ENDPOINT}1/download/",
+        "thumbnail_url": f"{DOCUMENTS_ENDPOINT}1/thumb/",
+        "correspondent": None,
+        "document_type": None,
+        "tags": [],
+        "owner": None,
+    }
 
 
-@patch(
-    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
-    return_value=None,
-)
-def test_docs_retrieval(
-    mock_get_api_key: MagicMock,
-    google_gmail_service_acct_connector_factory: Callable[..., PaperlessNgxConnector],
-) -> None:
-    print("\n\nRunning test_docs_retrieval")
-    connector = google_gmail_service_acct_connector_factory()
-    retrieved_docs: list[Document] = []
-    for doc_batch in connector.poll_source(_THREAD_1_START_TIME, _THREAD_1_END_TIME):
-        retrieved_docs.extend(doc_batch)
+@pytest.fixture
+def mock_responses(mock_document_response):
+    return {
+        "documents": [mock_document_response],
+        "tags": [],
+        "users": [],
+        "correspondents": [],
+        "document_types": [],
+    }
 
-    assert len(retrieved_docs) == 4
 
-    for doc in retrieved_docs:
-        id = doc.id
-        retrieved_primary_owner_emails: set[str | None] = set()
-        retrieved_secondary_owner_emails: set[str | None] = set()
-        if doc.primary_owners:
-            retrieved_primary_owner_emails = set(
-                [owner.email for owner in doc.primary_owners]
-            )
-        if doc.secondary_owners:
-            retrieved_secondary_owner_emails = set(
-                [owner.email for owner in doc.secondary_owners]
-            )
-        assert _THREAD_1_BY_ID[id]["sections_count"] == len(doc.sections)
-        assert _THREAD_1_BY_ID[id]["primary_owners"] == retrieved_primary_owner_emails
-        assert (
-            _THREAD_1_BY_ID[id]["secondary_owners"] == retrieved_secondary_owner_emails
+@pytest.fixture
+def setup_connector(connector):
+    credentials = {
+        "paperless_ngx_api_url": "http://test.com",
+        "paperless_ngx_auth_token": "test_token",
+    }
+    connector.load_credentials(credentials)
+    return connector
+
+
+@pytest.fixture
+def mock_get_side_effect(mock_responses):
+    def side_effect(url, **kwargs):
+        return MagicMock(
+            ok=True,
+            json=lambda: {
+                "count": 1,
+                "next": None,
+                "results": (
+                    mock_responses["documents"]
+                    if DOCUMENTS_ENDPOINT in url
+                    else (
+                        mock_responses["tags"]
+                        if TAGS_ENDPOINT in url
+                        else (
+                            mock_responses["users"]
+                            if USERS_ENDPOINT in url
+                            else (
+                                mock_responses["correspondents"]
+                                if CORRESPONDENTS_ENDPOINT in url
+                                else mock_responses["document_types"]
+                            )
+                        )
+                    )
+                ),
+            },
         )
+
+    return side_effect
+
+
+def test_load_credentials(connector):
+    credentials = {
+        "paperless_ngx_api_url": "http://test.com",
+        "paperless_ngx_auth_token": "test_token",
+    }
+
+    connector.load_credentials(credentials)
+
+    assert connector.api_url == "http://test.com"
+    assert connector.auth_token == "test_token"
+
+
+def test_load_from_state(setup_connector, mock_get_side_effect):
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = mock_get_side_effect
+
+        docs = next(setup_connector.load_from_state())
+
+        # Verify results
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.id == "1"
+        assert doc.title == "Test Document"
+        assert doc.source == "paperless_ngx"
+
+        # Verify requests were made with correct headers and URLs
+        expected_headers = {
+            "Authorization": "Token test_token",
+            "Accept": "application/json",
+        }
+        assert mock_get.call_count == 5  # One call for each endpoint
+        mock_get.assert_any_call(
+            f"http://test.com{DOCUMENTS_ENDPOINT}", headers=expected_headers, params={}
+        )
+        mock_get.assert_any_call(
+            f"http://test.com{TAGS_ENDPOINT}", headers=expected_headers, params={}
+        )
+        mock_get.assert_any_call(
+            f"http://test.com{USERS_ENDPOINT}", headers=expected_headers, params={}
+        )
+        mock_get.assert_any_call(
+            f"http://test.com{CORRESPONDENTS_ENDPOINT}",
+            headers=expected_headers,
+            params={},
+        )
+        mock_get.assert_any_call(
+            f"http://test.com{DOCUMENT_TYPES_ENDPOINT}",
+            headers=expected_headers,
+            params={},
+        )
+
+
+def test_retrieve_all_slim_documents(setup_connector, mock_get_side_effect):
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = mock_get_side_effect
+
+        docs = next(setup_connector.retrieve_all_slim_documents())
+
+        assert len(docs) == 1
+        doc = docs[0]
+        assert isinstance(doc, SlimDocument)
+        assert doc.id == "1"
+
+
+def test_poll_source(setup_connector, mock_get_side_effect):
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = mock_get_side_effect
+
+        since = int(datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp())
+        til = int(datetime(2023, 2, 1, tzinfo=timezone.utc).timestamp())
+        docs = next(setup_connector.poll_source(since, til))
+
+        assert len(docs) == 1
+        doc = docs[0]
+        assert doc.id == "1"
+        assert doc.title == "Test Document"
+
+        # Verify the date parameters were passed correctly
+        calls = mock_get.call_args_list
+        docs_call = [call for call in calls if DOCUMENTS_ENDPOINT in call[0][0]][0]
+        expected_params = {
+            "modified__gte": f"{datetime.fromtimestamp(since, timezone.utc).isoformat()}",
+            "modified__lte": f"{datetime.fromtimestamp(til, timezone.utc).isoformat()}",
+        }
+        assert docs_call[1]["params"] == expected_params
+
+
+def test_request_error_handling(setup_connector):
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = requests.exceptions.RequestException("Test error")
+
+        with pytest.raises(ConnectionError) as exc_info:
+            setup_connector._make_request(DOCUMENTS_ENDPOINT)
+
+        assert "Failed to connect" in str(exc_info.value)
