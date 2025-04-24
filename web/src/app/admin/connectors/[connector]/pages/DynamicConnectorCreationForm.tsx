@@ -72,27 +72,29 @@ const DynamicConnectionForm: FC<DynamicConnectionFormProps> = ({
       <AccessTypeForm connector={connector} />
       <AccessTypeGroupSelector connector={connector} />
 
-      {config.advanced_values.length > 0 && (
-        <>
-          <AdvancedOptionsToggle
-            showAdvancedOptions={showAdvancedOptions}
-            setShowAdvancedOptions={setShowAdvancedOptions}
-          />
-          {showAdvancedOptions &&
-            config.advanced_values.map(
-              (field) =>
-                !field.hidden && (
-                  <RenderField
-                    key={field.name}
-                    field={field}
-                    values={values}
-                    connector={connector}
-                    currentCredential={currentCredential}
-                  />
-                )
-            )}
-        </>
-      )}
+      {config.advanced_values.length > 0 &&
+        (!config.advancedValuesVisibleCondition ||
+          config.advancedValuesVisibleCondition(values, currentCredential)) && (
+          <>
+            <AdvancedOptionsToggle
+              showAdvancedOptions={showAdvancedOptions}
+              setShowAdvancedOptions={setShowAdvancedOptions}
+            />
+            {showAdvancedOptions &&
+              config.advanced_values.map(
+                (field) =>
+                  !field.hidden && (
+                    <RenderField
+                      key={field.name}
+                      field={field}
+                      values={values}
+                      connector={connector}
+                      currentCredential={currentCredential}
+                    />
+                  )
+              )}
+          </>
+        )}
     </>
   );
 };

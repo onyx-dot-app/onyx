@@ -143,6 +143,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         shared_drive_urls: str | None = None,
         my_drive_emails: str | None = None,
         shared_folder_urls: str | None = None,
+        specific_user_emails: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         # OLD PARAMETERS
         folder_paths: list[str] | None = None,
@@ -208,6 +209,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
         shared_folder_url_list = _extract_str_list_from_comma_str(shared_folder_urls)
         self._requested_folder_ids = set(_extract_ids_from_urls(shared_folder_url_list))
+        self._specific_user_emails = _extract_str_list_from_comma_str(
+            specific_user_emails
+        )
 
         self._primary_admin_email: str | None = None
 
@@ -269,6 +273,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         self._retrieved_ids.add(folder_id)
 
     def _get_all_user_emails(self) -> list[str]:
+        if self._specific_user_emails:
+            return self._specific_user_emails
+
         # Start with primary admin email
         user_emails = [self.primary_admin_email]
 
