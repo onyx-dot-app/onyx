@@ -133,7 +133,7 @@ def _get_time_filtered_query(
     return query
 
 
-def _is_object_type_is_empty(
+def _object_type_has_api_data(
     sf_client: Salesforce, sf_type: str, time_filter: str
 ) -> bool:
     """
@@ -158,22 +158,9 @@ def _bulk_retrieve_from_salesforce(
     sf_client: Salesforce,
 ) -> tuple[str, list[str] | None]:
     """Returns a tuple of
-    1. the salesforce object type
-    2. the list of CSV's
+    1. the salesforce object type (NOTE: seems redundant)
+    2. the list of CSV's written into the target directory
     """
-
-    # if _is_object_type_is_empty(sf_client, sf_type, time_filter):
-    #     return sf_type, None
-
-    # queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, sf_type)
-    # if "LastModifiedDate" in queryable_fields:
-    #     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
-    #     if _is_object_type_is_empty(sf_client, sf_type, time_filter):
-    #         return sf_type, None
-    # else:
-    #     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}"
-    #     if _is_object_type_is_empty(sf_client, sf_type, time_filter):
-    #         return sf_type, None
 
     bulk_2_handler = SFBulk2Handler(
         session_id=sf_client.session_id,
@@ -281,7 +268,7 @@ def fetch_all_csvs_in_parallel(
 
             break
 
-        if _is_object_type_is_empty(sf_client, sf_type, time_filter):
+        if _object_type_has_api_data(sf_client, sf_type, time_filter):
             logger.warning(f"Object skipped (no data available): type={sf_type}")
             continue
 

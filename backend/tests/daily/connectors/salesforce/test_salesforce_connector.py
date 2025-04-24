@@ -134,10 +134,13 @@ def test_salesforce_connector_poll_source(
             all_docs_1.append(doc)
 
     len_1 = len(all_docs_1)
+
+    # NOTE: this is the correct document count, but a partial download results in an
+    # incomplete set of object relationships. This is expected.
     assert len_1 > 1100 and len_1 < 1200
     print(f"all_docs_1 length: {len(all_docs_1)}")
 
-    # leave this out for the moment because it's too slow
+    # leave this out for the moment because it's slow to process 30k docs
     # all_docs_2: list[Document] = []
     # for doc_batch in salesforce_connector.poll_source(
     #     intermediate_time.timestamp(), time.time()
