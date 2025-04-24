@@ -271,7 +271,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                         },
                     )
                 )
-                yield documents
+            yield documents
 
             endCursor = response_json["data"]["issues"]["pageInfo"]["endCursor"]
             has_more = response_json["data"]["issues"]["pageInfo"]["hasNextPage"]
