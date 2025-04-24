@@ -10,7 +10,10 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-from onyx.llm.llm_provider_options import fetch_model_names_for_provider_as_set
+from onyx.llm.llm_provider_options import (
+    fetch_model_names_for_provider_as_set,
+    fetch_visible_model_names_for_provider_as_set,
+)
 
 # revision identifiers, used by Alembic.
 revision = "7a70b7664e37"
@@ -31,8 +34,7 @@ def _resolve(
 
     # If both are defined, we need to make sure that `model_names` is a superset of `display_model_names`.
     if models and display_models:
-        if not display_models.issubset(models):
-            models = display_models.union(models)
+        models = display_models.union(models)
 
     # If only `model_names` is defined, then:
     #   - If default-model-names are available for the `provider_name`, then set `display_model_names` to it
@@ -41,12 +43,12 @@ def _resolve(
     #
     # This preserves the invariant that `display_models` is a subset of `models`.
     elif models and not display_models:
-        default_models_for_provider = fetch_model_names_for_provider_as_set(
-            provider_name
+        visible_default_models = fetch_visible_model_names_for_provider_as_set(
+            provider_name=provider_name
         )
-        if default_models_for_provider:
-            display_models = set(default_models_for_provider)
-            models = models.union(set(default_models_for_provider))
+        if visible_default_models:
+            display_models = set(visible_default_models)
+            models = display_models.union(models)
         else:
             display_models = set(models)
 
@@ -55,28 +57,36 @@ def _resolve(
     #
     # This will also preserve the invariant that `display_models` is a subset of `models`.
     elif not models and display_models:
-        default_models_for_provider = fetch_model_names_for_provider_as_set(
-            provider_name
+        default_models = fetch_model_names_for_provider_as_set(
+            provider_name=provider_name
         )
-        models = (
-            display_models.union(default_models_for_provider)
-            if default_models_for_provider
-            else set(display_models)
-        )
+        if default_models:
+            models = display_models.union(default_models)
+        else:
+            models = set(display_models)
 
     # If neither are defined, then set `models` and `display_models` to the default-model-names for the given provider.
     #
     # This will also preserve the invariant that `display_models` is a subset of `models`.
     else:
-        default_models_for_provider = fetch_model_names_for_provider_as_set(
-            provider_name
+        default_models = fetch_model_names_for_provider_as_set(
+            provider_name=provider_name
         )
-        models = (
-            set(default_models_for_provider) if default_models_for_provider else set()
+        visible_default_models = fetch_visible_model_names_for_provider_as_set(
+            provider_name=provider_name
         )
-        display_models = (
-            set(default_models_for_provider) if default_models_for_provider else set()
-        )
+
+        if default_models:
+            if not visible_default_models:
+                raise RuntimeError
+            models = default_models
+            display_models = visible_default_models
+
+        # This is not a well-known llm-provider; we can't provide any model suggestions.
+        # Therefore, we set to the empty set and continue
+        else:
+            models = set()
+            display_models = set()
 
     # It is possible that `default_model_name` is not in `models` and is not in `display_models`.
     # It is also possible that `fast_default_model_name` is not in `models` and is not in `display_models`.
