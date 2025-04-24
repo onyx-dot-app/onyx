@@ -27,7 +27,7 @@ export default async function Page(props: {
     );
   } else {
     body = (
-      <div className="w-full my-8">
+      <div className="w-full mt-8 pb-8">
         <div>
           <div>
             <CardSection>

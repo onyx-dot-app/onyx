@@ -276,7 +276,10 @@ const FilePickerFolderItem: React.FC<{
 export interface FilePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (
+    selectedFiles: FileResponse[],
+    selectedFolders: FolderResponse[]
+  ) => void;
   buttonContent: string;
   setPresentingDocument: (onyxDocument: MinimalOnyxDocument) => void;
 }
@@ -323,7 +326,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     createFileFromLink,
   } = useDocumentsContext();
 
-  const router = useRouter();
   const [isCreatingFileFromLink, setIsCreatingFileFromLink] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
 
@@ -1374,7 +1376,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                   <div>
                     <Button
                       type="button"
-                      onClick={onSave}
+                      onClick={() =>
+                        onSave(selectedItems.files, selectedItems.folders)
+                      }
                       className="px-8 py-2 w-48"
                       disabled={
                         isUploadingFile ||

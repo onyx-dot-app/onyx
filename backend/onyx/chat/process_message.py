@@ -157,6 +157,7 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from onyx.utils.timing import log_function_time
+from onyx.utils.timing import log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -1495,7 +1496,7 @@ def _post_llm_answer_processing(
         yield StreamingError(error="Failed to parse LLM output")
 
 
-# @log_generator_function_time()
+@log_generator_function_time()
 def stream_chat_message(
     new_msg_req: CreateChatMessageRequest,
     user: User | None,
