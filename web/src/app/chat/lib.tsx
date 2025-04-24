@@ -212,6 +212,10 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     message: message,
+    // just use the default prompt for the assistant.
+    // should remove this in the future, as we don't support multiple prompts for a
+    // single assistant anyways
+    prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     force_user_file_search: forceUserFileSearch,
     file_descriptors: fileDescriptors,
