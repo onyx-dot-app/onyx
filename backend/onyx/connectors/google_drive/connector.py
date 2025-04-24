@@ -622,7 +622,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             checkpoint.completion_map[user_email].stage != DriveRetrievalStage.DONE
             for user_email in all_org_emails
         ):
-            raise ValueError("some users did not complete retrieval")
+            raise RuntimeError("some users did not complete retrieval")
         checkpoint.completion_stage = DriveRetrievalStage.DONE
 
     def _determine_retrieval_ids(
@@ -653,9 +653,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             checkpoint.completion_stage = next_stage
         else:
             if checkpoint.drive_ids_to_retrieve is None:
-                raise ValueError("drive ids to retrieve not set")
+                raise ValueError("drive ids to retrieve not set in checkpoint")
             if checkpoint.folder_ids_to_retrieve is None:
-                raise ValueError("folder ids to retrieve not set")
+                raise ValueError("folder ids to retrieve not set in checkpoint")
             # When loading from a checkpoint, load the previously cached drive and folder ids
             drive_ids_to_retrieve = set(checkpoint.drive_ids_to_retrieve)
             folder_ids_to_retrieve = set(checkpoint.folder_ids_to_retrieve)
