@@ -481,7 +481,6 @@ class ConfluenceConnector(
                 next_page_callback=store_next_page_start,
             )
         ):
-
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
 
@@ -540,7 +539,6 @@ class ConfluenceConnector(
         Return 'slim' docs (IDs + minimal permission data).
         Does not fetch actual text. Used primarily for incremental permission sync.
         """
-        print("Retrieving all slim documents")
         doc_metadata_list: list[SlimDocument] = []
         restrictions_expand = ",".join(_RESTRICTIONS_EXPANSION_FIELDS)
 

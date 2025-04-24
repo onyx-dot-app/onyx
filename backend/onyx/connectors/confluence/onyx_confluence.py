@@ -392,7 +392,6 @@ class OnyxConfluence:
 
     def __getattr__(self, name: str) -> Any:
         """Dynamically intercept attribute/method access."""
-        print("hello")
         attr = getattr(self._confluence, name, None)
         if attr is None:
             # The underlying Confluence client doesn't have this attribute
@@ -413,14 +412,13 @@ class OnyxConfluence:
             self._make_rate_limited_confluence_method(name, self._credentials_provider)
         )
 
-        print(f"Returning rate limited method for {name}")
-
         return rate_limited_method
 
     def _paginate_url(
         self,
         url_suffix: str,
         limit: int | None = None,
+        # Called with the "start" param to use to resume from the last retrieved page
         next_page_callback: Callable[[int], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
@@ -534,6 +532,7 @@ class OnyxConfluence:
         expand: str | None = None,
         limit: int | None = None,
         start: int = 0,
+        # Called with the "start" param to use to resume from the last retrieved page
         next_page_callback: Callable[[int], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
@@ -559,7 +558,6 @@ class OnyxConfluence:
         The limit only applies to the top level query.
         All expansion paginations use default pagination limit (defined by Atlassian).
         """
-        print(f"Paginating through expansions for {cql}")
 
         def _traverse_and_update(data: dict | list) -> None:
             if isinstance(data, dict):
@@ -576,7 +574,6 @@ class OnyxConfluence:
         for confluence_object in self.paginated_cql_retrieval(cql, expand, limit):
             _traverse_and_update(confluence_object)
             yield confluence_object
-            print(f"Yielded {confluence_object}")
 
     def paginated_cql_user_retrieval(
         self,

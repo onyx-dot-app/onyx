@@ -149,7 +149,7 @@ def test_load_from_checkpoint_happy_path(
         # First page response
         MagicMock(
             json=lambda: {
-                "results": [mock_page1, mock_page2, mock_page3],
+                "results": [mock_page1, mock_page2],
                 "_links": {"next": "rest/api/content/search?cql=type=page&start=3"},
             }
         ),
@@ -157,7 +157,7 @@ def test_load_from_checkpoint_happy_path(
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
-        MagicMock(json=lambda: {"results": []}),
+        MagicMock(json=lambda: {"results": [mock_page3]}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
     ]
@@ -416,11 +416,6 @@ def test_checkpoint_progress(
     outputs = load_everything_from_checkpoint_connector(
         confluence_connector, 0, end_time
     )
-
-    for output in outputs:
-        print(output)
-        print()
-        print()
 
     first_checkpoint = outputs[0].next_checkpoint
 
