@@ -51,8 +51,8 @@ def aggregate_kg_extractions(
         entities=defaultdict(int),
         relationships=defaultdict(lambda: defaultdict(int)),
         terms=defaultdict(int),
+        attributes=defaultdict(dict),
     )
-
     for connector_aggregated_kg_extractions in connector_aggregated_kg_extractions_list:
         for (
             grounded_entity,
@@ -84,6 +84,7 @@ def aggregate_kg_extractions(
                 aggregated_kg_extractions.terms[term] = count
             else:
                 aggregated_kg_extractions.terms[term] += count
+
     return aggregated_kg_extractions
 
 

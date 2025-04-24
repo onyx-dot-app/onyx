@@ -22,7 +22,6 @@ from onyx.db.relationships import add_or_increment_relationship
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.document_index.vespa.index import KGUDocumentUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
@@ -202,7 +201,6 @@ def kg_extraction(
         kg_enabled_connectors = get_kg_enabled_connectors(db_session)
 
     connector_extraction_stats: list[ConnectorExtractionStats] = []
-    document_kg_updates: Dict[str, KGUDocumentUpdateRequest] = {}
 
     processing_chunk_doc_extractions: list[
         tuple[KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes]
@@ -231,6 +229,7 @@ def kg_extraction(
                     lambda: defaultdict(int)
                 ),  # relationship + source document_id
                 terms=defaultdict(int),
+                attributes=defaultdict(dict),
             )
         )
 
@@ -521,6 +520,12 @@ def kg_extraction(
                         source_document_id
                     ] += count
 
+            for (
+                document_id,
+                attributes,
+            ) in aggregated_batch_extractions.attributes.items():
+                connector_aggregated_kg_extractions.attributes[document_id] = attributes
+
             connector_extraction_stats.append(
                 ConnectorExtractionStats(
                     connector_id=connector_id,
@@ -537,42 +542,6 @@ def kg_extraction(
                 connector_aggregated_kg_extractions
             )
 
-            # aggregate document updates
-
-            for (
-                processed_document
-            ) in (
-                documents_to_process
-            ):  # This will need to change if we do not materialize docs
-                document_kg_updates[processed_document.id] = KGUDocumentUpdateRequest(
-                    document_id=processed_document.id,
-                    entities=set(),
-                    relationships=set(),
-                    terms=set(),
-                )
-
-                updated_chunk_batches = get_document_chunks_for_kg_processing(
-                    processed_document.id,
-                    deep_extraction,
-                    index_name,
-                    batch_size=processing_chunk_batch_size,
-                )
-
-                for updated_chunk_batch in updated_chunk_batches:
-                    for updated_chunk in updated_chunk_batch:
-                        chunk_entities = updated_chunk.entities
-                        chunk_relationships = updated_chunk.relationships
-                        chunk_terms = updated_chunk.terms
-                        document_kg_updates[processed_document.id].entities.update(
-                            chunk_entities
-                        )
-                        document_kg_updates[processed_document.id].relationships.update(
-                            chunk_relationships
-                        )
-                        document_kg_updates[processed_document.id].terms.update(
-                            chunk_terms
-                        )
-
             aggregated_kg_extractions = aggregate_kg_extractions(
                 connector_aggregated_kg_extractions_list
             )
@@ -583,6 +552,16 @@ def kg_extraction(
                 ]
 
             # Populate the KG database with the extracted entities, relationships, and terms
+
+            # Create a dictionary of primary grounded entities to attributes
+
+            entity_attributes_dict: dict[str, dict[str, str | list[str]]] = {}
+            for (
+                document_id,
+                attributes,
+            ) in connector_aggregated_kg_extractions.attributes.items():
+                entity_attributes_dict[document_id] = attributes
+
             for (
                 entity,
                 extraction_count,
@@ -606,6 +585,7 @@ def kg_extraction(
                             entity
                             not in aggregated_kg_extractions.grounded_entities_document_ids
                         ):
+                            # Ungrounded entities
                             add_entity(
                                 db_session=db_session,
                                 kg_stage=KGStage.EXTRACTED,
@@ -614,6 +594,7 @@ def kg_extraction(
                                 occurances=extraction_count,
                             )
                         else:
+                            # Primary grounded entities
                             event_time = get_document_updated_at(
                                 entity,
                                 db_session,
@@ -626,20 +607,27 @@ def kg_extraction(
                                 document_id
                             ]
 
-                            attributes: dict[str, str] = {}
+                            entity_attributes: dict[str, str] = {}
 
                             if document_classification_result.classification_class:
-                                attributes["object_type"] = (
+                                entity_attributes["object_type"] = (
                                     document_classification_result.classification_class
                                 )
 
-                            metadata_attributes = (
-                                document_classification_result.source_metadata
-                            )
-                            if metadata_attributes:
-                                for key, value in metadata_attributes.items():
-                                    if value and isinstance(value, str):
-                                        attributes[key] = value
+                            if document_id in entity_attributes_dict:
+                                entity_attributes.update(
+                                    {
+                                        key: (
+                                            value
+                                            if isinstance(value, str)
+                                            else "; ".join(value)
+                                        )
+                                        for key, value in entity_attributes_dict[
+                                            document_id
+                                        ].items()
+                                        if value
+                                    }
+                                )
 
                             add_entity(
                                 db_session=db_session,
@@ -649,7 +637,7 @@ def kg_extraction(
                                 occurances=extraction_count,
                                 document_id=document_id,
                                 event_time=event_time,
-                                attributes=attributes,
+                                attributes=entity_attributes,
                             )
 
                         db_session.commit()
@@ -776,17 +764,12 @@ def kg_extraction(
 
             # Populate the Documents table with the kg information for the documents
 
-            for document_id, document_kg_update in document_kg_updates.items():
+            for processed_document in documents_to_process:
                 with get_session_with_current_tenant() as db_session:
                     update_document_kg_info(
                         db_session,
-                        document_id,
-                        kg_stage=KGStage.EXTRACTED,
-                        kg_data={
-                            "entities": list(document_kg_update.entities),
-                            "relationships": list(document_kg_update.relationships),
-                            "terms": list(document_kg_update.terms),
-                        },
+                        processed_document.id,
+                        KGStage.EXTRACTED,
                     )
                     db_session.commit()
 
@@ -866,7 +849,7 @@ def _kg_chunk_batch_extraction(
         attribute_company_participant_emails: set[str] = set()
         attribute_account_participant_emails: set[str] = set()
 
-        kg_attributes = dict[str, str | list[str]]()
+        kg_attributes: dict[str, str | list[str]] = {}
 
         if chunk.metadata:
             for attribute, value in chunk.metadata.items():
@@ -985,7 +968,8 @@ def _kg_chunk_batch_extraction(
         ]
 
         all_entities = set(
-            list(extracted_entities)
+            list(implied_attribute_entities)
+            + list(extracted_entities)
             + list(kg_document_extractions.implied_entities)
             + list(
                 generalize_entities(
@@ -997,7 +981,8 @@ def _kg_chunk_batch_extraction(
         logger.debug(f"All entities: {all_entities}")
 
         all_relationships = (
-            extracted_relationships
+            list(implied_attribute_relationships)
+            + list(extracted_relationships)
             + list(kg_document_extractions.implied_relationships)
             + implied_extracted_relationships
         )
@@ -1022,6 +1007,8 @@ def _kg_chunk_batch_extraction(
                 entities=all_entities,
                 relationships=set(all_relationships),
                 terms=set(extracted_terms),
+                converted_attributes=converted_attributes_to_relationships,
+                attributes=kg_attributes,
             ),
         ]
 
@@ -1072,6 +1059,7 @@ def _kg_chunk_batch_extraction(
             lambda: defaultdict(int)
         ),  # relationship + source document_id
         terms=defaultdict(int),
+        attributes=defaultdict(dict),
     )
 
     for chunk_result in succeeded_chunk_extraction:
@@ -1119,6 +1107,10 @@ def _kg_chunk_batch_extraction(
                 aggregated_kg_extractions.terms[kg_term] = 1
             else:
                 aggregated_kg_extractions.terms[kg_term] += 1
+
+        aggregated_kg_extractions.attributes[chunk_result.document_id] = (
+            chunk_result.attributes
+        )
 
     return KGBatchExtractionStats(
         connector_id=(

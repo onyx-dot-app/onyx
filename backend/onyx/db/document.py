@@ -920,17 +920,13 @@ def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
 
 
 def update_document_kg_info(
-    db_session: Session,
-    document_id: str,
-    kg_stage: KGStage,
-    kg_data: dict,
+    db_session: Session, document_id: str, kg_stage: KGStage
 ) -> None:
     """Updates the knowledge graph related information for a document.
     Args:
         db_session (Session): The database session to use
         document_id (str): The ID of the document to update
         kg_stage (KGStage): The stage of the knowledge graph processing for the document
-        kg_data (dict): Dictionary containing KG data with 'entities', 'relationships', and 'terms' keys
     Raises:
         ValueError: If the document with the given ID is not found
     """
@@ -939,7 +935,6 @@ def update_document_kg_info(
         .where(DbDocument.id == document_id)
         .values(
             kg_stage=kg_stage,
-            kg_data=kg_data,
         )
     )
     db_session.execute(stmt)
@@ -983,7 +978,7 @@ def get_document_kg_info(
 
 def get_all_kg_extracted_documents_info(
     db_session: Session,
-) -> list[tuple[str, dict]]:
+) -> list[str]:
     """Retrieves the knowledge graph data for all documents that have been processed.
     Args:
         db_session (Session): The database session to use
@@ -994,13 +989,13 @@ def get_all_kg_extracted_documents_info(
         Only returns documents where kg_stage is EXTRACTED
     """
     stmt = (
-        select(DbDocument.id, DbDocument.kg_data)
+        select(DbDocument.id)
         .where(DbDocument.kg_stage == KGStage.EXTRACTED)
         .order_by(DbDocument.id)
     )
 
     results = db_session.execute(stmt).all()
-    return [(str(doc_id), kg_data or {}) for doc_id, kg_data in results]
+    return [str(doc_id) for doc_id in results]
 
 
 def get_base_llm_doc_information(
@@ -1063,3 +1058,40 @@ def get_document_updated_at(
 
     stmt = select(DbDocument.doc_updated_at).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def reset_all_document_kg_stages(db_session: Session) -> int:
+    """Reset the KG stage of all documents that are not in NOT_STARTED state to NOT_STARTED.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage != KGStage.NOT_STARTED)
+        .values(kg_stage=KGStage.NOT_STARTED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def reset_extracted_document_kg_stages(db_session: Session) -> int:
+    """Reset the KG stage only of documents back to NOT_STARTED.
+    Part of reset flow for documemnts that have been extracted but not clustered.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
+        .values(kg_stage=KGStage.NOT_STARTED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0

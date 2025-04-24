@@ -764,6 +764,12 @@ entities, with a dictinct, etc. NO source_document in SELECT CLAUSE! So NEVER pr
 consider the allowed relationship types to make sure you select or count the correct one!
 - Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \
 of that in the reasoning.
+- Be careful with dates! Often a date will refer to the source data, which is the date when \
+a underlying piece of information was updated. However, if the attributes of an entity contain \
+time information as well (like 'started_at', 'completed_at', etc.), then you should really look at \
+the wording to see whether you should use a date in the attributes or rthge event date.
+- Dates are ALWAYS in string format of the form YYYY-MM-DD, for source date as well as for date-like the attributes! \
+So please use that format, particularly if you use data comparisons (>, <, ...)
 - Again, NO 'relationship' or 'source_document' in the SELECT CLAUSE, be it as direct columns are in aggregations!
 - Try to be as efficient as possible.
 

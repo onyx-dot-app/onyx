@@ -114,6 +114,7 @@ class KGUChunkUpdateRequest(BaseModel):
     relationships: set[str] | None = None
     terms: set[str] | None = None
     converted_attributes: set[str] | None = None
+    attributes: dict[str, str | list[str]] | None = None
 
 
 class KGUDocumentUpdateRequest(BaseModel):

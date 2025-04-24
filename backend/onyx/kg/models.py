@@ -29,6 +29,7 @@ class KGChunkExtraction(BaseModel):
     entities: list[str]
     relationships: list[str]
     terms: list[str]
+    attributes: dict[str, str | list[str]]
 
 
 class KGChunkId(BaseModel):
@@ -47,6 +48,7 @@ class KGAggregatedExtractions(BaseModel):
     entities: dict[str, int]
     relationships: dict[str, dict[str, int]]
     terms: dict[str, int]
+    attributes: dict[str, dict[str, str | list[str]]]
 
 
 class KGBatchExtractionStats(BaseModel):

@@ -1038,34 +1038,7 @@ Only output the category name, nothing else."""
             db_session
         )
 
-    for document_id, document_kg_info in all_kg_extracted_documents_info:
-        original_doc_entities = document_kg_info["entities"]
-        original_doc_relationships = document_kg_info["relationships"]
-        original_doc_terms = document_kg_info["terms"]
-
-        doc_replacement_entities = [
-            entity_replacements.get(
-                format_entity(previous_entity),
-                format_entity(previous_entity),
-            )
-            for previous_entity in original_doc_entities
-        ]
-
-        doc_replacement_relationships = [
-            relationship_replacements.get(
-                format_relationship(previous_relationship),
-                format_relationship(previous_relationship),
-            )
-            for previous_relationship in original_doc_relationships
-        ]
-
-        doc_replacement_terms = original_doc_terms
-
-        replacement_kg_data = {
-            "entities": doc_replacement_entities,
-            "relationships": doc_replacement_relationships,
-            "terms": doc_replacement_terms,
-        }
+    for document_id in all_kg_extracted_documents_info:
 
         # Update the document kg info
         with get_session_with_current_tenant() as db_session:
@@ -1073,7 +1046,6 @@ Only output the category name, nothing else."""
                 db_session,
                 document_id=document_id,
                 kg_stage=KGStage.NORMALIZED,
-                kg_data=replacement_kg_data,
             )
             db_session.commit()
 
