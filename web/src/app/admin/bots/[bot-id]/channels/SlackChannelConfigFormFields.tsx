@@ -190,6 +190,25 @@ export function SlackChannelConfigFormFields({
     }
   );
 
+  // Define the helper text based on the state
+  const channelHelperText = useMemo(() => {
+    if (isLoading || error) {
+      // No helper text needed during loading or if there's an error
+      // (error message is shown separately)
+      return null;
+    }
+    if (!channelOptions || channelOptions.length === 0) {
+      return "No channels found. You can type any channel name in directly.";
+    }
+
+    let helpText = `Select a channel from the dropdown list or type any channel name in directly.`;
+    if (channelOptions.length >= 500) {
+      return `${helpText} (Retrieved the first ${channelOptions.length} channels.)`;
+    }
+
+    return helpText;
+  }, [isLoading, error, channelOptions]);
+
   if (isLoading) {
     return <ThreeDotsLoader />;
   }
@@ -257,11 +276,11 @@ export function SlackChannelConfigFormFields({
                     />
                   )}
                 </Field>
-                <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
-                  Note: This list shows existing public and private channels (up
-                  to 500). You can either select from the list or type any
-                  channel name directly.
-                </p>
+                {channelHelperText && (
+                  <p className="mt-2 text-sm dark:text-neutral-400 text-neutral-600">
+                    {channelHelperText}
+                  </p>
+                )}
               </>
             )}
           </>

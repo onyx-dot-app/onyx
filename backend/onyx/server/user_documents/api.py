@@ -45,7 +45,7 @@ from onyx.server.documents.models import CredentialBase
 from onyx.server.user_documents.models import MessageResponse
 from onyx.server.user_documents.models import UserFileSnapshot
 from onyx.server.user_documents.models import UserFolderSnapshot
-from onyx.setup import setup_logger
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()

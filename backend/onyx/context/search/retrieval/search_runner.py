@@ -164,9 +164,7 @@ def doc_index_retrieval(
     top_base_chunks_standard_ranking_thread: (
         TimeoutThread[list[InferenceChunkUncleaned]] | None
     ) = None
-    top_base_chunks_keyword_ranking_thread: (
-        TimeoutThread[list[InferenceChunkUncleaned]] | None
-    ) = None
+
     top_semantic_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = (
         None
     )
@@ -187,20 +185,6 @@ def doc_index_retrieval(
         query.recency_bias_multiplier,
         query.num_hits,
         QueryExpansionType.SEMANTIC,
-        query.offset,
-    )
-
-    # same query but with 1st vespa phase as keyword retrieval
-    top_base_chunks_keyword_ranking_thread = run_in_background(
-        document_index.hybrid_retrieval,
-        query.query,
-        query_embedding,
-        query.processed_keywords,
-        query.filters,
-        query.hybrid_alpha,
-        query.recency_bias_multiplier,
-        query.num_hits,
-        QueryExpansionType.KEYWORD,
         query.offset,
     )
 
@@ -264,9 +248,6 @@ def doc_index_retrieval(
         top_base_chunks_standard_ranking = wait_on_background(
             top_base_chunks_standard_ranking_thread
         )
-        top_base_chunks_keyword_ranking = wait_on_background(
-            top_base_chunks_keyword_ranking_thread
-        )
 
         top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
 
@@ -274,11 +255,7 @@ def doc_index_retrieval(
             assert top_semantic_chunks_thread is not None
             top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
 
-        all_top_chunks = (
-            top_base_chunks_standard_ranking
-            + top_base_chunks_keyword_ranking
-            + top_keyword_chunks
-        )
+        all_top_chunks = top_base_chunks_standard_ranking + top_keyword_chunks
 
         # use all three retrieval methods to retrieve top chunks
 
@@ -293,12 +270,8 @@ def doc_index_retrieval(
         top_base_chunks_standard_ranking = wait_on_background(
             top_base_chunks_standard_ranking_thread
         )
-        top_base_chunks_keyword_ranking = wait_on_background(
-            top_base_chunks_keyword_ranking_thread
-        )
-        top_chunks = _dedupe_chunks(
-            top_base_chunks_standard_ranking + top_base_chunks_keyword_ranking
-        )
+
+        top_chunks = _dedupe_chunks(top_base_chunks_standard_ranking)
 
     logger.info(f"Overall number of top initial retrieval chunks: {len(top_chunks)}")
 

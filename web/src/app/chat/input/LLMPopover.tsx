@@ -71,7 +71,10 @@ export default function LLMPopover({
         }
 
         llmProvider.model_configurations.forEach((modelConfiguration) => {
-          if (!uniqueModelNames.has(modelConfiguration.name)) {
+          if (
+            !uniqueModelNames.has(modelConfiguration.name) &&
+            modelConfiguration.is_visible
+          ) {
             uniqueModelNames.add(modelConfiguration.name);
             llmOptionsByProvider[llmProvider.provider].push({
               name: modelConfiguration.name,

@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SyncStatus
 from onyx.db.enums import SyncType
 from onyx.db.models import SyncRecord
-from onyx.setup import setup_logger
+from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 

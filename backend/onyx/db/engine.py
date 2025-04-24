@@ -55,7 +55,11 @@ logger = setup_logger()
 SYNC_DB_API = "psycopg2"
 ASYNC_DB_API = "asyncpg"
 
+# why isn't this in configs?
 USE_IAM_AUTH = os.getenv("USE_IAM_AUTH", "False").lower() == "true"
+
+SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
+
 
 # Global so we don't create more than one engine per process
 _ASYNC_ENGINE: AsyncEngine | None = None
@@ -106,10 +110,10 @@ def build_connection_string(
     port: str = POSTGRES_PORT,
     db: str = POSTGRES_DB,
     app_name: str | None = None,
-    use_iam: bool = USE_IAM_AUTH,
+    use_iam_auth: bool = USE_IAM_AUTH,
     region: str = "us-west-2",
 ) -> str:
-    if use_iam:
+    if use_iam_auth:
         base_conn_str = f"postgresql+{db_api}://{user}@{host}:{port}/{db}"
     else:
         base_conn_str = f"postgresql+{db_api}://{user}:{password}@{host}:{port}/{db}"
@@ -176,9 +180,6 @@ def get_db_current_time(db_session: Session) -> datetime:
     return result
 
 
-SCHEMA_NAME_REGEX = re.compile(r"^[a-zA-Z0-9_-]+$")
-
-
 def is_valid_schema_name(name: str) -> bool:
     return SCHEMA_NAME_REGEX.match(name) is not None
 
@@ -188,43 +189,44 @@ class SqlEngine:
     _lock: threading.Lock = threading.Lock()
     _app_name: str = POSTGRES_UNKNOWN_APP_NAME
 
-    @classmethod
-    def _init_engine(cls, **engine_kwargs: Any) -> Engine:
-        connection_string = build_connection_string(
-            db_api=SYNC_DB_API, app_name=cls._app_name + "_sync", use_iam=USE_IAM_AUTH
-        )
+    # NOTE(rkuo) - this appears to be unused, clean it up?
+    # @classmethod
+    # def _init_engine(cls, **engine_kwargs: Any) -> Engine:
+    #     connection_string = build_connection_string(
+    #         db_api=SYNC_DB_API, app_name=cls._app_name + "_sync", use_iam=USE_IAM_AUTH
+    #     )
 
-        # Start with base kwargs that are valid for all pool types
-        final_engine_kwargs: dict[str, Any] = {}
+    #     # Start with base kwargs that are valid for all pool types
+    #     final_engine_kwargs: dict[str, Any] = {}
 
-        if POSTGRES_USE_NULL_POOL:
-            # if null pool is specified, then we need to make sure that
-            # we remove any passed in kwargs related to pool size that would
-            # cause the initialization to fail
-            final_engine_kwargs.update(engine_kwargs)
+    #     if POSTGRES_USE_NULL_POOL:
+    #         # if null pool is specified, then we need to make sure that
+    #         # we remove any passed in kwargs related to pool size that would
+    #         # cause the initialization to fail
+    #         final_engine_kwargs.update(engine_kwargs)
 
-            final_engine_kwargs["poolclass"] = pool.NullPool
-            if "pool_size" in final_engine_kwargs:
-                del final_engine_kwargs["pool_size"]
-            if "max_overflow" in final_engine_kwargs:
-                del final_engine_kwargs["max_overflow"]
-        else:
-            final_engine_kwargs["pool_size"] = 20
-            final_engine_kwargs["max_overflow"] = 5
-            final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
-            final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
+    #         final_engine_kwargs["poolclass"] = pool.NullPool
+    #         if "pool_size" in final_engine_kwargs:
+    #             del final_engine_kwargs["pool_size"]
+    #         if "max_overflow" in final_engine_kwargs:
+    #             del final_engine_kwargs["max_overflow"]
+    #     else:
+    #         final_engine_kwargs["pool_size"] = 20
+    #         final_engine_kwargs["max_overflow"] = 5
+    #         final_engine_kwargs["pool_pre_ping"] = POSTGRES_POOL_PRE_PING
+    #         final_engine_kwargs["pool_recycle"] = POSTGRES_POOL_RECYCLE
 
-            # any passed in kwargs override the defaults
-            final_engine_kwargs.update(engine_kwargs)
+    #         # any passed in kwargs override the defaults
+    #         final_engine_kwargs.update(engine_kwargs)
 
-        logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
-        # echo=True here for inspecting all emitted db queries
-        engine = create_engine(connection_string, **final_engine_kwargs)
+    #     logger.info(f"Creating engine with kwargs: {final_engine_kwargs}")
+    #     # echo=True here for inspecting all emitted db queries
+    #     engine = create_engine(connection_string, **final_engine_kwargs)
 
-        if USE_IAM_AUTH:
-            event.listen(engine, "do_connect", provide_iam_token)
+    #     if USE_IAM_AUTH:
+    #         event.listen(engine, "do_connect", provide_iam_token)
 
-        return engine
+    #     return engine
 
     @classmethod
     def init_engine(
@@ -232,20 +234,29 @@ class SqlEngine:
         pool_size: int,
         # is really `pool_max_overflow`, but calling it `max_overflow` to stay consistent with SQLAlchemy
         max_overflow: int,
+        app_name: str | None = None,
+        db_api: str = SYNC_DB_API,
+        use_iam: bool = USE_IAM_AUTH,
+        connection_string: str | None = None,
         **extra_engine_kwargs: Any,
     ) -> None:
         """NOTE: enforce that pool_size and pool_max_overflow are passed in. These are
         important args, and if incorrectly specified, we have run into hitting the pool
-        limit / using too many connections and overwhelming the database."""
+        limit / using too many connections and overwhelming the database.
+
+        Specifying connection_string directly will cause some of the other parameters
+        to be ignored.
+        """
         with cls._lock:
             if cls._engine:
                 return
 
-            connection_string = build_connection_string(
-                db_api=SYNC_DB_API,
-                app_name=cls._app_name + "_sync",
-                use_iam=USE_IAM_AUTH,
-            )
+            if not connection_string:
+                connection_string = build_connection_string(
+                    db_api=db_api,
+                    app_name=cls._app_name + "_sync",
+                    use_iam_auth=use_iam,
+                )
 
             # Start with base kwargs that are valid for all pool types
             final_engine_kwargs: dict[str, Any] = {}
@@ -274,7 +285,7 @@ class SqlEngine:
             # echo=True here for inspecting all emitted db queries
             engine = create_engine(connection_string, **final_engine_kwargs)
 
-            if USE_IAM_AUTH:
+            if use_iam:
                 event.listen(engine, "do_connect", provide_iam_token)
 
             cls._engine = engine
@@ -305,6 +316,8 @@ class SqlEngine:
 
 def get_all_tenant_ids() -> list[str]:
     """Returning [None] means the only tenant is the 'public' or self hosted tenant."""
+
+    tenant_ids: list[str]
 
     if not MULTI_TENANT:
         return [POSTGRES_DEFAULT_SCHEMA]
@@ -354,7 +367,7 @@ def get_sqlalchemy_async_engine() -> AsyncEngine:
         app_name = SqlEngine.get_app_name() + "_async"
         connection_string = build_connection_string(
             db_api=ASYNC_DB_API,
-            use_iam=USE_IAM_AUTH,
+            use_iam_auth=USE_IAM_AUTH,
         )
 
         connect_args: dict[str, Any] = {}

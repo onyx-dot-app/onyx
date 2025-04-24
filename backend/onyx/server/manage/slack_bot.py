@@ -36,6 +36,8 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.contextvars import get_current_tenant_id
 
+SLACK_API_CHANNELS_PER_PAGE = 100
+SLACK_MAX_RETURNED_CHANNELS = 500
 
 logger = setup_logger()
 
@@ -355,10 +357,6 @@ def list_bot_configs(
     ]
 
 
-MAX_SLACK_PAGES = 5
-SLACK_API_CHANNELS_PER_PAGE = 100
-
-
 @router.get(
     "/admin/slack-app/bots/{bot_id}/channels",
 )
@@ -368,6 +366,9 @@ def get_all_channels_from_slack_api(
     _: User | None = Depends(current_admin_user),
 ) -> list[SlackChannel]:
     """
+    Returns a list of available slack channels for the slack bot, limited to
+    SLACK_MAX_RETURNED_CHANNELS.
+
     Fetches all channels in the Slack workspace using the conversations_list API.
     This includes both public and private channels that are visible to the app,
     not just the ones the bot is a member of.
@@ -380,15 +381,12 @@ def get_all_channels_from_slack_api(
         )
 
     client = WebClient(token=tokens["bot_token"], timeout=1)
-    all_channels = []
+    all_channels: list[dict] = []
     next_cursor = None
-    current_page = 0
 
     try:
         # Use conversations_list to get all channels in the workspace (including ones the bot is not a member of)
-        while current_page < MAX_SLACK_PAGES:
-            current_page += 1
-
+        while len(all_channels) < SLACK_MAX_RETURNED_CHANNELS:
             # Make API call with cursor if we have one
             if next_cursor:
                 response = client.conversations_list(
@@ -415,15 +413,12 @@ def get_all_channels_from_slack_api(
             ):
                 next_cursor = response["response_metadata"]["next_cursor"]
                 if next_cursor:
-                    if current_page == MAX_SLACK_PAGES:
-                        raise HTTPException(
-                            status_code=400,
-                            detail="Workspace has too many channels to paginate over in this call.",
-                        )
                     continue
 
             # If we get here, no more pages
             break
+
+        del all_channels[SLACK_MAX_RETURNED_CHANNELS:]  # truncate the list
 
         channels = [
             SlackChannel(id=channel["id"], name=channel["name"])
