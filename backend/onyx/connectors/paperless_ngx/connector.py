@@ -140,7 +140,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 f"Could not parse ui_date_field: {ui_date_field}."
             )
         else:
-            self.master_date_field: Optional[DateField] = DateField.MODIFIED_DATE
+            self.master_date_field = DateField.MODIFIED_DATE
 
         logger.info("Initialized PaperlessNgxConnector")
 
@@ -541,7 +541,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             TextSection(link=uri, text=content, image_file_name=archived_file_name)
         ]
 
-        primary_owners: List[BasicExpertInfo] = (
+        primary_owners: List[BasicExpertInfo] | None = (
             [
                 BasicExpertInfo(
                     first_name=doc_owner.get("first_name", None),

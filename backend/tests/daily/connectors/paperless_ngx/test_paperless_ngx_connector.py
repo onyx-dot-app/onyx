@@ -1,5 +1,8 @@
 from datetime import datetime
 from datetime import timezone
+from typing import Any
+from typing import Dict
+from typing import List
 from unittest.mock import MagicMock
 from unittest.mock import patch
 
@@ -16,12 +19,12 @@ from onyx.connectors.paperless_ngx.connector import USERS_ENDPOINT
 
 
 @pytest.fixture
-def connector():
+def connector() -> PaperlessNgxConnector:
     return PaperlessNgxConnector()
 
 
 @pytest.fixture
-def mock_document_response():
+def mock_document_response() -> Dict[str, Any]:
     return {
         "id": 1,
         "title": "Test Document",
@@ -40,7 +43,9 @@ def mock_document_response():
 
 
 @pytest.fixture
-def mock_responses(mock_document_response):
+def mock_responses(
+    mock_document_response: Dict[str, Any],
+) -> Dict[str, List[Dict[str, Any]]]:
     return {
         "documents": [mock_document_response],
         "tags": [],
@@ -51,7 +56,7 @@ def mock_responses(mock_document_response):
 
 
 @pytest.fixture
-def setup_connector(connector):
+def setup_connector(connector: PaperlessNgxConnector) -> PaperlessNgxConnector:
     credentials = {
         "paperless_ngx_api_url": "http://test.com",
         "paperless_ngx_auth_token": "test_token",
@@ -61,8 +66,8 @@ def setup_connector(connector):
 
 
 @pytest.fixture
-def mock_get_side_effect(mock_responses):
-    def side_effect(url, **kwargs):
+def mock_get_side_effect(mock_responses: Dict[str, List[Dict[str, Any]]]) -> Any:
+    def side_effect(url: str, **kwargs: Any) -> MagicMock:
         return MagicMock(
             ok=True,
             json=lambda: {
@@ -91,7 +96,7 @@ def mock_get_side_effect(mock_responses):
     return side_effect
 
 
-def test_load_credentials(connector):
+def test_load_credentials(connector: PaperlessNgxConnector) -> None:
     credentials = {
         "paperless_ngx_api_url": "http://test.com",
         "paperless_ngx_auth_token": "test_token",
@@ -103,7 +108,9 @@ def test_load_credentials(connector):
     assert connector.auth_token == "test_token"
 
 
-def test_load_from_state(setup_connector, mock_get_side_effect):
+def test_load_from_state(
+    setup_connector: PaperlessNgxConnector, mock_get_side_effect: Any
+) -> None:
     with patch("requests.get") as mock_get:
         mock_get.side_effect = mock_get_side_effect
 
@@ -143,7 +150,9 @@ def test_load_from_state(setup_connector, mock_get_side_effect):
         )
 
 
-def test_retrieve_all_slim_documents(setup_connector, mock_get_side_effect):
+def test_retrieve_all_slim_documents(
+    setup_connector: PaperlessNgxConnector, mock_get_side_effect: Any
+) -> None:
     with patch("requests.get") as mock_get:
         mock_get.side_effect = mock_get_side_effect
 
@@ -155,7 +164,9 @@ def test_retrieve_all_slim_documents(setup_connector, mock_get_side_effect):
         assert doc.id == "1"
 
 
-def test_poll_source(setup_connector, mock_get_side_effect):
+def test_poll_source(
+    setup_connector: PaperlessNgxConnector, mock_get_side_effect: Any
+) -> None:
     with patch("requests.get") as mock_get:
         mock_get.side_effect = mock_get_side_effect
 
@@ -178,7 +189,7 @@ def test_poll_source(setup_connector, mock_get_side_effect):
         assert docs_call[1]["params"] == expected_params
 
 
-def test_request_error_handling(setup_connector):
+def test_request_error_handling(setup_connector: PaperlessNgxConnector) -> None:
     with patch("requests.get") as mock_get:
         mock_get.side_effect = requests.exceptions.RequestException("Test error")
 
