@@ -202,6 +202,10 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             identifier
                             url
                             branchName
+                            state {
+                                id
+                                name
+                            }
                             customerTicketCount
                             description
                             comments {
@@ -276,6 +280,7 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                                 "assignee": (node.get("assignee", {}) or {}).get(
                                     "email"
                                 ),
+                                "state": (node.get("state", {}) or {}).get("name"),
                                 "priority": (
                                     str(node.get("priority"))
                                     if node.get("priority") is not None

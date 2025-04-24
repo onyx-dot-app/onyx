@@ -248,12 +248,25 @@ def kg_extraction(
                     )
                 )
 
-            if (
-                len(unprocessed_document_batch) == 0 or document_batch_counter > 0
-            ):  # testing time only
-                break
-
             document_batch_counter += 1
+
+            connector_extraction_stats = []
+            connector_aggregated_kg_extractions_list = []
+            connector_failed_chunk_extractions: list[KGChunkId] = []
+            connector_succeeded_chunk_extractions: list[KGChunkId] = []
+            connector_aggregated_kg_extractions: KGAggregatedExtractions = (
+                KGAggregatedExtractions(
+                    grounded_entities_document_ids=defaultdict(str),
+                    entities=defaultdict(int),
+                    relationships=defaultdict(
+                        lambda: defaultdict(int)
+                    ),  # relationship + source document_id
+                    terms=defaultdict(int),
+                    attributes=defaultdict(dict),
+                )
+            )
+
+            logger.info(f"Processing document batch {document_batch_counter}")
 
             # Iterate over batches of unprocessed files
             # For each batch:
