@@ -406,7 +406,6 @@ class OnyxCeleryTask:
     )
 
     # Tenant pre-provisioning
-    PRE_PROVISION_TENANT = f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_pre_provision_tenant"
     UPDATE_USER_FILE_FOLDER_METADATA = "update_user_file_folder_metadata"
 
     CHECK_FOR_CONNECTOR_DELETION = "check_for_connector_deletion_task"
