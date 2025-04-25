@@ -76,9 +76,10 @@ def upgrade() -> None:
         if not default_models:
             continue
 
-        # If `default_models` is non-None, `display_model_names` must be non-None too.
         if not display_models:
-            raise RuntimeError
+            raise RuntimeError(
+                "If `default_models` is non-None, `display_models` must be non-None too."
+            )
 
         model_configurations = [
             ModelConfiguration.model_validate(model_configuration)
@@ -94,7 +95,7 @@ def upgrade() -> None:
         ]
 
         if model_configurations:
-            at_least_one_is_public = any(
+            at_least_one_is_visible = any(
                 [
                     model_configuration.is_visible
                     for model_configuration in model_configurations
@@ -103,7 +104,7 @@ def upgrade() -> None:
 
             # If there is at least one model which is public, this is a valid state.
             # Therefore, don't touch it and move on to the next one.
-            if at_least_one_is_public:
+            if at_least_one_is_visible:
                 continue
 
             existing_visible_model_names: set[str] = set(
