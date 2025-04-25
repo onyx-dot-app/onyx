@@ -108,6 +108,13 @@ def upgrade() -> None:
                 ]
             )
 
+            # We have to delete the old data before inserting the new data, else we run into duplicate value errors.
+            connection.execute(
+                model_configuration_table.delete().where(
+                    model_configuration_table.c.llm_provider_id == llm_provider_id
+                )
+            )
+
             difference = display_model_names.difference(existing_visible_model_names)
 
             for model_name in difference:
