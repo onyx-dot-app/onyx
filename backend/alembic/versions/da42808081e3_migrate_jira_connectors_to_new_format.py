@@ -21,6 +21,9 @@ branch_labels = None
 depends_on = None
 
 
+PRESERVED_CONFIG_KEYS = ["comment_email_blacklist", "batch_size", "labels_to_skip"]
+
+
 def upgrade() -> None:
     # Get all Jira connectors
     conn = op.get_bind()
@@ -62,6 +65,9 @@ def upgrade() -> None:
                 f"WARNING: Jira connector {connector_id} has no project URL configured"
             )
             continue
+        for old_key in PRESERVED_CONFIG_KEYS:
+            if old_key in old_config:
+                new_config[old_key] = old_config[old_key]
 
         # Update the connector config
         conn.execute(
@@ -107,6 +113,10 @@ def downgrade() -> None:
             old_config = {"jira_project_url": base_url}
         else:
             continue
+
+        for old_key in PRESERVED_CONFIG_KEYS:
+            if old_key in new_config:
+                old_config[old_key] = new_config[old_key]
 
         # Update the connector config
         conn.execute(
