@@ -306,10 +306,10 @@ export function ChatPage({
           (assistant) => assistant.id === existingChatSessionAssistantId
         )
       : defaultAssistantId !== undefined
-      ? availableAssistants.find(
-          (assistant) => assistant.id === defaultAssistantId
-        )
-      : undefined
+        ? availableAssistants.find(
+            (assistant) => assistant.id === defaultAssistantId
+          )
+        : undefined
   );
   // Gather default temperature settings
   const search_param_temperature = searchParams?.get(
@@ -700,6 +700,7 @@ export function ChatPage({
       chatSessionId || currentSessionId(),
       newCompleteMessageMap
     );
+    console.log(newCompleteMessageDetail);
     return newCompleteMessageDetail;
   };
 
@@ -1168,6 +1169,7 @@ export function ChatPage({
   const reset = () => {
     setMessage("");
     setCurrentMessageFiles([]);
+    clearSelectedItems();
     setLoadingError(null);
   };
 
@@ -1203,9 +1205,9 @@ export function ChatPage({
 
     // Check if the last message was an error and remove it before proceeding with a new message
     // Ensure this isn't a regeneration or resend, as those operations should preserve the history leading up to the point of regeneration/resend.
-    const currentMap = currentMessageMap(completeMessageDetail);
-    const currentHistory = buildLatestMessageChain(currentMap);
-    const lastMessage = currentHistory[currentHistory.length - 1];
+    let currentMap = currentMessageMap(completeMessageDetail);
+    let currentHistory = buildLatestMessageChain(currentMap);
+    let lastMessage = currentHistory[currentHistory.length - 1];
 
     if (
       lastMessage &&
@@ -1219,26 +1221,41 @@ export function ChatPage({
       // Remove the error message itself
       newMap.delete(lastMessage.messageId);
 
-      // Update the parent message to remove links to the error message
+      // Remove the parent message + update the parent of the parent to no longer
+      // link to the parent
       if (parentId !== null && parentId !== undefined) {
         const parentOfError = newMap.get(parentId);
         if (parentOfError) {
-          // Create a new object for the parent to ensure state updates correctly
-          const updatedParentOfError = {
-            ...parentOfError,
-            // Assuming the error was the latest child, set it to null.
-            // If branching history is complex, this might need adjustment, but for typical linear errors, this is fine.
-            latestChildMessageId: null,
-            childrenMessageIds: (parentOfError.childrenMessageIds || []).filter(
-              (id) => id !== lastMessage.messageId
-            ),
-          };
-          newMap.set(parentId, updatedParentOfError);
+          const grandparentId = parentOfError.parentMessageId;
+          if (grandparentId !== null && grandparentId !== undefined) {
+            const grandparent = newMap.get(grandparentId);
+            if (grandparent) {
+              // Update grandparent to no longer link to parent
+              const updatedGrandparent = {
+                ...grandparent,
+                childrenMessageIds: (
+                  grandparent.childrenMessageIds || []
+                ).filter((id) => id !== parentId),
+                latestChildMessageId:
+                  grandparent.latestChildMessageId === parentId
+                    ? null
+                    : grandparent.latestChildMessageId,
+              };
+              newMap.set(grandparentId, updatedGrandparent);
+            }
+          }
+          // Remove the parent message
+          newMap.delete(parentId);
         }
       }
       // Update the state immediately so subsequent logic uses the cleaned map
       updateCompleteMessageDetail(frozenSessionId, newMap);
       console.log("Removed previous error message ID:", lastMessage.messageId);
+
+      // update state for the new world (with the error message removed)
+      currentHistory = buildLatestMessageChain(newMap);
+      currentMap = newMap;
+      lastMessage = currentHistory[currentHistory.length - 1];
     }
 
     if (currentChatState() != "input") {
@@ -1310,11 +1327,10 @@ export function ChatPage({
         currentSessionId()
       );
     }
-    const messageMap = currentMessageMap(completeMessageDetail);
     const messageToResendParent =
       messageToResend?.parentMessageId !== null &&
       messageToResend?.parentMessageId !== undefined
-        ? messageMap.get(messageToResend.parentMessageId)
+        ? currentMap.get(messageToResend.parentMessageId)
         : null;
     const messageToResendIndex = messageToResend
       ? messageHistory.indexOf(messageToResend)
@@ -1341,15 +1357,15 @@ export function ChatPage({
 
     const currMessageHistory =
       messageToResendIndex !== null
-        ? messageHistory.slice(0, messageToResendIndex)
-        : messageHistory;
+        ? currentHistory.slice(0, messageToResendIndex)
+        : currentHistory;
 
     let parentMessage =
       messageToResendParent ||
       (currMessageHistory.length > 0
         ? currMessageHistory[currMessageHistory.length - 1]
         : null) ||
-      (messageMap.size === 1 ? Array.from(messageMap.values())[0] : null);
+      (currentMap.size === 1 ? Array.from(currentMap.values())[0] : null);
 
     let currentAssistantId;
     if (alternativeAssistantOverride) {
@@ -1396,13 +1412,9 @@ export function ChatPage({
       frozenMessageMap: Map<number, Message>;
     } = null;
     try {
-      const mapKeys = Array.from(
-        currentMessageMap(completeMessageDetail).keys()
-      );
-      const systemMessage = Math.min(...mapKeys);
-
+      const mapKeys = Array.from(currentMap.keys());
       const lastSuccessfulMessageId =
-        getLastSuccessfulMessageId(currMessageHistory) || systemMessage;
+        getLastSuccessfulMessageId(currMessageHistory);
 
       const stack = new CurrentMessageFIFO();
 
@@ -1520,11 +1532,12 @@ export function ChatPage({
               upsertToCompleteMessageMap({
                 messages: messageUpdates,
                 chatSessionId: currChatSessionId,
+                completeMessageMapOverride: currentMap,
               });
+            currentMap = currentFrozenMessageMap;
 
-            const frozenMessageMap = currentFrozenMessageMap;
             initialFetchDetails = {
-              frozenMessageMap,
+              frozenMessageMap: currentMap,
               assistant_message_id,
               user_message_id,
             };
@@ -1756,18 +1769,18 @@ export function ChatPage({
                   ] as [number, number][])
                 : null;
 
-              // Get the *current* map state directly here, instead of using the potentially stale frozenMessageMap
-              const latestMapState = currentMessageMap(completeMessageDetail);
-
-              return upsertToCompleteMessageMap({
+              const newMessageDetails = upsertToCompleteMessageMap({
                 messages: messages,
                 replacementsMap: replacementsMap,
                 // Pass the latest map state
-                completeMessageMapOverride: latestMapState,
+                completeMessageMapOverride: currentMap,
                 chatSessionId: frozenSessionId!,
               });
+              currentMap = newMessageDetails.messageMap;
+              return newMessageDetails;
             };
 
+            const systemMessageId = Math.min(...mapKeys);
             updateFn([
               {
                 messageId: regenerationRequest
@@ -1777,7 +1790,8 @@ export function ChatPage({
                 type: "user",
                 files: files,
                 toolCall: null,
-                parentMessageId: error ? null : lastSuccessfulMessageId,
+                // in the frontend, every message should have a parent ID
+                parentMessageId: lastSuccessfulMessageId ?? systemMessageId,
                 childrenMessageIds: [
                   ...(regenerationRequest?.parentMessage?.childrenMessageIds ||
                     []),
@@ -1831,7 +1845,7 @@ export function ChatPage({
     } catch (e: any) {
       console.log("Error:", e);
       const errorMsg = e.message;
-      upsertToCompleteMessageMap({
+      const newMessageDetails = upsertToCompleteMessageMap({
         messages: [
           {
             messageId:
@@ -1854,8 +1868,9 @@ export function ChatPage({
               initialFetchDetails?.user_message_id || TEMP_USER_MESSAGE_ID,
           },
         ],
-        completeMessageMapOverride: currentMessageMap(completeMessageDetail),
+        completeMessageMapOverride: currentMap,
       });
+      currentMap = newMessageDetails.messageMap;
     }
     console.log("Finished streaming");
     setAgenticGenerating(false);
@@ -1962,7 +1977,6 @@ export function ChatPage({
       if (response.length > 0) {
         const uploadedFile = response[0];
         addSelectedFile(uploadedFile);
-        // setCurrentMessageFiles((prev) => [...prev, uploadedFile]);
       } else {
         setPopup({
           type: "error",
@@ -1970,12 +1984,6 @@ export function ChatPage({
         });
       }
     }
-    // if (error) {
-    //   setPopup({
-    //     type: "error",
-    //     message: error,
-    //   });
-    // }
 
     updateChatState("input", currentSessionId());
   };

@@ -29,27 +29,21 @@ export default function LoginPage({
   useSendAuthRequiredMessage();
   return (
     <div className="flex flex-col w-full justify-center">
-      {authUrl && authTypeMetadata && authTypeMetadata.authType !== "cloud" && (
-        <>
-          <h2 className="text-center text-xl text-strong font-bold">
-            <LoginText />
-          </h2>
-          <SignInButton
-            authorizeUrl={authUrl}
-            authType={authTypeMetadata?.authType}
-          />
-          {authTypeMetadata?.authType === "basic" && (
-            <div className="flex  mt-4 justify-end">
-              <Link
-                href="/auth/forgot-password"
-                className="ml-auto text-link font-medium"
-              >
-                Forgot Password?
-              </Link>
-            </div>
-          )}
-        </>
-      )}
+      {authUrl &&
+        authTypeMetadata &&
+        authTypeMetadata.authType !== "cloud" &&
+        // basic auth is handled below w/ the EmailPasswordForm
+        authTypeMetadata.authType !== "basic" && (
+          <>
+            <h2 className="text-center text-xl text-strong font-bold">
+              <LoginText />
+            </h2>
+            <SignInButton
+              authorizeUrl={authUrl}
+              authType={authTypeMetadata?.authType}
+            />
+          </>
+        )}
 
       {authTypeMetadata?.authType === "cloud" && (
         <div className="w-full justify-center">
@@ -58,7 +52,7 @@ export default function LoginPage({
           </h2>
           <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
-            <div className="flex  mt-4 justify-between">
+            <div className="flex mt-4 justify-between">
               <Link
                 href="/auth/forgot-password"
                 className="ml-auto text-link font-medium"

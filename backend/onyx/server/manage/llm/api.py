@@ -69,7 +69,8 @@ def test_llm_configuration(
         existing_provider = fetch_existing_llm_provider(
             name=test_llm_request.name, db_session=db_session
         )
-        if existing_provider:
+        # if an API key is not provided, use the existing provider's API key
+        if existing_provider and test_api_key is None:
             test_api_key = existing_provider.api_key
 
     # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
