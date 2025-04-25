@@ -128,7 +128,9 @@ def upgrade() -> None:
                         is_visible=True,
                         max_input_tokens=None,
                     )
-                    .on_conflict_do_update(index_elements=["llm_provider_id", "name"])
+                    .on_conflict_do_nothing(
+                        index_elements=["llm_provider_id", "name"],
+                    )
                 )
         else:
             for model_name in default_models:
