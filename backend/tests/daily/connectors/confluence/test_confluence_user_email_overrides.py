@@ -1,3 +1,4 @@
+import types
 from unittest.mock import patch
 
 from onyx.connectors.confluence.onyx_confluence import ConfluenceUser
@@ -24,7 +25,12 @@ class MockCredentialsProvider(CredentialsProviderInterface):
     def __enter__(self) -> "MockCredentialsProvider":
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
         pass
 
 
