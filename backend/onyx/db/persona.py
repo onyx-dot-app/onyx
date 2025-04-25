@@ -3,7 +3,6 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete
 from sqlalchemy import exists
 from sqlalchemy import func
 from sqlalchemy import not_
