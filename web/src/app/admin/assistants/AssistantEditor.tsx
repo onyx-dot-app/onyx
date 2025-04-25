@@ -25,8 +25,8 @@ import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
-  checkLLMSupportsImageInput,
   destructureValue,
+  modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
@@ -93,6 +93,7 @@ import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
+import { useChatContext } from "@/components/context/ChatContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
@@ -139,6 +140,7 @@ export function AssistantEditor({
   admin?: boolean;
 }) {
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -643,7 +645,8 @@ export function AssistantEditor({
 
           // model must support image input for image generation
           // to work
-          const currentLLMSupportsImageOutput = checkLLMSupportsImageInput(
+          const currentLLMSupportsImageOutput = modelSupportsImageInput(
+            llmProviders,
             values.llm_model_version_override || defaultModelName || ""
           );
 

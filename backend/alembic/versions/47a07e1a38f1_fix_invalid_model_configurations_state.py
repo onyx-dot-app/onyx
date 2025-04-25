@@ -24,7 +24,7 @@ branch_labels = None
 depends_on = None
 
 
-class ModelConfiguration(BaseModel):
+class _SimpleModelConfiguration(BaseModel):
     # Configure model to read from attributes
     model_config = ConfigDict(from_attributes=True)
 
@@ -82,7 +82,7 @@ def upgrade() -> None:
             )
 
         model_configurations = [
-            ModelConfiguration.model_validate(model_configuration)
+            _SimpleModelConfiguration.model_validate(model_configuration)
             for model_configuration in connection.execute(
                 sa.select(
                     model_configuration_table.c.id,

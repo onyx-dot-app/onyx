@@ -6,7 +6,7 @@ import {
 } from "@/components/ui/popover";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
-  checkLLMSupportsImageInput,
+  modelSupportsImageInput,
   destructureValue,
   structureValue,
 } from "@/lib/llm/utils";
@@ -175,7 +175,10 @@ export default function LLMPopover({
       >
         <div className="flex-grow max-h-[300px] default-scrollbar overflow-y-auto">
           {llmOptions.map(({ name, icon, value }, index) => {
-            if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
+            if (
+              !requiresImageGeneration ||
+              modelSupportsImageInput(llmProviders, name)
+            ) {
               return (
                 <button
                   key={index}
@@ -206,7 +209,7 @@ export default function LLMPopover({
                     }
                   })()}
                   {llmManager.imageFilesPresent &&
-                    !checkLLMSupportsImageInput(name) && (
+                    !modelSupportsImageInput(llmProviders, name) && (
                       <TooltipProvider>
                         <Tooltip delayDuration={0}>
                           <TooltipTrigger className="my-auto flex items-center ml-auto">

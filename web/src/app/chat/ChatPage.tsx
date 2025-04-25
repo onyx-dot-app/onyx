@@ -90,8 +90,8 @@ import { buildFilters } from "@/lib/search/utils";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import Dropzone from "react-dropzone";
 import {
-  checkLLMSupportsImageInput,
   getFinalLLM,
+  modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
 import { ChatInputBar } from "./input/ChatInputBar";
@@ -1952,7 +1952,7 @@ export function ChatPage({
       liveAssistant,
       llmManager.currentLlm
     );
-    const llmAcceptsImages = checkLLMSupportsImageInput(llmModel);
+    const llmAcceptsImages = modelSupportsImageInput(llmProviders, llmModel);
 
     const imageFiles = acceptedFiles.filter((file) =>
       file.type.startsWith("image/")

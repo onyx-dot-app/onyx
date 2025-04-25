@@ -25,7 +25,6 @@ import {
 import { hasCompletedWelcomeFlowSS } from "@/components/initialSetup/welcome/WelcomeModalWrapper";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
 import { NEXT_PUBLIC_DEFAULT_SIDEBAR_OPEN } from "../constants";
-import { checkLLMSupportsImageInput } from "../llm/utils";
 
 interface FetchChatDataResult {
   user?: User | null;
@@ -173,8 +172,8 @@ export async function fetchSomeChatData(
     const hasImageCompatibleModel = result.llmProviders?.some(
       (provider) =>
         provider.provider === "openai" ||
-        provider.model_configurations.some((modelConfiguration) =>
-          checkLLMSupportsImageInput(modelConfiguration.name)
+        provider.model_configurations.some(
+          (modelConfiguration) => modelConfiguration.supports_image_input
         )
     );
 
