@@ -93,7 +93,6 @@ import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
 import TextView from "@/components/chat/TextView";
 import { MinimalOnyxDocument } from "@/lib/search/interfaces";
 import { MAX_CHARACTERS_PERSONA_DESCRIPTION } from "@/lib/constants";
-import { useChatContext } from "@/components/context/ChatContext";
 
 function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
