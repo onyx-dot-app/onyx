@@ -10,7 +10,6 @@ from simple_salesforce.bulk2 import SFBulk2Handler
 from simple_salesforce.bulk2 import SFBulk2Type
 
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
-from onyx.connectors.salesforce.sqlite_functions import OnyxSalesforceSQLite
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -184,9 +183,8 @@ def _bulk_retrieve_from_salesforce(
 
 
 def fetch_all_csvs_in_parallel(
-    sf_db: OnyxSalesforceSQLite,
     sf_client: Salesforce,
-    object_types: set[str],
+    all_types_to_filter: dict[str, bool],
     start: SecondsSinceUnixEpoch | None,
     end: SecondsSinceUnixEpoch | None,
     target_dir: str,
@@ -219,20 +217,16 @@ def fetch_all_csvs_in_parallel(
     )
 
     time_filter_for_each_object_type = {}
-    # We do this outside of the thread pool executor because this requires
-    # a database connection and we don't want to block the thread pool
-    # executor from running
-    for sf_type in object_types:
-        """Only add time filter if there is at least one object of the type
-        in the database. We aren't worried about partially completed object update runs
-        because this occurs after we check for existing csvs which covers this case"""
-        if sf_db.has_at_least_one_object_of_type(sf_type):
-            if sf_type in created_date_types:
-                time_filter_for_each_object_type[sf_type] = created_date_time_filter
-            else:
-                time_filter_for_each_object_type[sf_type] = last_modified_time_filter
-        else:
+
+    for sf_type, apply_filter in all_types_to_filter.items():
+        if not apply_filter:
             time_filter_for_each_object_type[sf_type] = ""
+            continue
+
+        if sf_type in created_date_types:
+            time_filter_for_each_object_type[sf_type] = created_date_time_filter
+        else:
+            time_filter_for_each_object_type[sf_type] = last_modified_time_filter
 
     # Run the bulk retrieve in parallel
     with ThreadPoolExecutor() as executor:
@@ -243,6 +237,6 @@ def fetch_all_csvs_in_parallel(
                 time_filter=time_filter_for_each_object_type[object_type],
                 target_dir=target_dir,
             ),
-            object_types,
+            all_types_to_filter.keys(),
         )
         return dict(results)

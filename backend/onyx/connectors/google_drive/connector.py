@@ -466,7 +466,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             # resume from a checkpoint
             if resuming:
                 drive_id = curr_stage.completed_until_parent_id
-                assert drive_id is not None, "drive id not set in checkpoint"
+                if drive_id is None:
+                    raise ValueError("drive id not set in checkpoint")
                 resume_start = curr_stage.completed_until
                 yield from _yield_from_drive(drive_id, resume_start)
                 # Don't enter resuming case for folder retrieval
@@ -476,6 +477,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 logger.info(
                     f"Getting files in shared drive '{drive_id}' as '{user_email}'"
                 )
+                curr_stage.completed_until = 0
+                curr_stage.completed_until_parent_id = drive_id
                 yield from _yield_from_drive(drive_id, start)
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
             resuming = False  # we are starting the next stage for the first time
@@ -500,7 +503,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             last_processed_folder = None
             if resuming:
                 folder_id = curr_stage.completed_until_parent_id
-                assert folder_id is not None, "folder id not set in checkpoint"
+                if folder_id is None:
+                    raise ValueError("folder id not set in checkpoint")
                 resume_start = curr_stage.completed_until
                 yield from _yield_from_folder_crawl(folder_id, resume_start)
                 last_processed_folder = folder_id
@@ -537,7 +541,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 checkpoint.user_emails = all_org_emails
             checkpoint.completion_stage = DriveRetrievalStage.DRIVE_IDS
         else:
-            assert checkpoint.user_emails is not None, "user emails not set"
+            if checkpoint.user_emails is None:
+                raise ValueError("user emails not set")
             all_org_emails = checkpoint.user_emails
 
         drive_ids_to_retrieve, folder_ids_to_retrieve = self._determine_retrieval_ids(
@@ -613,10 +618,11 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             logger.warning(
                 f"Some folders/drives were not retrieved. IDs: {remaining_folders}"
             )
-        assert all(
-            checkpoint.completion_map[user_email].stage == DriveRetrievalStage.DONE
+        if any(
+            checkpoint.completion_map[user_email].stage != DriveRetrievalStage.DONE
             for user_email in all_org_emails
-        ), "some users did not complete retrieval"
+        ):
+            raise RuntimeError("some users did not complete retrieval")
         checkpoint.completion_stage = DriveRetrievalStage.DONE
 
     def _determine_retrieval_ids(
@@ -646,12 +652,10 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 checkpoint.folder_ids_to_retrieve = list(folder_ids_to_retrieve)
             checkpoint.completion_stage = next_stage
         else:
-            assert (
-                checkpoint.drive_ids_to_retrieve is not None
-            ), "drive ids to retrieve not set"
-            assert (
-                checkpoint.folder_ids_to_retrieve is not None
-            ), "folder ids to retrieve not set"
+            if checkpoint.drive_ids_to_retrieve is None:
+                raise ValueError("drive ids to retrieve not set in checkpoint")
+            if checkpoint.folder_ids_to_retrieve is None:
+                raise ValueError("folder ids to retrieve not set in checkpoint")
             # When loading from a checkpoint, load the previously cached drive and folder ids
             drive_ids_to_retrieve = set(checkpoint.drive_ids_to_retrieve)
             folder_ids_to_retrieve = set(checkpoint.folder_ids_to_retrieve)
@@ -723,7 +727,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             drive_id = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until_parent_id
-            assert drive_id is not None, "drive id not set in checkpoint"
+            if drive_id is None:
+                raise ValueError("drive id not set in checkpoint")
             resume_start = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until
@@ -781,7 +786,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             folder_id = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until_parent_id
-            assert folder_id is not None, "folder id not set in checkpoint"
+            if folder_id is None:
+                raise ValueError("folder id not set in checkpoint")
             resume_start = checkpoint.completion_map[
                 self.primary_admin_email
             ].completed_until

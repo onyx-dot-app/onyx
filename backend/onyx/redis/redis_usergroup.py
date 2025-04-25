@@ -102,7 +102,7 @@ class RedisUserGroup(RedisObjectHelper):
                 kwargs=dict(document_id=doc_id, tenant_id=tenant_id),
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,
                 task_id=custom_task_id,
-                priority=OnyxCeleryPriority.LOW,
+                priority=OnyxCeleryPriority.MEDIUM,
             )
 
             num_tasks_sent += 1
