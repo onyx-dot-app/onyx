@@ -7,6 +7,7 @@ Create Date: 2025-04-23 15:39:43.159504
 """
 
 from alembic import op
+from pydantic import BaseModel, ConfigDict
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
@@ -21,6 +22,17 @@ revision = "47a07e1a38f1"
 down_revision = "7a70b7664e37"
 branch_labels = None
 depends_on = None
+
+
+class ModelConfiguration(BaseModel):
+    # Configure model to read from attributes
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    llm_provider_id: int
+    name: str
+    is_visible: bool
+    max_input_tokens: int | None
 
 
 def upgrade() -> None:
@@ -68,8 +80,9 @@ def upgrade() -> None:
         if not display_models:
             raise RuntimeError
 
-        model_configurations = list(
-            connection.execute(
+        model_configurations = [
+            ModelConfiguration.model_validate(model_configuration)
+            for model_configuration in connection.execute(
                 sa.select(
                     model_configuration_table.c.id,
                     model_configuration_table.c.llm_provider_id,
@@ -78,11 +91,14 @@ def upgrade() -> None:
                     model_configuration_table.c.max_input_tokens,
                 ).where(model_configuration_table.c.llm_provider_id == llm_provider_id)
             ).fetchall()
-        )
+        ]
 
         if model_configurations:
             at_least_one_is_public = any(
-                [model_configuration[3] for model_configuration in model_configurations]
+                [
+                    model_configuration.is_visible
+                    for model_configuration in model_configurations
+                ]
             )
 
             # If there is at least one model which is public, this is a valid state.
@@ -92,9 +108,9 @@ def upgrade() -> None:
 
             existing_visible_model_names: set[str] = set(
                 [
-                    model_configuration[2]
+                    model_configuration.name
                     for model_configuration in model_configurations
-                    if model_configuration[3]
+                    if model_configuration.is_visible
                 ]
             )
 
