@@ -759,7 +759,7 @@ question was about dates or times, then it can source_date. But source_document 
 in the SELECT clause!
 - Again, NEVER count or retrieve source documents in SELECT CLAUSE, whether it is in combination with \
 entities, with a dictinct, etc. NO source_document in SELECT CLAUSE! So NEVER produce a \
-'SELECT COOUNT(source_entity, source_document)...'
+'SELECT COUNT(source_entity, source_document)...'
 - Please think about whether you are interested in source entities or target entities! For that purpose, \
 consider the allowed relationship types to make sure you select or count the correct one!
 - Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \

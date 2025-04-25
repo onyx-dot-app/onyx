@@ -205,7 +205,7 @@ def generate_simple_sql(
             "kg_relationship", kg_relationships_view_name
         )
 
-        # reasoning = cleaned_response.split("SQL:")[0].strip()
+        reasoning = cleaned_response.split("SQL:")[0].strip()
 
     except Exception as e:
         logger.error(f"Error in strategy generation: {e}")
@@ -233,16 +233,16 @@ def generate_simple_sql(
     # else:
     individualized_sql_query = None
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=reasoning,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece=reasoning,
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
 
     # write_custom_event(
     #     "initial_agent_answer",
@@ -270,6 +270,7 @@ def generate_simple_sql(
 
     scalar_result = None
     query_results = None
+
     with get_kg_readonly_user_session_with_current_tenant() as db_session:
         try:
             result = db_session.execute(text(sql_statement))
