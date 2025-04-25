@@ -54,6 +54,7 @@ def upgrade() -> None:
         sa.column("llm_provider_id", sa.Integer),
         sa.column("name", sa.String),
         sa.column("is_visible", sa.Boolean),
+        sa.column("max_input_tokens", sa.Integer),
     )
 
     connection = op.get_bind()
@@ -81,6 +82,8 @@ def upgrade() -> None:
                     model_configuration_table.c.id,
                     model_configuration_table.c.llm_provider_id,
                     model_configuration_table.c.name,
+                    model_configuration_table.c.is_visible,
+                    model_configuration_table.c.max_input_tokens,
                 ).where(model_configuration_table.c.llm_provider_id == llm_provider_id)
             ).fetchall()
         )
