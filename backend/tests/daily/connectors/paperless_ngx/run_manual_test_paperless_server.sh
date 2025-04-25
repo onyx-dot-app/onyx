@@ -11,7 +11,7 @@ USERNAME="admin"
 PASSWORD="admin"
 
 # change to your local IP address if necessary
-HOST=$(ifconfig | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1) 
+HOST=$(ip addr | grep -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | grep -Eo '([0-9]*\.){3}[0-9]*' | grep -v '127.0.0.1' | head -n 1) 
 if [ -z "$HOST" ]; then
     HOST="localhost"
 fi
@@ -87,10 +87,10 @@ while ! curl -s "http://$HOST:$PORT" > /dev/null; do
 done
 echo -ne "\nPaperless-ngx is up and running!\n\n"
 
-# get the CSRF token
+# get the CSRF token in a cookies file
 curl -s -u $USERNAME:$PASSWORD "http://$HOST:$PORT/api/schema/view/" -H "Content-Type: application/json" -c paperless-test-cookies.txt -o /dev/null 
 
-# get the auth token
+# get the auth token and use the CSRF token from the cookies file
 AUTH_TOKEN=$(curl -s -u $USERNAME:$PASSWORD -X POST "http://$HOST:$PORT/api/profile/generate_auth_token/" -H "Content-Type: application/json" -c paperless-test-cookies.txt | tr -d '"')
 rm paperless-test-cookies.txt
 

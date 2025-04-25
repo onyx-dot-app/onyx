@@ -124,6 +124,10 @@ def test_load_credentials(
 
         assert connector.api_url == "http://test.com"
         assert connector.auth_token == "test_token"
+        mock_get.assert_called_with(
+            f"http://test.com{PROFILE_ENDPOINT}",
+            headers={"Authorization": "Token test_token", "Accept": "application/json"},
+        )
 
 
 def test_load_from_state(

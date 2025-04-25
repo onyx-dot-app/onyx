@@ -38,6 +38,8 @@ CORRESPONDENTS_ENDPOINT = "/api/correspondents/"
 DOCUMENT_TYPES_ENDPOINT = "/api/document_types/"
 PROFILE_ENDPOINT = "/api/profile/"
 
+PAPERLESS_NGX_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S+00:00"
+
 # TODO: handle custom fields?
 # CUSTOM_FIELDS_ENDPOINT = "/api/custom_fields/"
 
@@ -124,7 +126,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                         break
                     except ValueError:
                         continue
-                if not hasattr(self, "ui_min_start_date"):
+                if not self.master_start_date:
                     raise ValueError("Could not parse date with any format")
             except ValueError as e:
                 raise ConnectorValidationError(
@@ -132,16 +134,18 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 )
 
         # match ui_name in Datefield from ui_date_field str from UI
+        self.master_date_field: Optional[DateField] = DateField.MODIFIED_DATE
         if ui_date_field:
+            found = False
             for date_field in DateField:
                 if date_field.ui_name == ui_date_field:
                     self.master_date_field = date_field
+                    found = True
                     break
-            raise ConnectorValidationError(
-                f"Could not parse ui_date_field: {ui_date_field}."
-            )
-        else:
-            self.master_date_field = DateField.MODIFIED_DATE
+            if not found:
+                raise ConnectorValidationError(
+                    f"Could not parse ui_date_field: {ui_date_field}."
+                )
 
         logger.info("Initialized PaperlessNgxConnector")
 
@@ -499,7 +503,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             logger.warning(
                 f"Could not parse timestamp for document {doc_id}: {modified_timestamp_str}"
             )
-            updated_at = datetime.now(timezone.utc)
+            raise ValueError(
+                f"Invalid timestamp found in document data {doc_id}: {modified_timestamp_str}"
+            )
 
         doc_owner = next(
             (user for user in self.all_users if user["id"] == doc_data.get("owner")),
@@ -625,8 +631,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         end_dt = datetime.fromtimestamp(end, timezone.utc)
 
         # Format dates for API query in ISO format
-        start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
-        end_iso = end_dt.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+        start_iso = start_dt.strftime(PAPERLESS_NGX_DATE_FORMAT)
+        end_iso = end_dt.strftime(PAPERLESS_NGX_DATE_FORMAT)
 
         logger.info(
             f"Polling Paperless-ngx for documents modified between {start_iso} and {end_iso}."
@@ -680,12 +686,12 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         # Apply date filtering if provided
         if start is not None:
             start_dt = datetime.fromtimestamp(start, timezone.utc)
-            start_iso = start_dt.strftime("%Y-%m-%d")
+            start_iso = start_dt.strftime(PAPERLESS_NGX_DATE_FORMAT)
             logger.info(f"Filtering slim documents from {start_iso}")
 
         if end is not None:
             end_dt = datetime.fromtimestamp(end, timezone.utc)
-            end_iso = end_dt.strftime("%Y-%m-%d")
+            end_iso = end_dt.strftime(PAPERLESS_NGX_DATE_FORMAT)
             logger.info(f"Filtering slim documents until {end_iso}")
 
         # Get only the IDs by making the request and extracting minimal information
