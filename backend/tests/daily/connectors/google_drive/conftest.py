@@ -110,7 +110,7 @@ def google_drive_service_acct_connector_factory() -> (
         my_drive_emails: str | None,
         shared_folder_urls: str | None,
         include_files_shared_with_me: bool,
-        specific_user_emails: str | None,
+        specific_user_emails: str | None = None,
     ) -> GoogleDriveConnector:
         print("Creating GoogleDriveConnector with service account credentials")
         connector = GoogleDriveConnector(
