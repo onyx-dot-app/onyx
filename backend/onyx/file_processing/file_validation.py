@@ -2,6 +2,8 @@
 Centralized file type validation utilities.
 """
 
+# NOTE(rkuo): Unify this with upload_files_for_chat and extract_file_text
+
 # Standard image MIME types supported by most vision LLMs
 IMAGE_MIME_TYPES = [
     "image/png",

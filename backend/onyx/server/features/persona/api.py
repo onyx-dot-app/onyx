@@ -173,7 +173,7 @@ def undelete_persona(
     )
 
 
-# used for assistat profile pictures
+# used for assistant profile pictures
 @admin_router.post("/upload-image")
 def upload_file(
     file: UploadFile,

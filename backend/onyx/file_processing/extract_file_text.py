@@ -36,6 +36,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+# NOTE(rkuo): Unify this with upload_files_for_chat and file_valiation.py
 TEXT_SECTION_SEPARATOR = "\n\n"
 
 ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS = [

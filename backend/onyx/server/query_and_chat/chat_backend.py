@@ -661,6 +661,8 @@ def upload_files_for_chat(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> dict[str, list[FileDescriptor]]:
+
+    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
     image_content_types = {"image/jpeg", "image/png", "image/webp"}
     csv_content_types = {"text/csv"}
     text_content_types = {
