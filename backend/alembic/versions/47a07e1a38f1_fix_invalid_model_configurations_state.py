@@ -11,15 +11,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 from onyx.llm.llm_provider_options import (
-    ANTHROPIC_PROVIDER_NAME,
-    ANTHROPIC_VISIBLE_MODEL_NAMES,
-    BEDROCK_PROVIDER_NAME,
-    OPEN_AI_VISIBLE_MODEL_NAMES,
-    OPENAI_PROVIDER_NAME,
-    VERTEXAI_DEFAULT_FAST_MODEL,
-    VERTEXAI_DEFAULT_MODEL,
-    VERTEXAI_PROVIDER_NAME,
     fetch_model_names_for_provider_as_set,
+    fetch_visible_model_names_for_provider_as_set,
 )
 
 
@@ -28,14 +21,6 @@ revision = "47a07e1a38f1"
 down_revision = "7a70b7664e37"
 branch_labels = None
 depends_on = None
-
-
-_PROVIDER_TO_VISIBLE_MODELS_MAP = {
-    OPENAI_PROVIDER_NAME: set(OPEN_AI_VISIBLE_MODEL_NAMES),
-    BEDROCK_PROVIDER_NAME: set(),  # TODO!
-    ANTHROPIC_PROVIDER_NAME: set(ANTHROPIC_VISIBLE_MODEL_NAMES),
-    VERTEXAI_PROVIDER_NAME: set([VERTEXAI_DEFAULT_MODEL, VERTEXAI_DEFAULT_FAST_MODEL]),
-}
 
 
 def upgrade() -> None:
@@ -69,12 +54,19 @@ def upgrade() -> None:
     for llm_provider in llm_providers:
         llm_provider_id, provider_name = llm_provider
 
-        models = fetch_model_names_for_provider_as_set(provider_name)
+        default_models = fetch_model_names_for_provider_as_set(provider_name)
+        display_models = fetch_visible_model_names_for_provider_as_set(
+            provider_name=provider_name
+        )
 
         # if `fetch_model_names_for_provider_as_set` returns `None`, then
         # that means that `provider_name` is not a well-known llm provider.
-        if not models:
+        if not default_models:
             continue
+
+        # If `default_models` is non-None, `display_model_names` must be non-None too.
+        if not display_models:
+            raise RuntimeError
 
         model_configurations = list(
             connection.execute(
@@ -87,8 +79,6 @@ def upgrade() -> None:
                 ).where(model_configuration_table.c.llm_provider_id == llm_provider_id)
             ).fetchall()
         )
-
-        display_model_names: set[str] = _PROVIDER_TO_VISIBLE_MODELS_MAP[provider_name]
 
         if model_configurations:
             at_least_one_is_public = any(
@@ -115,7 +105,7 @@ def upgrade() -> None:
                 )
             )
 
-            difference = display_model_names.difference(existing_visible_model_names)
+            difference = display_models.difference(existing_visible_model_names)
 
             for model_name in difference:
                 if not model_name:
@@ -130,12 +120,12 @@ def upgrade() -> None:
                     )
                 )
         else:
-            for model_name in models:
+            for model_name in default_models:
                 connection.execute(
                     model_configuration_table.insert().values(
                         llm_provider_id=llm_provider_id,
                         name=model_name,
-                        is_visible=model_name in display_model_names,
+                        is_visible=model_name in display_models,
                         max_input_tokens=None,
                     )
                 )
