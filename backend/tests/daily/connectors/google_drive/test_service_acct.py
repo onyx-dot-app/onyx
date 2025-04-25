@@ -479,6 +479,7 @@ def test_specific_user_emails_restricted_folder(
     test_docs = load_all_docs(test_connector)
     assert len(test_docs) == 0
 
+
 @patch(
     "onyx.file_processing.extract_file_text.get_unstructured_api_key",
     return_value=None,
