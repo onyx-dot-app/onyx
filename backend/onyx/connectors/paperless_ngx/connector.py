@@ -36,6 +36,7 @@ TAGS_ENDPOINT = "/api/tags/"
 USERS_ENDPOINT = "/api/users/"
 CORRESPONDENTS_ENDPOINT = "/api/correspondents/"
 DOCUMENT_TYPES_ENDPOINT = "/api/document_types/"
+PROFILE_ENDPOINT = "/api/profile/"
 
 # TODO: handle custom fields?
 # CUSTOM_FIELDS_ENDPOINT = "/api/custom_fields/"
@@ -160,6 +161,26 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         if not self.auth_token:
             raise PermissionError("Paperless-ngx auth token not found in settings.")
 
+        # verify credentials with profile endpoint
+        try:
+            response = requests.get(
+                self.api_url + PROFILE_ENDPOINT, headers=self._get_headers()
+            ).json()
+            if response:
+                logger.info(
+                    "Successfully connected to Paperless-ngx API as user: "
+                    + response.get("first_name", response.get("email", "unknown"))
+                )
+            else:
+                raise PermissionError(
+                    "Failed to connect to Paperless-ngx API. Invalid server or credentials."
+                )
+        except Exception as e:
+            logger.error(f"Error fetching data from Paperless-ngx API: {e}")
+            raise PermissionError(
+                f"Failed to connect to Paperless-ngx API. Invalid server or credentials: {e}"
+            )
+
     def _get_headers(self) -> Dict[str, str]:
         """Returns authentication headers."""
         if not self.auth_token:
@@ -204,6 +225,10 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 results.extend(data.get("results", []))
                 url = data.get("next")  # Get URL for the next page
                 params = None  # Parameters are included in the 'next' URL
+
+            except requests.exceptions.JSONDecodeError as e:
+                logger.error(f"Recieved invalid JSON response: {response.text}")
+                raise ValueError(f"Failed to decode JSON response: {e}")
 
             except requests.exceptions.RequestException as e:
                 logger.error(f"Error fetching data from Paperless-ngx API: {e}")

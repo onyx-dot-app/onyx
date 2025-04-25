@@ -14,6 +14,7 @@ from onyx.connectors.paperless_ngx.connector import CORRESPONDENTS_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import DOCUMENT_TYPES_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import DOCUMENTS_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import PaperlessNgxConnector
+from onyx.connectors.paperless_ngx.connector import PROFILE_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import TAGS_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import USERS_ENDPOINT
 
@@ -52,22 +53,35 @@ def mock_responses(
         "users": [],
         "correspondents": [],
         "document_types": [],
+        "profile": {
+            "first_name": "Test",
+            "email": "test@example.com",
+        },
     }
 
 
 @pytest.fixture
-def setup_connector(connector: PaperlessNgxConnector) -> PaperlessNgxConnector:
-    credentials = {
-        "paperless_ngx_api_url": "http://test.com",
-        "paperless_ngx_auth_token": "test_token",
-    }
-    connector.load_credentials(credentials)
-    return connector
+def setup_connector(
+    connector: PaperlessNgxConnector, mock_get_side_effect: Any
+) -> PaperlessNgxConnector:
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = mock_get_side_effect
+        credentials = {
+            "paperless_ngx_api_url": "http://test.com",
+            "paperless_ngx_auth_token": "test_token",
+        }
+        connector.load_credentials(credentials)
+        return connector
 
 
 @pytest.fixture
 def mock_get_side_effect(mock_responses: Dict[str, List[Dict[str, Any]]]) -> Any:
     def side_effect(url: str, **kwargs: Any) -> MagicMock:
+        if PROFILE_ENDPOINT in url:
+            return MagicMock(
+                ok=True,
+                json=lambda: mock_responses["profile"],
+            )
         return MagicMock(
             ok=True,
             json=lambda: {
@@ -96,16 +110,20 @@ def mock_get_side_effect(mock_responses: Dict[str, List[Dict[str, Any]]]) -> Any
     return side_effect
 
 
-def test_load_credentials(connector: PaperlessNgxConnector) -> None:
-    credentials = {
-        "paperless_ngx_api_url": "http://test.com",
-        "paperless_ngx_auth_token": "test_token",
-    }
+def test_load_credentials(
+    connector: PaperlessNgxConnector, mock_get_side_effect: Any
+) -> None:
+    with patch("requests.get") as mock_get:
+        mock_get.side_effect = mock_get_side_effect
+        credentials = {
+            "paperless_ngx_api_url": "http://test.com",
+            "paperless_ngx_auth_token": "test_token",
+        }
 
-    connector.load_credentials(credentials)
+        connector.load_credentials(credentials)
 
-    assert connector.api_url == "http://test.com"
-    assert connector.auth_token == "test_token"
+        assert connector.api_url == "http://test.com"
+        assert connector.auth_token == "test_token"
 
 
 def test_load_from_state(
