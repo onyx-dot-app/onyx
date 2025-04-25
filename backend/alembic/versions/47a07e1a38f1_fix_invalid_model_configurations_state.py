@@ -121,16 +121,17 @@ def upgrade() -> None:
                 if not model_name:
                     continue
 
+                insert_statement = postgresql.insert(model_configuration_table).values(
+                    llm_provider_id=llm_provider_id,
+                    name=model_name,
+                    is_visible=True,
+                    max_input_tokens=None,
+                )
+
                 connection.execute(
-                    postgresql.insert(model_configuration_table)
-                    .values(
-                        llm_provider_id=llm_provider_id,
-                        name=model_name,
-                        is_visible=True,
-                        max_input_tokens=None,
-                    )
-                    .on_conflict_do_nothing(
+                    insert_statement.on_conflict_do_update(
                         index_elements=["llm_provider_id", "name"],
+                        set_={"is_visible": insert_statement.excluded.is_visible},
                     )
                 )
         else:
