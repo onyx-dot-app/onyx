@@ -165,15 +165,18 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         try:
             response = requests.get(
                 self.api_url + PROFILE_ENDPOINT, headers=self._get_headers()
-            ).json()
-            if response:
+            )
+            response.raise_for_status()  # Raises HTTPError for bad responses (4XX or 5XX)
+            json = response.json()
+            if json:
                 logger.info(
                     "Successfully connected to Paperless-ngx API as user: "
-                    + response.get("first_name", response.get("email", "unknown"))
+                    + json.get("first_name", json.get("email", "unknown"))
                 )
             else:
                 raise PermissionError(
-                    "Failed to connect to Paperless-ngx API. Invalid server or credentials."
+                    "Failed to connect to Paperless-ngx API. Invalid server or credentials: "
+                    + f"{response.text if response.text else 'No response'}"
                 )
         except Exception as e:
             logger.error(f"Error fetching data from Paperless-ngx API: {e}")
@@ -217,6 +220,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             params = {}
 
         while url:
+            response = None
             try:
                 response = requests.get(url, headers=headers, params=params)
                 response.raise_for_status()  # Raises HTTPError for bad responses (4XX or 5XX)
@@ -227,7 +231,10 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 params = None  # Parameters are included in the 'next' URL
 
             except requests.exceptions.JSONDecodeError as e:
-                logger.error(f"Recieved invalid JSON response: {response.text}")
+                if response and response.text:
+                    logger.error(f"Received invalid JSON response: {response.text}")
+                else:
+                    logger.error("Received empty or invalid JSON response.")
                 raise ValueError(f"Failed to decode JSON response: {e}")
 
             except requests.exceptions.RequestException as e:
