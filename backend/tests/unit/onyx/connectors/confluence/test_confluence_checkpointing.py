@@ -14,6 +14,7 @@ from requests.exceptions import HTTPError
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.confluence.connector import ConfluenceCheckpoint
 from onyx.connectors.confluence.connector import ConfluenceConnector
+from onyx.connectors.confluence.connector import TIME_OFFSET
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -43,6 +44,7 @@ def space_key() -> str:
 @pytest.fixture
 def mock_confluence_client() -> OnyxConfluence:
     """Create a mock Confluence client with proper typing"""
+    # Server mode just Also updates the start value
     return OnyxConfluence(
         is_cloud=False, url="test", credentials_provider=MagicMock(), timeout=None
     )
@@ -53,6 +55,9 @@ def confluence_connector(
     confluence_base_url: str, space_key: str, mock_confluence_client: OnyxConfluence
 ) -> Generator[ConfluenceConnector, None, None]:
     """Create a Confluence connector with a mock client"""
+    # NOTE: we test with is_cloud=True for all tests, but the behavior is close enough
+    # to the server behavior that we can use the same tests. In particular we always update
+    # the timestamp AND always update the new start value in the checkpoint.
     connector = ConfluenceConnector(
         wiki_base=confluence_base_url,
         space=space_key,
@@ -81,6 +86,7 @@ def create_mock_page() -> Callable[..., dict[str, Any]]:
             "id": id,
             "title": title,
             "version": {"when": updated},
+            "history": {"lastUpdated": {"when": updated}},
             "body": {"storage": {"value": content}},
             "metadata": {
                 "labels": {"results": [{"name": label} for label in (labels or [])]}
@@ -180,8 +186,10 @@ def test_load_from_checkpoint_happy_path(
     assert isinstance(document2, Document)
     assert document2.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/2"
     assert checkpoint_output1.next_checkpoint == ConfluenceCheckpoint(
+        last_updated=first_updated.timestamp() - TIME_OFFSET,
         next_start=2,
         has_more=True,
+        last_seen_doc_ids=["1", "2"],
     )
 
     checkpoint_output2 = outputs[1]
@@ -190,8 +198,10 @@ def test_load_from_checkpoint_happy_path(
     assert isinstance(document3, Document)
     assert document3.id == f"{confluence_connector.wiki_base}/spaces/TEST/pages/3"
     assert checkpoint_output2.next_checkpoint == ConfluenceCheckpoint(
+        last_updated=last_updated.timestamp(),
         next_start=3,
         has_more=False,
+        last_seen_doc_ids=["1", "2", "3"],
     )
 
 
@@ -455,6 +465,8 @@ def test_checkpoint_progress(
     assert isinstance(outputs_with_checkpoint[0].items[0], Document)
     assert outputs_with_checkpoint[0].items[0].semantic_identifier == "Page 3"
     assert outputs_with_checkpoint[0].next_checkpoint == ConfluenceCheckpoint(
+        last_updated=latest_timestamp.timestamp(),
         next_start=3,
         has_more=False,
+        last_seen_doc_ids=["1", "2", "3"],
     )

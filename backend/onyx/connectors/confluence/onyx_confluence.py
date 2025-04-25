@@ -501,9 +501,11 @@ class OnyxConfluence:
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
             updated_start = get_start_param_from_url(url_suffix)
+
             for result in results:
                 updated_start += 1
                 if next_page_callback:
+                    print(f"updated_start: {updated_start}, url_suffix: {url_suffix}")
                     next_page_callback(updated_start)
                 yield result
 
@@ -540,7 +542,7 @@ class OnyxConfluence:
         """
         expand_string = f"&expand={expand}" if expand else ""
         cql_url = f"rest/api/content/search?cql={cql}{expand_string}"
-        if start:
+        if not self._is_cloud and start:
             cql_url = update_param_in_path(cql_url, "start", str(start))
         yield from self._paginate_url(
             cql_url, limit, next_page_callback=next_page_callback

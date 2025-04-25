@@ -72,12 +72,20 @@ _SLIM_DOC_BATCH_SIZE = 5000
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
+TIME_OFFSET = 120
+MAX_CACHED_IDS = 100
+
 
 def _should_propagate_error(e: Exception) -> bool:
     return "field 'updated' is invalid" in str(e)
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
+    # Used for Confluence Cloud checkpointing
+    last_updated: SecondsSinceUnixEpoch
+    last_seen_doc_ids: list[str]  # avoid duplicate page processing
+
+    # used for Confluence Server checkpointing
     next_start: int
 
 
@@ -463,24 +471,32 @@ class ConfluenceConnector(
         """
         checkpoint = copy.deepcopy(checkpoint)
 
-        # use "start" when last_updated is 0
-        page_query = self._construct_page_query(start, end)
+        # use "start" when last_updated is 0 or for confluence server
+        start_ts = checkpoint.last_updated or start if self.is_cloud else start
+        page_query = self._construct_page_query(start_ts, end)
         logger.debug(f"page_query: {page_query}")
 
+        prev_doc_ids = set(checkpoint.last_seen_doc_ids)
+
+        # store the next page start for confluence server
         def store_next_page_start(next_page_start: int) -> None:
             checkpoint.next_start = next_page_start
 
+        new_doc_count = 0
         # most requests will include a few pages to skip, so we limit each page to
         # 2 * batch_size to only need a single request for most checkpoint runs
-        for yield_count, page in enumerate(
-            self.confluence_client.paginated_cql_retrieval(
-                cql=page_query,
-                expand=",".join(_PAGE_EXPANSION_FIELDS),
-                limit=self.batch_size + 1,  # + 1 to fetch one page per call
-                start=checkpoint.next_start,
-                next_page_callback=store_next_page_start,
-            )
+        for page in self.confluence_client.paginated_cql_retrieval(
+            cql=page_query,
+            expand=",".join(_PAGE_EXPANSION_FIELDS),
+            limit=2 * self.batch_size,
+            start=checkpoint.next_start,
+            next_page_callback=store_next_page_start,
         ):
+            if page["id"] in prev_doc_ids:
+                logger.debug(f"Skipping duplicate page: {page['id']}")
+                continue
+            new_doc_count += 1
+            checkpoint.last_seen_doc_ids.append(page["id"])
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
 
@@ -488,6 +504,15 @@ class ConfluenceConnector(
                 yield doc_or_failure
                 continue
 
+            new_ts = datetime_from_string(
+                page["history"]["lastUpdated"]["when"]
+            ).timestamp()
+            if self.is_cloud and new_ts < checkpoint.last_updated:
+                logger.warning(
+                    f"Confluence Cloud connector saw a page with an older "
+                    f"timestamp than the checkpoint: {new_ts} < {checkpoint.last_updated}"
+                )
+            checkpoint.last_updated = max(checkpoint.last_updated, new_ts)
             # Now get attachments for that page:
             doc_or_failure = self._fetch_page_attachments(page, doc_or_failure)
 
@@ -495,7 +520,13 @@ class ConfluenceConnector(
             yield doc_or_failure
 
             # create checkpoint after enough documents have been processed
-            if yield_count >= self.batch_size - 1:  # 0-indexing
+            if new_doc_count >= self.batch_size:
+                checkpoint.last_seen_doc_ids = checkpoint.last_seen_doc_ids[
+                    -MAX_CACHED_IDS:
+                ]
+                checkpoint.last_updated = max(
+                    start_ts or 0, checkpoint.last_updated - TIME_OFFSET
+                )
                 return checkpoint
 
         checkpoint.has_more = False
@@ -523,7 +554,9 @@ class ConfluenceConnector(
 
     @override
     def build_dummy_checkpoint(self) -> ConfluenceCheckpoint:
-        return ConfluenceCheckpoint(next_start=0, has_more=True)
+        return ConfluenceCheckpoint(
+            last_updated=0, next_start=0, has_more=True, last_seen_doc_ids=[]
+        )
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConfluenceCheckpoint:
