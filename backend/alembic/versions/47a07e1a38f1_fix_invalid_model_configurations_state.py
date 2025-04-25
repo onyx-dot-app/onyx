@@ -98,13 +98,6 @@ def upgrade() -> None:
                 ]
             )
 
-            # We have to delete the old data before inserting the new data, else we run into duplicate value errors.
-            connection.execute(
-                model_configuration_table.delete().where(
-                    model_configuration_table.c.llm_provider_id == llm_provider_id
-                )
-            )
-
             difference = display_models.difference(existing_visible_model_names)
 
             for model_name in difference:
@@ -112,12 +105,14 @@ def upgrade() -> None:
                     continue
 
                 connection.execute(
-                    model_configuration_table.insert().values(
+                    postgresql.insert(model_configuration_table)
+                    .values(
                         llm_provider_id=llm_provider_id,
                         name=model_name,
                         is_visible=True,
                         max_input_tokens=None,
                     )
+                    .on_conflict_do_update(index_elements=["llm_provider_id", "name"])
                 )
         else:
             for model_name in default_models:
