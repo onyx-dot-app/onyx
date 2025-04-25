@@ -108,9 +108,9 @@ def upgrade() -> None:
                 ]
             )
 
-            for model_name in display_model_names.difference(
-                existing_visible_model_names
-            ):
+            difference = display_model_names.difference(existing_visible_model_names)
+
+            for model_name in difference:
                 if not model_name:
                     continue
 
