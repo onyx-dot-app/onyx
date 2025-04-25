@@ -109,14 +109,11 @@ class OnyxConfluence:
         if timeout:
             self.shared_base_kwargs["timeout"] = timeout
 
-        if confluence_user_profiles_override:
-            self._confluence_user_profiles_override = (
-                process_confluence_user_profiles_override(
-                    confluence_user_profiles_override
-                )
-            )
-        else:
-            self._confluence_user_profiles_override = None
+        self._confluence_user_profiles_override = (
+            process_confluence_user_profiles_override(confluence_user_profiles_override)
+            if confluence_user_profiles_override
+            else None
+        )
 
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
