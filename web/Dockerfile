@@ -7,10 +7,14 @@ have a contract or agreement with DanswerAI, you are not permitted to use the En
 Edition features outside of personal development or testing purposes. Please reach out to \
 founders@onyx.app for more information. Please visit https://github.com/onyx-dot-app/onyx"
 
+USER root
+
 # Default ONYX_VERSION, typically overriden during builds by GitHub Actions.
 ARG ONYX_VERSION=0.0.0-dev
 ENV ONYX_VERSION=${ONYX_VERSION}
 RUN echo "ONYX_VERSION: ${ONYX_VERSION}"
+
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 # Step 1. Install dependencies + rebuild the source code only when needed
 FROM base AS builder

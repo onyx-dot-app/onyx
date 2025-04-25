@@ -105,6 +105,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.CodeRepository,
     docs: "https://docs.onyx.app/connectors/github",
   },
+  github_source: {
+    icon: GithubIcon,
+    displayName: "Github Files",
+    category: SourceCategory.CodeRepository,
+    docs: "https://docs.onyx.app/connectors/github",
+  },
   gitlab: {
     icon: GitlabIcon,
     displayName: "Gitlab",

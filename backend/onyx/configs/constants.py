@@ -143,6 +143,7 @@ class DocumentSource(str, Enum):
     REQUESTTRACKER = "requesttracker"
     GITHUB = "github"
     GITBOOK = "gitbook"
+    GITHUB_SOURCE = "github_source"
     GITLAB = "gitlab"
     GURU = "guru"
     BOOKSTACK = "bookstack"

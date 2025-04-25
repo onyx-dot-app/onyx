@@ -25,6 +25,7 @@ from onyx.connectors.fireflies.connector import FirefliesConnector
 from onyx.connectors.freshdesk.connector import FreshdeskConnector
 from onyx.connectors.gitbook.connector import GitbookConnector
 from onyx.connectors.github.connector import GithubConnector
+from onyx.connectors.github_source.connector import GithubSourceConnector
 from onyx.connectors.gitlab.connector import GitlabConnector
 from onyx.connectors.gmail.connector import GmailConnector
 from onyx.connectors.gong.connector import GongConnector
@@ -80,6 +81,7 @@ def identify_connector_class(
             InputType.SLIM_RETRIEVAL: SlackConnector,
         },
         DocumentSource.GITHUB: GithubConnector,
+        DocumentSource.GITHUB_SOURCE: GithubSourceConnector,
         DocumentSource.GMAIL: GmailConnector,
         DocumentSource.GITLAB: GitlabConnector,
         DocumentSource.GITBOOK: GitbookConnector,

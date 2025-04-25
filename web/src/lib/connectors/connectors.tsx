@@ -232,6 +232,79 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  github_source: {
+    description: "Configure GitHub connector",
+    values: [
+      {
+        type: "text",
+        query: "Enter the GitHub username or organization:",
+        label: "Repository Owner",
+        name: "repo_owner",
+        optional: false,
+      },
+      {
+        type: "tab",
+        name: "github_mode",
+        label: "What should we index from GitHub?",
+        optional: true,
+        tabs: [
+          {
+            value: "repo",
+            label: "Specific Repository",
+            fields: [
+              {
+                type: "text",
+                query: "Enter the repository name(s):",
+                label: "Repository Name(s)",
+                name: "repositories",
+                optional: false,
+                description:
+                  "For multiple repositories, enter comma-separated names (e.g., repo1,repo2,repo3)",
+              },
+            ],
+          },
+          {
+            value: "everything",
+            label: "Everything",
+            fields: [
+              {
+                type: "string_tab",
+                label: "Everything",
+                name: "everything",
+                description:
+                  "This connector will index all repositories the provided credentials have access to!",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: "checkbox",
+        query: "Include pull requests?",
+        label: "Include pull requests?",
+        description: "Index pull requests from repositories",
+        name: "include_prs",
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include issues?",
+        label: "Include Issues?",
+        name: "include_issues",
+        description: "Index issues from repositories",
+        optional: true,
+      },
+      {
+        type: "checkbox",
+        query: "Include files?",
+        label: "Include Files",
+        name: "include_files",
+        description: "Index files from this repository",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   gitlab: {
     description: "Configure GitLab connector",
     values: [

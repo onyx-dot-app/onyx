@@ -99,3 +99,10 @@ sentry-sdk==2.14.0
 prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 prometheus_fastapi_instrumentator==7.1.0
+tree_sitter==0.23.2
+tree_sitter_python==0.23.6
+tree_sitter_javascript==0.23.1
+tree_sitter_typescript==0.23.2
+tree_sitter_cpp==0.23.4
+tree-sitter-c-sharp==0.23.1
+gitpython==3.1.44
