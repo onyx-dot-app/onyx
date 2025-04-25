@@ -85,14 +85,6 @@ def _extract_ids_from_urls(urls: list[str]) -> list[str]:
     return [urlparse(url).path.strip("/").split("/")[-1] for url in urls]
 
 
-def _cleanup_folder_file_ids(
-    checkpoint: GoogleDriveCheckpoint,
-) -> None:
-    for folder_id in checkpoint.processed_folder_file_ids._dict:
-        if folder_id in checkpoint.retrieved_folder_and_drive_ids:
-            checkpoint.processed_folder_file_ids._dict[folder_id] = set()
-
-
 def _clean_requested_drive_ids(
     requested_drive_ids: set[str],
     requested_folder_ids: set[str],
@@ -310,7 +302,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     if email not in user_emails:
                         user_emails.append(email)
         return user_emails
-        # return ['test_user_1@onyx-test.com']
 
     def get_all_drive_ids(self) -> set[str]:
         primary_drive_service = get_drive_service(
@@ -499,6 +490,12 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
             resuming = False  # we are starting the next stage for the first time
 
+        # In the folder files section of service account retrieval we take extra care
+        # to not retrieve duplicate docs. In particular, we only add a folder to
+        # retrieved_folder_and_drive_ids when all users are finished retrieving files
+        # from that folder, and maintain a set of all file ids that have been retrieved
+        # for each folder. This might get rather large; in practice we assume that the
+        # specific folders users choose to index don't have too many files.
         if curr_stage.stage == DriveRetrievalStage.FOLDER_FILES:
 
             def _yield_from_folder_crawl(
@@ -514,7 +511,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     start=folder_start,
                     end=end,
                 ):
-                    # yield retrieved_file
                     with checkpoint.processed_folder_file_ids.lock:
                         should_yield = False
                         completed_ids = checkpoint.processed_folder_file_ids._dict.get(
@@ -1042,7 +1038,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
                 if batches_complete > BATCHES_PER_CHECKPOINT:
                     checkpoint.retrieved_folder_and_drive_ids = self._retrieved_ids
-                    _cleanup_folder_file_ids(checkpoint)
                     return  # create a new checkpoint
 
             # Process any remaining files

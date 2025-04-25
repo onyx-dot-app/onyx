@@ -155,7 +155,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
         assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
         return ThreadSafeDict(
-            {k: StageCompletion.model_validate(v) for k, v in v.items()}
+            {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )
 
     @field_serializer("processed_folder_file_ids")
@@ -169,4 +169,4 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         cls, v: Any
     ) -> ThreadSafeDict[str, set[str]]:
         assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
-        return ThreadSafeDict({k: set(v) for k, v in v.items()})
+        return ThreadSafeDict({k: set(val) for k, val in v.items()})

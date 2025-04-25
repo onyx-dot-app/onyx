@@ -502,7 +502,7 @@ def test_shared_drive_folder(
     expected_file_ids = FOLDER_1_FILE_IDS + FOLDER_1_1_FILE_IDS + FOLDER_1_2_FILE_IDS
 
     # test for deduping
-    assert len(retrieved_docs) == len(expected_file_ids)
+    assert len(expected_file_ids) == len(retrieved_docs)
     assert_expected_docs_in_retrieved_docs(
         retrieved_docs=retrieved_docs,
         expected_file_ids=expected_file_ids,
