@@ -1,0 +1,20 @@
+name: PR Labeller
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  validate_pr_title:
+    runs-on: ubuntu-latest
+    steps:
+    - name: PR Conventional Commit Validation
+      uses: ytanikin/pr-conventional-commits@1.4.0
+      with:
+        task_types: '["feat","fix","docs","test","ci","refactor","perf","chore","revert","build"]'
+        add_label: 'true'
