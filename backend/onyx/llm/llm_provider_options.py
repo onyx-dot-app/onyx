@@ -79,6 +79,7 @@ BEDROCK_MODEL_NAMES = [
     for model in litellm.bedrock_models + litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
 ][::-1]
+BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
@@ -141,7 +142,7 @@ _PROVIDER_TO_MODELS_MAP = {
 
 _PROVIDER_TO_VISIBLE_MODELS_MAP = {
     OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
-    BEDROCK_PROVIDER_NAME: [],
+    BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
 }
@@ -211,8 +212,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
-            default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-            default_fast_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+            default_model=BEDROCK_DEFAULT_MODEL,
+            default_fast_model=BEDROCK_DEFAULT_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
