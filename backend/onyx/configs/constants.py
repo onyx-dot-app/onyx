@@ -187,6 +187,7 @@ class DocumentSource(str, Enum):
     MINIO = "minio"
     YANDEX = "yandex"
     MAILRU = "mailru"
+    POSTGRES = "postgres"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"

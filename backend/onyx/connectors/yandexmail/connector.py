@@ -4,9 +4,9 @@ from datetime import datetime
 from email.header import decode_header
 from typing import Any
 
-from danswer.configs.constants import DocumentSource
-from danswer.connectors.interfaces import LoadConnector, PollConnector, GenerateDocumentsOutput, SecondsSinceUnixEpoch
-from danswer.connectors.models import ConnectorMissingCredentialError, Document, BasicExpertInfo, Section
+from onyx.configs.constants import DocumentSource
+from onyx.connectors.interfaces import LoadConnector, PollConnector, GenerateDocumentsOutput, SecondsSinceUnixEpoch
+from onyx.connectors.models import ConnectorMissingCredentialError, Document, BasicExpertInfo, TextSection
 
 
 def clean_text(text: str) -> str:
@@ -84,7 +84,7 @@ class YandexMailConnector(LoadConnector, PollConnector):
                     doc_batch.append(
                         Document(
                             id=email_id.decode("utf-8"),
-                            sections=[Section(link="", text=body)],
+                            sections=[TextSection(link="", text=body)],
                             source=DocumentSource.YANDEX,
                             semantic_identifier=subject,
                             title=subject,
