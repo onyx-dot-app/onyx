@@ -127,5 +127,5 @@ def downgrade() -> None:
                 WHERE id = :id
                 """
             ),
-            {"id": connector_id, "old_config": old_config},
+            {"id": connector_id, "old_config": json.dumps(old_config)},
         )
