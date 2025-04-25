@@ -1,7 +1,7 @@
 from onyx.connectors.confluence.models import ConfluenceUser
 
 
-def process_confluence_user_email_override(
+def process_confluence_user_profiles_override(
     confluence_user_email_override: list[dict[str, str]],
 ) -> list[ConfluenceUser]:
     return [

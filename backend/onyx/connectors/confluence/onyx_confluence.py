@@ -17,10 +17,10 @@ from requests import HTTPError
 
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_EMAIL_OVERRIDES
+from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.user_profile_override import (
-    process_confluence_user_email_override,
+    process_confluence_user_profiles_override,
 )
 from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
@@ -76,8 +76,8 @@ class OnyxConfluence:
         timeout: int | None = None,
         # should generally not be passed in, but making it overridable for
         # easier testing
-        confluence_user_email_overrides: list[dict[str, str]] | None = (
-            CONFLUENCE_CONNECTOR_USER_EMAIL_OVERRIDES
+        confluence_user_profiles_override: list[dict[str, str]] | None = (
+            CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
         ),
     ) -> None:
         self._is_cloud = is_cloud
@@ -109,12 +109,14 @@ class OnyxConfluence:
         if timeout:
             self.shared_base_kwargs["timeout"] = timeout
 
-        if confluence_user_email_overrides:
-            self._confluence_user_email_overrides = (
-                process_confluence_user_email_override(confluence_user_email_overrides)
+        if confluence_user_profiles_override:
+            self._confluence_user_profiles_override = (
+                process_confluence_user_profiles_override(
+                    confluence_user_profiles_override
+                )
             )
         else:
-            self._confluence_user_email_overrides = None
+            self._confluence_user_profiles_override = None
 
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
@@ -599,8 +601,8 @@ class OnyxConfluence:
         # this is needed since there is a live bug with Confluence Server/Data Center
         # where not all users are returned by the APIs. This is a workaround needed until
         # that is patched.
-        if self._confluence_user_email_overrides:
-            yield from self._confluence_user_email_overrides
+        if self._confluence_user_profiles_override:
+            yield from self._confluence_user_profiles_override
 
         elif self._is_cloud:
             cql = "type=user"

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from onyx.connectors.confluence.onyx_confluence import ConfluenceUser
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.interfaces import CredentialsProviderInterface
@@ -26,7 +28,7 @@ class MockCredentialsProvider(CredentialsProviderInterface):
         pass
 
 
-def test_paginated_cql_user_retrieval_with_overrides():
+def test_paginated_cql_user_retrieval_with_overrides() -> None:
     """
     Tests that paginated_cql_user_retrieval yields users from the overrides
     when provided and is_cloud is False.
@@ -54,7 +56,7 @@ def test_paginated_cql_user_retrieval_with_overrides():
         is_cloud=False,  # Overrides are primarily for Server/DC
         url="http://dummy-confluence.com",
         credentials_provider=mock_provider,
-        confluence_user_email_overrides=overrides,
+        confluence_user_profiles_override=overrides,
     )
 
     retrieved_users = list(confluence_client.paginated_cql_user_retrieval())
@@ -66,7 +68,7 @@ def test_paginated_cql_user_retrieval_with_overrides():
     assert retrieved_users == expected_users
 
 
-def test_paginated_cql_user_retrieval_no_overrides_server(mocker):
+def test_paginated_cql_user_retrieval_no_overrides_server() -> None:
     """
     Tests that paginated_cql_user_retrieval attempts to call the actual
     API pagination when no overrides are provided for Server/DC.
@@ -76,19 +78,19 @@ def test_paginated_cql_user_retrieval_no_overrides_server(mocker):
         is_cloud=False,
         url="http://dummy-confluence.com",
         credentials_provider=mock_provider,
-        confluence_user_email_overrides=None,
+        confluence_user_profiles_override=None,
     )
 
     # Mock the internal pagination method to check if it's called
-    mock_paginate = mocker.patch.object(confluence_client, "_paginate_url")
-    mock_paginate.return_value = iter([])  # Return an empty iterator
+    with patch.object(confluence_client, "_paginate_url") as mock_paginate:
+        mock_paginate.return_value = iter([])  # Return an empty iterator
 
-    list(confluence_client.paginated_cql_user_retrieval())
+        list(confluence_client.paginated_cql_user_retrieval())
 
-    mock_paginate.assert_called_once_with("rest/api/user/list", None)
+        mock_paginate.assert_called_once_with("rest/api/user/list", None)
 
 
-def test_paginated_cql_user_retrieval_no_overrides_cloud(mocker):
+def test_paginated_cql_user_retrieval_no_overrides_cloud() -> None:
     """
     Tests that paginated_cql_user_retrieval attempts to call the actual
     API pagination when no overrides are provided for Cloud.
@@ -98,16 +100,16 @@ def test_paginated_cql_user_retrieval_no_overrides_cloud(mocker):
         is_cloud=True,
         url="http://dummy-confluence.com",  # URL doesn't matter much here due to mocking
         credentials_provider=mock_provider,
-        confluence_user_email_overrides=None,
+        confluence_user_profiles_override=None,
     )
 
     # Mock the internal pagination method to check if it's called
-    mock_paginate = mocker.patch.object(confluence_client, "_paginate_url")
-    mock_paginate.return_value = iter([])  # Return an empty iterator
+    with patch.object(confluence_client, "_paginate_url") as mock_paginate:
+        mock_paginate.return_value = iter([])  # Return an empty iterator
 
-    list(confluence_client.paginated_cql_user_retrieval())
+        list(confluence_client.paginated_cql_user_retrieval())
 
-    # Check that the cloud-specific user search URL is called
-    mock_paginate.assert_called_once_with(
-        "rest/api/search/user?cql=type=user", None, auto_paginate=True
-    )
+        # Check that the cloud-specific user search URL is called
+        mock_paginate.assert_called_once_with(
+            "rest/api/search/user?cql=type=user", None, auto_paginate=True
+        )
