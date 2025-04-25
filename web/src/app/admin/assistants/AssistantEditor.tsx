@@ -647,17 +647,14 @@ export function AssistantEditor({
             values.llm_model_version_override || defaultModelName || ""
           );
 
-          const selectedFiles = useMemo(() => {
-            return files.filter((file) =>
-              values.user_file_ids.includes(file.id)
-            );
-          }, [files, values.user_file_ids]);
+          // TODO: memoize this / make more efficient
+          const selectedFiles = files.filter((file) =>
+            values.user_file_ids.includes(file.id)
+          );
 
-          const selectedFolders = useMemo(() => {
-            return folders.filter((folder) =>
-              values.user_folder_ids.includes(folder.id)
-            );
-          }, [folders, values.user_folder_ids]);
+          const selectedFolders = folders.filter((folder) =>
+            values.user_folder_ids.includes(folder.id)
+          );
 
           return (
             <>
