@@ -1,17 +1,16 @@
 import uuid
+from typing import Any
 
 import pytest
 import requests
 from requests.models import Response
 
 from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import model_supports_image_input
 from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
-
-
-_DEFAULT_MODELS = ["gpt-4", "gpt-4o"]
 
 
 def _get_provider_by_id(admin_user: DATestUser, provider_id: str) -> dict | None:
@@ -40,10 +39,10 @@ def assert_response_is_equivalent(
 
     assert provider_data["default_model_name"] == default_model_name
 
-    def fill_max_input_tokens_if_none(
+    def fill_max_input_tokens_and_supports_image_input(
         req: ModelConfigurationUpsertRequest,
-    ) -> ModelConfigurationUpsertRequest:
-        return ModelConfigurationUpsertRequest(
+    ) -> dict[str, Any]:
+        filled_with_max_input_tokens = ModelConfigurationUpsertRequest(
             name=req.name,
             is_visible=req.is_visible,
             max_input_tokens=req.max_input_tokens
@@ -51,13 +50,21 @@ def assert_response_is_equivalent(
                 model_name=req.name, model_provider=default_model_name
             ),
         )
+        return {
+            **filled_with_max_input_tokens.model_dump(),
+            "supports_image_input": model_supports_image_input(
+                req.name, created_provider["provider"]
+            ),
+        }
 
     actual = set(
         tuple(model_configuration.items())
         for model_configuration in provider_data["model_configurations"]
     )
     expected = set(
-        tuple(fill_max_input_tokens_if_none(model_configuration).dict().items())
+        tuple(
+            fill_max_input_tokens_and_supports_image_input(model_configuration).items()
+        )
         for model_configuration in model_configurations
     )
     assert actual == expected
@@ -150,7 +157,7 @@ def test_create_llm_provider(
             "api_key": "sk-000000000000000000000000000000000000000000000000",
             "default_model_name": default_model_name,
             "model_configurations": [
-                model_configuration.dict()
+                model_configuration.model_dump()
                 for model_configuration in model_configurations
             ],
             "is_public": True,

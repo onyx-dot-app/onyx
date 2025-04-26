@@ -25,8 +25,8 @@ import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
-  checkLLMSupportsImageInput,
   destructureValue,
+  modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
 import { ToolSnapshot } from "@/lib/tools/interfaces";
@@ -139,6 +139,7 @@ export function AssistantEditor({
   admin?: boolean;
 }) {
   const { refreshAssistants, isImageGenerationAvailable } = useAssistants();
+
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdminPage = searchParams?.get("admin") === "true";
@@ -643,7 +644,8 @@ export function AssistantEditor({
 
           // model must support image input for image generation
           // to work
-          const currentLLMSupportsImageOutput = checkLLMSupportsImageInput(
+          const currentLLMSupportsImageOutput = modelSupportsImageInput(
+            llmProviders,
             values.llm_model_version_override || defaultModelName || ""
           );
 

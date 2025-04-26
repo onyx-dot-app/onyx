@@ -12,12 +12,16 @@ from urllib.parse import quote
 
 import bs4
 from atlassian import Confluence  # type:ignore
-from pydantic import BaseModel
 from redis import Redis
 from requests import HTTPError
 
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
 from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
+from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+from onyx.connectors.confluence.models import ConfluenceUser
+from onyx.connectors.confluence.user_profile_override import (
+    process_confluence_user_profiles_override,
+)
 from onyx.connectors.confluence.utils import _handle_http_error
 from onyx.connectors.confluence.utils import confluence_refresh_tokens
 from onyx.connectors.confluence.utils import get_start_param_from_url
@@ -46,16 +50,6 @@ class ConfluenceRateLimitError(Exception):
     pass
 
 
-class ConfluenceUser(BaseModel):
-    user_id: str  # accountId in Cloud, userKey in Server
-    username: str | None  # Confluence Cloud doesn't give usernames
-    display_name: str
-    # Confluence Data Center doesn't give email back by default,
-    # have to fetch it with a different endpoint
-    email: str | None
-    type: str
-
-
 _DEFAULT_PAGINATION_LIMIT = 1000
 _MINIMUM_PAGINATION_LIMIT = 50
 
@@ -80,6 +74,11 @@ class OnyxConfluence:
         url: str,
         credentials_provider: CredentialsProviderInterface,
         timeout: int | None = None,
+        # should generally not be passed in, but making it overridable for
+        # easier testing
+        confluence_user_profiles_override: list[dict[str, str]] | None = (
+            CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+        ),
     ) -> None:
         self._is_cloud = is_cloud
         self._url = url.rstrip("/")
@@ -109,6 +108,12 @@ class OnyxConfluence:
         }
         if timeout:
             self.shared_base_kwargs["timeout"] = timeout
+
+        self._confluence_user_profiles_override = (
+            process_confluence_user_profiles_override(confluence_user_profiles_override)
+            if confluence_user_profiles_override
+            else None
+        )
 
     def _renew_credentials(self) -> tuple[dict[str, Any], bool]:
         """credential_json - the current json credentials
@@ -589,7 +594,14 @@ class OnyxConfluence:
         It's a seperate endpoint from the content/search endpoint used only for users.
         Otherwise it's very similar to the content/search endpoint.
         """
-        if self.cloud:
+
+        # this is needed since there is a live bug with Confluence Server/Data Center
+        # where not all users are returned by the APIs. This is a workaround needed until
+        # that is patched.
+        if self._confluence_user_profiles_override:
+            yield from self._confluence_user_profiles_override
+
+        elif self._is_cloud:
             cql = "type=user"
             url = "rest/api/search/user"
             expand_string = f"&expand={expand}" if expand else ""
@@ -680,7 +692,7 @@ class OnyxConfluence:
         This is not an SQL like query.
         It's a confluence specific endpoint that can be used to fetch groups.
         """
-        user_field = "accountId" if self.cloud else "key"
+        user_field = "accountId" if self._is_cloud else "key"
         user_value = user_id
         # Server uses userKey (but calls it key during the API call), Cloud uses accountId
         user_query = f"{user_field}={quote(user_value)}"

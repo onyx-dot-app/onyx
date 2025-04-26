@@ -25,13 +25,25 @@ SAML_CONF_DIR = os.environ.get("SAML_CONF_DIR") or "/app/ee/onyx/configs/saml_co
 #####
 # Auto Permission Sync
 #####
+# should generally only be used for sources that support polling of permissions
+# e.g. can pull in only permission changes rather than having to go through all
+# documents every time
 DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY = int(
     os.environ.get("DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
-# In seconds, default is 5 minutes
+
+#####
+# Confluence
+#####
+
+# In seconds, default is 30 minutes
 CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
-    os.environ.get("CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+    os.environ.get("CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY") or 30 * 60
+)
+# In seconds, default is 30 minutes
+CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY") or 30 * 60
 )
 # This is a boolean that determines if anonymous access is public
 # Default behavior is to not make the page public and instead add a group
@@ -39,9 +51,21 @@ CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
 CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC = (
     os.environ.get("CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC", "").lower() == "true"
 )
-# In seconds, default is 5 minutes
-CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY = int(
-    os.environ.get("CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
+
+
+#####
+# Google Drive
+#####
+GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
+    os.environ.get("GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
+)
+
+
+#####
+# Slack
+#####
+SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
+    os.environ.get("SLACK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
 NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
@@ -75,14 +99,6 @@ OAUTH_JIRA_CLOUD_CLIENT_SECRET = os.environ.get("OAUTH_JIRA_CLOUD_CLIENT_SECRET"
 OAUTH_GOOGLE_DRIVE_CLIENT_ID = os.environ.get("OAUTH_GOOGLE_DRIVE_CLIENT_ID", "")
 OAUTH_GOOGLE_DRIVE_CLIENT_SECRET = os.environ.get(
     "OAUTH_GOOGLE_DRIVE_CLIENT_SECRET", ""
-)
-
-GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY = int(
-    os.environ.get("GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY") or 5 * 60
-)
-
-SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
-    os.environ.get("SLACK_PERMISSION_DOC_SYNC_FREQUENCY") or 5 * 60
 )
 
 # The posthog client does not accept empty API keys or hosts however it fails silently

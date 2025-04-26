@@ -74,6 +74,10 @@ EXTERNAL_SHARED_DOC_SINGLETON = (
 
 SHARED_DRIVE_3_URL = "https://drive.google.com/drive/folders/0AJYm2K_I_vtNUk9PVA"
 
+RESTRICTED_ACCESS_FOLDER_URL = (
+    "https://drive.google.com/drive/folders/1HK4wZ16ucz8QGywlcS87Y629W7i7KdeN"
+)
+
 ADMIN_EMAIL = "admin@onyx-test.com"
 TEST_USER_1_EMAIL = "test_user_1@onyx-test.com"
 TEST_USER_2_EMAIL = "test_user_2@onyx-test.com"

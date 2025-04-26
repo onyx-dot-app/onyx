@@ -79,6 +79,9 @@ def _resolve(
         if default_models:
             if not visible_default_models:
                 raise RuntimeError
+                raise RuntimeError(
+                    "If `default_models` is non-None, `visible_default_models` must be non-None too."
+                )
             models = default_models
             display_models = visible_default_models
 
