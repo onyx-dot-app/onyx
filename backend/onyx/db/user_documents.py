@@ -54,6 +54,7 @@ def create_user_files(
             name=file.filename,
             token_count=None,
             link_url=link_url,
+            content_type=file.content_type,
         )
         db_session.add(new_file)
         user_files.append(new_file)
@@ -61,7 +62,7 @@ def create_user_files(
     return user_files
 
 
-def create_user_file_with_indexing(
+def upload_files_to_user_files_with_indexing(
     files: List[UploadFile],
     folder_id: int | None,
     user: User,

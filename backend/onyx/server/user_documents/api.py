@@ -31,13 +31,13 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.user_documents import calculate_user_files_token_count
-from onyx.db.user_documents import create_user_file_with_indexing
 from onyx.db.user_documents import create_user_files
 from onyx.db.user_documents import get_user_file_indexing_status
 from onyx.db.user_documents import share_file_with_assistant
 from onyx.db.user_documents import share_folder_with_assistant
 from onyx.db.user_documents import unshare_file_with_assistant
 from onyx.db.user_documents import unshare_folder_with_assistant
+from onyx.db.user_documents import upload_files_to_user_files_with_indexing
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.models import ConnectorBase
@@ -156,7 +156,7 @@ def upload_user_files(
 
     try:
         # Use our consolidated function that handles indexing properly
-        user_files = create_user_file_with_indexing(
+        user_files = upload_files_to_user_files_with_indexing(
             files, folder_id or -1, user, db_session
         )
 
