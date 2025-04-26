@@ -21,8 +21,6 @@ class UploadMimeTypes:
         "application/epub+zip",
     }
 
-    ALLOWED_MIME_TYPES = (
-        IMAGE_MIME_TYPES.union(TEXT_MIME_TYPES)
-        .union(DOCUMENT_MIME_TYPES)
-        .union(CSV_MIME_TYPES)
+    ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(
+        TEXT_MIME_TYPES, DOCUMENT_MIME_TYPES, CSV_MIME_TYPES
     )

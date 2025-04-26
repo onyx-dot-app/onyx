@@ -1,7 +1,7 @@
 """Add content type to UserFile
 
 Revision ID: 5c448911b12f
-Revises: 7a70b7664e37
+Revises: 47a07e1a38f1
 Create Date: 2025-04-25 16:59:48.182672
 
 """
