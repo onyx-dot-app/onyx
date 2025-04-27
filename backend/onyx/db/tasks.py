@@ -46,15 +46,53 @@ def get_latest_task_by_type(
 def register_task(
     task_name: str,
     db_session: Session,
+    task_id: str = "",
+    status: TaskStatus = TaskStatus.PENDING,
 ) -> TaskQueueState:
     new_task = TaskQueueState(
-        task_id="", task_name=task_name, status=TaskStatus.PENDING
+        task_id=task_id,
+        task_name=task_name,
+        status=status,
     )
 
     db_session.add(new_task)
     db_session.commit()
 
     return new_task
+
+
+def get_task_with_id(
+    db_session: Session,
+    task_id: str,
+) -> TaskQueueState | None:
+    return db_session.scalar(
+        select(TaskQueueState).where(TaskQueueState.task_id == task_id)
+    )
+
+
+def mark_task_as_started_with_id(
+    db_session: Session,
+    task_id: str,
+):
+    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    if not task:
+        raise RuntimeError(f"A task with the task-id {task_id} does not exist")
+
+    task.status = TaskStatus.STARTED
+    db_session.commit()
+
+
+def mark_task_as_finished_with_id(
+    db_session: Session,
+    task_id: str,
+    success: bool = True,
+):
+    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    if not task:
+        raise RuntimeError(f"A task with the task-id {task_id} does not exist")
+
+    task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
+    db_session.commit()
 
 
 def mark_task_start(

@@ -1,5 +1,3 @@
-import csv
-import io
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
@@ -12,13 +10,13 @@ from fastapi import Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from ee.onyx.background.celery.apps.primary import export_query_history_task
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
 from ee.onyx.db.query_history import get_page_of_chat_sessions
 from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import MessageSnapshot
-from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_display_email
 from onyx.chat.chat_utils import create_chat_chain
@@ -30,8 +28,11 @@ from onyx.configs.constants import SessionType
 from onyx.db.chat import get_chat_session_by_id
 from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine import get_session
+from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import User
+from onyx.db.tasks import get_task_with_id
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
@@ -39,6 +40,16 @@ from onyx.server.query_and_chat.models import ChatSessionsResponse
 router = APIRouter()
 
 ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
+
+
+def assert_query_history_is_enabled(
+    disallowed: list[QueryHistoryType] = [QueryHistoryType.DISABLED],
+):
+    if ONYX_QUERY_HISTORY_TYPE in disallowed:
+        raise HTTPException(
+            status_code=HTTPStatus.FORBIDDEN,
+            detail="Query history has been disabled by the administrator.",
+        )
 
 
 def fetch_and_process_chat_session_history(
@@ -119,14 +130,12 @@ def get_user_chat_sessions(
 ) -> ChatSessionsResponse:
     # we specifically don't allow this endpoint if "anonymized" since
     # this is a direct query on the user id
-    if ONYX_QUERY_HISTORY_TYPE in [
-        QueryHistoryType.DISABLED,
-        QueryHistoryType.ANONYMIZED,
-    ]:
-        raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN,
-            detail="Per user query history has been disabled by the administrator.",
-        )
+    assert_query_history_is_enabled(
+        [
+            QueryHistoryType.DISABLED,
+            QueryHistoryType.ANONYMIZED,
+        ]
+    )
 
     try:
         chat_sessions = get_chat_sessions_by_user(
@@ -163,11 +172,7 @@ def get_chat_session_history(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
-    if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.DISABLED:
-        raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
-        )
+    assert_query_history_is_enabled()
 
     page_of_chat_sessions = get_page_of_chat_sessions(
         page_num=page_num,
@@ -205,11 +210,7 @@ def get_chat_session_admin(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
-    if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.DISABLED:
-        raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
-        )
+    assert_query_history_is_enabled()
 
     try:
         chat_session = get_chat_session_by_id(
@@ -238,52 +239,74 @@ def get_chat_session_admin(
     return snapshot
 
 
-@router.get("/admin/query-history-csv")
-def get_query_history_as_csv(
+@router.post("/admin/query-history/start-export")
+def start_query_history_export(
     _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
     start: datetime | None = None,
     end: datetime | None = None,
+):
+    assert_query_history_is_enabled()
+
+    start = start or datetime.fromtimestamp(0, tz=timezone.utc)
+    end = end or datetime.now(tz=timezone.utc)
+
+    task = export_query_history_task.apply_async(
+        kwargs={
+            "start": start,
+            "end": end,
+        }
+    )
+
+    return {"id": task.id}
+
+
+@router.get("/admin/query-history/export-status")
+def get_query_history_export_status(
+    task_id: str,
+    _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> StreamingResponse:
-    if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.DISABLED:
+):
+    assert_query_history_is_enabled()
+
+    task = get_task_with_id(db_session=db_session, task_id=task_id)
+
+    if not task:
         raise HTTPException(
-            status_code=HTTPStatus.FORBIDDEN,
-            detail="Query history has been disabled by the administrator.",
+            404,
+            f"No task with the id {task_id} was found",
         )
 
-    # this call is very expensive and is timing out via endpoint
-    # TODO: optimize call and/or generate via background task
-    complete_chat_session_history = fetch_and_process_chat_session_history(
-        db_session=db_session,
-        start=start or datetime.fromtimestamp(0, tz=timezone.utc),
-        end=end or datetime.now(tz=timezone.utc),
-        feedback_type=None,
-        limit=None,
-    )
+    return {"status": task.status}
 
-    question_answer_pairs: list[QuestionAnswerPairSnapshot] = []
-    for chat_session_snapshot in complete_chat_session_history:
-        if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-            chat_session_snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
-        question_answer_pairs.extend(
-            QuestionAnswerPairSnapshot.from_chat_session_snapshot(chat_session_snapshot)
+@router.get("/admin/query-history/download")
+def download_query_history_csv(
+    task_id: str,
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+):
+    assert_query_history_is_enabled()
+
+    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    if not task:
+        raise HTTPException(
+            404,
+            f"No task with the id {task_id} was found",
         )
 
-    # Create an in-memory text stream
-    stream = io.StringIO()
-    writer = csv.DictWriter(
-        stream, fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys())
-    )
-    writer.writeheader()
-    for row in question_answer_pairs:
-        writer.writerow(row.to_json())
+    # Maybe we should handle each specific TaskStatus separately?
+    # I.e., if it's a `TaskStatus.PENDING` return a different error code vs if it's a `TaskStatus.FAILURE`.
+    if task.status != TaskStatus.SUCCESS:
+        raise HTTPException(500)
 
-    # Reset the stream's position to the start
-    stream.seek(0)
+    file_store = get_default_file_store(db_session)
+    report_name = f"query-history-{task_id}.csv"
+    csv_stream = file_store.read_file(report_name)
 
+    csv_stream.seek(0)
     return StreamingResponse(
-        iter([stream.getvalue()]),
+        iter(csv_stream),
         media_type="text/csv",
-        headers={"Content-Disposition": "attachment;filename=onyx_query_history.csv"},
+        headers={"Content-Disposition": f"attachment;filename={report_name}"},
     )

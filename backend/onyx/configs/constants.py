@@ -442,6 +442,8 @@ class OnyxCeleryTask:
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
 
+    EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
+
 
 # this needs to correspond to the matching entry in supervisord
 ONYX_CELERY_BEAT_HEARTBEAT_KEY = "onyx:celery:beat:heartbeat"
