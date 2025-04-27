@@ -1,66 +1,66 @@
-repos:
-  - repo: https://github.com/psf/black
-    rev: 25.1.0
-    hooks:
-    - id: black
-      language_version: python3.11
+# repos:
+#   - repo: https://github.com/psf/black
+#     rev: 25.1.0
+#     hooks:
+#     - id: black
+#       language_version: python3.11
 
-  # this is a fork which keeps compatibility with black
-  - repo: https://github.com/wimglenn/reorder-python-imports-black
-    rev: v3.14.0
-    hooks:
-    - id: reorder-python-imports
-      args: ['--py311-plus', '--application-directories=backend/']
-      # need to ignore alembic files, since reorder-python-imports gets confused
-      # and thinks that alembic is a local package since there is a folder
-      # in the backend directory called `alembic`
-      exclude: ^backend/alembic/
+#   # this is a fork which keeps compatibility with black
+#   - repo: https://github.com/wimglenn/reorder-python-imports-black
+#     rev: v3.14.0
+#     hooks:
+#     - id: reorder-python-imports
+#       args: ['--py311-plus', '--application-directories=backend/']
+#       # need to ignore alembic files, since reorder-python-imports gets confused
+#       # and thinks that alembic is a local package since there is a folder
+#       # in the backend directory called `alembic`
+#       exclude: ^backend/alembic/
 
-  # These settings will remove unused imports with side effects
-  # Note: The repo currently does not and should not have imports with side effects
-  - repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.1
-    hooks:
-      - id: autoflake
-        args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
+#   # These settings will remove unused imports with side effects
+#   # Note: The repo currently does not and should not have imports with side effects
+#   - repo: https://github.com/PyCQA/autoflake
+#     rev: v2.3.1
+#     hooks:
+#       - id: autoflake
+#         args: [ '--remove-all-unused-imports', '--remove-unused-variables', '--in-place' , '--recursive']
 
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    # Ruff version.
-    rev: v0.11.4
-    hooks:
-      - id: ruff
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
-    hooks:
-    - id: prettier
-      types_or: [html, css, javascript, ts, tsx]
-      additional_dependencies:
-      - prettier
+#   - repo: https://github.com/astral-sh/ruff-pre-commit
+#     # Ruff version.
+#     rev: v0.11.4
+#     hooks:
+#       - id: ruff
+#   - repo: https://github.com/pre-commit/mirrors-prettier
+#     rev: v3.1.0
+#     hooks:
+#     - id: prettier
+#       types_or: [html, css, javascript, ts, tsx]
+#       additional_dependencies:
+#       - prettier
 
-  # We would like to have a mypy pre-commit hook, but due to the fact that
-  # pre-commit runs in it's own isolated environment, we would need to install
-  # and keep in sync all dependencies so mypy has access to the appropriate type
-  # stubs. This does not seem worth it at the moment, so for now we will stick to
-  # having mypy run via Github Actions / manually by contributors
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.1.1
-  #   hooks:
-  #     - id: mypy
-  #       exclude: ^tests/
-  #       # below are needed for type stubs since pre-commit runs in it's own
-  #       # isolated environment. Unfortunately, this needs to be kept in sync
-  #       # with requirements/dev.txt + requirements/default.txt
-  #       additional_dependencies: [
-  #         alembic==1.10.4,
-  #         types-beautifulsoup4==4.12.0.3,
-  #         types-html5lib==1.1.11.13,
-  #         types-oauthlib==3.2.0.9,
-  #         types-psycopg2==2.9.21.10,
-  #         types-python-dateutil==2.8.19.13,
-  #         types-regex==2023.3.23.1,
-  #         types-requests==2.28.11.17,
-  #         types-retry==0.9.9.3,
-  #         types-urllib3==1.26.25.11
-  #       ]
-  #       # TODO: add back once errors are addressed
-  #       # args: [--strict]
+#   # We would like to have a mypy pre-commit hook, but due to the fact that
+#   # pre-commit runs in it's own isolated environment, we would need to install
+#   # and keep in sync all dependencies so mypy has access to the appropriate type
+#   # stubs. This does not seem worth it at the moment, so for now we will stick to
+#   # having mypy run via Github Actions / manually by contributors
+#   # - repo: https://github.com/pre-commit/mirrors-mypy
+#   #   rev: v1.1.1
+#   #   hooks:
+#   #     - id: mypy
+#   #       exclude: ^tests/
+#   #       # below are needed for type stubs since pre-commit runs in it's own
+#   #       # isolated environment. Unfortunately, this needs to be kept in sync
+#   #       # with requirements/dev.txt + requirements/default.txt
+#   #       additional_dependencies: [
+#   #         alembic==1.10.4,
+#   #         types-beautifulsoup4==4.12.0.3,
+#   #         types-html5lib==1.1.11.13,
+#   #         types-oauthlib==3.2.0.9,
+#   #         types-psycopg2==2.9.21.10,
+#   #         types-python-dateutil==2.8.19.13,
+#   #         types-regex==2023.3.23.1,
+#   #         types-requests==2.28.11.17,
+#   #         types-retry==0.9.9.3,
+#   #         types-urllib3==1.26.25.11
+#   #       ]
+#   #       # TODO: add back once errors are addressed
+#   #       # args: [--strict]
