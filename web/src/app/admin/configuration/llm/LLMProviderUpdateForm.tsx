@@ -160,7 +160,7 @@ export function LLMProviderUpdateForm({
         finalValues.api_key_changed = values.api_key !== initialValues.api_key;
 
         // test the configuration
-        if (!isEqual(values, initialValues)) {
+        if (!isEqual(finalValues, initialValues)) {
           setIsTesting(true);
 
           const response = await fetch("/api/admin/llm/test", {
