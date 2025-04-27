@@ -20,7 +20,7 @@ import {
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { LLMProviderView, ModelConfiguration } from "./interfaces";
+import { LLMProviderView } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
