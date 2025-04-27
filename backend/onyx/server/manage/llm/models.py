@@ -28,7 +28,10 @@ class TestLLMRequest(BaseModel):
     fast_default_model_name: str | None = None
     deployment_name: str | None = None
 
-    model_configurations: list["ModelConfigurationUpsertRequest"] = []
+    model_configurations: list["ModelConfigurationUpsertRequest"]
+
+    # if try and use the existing API key
+    api_key_changed: bool
 
 
 class LLMProviderDescriptor(BaseModel):

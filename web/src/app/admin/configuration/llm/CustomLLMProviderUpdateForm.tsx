@@ -20,7 +20,7 @@ import {
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { LLMProviderView } from "./interfaces";
+import { LLMProviderView, ModelConfiguration } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -69,17 +69,16 @@ export function CustomLLMProviderUpdateForm({
     model_configurations: existingLlmProvider?.model_configurations.map(
       (modelConfiguration) => ({
         ...modelConfiguration,
-        max_input_tokens:
-          modelConfiguration.max_input_tokens ??
-          ("" as string | number | null | undefined),
+        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
       })
-    ) ?? [{ name: "", is_visible: true, max_input_tokens: "" }],
+    ) ?? [{ name: "", is_visible: true, max_input_tokens: null }],
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
     deployment_name: existingLlmProvider?.deployment_name ?? null,
+    api_key_changed: false,
   };
 
   // Setup validation schema if required
@@ -114,15 +113,20 @@ export function CustomLLMProviderUpdateForm({
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
-        values.model_configurations.forEach((modelConfiguration) => {
-          if (
-            modelConfiguration.max_input_tokens === "" ||
-            modelConfiguration.max_input_tokens === null ||
-            modelConfiguration.max_input_tokens === undefined
-          ) {
-            modelConfiguration.max_input_tokens = null;
-          }
-        });
+        // build final payload
+        const finalValues = { ...values };
+        finalValues.model_configurations = finalValues.model_configurations.map(
+          (modelConfiguration) => ({
+            ...modelConfiguration,
+            max_input_tokens:
+              modelConfiguration.max_input_tokens === null ||
+              modelConfiguration.max_input_tokens === undefined
+                ? null
+                : modelConfiguration.max_input_tokens,
+            supports_image_input: false, // doesn't matter, not used
+          })
+        );
+        finalValues.api_key_changed = values.api_key !== initialValues.api_key;
 
         if (values.model_configurations.length === 0) {
           const fullErrorMsg = "At least one model name is required";

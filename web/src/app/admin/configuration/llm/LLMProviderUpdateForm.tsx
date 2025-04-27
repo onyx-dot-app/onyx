@@ -75,7 +75,7 @@ export function LLMProviderUpdateForm({
       ),
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
-    model_configurations: [] as ModelConfiguration[],
+    model_configurations: existingLlmProvider?.model_configurations ?? [],
     deployment_name: existingLlmProvider?.deployment_name,
     api_key_changed: false,
 
@@ -136,7 +136,6 @@ export function LLMProviderUpdateForm({
         max_input_tokens: Yup.number().nullable().optional(),
       })
     ),
-    api_key_changed: Yup.boolean(),
   });
 
   return (
@@ -146,10 +145,10 @@ export function LLMProviderUpdateForm({
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
-        values.api_key_changed = values.api_key !== initialValues.api_key;
-
+        // build final payload
         const visibleModels = new Set(values.selected_model_names);
-        values.model_configurations = llmProviderDescriptor.llm_names.map(
+        const finalValues = { ...values };
+        finalValues.model_configurations = llmProviderDescriptor.llm_names.map(
           (name) =>
             ({
               name,
@@ -157,8 +156,8 @@ export function LLMProviderUpdateForm({
               max_input_tokens: null,
             }) as ModelConfiguration
         );
-
-        delete values.selected_model_names;
+        delete finalValues.selected_model_names;
+        finalValues.api_key_changed = values.api_key !== initialValues.api_key;
 
         // test the configuration
         if (!isEqual(values, initialValues)) {
@@ -171,7 +170,7 @@ export function LLMProviderUpdateForm({
             },
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
-              ...values,
+              ...finalValues,
             }),
           });
           setIsTesting(false);
@@ -194,9 +193,10 @@ export function LLMProviderUpdateForm({
             },
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
-              ...values,
+              ...finalValues,
               fast_default_model_name:
-                values.fast_default_model_name || values.default_model_name,
+                finalValues.fast_default_model_name ||
+                finalValues.default_model_name,
             }),
           }
         );
