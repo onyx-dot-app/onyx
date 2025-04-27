@@ -14,7 +14,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_entities_by_document_ids
-from onyx.db.entities import get_entity_types_with_grounded_source_name
+from onyx.db.entity_type import get_entity_types_with_grounded_source_name
 from onyx.prompts.kg_prompts import SEARCH_FILTER_CONSTRUCTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout

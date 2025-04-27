@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column("grounding", sa.String(), nullable=False),
         sa.Column("clustering", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column(
-            "classification_requirements",
+            "attributes",
             postgresql.JSONB,
             nullable=False,
             server_default="{}",
@@ -50,9 +50,6 @@ def upgrade() -> None:
             "ge_determine_instructions", postgresql.ARRAY(sa.String()), nullable=True
         ),
         sa.Column("ge_grounding_signature", sa.String(), nullable=True),
-        sa.Column(
-            "allowed_attributes", postgresql.JSONB, nullable=False, server_default="{}"
-        ),
     )
 
     # Create KGRelationshipType table
@@ -88,9 +85,9 @@ def upgrade() -> None:
         ),
     )
 
-    # Create KGRelationshipTypeExtractionTemp table
+    # Create KGRelationshipTypeExtractionStaging table
     op.create_table(
-        "kg_relationship_type_extraction_temp",
+        "kg_relationship_type_extraction_staging",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
         sa.Column(
@@ -165,9 +162,9 @@ def upgrade() -> None:
         "ix_entity_name_search", "kg_entity", ["name", "entity_type_id_name"]
     )
 
-    # Create KGEntityExtractionTemp table
+    # Create KGEntityExtractionStaging table
     op.create_table(
-        "kg_entity_extraction_temp",
+        "kg_entity_extraction_staging",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
         sa.Column("sub_type", sa.String(), nullable=True, index=True),
@@ -205,13 +202,13 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
     )
     op.create_index(
-        "ix_entity_extraction_temp_acl",
-        "kg_entity_extraction_temp",
+        "ix_entity_extraction_staging_acl",
+        "kg_entity_extraction_staging",
         ["entity_type_id_name", "acl"],
     )
     op.create_index(
-        "ix_entity_extraction_temp_name_search",
-        "kg_entity_extraction_temp",
+        "ix_entity_extraction_staging_name_search",
+        "kg_entity_extraction_staging",
         ["name", "entity_type_id_name"],
     )
 
@@ -256,9 +253,9 @@ def upgrade() -> None:
         "ix_kg_relationship_nodes", "kg_relationship", ["source_node", "target_node"]
     )
 
-    # Create KGRelationshipExtractionTemp table
+    # Create KGRelationshipExtractionStaging table
     op.create_table(
-        "kg_relationship_extraction_temp",
+        "kg_relationship_extraction_staging",
         sa.Column("id_name", sa.String(), nullable=False, index=True),
         sa.Column("source_node", sa.String(), nullable=False, index=True),
         sa.Column("target_node", sa.String(), nullable=False, index=True),
@@ -277,26 +274,30 @@ def upgrade() -> None:
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        sa.ForeignKeyConstraint(["source_node"], ["kg_entity_extraction_temp.id_name"]),
-        sa.ForeignKeyConstraint(["target_node"], ["kg_entity_extraction_temp.id_name"]),
+        sa.ForeignKeyConstraint(
+            ["source_node"], ["kg_entity_extraction_staging.id_name"]
+        ),
+        sa.ForeignKeyConstraint(
+            ["target_node"], ["kg_entity_extraction_staging.id_name"]
+        ),
         sa.ForeignKeyConstraint(["source_node_type"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["target_node_type"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["source_document"], ["document.id"]),
         sa.ForeignKeyConstraint(
             ["relationship_type_id_name"],
-            ["kg_relationship_type_extraction_temp.id_name"],
+            ["kg_relationship_type_extraction_staging.id_name"],
         ),
         sa.UniqueConstraint(
             "source_node",
             "target_node",
             "type",
-            name="uq_kg_relationship_extraction_temp_source_target_type",
+            name="uq_kg_relationship_extraction_staging_source_target_type",
         ),
         sa.PrimaryKeyConstraint("id_name", "source_document"),
     )
     op.create_index(
-        "ix_kg_relationship_extraction_temp_nodes",
-        "kg_relationship_extraction_temp",
+        "ix_kg_relationship_extraction_staging_nodes",
+        "kg_relationship_extraction_staging",
         ["source_node", "target_node"],
     )
 
@@ -328,10 +329,6 @@ def upgrade() -> None:
         sa.Column("kg_stage", sa.String(), nullable=True, index=True),
     )
     op.add_column(
-        "document",
-        sa.Column("kg_data", postgresql.JSONB(), nullable=False, server_default="{}"),
-    )
-    op.add_column(
         "connector",
         sa.Column(
             "kg_processing_enabled",
@@ -353,11 +350,10 @@ def downgrade() -> None:
     op.drop_table("kg_relationship")
     op.drop_table("kg_entity")
     op.drop_table("kg_relationship_type")
-    op.drop_table("kg_relationship_extraction_temp")
-    op.drop_table("kg_relationship_type_extraction_temp")
-    op.drop_table("kg_entity_extraction_temp")
+    op.drop_table("kg_relationship_extraction_staging")
+    op.drop_table("kg_relationship_type_extraction_staging")
+    op.drop_table("kg_entity_extraction_staging")
     op.drop_table("kg_entity_type")
     op.drop_column("connector", "kg_processing_enabled")
     op.drop_column("document_by_connector_credential_pair", "kg_stage")
-    op.drop_column("document", "kg_data")
     op.drop_column("document", "kg_stage")

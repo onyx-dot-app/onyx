@@ -6,9 +6,9 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGRelationship
-from onyx.db.models import KGRelationshipExtractionTemp
+from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipType
-from onyx.db.models import KGRelationshipTypeExtractionTemp
+from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
 from onyx.kg.utils.formatting_utils import format_entity
 from onyx.kg.utils.formatting_utils import format_relationship
@@ -21,7 +21,7 @@ def add_relationship(
     relationship_id_name: str,
     source_document_id: str,
     occurances: int | None = None,
-) -> Union["KGRelationship", "KGRelationshipExtractionTemp"]:
+) -> Union["KGRelationship", "KGRelationshipExtractionStaging"]:
     """
     Add a relationship between two entities to the database.
 
@@ -64,9 +64,9 @@ def add_relationship(
         "occurances": occurances,
     }
 
-    relationship: KGRelationship | KGRelationshipExtractionTemp
+    relationship: KGRelationship | KGRelationshipExtractionStaging
     if kg_stage == KGStage.EXTRACTED:
-        relationship = KGRelationshipExtractionTemp(**relationship_data)
+        relationship = KGRelationshipExtractionStaging(**relationship_data)
     elif kg_stage == KGStage.NORMALIZED:
         relationship = KGRelationship(**relationship_data)
     else:
@@ -84,7 +84,7 @@ def add_or_increment_relationship(
     relationship_id_name: str,
     source_document_id: str,
     new_occurances: int = 1,
-) -> KGRelationship | KGRelationshipExtractionTemp:
+) -> KGRelationship | KGRelationshipExtractionStaging:
     """
     Add a relationship between two entities to the database if it doesn't exist,
     or increment its occurances by 1 if it already exists.
@@ -102,9 +102,9 @@ def add_or_increment_relationship(
     # Format the relationship_id_name
     relationship_id_name = format_relationship(relationship_id_name)
 
-    _KGTable: type[KGRelationship] | type[KGRelationshipExtractionTemp]
+    _KGTable: type[KGRelationship] | type[KGRelationshipExtractionStaging]
     if kg_stage == KGStage.EXTRACTED:
-        _KGTable = KGRelationshipExtractionTemp
+        _KGTable = KGRelationshipExtractionStaging
     elif kg_stage == KGStage.NORMALIZED:
         _KGTable = KGRelationship
     else:
@@ -121,7 +121,7 @@ def add_or_increment_relationship(
     if existing_relationship:
         # If it exists, increment the occurances
         existing_relationship = cast(
-            KGRelationship | KGRelationshipExtractionTemp, existing_relationship
+            KGRelationship | KGRelationshipExtractionStaging, existing_relationship
         )
         existing_relationship.occurances = (
             existing_relationship.occurances or 0
@@ -148,7 +148,7 @@ def add_relationship_type(
     target_entity_type: str,
     definition: bool = False,
     extraction_count: int = 0,
-) -> Union["KGRelationshipType", "KGRelationshipTypeExtractionTemp"]:
+) -> Union["KGRelationshipType", "KGRelationshipTypeExtractionStaging"]:
     """
     Add a new relationship type to the database.
 
@@ -180,10 +180,10 @@ def add_relationship_type(
         "active": True,  # Setting as active by default
     }
 
-    rel_type: KGRelationshipType | KGRelationshipTypeExtractionTemp
+    rel_type: KGRelationshipType | KGRelationshipTypeExtractionStaging
 
     if kg_stage == KGStage.EXTRACTED:
-        rel_type = KGRelationshipTypeExtractionTemp(**relationship_data)
+        rel_type = KGRelationshipTypeExtractionStaging(**relationship_data)
     elif kg_stage == KGStage.NORMALIZED:
         rel_type = KGRelationshipType(**relationship_data)
     else:
@@ -197,7 +197,7 @@ def add_relationship_type(
 
 def get_all_relationship_types(
     db_session: Session, kg_stage: str
-) -> list["KGRelationshipType"] | list["KGRelationshipTypeExtractionTemp"]:
+) -> list["KGRelationshipType"] | list["KGRelationshipTypeExtractionStaging"]:
     """
     Retrieve all relationship types from the database.
 
@@ -205,10 +205,10 @@ def get_all_relationship_types(
         db_session: SQLAlchemy database session
 
     Returns:
-        List of KGRelationshipType or KGRelationshipExtractionTemp objects
+        List of KGRelationshipType or KGRelationshipTypeExtractionStaging objects
     """
     if kg_stage == KGStage.EXTRACTED:
-        return db_session.query(KGRelationshipTypeExtractionTemp).all()
+        return db_session.query(KGRelationshipTypeExtractionStaging).all()
     elif kg_stage == KGStage.NORMALIZED:
         return db_session.query(KGRelationshipType).all()
     else:
@@ -217,7 +217,7 @@ def get_all_relationship_types(
 
 def get_all_relationships(
     db_session: Session, kg_stage: KGStage
-) -> list["KGRelationship"] | list["KGRelationshipExtractionTemp"]:
+) -> list["KGRelationship"] | list["KGRelationshipExtractionStaging"]:
     """
     Retrieve all relationships from the database.
 
@@ -228,7 +228,7 @@ def get_all_relationships(
         List of KGRelationship objects
     """
     if kg_stage == KGStage.EXTRACTED:
-        return db_session.query(KGRelationshipExtractionTemp).all()
+        return db_session.query(KGRelationshipExtractionStaging).all()
     elif kg_stage == KGStage.NORMALIZED:
         return db_session.query(KGRelationship).all()
     else:

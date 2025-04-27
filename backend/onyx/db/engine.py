@@ -282,7 +282,7 @@ class SqlEngine:
             connection_string = build_connection_string(
                 user=kg_readonly_user,
                 password=kg_read_only_password,
-                use_iam=False,  # Custom users typically don't use IAM auth
+                use_iam_auth=False,  # Custom users typically don't use IAM auth
                 db_api=SYNC_DB_API,  # Explicitly use sync DB API
             )
 

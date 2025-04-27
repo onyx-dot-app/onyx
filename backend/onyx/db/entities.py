@@ -7,28 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
+from onyx.db.models import Document
 from onyx.db.models import KGEntity
-from onyx.db.models import KGEntityExtractionTemp
+from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGEntityType
 from onyx.kg.models import KGStage
-
-
-def get_entity_types(
-    db_session: Session,
-    active: bool | None = True,
-) -> list[KGEntityType]:
-    # Query the database for all distinct entity types
-
-    if active is None:
-        return db_session.query(KGEntityType).order_by(KGEntityType.id_name).all()
-
-    else:
-        return (
-            db_session.query(KGEntityType)
-            .filter(KGEntityType.active == active)
-            .order_by(KGEntityType.id_name)
-            .all()
-        )
 
 
 def add_entity(
@@ -40,7 +23,7 @@ def add_entity(
     occurances: int = 0,
     event_time: datetime | None = None,
     attributes: dict[str, str] | None = None,
-) -> "KGEntity | KGEntityExtractionTemp | None":
+) -> "KGEntity | KGEntityExtractionStaging | None":
     """Add a new entity to the database.
 
     Args:
@@ -57,9 +40,9 @@ def add_entity(
     name = name.title()
     id_name = f"{entity_type}:{name}"
 
-    _KGEntityObject: Type[KGEntity | KGEntityExtractionTemp]
+    _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
     if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject = KGEntityExtractionTemp
+        _KGEntityObject = KGEntityExtractionStaging
     elif kg_stage == KGStage.NORMALIZED:
         _KGEntityObject = KGEntity
     else:
@@ -94,6 +77,15 @@ def add_entity(
     )
 
     result = db_session.execute(stmt).scalar()
+
+    # Update the document's kg_stage if document_id is provided
+    if document_id is not None:
+
+        db_session.query(Document).filter(Document.id == document_id).update(
+            {"kg_stage": kg_stage}
+        )
+    db_session.flush()
+
     return result
 
 
@@ -132,7 +124,7 @@ def get_ungrounded_entities(db_session: Session) -> List[KGEntity]:
 
 def get_entities_by_grounding(
     db_session: Session, kg_stage: KGStage, grounding: str
-) -> List[KGEntity] | List[KGEntityExtractionTemp]:
+) -> List[KGEntity] | List[KGEntityExtractionStaging]:
     """Get all entities whose entity type has grounding = 'UE' (ungrounded entities).
 
     Args:
@@ -142,10 +134,10 @@ def get_entities_by_grounding(
         List of KGEntity objects belonging to ungrounded entity types
     """
 
-    _KGEntityObject: Type[KGEntity | KGEntityExtractionTemp]
+    _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
 
     if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject = KGEntityExtractionTemp
+        _KGEntityObject = KGEntityExtractionStaging
         return (
             db_session.query(_KGEntityObject)
             .join(
@@ -168,58 +160,6 @@ def get_entities_by_grounding(
         )
     else:
         raise ValueError(f"Invalid KGStage: {kg_stage.value}")
-
-
-def get_determined_grounded_entity_types(db_session: Session) -> List[KGEntityType]:
-    """Get all entity types that have non-null ge_determine_instructions.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have ge_determine_instructions defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.ge_determine_instructions.isnot(None))
-        .all()
-    )
-
-
-def get_entity_types_with_grounded_source_name(
-    db_session: Session,
-) -> List[KGEntityType]:
-    """Get all entity types that have non-null grounded_source_name.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have grounded_source_name defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounded_source_name.isnot(None))
-        .all()
-    )
-
-
-def get_entity_types_with_grounding_signature(
-    db_session: Session,
-) -> List[KGEntityType]:
-    """Get all entity types that have non-null ge_grounding_signature.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have ge_grounding_signature defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.ge_grounding_signature.isnot(None))
-        .all()
-    )
 
 
 def get_ge_entities_by_types(
@@ -282,31 +222,6 @@ def get_entities_for_types(
         .filter(KGEntity.entity_type_id_name.in_(entity_types))
         .all()
     )
-
-
-def get_entity_type_by_grounded_source_name(
-    db_session: Session, grounded_source_name: str
-) -> KGEntityType | None:
-    """Get an entity type by its grounded_source_name and return it as a dictionary.
-
-    Args:
-        db_session: SQLAlchemy session
-        grounded_source_name: The grounded_source_name of the entity to retrieve
-
-    Returns:
-        Dictionary containing the entity's data with column names as keys,
-        or None if the entity is not found
-    """
-    entity_type = (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.grounded_source_name == grounded_source_name)
-        .first()
-    )
-
-    if entity_type is None:
-        return None
-
-    return entity_type
 
 
 def get_entities_by_document_ids(

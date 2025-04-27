@@ -42,6 +42,14 @@ def extract_ert(
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
 
+    if graph_config.tooling.search_tool is None:
+        raise ValueError("Search tool is not set")
+    elif graph_config.tooling.search_tool.user is None:
+        raise ValueError("User is not set")
+    else:
+        user_email = graph_config.tooling.search_tool.user.email
+        user_name = user_email.split("@")[0] or "unknown"
+
     # first four lines duplicates from generate_initial_answer
     question = graph_config.inputs.search_request.query
     today_date = datetime.now().strftime("%A, %Y-%m-%d")
@@ -70,6 +78,7 @@ def extract_ert(
     query_extraction_prompt = (
         query_extraction_pre_prompt.replace("---content---", question)
         .replace("---today_date---", today_date)
+        .replace("---user_name---", f"EMPLOYEE:{user_name}")
         .replace("{{", "{")
         .replace("}}", "}")
     )

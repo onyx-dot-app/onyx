@@ -278,7 +278,7 @@ there be an explicit mention of a date or time frame in the QUESTION (note: last
 imply the need for a time filter just because the question asks for something that is not the current date. \
 They will relate to ordering that we will handle separately).
 
-Today is ---today_date---, which may or may not be relevant.
+Today is ---today_date--- and the user asking is ---user_name---, which may or may not be relevant.
 Here are the entity types that are available for extraction. Some of them may have \
 a description, others should be obvious. Also, notice that some may have attributes associated with them, which will \
 be important later.
@@ -678,7 +678,7 @@ It is of the form \
 been removed. [example: ACCOUNT__has__CONCERN]
    - source_document (str): the id of the document that contains the relationship. Note that the combination of \
 id_name and source_document IS UNIQUE!
-   - source_date (str): the 'event' date of the source document [example: 2021-01-01]
+   - source_date (timestamp): the 'event' date of the source document [example: 2025-04-25 21:43:31.054741+00]
 
 {SEPARATOR_LINE}
 
@@ -771,6 +771,9 @@ the wording to see whether you should use a date in the attributes or rthge even
 - Dates are ALWAYS in string format of the form YYYY-MM-DD, for source date as well as for date-like the attributes! \
 So please use that format, particularly if you use data comparisons (>, <, ...)
 - Again, NO 'relationship' or 'source_document' in the SELECT CLAUSE, be it as direct columns are in aggregations!
+- Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
+want to sort by. If the sorting is a time-based and there is a limitfor example, you do want to have a suitable date \
+variable as the first column to sort by.
 - Try to be as efficient as possible.
 
 APPROACH:
@@ -778,6 +781,8 @@ Please think through this step by step. Make sure that you include all columns i
 also in the SELECT DISTINCT clause, \
 if applicable! Then, when you have it say '<start sql>' followed by the SQL statement that must end \
 with a ';', then say '<end sql>'.
+
+Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
 
 Your answer:
 """.strip()

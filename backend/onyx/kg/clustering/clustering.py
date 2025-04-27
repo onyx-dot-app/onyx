@@ -16,10 +16,10 @@ from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entities import delete_entities_by_id_names
-from onyx.db.entities import get_determined_grounded_entity_types
 from onyx.db.entities import get_entities_by_grounding
-from onyx.db.entities import get_entity_types_with_grounding_signature
 from onyx.db.entities import get_ge_entities_by_types
+from onyx.db.entity_type import get_determined_grounded_entity_types
+from onyx.db.entity_type import get_entity_types_with_grounding_signature
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_relationship_types_by_id_names
@@ -101,10 +101,7 @@ def _cluster_relationships(
         logger.warning(
             "Not enough relationships to cluster. Returning each relationship as its own cluster."
         )
-        return {
-            i: [rel["name"] for rel in relationship_data]
-            for i in range(len(relationship_data))
-        }
+        return {i: [rel["name"]] for (i, rel) in enumerate(relationship_data)}
 
     train_data = []
     rel_names = []

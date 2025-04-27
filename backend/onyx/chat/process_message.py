@@ -53,6 +53,8 @@ from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
+from onyx.configs.kg_configs import USE_KG_APPROACH
+from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
 from onyx.context.search.enums import SearchType
@@ -568,22 +570,23 @@ def stream_chat_message_objects(
 
     # TODO: INITIAL DEV ONLY!!!
 
-    if new_msg_req.message == "ee":
-        kg_extraction(tenant_id, index_str)
+    if USE_KG_APPROACH:
+        if new_msg_req.message == "ee":
+            kg_extraction(tenant_id, index_str)
 
-        raise Exception("Extractions done")
+            raise Exception("Extractions done")
 
-    elif new_msg_req.message == "cc":
-        kg_clustering(tenant_id, index_str)
-        raise Exception("Clustering done")
+        elif new_msg_req.message == "cc":
+            kg_clustering(tenant_id, index_str)
+            raise Exception("Clustering done")
 
-    elif new_msg_req.message == "reset_full_kg_index":
-        reset_full_kg_index()
-        raise Exception("Full KG index reset done")
+        elif new_msg_req.message == "rs_full":
+            reset_full_kg_index()
+            raise Exception("Full KG index reset done")
 
-    elif new_msg_req.message == "reset_extraction_kg_index":
-        reset_extraction_kg_index()
-        raise Exception("Extraction KG index reset done")
+        elif new_msg_req.message == "rs_extraction":
+            reset_extraction_kg_index()
+            raise Exception("Extraction KG index reset done")
 
     try:
         # Move these variables inside the try block

@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
@@ -71,22 +72,32 @@ def generate_answer(
     if research_results and introductory_answer:
         output_format_prompt = (
             OUTPUT_FORMAT_PROMPT.replace("---question---", question)
-            .replace("---introductory_answer---", introductory_answer)
+            .replace(
+                "---introductory_answer---",
+                rename_entities_in_answer(introductory_answer),
+            )
             .replace("---output_format---", str(output_format) if output_format else "")
-            .replace("---research_results---", research_results)
+            .replace(
+                "---research_results---", rename_entities_in_answer(research_results)
+            )
         )
 
     elif not research_results and introductory_answer:
         output_format_prompt = (
             OUTPUT_FORMAT_NO_EXAMPLES_PROMPT.replace("---question---", question)
-            .replace("---introductory_answer---", introductory_answer)
+            .replace(
+                "---introductory_answer---",
+                rename_entities_in_answer(introductory_answer),
+            )
             .replace("---output_format---", str(output_format) if output_format else "")
         )
     elif research_results and not introductory_answer:
         output_format_prompt = (
             OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT.replace("---question---", question)
             .replace("---output_format---", str(output_format) if output_format else "")
-            .replace("---research_results---", research_results)
+            .replace(
+                "---research_results---", rename_entities_in_answer(research_results)
+            )
         )
     else:
         raise ValueError("No research results or introductory answer provided")
@@ -97,6 +108,7 @@ def generate_answer(
         )
     ]
     fast_llm = graph_config.tooling.fast_llm
+
     dispatch_timings: list[float] = []
     response: list[str] = []
 

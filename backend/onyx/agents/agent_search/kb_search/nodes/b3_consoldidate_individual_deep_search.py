@@ -4,6 +4,7 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
 from onyx.agents.agent_search.kb_search.states import ConsolidatedResearchUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
@@ -31,6 +32,10 @@ def consoldidate_individual_deep_search(
 
     consolidated_research_object_results_str = "\n".join(
         [f"{x['object']}: {x['results']}" for x in research_object_results]
+    )
+
+    consolidated_research_object_results_str = rename_entities_in_answer(
+        consolidated_research_object_results_str
     )
 
     return ConsolidatedResearchUpdate(

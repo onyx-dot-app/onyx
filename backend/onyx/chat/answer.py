@@ -23,9 +23,11 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.configs.constants import BASIC_KEY
+from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.context.search.models import RerankingDetails
 from onyx.db.models import Persona
 from onyx.file_store.utils import InMemoryChatFile
@@ -139,6 +141,7 @@ class Answer:
             run_langgraph = run_agent_search_graph
         elif (
             self.graph_config.inputs.persona
+            and USE_DIV_CON_AGENT
             and self.graph_config.inputs.persona.description.startswith(
                 "DivCon Beta Agent"
             )
@@ -146,6 +149,7 @@ class Answer:
             run_langgraph = run_dc_graph
         elif (
             self.graph_config.inputs.search_request.persona
+            and USE_KG_APPROACH
             and self.graph_config.inputs.search_request.persona.name.startswith(
                 "KG Dev"
             )

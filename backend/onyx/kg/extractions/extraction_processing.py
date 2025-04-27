@@ -14,9 +14,9 @@ from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
-from onyx.db.entities import get_entity_types
+from onyx.db.entity_type import get_entity_types
 from onyx.db.models import KGRelationshipType
-from onyx.db.models import KGRelationshipTypeExtractionTemp
+from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
 from onyx.db.relationships import add_or_increment_relationship
 from onyx.db.relationships import add_relationship
@@ -73,14 +73,13 @@ def _get_classification_extraction_instructions() -> (
         grounded_source_name = entity_type.grounded_source_name
         if grounded_source_name is None:
             continue
-        classification_class_definitions = entity_type.classification_requirements
+        classification_attributes = entity_type.attributes.get(
+            "classification_attributes", {}
+        )
 
-        classification_options = ", ".join(classification_class_definitions.keys())
+        classification_options = ", ".join(classification_attributes.keys())
 
-        if (
-            len(classification_options) > 0
-            and len(classification_class_definitions) > 0
-        ):
+        if len(classification_options) > 0 and len(classification_attributes) > 0:
             classification_enabled = True
         else:
             classification_enabled = False
@@ -90,7 +89,7 @@ def _get_classification_extraction_instructions() -> (
                 classification_instructions=KGClassificationInstructionStrings(
                     classification_enabled=classification_enabled,
                     classification_options=classification_options,
-                    classification_class_definitions=classification_class_definitions,
+                    classification_class_definitions=classification_attributes,
                 ),
                 extraction_instructions=KGExtractionInstructions(
                     deep_extraction=entity_type.ge_deep_extraction,
@@ -116,14 +115,26 @@ def get_entity_types_str(active: bool | None = None) -> str:
                 entity_description = "\n  - Description: " + entity_type.description
             else:
                 entity_description = ""
+
             if entity_type.ge_determine_instructions:
-                allowed_options = "\n  - Allowed Options: " + ", ".join(
+                allowed_values = "\n  - Allowed Values: " + ", ".join(
                     entity_type.ge_determine_instructions
                 )
             else:
-                allowed_options = ""
+                allowed_values = ""
+
+            if entity_type.attributes.get("metadata_attributes"):
+                entity_attributes = "\n       - Attributes: " + ", ".join(
+                    entity_type.attributes.get("metadata_attributes", {}).keys()
+                )
+            else:
+                entity_attributes = ""
+
             entity_types_list.append(
-                entity_type.id_name + entity_description + allowed_options
+                entity_type.id_name
+                + entity_description
+                + allowed_values
+                + entity_attributes
             )
 
     return "\n".join(entity_types_list)
@@ -148,12 +159,12 @@ def get_relationship_types_str(active: bool | None = None) -> str:
 
         if active is not None:
             active_relationship_types = cast(
-                list[KGRelationshipType] | list[KGRelationshipTypeExtractionTemp],
+                list[KGRelationshipType] | list[KGRelationshipTypeExtractionStaging],
                 [rt for rt in relationship_types if rt.active == active],
             )
         else:
             active_relationship_types = cast(
-                list[KGRelationshipType] | list[KGRelationshipTypeExtractionTemp],
+                list[KGRelationshipType] | list[KGRelationshipTypeExtractionStaging],
                 relationship_types,
             )
 
@@ -248,22 +259,26 @@ def kg_extraction(
                     )
                 )
 
+            if len(unprocessed_document_batch) == 0:
+                logger.info(
+                    f"No unprocessed documents found for connector {connector_id}. Processed {document_batch_counter} batches."
+                )
+                break
+
             document_batch_counter += 1
 
             connector_extraction_stats = []
             connector_aggregated_kg_extractions_list = []
-            connector_failed_chunk_extractions: list[KGChunkId] = []
-            connector_succeeded_chunk_extractions: list[KGChunkId] = []
-            connector_aggregated_kg_extractions: KGAggregatedExtractions = (
-                KGAggregatedExtractions(
-                    grounded_entities_document_ids=defaultdict(str),
-                    entities=defaultdict(int),
-                    relationships=defaultdict(
-                        lambda: defaultdict(int)
-                    ),  # relationship + source document_id
-                    terms=defaultdict(int),
-                    attributes=defaultdict(dict),
-                )
+            connector_failed_chunk_extractions = []
+            connector_succeeded_chunk_extractions = []
+            connector_aggregated_kg_extractions = KGAggregatedExtractions(
+                grounded_entities_document_ids=defaultdict(str),
+                entities=defaultdict(int),
+                relationships=defaultdict(
+                    lambda: defaultdict(int)
+                ),  # relationship + source document_id
+                terms=defaultdict(int),
+                attributes=defaultdict(dict),
             )
 
             logger.info(f"Processing document batch {document_batch_counter}")

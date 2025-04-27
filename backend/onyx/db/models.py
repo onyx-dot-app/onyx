@@ -594,14 +594,6 @@ class Document(Base):
         comment="Status of knowledge graph extraction for this document",
     )
 
-    kg_data: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Knowledge graph data extracted from this document",
-    )
-
     retrieval_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="document"
     )
@@ -653,7 +645,7 @@ class KGEntityType(Base):
         comment="Clustering information for this entity type",
     )
 
-    classification_requirements: Mapped[dict] = mapped_column(
+    attributes: Mapped[dict] = mapped_column(
         postgresql.JSONB,
         nullable=False,
         default=dict,
@@ -758,8 +750,8 @@ class KGRelationshipType(Base):
     )
 
 
-class KGRelationshipTypeExtractionTemp(Base):
-    __tablename__ = "kg_relationship_type_extraction_temp"
+class KGRelationshipTypeExtractionStaging(Base):
+    __tablename__ = "kg_relationship_type_extraction_staging"
 
     # Primary identifier
     id_name: Mapped[str] = mapped_column(
@@ -820,12 +812,12 @@ class KGRelationshipTypeExtractionTemp(Base):
     source_type: Mapped["KGEntityType"] = relationship(
         "KGEntityType",
         foreign_keys=[source_entity_type_id_name],
-        backref="source_relationship_type_temp",
+        backref="source_relationship_type_staging",
     )
     target_type: Mapped["KGEntityType"] = relationship(
         "KGEntityType",
         foreign_keys=[target_entity_type_id_name],
-        backref="target_relationship_type_temp",
+        backref="target_relationship_type_staging",
     )
 
 
@@ -906,8 +898,8 @@ class KGEntity(Base):
     )
 
 
-class KGEntityExtractionTemp(Base):
-    __tablename__ = "kg_entity_extraction_temp"
+class KGEntityExtractionStaging(Base):
+    __tablename__ = "kg_entity_extraction_staging"
 
     # Primary identifier
     id_name: Mapped[str] = mapped_column(
@@ -943,7 +935,7 @@ class KGEntityExtractionTemp(Base):
 
     # Relationship to KGEntityType
     entity_type: Mapped["KGEntityType"] = relationship(
-        "KGEntityType", backref="entity_temp"
+        "KGEntityType", backref="entity_staging"
     )
 
     description: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -1070,8 +1062,8 @@ class KGRelationship(Base):
     )
 
 
-class KGRelationshipExtractionTemp(Base):
-    __tablename__ = "kg_relationship_extraction_temp"
+class KGRelationshipExtractionStaging(Base):
+    __tablename__ = "kg_relationship_extraction_staging"
 
     # Primary identifier - now part of composite key
     id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
@@ -1083,14 +1075,14 @@ class KGRelationshipExtractionTemp(Base):
     # Source and target nodes (foreign keys to Entity table)
     source_node: Mapped[str] = mapped_column(
         NullFilteredString,
-        ForeignKey("kg_entity_extraction_temp.id_name"),
+        ForeignKey("kg_entity_extraction_staging.id_name"),
         nullable=False,
         index=True,
     )
 
     target_node: Mapped[str] = mapped_column(
         NullFilteredString,
-        ForeignKey("kg_entity_extraction_temp.id_name"),
+        ForeignKey("kg_entity_extraction_staging.id_name"),
         nullable=False,
         index=True,
     )
@@ -1115,14 +1107,14 @@ class KGRelationshipExtractionTemp(Base):
     # Add new relationship type reference
     relationship_type_id_name: Mapped[str] = mapped_column(
         NullFilteredString,
-        ForeignKey("kg_relationship_type_extraction_temp.id_name"),
+        ForeignKey("kg_relationship_type_extraction_staging.id_name"),
         nullable=False,
         index=True,
     )
 
     # Add the SQLAlchemy relationship property
-    relationship_type: Mapped["KGRelationshipTypeExtractionTemp"] = relationship(
-        "KGRelationshipTypeExtractionTemp", backref="relationship_temp"
+    relationship_type: Mapped["KGRelationshipTypeExtractionStaging"] = relationship(
+        "KGRelationshipTypeExtractionStaging", backref="relationship_staging"
     )
 
     occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -1138,11 +1130,11 @@ class KGRelationshipExtractionTemp(Base):
     )
 
     # Relationships to Entity table
-    source: Mapped["KGEntityExtractionTemp"] = relationship(
-        "KGEntityExtractionTemp", foreign_keys=[source_node]
+    source: Mapped["KGEntityExtractionStaging"] = relationship(
+        "KGEntityExtractionStaging", foreign_keys=[source_node]
     )
-    target: Mapped["KGEntityExtractionTemp"] = relationship(
-        "KGEntityExtractionTemp", foreign_keys=[target_node]
+    target: Mapped["KGEntityExtractionStaging"] = relationship(
+        "KGEntityExtractionStaging", foreign_keys=[target_node]
     )
     document: Mapped["Document"] = relationship(
         "Document", foreign_keys=[source_document]

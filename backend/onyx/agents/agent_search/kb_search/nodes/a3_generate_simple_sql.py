@@ -132,7 +132,7 @@ def generate_simple_sql(
         raise ValueError("User is not set")
     else:
         user_email = graph_config.tooling.search_tool.user.email
-
+        user_name = user_email.split("@")[0]
     simple_sql_prompt = (
         SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
         .replace("---relationship_types---", relationship_types_str)
@@ -144,6 +144,8 @@ def generate_simple_sql(
         .replace(
             "---query_relationships---", "\n".join(state.query_graph_relationships)
         )
+        .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
+        .replace("---user_name---", f"EMPLOYEE:{user_name}")
     )
 
     # Create temporary view
@@ -190,7 +192,7 @@ def generate_simple_sql(
             primary_llm.invoke,
             prompt=msg,
             timeout_override=25,
-            max_tokens=800,
+            max_tokens=1500,
         )
 
         cleaned_response = (
@@ -205,7 +207,7 @@ def generate_simple_sql(
             "kg_relationship", kg_relationships_view_name
         )
 
-        reasoning = cleaned_response.split("SQL:")[0].strip()
+        # reasoning = cleaned_response.split("SQL:")[0].strip()
 
     except Exception as e:
         logger.error(f"Error in strategy generation: {e}")
@@ -233,16 +235,16 @@ def generate_simple_sql(
     # else:
     individualized_sql_query = None
 
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=reasoning,
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
+    # write_custom_event(
+    #     "initial_agent_answer",
+    #     AgentAnswerPiece(
+    #         answer_piece=reasoning,
+    #         level=0,
+    #         level_question_num=0,
+    #         answer_type="agent_level_answer",
+    #     ),
+    #     writer,
+    # )
 
     # write_custom_event(
     #     "initial_agent_answer",
