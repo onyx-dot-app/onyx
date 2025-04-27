@@ -50,7 +50,7 @@ class FileStore(ABC):
 
     @abstractmethod
     def read_file(
-        self, file_name: str, mode: str | None, use_tempfile: bool = False
+        self, file_name: str, mode: str | None = None, use_tempfile: bool = False
     ) -> IO:
         """
         Read the content of a given file by the name
