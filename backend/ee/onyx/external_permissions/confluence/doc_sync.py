@@ -263,19 +263,18 @@ def _get_all_page_restrictions(
     # we want the restrictions from the immediate parent to take precedence, so we should
     # reverse the list
     for ancestor in reversed(ancestors):
-        ancestor_user_emails, ancestor_group_names = _extract_read_access_restrictions(
+        (
+            ancestor_user_emails,
+            ancestor_group_names,
+            found_any_restrictions_in_ancestor,
+        ) = _extract_read_access_restrictions(
             confluence_client=confluence_client,
             restrictions=ancestor.get("restrictions", {}),
         )
-        if not ancestor_user_emails and not ancestor_group_names:
-            # This ancestor has no restrictions, so it has no effect on
-            # the page's restrictions, so we ignore it
-            continue
-
-        # if inheriting restrictions from the parent, then the first one we run into
-        # should be applied (the reason why we'd traverse more than one ancestor is if
-        # the ancestor also is in "inherit" mode.)
-        if ancestor_user_emails or ancestor_group_names:
+        if found_any_restrictions_in_ancestor:
+            # if inheriting restrictions from the parent, then the first one we run into
+            # should be applied (the reason why we'd traverse more than one ancestor is if
+            # the ancestor also is in "inherit" mode.)
             return ExternalAccess(
                 external_user_emails=ancestor_user_emails,
                 external_user_group_ids=ancestor_group_names,
