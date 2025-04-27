@@ -114,3 +114,9 @@ def build_celery_task_wrapper(
         return task
 
     return wrap_task
+
+
+def query_history_report_name(
+    task_id: str,
+) -> str:
+    return f"query-history-{task_id}.csv"

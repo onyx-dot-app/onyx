@@ -11,6 +11,7 @@ from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import build_celery_task_wrapper
+from onyx.background.task_utils import query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import FileOrigin
@@ -144,7 +145,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime):
             for qa_pair in to_qa_pair(chat_session_snapshot)
         ]
 
-        report_name = f"query-history-{self.request.id}.csv"
+        report_name = query_history_report_name(task_id)
 
         file_store = get_default_file_store(db_session)
         stream = io.StringIO()

@@ -19,6 +19,7 @@ from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import MessageSnapshot
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_display_email
+from onyx.background.task_utils import query_history_report_name
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import MessageType
@@ -301,7 +302,7 @@ def download_query_history_csv(
         raise HTTPException(500)
 
     file_store = get_default_file_store(db_session)
-    report_name = f"query-history-{task_id}.csv"
+    report_name = query_history_report_name(task_id)
     csv_stream = file_store.read_file(report_name)
 
     csv_stream.seek(0)
