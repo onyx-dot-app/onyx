@@ -14,7 +14,6 @@ from onyx.db.engine import get_session
 from onyx.db.llm import fetch_existing_llm_provider
 from onyx.db.llm import fetch_existing_llm_providers
 from onyx.db.llm import fetch_existing_llm_providers_for_user
-from onyx.db.llm import fetch_max_input_tokens
 from onyx.db.llm import remove_llm_provider
 from onyx.db.llm import update_default_provider
 from onyx.db.llm import update_default_vision_provider
@@ -68,16 +67,15 @@ def test_llm_configuration(
         # as it turns out the name is not editable in the UI and other code also keys off name,
         # so we won't rock the boat just yet.
         existing_provider = fetch_existing_llm_provider(
-            test_llm_request.name, db_session
+            name=test_llm_request.name, db_session=db_session
         )
-        if existing_provider:
+        # if an API key is not provided, use the existing provider's API key
+        if existing_provider and not test_llm_request.api_key_changed:
             test_api_key = existing_provider.api_key
 
-    max_input_tokens = fetch_max_input_tokens(
-        db_session=db_session,
-        provider_name=test_llm_request.provider,
-        model_name=test_llm_request.name or test_llm_request.default_model_name,
-    )
+    # For this "testing" workflow, we do *not* need the actual `max_input_tokens`.
+    # Therefore, instead of performing additional, more complex logic, we just use a dummy value
+    max_input_tokens = -1
 
     llm = get_llm(
         provider=test_llm_request.provider,
@@ -191,7 +189,7 @@ def put_llm_provider(
     # NOTE: may involve duplicate fetching to Postgres, but we're assuming SQLAlchemy is smart enough to cache
     # the result
     existing_provider = fetch_existing_llm_provider(
-        llm_provider_upsert_request.name, db_session
+        name=llm_provider_upsert_request.name, db_session=db_session
     )
     if existing_provider and is_creation:
         raise HTTPException(

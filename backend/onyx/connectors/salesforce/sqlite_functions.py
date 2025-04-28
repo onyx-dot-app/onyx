@@ -572,28 +572,3 @@ class OnyxSalesforceSQLite:
             AND json_extract(data, '$.Email') IS NOT NULL
             """
         )
-
-
-# @contextmanager
-# def get_db_connection(
-#     directory: str,
-#     isolation_level: str | None = None,
-# ) -> Iterator[sqlite3.Connection]:
-#     """Get a database connection with proper isolation level and error handling.
-
-#     Args:
-#         isolation_level: SQLite isolation level. None = default "DEFERRED",
-#             can be "IMMEDIATE" or "EXCLUSIVE" for more strict isolation.
-#     """
-#     # 60 second timeout for locks
-#     conn = sqlite3.connect(get_sqlite_db_path(directory), timeout=60.0)
-
-#     if isolation_level is not None:
-#         conn.isolation_level = isolation_level
-#     try:
-#         yield conn
-#     except Exception:
-#         conn.rollback()
-#         raise
-#     finally:
-#         conn.close()

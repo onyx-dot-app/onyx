@@ -23,21 +23,21 @@ import { Modal } from "@/components/Modal";
 import FunctionalHeader from "@/components/chat/Header";
 import FixedLogo from "@/components/logo/FixedLogo";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 function BackToOnyxButton({
   documentSidebarVisible,
 }: {
   documentSidebarVisible: boolean;
 }) {
-  const router = useRouter();
   const enterpriseSettings = useContext(SettingsContext)?.enterpriseSettings;
 
   return (
     <div className="absolute bottom-0 bg-background w-full flex border-t border-border py-4">
       <div className="mx-auto">
-        <Button onClick={() => router.push("/chat")}>
+        <Link href="/chat">
           Back to {enterpriseSettings?.application_name || "Onyx Chat"}
-        </Button>
+        </Link>
       </div>
       <div
         style={{ transition: "width 0.30s ease-out" }}

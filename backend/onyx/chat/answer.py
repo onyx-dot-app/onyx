@@ -167,7 +167,6 @@ class Answer:
                 break
             processed_stream.append(packet)
             yield packet
-
         self._processed_stream = processed_stream
 
     @property

@@ -10,6 +10,7 @@ env:
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
   GEN_AI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   MOCK_LLM_RESPONSE: true
+  PYTEST_PLAYWRIGHT_SKIP_INITIAL_RESET: true
 
 jobs:
   playwright-tests:

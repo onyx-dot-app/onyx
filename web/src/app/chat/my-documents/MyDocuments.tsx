@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useTransition } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
@@ -68,11 +68,23 @@ export default function MyDocuments() {
   const [sortDirection, setSortDirection] = useState<SortDirection>(
     SortDirection.Descending
   );
-  const pageLimit = 10;
+
   const searchParams = useSearchParams();
+
   const router = useRouter();
   const { popup, setPopup } = usePopup();
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+
+  useEffect(() => {
+    const createFolder = searchParams.get("createFolder");
+    if (createFolder) {
+      setIsCreateFolderOpen(true);
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete("createFolder");
+      router.replace(`?${newSearchParams.toString()}`);
+    }
+  }, [searchParams]);
+
   const [isPending, startTransition] = useTransition();
   const [hoveredColumn, setHoveredColumn] = useState<SortType | null>(null);
 
@@ -118,117 +130,21 @@ export default function MyDocuments() {
   };
 
   const handleDeleteItem = async (itemId: number, isFolder: boolean) => {
-    if (!isFolder) {
-      // For files, keep the old confirmation
-      const confirmDelete = window.confirm(
-        `Are you sure you want to delete this file?`
-      );
-
-      if (confirmDelete) {
-        try {
-          await deleteItem(itemId, isFolder);
-          setPopup({
-            message: `File deleted successfully`,
-            type: "success",
-          });
-          await refreshFolders();
-        } catch (error) {
-          console.error("Error deleting item:", error);
-          setPopup({
-            message: `Failed to delete file`,
-            type: "error",
-          });
-        }
-      }
-    }
-
-    // If it's a folder, the SharedFolderItem component will handle it
-  };
-
-  const handleMoveItem = async (
-    itemId: number,
-    currentFolderId: number | null,
-    isFolder: boolean
-  ) => {
-    const availableFolders = folders
-      .filter((folder) => folder.id !== itemId)
-      .map((folder) => `${folder.id}: ${folder.name}`)
-      .join("\n");
-
-    const promptMessage = `Enter the ID of the destination folder:\n\nAvailable folders:\n${availableFolders}\n\nEnter 0 to move to the root folder.`;
-    const destinationFolderId = prompt(promptMessage);
-
-    if (destinationFolderId !== null) {
-      const newFolderId = parseInt(destinationFolderId, 10);
-      if (isNaN(newFolderId)) {
-        setPopup({
-          message: "Invalid folder ID",
-          type: "error",
-        });
-        return;
-      }
-
-      try {
-        await moveItem(
-          itemId,
-          newFolderId === 0 ? null : newFolderId,
-          isFolder
-        );
-        setPopup({
-          message: `${
-            isFolder ? "Knowledge Group" : "File"
-          } moved successfully`,
-          type: "success",
-        });
-        await refreshFolders();
-      } catch (error) {
-        console.error("Error moving item:", error);
-        setPopup({
-          message: "Failed to move item",
-          type: "error",
-        });
-      }
-    }
-  };
-
-  const handleDownloadItem = async (documentId: string) => {
     try {
-      await downloadItem(documentId);
-    } catch (error) {
-      console.error("Error downloading file:", error);
+      await deleteItem(itemId, isFolder);
       setPopup({
-        message: "Failed to download file",
+        message: isFolder
+          ? `Folder deleted successfully`
+          : `File deleted successfully`,
+        type: "success",
+      });
+      await refreshFolders();
+    } catch (error) {
+      console.error("Error deleting item:", error);
+      setPopup({
+        message: `Failed to delete ${isFolder ? "folder" : "file"}`,
         type: "error",
       });
-    }
-  };
-
-  const onRenameItem = async (
-    itemId: number,
-    currentName: string,
-    isFolder: boolean
-  ) => {
-    const newName = prompt(
-      `Enter new name for ${isFolder ? "Knowledge Group" : "File"}:`,
-      currentName
-    );
-    if (newName && newName !== currentName) {
-      try {
-        await renameItem(itemId, newName, isFolder);
-        setPopup({
-          message: `${
-            isFolder ? "Knowledge Group" : "File"
-          } renamed successfully`,
-          type: "success",
-        });
-        await refreshFolders();
-      } catch (error) {
-        console.error("Error renaming item:", error);
-        setPopup({
-          message: `Failed to rename ${isFolder ? "Knowledge Group" : "File"}`,
-          type: "error",
-        });
-      }
     }
   };
 
@@ -438,11 +354,7 @@ export default function MyDocuments() {
                     onClick={handleFolderClick}
                     description={folder.description}
                     lastUpdated={folder.created_at}
-                    onRename={() => onRenameItem(folder.id, folder.name, true)}
                     onDelete={() => handleDeleteItem(folder.id, true)}
-                    onMove={() =>
-                      handleMoveItem(folder.id, currentFolder, true)
-                    }
                   />
                 ))}
               </div>

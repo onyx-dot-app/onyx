@@ -402,6 +402,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
 
             <div className="w-full px-4">
               <button
+                aria-label="Explore Assistants"
                 onClick={() => setShowAssistantsModal(true)}
                 className="w-full cursor-pointer text-base text-black dark:text-[#D4D4D4] hover:bg-background-chat-hover flex items-center gap-x-2 py-1 px-2 rounded-md"
               >

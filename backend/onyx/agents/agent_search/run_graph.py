@@ -51,7 +51,6 @@ def _parse_agent_event(
     Parse the event into a typed object.
     Return None if we are not interested in the event.
     """
-
     event_type = event["event"]
 
     # We always just yield the event data, but this piece is useful for two development reasons:

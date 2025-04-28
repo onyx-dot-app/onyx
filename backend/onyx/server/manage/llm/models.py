@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 from onyx.llm.utils import get_max_input_tokens
+from onyx.llm.utils import model_supports_image_input
 
 
 if TYPE_CHECKING:
@@ -27,7 +28,10 @@ class TestLLMRequest(BaseModel):
     fast_default_model_name: str | None = None
     deployment_name: str | None = None
 
-    model_configurations: list["ModelConfigurationUpsertRequest"] = []
+    model_configurations: list["ModelConfigurationUpsertRequest"]
+
+    # if try and use the existing API key
+    api_key_changed: bool
 
 
 class LLMProviderDescriptor(BaseModel):
@@ -152,6 +156,7 @@ class ModelConfigurationView(BaseModel):
     name: str
     is_visible: bool | None = False
     max_input_tokens: int | None = None
+    supports_image_input: bool
 
     @classmethod
     def from_model(
@@ -165,6 +170,10 @@ class ModelConfigurationView(BaseModel):
             max_input_tokens=model_configuration_model.max_input_tokens
             or get_max_input_tokens(
                 model_name=model_configuration_model.name, model_provider=provider_name
+            ),
+            supports_image_input=model_supports_image_input(
+                model_name=model_configuration_model.name,
+                model_provider=provider_name,
             ),
         )
 

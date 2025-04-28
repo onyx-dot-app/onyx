@@ -12,6 +12,7 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
+from onyx.file_processing.extract_file_text import IMAGE_MEDIA_TYPES
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
@@ -111,6 +112,9 @@ def load_user_folder(folder_id: int, db_session: Session) -> list[InMemoryChatFi
 
 
 def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
+    chat_file_type = ChatFileType.USER_KNOWLEDGE
+    status = "not_loaded"
+
     user_file = db_session.query(UserFile).filter(UserFile.id == file_id).first()
     if not user_file:
         raise ValueError(f"User file with id {file_id} not found")
@@ -119,25 +123,37 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
     file_store = get_default_file_store(db_session)
     plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
 
+    # check for plain text normalized version first, then use original file otherwise
     try:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
-        return InMemoryChatFile(
+        chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
             content=file_io.read(),
             file_type=ChatFileType.USER_KNOWLEDGE,
             filename=user_file.name,
         )
-    except Exception as e:
-        logger.warning(
-            f"Failed to load plaintext file {plaintext_file_name}, defaulting to original file: {e}"
-        )
+        status = "plaintext"
+        return chat_file
+    except Exception:
         # Fall back to original file if plaintext not available
         file_io = file_store.read_file(user_file.file_id, mode="b")
-        return InMemoryChatFile(
+        file_record = file_store.read_file_record(user_file.file_id)
+        if file_record.file_type in IMAGE_MEDIA_TYPES:
+            chat_file_type = ChatFileType.IMAGE
+
+        chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
             content=file_io.read(),
-            file_type=ChatFileType.USER_KNOWLEDGE,
+            file_type=chat_file_type,
             filename=user_file.name,
+        )
+        status = "original"
+        return chat_file
+    finally:
+        logger.debug(
+            f"load_user_file finished: file_id={user_file.file_id} "
+            f"chat_file_type={chat_file_type} "
+            f"status={status}"
         )
 
 

@@ -273,6 +273,10 @@ def reset_postgres(
             logger.warning(
                 f"Postgres downgrade timed out, retrying... ({_ + 1}/{NUM_TRIES})"
             )
+        except RuntimeError:
+            logger.warning(
+                f"Postgres downgrade exceptioned, retrying... ({_ + 1}/{NUM_TRIES})"
+            )
 
     if not success:
         raise RuntimeError("Postgres downgrade failed after 10 timeouts.")

@@ -71,6 +71,7 @@ export interface ModelConfiguration {
   name: string;
   is_visible: boolean;
   max_input_tokens: number | null;
+  supports_image_input: boolean;
 }
 
 export interface VisionProvider extends LLMProviderView {

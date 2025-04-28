@@ -342,12 +342,7 @@ export const AIMessage = ({
     }
     const processed = preprocessLaTeX(content);
 
-    // Escape $ that are preceded by a space and followed by a non-$ character
-    const escapedDollarSigns = processed.replace(/([\s])\$([^\$])/g, "$1\\$$2");
-
-    return (
-      escapedDollarSigns + (!isComplete && !toolCallGenerating ? " [*]() " : "")
-    );
+    return processed + (!isComplete && !toolCallGenerating ? " [*]() " : "");
   };
 
   const finalContentProcessed = processContent(finalContent as string);

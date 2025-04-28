@@ -1,8 +1,8 @@
 import React from "react";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
-  checkLLMSupportsImageInput,
   destructureValue,
+  modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
 import {
@@ -96,7 +96,7 @@ export const LLMSelector: React.FC<LLMSelectorProps> = ({
         {llmOptions.map((option) => {
           if (
             !requiresImageGeneration ||
-            checkLLMSupportsImageInput(option.name)
+            modelSupportsImageInput(llmProviders, option.name)
           ) {
             return (
               <SelectItem key={option.value} value={option.value}>

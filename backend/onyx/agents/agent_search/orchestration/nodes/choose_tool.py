@@ -293,6 +293,10 @@ def choose_tool(
             semantic_expansions=[semantic_expansion],
         )
 
+        logger.info(f"Original query: {agent_config.inputs.search_request.query}")
+        logger.info(f"Expanded keyword queries: {keyword_expansion}")
+        logger.info(f"Expanded semantic queries: {semantic_expansion}")
+
     return ToolChoiceUpdate(
         tool_choice=ToolChoice(
             tool=selected_tool,

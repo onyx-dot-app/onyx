@@ -110,6 +110,7 @@ def google_drive_service_acct_connector_factory() -> (
         my_drive_emails: str | None,
         shared_folder_urls: str | None,
         include_files_shared_with_me: bool,
+        specific_user_emails: str | None = None,
     ) -> GoogleDriveConnector:
         print("Creating GoogleDriveConnector with service account credentials")
         connector = GoogleDriveConnector(
@@ -119,6 +120,7 @@ def google_drive_service_acct_connector_factory() -> (
             my_drive_emails=my_drive_emails,
             shared_folder_urls=shared_folder_urls,
             include_files_shared_with_me=include_files_shared_with_me,
+            specific_user_emails=specific_user_emails,
         )
 
         json_string = os.environ[

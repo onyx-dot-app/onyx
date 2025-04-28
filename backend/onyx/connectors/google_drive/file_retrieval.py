@@ -221,6 +221,9 @@ def get_files_in_shared_drive(
         # If we found any files, mark this drive as traversed. When a user has access to a drive,
         # they have access to all the files in the drive. Also not a huge deal if we re-traverse
         # empty drives.
+        # NOTE: ^^ the above is not actually true due to folder restrictions:
+        # https://support.google.com/a/users/answer/12380484?hl=en
+        # So we may have to change this logic for people who use folder restrictions.
         update_traversed_ids_func(drive_id)
         yield file
 
@@ -244,14 +247,14 @@ def get_all_files_in_my_drive_and_shared(
     if not include_shared_with_me:
         folder_query += " and 'me' in owners"
     found_folders = False
-    for file in execute_paginated_retrieval(
+    for folder in execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         corpora="user",
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
         q=folder_query,
     ):
-        update_traversed_ids_func(file[GoogleFields.ID])
+        update_traversed_ids_func(folder[GoogleFields.ID])
         found_folders = True
     if found_folders:
         update_traversed_ids_func(get_root_folder_id(service))

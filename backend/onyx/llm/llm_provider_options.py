@@ -79,6 +79,7 @@ BEDROCK_MODEL_NAMES = [
     for model in litellm.bedrock_models + litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
 ][::-1]
+BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
@@ -126,6 +127,10 @@ VERTEXAI_MODEL_NAMES = [
     "gemini-1.5-flash-001",
     "gemini-1.5-flash-002",
 ]
+VERTEXAI_VISIBLE_MODEL_NAMES = [
+    VERTEXAI_DEFAULT_MODEL,
+    VERTEXAI_DEFAULT_FAST_MODEL,
+]
 
 
 _PROVIDER_TO_MODELS_MAP = {
@@ -133,6 +138,13 @@ _PROVIDER_TO_MODELS_MAP = {
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+}
+
+_PROVIDER_TO_VISIBLE_MODELS_MAP = {
+    OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
+    BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
+    ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
+    VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
 }
 
 
@@ -200,8 +212,8 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                 ),
             ],
             llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
-            default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-            default_fast_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+            default_model=BEDROCK_DEFAULT_MODEL,
+            default_fast_model=BEDROCK_DEFAULT_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
@@ -228,3 +240,17 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
     return _PROVIDER_TO_MODELS_MAP.get(provider_name, [])
+
+
+def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None:
+    model_names = fetch_models_for_provider(provider_name)
+    return set(model_names) if model_names else None
+
+
+def fetch_visible_model_names_for_provider_as_set(
+    provider_name: str,
+) -> set[str] | None:
+    visible_model_names: list[str] | None = _PROVIDER_TO_VISIBLE_MODELS_MAP.get(
+        provider_name
+    )
+    return set(visible_model_names) if visible_model_names else None

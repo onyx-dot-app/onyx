@@ -104,7 +104,7 @@ const DraggableItem: React.FC<{
       <div className="w-6 flex items-center justify-center shrink-0">
         <div
           className={`${
-            isSelected ? "" : "opacity-0 group-hover:opacity-100"
+            isSelected ? "" : "desktop:opacity-0 group-hover:opacity-100"
           } transition-opacity duration-150`}
           onClick={(e) => {
             e.stopPropagation();
@@ -199,7 +199,7 @@ const FilePickerFolderItem: React.FC<{
             className={`transition-opacity duration-150 ${
               isSelected || allFilesSelected
                 ? "opacity-100"
-                : "opacity-0 group-hover:opacity-100"
+                : "desktop:opacity-0 group-hover:opacity-100"
             }`}
             onClick={(e) => {
               e.preventDefault();
@@ -276,7 +276,10 @@ const FilePickerFolderItem: React.FC<{
 export interface FilePickerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (
+    selectedFiles: FileResponse[],
+    selectedFolders: FolderResponse[]
+  ) => void;
   buttonContent: string;
   setPresentingDocument: (onyxDocument: MinimalOnyxDocument) => void;
 }
@@ -323,8 +326,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
     createFileFromLink,
   } = useDocumentsContext();
 
-  const router = useRouter();
-  const [linkUrl, setLinkUrl] = useState("");
   const [isCreatingFileFromLink, setIsCreatingFileFromLink] = useState(false);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
 
@@ -394,12 +395,6 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       setSelectedFolderIds(folderIds);
     }
   }, [isOpen, selectedFiles, selectedFolders]);
-
-  useEffect(() => {
-    if (isOpen) {
-      refreshFolders();
-    }
-  }, [isOpen, refreshFolders]);
 
   useEffect(() => {
     if (currentFolder) {
@@ -1087,7 +1082,7 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
       }
     >
       <div className="h-[calc(70vh-5rem)] flex overflow-visible flex-col">
-        <div className="grid overflow-x-visible h-full overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 grid-cols-2">
+        <div className="grid overflow-x-visible h-full overflow-y-hidden flex-1  w-full divide-x divide-neutral-200 dark:divide-neutral-700 desktop:grid-cols-2">
           <div className="w-full h-full pb-4 overflow-hidden ">
             <div className="px-6 sticky flex flex-col gap-y-2 z-[1000] top-0 mb-2 flex gap-x-2 w-full pr-4">
               <div className="w-full relative">
@@ -1251,16 +1246,16 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             ) : folders.length > 0 ? (
               <div className="flex-grow overflow-y-auto px-4">
                 <p className="text-text-subtle dark:text-neutral-400">
-                  No groups found
+                  No folders found
                 </p>
               </div>
             ) : (
               <div className="flex-grow flex-col overflow-y-auto px-4 flex items-start justify-start gap-y-2">
                 <p className="text-sm text-muted-foreground dark:text-neutral-400">
-                  No groups found
+                  No folders found
                 </p>
                 <a
-                  href="/chat/my-documents"
+                  href="/chat/my-documents?createFolder=true"
                   className="inline-flex items-center text-sm justify-center text-neutral-600 dark:text-neutral-400 hover:underline"
                 >
                   <FolderIcon className="mr-2 h-4 w-4" />
@@ -1270,14 +1265,20 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
             )}
           </div>
           <div
-            className={`w-full h-full flex flex-col ${
+            className={`mobile:hidden overflow-y-auto w-full h-full flex flex-col ${
               isHoveringRight ? "bg-neutral-100 dark:bg-neutral-800/30" : ""
             }`}
             onDragEnter={() => setIsHoveringRight(true)}
             onDragLeave={() => setIsHoveringRight(false)}
           >
-            <div className="px-5 pb-5 flex-1 flex flex-col">
-              <div className="shrink default-scrollbar flex h-full overflow-y-auto mb-3">
+            <div className="px-5 h-full flex flex-col">
+              {/* Top section: scrollable, takes remaining space */}
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-neutral-800 dark:text-neutral-100">
+                  Selected Items
+                </h3>
+              </div>
+              <div className="flex-1 min-h-0 overflow-y-auto">
                 <SelectedItemsList
                   uploadingFiles={uploadingFiles}
                   setPresentingDocument={setPresentingDocument}
@@ -1288,69 +1289,68 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                 />
               </div>
 
-              <div className="flex flex-col space-y-3">
-                <div className="flex flex-col space-y-2">
-                  <FileUploadSection
-                    disabled={isUploadingFile || isCreatingFileFromLink}
-                    onUpload={(files: File[]) => {
-                      setIsUploadingFile(true);
-                      setUploadStartTime(Date.now()); // Record start time
+              {/* Bottom section: fixed height, doesn't flex */}
+              <div className="flex-none py-2">
+                <FileUploadSection
+                  disabled={isUploadingFile || isCreatingFileFromLink}
+                  onUpload={(files: File[]) => {
+                    setIsUploadingFile(true);
+                    setUploadStartTime(Date.now()); // Record start time
 
-                      // Add files to uploading files state
+                    // Start the refresh interval to simulate progress
+                    startRefreshInterval();
 
-                      // Start the refresh interval to simulate progress
-                      startRefreshInterval();
+                    // Convert File[] to FileList for addUploadedFileToContext
+                    const fileListArray = Array.from(files);
+                    const fileList = new DataTransfer();
+                    fileListArray.forEach((file) => fileList.items.add(file));
 
-                      // Convert File[] to FileList for addUploadedFileToContext
-                      const fileListArray = Array.from(files);
-                      const fileList = new DataTransfer();
-                      fileListArray.forEach((file) => fileList.items.add(file));
+                    addUploadedFileToContext(fileList.files)
+                      .then(() => refreshFolders())
+                      .finally(() => {
+                        setIsUploadingFile(false);
+                      });
+                  }}
+                  onUrlUpload={async (url: string) => {
+                    setIsCreatingFileFromLink(true);
+                    setUploadStartTime(Date.now()); // Record start time
 
-                      addUploadedFileToContext(fileList.files)
-                        .then(() => refreshFolders())
-                        .finally(() => {
-                          setIsUploadingFile(false);
-                        });
-                    }}
-                    onUrlUpload={async (url: string) => {
-                      setIsCreatingFileFromLink(true);
-                      setUploadStartTime(Date.now()); // Record start time
+                    // Add URL to uploading files
+                    setUploadingFiles((prev) => [
+                      ...prev,
+                      { name: url, progress: 0 },
+                    ]);
 
-                      // Add URL to uploading files
-                      setUploadingFiles((prev) => [
-                        ...prev,
-                        { name: url, progress: 0 },
-                      ]);
+                    // Start the refresh interval to simulate progress
+                    startRefreshInterval();
 
-                      // Start the refresh interval to simulate progress
-                      startRefreshInterval();
+                    try {
+                      const response: FileResponse[] = await createFileFromLink(
+                        url,
+                        -1
+                      );
 
-                      try {
-                        const response: FileResponse[] =
-                          await createFileFromLink(url, -1);
+                      if (response.length > 0) {
+                        // Extract domain from URL to help with detection
+                        const urlObj = new URL(url);
 
-                        if (response.length > 0) {
-                          // Extract domain from URL to help with detection
-                          const urlObj = new URL(url);
-
-                          const createdFile: FileResponse = response[0];
-                          addSelectedFile(createdFile);
-                          // Make sure to remove the uploading file indicator when done
-                          markFileComplete(url);
-                        }
-
-                        await refreshFolders();
-                      } catch (e) {
-                        console.error("Error creating file from link:", e);
-                        // Also remove the uploading indicator on error
+                        const createdFile: FileResponse = response[0];
+                        addSelectedFile(createdFile);
+                        // Make sure to remove the uploading file indicator when done
                         markFileComplete(url);
-                      } finally {
-                        setIsCreatingFileFromLink(false);
                       }
-                    }}
-                    isUploading={isUploadingFile || isCreatingFileFromLink}
-                  />
-                </div>
+
+                      await refreshFolders();
+                    } catch (e) {
+                      console.error("Error creating file from link:", e);
+                      // Also remove the uploading indicator on error
+                      markFileComplete(url);
+                    } finally {
+                      setIsCreatingFileFromLink(false);
+                    }
+                  }}
+                  isUploading={isUploadingFile || isCreatingFileFromLink}
+                />
               </div>
             </div>
           </div>
@@ -1375,7 +1375,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                 <TooltipTrigger asChild>
                   <div>
                     <Button
-                      onClick={onSave}
+                      type="button"
+                      onClick={() =>
+                        onSave(selectedItems.files, selectedItems.folders)
+                      }
                       className="px-8 py-2 w-48"
                       disabled={
                         isUploadingFile ||
