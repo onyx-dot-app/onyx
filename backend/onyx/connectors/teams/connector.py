@@ -181,6 +181,8 @@ class TeamsConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
+        # TODO: (chris) move from "Display Names" to IDs, since display names
+        # are NOT guaranteed to be unique
         teams: list[str] = [],
     ) -> None:
         self.batch_size = batch_size
