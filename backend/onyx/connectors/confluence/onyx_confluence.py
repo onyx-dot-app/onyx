@@ -506,7 +506,6 @@ class OnyxConfluence:
             # the configured server, it will artificially limit the amount of
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
-            # print(f"next_response: {next_response}")
             old_url_suffix = url_suffix
             updated_start = get_start_param_from_url(old_url_suffix)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))

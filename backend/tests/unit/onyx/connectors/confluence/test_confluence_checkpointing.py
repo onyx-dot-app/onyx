@@ -54,13 +54,13 @@ def confluence_connector(
     confluence_base_url: str, space_key: str, mock_confluence_client: OnyxConfluence
 ) -> Generator[ConfluenceConnector, None, None]:
     """Create a Confluence connector with a mock client"""
-    # NOTE: we test with is_cloud=True for all tests, but the behavior is close enough
-    # to the server behavior that we can use the same tests. In particular we always update
-    # the timestamp AND always update the new start value in the checkpoint.
+    # NOTE: we test with is_cloud=False for all tests, which is generally fine because the behavior
+    # for the two versions is "close enough". If cloud-specific behavior is added, we can parametrize
+    # the connector and client fixtures to allow either.
     connector = ConfluenceConnector(
         wiki_base=confluence_base_url,
         space=space_key,
-        is_cloud=True,
+        is_cloud=False,
         labels_to_skip=["secret", "sensitive"],
         timezone_offset=0.0,
         batch_size=2,
@@ -102,7 +102,7 @@ def test_get_cql_query_with_space(confluence_connector: ConfluenceConnector) -> 
     start = datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp()
     end = datetime(2023, 1, 2, tzinfo=timezone.utc).timestamp()
 
-    query = confluence_connector._construct_page_query(start, end)
+    query = confluence_connector._construct_page_cql_query(start, end)
 
     # Check that the space part and time part are both in the query
     assert f"space='{confluence_connector.space}'" in query
@@ -119,7 +119,7 @@ def test_get_cql_query_without_space(confluence_base_url: str) -> None:
     start = datetime(2023, 1, 1, tzinfo=connector.timezone).timestamp()
     end = datetime(2023, 1, 2, tzinfo=connector.timezone).timestamp()
 
-    query = connector._construct_page_query(start, end)
+    query = connector._construct_page_cql_query(start, end)
 
     # Check that only time part is in the query
     assert "space=" not in query
@@ -158,11 +158,14 @@ def test_load_from_checkpoint_happy_path(
                 "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
             }
         ),
+        # links and attachemnts responses
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
+        # next actual page response
         MagicMock(json=lambda: {"results": [mock_page3]}),
+        # more links and attachment responses
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
@@ -176,11 +179,6 @@ def test_load_from_checkpoint_happy_path(
     )
 
     # Check that the documents were returned
-    for output in outputs:
-        print("OUTPUT")
-        print(output)
-        print()
-        print()
     assert len(outputs) == 2
 
     checkpoint_output1 = outputs[0]
@@ -314,6 +312,7 @@ def test_retrieve_all_slim_documents(
                 "_links": {"next": "rest/api/content/search?cql=type=page&start=2"},
             }
         ),
+        # links and attachments responses
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
         MagicMock(json=lambda: {"results": []}),
@@ -461,7 +460,7 @@ def test_checkpoint_progress(
     )
 
     # Verify only the new page was processed since the others were in last_seen_doc_ids
-    assert len(outputs_with_checkpoint) == 1 or len(outputs_with_checkpoint) == 2
+    assert len(outputs_with_checkpoint) == 2
     assert len(outputs_with_checkpoint[0].items) == 1
     assert isinstance(outputs_with_checkpoint[0].items[0], Document)
     assert outputs_with_checkpoint[0].items[0].semantic_identifier == "Page 3"

@@ -73,7 +73,6 @@ _SLIM_DOC_BATCH_SIZE = 5000
 ONE_HOUR = 3600
 ONE_DAY = ONE_HOUR * 24
 
-TIME_OFFSET = 120
 MAX_CACHED_IDS = 100
 
 
@@ -214,11 +213,17 @@ class ConfluenceConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
 
-    def _construct_page_query(
+    def _construct_page_cql_query(
         self,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> str:
+        """
+        Constructs a CQL query for use in the confluence API. See
+        https://developer.atlassian.com/server/confluence/advanced-searching-using-cql/
+        for more information. This is JUST the CQL, not the full URL used to hit the API.
+        Use _build_page_retrieval_url to get the full URL.
+        """
         page_query = self.base_cql_page_query + self.cql_label_filter
         # Add time filters
         if start:
@@ -477,8 +482,6 @@ class ConfluenceConnector(
 
         # store the next page start for confluence server, cursor for confluence cloud
         def store_next_page_url(next_page_url: str) -> None:
-            print("STORING NEXT PAGE URL")
-            print(next_page_url)
             checkpoint.next_page_url = next_page_url
 
         for page in self.confluence_client.paginated_page_retrieval(
@@ -511,7 +514,12 @@ class ConfluenceConnector(
         end: SecondsSinceUnixEpoch | None,
         limit: int,
     ) -> str:
-        page_query = self._construct_page_query(start, end)
+        """
+        Builds the full URL used to retrieve pages from the confluence API.
+        This can be used as input to the confluence client's _paginate_url
+        or paginated_page_retrieval methods.
+        """
+        page_query = self._construct_page_cql_query(start, end)
         cql_url = self.confluence_client.build_cql_url(
             page_query, expand=",".join(_PAGE_EXPANSION_FIELDS)
         )

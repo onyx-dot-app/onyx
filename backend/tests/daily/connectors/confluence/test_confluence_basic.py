@@ -13,14 +13,6 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.models import Document
 from tests.daily.connectors.utils import load_all_docs_from_checkpoint_connector
 
-EXPIRED_CURSOR = (
-    r"/rest/api/content/search?next=true&"
-    r"cursor=_f_MzI%3D_sa_WzE3MzIxMTcwMDEwMDAsIlx0MjEzODQzOTc4IEdZcmVXMz1TTltVJ3FJOjZKTjM9IGNwIl0%3D&"
-    r"expand=body.storage.value%2Cversion%2Cspace%2Cmetadata.labels%2Chistory.lastUpdated&limit=32&"
-    r"start=32&cql=type%3Dpage%20and%20lastmodified%20%3E%3D%20%272024-09-21%2015%3A16%27%20and%20"
-    r"lastmodified%20%3C%3D%20%272025-04-26%2009%3A49%27%20order%20by%20lastmodified%20asc"
-)
-
 
 @pytest.fixture
 def confluence_connector(space: str) -> ConfluenceConnector:
