@@ -7,6 +7,7 @@ from typing import Dict
 from langchain_core.messages import HumanMessage
 
 from onyx.configs.kg_configs import KG_VENDOR
+from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
@@ -182,6 +183,10 @@ def kg_extraction_initialization(tenant_id: str, num_chunks: int = 1000) -> None
     This extraction will create a random sample of chunks to process in order to perform
     clustering and topic modeling.
     """
+
+    if not USE_KG_APPROACH:
+        logger.error("KG approach is not enabled, skipping extraction")
+        raise Exception("KG approach is not enabled, extraction cannot be run.")
 
     logger.info(f"Starting kg extraction for tenant {tenant_id}")
 

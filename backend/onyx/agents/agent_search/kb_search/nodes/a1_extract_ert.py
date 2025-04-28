@@ -19,6 +19,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
+from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.relationships import get_allowed_relationship_type_pairs
 from onyx.kg.extractions.extraction_processing import get_entity_types_str
@@ -37,6 +38,11 @@ def extract_ert(
     """
     LangGraph node to start the agentic search process.
     """
+
+    if not USE_KG_APPROACH:
+        logger.error("KG approach is not enabled, the KG agent flow cannot run.")
+        raise Exception("KG approach is not enabled, the KG agent flow cannot run.")
+
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])

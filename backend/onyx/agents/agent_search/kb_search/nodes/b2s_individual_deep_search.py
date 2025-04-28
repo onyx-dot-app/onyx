@@ -95,14 +95,20 @@ def individual_deep_search(
                 "Failed to parse LLM response as JSON in Entity-Term Extraction"
             )
             vespa_filter_results = KGFilterConstructionResults(
-                entity_filters=[],
-                relationship_filters=[],
+                local_entity_filters=[],
+                global_entity_filters=[],
+                global_relationship_filters=[],
+                source_document_filters=[],
+                structure=[],
             )
     except Exception as e:
         logger.error(f"Error in extract_ert: {e}")
         vespa_filter_results = KGFilterConstructionResults(
-            entity_filters=[],
-            relationship_filters=[],
+            local_entity_filters=[],
+            global_entity_filters=[],
+            global_relationship_filters=[],
+            source_document_filters=[],
+            structure=[],
         )
 
     if state.sql_query_results:
