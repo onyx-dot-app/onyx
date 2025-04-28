@@ -18,7 +18,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def kg_clustering(
+def kg_incremental_cluster_updates(
     tenant_id: str, index_name: str, processing_chunk_batch_size: int = 8
 ) -> None:
     """

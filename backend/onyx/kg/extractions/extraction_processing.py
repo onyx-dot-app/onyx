@@ -124,9 +124,32 @@ def get_entity_types_str(active: bool | None = None) -> str:
             else:
                 allowed_values = ""
 
+            entity_type_attribute_list = []
             if entity_type.attributes.get("metadata_attributes"):
-                entity_attributes = "\n       - Attributes: " + ", ".join(
-                    entity_type.attributes.get("metadata_attributes", {}).keys()
+
+                for attribute, values in entity_type.attributes.get(
+                    "metadata_attributes", {}
+                ).items():
+                    if values:
+                        entity_type_attribute_list.append(f"{attribute}: {values}")
+                    else:
+                        entity_type_attribute_list.append(
+                            f"{attribute}: (can take any suitable value)"
+                        )
+
+            if entity_type.attributes.get("classification_attributes"):
+                entity_type_attribute_list.append(
+                    "object_type: "
+                    + ", ".join(
+                        entity_type.attributes.get(
+                            "classification_attributes", {}
+                        ).keys()
+                    )
+                )
+            if entity_type_attribute_list:
+                entity_attributes = (
+                    "\n  - Attributes:\n         - "
+                    + "\n         - ".join(entity_type_attribute_list)
                 )
             else:
                 entity_attributes = ""
