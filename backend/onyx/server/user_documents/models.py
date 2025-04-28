@@ -8,6 +8,8 @@ from pydantic import BaseModel
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
+from onyx.file_store.models import ChatFileType
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 
 
 class UserFileStatus(str, PyEnum):
@@ -17,6 +19,7 @@ class UserFileStatus(str, PyEnum):
     REINDEXING = "REINDEXING"
 
 
+# this maps to FileResponse on the front end
 class UserFileSnapshot(BaseModel):
     id: int
     name: str
@@ -30,6 +33,7 @@ class UserFileSnapshot(BaseModel):
     indexed: bool
     link_url: str | None
     status: UserFileStatus
+    chat_file_type: ChatFileType
 
     @classmethod
     def from_model(cls, model: UserFile) -> "UserFileSnapshot":
@@ -73,6 +77,7 @@ class UserFileSnapshot(BaseModel):
                 else False
             ),
             link_url=model.link_url,
+            chat_file_type=mime_type_to_chat_file_type(model.content_type),
         )
 
 

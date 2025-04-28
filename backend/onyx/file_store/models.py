@@ -14,6 +14,9 @@ class ChatFileType(str, Enum):
     # Plain text only contain the text
     PLAIN_TEXT = "plain_text"
     CSV = "csv"
+
+    # NOTE(rkuo): don't understand the motivation for this
+    # "user knowledge" is not a file type, it's a source or intent
     USER_KNOWLEDGE = "user_knowledge"
 
 

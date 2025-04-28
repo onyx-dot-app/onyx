@@ -184,10 +184,10 @@ async def run_async_migrations() -> None:
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
-                    logger.error("--continue is not set, raising exception!")
+                    logger.error("--continue=true is not set, raising exception!")
                     raise
 
-                logger.warning("--continue is set, continuing to next schema.")
+                logger.warning("--continue=true is set, continuing to next schema.")
 
     else:
         try:

@@ -221,6 +221,9 @@ def get_files_in_shared_drive(
         # If we found any files, mark this drive as traversed. When a user has access to a drive,
         # they have access to all the files in the drive. Also not a huge deal if we re-traverse
         # empty drives.
+        # NOTE: ^^ the above is not actually true due to folder restrictions:
+        # https://support.google.com/a/users/answer/12380484?hl=en
+        # So we may have to change this logic for people who use folder restrictions.
         update_traversed_ids_func(drive_id)
         yield file
 

@@ -30,6 +30,7 @@ from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -236,7 +237,12 @@ class OnyxConfluence:
                         **merged_kwargs,
                     )
 
-            spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+            # This call sometimes hangs indefinitely, so we run it in a timeout
+            spaces = run_with_timeout(
+                timeout=10,
+                func=confluence_client_with_minimal_retries.get_all_spaces,
+                limit=1,
+            )
 
             # uncomment the following for testing
             # the following is an attempt to retrieve the user's timezone
@@ -412,13 +418,14 @@ class OnyxConfluence:
             self._make_rate_limited_confluence_method(name, self._credentials_provider)
         )
 
-        def wrapped_method(*args: Any, **kwargs: Any) -> Any:
-            return rate_limited_method(*args, **kwargs)
-
-        return wrapped_method
+        return rate_limited_method
 
     def _paginate_url(
-        self, url_suffix: str, limit: int | None = None, auto_paginate: bool = False
+        self,
+        url_suffix: str,
+        limit: int | None = None,
+        # Called with the next url to use to get the next page
+        next_page_callback: Callable[[str], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
         This will paginate through the top level query.
@@ -426,8 +433,7 @@ class OnyxConfluence:
         if not limit:
             limit = _DEFAULT_PAGINATION_LIMIT
 
-        connection_char = "&" if "?" in url_suffix else "?"
-        url_suffix += f"{connection_char}limit={limit}"
+        url_suffix = update_param_in_path(url_suffix, "limit", str(limit))
 
         while url_suffix:
             logger.debug(f"Making confluence call to {url_suffix}")
@@ -494,10 +500,28 @@ class OnyxConfluence:
 
             # yield the results individually
             results = cast(list[dict[str, Any]], next_response.get("results", []))
-            yield from results
-
+            # make sure we don't update the start by more than the amount
+            # of results we were able to retrieve. The Confluence API has a
+            # weird behavior where if you pass in a limit that is too large for
+            # the configured server, it will artificially limit the amount of
+            # results returned BUT will not apply this to the start parameter.
+            # This will cause us to miss results.
             old_url_suffix = url_suffix
+            updated_start = get_start_param_from_url(old_url_suffix)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
+            for i, result in enumerate(results):
+                updated_start += 1
+                if url_suffix and next_page_callback and i == len(results) - 1:
+                    # update the url if we're on the last result in the page
+                    if not self._is_cloud:
+                        # If confluence claims there are more results, we update the start param
+                        # based on how many results were returned and try again.
+                        url_suffix = update_param_in_path(
+                            url_suffix, "start", str(updated_start)
+                        )
+                    # notify the caller of the new url
+                    next_page_callback(url_suffix)
+                yield result
 
             # we've observed that Confluence sometimes returns a next link despite giving
             # 0 results. This is a bug with Confluence, so we need to check for it and
@@ -509,37 +533,9 @@ class OnyxConfluence:
                 )
                 break
 
-            # make sure we don't update the start by more than the amount
-            # of results we were able to retrieve. The Confluence API has a
-            # weird behavior where if you pass in a limit that is too large for
-            # the configured server, it will artificially limit the amount of
-            # results returned BUT will not apply this to the start parameter.
-            # This will cause us to miss results.
-            if url_suffix and "start" in url_suffix:
-                new_start = get_start_param_from_url(url_suffix)
-                previous_start = get_start_param_from_url(old_url_suffix)
-                if new_start - previous_start > len(results):
-                    logger.debug(
-                        f"Start was updated by more than the amount of results "
-                        f"retrieved for `{url_suffix}`. This is a bug with Confluence, "
-                        "but we have logic to work around it - don't worry this isn't"
-                        f" causing an issue. Start: {new_start}, Previous Start: "
-                        f"{previous_start}, Len Results: {len(results)}."
-                    )
-
-                    # Update the url_suffix to use the adjusted start
-                    adjusted_start = previous_start + len(results)
-                    url_suffix = update_param_in_path(
-                        url_suffix, "start", str(adjusted_start)
-                    )
-
-            # some APIs don't properly paginate, so we need to manually update the `start` param
-            if auto_paginate and len(results) > 0:
-                previous_start = get_start_param_from_url(old_url_suffix)
-                updated_start = previous_start + len(results)
-                url_suffix = update_param_in_path(
-                    old_url_suffix, "start", str(updated_start)
-                )
+    def build_cql_url(self, cql: str, expand: str | None = None) -> str:
+        expand_string = f"&expand={expand}" if expand else ""
+        return f"rest/api/content/search?cql={cql}{expand_string}"
 
     def paginated_cql_retrieval(
         self,
@@ -550,10 +546,28 @@ class OnyxConfluence:
         """
         The content/search endpoint can be used to fetch pages, attachments, and comments.
         """
-        expand_string = f"&expand={expand}" if expand else ""
-        yield from self._paginate_url(
-            f"rest/api/content/search?cql={cql}{expand_string}", limit
-        )
+        cql_url = self.build_cql_url(cql, expand)
+        yield from self._paginate_url(cql_url, limit)
+
+    def paginated_page_retrieval(
+        self,
+        cql_url: str,
+        limit: int,
+        # Called with the next url to use to get the next page
+        next_page_callback: Callable[[str], None] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """
+        Error handling (and testing) wrapper for _paginate_url,
+        because the current approach to page retrieval involves handling the
+        next page links manually.
+        """
+        try:
+            yield from self._paginate_url(
+                cql_url, limit=limit, next_page_callback=next_page_callback
+            )
+        except Exception as e:
+            logger.exception(f"Error in paginated_page_retrieval: {e}")
+            raise e
 
     def cql_paginate_all_expansions(
         self,
@@ -591,7 +605,7 @@ class OnyxConfluence:
     ) -> Iterator[ConfluenceUser]:
         """
         The search/user endpoint can be used to fetch users.
-        It's a seperate endpoint from the content/search endpoint used only for users.
+        It's a separate endpoint from the content/search endpoint used only for users.
         Otherwise it's very similar to the content/search endpoint.
         """
 
@@ -606,9 +620,7 @@ class OnyxConfluence:
             url = "rest/api/search/user"
             expand_string = f"&expand={expand}" if expand else ""
             url += f"?cql={cql}{expand_string}"
-            # endpoint doesn't properly paginate, so we need to manually update the `start` param
-            # thus the auto_paginate flag
-            for user_result in self._paginate_url(url, limit, auto_paginate=True):
+            for user_result in self._paginate_url(url, limit):
                 # Example response:
                 # {
                 #     'user': {
