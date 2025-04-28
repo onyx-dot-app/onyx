@@ -152,6 +152,8 @@ class KGStage(str, Enum):
     FAILED = "failed"
     SKIPPED = "skipped"
     NOT_STARTED = "not_started"
+    EXTRACTING = "extracting"
+    DO_NOT_EXTRACT = "do_not_extract"
 
 
 class KGDocumentEntitiesRelationshipsAttributes(BaseModel):

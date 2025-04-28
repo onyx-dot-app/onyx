@@ -889,21 +889,20 @@ def get_unprocessed_kg_document_batch_for_connector(
             and_(
                 DocumentByConnectorCredentialPair.connector_id == connector_id,
                 or_(
-                    DocumentByConnectorCredentialPair.kg_stage.is_(None),
-                    DocumentByConnectorCredentialPair.kg_stage
-                    == KGStage.NOT_STARTED.value,
-                ),
-                or_(
-                    DbDocument.kg_stage == KGStage.NOT_STARTED.value,
                     DbDocument.kg_stage.is_(None),
+                    DbDocument.kg_stage == KGStage.NOT_STARTED,
                 ),
             )
         )
         .distinct()
+        .order_by(DbDocument.doc_updated_at.desc())
         .limit(batch_size)
     )
 
-    return list(db_session.scalars(stmt).all())
+    documents = db_session.scalars(stmt).all()
+    db_session.flush()
+
+    return list(documents)
 
 
 def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
@@ -949,6 +948,7 @@ def update_document_kg_stage(
         update(DbDocument).where(DbDocument.id == document_id).values(kg_stage=kg_stage)
     )
     db_session.execute(stmt)
+    db_session.flush()
 
 
 def get_document_kg_info(

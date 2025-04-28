@@ -7,7 +7,6 @@ from typing import Dict
 from langchain_core.messages import HumanMessage
 
 from onyx.configs.kg_configs import KG_VENDOR
-from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
@@ -201,19 +200,6 @@ def get_relationship_types_str(active: bool | None = None) -> str:
     return "\n".join(relationship_types_list)
 
 
-def kg_extraction_initialization(tenant_id: str, num_chunks: int = 1000) -> None:
-    """
-    This extraction will create a random sample of chunks to process in order to perform
-    clustering and topic modeling.
-    """
-
-    if not USE_KG_APPROACH:
-        logger.error("KG approach is not enabled, skipping extraction")
-        raise Exception("KG approach is not enabled, extraction cannot be run.")
-
-    logger.info(f"Starting kg extraction for tenant {tenant_id}")
-
-
 def kg_extraction(
     tenant_id: str, index_name: str, processing_chunk_batch_size: int = 8
 ) -> list[ConnectorExtractionStats]:
@@ -283,7 +269,7 @@ def kg_extraction(
                     get_unprocessed_kg_document_batch_for_connector(
                         db_session,
                         connector_id,
-                        batch_size=4,
+                        batch_size=8,
                     )
                 )
 
@@ -340,6 +326,16 @@ def kg_extraction(
 
             # run this only for primary grounded sources that have a classification approach configured
             if connector_docs_classfication_enabled:
+
+                # mark docs in unprocessed_document_batch as EXTRACTING
+                for unprocessed_document in unprocessed_document_batch:
+                    with get_session_with_current_tenant() as db_session:
+                        update_document_kg_stage(
+                            db_session,
+                            unprocessed_document.id,
+                            KGStage.EXTRACTING,
+                        )
+                        db_session.commit()
 
                 document_classification_content_list = (
                     get_document_classification_content_for_kg_processing(
@@ -831,6 +827,15 @@ def kg_extraction(
 
             # Update the document table
             for classification_outcome in classification_outcomes:
+                if not classification_outcome[0]:
+                    with get_session_with_current_tenant() as db_session:
+                        update_document_kg_stage(
+                            db_session,
+                            document_id,
+                            KGStage.DO_NOT_EXTRACT,
+                        )
+                        db_session.commit()
+                    continue
                 classification_result = classification_outcome[1]
                 if classification_result.classification_decision:
                     document_id = classification_result.document_id
