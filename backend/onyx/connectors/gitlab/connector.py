@@ -6,6 +6,7 @@ from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+from typing import TypeVar
 
 import gitlab
 import pytz
@@ -24,6 +25,8 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
+T = TypeVar("T")
+
 
 logger = setup_logger()
 
@@ -36,9 +39,7 @@ exclude_patterns = [
 ]
 
 
-def _batch_gitlab_objects(
-    git_objs: Iterable[Any], batch_size: int
-) -> Iterator[list[Any]]:
+def _batch_gitlab_objects(git_objs: Iterable[T], batch_size: int) -> Iterator[list[T]]:
     it = iter(git_objs)
     while True:
         batch = list(itertools.islice(it, batch_size))
@@ -154,7 +155,7 @@ class GitlabConnector(LoadConnector, PollConnector):
     ) -> GenerateDocumentsOutput:
         if self.gitlab_client is None:
             raise ConnectorMissingCredentialError("Gitlab")
-        project: gitlab.Project = self.gitlab_client.projects.get(
+        project: Project = self.gitlab_client.projects.get(
             f"{self.project_owner}/{self.project_name}"
         )
 
@@ -189,7 +190,10 @@ class GitlabConnector(LoadConnector, PollConnector):
 
         if self.include_mrs:
             merge_requests = project.mergerequests.list(
-                state=self.state_filter, order_by="updated_at", sort="desc"
+                state=self.state_filter,
+                order_by="updated_at",
+                sort="desc",
+                iterator=True,
             )
 
             for mr_batch in _batch_gitlab_objects(merge_requests, self.batch_size):
@@ -209,7 +213,7 @@ class GitlabConnector(LoadConnector, PollConnector):
                 yield mr_doc_batch
 
         if self.include_issues:
-            issues = project.issues.list(state=self.state_filter)
+            issues = project.issues.list(state=self.state_filter, iterator=True)
 
             for issue_batch in _batch_gitlab_objects(issues, self.batch_size):
                 issue_doc_batch: list[Document] = []
@@ -235,8 +239,8 @@ class GitlabConnector(LoadConnector, PollConnector):
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        start_datetime = datetime.utcfromtimestamp(start)
-        end_datetime = datetime.utcfromtimestamp(end)
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
         return self._fetch_from_gitlab(start_datetime, end_datetime)
 
 

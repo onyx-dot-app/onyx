@@ -60,7 +60,7 @@ pycryptodome==3.19.1
 pydantic==2.8.2
 PyGithub==2.5.0
 python-dateutil==2.8.2
-python-gitlab==3.9.0
+python-gitlab==5.6.0
 python-pptx==0.6.23
 pypdf==5.4.0
 pytest-mock==3.12.0
