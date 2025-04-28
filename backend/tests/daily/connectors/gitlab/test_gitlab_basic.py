@@ -36,8 +36,7 @@ def test_gitlab_connector_basic(gitlab_connector: GitlabConnector) -> None:
     doc_batches = gitlab_connector.load_from_state()
     docs = list(itertools.chain(*doc_batches))
     # Assert right number of docs - Adjust if necessary based on test repo state
-    # print(f"Found {len(docs)} documents.") # Keep this commented unless debugging
-    # assert len(docs) == 79 # The exact number might fluctuate slightly
+    assert len(docs) == 79
 
     # Find one of each type to validate
     validated_mr = False
