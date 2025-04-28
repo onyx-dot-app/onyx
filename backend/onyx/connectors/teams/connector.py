@@ -39,7 +39,7 @@ def get_created_datetime(chat_message: ChatMessage) -> datetime:
 
 def _extract_channel_members(channel: Channel) -> list[BasicExpertInfo]:
     channel_members_list: list[BasicExpertInfo] = []
-    members = channel.members.get().execute_query_retry()
+    members = channel.members.get_all().execute_query_retry()
     for member in members:
         channel_members_list.append(BasicExpertInfo(display_name=member.display_name))
     return channel_members_list
@@ -56,7 +56,7 @@ def _get_threads_from_channel(
     if end and end.tzinfo is None:
         end = end.replace(tzinfo=timezone.utc)
 
-    query = channel.messages.get()
+    query = channel.messages.get_all()
     base_messages: list[ChatMessage] = query.execute_query_retry()
 
     threads: list[list[ChatMessage]] = []
@@ -87,7 +87,7 @@ def _get_channels_from_teams(
 ) -> list[Channel]:
     channels_list: list[Channel] = []
     for team in teams:
-        query = team.channels.get()
+        query = team.channels.get_all()
         channels = query.execute_query_retry()
         channels_list.extend(channels)
 
