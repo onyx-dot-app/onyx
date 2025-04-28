@@ -746,3 +746,8 @@ IMAGE_ANALYSIS_SYSTEM_PROMPT = os.environ.get(
 DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
+
+# Database User Configuration
+DB_USER_USERNAME = os.getenv("DB_USER_USERNAME", "kg_readonly")
+DB_USER_PASSWORD = os.getenv("DB_USER_PASSWORD", "")
+DB_USER_DATABASE = os.getenv("DB_USER_DATABASE", "postgres")

@@ -66,12 +66,18 @@ def create_views(
     db_session.execute(allowed_docs_view)
     db_session.execute(kg_relationships_view)
 
+    grant_connect = text(
+        f"GRANT CONNECT ON DATABASE postgres TO {KG_READONLY_DB_USER};"
+    )
+
     grant_allowed_docs = text(
         f"GRANT SELECT ON {allowed_docs_view_name} TO {KG_READONLY_DB_USER}"
     )
+
     grant_kg_relationships = text(
         f"GRANT SELECT ON {kg_relationships_view_name} TO {KG_READONLY_DB_USER}"
     )
+    db_session.execute(grant_connect)
     db_session.execute(grant_allowed_docs)
     db_session.execute(grant_kg_relationships)
 
@@ -100,8 +106,14 @@ def drop_views(
     revoke_allowed_docs = text(
         f"REVOKE SELECT ON {allowed_docs_view_name} FROM {KG_READONLY_DB_USER}"
     )
+
+    revoke_connect = text(
+        f"REVOKE CONNECT ON DATABASE postgres FROM {KG_READONLY_DB_USER}"
+    )
+
     db_session.execute(revoke_kg_relationships)
     db_session.execute(revoke_allowed_docs)
+    db_session.execute(revoke_connect)
 
     # Drop the views in reverse order of creation to handle dependencies
     drop_kg_relationships = text(f"DROP VIEW IF EXISTS {kg_relationships_view_name}")

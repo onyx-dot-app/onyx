@@ -102,7 +102,6 @@ from onyx.kg.clustering.incremental_cluster_updates import (
     kg_incremental_cluster_updates,
 )
 from onyx.kg.clustering.initial_clustering import kg_clustering
-from onyx.kg.configuration import create_kg_readonly_user
 from onyx.kg.configuration import populate_default_account_employee_definitions
 from onyx.kg.configuration import populate_default_grounded_entity_types
 from onyx.kg.extractions.extraction_processing import kg_extraction
@@ -607,10 +606,6 @@ def stream_chat_message_objects(
         elif new_msg_req.message == "kg_setup":
             populate_default_grounded_entity_types()
             populate_default_account_employee_definitions()
-            # TODO the following MUST be moved to the proper spot
-            # ... needs to be set up once only also in multi-tenant mode
-            # must be part of app setup/config, not the tenant config
-            create_kg_readonly_user()
             raise Exception("KG setup done")
 
     try:
