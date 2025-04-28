@@ -73,7 +73,7 @@ def get_task_with_id(
 def mark_task_as_started_with_id(
     db_session: Session,
     task_id: str,
-):
+) -> None:
     task = get_task_with_id(db_session=db_session, task_id=task_id)
     if not task:
         raise RuntimeError(f"A task with the task-id {task_id} does not exist")
@@ -86,7 +86,7 @@ def mark_task_as_finished_with_id(
     db_session: Session,
     task_id: str,
     success: bool = True,
-):
+) -> None:
     task = get_task_with_id(db_session=db_session, task_id=task_id)
     if not task:
         raise RuntimeError(f"A task with the task-id {task_id} does not exist")

@@ -45,7 +45,7 @@ ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 
 def assert_query_history_is_enabled(
     disallowed: list[QueryHistoryType] = [QueryHistoryType.DISABLED],
-):
+) -> None:
     if ONYX_QUERY_HISTORY_TYPE in disallowed:
         raise HTTPException(
             status_code=HTTPStatus.FORBIDDEN,
@@ -246,7 +246,7 @@ def start_query_history_export(
     db_session: Session = Depends(get_session),
     start: datetime | None = None,
     end: datetime | None = None,
-):
+) -> dict[str, str]:
     assert_query_history_is_enabled()
 
     start = start or datetime.fromtimestamp(0, tz=timezone.utc)
@@ -267,7 +267,7 @@ def get_query_history_export_status(
     task_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-):
+) -> dict[str, str]:
     assert_query_history_is_enabled()
 
     task = get_task_with_id(db_session=db_session, task_id=task_id)
@@ -286,7 +286,7 @@ def download_query_history_csv(
     task_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-):
+) -> StreamingResponse:
     assert_query_history_is_enabled()
 
     task = get_task_with_id(db_session=db_session, task_id=task_id)

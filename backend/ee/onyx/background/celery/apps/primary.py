@@ -104,7 +104,7 @@ def autogenerate_usage_report_task(*, tenant_id: str) -> None:
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
 )
-def export_query_history_task(self: Task, *, start: datetime, end: datetime):
+def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> None:
     # Importing here because importing in the global namespace causes a circular dependency issue.
     from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
     from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
