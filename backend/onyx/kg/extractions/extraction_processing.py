@@ -504,6 +504,14 @@ def kg_extraction(
                             else:
                                 connector_aggregated_kg_extractions.terms[term] += count
 
+                        for (
+                            document_id,
+                            attributes,
+                        ) in aggregated_batch_extractions.attributes.items():
+                            connector_aggregated_kg_extractions.attributes[
+                                document_id
+                            ] = attributes
+
                         connector_extraction_stats.append(
                             ConnectorExtractionStats(
                                 connector_id=connector_id,
