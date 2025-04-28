@@ -76,45 +76,51 @@ def kg_clustering(
 
             db_session.commit()
 
-            transferred_entities.append(added_entity.id_name)
+            if added_entity:
+                transferred_entities.append(added_entity.id_name)
 
     transferred_relationship_types: list[str] = []
     for relationship_type in relationship_types:
         with get_session_with_current_tenant() as db_session:
-            added_relationship_type = add_relationship_type(
+            added_relationship_type_id_name = add_relationship_type(
+                db_session,
                 KGStage.NORMALIZED,
-                source_entity_type=relationship_type.source_entity_type,
-                relationship_type=relationship_type.relationship_type,
-                target_entity_type=relationship_type.target_entity_type,
-                extraction_count=relationship_type.extraction_count,
+                source_entity_type=relationship_type.source_entity_type_id_name,
+                relationship_type=relationship_type.type,
+                target_entity_type=relationship_type.target_entity_type_id_name,
+                extraction_count=relationship_type.occurances or 1,
             )
 
             db_session.commit()
 
-            transferred_relationship_types.append(added_relationship_type.id_name)
+            transferred_relationship_types.append(added_relationship_type_id_name)
 
     transferred_relationships: list[str] = []
     for relationship in relationships:
         with get_session_with_current_tenant() as db_session:
             try:
                 added_relationship = add_relationship(
+                    db_session,
                     KGStage.NORMALIZED,
-                    source_entity_type=relationship.source_entity_type,
-                    relationship_type=relationship.relationship_type,
-                    target_entity_type=relationship.target_entity_type,
-                    extraction_count=relationship.extraction_count,
+                    relationship_id_name=relationship.id_name,
+                    source_document_id=relationship.source_document or "",
+                    occurances=relationship.occurances or 1,
                 )
 
-                source_documents_w_successful_transfers.add(
-                    relationship.source_document
-                )
+                if relationship.source_document:
+                    source_documents_w_successful_transfers.add(
+                        relationship.source_document
+                    )
 
                 db_session.commit()
 
                 transferred_relationships.append(added_relationship.id_name)
 
             except Exception as e:
-                source_documents_w_failed_transfers.add(relationship.source_document)
+                if relationship.source_document:
+                    source_documents_w_failed_transfers.add(
+                        relationship.source_document
+                    )
                 logger.error(
                     f"Error transferring relationship {relationship.id_name}: {e}"
                 )

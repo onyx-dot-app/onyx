@@ -1093,3 +1093,23 @@ def reset_extracted_document_kg_stages(db_session: Session) -> int:
     )
     result = db_session.execute(stmt)
     return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def reset_normalized_document_kg_stages(db_session: Session) -> int:
+    """Reset the KG stage only of documents back to NOT_STARTED.
+    Part of reset flow for documemnts that have been normalized.
+    This essentialy requires that the extractions are still available.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage == KGStage.NORMALIZED)
+        .values(kg_stage=KGStage.EXTRACTED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0

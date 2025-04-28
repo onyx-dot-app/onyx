@@ -3,8 +3,8 @@ from typing import List
 from typing import Union
 
 from sqlalchemy import func
-from sqlalchemy import insert
 from sqlalchemy import or_
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from onyx.db.models import KGRelationship
@@ -76,7 +76,7 @@ def add_relationship(
 
     # Use on_conflict_do_update to handle conflicts
     stmt = (
-        insert(type(relationship))
+        postgresql.insert(type(relationship))
         .values(**relationship_data)
         .on_conflict_do_update(
             constraint=(
@@ -85,7 +85,8 @@ def add_relationship(
                 else "kg_relationship_extraction_staging_pkey"
             ),
             set_={
-                "occurances": relationship_data["occurances"] + (occurances or 1),
+                "occurances": int(str(relationship_data["occurances"] or 0))
+                + (occurances or 1),
                 "time_updated": func.now(),
             },
         )
@@ -95,18 +96,26 @@ def add_relationship(
     db_session.flush()  # Flush to get any DB errors early
 
     # Fetch the updated/inserted record
+    result: Union[KGRelationship, KGRelationshipExtractionStaging, None] = None
     if kg_stage == KGStage.EXTRACTED:
-        return (
+        result = (
             db_session.query(KGRelationshipExtractionStaging)
             .filter_by(id_name=relationship_id_name, source_document=source_document_id)
             .first()
         )
     else:
-        return (
+        result = (
             db_session.query(KGRelationship)
             .filter_by(id_name=relationship_id_name, source_document=source_document_id)
             .first()
         )
+
+    if result is None:
+        raise ValueError(
+            f"Failed to create or update relationship with id_name: {relationship_id_name}"
+        )
+
+    return result
 
 
 def add_or_increment_relationship(
@@ -179,7 +188,7 @@ def add_relationship_type(
     target_entity_type: str,
     definition: bool = False,
     extraction_count: int = 0,
-) -> Union["KGRelationshipType", "KGRelationshipTypeExtractionStaging"]:
+) -> str:
     """
     Add a new relationship type to the database.
 
@@ -222,7 +231,7 @@ def add_relationship_type(
 
     # Use on_conflict_do_update to handle conflicts
     stmt = (
-        insert(type(rel_type))
+        postgresql.insert(type(rel_type))
         .values(**relationship_data)
         .on_conflict_do_update(
             index_elements=["id_name"],
@@ -235,7 +244,8 @@ def add_relationship_type(
                     "target_entity_type_id_name"
                 ],
                 "definition": relationship_data["definition"],
-                "occurances": relationship_data["occurances"] + extraction_count,
+                "occurances": int(str(relationship_data["occurances"] or 0))
+                + extraction_count,
                 "type": relationship_data["type"],
                 "active": relationship_data["active"],
                 "time_updated": func.now(),
@@ -246,15 +256,7 @@ def add_relationship_type(
     db_session.execute(stmt)
     db_session.flush()  # Flush to get any DB errors early
 
-    # Fetch the updated/inserted record
-    if kg_stage == KGStage.EXTRACTED:
-        return (
-            db_session.query(KGRelationshipTypeExtractionStaging)
-            .filter_by(id_name=id_name)
-            .first()
-        )
-    else:
-        return db_session.query(KGRelationshipType).filter_by(id_name=id_name).first()
+    return id_name
 
 
 def get_all_relationship_types(
@@ -331,7 +333,7 @@ def delete_relationships_by_id_names(
 
 
 def delete_relationship_types_by_id_names(
-    db_session: Session, id_names: list[str]
+    db_session: Session, id_names: list[str], kg_stage: KGStage
 ) -> int:
     """
     Delete relationship types from the database based on a list of id_names.
@@ -346,11 +348,18 @@ def delete_relationship_types_by_id_names(
     Raises:
         sqlalchemy.exc.SQLAlchemyError: If there's an error during deletion
     """
-    deleted_count = (
-        db_session.query(KGRelationshipType)
-        .filter(KGRelationshipType.id_name.in_(id_names))
-        .delete(synchronize_session=False)
-    )
+    if kg_stage == KGStage.EXTRACTED:
+        deleted_count = (
+            db_session.query(KGRelationshipTypeExtractionStaging)
+            .filter(KGRelationshipTypeExtractionStaging.id_name.in_(id_names))
+            .delete(synchronize_session=False)
+        )
+    elif kg_stage == KGStage.NORMALIZED:
+        deleted_count = (
+            db_session.query(KGRelationshipType)
+            .filter(KGRelationshipType.id_name.in_(id_names))
+            .delete(synchronize_session=False)
+        )
 
     db_session.flush()  # Flush to ensure deletion is processed
     return deleted_count

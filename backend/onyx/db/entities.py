@@ -167,7 +167,9 @@ def get_grounded_entities_by_types(
     )
 
 
-def delete_entities_by_id_names(db_session: Session, id_names: list[str]) -> int:
+def delete_entities_by_id_names(
+    db_session: Session, id_names: list[str], kg_stage: KGStage
+) -> int:
     """
     Delete entities from the database based on a list of id_names.
 
@@ -178,19 +180,28 @@ def delete_entities_by_id_names(db_session: Session, id_names: list[str]) -> int
     Returns:
         Number of entities deleted
     """
-    deleted_count = (
-        db_session.query(KGEntity)
-        .filter(KGEntity.id_name.in_(id_names))
-        .delete(synchronize_session=False)
-    )
+    if kg_stage == KGStage.EXTRACTED:
+        deleted_count = (
+            db_session.query(KGEntityExtractionStaging)
+            .filter(KGEntityExtractionStaging.id_name.in_(id_names))
+            .delete(synchronize_session=False)
+        )
+    elif kg_stage == KGStage.NORMALIZED:
+        deleted_count = (
+            db_session.query(KGEntity)
+            .filter(KGEntity.id_name.in_(id_names))
+            .delete(synchronize_session=False)
+        )
+    else:
+        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
 
     db_session.flush()  # Flush to ensure deletion is processed
     return deleted_count
 
 
 def get_entities_for_types(
-    db_session: Session, entity_types: List[str]
-) -> List[KGEntity]:
+    db_session: Session, entity_types: List[str], kg_stage: KGStage
+) -> List[KGEntity] | List[KGEntityExtractionStaging]:
     """Get all entities that belong to the specified entity types.
 
     Args:
@@ -200,16 +211,29 @@ def get_entities_for_types(
     Returns:
         List of KGEntity objects belonging to the specified entity types
     """
-    return (
-        db_session.query(KGEntity)
-        .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
-        .filter(KGEntity.entity_type_id_name.in_(entity_types))
-        .all()
-    )
+    if kg_stage == KGStage.EXTRACTED:
+        return (
+            db_session.query(KGEntityExtractionStaging)
+            .join(
+                KGEntityType,
+                KGEntityExtractionStaging.entity_type_id_name == KGEntityType.id_name,
+            )
+            .filter(KGEntityExtractionStaging.entity_type_id_name.in_(entity_types))
+            .all()
+        )
+    elif kg_stage == KGStage.NORMALIZED:
+        return (
+            db_session.query(KGEntity)
+            .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
+            .filter(KGEntity.entity_type_id_name.in_(entity_types))
+            .all()
+        )
+    else:
+        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
 
 
 def get_entities_by_document_ids(
-    db_session: Session, document_ids: list[str]
+    db_session: Session, document_ids: list[str], kg_stage: KGStage
 ) -> List[str]:
     """Get all entity id_names that belong to the specified document ids.
 
@@ -220,9 +244,15 @@ def get_entities_by_document_ids(
     Returns:
         List of entity id_names belonging to the specified document ids
     """
-    document_ids = [id.lower() for id in document_ids]
-    stmt = select(KGEntity.id_name).where(
-        func.lower(KGEntity.document_id).in_(document_ids)
-    )
+    if kg_stage == KGStage.EXTRACTED:
+        stmt = select(KGEntityExtractionStaging.id_name).where(
+            func.lower(KGEntityExtractionStaging.document_id).in_(document_ids)
+        )
+    elif kg_stage == KGStage.NORMALIZED:
+        stmt = select(KGEntity.id_name).where(
+            func.lower(KGEntity.document_id).in_(document_ids)
+        )
+    else:
+        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
     result = db_session.execute(stmt).scalars().all()
     return list(result)
