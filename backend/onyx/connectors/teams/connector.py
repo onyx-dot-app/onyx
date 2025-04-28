@@ -27,6 +27,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -218,24 +219,66 @@ class TeamsConnector(LoadConnector, PollConnector):
         if self.graph_client is None:
             raise ConnectorMissingCredentialError("Teams")
 
-        teams_list: list[Team] = []
+        teams: list[Team] = []
+        try:
+            # Use get_all() to handle pagination automatically
+            if not self.requested_team_list:
+                teams = self.graph_client.teams.get_all().execute_query()
+            else:
+                # Construct filter using proper Microsoft Graph API syntax
+                filter_conditions = " or ".join(
+                    [
+                        f"displayName eq '{team_name}'"
+                        for team_name in self.requested_team_list
+                    ]
+                )
 
-        teams = self.graph_client.teams.get().execute_query_retry()
+                # Initialize pagination variables
+                page_size = 100  # Maximum allowed by Microsoft Graph API
+                skip = 0
 
-        if len(self.requested_team_list) > 0:
-            adjusted_request_strings = [
-                requested_team.replace(" ", "")
-                for requested_team in self.requested_team_list
-            ]
-            teams_list = [
-                team
-                for team in teams
-                if team.display_name.replace(" ", "") in adjusted_request_strings
-            ]
-        else:
-            teams_list.extend(teams)
+                while True:
+                    # Get a page of teams with the filter
+                    teams_page = (
+                        self.graph_client.teams.get()
+                        .filter(filter_conditions)
+                        .top(page_size)
+                        .skip(skip)
+                        .execute_query()
+                    )
 
-        return teams_list
+                    if not teams_page:
+                        break
+
+                    teams.extend(teams_page)
+                    skip += page_size
+
+                    # If we got fewer results than the page size, we've reached the end
+                    if len(teams_page) < page_size:
+                        break
+
+                # Validate that we found all requested teams
+                if len(teams) != len(self.requested_team_list):
+                    found_team_names = {
+                        team.properties["displayName"] for team in teams
+                    }
+                    missing_teams = set(self.requested_team_list) - found_team_names
+                    raise ConnectorValidationError(
+                        f"Requested teams not found: {list(missing_teams)}"
+                    )
+        except ClientRequestException as e:
+            if e.response.status_code == 403:
+                raise InsufficientPermissionsError(
+                    "App lacks required permissions to read Teams. "
+                    "Please ensure the app has the following permissions: "
+                    "Team.ReadBasic.All, TeamMember.Read.All, "
+                    "Channel.ReadBasic.All, ChannelMessage.Read.All, "
+                    "Group.Read.All, TeamSettings.ReadWrite.All, "
+                    "ChannelMember.Read.All, ChannelSettings.ReadWrite.All"
+                )
+            raise
+
+        return teams
 
     def _fetch_from_teams(
         self, start: datetime | None = None, end: datetime | None = None
@@ -262,7 +305,7 @@ class TeamsConnector(LoadConnector, PollConnector):
         # goes over channels, converts them into Document objects and then yields them in batches
         doc_batch: list[Document] = []
         for channel in channels:
-            logger.debug(f"Fetching threads from channel: {channel.id}")
+            logger.info(f"Fetching threads from channel: {channel.id}")
             thread_list = _get_threads_from_channel(channel, start=start, end=end)
             for thread in thread_list:
                 converted_doc = _convert_thread_to_document(channel, thread)
@@ -290,7 +333,8 @@ class TeamsConnector(LoadConnector, PollConnector):
 
         try:
             # Minimal call to confirm we can retrieve Teams
-            found_teams = self._get_all_teams()
+            # make sure it doesn't take forever, since this is a syncronous call
+            found_teams = run_with_timeout(10, self._get_all_teams)
 
         except ClientRequestException as e:
             status_code = e.response.status_code
