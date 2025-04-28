@@ -9,6 +9,7 @@ def reset_normalization_kg_index() -> None:
     """
     Resets the knowledge graph index.
     """
+
     with get_session_with_current_tenant() as db_session:
         db_session.query(KGRelationship).delete()
         db_session.query(KGEntity).delete()

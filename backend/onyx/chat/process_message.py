@@ -574,24 +574,24 @@ def stream_chat_message_objects(
     # TODO: INITIAL DEV ONLY!!!
 
     if USE_KG_APPROACH:
-        if new_msg_req.message == "ee":
+        if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)
 
             raise Exception("Extractions done")
 
-        elif new_msg_req.message == "cc":
+        elif new_msg_req.message == "kg_c":
             kg_clustering(tenant_id, index_str)
             raise Exception("Clustering done")
 
-        elif new_msg_req.message == "rs_full":
+        elif new_msg_req.message == "kg_rs_full":
             reset_full_kg_index()
             raise Exception("Full KG index reset done")
 
-        elif new_msg_req.message == "rs_extraction":
+        elif new_msg_req.message == "kg_rs_extraction":
             reset_extraction_kg_index()
             raise Exception("Extraction KG index reset done")
 
-        elif new_msg_req.message == "rs_normalization":
+        elif new_msg_req.message == "kg_rs_normalization":
             reset_normalization_kg_index()
             raise Exception("Normalization KG index reset done")
 

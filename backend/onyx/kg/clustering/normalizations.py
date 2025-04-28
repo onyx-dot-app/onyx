@@ -9,6 +9,7 @@ from thefuzz import process  # type: ignore
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_entities_for_types
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
+from onyx.kg.models import KGStage
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
@@ -23,7 +24,9 @@ def _get_existing_normalized_entities(raw_entities: List[str]) -> List[str]:
     entity_types = list(set([entity.split(":")[0] for entity in raw_entities]))
 
     with get_session_with_current_tenant() as db_session:
-        entities = get_entities_for_types(db_session, entity_types)
+        entities = get_entities_for_types(
+            db_session, entity_types, kg_stage=KGStage.NORMALIZED
+        )
 
     return [entity.id_name for entity in entities]
 
