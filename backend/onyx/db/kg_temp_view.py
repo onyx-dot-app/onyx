@@ -93,6 +93,16 @@ def drop_views(
         allowed_docs_view_name: Name of the allowed_docs view
         kg_relationships_view_name: Name of the kg_relationships view
     """
+    # First revoke access from the readonly user
+    revoke_kg_relationships = text(
+        f"REVOKE SELECT ON {kg_relationships_view_name} FROM {KG_READONLY_DB_USER}"
+    )
+    revoke_allowed_docs = text(
+        f"REVOKE SELECT ON {allowed_docs_view_name} FROM {KG_READONLY_DB_USER}"
+    )
+    db_session.execute(revoke_kg_relationships)
+    db_session.execute(revoke_allowed_docs)
+
     # Drop the views in reverse order of creation to handle dependencies
     drop_kg_relationships = text(f"DROP VIEW IF EXISTS {kg_relationships_view_name}")
     drop_allowed_docs = text(f"DROP VIEW IF EXISTS {allowed_docs_view_name}")
