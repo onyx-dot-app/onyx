@@ -49,6 +49,7 @@ from onyx.connectors.mock_connector.connector import MockConnector
 from onyx.connectors.models import InputType
 from onyx.connectors.notion.connector import NotionConnector
 from onyx.connectors.onyx_jira.connector import JiraConnector
+from onyx.connectors.postgres.connector import PostgresConnector
 from onyx.connectors.productboard.connector import ProductboardConnector
 from onyx.connectors.redmine.connector import RedmineConnector
 from onyx.connectors.salesforce.connector import SalesforceConnector
@@ -130,6 +131,7 @@ def identify_connector_class(
         DocumentSource.MAILRU: MailRuConnector,
         DocumentSource.MINIO: MinioConnector,
         DocumentSource.YANDEX: YandexMailConnector,
+        DocumentSource.POSTGRES: PostgresConnector,
         # just for integration tests
         DocumentSource.MOCK_CONNECTOR: MockConnector,
     }
