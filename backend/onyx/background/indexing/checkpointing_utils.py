@@ -54,18 +54,15 @@ def save_checkpoint(
 
 def load_checkpoint(
     db_session: Session, index_attempt_id: int, connector: BaseConnector
-) -> ConnectorCheckpoint | None:
+) -> ConnectorCheckpoint:
     """Load a checkpoint for a given index attempt from the file store"""
     checkpoint_pointer = _build_checkpoint_pointer(index_attempt_id)
     file_store = get_default_file_store(db_session)
-    try:
-        checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
-        checkpoint_data = checkpoint_io.read().decode("utf-8")
-        if isinstance(connector, CheckpointedConnector):
-            return connector.validate_checkpoint_json(checkpoint_data)
-        return ConnectorCheckpoint.model_validate_json(checkpoint_data)
-    except RuntimeError:
-        return None
+    checkpoint_io = file_store.read_file(checkpoint_pointer, mode="rb")
+    checkpoint_data = checkpoint_io.read().decode("utf-8")
+    if isinstance(connector, CheckpointedConnector):
+        return connector.validate_checkpoint_json(checkpoint_data)
+    return ConnectorCheckpoint.model_validate_json(checkpoint_data)
 
 
 def get_latest_valid_checkpoint(
@@ -118,34 +115,33 @@ def get_latest_valid_checkpoint(
     )
 
     checkpoint = connector.build_dummy_checkpoint()
-    if latest_valid_checkpoint_candidate:
-        try:
-            previous_checkpoint = load_checkpoint(
-                db_session=db_session,
-                index_attempt_id=latest_valid_checkpoint_candidate.id,
-                connector=connector,
-            )
-        except Exception:
-            logger.exception(
-                f"Failed to load checkpoint from previous failed attempt with ID "
-                f"{latest_valid_checkpoint_candidate.id}."
-            )
-            previous_checkpoint = None
+    if latest_valid_checkpoint_candidate is None:
+        return checkpoint
 
-        if previous_checkpoint is not None:
-            logger.info(
-                f"Using checkpoint from previous failed attempt with ID "
-                f"{latest_valid_checkpoint_candidate.id}. Previous checkpoint: "
-                f"{previous_checkpoint}"
-            )
-            save_checkpoint(
-                db_session=db_session,
-                index_attempt_id=latest_valid_checkpoint_candidate.id,
-                checkpoint=previous_checkpoint,
-            )
-            checkpoint = previous_checkpoint
+    try:
+        previous_checkpoint = load_checkpoint(
+            db_session=db_session,
+            index_attempt_id=latest_valid_checkpoint_candidate.id,
+            connector=connector,
+        )
+    except Exception:
+        logger.exception(
+            f"Failed to load checkpoint from previous failed attempt with ID "
+            f"{latest_valid_checkpoint_candidate.id}. Falling back to default checkpoint."
+        )
+        return checkpoint
 
-    return checkpoint
+    logger.info(
+        f"Using checkpoint from previous failed attempt with ID "
+        f"{latest_valid_checkpoint_candidate.id}. Previous checkpoint: "
+        f"{previous_checkpoint}"
+    )
+    save_checkpoint(
+        db_session=db_session,
+        index_attempt_id=latest_valid_checkpoint_candidate.id,
+        checkpoint=previous_checkpoint,
+    )
+    return previous_checkpoint
 
 
 def get_index_attempts_with_old_checkpoints(

@@ -19,6 +19,7 @@ from onyx.connectors.confluence.utils import build_confluence_document_id
 from onyx.connectors.confluence.utils import convert_attachment_to_content
 from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import process_attachment
+from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
@@ -81,12 +82,8 @@ def _should_propagate_error(e: Exception) -> bool:
 
 
 class ConfluenceCheckpoint(ConnectorCheckpoint):
-    # Used for Confluence Cloud checkpointing
-    last_updated: SecondsSinceUnixEpoch
-    last_seen_doc_ids: list[str]  # avoid duplicate page processing
 
-    # used for Confluence Server checkpointing
-    next_start: int
+    next_page_url: str | None
 
 
 class ConfluenceConnector(
@@ -472,65 +469,53 @@ class ConfluenceConnector(
         checkpoint = copy.deepcopy(checkpoint)
 
         # use "start" when last_updated is 0 or for confluence server
-        start_ts = checkpoint.last_updated or start if self.is_cloud else start
-        page_query = self._construct_page_query(start_ts, end)
-        logger.debug(f"page_query: {page_query}")
+        start_ts = start
+        page_query_url = checkpoint.next_page_url or self._build_page_retrieval_url(
+            start_ts, end, self.batch_size
+        )
+        logger.debug(f"page_query_url: {page_query_url}")
 
-        prev_doc_ids = set(checkpoint.last_seen_doc_ids)
+        # store the next page start for confluence server, cursor for confluence cloud
+        def store_next_page_url(next_page_url: str) -> None:
+            print("STORING NEXT PAGE URL")
+            print(next_page_url)
+            checkpoint.next_page_url = next_page_url
 
-        # store the next page start for confluence server
-        def store_next_page_start(next_page_start: int) -> None:
-            checkpoint.next_start = next_page_start
-
-        new_doc_count = 0
-        # most requests will include a few pages to skip, so we limit each page to
-        # 2 * batch_size to only need a single request for most checkpoint runs
-        for page in self.confluence_client.paginated_cql_retrieval(
-            cql=page_query,
-            expand=",".join(_PAGE_EXPANSION_FIELDS),
-            limit=2 * self.batch_size,
-            start=checkpoint.next_start,
-            next_page_callback=store_next_page_start,
+        for page in self.confluence_client.paginated_page_retrieval(
+            cql_url=page_query_url,
+            limit=self.batch_size,
+            next_page_callback=store_next_page_url,
         ):
-            if page["id"] in prev_doc_ids:
-                logger.debug(f"Skipping duplicate page: {page['id']}")
-                continue
-            new_doc_count += 1
-            checkpoint.last_seen_doc_ids.append(page["id"])
             # Build doc from page
             doc_or_failure = self._convert_page_to_document(page)
 
             if isinstance(doc_or_failure, ConnectorFailure):
                 yield doc_or_failure
                 continue
-
-            new_ts = datetime_from_string(
-                page["history"]["lastUpdated"]["when"]
-            ).timestamp()
-            if self.is_cloud and new_ts < checkpoint.last_updated:
-                logger.warning(
-                    f"Confluence Cloud connector saw a page with an older "
-                    f"timestamp than the checkpoint: {new_ts} < {checkpoint.last_updated}"
-                )
-            checkpoint.last_updated = max(checkpoint.last_updated, new_ts)
             # Now get attachments for that page:
             doc_or_failure = self._fetch_page_attachments(page, doc_or_failure)
 
             # yield completed document (or failure)
             yield doc_or_failure
 
-            # create checkpoint after enough documents have been processed
-            if new_doc_count >= self.batch_size:
-                checkpoint.last_seen_doc_ids = checkpoint.last_seen_doc_ids[
-                    -MAX_CACHED_IDS:
-                ]
-                checkpoint.last_updated = max(
-                    start_ts or 0, checkpoint.last_updated - TIME_OFFSET
-                )
+            # Create checkpoint once a full page of results is returned
+            if checkpoint.next_page_url and checkpoint.next_page_url != page_query_url:
                 return checkpoint
 
         checkpoint.has_more = False
         return checkpoint
+
+    def _build_page_retrieval_url(
+        self,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
+        limit: int,
+    ) -> str:
+        page_query = self._construct_page_query(start, end)
+        cql_url = self.confluence_client.build_cql_url(
+            page_query, expand=",".join(_PAGE_EXPANSION_FIELDS)
+        )
+        return update_param_in_path(cql_url, "limit", str(limit))
 
     @override
     def load_from_checkpoint(
@@ -554,9 +539,7 @@ class ConfluenceConnector(
 
     @override
     def build_dummy_checkpoint(self) -> ConfluenceCheckpoint:
-        return ConfluenceCheckpoint(
-            last_updated=0, next_start=0, has_more=True, last_seen_doc_ids=[]
-        )
+        return ConfluenceCheckpoint(has_more=True, next_page_url=None)
 
     @override
     def validate_checkpoint_json(self, checkpoint_json: str) -> ConfluenceCheckpoint:

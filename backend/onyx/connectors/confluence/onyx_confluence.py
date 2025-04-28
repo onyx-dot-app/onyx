@@ -30,6 +30,7 @@ from onyx.connectors.interfaces import CredentialsProviderInterface
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -236,7 +237,12 @@ class OnyxConfluence:
                         **merged_kwargs,
                     )
 
-            spaces = confluence_client_with_minimal_retries.get_all_spaces(limit=1)
+            # This call sometimes hangs indefinitely, so we run it in a timeout
+            spaces = run_with_timeout(
+                timeout=10,
+                func=confluence_client_with_minimal_retries.get_all_spaces,
+                limit=1,
+            )
 
             # uncomment the following for testing
             # the following is an attempt to retrieve the user's timezone
@@ -418,8 +424,8 @@ class OnyxConfluence:
         self,
         url_suffix: str,
         limit: int | None = None,
-        # Called with the "start" param to use to resume from the last retrieved page
-        next_page_callback: Callable[[int], None] | None = None,
+        # Called with the next url to use to get the next page
+        next_page_callback: Callable[[str], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
         This will paginate through the top level query.
@@ -500,17 +506,23 @@ class OnyxConfluence:
             # the configured server, it will artificially limit the amount of
             # results returned BUT will not apply this to the start parameter.
             # This will cause us to miss results.
-            updated_start = get_start_param_from_url(url_suffix)
-
-            for result in results:
-                updated_start += 1
-                if next_page_callback:
-                    print(f"updated_start: {updated_start}, url_suffix: {url_suffix}")
-                    next_page_callback(updated_start)
-                yield result
-
+            # print(f"next_response: {next_response}")
             old_url_suffix = url_suffix
+            updated_start = get_start_param_from_url(old_url_suffix)
             url_suffix = cast(str, next_response.get("_links", {}).get("next", ""))
+            for i, result in enumerate(results):
+                updated_start += 1
+                if url_suffix and next_page_callback and i == len(results) - 1:
+                    # update the url if we're on the last result in the page
+                    if not self._is_cloud:
+                        # If confluence claims there are more results, we update the start param
+                        # based on how many results were returned and try again.
+                        url_suffix = update_param_in_path(
+                            url_suffix, "start", str(updated_start)
+                        )
+                    # notify the caller of the new url
+                    next_page_callback(url_suffix)
+                yield result
 
             # we've observed that Confluence sometimes returns a next link despite giving
             # 0 results. This is a bug with Confluence, so we need to check for it and
@@ -521,32 +533,42 @@ class OnyxConfluence:
                     "being present. Stopping pagination."
                 )
                 break
-            elif url_suffix and "start" in url_suffix:
-                # If confluence claims there are more results, we update the start param
-                # based on how many results were returned and try again
-                url_suffix = update_param_in_path(
-                    old_url_suffix, "start", str(updated_start)
-                )
+
+    def build_cql_url(self, cql: str, expand: str | None = None) -> str:
+        expand_string = f"&expand={expand}" if expand else ""
+        return f"rest/api/content/search?cql={cql}{expand_string}"
 
     def paginated_cql_retrieval(
         self,
         cql: str,
         expand: str | None = None,
         limit: int | None = None,
-        start: int = 0,
-        # Called with the "start" param to use to resume from the last retrieved page
-        next_page_callback: Callable[[int], None] | None = None,
     ) -> Iterator[dict[str, Any]]:
         """
         The content/search endpoint can be used to fetch pages, attachments, and comments.
         """
-        expand_string = f"&expand={expand}" if expand else ""
-        cql_url = f"rest/api/content/search?cql={cql}{expand_string}"
-        if not self._is_cloud and start:
-            cql_url = update_param_in_path(cql_url, "start", str(start))
-        yield from self._paginate_url(
-            cql_url, limit, next_page_callback=next_page_callback
-        )
+        cql_url = self.build_cql_url(cql, expand)
+        yield from self._paginate_url(cql_url, limit)
+
+    def paginated_page_retrieval(
+        self,
+        cql_url: str,
+        limit: int,
+        # Called with the next url to use to get the next page
+        next_page_callback: Callable[[str], None] | None = None,
+    ) -> Iterator[dict[str, Any]]:
+        """
+        Error handling (and testing) wrapper for _paginate_url,
+        because the current approach to page retrieval involves handling the
+        next page links manually.
+        """
+        try:
+            yield from self._paginate_url(
+                cql_url, limit=limit, next_page_callback=next_page_callback
+            )
+        except Exception as e:
+            logger.exception(f"Error in paginated_page_retrieval: {e}")
+            raise e
 
     def cql_paginate_all_expansions(
         self,
