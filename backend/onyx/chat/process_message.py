@@ -99,6 +99,8 @@ from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
 from onyx.kg.clustering.clustering import kg_clustering
+from onyx.kg.configuration import populate_default_account_employee_definitions
+from onyx.kg.configuration import populate_default_grounded_entity_types
 from onyx.kg.extractions.extraction_processing import kg_extraction
 from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
 from onyx.kg.resets.reset_index import reset_full_kg_index
@@ -587,6 +589,11 @@ def stream_chat_message_objects(
         elif new_msg_req.message == "rs_extraction":
             reset_extraction_kg_index()
             raise Exception("Extraction KG index reset done")
+
+        elif new_msg_req.message == "kg_setup":
+            populate_default_grounded_entity_types()
+            populate_default_account_employee_definitions()
+            raise Exception("KG setup done")
 
     try:
         # Move these variables inside the try block

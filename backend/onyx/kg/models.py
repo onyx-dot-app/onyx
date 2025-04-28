@@ -161,3 +161,23 @@ class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
     converted_relationships_to_attributes: dict[str, list[str]]
     company_participant_emails: set[str]
     account_participant_emails: set[str]
+
+
+class KGGroundingType(str, Enum):
+    UNGROUNDED = "ungrounded"
+    GROUNDED = "grounded"
+
+
+class KGDefaultEntityDefinition(BaseModel):
+    description: str
+    grounding: KGGroundingType
+    active: bool = False
+    grounded_source_name: str | None
+    attributes: dict = {}
+    entity_values: dict = {}
+
+
+class KGEntityInformation(BaseModel):
+    entity_type: str
+    entity_name: str
+    occurances: int

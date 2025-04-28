@@ -1,7 +1,7 @@
 """create knowlege graph tables
 
 Revision ID: 495cb26ce93e
-Revises: 7a70b7664e37
+Revises: 47a07e1a38f1
 Create Date: 2025-03-19 08:51:14.341989
 
 """
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "495cb26ce93e"
-down_revision = "7a70b7664e37"
+down_revision = "47a07e1a38f1"
 branch_labels = None
 depends_on = None
 
@@ -23,7 +23,6 @@ def upgrade() -> None:
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("description", sa.String(), nullable=True),
         sa.Column("grounding", sa.String(), nullable=False),
-        sa.Column("clustering", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column(
             "attributes",
             postgresql.JSONB,
@@ -31,11 +30,8 @@ def upgrade() -> None:
             server_default="{}",
         ),
         sa.Column("occurances", sa.Integer(), nullable=True),
-        sa.Column(
-            "extraction_sources", postgresql.JSONB, nullable=False, server_default="{}"
-        ),
         sa.Column("active", sa.Boolean(), nullable=False, default=False),
-        sa.Column("ge_deep_extraction", sa.Boolean(), nullable=False, default=False),
+        sa.Column("deep_extraction", sa.Boolean(), nullable=False, default=False),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -46,9 +42,7 @@ def upgrade() -> None:
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
         sa.Column("grounded_source_name", sa.String(), nullable=True, unique=True),
-        sa.Column(
-            "ge_determine_instructions", postgresql.ARRAY(sa.String()), nullable=True
-        ),
+        sa.Column("entity_values", postgresql.ARRAY(sa.String()), nullable=True),
         sa.Column("ge_grounding_signature", sa.String(), nullable=True),
     )
 
@@ -64,7 +58,6 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("clustering", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("occurances", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
@@ -97,7 +90,6 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("clustering", postgresql.JSONB, nullable=False, server_default="{}"),
         sa.Column("occurances", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),

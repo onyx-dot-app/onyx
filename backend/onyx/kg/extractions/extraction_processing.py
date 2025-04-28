@@ -6,7 +6,7 @@ from typing import Dict
 
 from langchain_core.messages import HumanMessage
 
-from onyx.configs.kg_configs import KG_OWN_COMPANY
+from onyx.configs.kg_configs import KG_VENDOR
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
@@ -92,7 +92,7 @@ def _get_classification_extraction_instructions() -> (
                     classification_class_definitions=classification_attributes,
                 ),
                 extraction_instructions=KGExtractionInstructions(
-                    deep_extraction=entity_type.ge_deep_extraction,
+                    deep_extraction=entity_type.deep_extraction,
                     active=entity_type.active,
                 ),
             )
@@ -116,9 +116,9 @@ def get_entity_types_str(active: bool | None = None) -> str:
             else:
                 entity_description = ""
 
-            if entity_type.ge_determine_instructions:
+            if entity_type.entity_values:
                 allowed_values = "\n  - Allowed Values: " + ", ".join(
-                    entity_type.ge_determine_instructions
+                    entity_type.entity_values
                 )
             else:
                 allowed_values = ""
@@ -1020,7 +1020,7 @@ def _kg_chunk_batch_extraction(
 
         if not all_relationships:
             all_relationships.append(
-                f"VENDOR:{KG_OWN_COMPANY}"
+                f"VENDOR:{KG_VENDOR}"
                 + "__"
                 + "relates_to"
                 + "__"

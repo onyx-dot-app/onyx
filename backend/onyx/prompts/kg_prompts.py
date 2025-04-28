@@ -1,4 +1,4 @@
-from onyx.configs.kg_configs import KG_OWN_COMPANY
+from onyx.configs.kg_configs import KG_VENDOR
 
 # Standards
 SEPARATOR_LINE = "-------"
@@ -462,7 +462,7 @@ ignore.
 
 Note: when you extract relationships, please make sure that:
   - if you see a relationship for one of our employees, you should extract the relationship both for the employee AND \
-    VENDOR:{KG_OWN_COMPANY}.
+    VENDOR:{KG_VENDOR}.
   - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
 only for the account ACCOUNT:<account_name>!
 
@@ -479,7 +479,7 @@ This is a call between employees of the VENDOR's company and representatives of 
 When you exract information based on the instructions, please make sure that you properly attribute the information \
 to the correct employee and account. \
 
-Here are the participants (name component of email) from us ({KG_OWN_COMPANY}):
+Here are the participants (name component of email) from us ({KG_VENDOR}):
 {{participant_string}}
 
 Here are the participants (name component of email) from the other account(s):
@@ -490,7 +490,7 @@ look at the context and try to identify whether the statement comes from the oth
 
 Note: when you extract relationships, please make sure that:
   - if you see a relationship for one of our employees, you should extract the relationship both for the employee AND \
-    VENDOR:{KG_OWN_COMPANY}.
+    VENDOR:{KG_VENDOR}.
   - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
 only for the account ACCOUNT:<account_name>!
 
@@ -501,7 +501,7 @@ And here is the content:
 
 
 CALL_DOCUMENT_CLASSIFICATION_PROMPT = f"""
-This is the beginning of a call between employees of the VENDOR's company ({KG_OWN_COMPANY}) and other participants.
+This is the beginning of a call between employees of the VENDOR's company ({KG_VENDOR}) and other participants.
 
 Your task is to classify the call into one of the following categories:
 {{category_options}}

@@ -629,7 +629,7 @@ class KGEntityType(Base):
         NullFilteredString, nullable=False, index=False
     )
 
-    ge_determine_instructions: Mapped[list[str]] = mapped_column(
+    entity_values: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=True, default=None
     )
 
@@ -655,16 +655,9 @@ class KGEntityType(Base):
 
     occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    extraction_sources: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        comment="Sources and methods used to extract this entity",
-    )
-
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
-    ge_deep_extraction: Mapped[bool] = mapped_column(
+    deep_extraction: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
 

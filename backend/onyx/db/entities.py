@@ -11,6 +11,7 @@ from onyx.db.models import Document
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGEntityType
+from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
 
 
@@ -105,33 +106,16 @@ def get_kg_entity_by_document(db: Session, document_id: str) -> KGEntity | None:
     return result
 
 
-def get_ungrounded_entities(db_session: Session) -> List[KGEntity]:
-    """Get all entities whose entity type has grounding = 'UE' (ungrounded entities).
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntity objects belonging to ungrounded entity types
-    """
-    return (
-        db_session.query(KGEntity)
-        .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
-        .filter(KGEntityType.grounding == "UE")
-        .all()
-    )
-
-
 def get_entities_by_grounding(
-    db_session: Session, kg_stage: KGStage, grounding: str
+    db_session: Session, kg_stage: KGStage, grounding: KGGroundingType
 ) -> List[KGEntity] | List[KGEntityExtractionStaging]:
-    """Get all entities whose entity type has grounding = 'UE' (ungrounded entities).
+    """Get all entities by grounding type.
 
     Args:
         db_session: SQLAlchemy session
 
     Returns:
-        List of KGEntity objects belonging to ungrounded entity types
+        List of KGEntity objects for a given grounding type
     """
 
     _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
@@ -162,8 +146,8 @@ def get_entities_by_grounding(
         raise ValueError(f"Invalid KGStage: {kg_stage.value}")
 
 
-def get_ge_entities_by_types(
-    db_session: Session, entity_types: List[str]
+def get_grounded_entities_by_types(
+    db_session: Session, entity_types: List[str], grounding: KGGroundingType
 ) -> List[KGEntity]:
     """Get all entities matching an entity_type.
 
@@ -178,7 +162,7 @@ def get_ge_entities_by_types(
         db_session.query(KGEntity)
         .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
         .filter(KGEntity.entity_type_id_name.in_(entity_types))
-        .filter(KGEntityType.grounding == "GE")
+        .filter(KGEntityType.grounding == grounding)
         .all()
     )
 
