@@ -320,8 +320,11 @@ def download_query_history_csv(
 
     # Maybe we should handle each specific TaskStatus separately?
     # I.e., if it's a `TaskStatus.PENDING` return a different error code vs if it's a `TaskStatus.FAILURE`.
-    if task.status != TaskStatus.SUCCESS:
-        raise HTTPException(500, f"Task with {request_id=} has not finished yet")
+    if task.status in [TaskStatus.STARTED, TaskStatus.PENDING]:
+        raise HTTPException(102, f"Task with {request_id=} is still being worked on")
+
+    elif task.status == TaskStatus.FAILURE:
+        raise HTTPException(500, f"Task with {request_id=} failed")
 
     file_store = get_default_file_store(db_session)
     report_name = query_history_report_name(request_id)
