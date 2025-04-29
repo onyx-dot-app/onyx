@@ -1,29 +1,62 @@
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
+import { FaSpinner } from "react-icons/fa";
 import { FiDownload } from "react-icons/fi";
 
 const START_QUERY_HISTORY_EXPORT_URL = "/api/admin/query-history/start-export";
 const CHECK_QUERY_HISTORY_EXPORT_STATUS_URL =
   "/api/admin/query-history/export-status";
 const DOWNLOAD_QUERY_HISTORY_URL = "/api/admin/query-history/download";
+const MAX_RETRIES = 10;
+const RETRY_COOLDOWN_MILLISECONDS = 1000;
 
 type StartQueryHistoryExportResponse = { request_id: string };
 type CheckQueryHistoryExportStatusResponse = {
   status: "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 };
 
-type Status = "NULL" | "PENDING" | "SUCCESS" | "FAILURE";
+// The status of the spinner.
+// If it's "static", then no spinning animation should be shown.
+// Otherwise, the spinning animation should be shown.
+type SpinnerStatus = "static" | "spinning";
 
 const withRequestId = (url: string, requestId: string): string =>
   `${url}?request_id=${requestId}`;
 
 export function DownloadAsCSV() {
   const timerIdRef = useRef<null | number>(null);
-  const [, rerender] = useState(null);
-  const [completionStatus, setCompletionStatus] = useState<Status>("NULL");
+  const retryCount = useRef<number>(0);
+  const [, rerender] = useState();
+  const [spinnerStatus, setSpinnerStatus] = useState<SpinnerStatus>("static");
+
+  const reset = (failure: boolean = false) => {
+    setSpinnerStatus("static");
+    if (timerIdRef.current) {
+      clearInterval(timerIdRef.current);
+      timerIdRef.current = null;
+    }
+    retryCount.current = 0;
+
+    if (failure) {
+      // Throw up an alert here.
+      //
+      // TODO:
+      // I cannot find a "Toast" component in the codebase.
+      // When I do, I'll add it here.
+      // Therefore, if fetching fails, then we can throw up a failure toast.
+    }
+
+    rerender(undefined);
+  };
 
   const startExport = async () => {
-    setCompletionStatus("PENDING");
+    // If the button is pressed again while we're spinning, then we reset and cancel the request.
+    if (spinnerStatus === "spinning") {
+      reset();
+      return;
+    }
+
+    setSpinnerStatus("spinning");
     const response = await fetch(START_QUERY_HISTORY_EXPORT_URL, {
       method: "POST",
       headers: {
@@ -32,23 +65,27 @@ export function DownloadAsCSV() {
     });
 
     if (!response.ok) {
-      setCompletionStatus("FAILURE");
+      reset(true);
+      return;
     }
 
     const { request_id } =
       (await response.json()) as StartQueryHistoryExportResponse;
     const timer = setInterval(
       () => checkStatus(request_id),
-      1000
+      RETRY_COOLDOWN_MILLISECONDS
     ) as unknown as number;
     timerIdRef.current = timer;
-    rerender(null);
+    rerender(undefined);
   };
 
   const checkStatus = async (requestId: string) => {
-    if (completionStatus === "SUCCESS" || completionStatus === "FAILURE") {
+    rerender(undefined);
+    if (retryCount.current >= MAX_RETRIES) {
+      reset(true);
       return;
     }
+    retryCount.current += 1;
 
     const response = await fetch(
       withRequestId(CHECK_QUERY_HISTORY_EXPORT_STATUS_URL, requestId),
@@ -58,35 +95,43 @@ export function DownloadAsCSV() {
     );
 
     if (!response.ok) {
-      setCompletionStatus("FAILURE");
+      reset(true);
+      return;
     }
 
     const { status } =
       (await response.json()) as CheckQueryHistoryExportStatusResponse;
 
     if (status === "SUCCESS") {
-      if (timerIdRef.current) {
-        clearInterval(timerIdRef.current);
-      }
+      reset();
       window.location.href = withRequestId(
         DOWNLOAD_QUERY_HISTORY_URL,
         requestId
       );
     } else if (status === "FAILURE") {
-      if (timerIdRef.current) {
-        clearInterval(timerIdRef.current);
-      }
-      setCompletionStatus(status);
+      reset(true);
     }
   };
 
   return (
-    <Button
-      className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer hover:bg-accent-background text-sm"
-      onClick={startExport}
-    >
-      <FiDownload className="my-auto mr-2" />
-      Download as CSV
-    </Button>
+    <div className="flex flex-1 flex-col w-full justify-center">
+      <Button
+        className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer hover:bg-accent-background text-sm"
+        onClick={startExport}
+        variant={spinnerStatus === "spinning" ? "destructive" : "default"}
+      >
+        {spinnerStatus === "spinning" ? (
+          <>
+            <FaSpinner className="animate-spin text-2xl" />
+            Cancel
+          </>
+        ) : (
+          <>
+            <FiDownload className="my-auto mr-2" />
+            Download as CSV
+          </>
+        )}
+      </Button>
+    </div>
   );
 }
