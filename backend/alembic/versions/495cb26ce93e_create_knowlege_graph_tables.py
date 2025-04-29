@@ -26,8 +26,11 @@ depends_on = None
 def upgrade() -> None:
 
     # Create a new permission-less user to be later used for knowledge graph queries.
-    # The user will get temporary read priveledges on a specific view that will be
-    # ad hoc generated specific to a query.
+    # The user will later get temporary read priviledges for a specific view that will be
+    # ad hoc generated specific to a knowledge graph query.
+    #
+    # Note: in order for the migration to run, the KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD
+    # environment variables MUST be set. Otherwise, an exception will be raised.
 
     if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
 

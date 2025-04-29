@@ -1,7 +1,7 @@
 import re
 from typing import Set
 
-from onyx.agents.agent_search.kb_search.models import KGExpendedGraphObjects
+from onyx.agents.agent_search.kb_search.models import KGExpandedGraphObjects
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import get_entity_types
 from onyx.db.models import Document
@@ -38,7 +38,9 @@ def _check_entities_disconnected(
             source, _, target = relationship.split("__")
             if source in graph and target in graph:
                 graph[source].add(target)
-                graph[target].add(source)  # Add reverse edge since graph is undirected
+                # Add reverse edge to capture that we do also have a relationship in the other direction,
+                # albeit not quite the same one.
+                graph[target].add(source)
         except ValueError:
             raise ValueError(f"Invalid relationship format: {relationship}")
 
@@ -67,7 +69,7 @@ def _check_entities_disconnected(
 
 def create_minimal_connected_query_graph(
     entities: list[str], relationships: list[str], max_depth: int = 2
-) -> KGExpendedGraphObjects:
+) -> KGExpandedGraphObjects:
     """
     Find the minimal subgraph that connects all input entities, using only general entities
     (<entity_type>:*) as intermediate nodes. The subgraph will include only the relationships
@@ -79,7 +81,7 @@ def create_minimal_connected_query_graph(
         max_depth: Maximum depth to expand the graph (default: 2)
 
     Returns:
-        KGExpendedGraphObjects containing expanded entities and relationships
+        KGExpandedGraphObjects containing expanded entities and relationships
     """
     # Create copies of input lists to avoid modifying originals
     expanded_entities = entities.copy()
@@ -216,7 +218,7 @@ def create_minimal_connected_query_graph(
     logger.debug(f"Number of expanded entities: {len(expanded_entities)}")
     logger.debug(f"Number of expanded relationships: {len(expanded_relationships)}")
 
-    return KGExpendedGraphObjects(
+    return KGExpandedGraphObjects(
         entities=expanded_entities, relationships=expanded_relationships
     )
 

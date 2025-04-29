@@ -30,10 +30,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-test_mode = False
 
-
-def kb_graph_builder(test_mode: bool = False) -> StateGraph:
+def kb_graph_builder() -> StateGraph:
     """
     LangGraph graph builder for the knowledge graph  search process.
     """
@@ -75,11 +73,6 @@ def kb_graph_builder(test_mode: bool = False) -> StateGraph:
         process_individual_deep_search,
     )
 
-    # graph.add_node(
-    #     "individual_deep_search",
-    #     individual_deep_search,
-    # )
-
     graph.add_node(
         "consoldidate_individual_deep_search",
         consoldidate_individual_deep_search,
@@ -105,11 +98,6 @@ def kb_graph_builder(test_mode: bool = False) -> StateGraph:
 
     graph.add_edge(start_key="process_kg_only_answers", end_key="generate_answer")
 
-    # graph.add_edge(
-    #     start_key="construct_deep_search_filters",
-    #     end_key="process_individual_deep_search",
-    # )
-
     graph.add_conditional_edges(
         source="construct_deep_search_filters",
         path=research_individual_object,
@@ -120,11 +108,6 @@ def kb_graph_builder(test_mode: bool = False) -> StateGraph:
         start_key="process_individual_deep_search",
         end_key="consoldidate_individual_deep_search",
     )
-
-    # graph.add_edge(
-    #     start_key="individual_deep_search",
-    #     end_key="consoldidate_individual_deep_search",
-    # )
 
     graph.add_edge(
         start_key="consoldidate_individual_deep_search", end_key="generate_answer"

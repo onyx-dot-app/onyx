@@ -12,6 +12,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_entities_by_document_ids
 from onyx.db.entity_type import get_entity_types_with_grounded_source_name
@@ -33,7 +35,7 @@ def _convert_document_ids_to_entities(source_document_filters: list[str]) -> lis
 
 
 def construct_deep_search_filters(
-    state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
+    state: MainState, config: RunnableConfig, writer: StreamWriter
 ) -> DeepSearchFilterUpdate:
     """
     LangGraph node to start the agentic search process.
@@ -164,6 +166,17 @@ def construct_deep_search_filters(
             if entity_type.grounded_source_name.lower() in div_con_structure[0].lower():
                 source_division = True
                 break
+
+        write_custom_event(
+            "initial_agent_answer",
+            AgentAnswerPiece(
+                answer_piece=f"Researching {div_con_structure} topics...  -  ",
+                level=0,
+                level_question_num=0,
+                answer_type="agent_level_answer",
+            ),
+            writer,
+        )
 
     return DeepSearchFilterUpdate(
         vespa_filter_results=filter_results,
