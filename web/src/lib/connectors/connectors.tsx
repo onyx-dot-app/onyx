@@ -540,6 +540,46 @@ export const connectorConfigs: Record<
     values: [],
     advanced_values: [],
   },
+  postgresql: {
+    description: "Настроить коннектор SharePoint",
+    values: [
+      {
+        type: "text",
+        query: "Введите схему:",
+        label: "Схема",
+        name: "schema",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Введите таблицу:",
+        label: "Таблица",
+        name: "table_name",
+      },
+      {
+        type: "text",
+        query: "Введите столбцы:",
+        label: "Столбцы с текстом",
+        name: "conten_columns",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Введите столбцы:",
+        label: "Столбцы метаданных",
+        name: "metadata_columns",
+        optional: true,
+      },
+      {
+        type: "text",
+        query: "Введите запрос:",
+        label: "SQL-запрос",
+        name: "query",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
 };
 export function createConnectorInitialValues(
   connector: ConfigurableSources,

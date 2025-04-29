@@ -232,6 +232,14 @@ export interface MailruCredentialJson {
   password: string;
 }
 
+export interface PostgresqlCredentialJson {
+  host: string;
+  port: string;
+  db_name: string;
+  user: string;
+  password: string;
+}
+
 export interface EgnyteCredentialJson {
   domain: string;
   access_token: string;
@@ -301,6 +309,13 @@ export const credentialTemplates: Record<ValidSources, any> = {
     email: "",
     password: "",
   } as MailruCredentialJson,
+  postgresql: {
+    host: "",
+    port: "",
+    db_name: "",
+    user: "",
+    password: "",
+  } as PostgresqlCredentialJson,
 };
 
 export const credentialDisplayNames: Record<string, string> = {

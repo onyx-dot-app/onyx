@@ -15,6 +15,7 @@ import {
   MailruIcon,
   RedmineIcon,
   YandexIcon,
+  PostgreSQLIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -114,6 +115,12 @@ const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Mail",
     category: SourceCategory.AppConnection,
     adminUrl: "mailru",
+  },
+  postgresql: {
+    icon: PostgreSQLIcon,
+    displayName: "PostgreSQL",
+    category: SourceCategory.AppConnection,
+    adminUrl: "postgresql",
   },
 };
 

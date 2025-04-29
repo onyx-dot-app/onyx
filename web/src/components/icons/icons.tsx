@@ -56,6 +56,7 @@ import mixedBreadSVG from "../../../public/Mixedbread.png";
 import OCIStorageSVG from "../../../public/OCI.svg";
 import yandexIcon from "../../../public/Yandex.png";
 import mailruIcon from "../../../public/Mailru.png";
+import postgreSQL from "../../../public/postgreSQL.svg";
 import googleCloudStorageIcon from "../../../public/GoogleCloudStorage.png";
 import guruIcon from "../../../public/Guru.svg";
 import gongIcon from "../../../public/Gong.png";
@@ -591,6 +592,13 @@ export const MailruIcon = ({
   className = defaultTailwindCSS,
 }: IconProps) => (
   <LogoIcon size={size} className={className} src={mailruIcon} />
+);
+
+export const PostgreSQLIcon = ({
+  size = 16,
+  className = defaultTailwindCSS,
+}: IconProps) => (
+  <LogoIcon size={size} className={className} src={postgreSQL} />
 );
 
 export const ChevronUpIcon = ({

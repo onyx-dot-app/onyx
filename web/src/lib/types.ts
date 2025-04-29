@@ -369,6 +369,7 @@ export enum ValidSources {
   S3 = "minio",
   Yandex = "yandex",
   Mailru = "mailru",
+  PostgresQL = "postgresql",
 }
 
 export const validAutoSyncSources = [
