@@ -96,9 +96,9 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
+from onyx.file_store.utils import get_user_files
 from onyx.file_store.utils import load_all_chat_files
-from onyx.file_store.utils import load_all_user_file_files
-from onyx.file_store.utils import load_all_user_files
+from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import save_files
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
@@ -849,12 +849,12 @@ def stream_chat_message_objects(
         user_file_files: list[UserFile] | None = None
         if user_file_ids or user_folder_ids:
             # Load user files
-            user_files = load_all_user_files(
+            user_files = load_in_memory_chat_files(
                 user_file_ids or [],
                 user_folder_ids or [],
                 db_session,
             )
-            user_file_files = load_all_user_file_files(
+            user_file_files = get_user_files(
                 user_file_ids or [],
                 user_folder_ids or [],
                 db_session,

@@ -157,16 +157,32 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
         )
 
 
-def load_all_user_files(
+def load_in_memory_chat_files(
     user_file_ids: list[int],
     user_folder_ids: list[int],
     db_session: Session,
 ) -> list[InMemoryChatFile]:
+    """
+    Loads the actual content of user files specified by individual IDs and those
+    within specified folder IDs into memory.
+
+    Args:
+        user_file_ids: A list of specific UserFile IDs to load.
+        user_folder_ids: A list of UserFolder IDs. All UserFiles within these folders will be loaded.
+        db_session: The SQLAlchemy database session.
+
+    Returns:
+        A list of InMemoryChatFile objects, each containing the file content (as bytes),
+        file ID, file type, and filename. Prioritizes loading plaintext versions if available.
+    """
+    # Use parallel execution to load files concurrently
     return cast(
         list[InMemoryChatFile],
         run_functions_tuples_in_parallel(
+            # 1. Load files specified by individual IDs
             [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
         )
+        # 2. Load all files within specified folders
         + [
             file
             for folder_id in user_folder_ids
@@ -175,24 +191,47 @@ def load_all_user_files(
     )
 
 
-def load_all_user_file_files(
+def get_user_files(
     user_file_ids: list[int],
     user_folder_ids: list[int],
     db_session: Session,
 ) -> list[UserFile]:
+    """
+    Fetches UserFile database records based on provided file and folder IDs.
+
+    Args:
+        user_file_ids: A list of specific UserFile IDs to fetch.
+        user_folder_ids: A list of UserFolder IDs. All UserFiles within these folders will be fetched.
+        db_session: The SQLAlchemy database session.
+
+    Returns:
+        A list containing UserFile SQLAlchemy model objects corresponding to the
+        specified file IDs and all files within the specified folder IDs.
+        It does NOT return the actual file content.
+    """
     user_files: list[UserFile] = []
+
+    # 1. Fetch UserFile records for specific file IDs
     for user_file_id in user_file_ids:
+        # Query the database for a UserFile with the matching ID
         user_file = (
             db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
         )
+        # If found, add it to the list
         if user_file is not None:
             user_files.append(user_file)
+
+    # 2. Fetch UserFile records for all files within specified folder IDs
     for user_folder_id in user_folder_ids:
+        # Query the database for all UserFiles belonging to the current folder ID
+        # and extend the list with the results
         user_files.extend(
             db_session.query(UserFile)
             .filter(UserFile.folder_id == user_folder_id)
             .all()
         )
+
+    # 3. Return the combined list of UserFile database objects
     return user_files
 
 
