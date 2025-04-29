@@ -69,7 +69,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=False),
         sa.Column("deep_extraction", sa.Boolean(), nullable=False, default=False),
         sa.Column(
@@ -98,7 +98,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -130,7 +130,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -171,7 +171,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
@@ -215,7 +215,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
@@ -255,7 +255,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -296,7 +296,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurances", sa.Integer(), nullable=True),
+        sa.Column("occurences", sa.Integer(), nullable=True),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),

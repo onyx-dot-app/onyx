@@ -21,7 +21,7 @@ def add_entity(
     entity_type: str,
     name: str,
     document_id: str | None = None,
-    occurances: int = 0,
+    occurences: int = 0,
     event_time: datetime | None = None,
     attributes: dict[str, str] | None = None,
 ) -> "KGEntity | KGEntityExtractionStaging | None":
@@ -32,7 +32,7 @@ def add_entity(
         kg_stage: KGStage of the entity
         entity_type: Type of the entity (must match an existing KGEntityType)
         name: Name of the entity
-        occurances: Number of clusters this entity has been found
+        occurences: Number of clusters this entity has been found
 
     Returns:
         KGEntity: The created entity
@@ -57,7 +57,7 @@ def add_entity(
             entity_type_id_name=entity_type,
             document_id=document_id,
             name=name,
-            occurances=occurances,
+            occurences=occurences,
             event_time=event_time,
             attributes=attributes,
         )
@@ -65,7 +65,7 @@ def add_entity(
             index_elements=["id_name"],
             set_=dict(
                 # Direct numeric addition without text()
-                occurances=_KGEntityObject.occurances + occurances,
+                occurences=_KGEntityObject.occurences + occurences,
                 # Keep other fields updated as before
                 entity_type_id_name=entity_type,
                 document_id=document_id,

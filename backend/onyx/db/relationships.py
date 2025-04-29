@@ -22,7 +22,7 @@ def add_relationship(
     kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-    occurances: int | None = None,
+    occurences: int | None = None,
 ) -> Union["KGRelationship", "KGRelationshipExtractionStaging"]:
     """
     Add a relationship between two entities to the database.
@@ -31,7 +31,7 @@ def add_relationship(
         db_session: SQLAlchemy database session
         relationship_type: Type of relationship
         source_document_id: ID of the source document
-        occurances: Optional count of similar relationships clustered together
+        occurences: Optional count of similar relationships clustered together
 
     Returns:
         The created KGRelationship object
@@ -63,7 +63,7 @@ def add_relationship(
         "type": relationship_string.lower(),
         "relationship_type_id_name": relationship_type,
         "source_document": source_document_id,
-        "occurances": occurances or 1,
+        "occurences": occurences or 1,
     }
 
     relationship: KGRelationship | KGRelationshipExtractionStaging
@@ -85,8 +85,8 @@ def add_relationship(
                 else "kg_relationship_extraction_staging_pkey"
             ),
             set_={
-                "occurances": int(str(relationship_data["occurances"] or 0))
-                + (occurances or 1),
+                "occurences": int(str(relationship_data["occurences"] or 0))
+                + (occurences or 1),
                 "time_updated": func.now(),
             },
         )
@@ -123,11 +123,11 @@ def add_or_increment_relationship(
     kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-    new_occurances: int = 1,
+    new_occurences: int = 1,
 ) -> KGRelationship | KGRelationshipExtractionStaging:
     """
     Add a relationship between two entities to the database if it doesn't exist,
-    or increment its occurances by 1 if it already exists.
+    or increment its occurences by 1 if it already exists.
 
     Args:
         db_session: SQLAlchemy database session
@@ -159,24 +159,24 @@ def add_or_increment_relationship(
     )
 
     if existing_relationship:
-        # If it exists, increment the occurances
+        # If it exists, increment the occurences
         existing_relationship = cast(
             KGRelationship | KGRelationshipExtractionStaging, existing_relationship
         )
-        existing_relationship.occurances = (
-            existing_relationship.occurances or 0
-        ) + new_occurances
+        existing_relationship.occurences = (
+            existing_relationship.occurences or 0
+        ) + new_occurences
         db_session.flush()
         return existing_relationship
     else:
-        # If it doesn't exist, add it with occurances=1
+        # If it doesn't exist, add it with occurences=1
         db_session.flush()
         return add_relationship(
             db_session,
             KGStage(kg_stage),
             relationship_id_name,
             source_document_id,
-            occurances=new_occurances,
+            occurences=new_occurences,
         )
 
 
@@ -215,7 +215,7 @@ def add_relationship_type(
         "source_entity_type_id_name": source_entity_type.upper(),
         "target_entity_type_id_name": target_entity_type.upper(),
         "definition": definition,
-        "occurances": extraction_count,
+        "occurences": extraction_count,
         "type": relationship_type,  # Using the relationship_type as the type
         "active": True,  # Setting as active by default
     }
@@ -244,7 +244,7 @@ def add_relationship_type(
                     "target_entity_type_id_name"
                 ],
                 "definition": relationship_data["definition"],
-                "occurances": int(str(relationship_data["occurances"] or 0))
+                "occurences": int(str(relationship_data["occurences"] or 0))
                 + extraction_count,
                 "type": relationship_data["type"],
                 "active": relationship_data["active"],

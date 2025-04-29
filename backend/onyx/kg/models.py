@@ -182,4 +182,4 @@ class KGDefaultEntityDefinition(BaseModel):
 class KGEntityInformation(BaseModel):
     entity_type: str
     entity_name: str
-    occurances: int
+    occurences: int

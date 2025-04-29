@@ -314,7 +314,7 @@ def _create_relationship_mapping(
         clustered_id = f"{source_node}__{rel_name}__{target_node}"
 
         relationship_replacements[original_id] = clustered_id
-        reverse_relationship_replacements_count[clustered_id] += rel.occurances or 1
+        reverse_relationship_replacements_count[clustered_id] += rel.occurences or 1
 
     return relationship_replacements, reverse_relationship_replacements_count
 
@@ -547,7 +547,7 @@ def kg_clustering(
                 KGStage.NORMALIZED,
                 entity_type=grounded_entity.entity_type_id_name,
                 name=grounded_entity.name,
-                occurances=grounded_entity.occurances or 1,
+                occurences=grounded_entity.occurences or 1,
                 document_id=grounded_entity.document_id or None,
                 attributes=grounded_entity.attributes or None,
             )
@@ -566,7 +566,7 @@ def kg_clustering(
                 source_entity_type=relationship_type.source_entity_type_id_name,
                 relationship_type=relationship_type.type,
                 target_entity_type=relationship_type.target_entity_type_id_name,
-                extraction_count=relationship_type.occurances or 1,
+                extraction_count=relationship_type.occurences or 1,
             )
 
             db_session.commit()
@@ -582,7 +582,7 @@ def kg_clustering(
                     KGStage.NORMALIZED,
                     relationship_id_name=relationship.id_name,
                     source_document_id=relationship.source_document or "",
-                    occurances=relationship.occurances or 1,
+                    occurences=relationship.occurences or 1,
                 )
 
                 if relationship.source_document:

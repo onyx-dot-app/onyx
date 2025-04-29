@@ -651,7 +651,7 @@ def kg_extraction(
                                 kg_stage=KGStage.EXTRACTED,
                                 entity_type=entity_type,
                                 name=entity_name,
-                                occurances=extraction_count,
+                                occurences=extraction_count,
                             )
                         else:
                             # Primary grounded entities
@@ -694,7 +694,7 @@ def kg_extraction(
                                 kg_stage=KGStage.EXTRACTED,
                                 entity_type=entity_type,
                                 name=entity_name,
-                                occurances=extraction_count,
+                                occurences=extraction_count,
                                 document_id=document_id,
                                 event_time=event_time,
                                 attributes=entity_attributes,

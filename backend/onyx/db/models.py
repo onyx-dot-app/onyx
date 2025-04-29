@@ -653,7 +653,7 @@ class KGEntityType(Base):
         comment="Pre-extraction classification requirements and instructions",
     )
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -718,7 +718,7 @@ class KGRelationshipType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -789,7 +789,7 @@ class KGRelationshipTypeExtractionStaging(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -858,7 +858,7 @@ class KGEntity(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -937,7 +937,7 @@ class KGEntityExtractionStaging(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -1019,7 +1019,7 @@ class KGRelationship(Base):
         "KGRelationshipType", backref="relationship"
     )
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -1110,7 +1110,7 @@ class KGRelationshipExtractionStaging(Base):
         "KGRelationshipTypeExtractionStaging", backref="relationship_staging"
     )
 
-    occurances: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(

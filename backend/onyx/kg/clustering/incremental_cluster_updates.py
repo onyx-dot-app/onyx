@@ -69,7 +69,7 @@ def kg_incremental_cluster_updates(
                 KGStage.NORMALIZED,
                 entity_type=grounded_entity.entity_type_id_name,
                 name=grounded_entity.name,
-                occurances=grounded_entity.occurances or 1,
+                occurences=grounded_entity.occurences or 1,
                 document_id=grounded_entity.document_id or None,
                 attributes=grounded_entity.attributes or None,
             )
@@ -88,7 +88,7 @@ def kg_incremental_cluster_updates(
                 source_entity_type=relationship_type.source_entity_type_id_name,
                 relationship_type=relationship_type.type,
                 target_entity_type=relationship_type.target_entity_type_id_name,
-                extraction_count=relationship_type.occurances or 1,
+                extraction_count=relationship_type.occurences or 1,
             )
 
             db_session.commit()
@@ -104,7 +104,7 @@ def kg_incremental_cluster_updates(
                     KGStage.NORMALIZED,
                     relationship_id_name=relationship.id_name,
                     source_document_id=relationship.source_document or "",
-                    occurances=relationship.occurances or 1,
+                    occurences=relationship.occurences or 1,
                 )
 
                 if relationship.source_document:
