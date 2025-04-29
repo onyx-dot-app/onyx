@@ -330,11 +330,19 @@ def _get_messages(
 
     # have to be in the channel in order to read messages
     if not channel["is_member"]:
-        make_slack_api_call_w_retries(
-            client.conversations_join,
-            channel=channel["id"],
-            is_private=channel["is_private"],
-        )
+        try:
+            make_slack_api_call_w_retries(
+                client.conversations_join,
+                channel=channel["id"],
+                is_private=channel["is_private"],
+            )
+        except SlackApiError as e:
+            if e.response["error"] == "is_archived":
+                logger.warning(f"Channel {channel['name']} is archived. Skipping.")
+                return [], False
+
+            logger.exception(f"Error joining channel {channel['name']}")
+            raise
         logger.info(f"Successfully joined '{channel['name']}'")
 
     response = make_slack_api_call_w_retries(

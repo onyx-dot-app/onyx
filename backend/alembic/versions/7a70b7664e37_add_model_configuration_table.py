@@ -27,7 +27,7 @@ def _resolve(
     model_names: list[str] | None,
     display_model_names: list[str] | None,
     default_model_name: str,
-    fast_default_model_name: str,
+    fast_default_model_name: str | None,
 ) -> set[tuple[str, bool]]:
     models = set(model_names) if model_names else None
     display_models = set(display_model_names) if display_model_names else None
@@ -94,9 +94,11 @@ def _resolve(
     # It is possible that `default_model_name` is not in `models` and is not in `display_models`.
     # It is also possible that `fast_default_model_name` is not in `models` and is not in `display_models`.
     models.add(default_model_name)
-    models.add(fast_default_model_name)
+    if fast_default_model_name:
+        models.add(fast_default_model_name)
     display_models.add(default_model_name)
-    display_models.add(fast_default_model_name)
+    if fast_default_model_name:
+        display_models.add(fast_default_model_name)
 
     return set([(model, model in display_models) for model in models])
 
