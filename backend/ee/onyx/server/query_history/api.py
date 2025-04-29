@@ -280,29 +280,27 @@ def get_query_history_export_status(
     task = get_task_with_id(db_session=db_session, task_id=request_id)
 
     if task:
-        status = task.status
+        return {"status": task.status}
 
-    else:
-        # If task is None, then it's possible that the task has already finished processing.
-        # Therefore, we should then check if the export file has already been stored inside of the file-store.
-        # If that *also* doesn't exist, then we can return a 404.
-        file_store = get_default_file_store(db_session)
+    # If task is None, then it's possible that the task has already finished processing.
+    # Therefore, we should then check if the export file has already been stored inside of the file-store.
+    # If that *also* doesn't exist, then we can return a 404.
+    file_store = get_default_file_store(db_session)
 
-        report_name = query_history_report_name(request_id)
-        has_file = file_store.has_file(
-            file_name=report_name,
-            file_origin=FileOrigin.GENERATED_REPORT,
-            file_type="text/csv",
+    report_name = query_history_report_name(request_id)
+    has_file = file_store.has_file(
+        file_name=report_name,
+        file_origin=FileOrigin.GENERATED_REPORT,
+        file_type="text/csv",
+    )
+
+    if not has_file:
+        raise HTTPException(
+            404,
+            f"No task with {request_id=} was found",
         )
-        if not has_file:
-            raise HTTPException(
-                404,
-                f"No task with {request_id=} was found",
-            )
 
-        status = TaskStatus.SUCCESS
-
-    return {"status": status}
+    return {"status": TaskStatus.SUCCESS}
 
 
 @router.get("/admin/query-history/download")
