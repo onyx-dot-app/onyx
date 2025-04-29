@@ -16,8 +16,11 @@ import { Modal } from "@/components/Modal";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { AnonymousUserPath } from "./AnonymousUserPath";
 import { useChatContext } from "@/components/context/ChatContext";
+import { EditableValue } from "@/components/EditableValue";
+import useSWR from "swr";
 import { LLMSelector } from "@/components/llm/LLMSelector";
 import { useVisionProviders } from "./hooks/useVisionProviders";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 
 export function Checkbox({
   label,
@@ -140,6 +143,30 @@ export function SettingsForm() {
   if (!settings) {
     return null;
   }
+
+  const { data, error, mutate } = useSWR<{ token: string }>(
+    "/api/telegram/token",
+    errorHandlingFetcher
+  );
+
+  const onChangeTelegramToken = async (value: string) => {
+    const response = await fetch("/api/telegram/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        token: value,
+      }),
+    });
+    if (response.ok) {
+      mutate({ token: value });
+      return true;
+    } else {
+      alert(`Ошибка обновления токена`);
+      return false;
+    }
+  };
 
   async function updateSettingField(
     updateRequests: { fieldName: keyof Settings; newValue: any }[]
@@ -413,6 +440,16 @@ export function SettingsForm() {
               </div>
             )}
           </div>
+        </div>
+
+        <Title className="mb-4 mt-6">Интеграция Telegram</Title>
+        <div className="block font-medium text-base">Токен Telegram-бота:</div>
+        <div className="w-fit">
+          <EditableValue
+            initialValue={error ? error.detail : data?.token}
+            onSubmit={onChangeTelegramToken}
+            consistentWidth={false}
+          />
         </div>
       </div>
     </div>

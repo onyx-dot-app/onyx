@@ -4,6 +4,7 @@ import k from "./../i18n/keys";
 
 import { useState, useRef, useContext, useEffect, useMemo } from "react";
 import { FiLogOut } from "react-icons/fi";
+import { FaTelegramPlane } from "react-icons/fa";
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { UserRole } from "@/lib/types";
@@ -127,6 +128,9 @@ export function UserDropdown({
     setUserInfoVisible(open);
     setShowNotifications(false);
   };
+
+  const isTelegramIntegrationEnable =
+    process.env.NEXT_PUBLIC_ENABLE_TELEGRAM_INTEGRATION === "true";
 
   return (
     <div className="group relative" ref={userInfoRef}>
@@ -254,6 +258,14 @@ export function UserDropdown({
                       label="Панель куратора"
                     />
                   )
+                )}
+
+                {isTelegramIntegrationEnable && (
+                  <DropdownOption
+                    href="/telegram"
+                    icon={<FaTelegramPlane size={16} className="my-auto" />}
+                    label="Telegram"
+                  />
                 )}
 
                 {toggleUserSettings && (
