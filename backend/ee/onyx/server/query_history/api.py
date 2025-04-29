@@ -22,6 +22,7 @@ from onyx.auth.users import get_display_email
 from onyx.background.task_utils import query_history_report_name
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
+from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
@@ -252,6 +253,12 @@ def start_query_history_export(
     start = start or datetime.fromtimestamp(0, tz=timezone.utc)
     end = end or datetime.now(tz=timezone.utc)
 
+    if start >= end:
+        raise HTTPException(
+            400,
+            f"Start time must come before end time, but instead got the start time coming after; {start=} {end=}",
+        )
+
     task = export_query_history_task.apply_async(
         kwargs={
             "start": start,
@@ -259,50 +266,67 @@ def start_query_history_export(
         }
     )
 
-    return {"id": task.id}
+    return {"request_id": task.id}
 
 
 @router.get("/admin/query-history/export-status")
 def get_query_history_export_status(
-    task_id: str,
+    request_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
     assert_query_history_is_enabled()
 
-    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    task = get_task_with_id(db_session=db_session, task_id=request_id)
 
-    if not task:
-        raise HTTPException(
-            404,
-            f"No task with the id {task_id} was found",
+    if task:
+        status = task.status
+
+    else:
+        # If task is None, then it's possible that the task has already finished processing.
+        # Therefore, we should then check if the export file has already been stored inside of the file-store.
+        # If that *also* doesn't exist, then we can return a 404.
+        file_store = get_default_file_store(db_session)
+
+        report_name = query_history_report_name(request_id)
+        has_file = file_store.has_file(
+            file_name=report_name,
+            file_origin=FileOrigin.GENERATED_REPORT,
+            file_type="text/csv",
         )
+        if not has_file:
+            raise HTTPException(
+                404,
+                f"No task with {request_id=} was found",
+            )
 
-    return {"status": task.status}
+        status = TaskStatus.SUCCESS
+
+    return {"status": status}
 
 
 @router.get("/admin/query-history/download")
 def download_query_history_csv(
-    task_id: str,
+    request_id: str,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
     assert_query_history_is_enabled()
 
-    task = get_task_with_id(db_session=db_session, task_id=task_id)
+    task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
         raise HTTPException(
             404,
-            f"No task with the id {task_id} was found",
+            f"No task with {request_id=} was found",
         )
 
     # Maybe we should handle each specific TaskStatus separately?
     # I.e., if it's a `TaskStatus.PENDING` return a different error code vs if it's a `TaskStatus.FAILURE`.
     if task.status != TaskStatus.SUCCESS:
-        raise HTTPException(500)
+        raise HTTPException(500, f"Task with {request_id=} has not finished yet")
 
     file_store = get_default_file_store(db_session)
-    report_name = query_history_report_name(task_id)
+    report_name = query_history_report_name(request_id)
     csv_stream = file_store.read_file(report_name)
 
     csv_stream.seek(0)

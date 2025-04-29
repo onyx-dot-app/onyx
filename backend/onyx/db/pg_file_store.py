@@ -18,6 +18,13 @@ def get_pg_conn_from_session(db_session: Session) -> connection:
     return db_session.connection().connection.connection  # type: ignore
 
 
+def get_pgfilestore_by_file_name_optional(
+    file_name: str,
+    db_session: Session,
+) -> PGFileStore | None:
+    return db_session.query(PGFileStore).filter_by(file_name=file_name).first()
+
+
 def get_pgfilestore_by_file_name(
     file_name: str,
     db_session: Session,
