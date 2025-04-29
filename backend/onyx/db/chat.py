@@ -870,6 +870,9 @@ def create_search_doc_from_user_file(
             content_sample = associated_chat_file.content[:100]
             # Remove null bytes which can cause SQL errors
             content_sample = content_sample.replace(b"\x00", b"")
+
+            # NOTE(rkuo): this used to be "replace" instead of strict, but
+            # that would bypass the binary handling below
             blurb = content_sample.decode("utf-8", errors="strict")
         except Exception:
             # If decoding fails completely, provide a generic description
