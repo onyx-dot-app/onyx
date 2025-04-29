@@ -77,6 +77,11 @@ GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC: set[DocumentSource] = {
 }
 
 
+def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
+    """Checks if the given DocumentSource requires external group syncing."""
+    return source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC
+
+
 # If nothing is specified here, we run the doc_sync every time the celery beat runs
 DOC_PERMISSION_SYNC_PERIODS: dict[DocumentSource, int] = {
     # Polling is not supported so we fetch all doc permissions every 5 minutes

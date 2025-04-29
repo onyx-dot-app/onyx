@@ -26,6 +26,9 @@ from ee.onyx.external_permissions.sync_params import (
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.tasks.external_group_syncing.group_sync_utils import (
+    mark_all_relevant_cc_pairs_as_external_group_synced,
+)
 from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT
@@ -38,8 +41,6 @@ from onyx.configs.constants import OnyxRedisConstants
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.factory import validate_ccpair_for_user
-from onyx.db.connector import mark_cc_pair_as_external_group_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -386,24 +387,6 @@ def connector_external_group_sync_generator_task(
                     f"No connector credential pair found for id: {cc_pair_id}"
                 )
 
-            try:
-                created = validate_ccpair_for_user(
-                    cc_pair.connector.id,
-                    cc_pair.credential.id,
-                    db_session,
-                    enforce_creation=False,
-                )
-                if not created:
-                    task_logger.warning(
-                        f"Unable to create connector credential pair for id: {cc_pair_id}"
-                    )
-            except Exception:
-                task_logger.exception(
-                    f"validate_ccpair_permissions_sync exceptioned: cc_pair={cc_pair_id}"
-                )
-                # TODO: add some notification to the admins here
-                raise
-
             source_type = cc_pair.connector.source
 
             ext_group_sync_func = GROUP_PERMISSIONS_FUNC_MAP.get(source_type)
@@ -440,7 +423,7 @@ def connector_external_group_sync_generator_task(
                 f"Synced {len(external_user_groups)} external user groups for {source_type}"
             )
 
-            mark_cc_pair_as_external_group_synced(db_session, cc_pair.id)
+            mark_all_relevant_cc_pairs_as_external_group_synced(db_session, cc_pair)
 
             update_sync_record_status(
                 db_session=db_session,
