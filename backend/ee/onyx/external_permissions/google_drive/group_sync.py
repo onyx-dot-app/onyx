@@ -87,7 +87,7 @@ def _get_all_groups(
         admin_service.groups().list,
         list_key="groups",
         domain=google_domain,
-        fields="groups(email)",
+        fields="groups(email),nextPageToken",
     ):
         group_emails.add(group["email"])
     return group_emails

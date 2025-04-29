@@ -55,6 +55,8 @@ env:
   SHAREPOINT_SITE: ${{ secrets.SHAREPOINT_SITE }}
   # Github
   ACCESS_TOKEN_GITHUB: ${{ secrets.ACCESS_TOKEN_GITHUB }}
+  # Gitlab
+  GITLAB_ACCESS_TOKEN: ${{ secrets.GITLAB_ACCESS_TOKEN }}
   # Gitbook
   GITBOOK_SPACE_ID: ${{ secrets.GITBOOK_SPACE_ID }}
   GITBOOK_API_KEY: ${{ secrets.GITBOOK_API_KEY }}
