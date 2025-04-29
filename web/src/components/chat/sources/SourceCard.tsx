@@ -125,7 +125,7 @@ export function SeeMoreBlock({
     <button
       onClick={toggleDocumentSelection}
       className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
-        h-[80px] p-3 border border-[1.5px] border-new-background-light   text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
     >
       <div className="flex items-center gap-1">
         {docs.length > 2 && iconsToRender.map((icon, index) => icon)}
@@ -204,7 +204,7 @@ export function FilesSeeMoreBlock({
     <button
       onClick={toggleDocumentSelection}
       className={`w-full ${fullWidth ? "w-full" : "max-w-[200px]"}
-        h-[80px] p-3 border border-[1.5px] border-new-background-light   text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
+        h-[80px] p-3 border border-[1.5px] border-new-background-light text-left bg-accent-background hover:bg-accent-background-hovered dark:bg-accent-background-hovered dark:hover:bg-neutral-700/80 cursor-pointer rounded-lg flex flex-col justify-between overflow-hidden`}
     >
       <div className="flex items-center gap-1">
         {files.length > 2 && iconsToRender.map((icon, index) => icon)}
