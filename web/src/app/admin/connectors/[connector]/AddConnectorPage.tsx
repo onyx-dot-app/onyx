@@ -51,7 +51,7 @@ import {
   NEXT_PUBLIC_CLOUD_ENABLED,
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
-import TemporaryLoadingModal from "@/components/TemporaryLoadingModal";
+import TemporaryLoadingModal from "@/components/LoadingModal";
 import {
   getConnectorOauthRedirectUrl,
   useOAuthDetails,
@@ -66,6 +66,7 @@ export interface AdvancedConfig {
 }
 
 const BASE_CONNECTOR_URL = "/api/manage/admin/connector";
+const CONNECTOR_CREATION_TIMEOUT_MS = 10000; // ~10 seconds is reasonable for longer connector validation
 
 export async function submitConnector<T>(
   connector: ConnectorBase<T>,
@@ -119,6 +120,13 @@ export async function submitConnector<T>(
   } catch (error) {
     return { message: `Error: ${error}`, isSuccess: false };
   }
+}
+
+export async function deleteConnector(connectorId: number): Promise<boolean> {
+  const response = await fetch(`${BASE_CONNECTOR_URL}/${connectorId}`, {
+    method: "DELETE",
+  });
+  return response.ok;
 }
 
 export default function AddConnector({
@@ -384,57 +392,103 @@ export default function AddConnector({
 
         setCreatingConnector(true);
         try {
-          const { message, isSuccess, response } = await submitConnector<any>(
-            {
-              connector_specific_config: transformedConnectorSpecificConfig,
-              input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-              name: name,
-              source: connector,
-              access_type: access_type,
-              refresh_freq: advancedConfiguration.refreshFreq || null,
-              prune_freq: advancedConfiguration.pruneFreq || null,
-              indexing_start: advancedConfiguration.indexingStart || null,
-              groups: groups,
-            },
-            undefined,
-            credentialActivated ? false : true
+          const timeoutPromise = new Promise<{ isTimeout: true }>((resolve) =>
+            setTimeout(
+              () => resolve({ isTimeout: true }),
+              CONNECTOR_CREATION_TIMEOUT_MS
+            )
           );
-          // If no credential
-          if (!credentialActivated) {
-            if (isSuccess) {
+
+          const connectorCreationPromise = (async () => {
+            const { message, isSuccess, response } = await submitConnector<any>(
+              {
+                connector_specific_config: transformedConnectorSpecificConfig,
+                input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+                name: name,
+                source: connector,
+                access_type: access_type,
+                refresh_freq: advancedConfiguration.refreshFreq || null,
+                prune_freq: advancedConfiguration.pruneFreq || null,
+                indexing_start: advancedConfiguration.indexingStart || null,
+                groups: groups,
+              },
+              undefined,
+              credentialActivated ? false : true
+            );
+
+            // If no credential
+            if (!credentialActivated) {
+              if (isSuccess) {
+                onSuccess();
+              } else {
+                setPopup({ message: message, type: "error" });
+              }
+            }
+
+            // With credential
+            if (credentialActivated && isSuccess && response) {
+              const credential =
+                currentCredential ||
+                liveGDriveCredential ||
+                liveGmailCredential;
+              const linkCredentialResponse = await linkCredential(
+                response.id,
+                credential?.id!,
+                name,
+                access_type,
+                groups,
+                auto_sync_options
+              );
+              if (linkCredentialResponse.ok) {
+                onSuccess();
+              } else {
+                const errorData = await linkCredentialResponse.json();
+                setPopup({
+                  message: errorData.message || errorData.detail,
+                  type: "error",
+                });
+              }
+            } else if (isSuccess) {
               onSuccess();
             } else {
               setPopup({ message: message, type: "error" });
             }
-          }
+            return response?.id;
+          })();
 
-          // Without credential
-          if (credentialActivated && isSuccess && response) {
-            const credential =
-              currentCredential || liveGDriveCredential || liveGmailCredential;
-            const linkCredentialResponse = await linkCredential(
-              response.id,
-              credential?.id!,
-              name,
-              access_type,
-              groups,
-              auto_sync_options
-            );
-            if (linkCredentialResponse.ok) {
-              onSuccess();
-            } else {
-              const errorData = await linkCredentialResponse.json();
-              setPopup({
-                message: errorData.message || errorData.detail,
-                type: "error",
-              });
-            }
-          } else if (isSuccess) {
-            onSuccess();
-          } else {
-            setPopup({ message: message, type: "error" });
+          const result = (await Promise.race([
+            connectorCreationPromise,
+            timeoutPromise,
+          ])) as {
+            connectorId?: number;
+            isTimeout?: true;
+          };
+
+          if (result.isTimeout) {
+            setPopup({
+              message: `Operation timed out after ${CONNECTOR_CREATION_TIMEOUT_MS / 1000} seconds. Check your configuration for errors?`,
+              type: "error",
+            });
+            // Track the late completion of the connector creation and delete it if created
+            connectorCreationPromise.then(async (result) => {
+              if (result) {
+                const deleteResponse = await deleteConnector(result);
+                if (deleteResponse) {
+                  setPopup({
+                    message:
+                      "Connector was created after timeout and has been deleted.",
+                    type: "error",
+                  });
+                } else {
+                  setPopup({
+                    message:
+                      "Connector was created after timeout but could not be deleted.",
+                    type: "error",
+                  });
+                }
+              }
+            });
           }
-          await new Promise((r) => setTimeout(r, 2000));
           return;
         } finally {
           setCreatingConnector(false);
