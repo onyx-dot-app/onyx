@@ -149,24 +149,17 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
 
         file_store = get_default_file_store(db_session)
         stream = io.StringIO()
-        writer = csv.DictWriter(
-            stream, fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys())
-        )
 
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
+        )
         writer.writeheader()
         for row in qa_pairs:
             writer.writerow(row.to_json())
 
-        stream.seek(0)
-        file_store.save_file(
-            file_name=report_name,
-            content=stream,
-            display_name=report_name,
-            file_origin=FileOrigin.GENERATED_REPORT,
-            file_type="text/csv",
-        )
-
         try:
+            stream.seek(0)
             file_store.save_file(
                 file_name=report_name,
                 content=stream,
