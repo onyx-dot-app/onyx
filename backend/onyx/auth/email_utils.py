@@ -32,7 +32,6 @@ from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME
 from onyx.configs.constants import ONYX_SLACK_URL
 from onyx.db.models import User
 from onyx.server.runtime.onyx_runtime import OnyxRuntime
-from onyx.utils.file import FileWithMimeType
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import add_url_params
 from onyx.utils.variable_functionality import fetch_versioned_implementation
@@ -212,7 +211,7 @@ def send_email_with_sendgrid(
     inline_png: tuple[str, bytes] | None = None,
 ) -> None:
     from_email = Email(mail_from) if mail_from else Email("noreply@onyx.app")
-    to_email = To(user_email)  # Change to your recipient
+    to_email = To(user_email)
 
     mail = Mail(
         from_email=from_email,
@@ -241,13 +240,10 @@ def send_email_with_sendgrid(
     # Get a JSON-ready representation of the Mail object
     mail_json = mail.get()
 
-    try:
-        sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
-        response = sg.client.mail.send.post(request_body=mail_json)
-        if response.status_code != 202:
-            logger.warning(f"Unexpected status code {response.status_code}")
-    except Exception as e:
-        raise e
+    sg = sendgrid.SendGridAPIClient(api_key=SENDGRID_API_KEY)
+    response = sg.client.mail.send.post(request_body=mail_json)  # can raise
+    if response.status_code != 202:
+        logger.warning(f"Unexpected status code {response.status_code}")
 
 
 def send_email_with_smtplib(
@@ -293,13 +289,10 @@ def send_email_with_smtplib(
         html_part = MIMEText(html_body, "html")
         msg.attach(html_part)
 
-    try:
-        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
-            s.starttls()
-            s.login(SMTP_USER, SMTP_PASS)
-            s.send_message(msg)
-    except Exception as e:
-        raise e
+    with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as s:
+        s.starttls()
+        s.login(SMTP_USER, SMTP_PASS)
+        s.send_message(msg)
 
 
 def send_subscription_cancellation_email(user_email: str) -> None:
@@ -404,8 +397,6 @@ def build_user_email_invite(
 def send_user_email_invite(
     user_email: str, current_user: User, auth_type: AuthType
 ) -> None:
-    onyx_file: FileWithMimeType | None = None
-
     try:
         load_runtime_settings_fn = fetch_versioned_implementation(
             "onyx.server.enterprise_settings.store", "load_runtime_settings"
