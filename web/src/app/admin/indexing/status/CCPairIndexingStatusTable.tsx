@@ -373,8 +373,6 @@ export function CCPairIndexingStatusTable({
       return Object.keys(filteredGroupedStatuses) as ValidSources[];
     }
 
-    const [first] = sortedSources;
-    return Array(100).fill(first) as ValidSources[];
     return sortedSources;
   }, [sortedSources, filteredGroupedStatuses, filterOptions]);
 
