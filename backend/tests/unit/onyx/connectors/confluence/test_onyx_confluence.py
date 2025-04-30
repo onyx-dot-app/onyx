@@ -53,7 +53,7 @@ def mock_credentials_provider() -> mock.Mock:
 
 
 @pytest.fixture
-def confluence_client(mock_credentials_provider: mock.Mock) -> OnyxConfluence:
+def confluence_server_client(mock_credentials_provider: mock.Mock) -> OnyxConfluence:
     confluence = OnyxConfluence(
         is_cloud=False,
         url="http://fake-confluence.com",
@@ -72,7 +72,7 @@ def confluence_client(mock_credentials_provider: mock.Mock) -> OnyxConfluence:
 
 
 def test_cql_paginate_all_expansions_handles_internal_pagination_error(
-    confluence_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
+    confluence_server_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
 ) -> None:
     """
     Tests that cql_paginate_all_expansions correctly handles HTTP 500 errors
@@ -91,8 +91,8 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
        - Page 2 (start=1): Success
        - Page 3 (start=2): Failure (500)
        - Page 4 (start=3): Failure (500) <- This is the error that should be raised
-    5. Expansion 3 is never called because Expansion 2 ultimately fails.
-    6. The overall call raises the HTTPError from the last failed attempt (page 4, start=3, limit=1).
+    5. Calls the expansion for the third child and gets a response with 1 child.
+    6. The overall call succeeds.
     """
     caplog.set_level("WARNING")  # To check logging messages
 
@@ -292,12 +292,12 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
         print(f"!!! Unexpected GET path in mock: {path}")
         raise RuntimeError(f"Unexpected GET path in mock: {path}")
 
-    confluence_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = get_side_effect
 
     # --- Execute ---
     # Consume the iterator to trigger the calls
     result = list(
-        confluence_client.cql_paginate_all_expansions(
+        confluence_server_client.cql_paginate_all_expansions(
             cql=top_level_cql,
             expand=top_level_expand,
             limit=_DEFAULT_PAGINATION_LIMIT,
@@ -358,12 +358,14 @@ def test_cql_paginate_all_expansions_handles_internal_pagination_error(
 
 
 def test_paginated_cql_retrieval_handles_pagination_error(
-    confluence_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
+    confluence_server_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
 ) -> None:
     """
     Tests that paginated_cql_retrieval correctly handles HTTP 500 errors
     during pagination, retrying with smaller limits down to 1, skipping
     the problematic item, and continuing.
+
+    NOTE: in this context, a "page" is a set of results NOT a confluence page.
 
     Specifically, this test:
     1. Makes an initial CQL call with a limit, gets page 1 successfully.
@@ -505,11 +507,11 @@ def test_paginated_cql_retrieval_handles_pagination_error(
             print(f"!!! Unexpected GET path in mock: {path}")
             raise RuntimeError(f"Unexpected GET path in mock: {path}")
 
-    confluence_client._confluence.get.side_effect = get_side_effect
+    confluence_server_client._confluence.get.side_effect = get_side_effect
 
     # --- Execute ---
     results = list(
-        confluence_client.paginated_cql_retrieval(
+        confluence_server_client.paginated_cql_retrieval(
             cql=test_cql,
             limit=test_limit,
         )
@@ -550,3 +552,216 @@ def test_paginated_cql_retrieval_handles_pagination_error(
         page3_path,  # Page 3 success
     ]
     assert mock_get_call_paths == expected_calls
+
+
+def test_paginated_cql_retrieval_skips_completely_failing_page(
+    confluence_server_client: OnyxConfluence, caplog: pytest.LogCaptureFixture
+) -> None:
+    """
+    Tests that paginated_cql_retrieval skips an entire page if the initial
+    fetch fails and all subsequent limit=1 retries also fail. It should
+    then proceed to fetch the next page successfully.
+    """
+    caplog.set_level("WARNING")
+
+    test_cql = "type=page"
+    encoded_cql = "type%3Dpage"
+    test_limit = 3  # Small limit for testing
+    _TEST_MINIMUM_LIMIT = 1
+
+    base_path = f"rest/api/content/search?cql={encoded_cql}"
+    page1_path = f"{base_path}&limit={test_limit}"
+    # Page 2 starts where page 1 left off (start=test_limit)
+    page2_initial_path = f"{base_path}&limit={test_limit}&start={test_limit}"
+    # Page 3 starts after the completely failed page 2 (start=test_limit * 2)
+    page3_path = f"{base_path}&limit={test_limit}&start={test_limit * 2}"
+
+    # --- Mock Responses ---
+    # Page 1: Success (3 items)
+    page1_response = _create_mock_response(
+        200,
+        {
+            "results": [{"id": 1}, {"id": 2}, {"id": 3}],
+            "_links": {"next": f"/{page2_initial_path}"},
+            "size": 3,
+        },
+        url=page1_path,
+    )
+
+    # Page 2: Initial attempt fails with 500
+    page2_initial_error = _create_http_error(500, url=page2_initial_path)
+
+    # Page 2: Retry attempts with limit=1 (ALL fail)
+    page2_limit1_start_offset = test_limit
+    page2_limit1_retry_errors = {}
+    # Generate failing responses for each item expected on page 2
+    for i in range(test_limit):
+        item_path = f"{base_path}&limit={_TEST_MINIMUM_LIMIT}&start={page2_limit1_start_offset + i}"
+        page2_limit1_retry_errors[item_path] = _create_http_error(500, url=item_path)
+
+    # Page 3: Success (2 items)
+    page3_response = _create_mock_response(
+        200,
+        {"results": [{"id": 7}, {"id": 8}], "_links": {}, "size": 2},
+        url=page3_path,
+    )
+
+    # --- Side Effect Logic ---
+    mock_get_call_paths: list[str] = []
+    call_counts: dict[str, int] = {}
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,
+        advanced_mode: bool = False,
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+        call_counts[path] = call_counts.get(path, 0) + 1
+        print(f"Mock GET received path: {path} (Call #{call_counts[path]})")
+
+        if path == page1_path:
+            print(f"-> Returning page 1 success for {path}")
+            return page1_response
+        elif path == page2_initial_path:
+            print(f"-> Returning page 2 initial 500 error for {path}")
+            return page2_initial_error
+        elif path in page2_limit1_retry_errors:
+            print(f"-> Returning page 2 limit=1 retry 500 error for {path}")
+            return page2_limit1_retry_errors[path]
+        elif path == page3_path:
+            print(f"-> Returning page 3 success for {path}")
+            return page3_response
+        else:
+            print(f"!!! Unexpected GET path in mock: {path}")
+            raise RuntimeError(f"Unexpected GET path in mock: {path}")
+
+    confluence_server_client._confluence.get.side_effect = get_side_effect
+
+    # --- Execute ---
+    results = list(
+        confluence_server_client.paginated_cql_retrieval(
+            cql=test_cql,
+            limit=test_limit,
+        )
+    )
+
+    # --- Assertions ---
+    # Verify expected results (ids 1-3 from page 1, 7-8 from page 3)
+    expected_results = [
+        {"id": 1},
+        {"id": 2},
+        {"id": 3},  # Page 1
+        # Page 2 completely skipped
+        {"id": 7},
+        {"id": 8},  # Page 3
+    ]
+    assert results == expected_results
+
+    # Verify logs for the failed retry attempts on page 2
+    for failed_path in page2_limit1_retry_errors:
+        assert f"Error in confluence call to /{failed_path}" in caplog.text
+    assert (
+        f"Error in confluence call to {page2_initial_path}" not in caplog.text
+    )  # Initial error triggers retry, not direct logging in _paginate_url
+
+    # Verify sequence of calls
+    expected_calls = [
+        page1_path,  # Page 1 success
+        page2_initial_path,  # Page 2 initial fail (500)
+    ]
+    # Add the failed limit=1 retry calls for page 2
+    expected_calls.extend(list(page2_limit1_retry_errors.keys()))
+    # The retry loop should make one final call to check if there are more items
+    # expected_calls.append(page2_limit1_final_empty_path)
+    # Add the call to page 3
+    expected_calls.append(page3_path)
+
+    assert mock_get_call_paths == expected_calls
+
+
+def test_paginated_cql_retrieval_cloud_no_retry_on_error(
+    mock_credentials_provider: mock.Mock,
+) -> None:
+    """
+    Tests that for Confluence Cloud (is_cloud=True), paginated_cql_retrieval
+    does NOT retry on pagination errors and raises HTTPError immediately.
+    """
+    # Setup Confluence Cloud Client
+    confluence_cloud_client = OnyxConfluence(
+        is_cloud=True,  # Key difference: Cloud instance
+        url="https://fake-cloud.atlassian.net",
+        credentials_provider=mock_credentials_provider,
+        timeout=10,
+    )
+    mock_internal_client = mock.Mock()
+    mock_internal_client.url = confluence_cloud_client._url
+    confluence_cloud_client._confluence = mock_internal_client
+    confluence_cloud_client._kwargs = confluence_cloud_client.shared_base_kwargs
+
+    test_cql = "type=page"
+    encoded_cql = "type%3Dpage"
+    test_limit = 50  # Use a standard limit
+
+    base_path = f"rest/api/content/search?cql={encoded_cql}"
+    page1_path = f"{base_path}&limit={test_limit}"
+    page2_path = f"{base_path}&limit={test_limit}&start={test_limit}"
+
+    # --- Mock Responses ---
+    # Page 1: Success
+    page1_response = _create_mock_response(
+        200,
+        {
+            "results": [{"id": i} for i in range(test_limit)],
+            "_links": {"next": f"/{page2_path}"},
+            "size": test_limit,
+        },
+        url=page1_path,
+    )
+
+    # Page 2: Failure (500)
+    page2_error = _create_http_error(500, url=page2_path)
+
+    # --- Side Effect Logic ---
+    mock_get_call_paths: list[str] = []
+
+    def get_side_effect(
+        path: str,
+        params: dict[str, Any] | None = None,
+        advanced_mode: bool = False,
+    ) -> requests.Response:
+        path = path.strip("/")
+        mock_get_call_paths.append(path)
+        print(f"Mock GET received path: {path}")
+
+        if path == page1_path:
+            print(f"-> Returning page 1 success for {path}")
+            return page1_response
+        elif path == page2_path:
+            print(f"-> Returning page 2 500 error for {path}")
+            return page2_error
+        else:
+            # No other paths (like limit=1 retries) should be called
+            print(f"!!! Unexpected GET path in mock for Cloud test: {path}")
+            raise RuntimeError(f"Unexpected GET path in mock for Cloud test: {path}")
+
+    confluence_cloud_client._confluence.get.side_effect = get_side_effect
+
+    # --- Execute & Assert ---
+    with pytest.raises(HTTPError) as excinfo:
+        # Consume the iterator to trigger calls
+        list(
+            confluence_cloud_client.paginated_cql_retrieval(
+                cql=test_cql,
+                limit=test_limit,
+            )
+        )
+
+    # Verify the error is the one we simulated for page 2
+    assert excinfo.value.response == page2_error
+    assert excinfo.value.response.status_code == 500
+    assert page2_path in excinfo.value.response.url
+
+    # Verify only two calls were made (page 1 success, page 2 fail)
+    # Crucially, no retry attempts with different limits should exist.
+    assert mock_get_call_paths == [page1_path, page2_path]

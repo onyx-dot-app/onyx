@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
@@ -420,6 +421,62 @@ class OnyxConfluence:
 
         return rate_limited_method
 
+    def _try_one_by_one_for_paginated_url(
+        self,
+        url_suffix: str,
+        initial_start: int,
+        limit: int,
+    ) -> Generator[dict[str, Any], None, str | None]:
+        """
+        Go through `limit` items, starting at `initial_start` one by one (e.g. using
+        `limit=1` for each call).
+
+        If we encounter an error, we skip the item and try the next one. We will return
+        the items we were able to retrieve successfully.
+
+        Returns the expected next url_suffix. Returns None if it thinks we've hit the end.
+
+        TODO (chris): make this yield failures as well as successes.
+        TODO (chris): make this work for confluence cloud somehow.
+        """
+        if self._is_cloud:
+            raise RuntimeError("This method is not implemented for Confluence Cloud.")
+
+        found_empty_page = False
+        temp_url_suffix = url_suffix
+
+        for ind in range(limit):
+            try:
+                temp_url_suffix = update_param_in_path(
+                    url_suffix, "start", str(initial_start + ind)
+                )
+                temp_url_suffix = update_param_in_path(temp_url_suffix, "limit", "1")
+                logger.info(f"Making recovery confluence call to {temp_url_suffix}")
+                raw_response = self.get(path=temp_url_suffix, advanced_mode=True)
+                raw_response.raise_for_status()
+
+                latest_results = raw_response.json().get("results", [])
+                yield from latest_results
+
+                if not latest_results:
+                    # no more results, break out of the loop
+                    logger.info(
+                        f"No results found for call '{temp_url_suffix}'"
+                        "Stopping pagination."
+                    )
+                    found_empty_page = True
+                    break
+            except Exception:
+                logger.exception(
+                    f"Error in confluence call to {temp_url_suffix}. Continuing."
+                )
+
+        if found_empty_page:
+            return None
+
+        # if we got here, we successfully tried `limit` items
+        return update_param_in_path(url_suffix, "start", str(initial_start + limit))
+
     def _paginate_url(
         self,
         url_suffix: str,
@@ -465,71 +522,29 @@ class OnyxConfluence:
                     )
                     continue
 
-                # this iterative approach only works for server, since cloud uses cursor-based
+                # If we fail due to a 500, try one by one.
+                # NOTE: this iterative approach only works for server, since cloud uses cursor-based
                 # pagination
                 if raw_response.status_code == 500 and not self._is_cloud:
-                    # in the case of a 500 error, go one by one until we find the error
-                    # and skip the error
-                    results: list[dict[str, Any]] = []
                     initial_start = get_start_param_from_url(url_suffix)
                     if initial_start is None:
                         # can't handle this if we don't have offset-based pagination
                         raise
 
-                    if limit == 1:
-                        # no point in trying to reduce limit to 1 if limit is already 1!
-                        raise
+                    # this will just yield the successful items from the batch
+                    new_url_suffix = yield from self._try_one_by_one_for_paginated_url(
+                        url_suffix,
+                        initial_start=initial_start,
+                        limit=limit,
+                    )
 
-                    found_empty_page = False
-                    found_any_success = False
-                    temp_url_suffix = url_suffix
-                    ind = 0
-                    for ind in range(limit):
-                        try:
-                            temp_url_suffix = update_param_in_path(
-                                url_suffix, "start", str(initial_start + ind)
-                            )
-                            temp_url_suffix = update_param_in_path(
-                                temp_url_suffix, "limit", "1"
-                            )
-                            logger.info(
-                                f"Making recovery confluence call to {temp_url_suffix}"
-                            )
-                            raw_response = self.get(
-                                path=temp_url_suffix, advanced_mode=True
-                            )
-                            raw_response.raise_for_status()
-
-                            latest_results = raw_response.json().get("results", [])
-                            yield from latest_results
-
-                            found_any_success = True
-
-                            if not latest_results:
-                                # no more results, break out of the loop
-                                logger.info(
-                                    f"No results found for call '{temp_url_suffix}'"
-                                    "Stopping pagination."
-                                )
-                                found_empty_page = True
-                                break
-                        except Exception:
-                            logger.exception(
-                                f"Error in confluence call to {temp_url_suffix}"
-                            )
-
-                    if found_empty_page or not found_any_success:
+                    # this means we ran into an empty page
+                    if new_url_suffix is None:
                         if next_page_callback:
                             next_page_callback("")
                         break
 
-                    # since we manually tried up to limit, we can just update the start
-                    url_suffix = update_param_in_path(
-                        url_suffix, "start", str(initial_start + ind + 1)
-                    )
-                    if next_page_callback:
-                        next_page_callback(url_suffix)
-
+                    url_suffix = new_url_suffix
                     continue
 
                 else:
