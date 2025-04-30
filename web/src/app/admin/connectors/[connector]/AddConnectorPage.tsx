@@ -175,6 +175,7 @@ export default function AddConnector({
   const { setFormStep, setAllowCreate, formStep } = useFormContext();
   const { popup, setPopup } = usePopup();
   const [uploading, setUploading] = useState(false);
+  const [creatingConnector, setCreatingConnector] = useState(false);
 
   // Hooks for Google Drive and Gmail credentials
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
@@ -381,57 +382,63 @@ export default function AddConnector({
           return;
         }
 
-        const { message, isSuccess, response } = await submitConnector<any>(
-          {
-            connector_specific_config: transformedConnectorSpecificConfig,
-            input_type: isLoadState(connector) ? "load_state" : "poll", // single case
-            name: name,
-            source: connector,
-            access_type: access_type,
-            refresh_freq: advancedConfiguration.refreshFreq || null,
-            prune_freq: advancedConfiguration.pruneFreq || null,
-            indexing_start: advancedConfiguration.indexingStart || null,
-            groups: groups,
-          },
-          undefined,
-          credentialActivated ? false : true
-        );
-        // If no credential
-        if (!credentialActivated) {
-          if (isSuccess) {
+        setCreatingConnector(true);
+        try {
+          const { message, isSuccess, response } = await submitConnector<any>(
+            {
+              connector_specific_config: transformedConnectorSpecificConfig,
+              input_type: isLoadState(connector) ? "load_state" : "poll", // single case
+              name: name,
+              source: connector,
+              access_type: access_type,
+              refresh_freq: advancedConfiguration.refreshFreq || null,
+              prune_freq: advancedConfiguration.pruneFreq || null,
+              indexing_start: advancedConfiguration.indexingStart || null,
+              groups: groups,
+            },
+            undefined,
+            credentialActivated ? false : true
+          );
+          // If no credential
+          if (!credentialActivated) {
+            if (isSuccess) {
+              onSuccess();
+            } else {
+              setPopup({ message: message, type: "error" });
+            }
+          }
+
+          // Without credential
+          if (credentialActivated && isSuccess && response) {
+            const credential =
+              currentCredential || liveGDriveCredential || liveGmailCredential;
+            const linkCredentialResponse = await linkCredential(
+              response.id,
+              credential?.id!,
+              name,
+              access_type,
+              groups,
+              auto_sync_options
+            );
+            if (linkCredentialResponse.ok) {
+              onSuccess();
+            } else {
+              const errorData = await linkCredentialResponse.json();
+              setPopup({
+                message: errorData.message || errorData.detail,
+                type: "error",
+              });
+            }
+          } else if (isSuccess) {
             onSuccess();
           } else {
             setPopup({ message: message, type: "error" });
           }
+          await new Promise((r) => setTimeout(r, 2000));
+          return;
+        } finally {
+          setCreatingConnector(false);
         }
-
-        // Without credential
-        if (credentialActivated && isSuccess && response) {
-          const credential =
-            currentCredential || liveGDriveCredential || liveGmailCredential;
-          const linkCredentialResponse = await linkCredential(
-            response.id,
-            credential?.id!,
-            name,
-            access_type,
-            groups,
-            auto_sync_options
-          );
-          if (linkCredentialResponse.ok) {
-            onSuccess();
-          } else {
-            const errorData = await linkCredentialResponse.json();
-            setPopup({
-              message: errorData.message || errorData.detail,
-              type: "error",
-            });
-          }
-        } else if (isSuccess) {
-          onSuccess();
-        } else {
-          setPopup({ message: message, type: "error" });
-        }
-        return;
       }}
     >
       {(formikProps) => {
@@ -441,6 +448,10 @@ export default function AddConnector({
 
             {uploading && (
               <TemporaryLoadingModal content="Uploading files..." />
+            )}
+
+            {creatingConnector && (
+              <TemporaryLoadingModal content="Creating connector..." /> // There's no spinner here from TemporaryLoadingModal?
             )}
 
             <AdminPageTitle
