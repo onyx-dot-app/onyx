@@ -140,7 +140,6 @@ export function QueryHistoryTable() {
     currentPage,
     totalPages,
     goToPage,
-    refresh,
   } = usePaginatedFetch<ChatSessionMinimal>({
     itemsPerPage: ITEMS_PER_PAGE,
     pagesPerBatch: PAGES_PER_BATCH,
@@ -201,8 +200,7 @@ export function QueryHistoryTable() {
               onValueChange={onTimeRangeChange}
             />
           </div>
-
-          <DownloadAsCSV />
+          <DownloadAsCSV dateRange={dateRange} />
         </div>
         <Separator />
         <Table className="mt-5">

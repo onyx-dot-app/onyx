@@ -1,6 +1,7 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
+import { DateRange } from "../DateRangeSelector";
 import { FaSpinner } from "react-icons/fa";
 import { FiDownload } from "react-icons/fi";
 
@@ -24,7 +25,16 @@ type SpinnerStatus = "static" | "spinning";
 const withRequestId = (url: string, requestId: string): string =>
   `${url}?request_id=${requestId}`;
 
-export function DownloadAsCSV() {
+const withDateRange = (dateRange: DateRange): string => {
+  if (!dateRange) {
+    return START_QUERY_HISTORY_EXPORT_URL;
+  }
+
+  const { from, to } = dateRange;
+  return `${START_QUERY_HISTORY_EXPORT_URL}?start=${from}&end=${to}`;
+};
+
+export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
   const [, rerender] = useState<void>();
@@ -58,7 +68,7 @@ export function DownloadAsCSV() {
     }
 
     setSpinnerStatus("spinning");
-    const response = await fetch(START_QUERY_HISTORY_EXPORT_URL, {
+    const response = await fetch(withDateRange(dateRange), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
