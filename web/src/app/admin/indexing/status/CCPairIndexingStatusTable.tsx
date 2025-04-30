@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CCPairStatus, IndexAttemptStatus } from "@/components/Status";
+import { CCPairStatus } from "@/components/Status";
 import { timeAgo } from "@/lib/time";
 import {
   ConnectorIndexingStatus,
@@ -25,7 +25,6 @@ import {
   FiLock,
   FiUnlock,
   FiRefreshCw,
-  FiPauseCircle,
 } from "react-icons/fi";
 import {
   Tooltip,
@@ -35,7 +34,6 @@ import {
 } from "@/components/ui/tooltip";
 import { SourceIcon } from "@/components/SourceIcon";
 import { getSourceDisplayName } from "@/lib/sources";
-import { Warning } from "@phosphor-icons/react";
 import Cookies from "js-cookie";
 import { TOGGLED_CONNECTORS_COOKIE_NAME } from "@/lib/constants";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
@@ -53,7 +51,6 @@ function SummaryRow({
   isOpen: boolean;
   onToggle: () => void;
 }) {
-  const activePercentage = (summary.active / summary.count) * 100;
   const isPaidEnterpriseFeaturesEnabled = usePaidEnterpriseFeaturesEnabled();
 
   return (
@@ -135,13 +132,13 @@ function ConnectorRow({
 
   return (
     <TableRow
-      className={`
-border border-border dark:border-neutral-700
-        hover:bg-accent-background ${
+      className={`border border-border dark:border-neutral-700 hover:bg-accent-background
+        ${
           invisible
             ? "invisible !h-0 !-mb-10 !border-none"
             : "!border border-border dark:border-neutral-700"
-        }  w-full cursor-pointer relative `}
+        }
+        w-full cursor-pointer relative`}
       onClick={() => {
         router.push(`/admin/connector/${ccPairsIndexingStatus.cc_pair_id}`);
       }}
@@ -376,6 +373,8 @@ export function CCPairIndexingStatusTable({
       return Object.keys(filteredGroupedStatuses) as ValidSources[];
     }
 
+    const [first] = sortedSources;
+    return Array(100).fill(first) as ValidSources[];
     return sortedSources;
   }, [sortedSources, filteredGroupedStatuses, filterOptions]);
 
@@ -406,24 +405,6 @@ export function CCPairIndexingStatusTable({
           JSON.stringify(newConnectorsToggled)
         );
       }, 0);
-    }
-  };
-
-  const clearAllFilters = () => {
-    const emptyFilters: FilterOptions = {
-      accessType: null,
-      docsCountFilter: {
-        operator: null,
-        value: null,
-      },
-      lastStatus: null,
-    };
-
-    setFilterOptions(emptyFilters);
-
-    // Reset the FilterComponent's internal state
-    if (filterComponentRef.current) {
-      filterComponentRef.current.resetFilters();
     }
   };
 
@@ -468,196 +449,194 @@ export function CCPairIndexingStatusTable({
     sortedSources.length;
 
   return (
-    <>
-      <Table>
-        <TableHeader>
-          <ConnectorRow
-            invisible
-            ccPairsIndexingStatus={{
-              cc_pair_id: 1,
+    <Table>
+      <TableHeader>
+        <ConnectorRow
+          invisible
+          ccPairsIndexingStatus={{
+            cc_pair_id: 1,
+            name: "Sample File Connector",
+            cc_pair_status: ConnectorCredentialPairStatus.ACTIVE,
+            last_status: "success",
+            connector: {
               name: "Sample File Connector",
-              cc_pair_status: ConnectorCredentialPairStatus.ACTIVE,
-              last_status: "success",
-              connector: {
-                name: "Sample File Connector",
-                source: ValidSources.File,
-                input_type: "poll",
-                connector_specific_config: {
-                  file_locations: ["/path/to/sample/file.txt"],
-                  zip_metadata: {},
-                },
-                refresh_freq: 86400,
-                prune_freq: null,
-                indexing_start: new Date("2023-07-01T12:00:00Z"),
-                id: 1,
-                credential_ids: [],
-                access_type: "public",
-                time_created: "2023-07-01T12:00:00Z",
-                time_updated: "2023-07-01T12:00:00Z",
+              source: ValidSources.File,
+              input_type: "poll",
+              connector_specific_config: {
+                file_locations: ["/path/to/sample/file.txt"],
+                zip_metadata: {},
               },
-              credential: {
-                id: 1,
-                name: "Sample Credential",
-                source: ValidSources.File,
-                user_id: "1",
-                user_email: "sample@example.com",
-                time_created: "2023-07-01T12:00:00Z",
-                time_updated: "2023-07-01T12:00:00Z",
-                credential_json: {},
-                admin_public: false,
-              },
+              refresh_freq: 86400,
+              prune_freq: null,
+              indexing_start: new Date("2023-07-01T12:00:00Z"),
+              id: 1,
+              credential_ids: [],
               access_type: "public",
-              docs_indexed: 1000,
-              last_success: "2023-07-01T12:00:00Z",
-              last_finished_status: "success",
-              latest_index_attempt: null,
-              groups: [], // Add this line
-              in_repeated_error_state: false,
-            }}
-            isEditable={false}
+              time_created: "2023-07-01T12:00:00Z",
+              time_updated: "2023-07-01T12:00:00Z",
+            },
+            credential: {
+              id: 1,
+              name: "Sample Credential",
+              source: ValidSources.File,
+              user_id: "1",
+              user_email: "sample@example.com",
+              time_created: "2023-07-01T12:00:00Z",
+              time_updated: "2023-07-01T12:00:00Z",
+              credential_json: {},
+              admin_public: false,
+            },
+            access_type: "public",
+            docs_indexed: 1000,
+            last_success: "2023-07-01T12:00:00Z",
+            last_finished_status: "success",
+            latest_index_attempt: null,
+            groups: [], // Add this line
+            in_repeated_error_state: false,
+          }}
+          isEditable={false}
+        />
+      </TableHeader>
+      <div className="flex -mt-12 items-center w-0 m4 gap-x-2">
+        <input
+          type="text"
+          ref={searchInputRef}
+          placeholder="Search connectors..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="ml-1 w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        />
+
+        <Button className="h-9" onClick={() => toggleSources()}>
+          {!shouldExpand ? "Collapse All" : "Expand All"}
+        </Button>
+
+        <div className="flex items-center gap-2">
+          <FilterComponent
+            onFilterChange={handleFilterChange}
+            ref={filterComponentRef}
           />
-        </TableHeader>
-        <div className="flex -mt-12 items-center w-0 m4 gap-x-2">
-          <input
-            type="text"
-            ref={searchInputRef}
-            placeholder="Search connectors..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="ml-1 w-96 h-9 border border-border flex-none rounded-md bg-background-50 px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-          />
 
-          <Button className="h-9" onClick={() => toggleSources()}>
-            {!shouldExpand ? "Collapse All" : "Expand All"}
-          </Button>
+          {hasActiveFilters && (
+            <div className="flex flex-none items-center gap-1 ml-2 max-w-[500px]">
+              {filterOptions.accessType &&
+                filterOptions.accessType.length > 0 && (
+                  <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+                    Access: {filterOptions.accessType.join(", ")}
+                  </Badge>
+                )}
 
-          <div className="flex items-center gap-2">
-            <FilterComponent
-              onFilterChange={handleFilterChange}
-              ref={filterComponentRef}
-            />
+              {filterOptions.lastStatus &&
+                filterOptions.lastStatus.length > 0 && (
+                  <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+                    Status:{" "}
+                    {filterOptions.lastStatus
+                      .map((s) => s.replace(/_/g, " "))
+                      .join(", ")}
+                  </Badge>
+                )}
 
-            {hasActiveFilters && (
-              <div className="flex flex-none items-center gap-1 ml-2 max-w-[500px]">
-                {filterOptions.accessType &&
-                  filterOptions.accessType.length > 0 && (
-                    <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Access: {filterOptions.accessType.join(", ")}
-                    </Badge>
-                  )}
+              {filterOptions.docsCountFilter.operator &&
+                filterOptions.docsCountFilter.value !== null && (
+                  <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+                    Docs {filterOptions.docsCountFilter.operator}{" "}
+                    {filterOptions.docsCountFilter.value}
+                  </Badge>
+                )}
 
-                {filterOptions.lastStatus &&
-                  filterOptions.lastStatus.length > 0 && (
-                    <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Status:{" "}
-                      {filterOptions.lastStatus
-                        .map((s) => s.replace(/_/g, " "))
-                        .join(", ")}
-                    </Badge>
-                  )}
+              {filterOptions.docsCountFilter.operator &&
+                filterOptions.docsCountFilter.value === null && (
+                  <Badge variant="secondary" className="px-2 py-0.5 text-xs">
+                    Docs {filterOptions.docsCountFilter.operator} any
+                  </Badge>
+                )}
 
-                {filterOptions.docsCountFilter.operator &&
-                  filterOptions.docsCountFilter.value !== null && (
-                    <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Docs {filterOptions.docsCountFilter.operator}{" "}
-                      {filterOptions.docsCountFilter.value}
-                    </Badge>
-                  )}
-
-                {filterOptions.docsCountFilter.operator &&
-                  filterOptions.docsCountFilter.value === null && (
-                    <Badge variant="secondary" className="px-2 py-0.5 text-xs">
-                      Docs {filterOptions.docsCountFilter.operator} any
-                    </Badge>
-                  )}
-
-                <Badge
-                  variant="outline"
-                  className="px-2 py-0.5 text-xs border-red-400  bg-red-100 hover:border-red-600 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900"
-                  onClick={() => {
-                    if (filterComponentRef.current) {
-                      filterComponentRef.current.resetFilters();
-                      setFilterOptions({
-                        accessType: null,
-                        docsCountFilter: {
-                          operator: null,
-                          value: null,
-                        },
-                        lastStatus: null,
-                      });
-                    }
-                  }}
-                >
-                  <span className="text-red-500 dark:text-red-400">Clear</span>
-                </Badge>
-              </div>
-            )}
-          </div>
+              <Badge
+                variant="outline"
+                className="px-2 py-0.5 text-xs border-red-400  bg-red-100 hover:border-red-600 cursor-pointer hover:bg-red-100 dark:hover:bg-red-900"
+                onClick={() => {
+                  if (filterComponentRef.current) {
+                    filterComponentRef.current.resetFilters();
+                    setFilterOptions({
+                      accessType: null,
+                      docsCountFilter: {
+                        operator: null,
+                        value: null,
+                      },
+                      lastStatus: null,
+                    });
+                  }
+                }}
+              >
+                <span className="text-red-500 dark:text-red-400">Clear</span>
+              </Badge>
+            </div>
+          )}
         </div>
-        <TableBody>
-          {displaySources
-            .filter(
-              (source) =>
-                source != "not_applicable" && source != "ingestion_api"
-            )
-            .map((source, ind) => {
-              const sourceMatches = source
+      </div>
+      <TableBody>
+        {displaySources
+          .filter(
+            (source) => source != "not_applicable" && source != "ingestion_api"
+          )
+          .map((source, ind) => {
+            const sourceMatches = source
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase());
+
+            const statuses =
+              filteredGroupedStatuses[source] || groupedStatuses[source];
+
+            const matchingConnectors = statuses.filter((status) =>
+              (status.name || "")
                 .toLowerCase()
-                .includes(searchTerm.toLowerCase());
+                .includes(searchTerm.toLowerCase())
+            );
 
-              const statuses =
-                filteredGroupedStatuses[source] || groupedStatuses[source];
-
-              const matchingConnectors = statuses.filter((status) =>
-                (status.name || "")
-                  .toLowerCase()
-                  .includes(searchTerm.toLowerCase())
-              );
-
-              if (sourceMatches || matchingConnectors.length > 0) {
-                return (
-                  <React.Fragment key={ind}>
-                    <br className="mt-4" />
-                    <SummaryRow
-                      source={source}
-                      summary={groupSummaries[source]}
-                      isOpen={connectorsToggled[source] || false}
-                      onToggle={() => toggleSource(source)}
-                    />
-                    {connectorsToggled[source] && (
-                      <>
-                        <TableRow className="border border-border dark:border-neutral-700">
-                          <TableHead>Name</TableHead>
-                          <TableHead>Last Indexed</TableHead>
-                          <TableHead>Status</TableHead>
-                          {isPaidEnterpriseFeaturesEnabled && (
-                            <TableHead>Permissions</TableHead>
-                          )}
-                          <TableHead>Total Docs</TableHead>
-                          <TableHead></TableHead>
-                        </TableRow>
-                        {(sourceMatches ? statuses : matchingConnectors).map(
-                          (ccPairsIndexingStatus) => (
-                            <ConnectorRow
-                              key={ccPairsIndexingStatus.cc_pair_id}
-                              ccPairsIndexingStatus={ccPairsIndexingStatus}
-                              isEditable={editableCcPairsIndexingStatuses.some(
-                                (e) =>
-                                  e.cc_pair_id ===
-                                  ccPairsIndexingStatus.cc_pair_id
-                              )}
-                            />
-                          )
+            if (sourceMatches || matchingConnectors.length > 0) {
+              return (
+                <React.Fragment key={ind}>
+                  <br className="mt-4" />
+                  <SummaryRow
+                    source={source}
+                    summary={groupSummaries[source]}
+                    isOpen={connectorsToggled[source] || false}
+                    onToggle={() => toggleSource(source)}
+                  />
+                  {connectorsToggled[source] && (
+                    <>
+                      <TableRow className="border border-border dark:border-neutral-700">
+                        <TableHead>Name</TableHead>
+                        <TableHead>Last Indexed</TableHead>
+                        <TableHead>Status</TableHead>
+                        {isPaidEnterpriseFeaturesEnabled && (
+                          <TableHead>Permissions</TableHead>
                         )}
-                      </>
-                    )}
-                  </React.Fragment>
-                );
-              }
-              return null;
-            })}
-        </TableBody>
-      </Table>
-    </>
+                        <TableHead>Total Docs</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                      {(sourceMatches ? statuses : matchingConnectors).map(
+                        (ccPairsIndexingStatus) => (
+                          <ConnectorRow
+                            key={ccPairsIndexingStatus.cc_pair_id}
+                            ccPairsIndexingStatus={ccPairsIndexingStatus}
+                            isEditable={editableCcPairsIndexingStatuses.some(
+                              (e) =>
+                                e.cc_pair_id ===
+                                ccPairsIndexingStatus.cc_pair_id
+                            )}
+                          />
+                        )
+                      )}
+                    </>
+                  )}
+                </React.Fragment>
+              );
+            }
+            return null;
+          })}
+        <br className="mt-4" />
+      </TableBody>
+    </Table>
   );
 }
