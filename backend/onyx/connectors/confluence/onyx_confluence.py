@@ -464,31 +464,70 @@ class OnyxConfluence:
                         _REPLACEMENT_EXPANSIONS,
                     )
                     continue
-                if (
-                    raw_response.status_code == 500
-                    and limit > _MINIMUM_PAGINATION_LIMIT
-                ):
-                    new_limit = limit // 2
-                    logger.warning(
+
+                if raw_response.status_code == 500:
+                    # in the case of a 500 error, go one by one until we find the error
+                    # and skip the error
+                    results: list[dict[str, Any]] = []
+                    initial_start = get_start_param_from_url(url_suffix)
+                    if initial_start is None:
+                        # can't handle this if we don't have offset-based pagination
+                        raise
+
+                    if limit == 1:
+                        # no point in trying to reduce limit to 1 if limit is already 1!
+                        raise
+
+                    found_empty_page = False
+                    temp_url_suffix = url_suffix
+                    for ind in range(limit):
+                        try:
+                            temp_url_suffix = update_param_in_path(
+                                url_suffix, "start", str(initial_start + ind)
+                            )
+                            temp_url_suffix = update_param_in_path(
+                                temp_url_suffix, "limit", "1"
+                            )
+                            raw_response = self.get(
+                                path=temp_url_suffix, advanced_mode=True
+                            )
+                            raw_response.raise_for_status()
+
+                            latest_results = raw_response.json().get("results", [])
+                            yield from latest_results
+
+                            if not latest_results:
+                                # no more results, break out of the loop
+                                logger.info(
+                                    f"No results found for call '{temp_url_suffix}'"
+                                    "Stopping pagination."
+                                )
+                                found_empty_page = True
+                                break
+                        except Exception:
+                            logger.exception(
+                                f"Error in confluence call to {temp_url_suffix}"
+                            )
+
+                    if found_empty_page:
+                        break
+
+                    # since we manually tried up to limit, we can just update the start
+                    url_suffix = update_param_in_path(
+                        url_suffix, "start", str(initial_start + limit)
+                    )
+                    if next_page_callback:
+                        next_page_callback(url_suffix)
+                    continue
+
+                else:
+                    logger.exception(
                         f"Error in confluence call to {url_suffix} \n"
                         f"Raw Response Text: {raw_response.text} \n"
                         f"Full Response: {raw_response.__dict__} \n"
                         f"Error: {e} \n"
-                        f"Reducing limit from {limit} to {new_limit} and trying again."
                     )
-                    url_suffix = url_suffix.replace(
-                        f"limit={limit}", f"limit={new_limit}"
-                    )
-                    limit = new_limit
-                    continue
-
-                logger.exception(
-                    f"Error in confluence call to {url_suffix} \n"
-                    f"Raw Response Text: {raw_response.text} \n"
-                    f"Full Response: {raw_response.__dict__} \n"
-                    f"Error: {e} \n"
-                )
-                raise e
+                    raise
 
             try:
                 next_response = raw_response.json()
@@ -578,15 +617,13 @@ class OnyxConfluence:
         """
         This function will paginate through the top level query first, then
         paginate through all of the expansions.
-        The limit only applies to the top level query.
-        All expansion paginations use default pagination limit (defined by Atlassian).
         """
 
         def _traverse_and_update(data: dict | list) -> None:
             if isinstance(data, dict):
                 next_url = data.get("_links", {}).get("next")
                 if next_url and "results" in data:
-                    data["results"].extend(self._paginate_url(next_url))
+                    data["results"].extend(self._paginate_url(next_url, limit=limit))
 
                 for value in data.values():
                     _traverse_and_update(value)
