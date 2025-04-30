@@ -75,7 +75,7 @@ export function DownloadAsCSV() {
     const timer = setInterval(
       () => checkStatus(request_id),
       RETRY_COOLDOWN_MILLISECONDS
-    );
+    ) as unknown as number;
     timerIdRef.current = timer;
     rerender();
   };
