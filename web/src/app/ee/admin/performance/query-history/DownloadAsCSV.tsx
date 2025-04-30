@@ -27,7 +27,7 @@ const withRequestId = (url: string, requestId: string): string =>
 export function DownloadAsCSV() {
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
-  const [, rerender] = useState();
+  const [, rerender] = useState<void>();
   const [spinnerStatus, setSpinnerStatus] = useState<SpinnerStatus>("static");
 
   const { popup, setPopup } = usePopup();
@@ -47,7 +47,7 @@ export function DownloadAsCSV() {
       });
     }
 
-    rerender(undefined);
+    rerender();
   };
 
   const startExport = async () => {
@@ -77,11 +77,11 @@ export function DownloadAsCSV() {
       RETRY_COOLDOWN_MILLISECONDS
     ) as unknown as number;
     timerIdRef.current = timer;
-    rerender(undefined);
+    rerender();
   };
 
   const checkStatus = async (requestId: string) => {
-    rerender(undefined);
+    rerender();
     if (retryCount.current >= MAX_RETRIES) {
       reset(true);
       return;
