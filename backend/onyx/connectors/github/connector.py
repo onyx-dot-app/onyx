@@ -440,7 +440,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
-            def pull_requests_func():
+            def pull_requests_func() -> PaginatedList[PullRequest]:
                 return repo.get_pulls(
                     state=self.state_filter, sort="updated", direction="desc"
                 )
@@ -520,7 +520,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
             logger.info(f"Fetching issues for repo: {repo.name}")
 
-            def issues_func():
+            def issues_func() -> PaginatedList[Issue]:
                 return repo.get_issues(
                     state=self.state_filter, sort="updated", direction="desc"
                 )
