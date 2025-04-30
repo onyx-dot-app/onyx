@@ -112,12 +112,10 @@ class PostgresBackedFileStore(FileStore):
         file_type: str,
         display_name: str | None = None,
     ) -> bool:
-        return (
-            get_pgfilestore_by_file_name_optional(
-                file_name=display_name or file_name, db_session=self.db_session
-            )
-            is not None
+        file_record = get_pgfilestore_by_file_name_optional(
+            file_name=display_name or file_name, db_session=self.db_session
         )
+        return file_record is not None and file_record.file_origin == file_origin and file_record.file_type == file_type
 
     def save_file(
         self,
