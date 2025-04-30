@@ -328,8 +328,10 @@ def download_query_history_csv(
 
     file_store = get_default_file_store(db_session)
     report_name = query_history_report_name(request_id)
-    csv_stream = file_store.read_file(report_name)
-
+    try:
+        csv_stream = file_store.read_file(report_name)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to read query history file: {str(e)}")
     csv_stream.seek(0)
     return StreamingResponse(
         iter(csv_stream),
