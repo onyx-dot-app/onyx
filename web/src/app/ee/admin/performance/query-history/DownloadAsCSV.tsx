@@ -31,7 +31,11 @@ const withDateRange = (dateRange: DateRange): string => {
   }
 
   const { from, to } = dateRange;
-  return `${START_QUERY_HISTORY_EXPORT_URL}?start=${from}&end=${to}`;
+
+  const fromString = from.toISOString();
+  const toString = to.toISOString();
+
+  return `${START_QUERY_HISTORY_EXPORT_URL}?start=${fromString}&end=${toString}`;
 };
 
 export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
