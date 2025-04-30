@@ -5,7 +5,6 @@ from datetime import timezone
 from typing import Any
 from urllib.parse import quote
 
-from requests.exceptions import HTTPError
 from typing_extensions import override
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
@@ -22,10 +21,6 @@ from onyx.connectors.confluence.utils import datetime_from_string
 from onyx.connectors.confluence.utils import process_attachment
 from onyx.connectors.confluence.utils import update_param_in_path
 from onyx.connectors.confluence.utils import validate_attachment_filetype
-from onyx.connectors.exceptions import ConnectorValidationError
-from onyx.connectors.exceptions import CredentialExpiredError
-from onyx.connectors.exceptions import InsufficientPermissionsError
-from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import ConnectorCheckpoint
@@ -645,28 +640,30 @@ class ConfluenceConnector(
         yield doc_metadata_list
 
     def validate_connector_settings(self) -> None:
-        try:
-            spaces = self.low_timeout_confluence_client.get_all_spaces(limit=1)
-        except HTTPError as e:
-            status_code = e.response.status_code if e.response else None
-            if status_code == 401:
-                raise CredentialExpiredError(
-                    "Invalid or expired Confluence credentials (HTTP 401)."
-                )
-            elif status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Insufficient permissions to access Confluence resources (HTTP 403)."
-                )
-            raise UnexpectedValidationError(
-                f"Unexpected Confluence error (status={status_code}): {e}"
-            )
-        except Exception as e:
-            raise UnexpectedValidationError(
-                f"Unexpected error while validating Confluence settings: {e}"
-            )
+        # Freezing often, just removing for now
+        return None
+        # try:
+        #     spaces = self.low_timeout_confluence_client.get_all_spaces(limit=1)
+        # except HTTPError as e:
+        #     status_code = e.response.status_code if e.response else None
+        #     if status_code == 401:
+        #         raise CredentialExpiredError(
+        #             "Invalid or expired Confluence credentials (HTTP 401)."
+        #         )
+        #     elif status_code == 403:
+        #         raise InsufficientPermissionsError(
+        #             "Insufficient permissions to access Confluence resources (HTTP 403)."
+        #         )
+        #     raise UnexpectedValidationError(
+        #         f"Unexpected Confluence error (status={status_code}): {e}"
+        #     )
+        # except Exception as e:
+        #     raise UnexpectedValidationError(
+        #         f"Unexpected error while validating Confluence settings: {e}"
+        #     )
 
-        if not spaces or not spaces.get("results"):
-            raise ConnectorValidationError(
-                "No Confluence spaces found. Either your credentials lack permissions, or "
-                "there truly are no spaces in this Confluence instance."
-            )
+        # if not spaces or not spaces.get("results"):
+        #     raise ConnectorValidationError(
+        #         "No Confluence spaces found. Either your credentials lack permissions, or "
+        #         "there truly are no spaces in this Confluence instance."
+        #     )

@@ -465,7 +465,9 @@ class OnyxConfluence:
                     )
                     continue
 
-                if raw_response.status_code == 500:
+                # this iterative approach only works for server, since cloud uses cursor-based
+                # pagination
+                if raw_response.status_code == 500 and not self._is_cloud:
                     # in the case of a 500 error, go one by one until we find the error
                     # and skip the error
                     results: list[dict[str, Any]] = []
@@ -480,6 +482,7 @@ class OnyxConfluence:
 
                     found_empty_page = False
                     temp_url_suffix = url_suffix
+                    ind = 0
                     for ind in range(limit):
                         try:
                             temp_url_suffix = update_param_in_path(
@@ -510,14 +513,17 @@ class OnyxConfluence:
                             )
 
                     if found_empty_page:
+                        if next_page_callback:
+                            next_page_callback("")
                         break
 
                     # since we manually tried up to limit, we can just update the start
                     url_suffix = update_param_in_path(
-                        url_suffix, "start", str(initial_start + limit)
+                        url_suffix, "start", str(initial_start + ind + 1)
                     )
                     if next_page_callback:
                         next_page_callback(url_suffix)
+
                     continue
 
                 else:
