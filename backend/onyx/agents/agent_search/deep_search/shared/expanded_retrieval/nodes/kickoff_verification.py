@@ -10,6 +10,7 @@ from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states impor
 from onyx.agents.agent_search.deep_search.shared.expanded_retrieval.states import (
     ExpandedRetrievalState,
 )
+from onyx.configs.agent_configs import AGENT_MAX_VERIFICATION_HITS
 
 
 def kickoff_verification(
@@ -22,7 +23,7 @@ def kickoff_verification(
     are done here, so this could be replaced with an edge. But we may choose to make state
     updates later.)
     """
-    retrieved_documents = state.retrieved_documents
+    retrieved_documents = state.retrieved_documents[:AGENT_MAX_VERIFICATION_HITS]
     verification_question = state.question
 
     sub_question_id = state.sub_question_id
