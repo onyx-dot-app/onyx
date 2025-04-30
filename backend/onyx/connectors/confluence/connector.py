@@ -9,7 +9,6 @@ from urllib.parse import quote
 from typing_extensions import override
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
-from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_SLIM_FETCH_LIMIT
 from onyx.configs.app_configs import CONFLUENCE_TIMEZONE_OFFSET
 from onyx.configs.app_configs import CONTINUE_ON_CONNECTOR_FAILURE
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -572,7 +571,7 @@ class ConfluenceConnector(
         for page in self.confluence_client.cql_paginate_all_expansions(
             cql=page_query,
             expand=restrictions_expand,
-            limit=CONFLUENCE_CONNECTOR_SLIM_FETCH_LIMIT,
+            limit=_SLIM_DOC_BATCH_SIZE,
         ):
             page_restrictions = page.get("restrictions")
             page_space_key = page.get("space", {}).get("key")
@@ -598,7 +597,7 @@ class ConfluenceConnector(
             for attachment in self.confluence_client.cql_paginate_all_expansions(
                 cql=attachment_query,
                 expand=restrictions_expand,
-                limit=CONFLUENCE_CONNECTOR_SLIM_FETCH_LIMIT,
+                limit=_SLIM_DOC_BATCH_SIZE,
             ):
                 # If you skip images, you'll skip them in the permission sync
                 attachment["metadata"].get("mediaType", "")

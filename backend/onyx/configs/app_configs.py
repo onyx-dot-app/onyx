@@ -401,10 +401,6 @@ CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
     ),
 )
 
-CONFLUENCE_CONNECTOR_SLIM_FETCH_LIMIT = int(
-    os.environ.get("CONFLUENCE_CONNECTOR_SLIM_FETCH_LIMIT", 5000)
-)
-
 # Due to breakages in the confluence API, the timezone offset must be specified client side
 # to match the user's specified timezone.
 
