@@ -81,12 +81,12 @@ export function DownloadAsCSV() {
   };
 
   const checkStatus = async (requestId: string) => {
-    rerender();
     if (retryCount.current >= MAX_RETRIES) {
       reset(true);
       return;
     }
     retryCount.current += 1;
+    rerender();
 
     const response = await fetch(
       withRequestId(CHECK_QUERY_HISTORY_EXPORT_STATUS_URL, requestId),
