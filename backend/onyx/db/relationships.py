@@ -348,6 +348,8 @@ def delete_relationship_types_by_id_names(
     Raises:
         sqlalchemy.exc.SQLAlchemyError: If there's an error during deletion
     """
+    deleted_count = 0
+
     if kg_stage == KGStage.EXTRACTED:
         deleted_count = (
             db_session.query(KGRelationshipTypeExtractionStaging)

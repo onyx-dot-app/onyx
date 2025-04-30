@@ -67,6 +67,16 @@ class KGDefaultAccountEmployeeDefinitions(BaseModel):
         grounded_source_name=None,
     )
 
+    ACCOUNT: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
+        description=f"A company that could potentially be or is or was a customer of the vendor \
+('us, {KG_VENDOR}'). Note that {KG_VENDOR} can never be an ACCOUNT.",
+        grounding=KGGroundingType.GROUNDED,
+        active=True,
+        grounded_source_name=None,
+        # If grounded_source is None, the domain in email addresses will be used. If grounded source is specified,
+        # the grounded source name will be used and the domains in email addresses will be matched to Accounts
+    )
+
     EMPLOYEE: KGDefaultEntityDefinition = KGDefaultEntityDefinition(
         description=f"A person who speaks on \
 behalf of 'our' company (the VENDOR {KG_VENDOR}), NOT of another account. Therefore, employees of other companies \
@@ -74,4 +84,5 @@ are NOT included here. If in doubt, do NOT extract.",
         grounding=KGGroundingType.GROUNDED,
         active=True,
         grounded_source_name=None,
+        # The email address sans domain will be used to identify the employee.
     )

@@ -294,6 +294,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                         sf_object=parent_object,
                         sf_instance=self.sf_client.sf_instance,
                     )
+                    doc.metadata.update({"object_type": parent_type})
                     doc_sizeof = sys.getsizeof(doc)
                     docs_to_yield_bytes += doc_sizeof
                     docs_to_yield.append(doc)
