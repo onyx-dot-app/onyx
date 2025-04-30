@@ -481,6 +481,7 @@ class OnyxConfluence:
                         raise
 
                     found_empty_page = False
+                    found_any_success = False
                     temp_url_suffix = url_suffix
                     ind = 0
                     for ind in range(limit):
@@ -491,6 +492,9 @@ class OnyxConfluence:
                             temp_url_suffix = update_param_in_path(
                                 temp_url_suffix, "limit", "1"
                             )
+                            logger.info(
+                                f"Making recovery confluence call to {temp_url_suffix}"
+                            )
                             raw_response = self.get(
                                 path=temp_url_suffix, advanced_mode=True
                             )
@@ -498,6 +502,8 @@ class OnyxConfluence:
 
                             latest_results = raw_response.json().get("results", [])
                             yield from latest_results
+
+                            found_any_success = True
 
                             if not latest_results:
                                 # no more results, break out of the loop
@@ -512,7 +518,7 @@ class OnyxConfluence:
                                 f"Error in confluence call to {temp_url_suffix}"
                             )
 
-                    if found_empty_page:
+                    if found_empty_page or not found_any_success:
                         if next_page_callback:
                             next_page_callback("")
                         break
