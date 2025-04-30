@@ -1,3 +1,4 @@
+import { usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
 import { FaSpinner } from "react-icons/fa";
@@ -29,6 +30,8 @@ export function DownloadAsCSV() {
   const [, rerender] = useState();
   const [spinnerStatus, setSpinnerStatus] = useState<SpinnerStatus>("static");
 
+  const { popup, setPopup } = usePopup();
+
   const reset = (failure: boolean = false) => {
     setSpinnerStatus("static");
     if (timerIdRef.current) {
@@ -38,12 +41,10 @@ export function DownloadAsCSV() {
     retryCount.current = 0;
 
     if (failure) {
-      // Throw up an alert here.
-      //
-      // TODO:
-      // I cannot find a "Toast" component in the codebase.
-      // When I do, I'll add it here.
-      // Therefore, if fetching fails, then we can throw up a failure toast.
+      setPopup({
+        message: "Failed to download the query-history.",
+        type: "error",
+      });
     }
 
     rerender(undefined);
@@ -114,24 +115,27 @@ export function DownloadAsCSV() {
   };
 
   return (
-    <div className="flex flex-1 flex-col w-full justify-center">
-      <Button
-        className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer hover:bg-accent-background text-sm"
-        onClick={startExport}
-        variant={spinnerStatus === "spinning" ? "destructive" : "default"}
-      >
-        {spinnerStatus === "spinning" ? (
-          <>
-            <FaSpinner className="animate-spin text-2xl" />
-            Cancel
-          </>
-        ) : (
-          <>
-            <FiDownload className="my-auto mr-2" />
-            Download as CSV
-          </>
-        )}
-      </Button>
-    </div>
+    <>
+      {popup}
+      <div className="flex flex-1 flex-col w-full justify-center">
+        <Button
+          className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer hover:bg-accent-background text-sm"
+          onClick={startExport}
+          variant={spinnerStatus === "spinning" ? "destructive" : "default"}
+        >
+          {spinnerStatus === "spinning" ? (
+            <>
+              <FaSpinner className="animate-spin text-2xl" />
+              Cancel
+            </>
+          ) : (
+            <>
+              <FiDownload className="my-auto mr-2" />
+              Download as CSV
+            </>
+          )}
+        </Button>
+      </div>
+    </>
   );
 }
