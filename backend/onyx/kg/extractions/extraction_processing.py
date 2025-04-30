@@ -312,7 +312,7 @@ def kg_extraction(
             )  # unprocessed documents that are not filtered out by classification
             document_classifications: dict[str, KGClassificationDecisions] = {}
 
-            # should documents be classified?
+            # should documents be classified, creating an attribute?
             connector_docs_classfication_enabled = (
                 document_classification_extraction_instructions[
                     connector_source

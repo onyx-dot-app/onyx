@@ -1,7 +1,7 @@
 """create knowlege graph tables
 
 Revision ID: 495cb26ce93e
-Revises: 47a07e1a38f1
+Revises: 5c448911b12f
 Create Date: 2025-03-19 08:51:14.341989
 
 """
@@ -18,7 +18,7 @@ from onyx.kg.configuration import KG_READONLY_DB_USER, KG_READONLY_DB_PASSWORD
 
 # revision identifiers, used by Alembic.
 revision = "495cb26ce93e"
-down_revision = "47a07e1a38f1"
+down_revision = "5c448911b12f"
 branch_labels = None
 depends_on = None
 
@@ -84,7 +84,9 @@ def upgrade() -> None:
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        sa.Column("grounded_source_name", sa.String(), nullable=True, unique=True),
+        sa.Column(
+            "grounded_source_subtypes", postgresql.ARRAY(sa.String()), nullable=True
+        ),
         sa.Column("entity_values", postgresql.ARRAY(sa.String()), nullable=True),
         sa.Column("ge_grounding_signature", sa.String(), nullable=True),
     )

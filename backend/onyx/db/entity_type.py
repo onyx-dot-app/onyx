@@ -60,24 +60,6 @@ def get_entity_types_with_grounded_source_name(
     )
 
 
-def get_entity_types_with_grounding_signature(
-    db_session: Session,
-) -> List[KGEntityType]:
-    """Get all entity types that have non-null ge_grounding_signature.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        List of KGEntityType objects that have ge_grounding_signature defined
-    """
-    return (
-        db_session.query(KGEntityType)
-        .filter(KGEntityType.ge_grounding_signature.isnot(None))
-        .all()
-    )
-
-
 def get_entity_type_by_grounded_source_name(
     db_session: Session, grounded_source_name: KGGroundingType
 ) -> KGEntityType | None:

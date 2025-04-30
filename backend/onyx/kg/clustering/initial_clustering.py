@@ -14,7 +14,6 @@ from onyx.db.entities import add_entity
 from onyx.db.entities import delete_entities_by_id_names
 from onyx.db.entities import get_entities_by_grounding
 from onyx.db.entity_type import get_determined_grounded_entity_types
-from onyx.db.entity_type import get_grounded_entity_types_with_null_grounded_source
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_relationship_types_by_id_names
@@ -48,25 +47,6 @@ def _create_ge_determined_entity_map() -> Dict[str, List[str]]:
                 )
 
     return ge_determined_entity_map
-
-
-def _get_grounded_entity_type_no_source() -> dict[str, str]:
-    """Build a dictionary mapping entity type id_names to their ge_grounding_signature values.
-
-    Args:
-        db_session: SQLAlchemy session
-
-    Returns:
-        Dictionary mapping entity type id_names to their ge_grounding_signature values
-        for all entity types that have a grounding signature defined
-    """
-    with get_session_with_current_tenant() as db_session:
-        entity_types = get_grounded_entity_types_with_null_grounded_source(db_session)
-    return {
-        entity_type.id_name: entity_type.ge_grounding_signature
-        for entity_type in entity_types
-        if entity_type.ge_grounding_signature is not None
-    }
 
 
 def _cluster_relationships(

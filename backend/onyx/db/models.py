@@ -633,8 +633,12 @@ class KGEntityType(Base):
         postgresql.ARRAY(String), nullable=True, default=None
     )
 
-    ge_grounding_signature: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=False, default=None
+    grounded_source_subtypes: Mapped[str] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Filtering based on document attribute",
     )
 
     clustering: Mapped[dict] = mapped_column(
