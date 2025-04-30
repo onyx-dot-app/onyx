@@ -158,8 +158,9 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
         for row in qa_pairs:
             writer.writerow(row.to_json())
 
+        stream.seek(0)
+
         try:
-            stream.seek(0)
             file_store.save_file(
                 file_name=report_name,
                 content=stream,
@@ -167,10 +168,11 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 file_origin=FileOrigin.GENERATED_REPORT,
                 file_type="text/csv",
             )
-            mark_task_as_finished_with_id(
-                db_session=db_session,
-                task_id=task_id,
-            )
         except Exception:
             logger.exception(f"Failed to save query history export file {report_name}")
             raise
+
+        mark_task_as_finished_with_id(
+            db_session=db_session,
+            task_id=task_id,
+        )
