@@ -211,13 +211,13 @@ def _handle_search_tool_response_summary(
     user_files: list[UserFile] | None = None,
     loaded_user_files: list[InMemoryChatFile] | None = None,
 ) -> tuple[QADocsResponse, list[DbSearchDoc], list[int] | None]:
-    response_sumary = cast(SearchResponseSummary, packet.response)
+    response_summary = cast(SearchResponseSummary, packet.response)
 
     is_extended = isinstance(packet, ExtendedToolResponse)
     dropped_inds = None
 
     if not selected_search_docs:
-        top_docs = chunks_or_sections_to_search_docs(response_sumary.top_sections)
+        top_docs = chunks_or_sections_to_search_docs(response_summary.top_sections)
 
         deduped_docs = top_docs
         if (
@@ -264,13 +264,13 @@ def _handle_search_tool_response_summary(
         level, question_num = packet.level, packet.level_question_num
     return (
         QADocsResponse(
-            rephrased_query=response_sumary.rephrased_query,
+            rephrased_query=response_summary.rephrased_query,
             top_documents=response_docs,
-            predicted_flow=response_sumary.predicted_flow,
-            predicted_search=response_sumary.predicted_search,
-            applied_source_filters=response_sumary.final_filters.source_type,
-            applied_time_cutoff=response_sumary.final_filters.time_cutoff,
-            recency_bias_multiplier=response_sumary.recency_bias_multiplier,
+            predicted_flow=response_summary.predicted_flow,
+            predicted_search=response_summary.predicted_search,
+            applied_source_filters=response_summary.final_filters.source_type,
+            applied_time_cutoff=response_summary.final_filters.time_cutoff,
+            recency_bias_multiplier=response_summary.recency_bias_multiplier,
             level=level,
             level_question_num=question_num,
         ),
