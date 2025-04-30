@@ -45,7 +45,7 @@ ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 
 
 def assert_query_history_is_enabled(
-    disallowed: list[QueryHistoryType] = [QueryHistoryType.DISABLED],
+    disallowed: list[QueryHistoryType],
 ) -> None:
     if ONYX_QUERY_HISTORY_TYPE in disallowed:
         raise HTTPException(
@@ -174,7 +174,7 @@ def get_chat_session_history(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
-    assert_query_history_is_enabled()
+    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     page_of_chat_sessions = get_page_of_chat_sessions(
         page_num=page_num,
@@ -212,7 +212,7 @@ def get_chat_session_admin(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
-    assert_query_history_is_enabled()
+    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     try:
         chat_session = get_chat_session_by_id(
@@ -248,7 +248,7 @@ def start_query_history_export(
     start: datetime | None = None,
     end: datetime | None = None,
 ) -> dict[str, str]:
-    assert_query_history_is_enabled()
+    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     start = start or datetime.fromtimestamp(0, tz=timezone.utc)
     end = end or datetime.now(tz=timezone.utc)
@@ -275,7 +275,7 @@ def get_query_history_export_status(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    assert_query_history_is_enabled()
+    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     task = get_task_with_id(db_session=db_session, task_id=request_id)
 
@@ -309,7 +309,7 @@ def download_query_history_csv(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
-    assert_query_history_is_enabled()
+    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
