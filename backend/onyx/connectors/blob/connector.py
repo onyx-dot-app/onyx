@@ -4,6 +4,7 @@ from datetime import timezone
 from io import BytesIO
 from typing import Any
 from typing import Optional
+from urllib.parse import quote
 
 import boto3  # type: ignore
 from botocore.client import Config  # type: ignore
@@ -164,8 +165,6 @@ class BlobStorageConnector(LoadConnector, PollConnector):
             raise ConnectorMissingCredentialError("Blob storage")
 
         # Encode the key while preserving forward slashes
-        from urllib.parse import quote
-
         encoded_key = quote(key, safe="/")
 
         if self.bucket_type == BlobType.R2:
