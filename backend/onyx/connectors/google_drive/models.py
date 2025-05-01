@@ -9,6 +9,7 @@ from pydantic import field_validator
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
+from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 
 class GDriveMimeType(str, Enum):
@@ -136,7 +137,10 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     completion_map: ThreadSafeDict[str, StageCompletion]
 
     # only used for folder crawling. maps from parent folder id to seen file ids.
-    processed_folder_file_ids: ThreadSafeDict[str, set[str]] = ThreadSafeDict()
+    # processed_folder_file_ids: ThreadSafeDict[str, set[str]] = ThreadSafeDict()
+
+    # maps file id to at most 5 users that can see the file
+    all_retrieved_file_ids: ThreadSafeSet[str]
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
@@ -158,15 +162,16 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
             {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )
 
-    @field_serializer("processed_folder_file_ids")
-    def serialize_processed_folder_file_ids(
-        self, processed_folder_file_ids: ThreadSafeDict[str, set[str]], _info: Any
-    ) -> dict[str, set[str]]:
-        return processed_folder_file_ids._dict
+    @field_serializer("all_retrieved_file_ids")
+    def serialize_all_retrieved_file_ids(
+        self, all_retrieved_file_ids: ThreadSafeSet[str], _info: Any
+    ) -> set[str]:
+        return all_retrieved_file_ids._set
 
-    @field_validator("processed_folder_file_ids", mode="before")
-    def validate_processed_folder_file_ids(
-        cls, v: Any
-    ) -> ThreadSafeDict[str, set[str]]:
-        assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
-        return ThreadSafeDict({k: set(val) for k, val in v.items()})
+    @field_validator("all_retrieved_file_ids", mode="before")
+    def validate_all_retrieved_file_ids(cls, v: Any) -> ThreadSafeSet[str]:
+        if isinstance(v, set):
+            return ThreadSafeSet(v)
+        if isinstance(v, ThreadSafeSet):
+            return v
+        raise ValueError("all_retrieved_file_ids must be a set")

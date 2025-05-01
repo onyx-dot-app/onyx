@@ -6,6 +6,7 @@ import uuid
 from collections.abc import Callable
 from collections.abc import Iterator
 from collections.abc import MutableMapping
+from collections.abc import MutableSet
 from collections.abc import Sequence
 from concurrent.futures import as_completed
 from concurrent.futures import FIRST_COMPLETED
@@ -168,6 +169,40 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
             new_val = value_callback(val)
             self._dict[key] = new_val
             return val, new_val
+
+
+class ThreadSafeSet(MutableSet[VT]):
+    def __init__(self, input_set: set[VT] | None = None) -> None:
+        self._set: set[VT] = input_set or set()
+        self.lock = threading.Lock()
+
+    def add(self, value: VT) -> None:
+        with self.lock:
+            self._set.add(value)
+
+    def discard(self, value: VT) -> None:
+        with self.lock:
+            self._set.discard(value)
+
+    def __contains__(self, value: object) -> bool:
+        with self.lock:
+            return value in self._set
+
+    def __iter__(self) -> Iterator[VT]:
+        with self.lock:
+            return iter(self._set)
+
+    def __len__(self) -> int:
+        with self.lock:
+            return len(self._set)
+
+    def clear(self) -> None:
+        with self.lock:
+            self._set.clear()
+
+    def copy(self) -> set[VT]:
+        with self.lock:
+            return self._set.copy()
 
 
 class CallableProtocol(Protocol):
