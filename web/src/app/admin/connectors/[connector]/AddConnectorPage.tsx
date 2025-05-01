@@ -10,7 +10,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { useFormContext } from "@/components/context/FormContext";
 import { getSourceDisplayName, getSourceMetadata } from "@/lib/sources";
 import { SourceIcon } from "@/components/SourceIcon";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { deleteCredential, linkCredential } from "@/lib/credential";
 import { submitFiles } from "./pages/utils/files";
 import { submitGoogleSite } from "./pages/utils/google_site";
@@ -51,7 +51,6 @@ import {
   NEXT_PUBLIC_CLOUD_ENABLED,
   NEXT_PUBLIC_TEST_ENV,
 } from "@/lib/constants";
-import TemporaryLoadingModal from "@/components/LoadingModal";
 import {
   getConnectorOauthRedirectUrl,
   useOAuthDetails,
@@ -122,11 +121,10 @@ export async function submitConnector<T>(
   }
 }
 
-export async function deleteConnector(connectorId: number): Promise<boolean> {
-  const response = await fetch(`${BASE_CONNECTOR_URL}/${connectorId}`, {
+export async function deleteConnector(connectorId: number): Promise<void> {
+  await fetch(`${BASE_CONNECTOR_URL}/${connectorId}`, {
     method: "DELETE",
   });
-  return response.ok;
 }
 
 export default function AddConnector({
@@ -184,6 +182,18 @@ export default function AddConnector({
   const { popup, setPopup } = usePopup();
   const [uploading, setUploading] = useState(false);
   const [creatingConnector, setCreatingConnector] = useState(false);
+
+  // Connector creation timeout management
+  const timeoutErrorHappenedRef = useRef<boolean>(false);
+  const connectorIdRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      // Cleanup refs when component unmounts
+      timeoutErrorHappenedRef.current = false;
+      connectorIdRef.current = null;
+    };
+  }, []);
 
   // Hooks for Google Drive and Gmail credentials
   const { liveGDriveCredential } = useGoogleDriveCredentials(connector);
@@ -416,6 +426,11 @@ export default function AddConnector({
               credentialActivated ? false : true
             );
 
+            // Store the connector id immediately for potential timeout
+            if (response?.id) {
+              connectorIdRef.current = response.id;
+            }
+
             // If no credential
             if (!credentialActivated) {
               if (isSuccess) {
@@ -443,51 +458,43 @@ export default function AddConnector({
                 onSuccess();
               } else {
                 const errorData = await linkCredentialResponse.json();
-                setPopup({
-                  message: errorData.message || errorData.detail,
-                  type: "error",
-                });
+
+                if (!timeoutErrorHappenedRef.current) {
+                  // Only show error if timeout didn't happen
+                  setPopup({
+                    message: errorData.message || errorData.detail,
+                    type: "error",
+                  });
+                }
               }
             } else if (isSuccess) {
               onSuccess();
             } else {
               setPopup({ message: message, type: "error" });
             }
-            return response?.id;
+
+            timeoutErrorHappenedRef.current = false;
+            return;
           })();
 
           const result = (await Promise.race([
             connectorCreationPromise,
             timeoutPromise,
           ])) as {
-            connectorId?: number;
             isTimeout?: true;
           };
 
           if (result.isTimeout) {
+            timeoutErrorHappenedRef.current = true;
             setPopup({
               message: `Operation timed out after ${CONNECTOR_CREATION_TIMEOUT_MS / 1000} seconds. Check your configuration for errors?`,
               type: "error",
             });
-            // Track the late completion of the connector creation and delete it if created
-            connectorCreationPromise.then(async (result) => {
-              if (result) {
-                const deleteResponse = await deleteConnector(result);
-                if (deleteResponse) {
-                  setPopup({
-                    message:
-                      "Connector was created after timeout and has been deleted.",
-                    type: "error",
-                  });
-                } else {
-                  setPopup({
-                    message:
-                      "Connector was created after timeout but could not be deleted.",
-                    type: "error",
-                  });
-                }
-              }
-            });
+
+            if (connectorIdRef.current) {
+              await deleteConnector(connectorIdRef.current);
+              connectorIdRef.current = null;
+            }
           }
           return;
         } finally {
@@ -500,13 +507,9 @@ export default function AddConnector({
           <div className="mx-auto w-full">
             {popup}
 
-            {uploading && (
-              <TemporaryLoadingModal content="Uploading files..." />
-            )}
+            {uploading && <Spinner />}
 
-            {creatingConnector && (
-              <TemporaryLoadingModal content="Creating connector..." /> // There's no spinner here from TemporaryLoadingModal?
-            )}
+            {creatingConnector && <Spinner />}
 
             <AdminPageTitle
               includeDivider={false}
