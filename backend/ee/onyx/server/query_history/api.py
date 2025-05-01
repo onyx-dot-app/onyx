@@ -34,7 +34,7 @@ from onyx.db.engine import get_session
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import User
-from onyx.db.tasks import get_all_tasks
+from onyx.db.tasks import get_all_query_history_export_tasks
 from onyx.db.tasks import get_task_with_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
@@ -252,7 +252,7 @@ def list_all_query_history_exports(
     try:
         return [
             TaskQueueState.from_model(task)
-            for task in get_all_tasks(db_session=db_session)
+            for task in get_all_query_history_export_tasks(db_session=db_session)
         ]
     except Exception as e:
         raise HTTPException(500, f"Failed to get all tasks: {e}")

@@ -70,10 +70,16 @@ def get_task_with_id(
     )
 
 
-def get_all_tasks(
+def get_all_query_history_export_tasks(
     db_session: Session,
 ) -> list[TaskQueueState]:
-    return db_session.query(TaskQueueState).all()
+    return list(
+        db_session.scalars(
+            select(TaskQueueState).where(
+                TaskQueueState.task_name.like("export_query_history_task_%")
+            )
+        )
+    )
 
 
 def mark_task_as_started_with_id(
