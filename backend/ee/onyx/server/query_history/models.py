@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
@@ -221,21 +222,24 @@ class QuestionAnswerPairSnapshot(BaseModel):
 
 
 class TaskQueueState(BaseModel):
-    id: int
     task_id: str
-    task_name: str
     status: TaskStatus
-    start_time: datetime | None
+    start: datetime
+    end: datetime
 
     @classmethod
     def from_model(
         cls,
         task_queue_state: TaskQueueStateModel,
     ) -> "TaskQueueState":
+        start_end = task_queue_state.task_name.removeprefix(
+            f"{QUERY_HISTORY_TASK_NAME_PREFIX}_"
+        )
+        start, end = start_end.split("_")
+
         return cls(
-            id=task_queue_state.id,
             task_id=task_queue_state.task_id,
-            task_name=task_queue_state.task_name,
             status=task_queue_state.status,
-            start_time=task_queue_state.start_time,
+            start=datetime.fromisoformat(start),
+            end=datetime.fromisoformat(end),
         )
