@@ -70,6 +70,12 @@ def get_task_with_id(
     )
 
 
+def get_all_tasks(
+    db_session: Session,
+) -> list[TaskQueueState]:
+    return list(db_session.scalars(select(TaskQueueState)))
+
+
 def mark_task_as_started_with_id(
     db_session: Session,
     task_id: str,

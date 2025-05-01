@@ -32,7 +32,9 @@ from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine import get_session
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatSession
+from onyx.db.models import TaskQueueState
 from onyx.db.models import User
+from onyx.db.tasks import get_all_tasks
 from onyx.db.tasks import get_task_with_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
@@ -239,6 +241,16 @@ def get_chat_session_admin(
         snapshot.user_email = ONYX_ANONYMIZED_EMAIL
 
     return snapshot
+
+
+@router.get("/admin/query-history/list")
+def list_all_query_history_exports(
+    _: User | None = Depends(current_admin_user),
+    db_session: Session = Depends(get_session),
+) -> list[TaskQueueState]:
+    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+
+    return get_all_tasks(db_session=db_session)
 
 
 @router.post("/admin/query-history/start-export")
