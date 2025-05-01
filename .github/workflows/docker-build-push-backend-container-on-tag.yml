@@ -45,6 +45,7 @@ jobs:
             ${{ env.LATEST_TAG == 'true' && format('{0}:latest', env.REGISTRY_IMAGE) || '' }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+          no-cache: true
 
       # trivy has their own rate limiting issues causing this action to flake
       # we worked around it by hardcoding to different db repos in env

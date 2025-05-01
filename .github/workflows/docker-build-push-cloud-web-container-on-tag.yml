@@ -70,10 +70,10 @@ jobs:
             NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED=true
             NEXT_PUBLIC_INCLUDE_ERROR_POPUP_SUPPORT_LINK=true
             NODE_OPTIONS=--max-old-space-size=8192
-          # needed due to weird interactions with the builds for different platforms
-          no-cache: true
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # no-cache needed due to weird interactions with the builds for different platforms
+          no-cache: true
 
       - name: Export digest
         run: |

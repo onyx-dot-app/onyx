@@ -193,12 +193,9 @@ class HighspotClient:
         """
         params = {"right": "view"}
         response = self._make_request("GET", "spots", params=params)
-        logger.info(f"Received {response} spots")
-        total_counts = response.get("counts_total")
-        # Fix comparison to handle None value
-        if total_counts is not None and total_counts > 0:
-            return response.get("collection", [])
-        return []
+        found_spots = response.get("collection", [])
+        logger.info(f"Received {len(found_spots)} spots")
+        return found_spots
 
     def get_spot(self, spot_id: str) -> Dict[str, Any]:
         """
