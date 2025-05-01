@@ -141,6 +141,21 @@ def get_all_documents_needing_vespa_sync_for_cc_pair(
     return list(db_session.scalars(stmt).all())
 
 
+def construct_document_id_select_for_connector_credential_pair(
+    connector_id: int, credential_id: int | None = None
+) -> Select:
+    initial_doc_ids_stmt = select(DocumentByConnectorCredentialPair.id).where(
+        and_(
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+        )
+    )
+    stmt = (
+        select(DbDocument.id).where(DbDocument.id.in_(initial_doc_ids_stmt)).distinct()
+    )
+    return stmt
+
+
 def construct_document_select_for_connector_credential_pair(
     connector_id: int, credential_id: int | None = None
 ) -> Select:
