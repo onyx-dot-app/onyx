@@ -118,20 +118,29 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
     task_id = self.request.id
 
     with get_session_with_current_tenant() as db_session:
-        register_task(
-            db_session=db_session,
-            task_name=query_history_task_name(start=start, end=end),
-            task_id=task_id,
-            status=TaskStatus.STARTED,
-        )
+        try:
+            register_task(
+                db_session=db_session,
+                task_name=query_history_task_name(start=start, end=end),
+                task_id=task_id,
+                status=TaskStatus.STARTED,
+            )
 
-        complete_chat_session_history = fetch_and_process_chat_session_history(
-            db_session=db_session,
-            start=start,
-            end=end,
-            feedback_type=None,
-            limit=None,
-        )
+            complete_chat_session_history = fetch_and_process_chat_session_history(
+                db_session=db_session,
+                start=start,
+                end=end,
+                feedback_type=None,
+                limit=None,
+            )
+        except Exception:
+            logger.exception(f"Failed to export query history with {task_id=}")
+            mark_task_as_finished_with_id(
+                db_session=db_session,
+                task_id=task_id,
+                success=False,
+            )
+            raise
 
     def to_qa_pair(
         chat_session_snapshot: ChatSessionSnapshot,
@@ -177,4 +186,9 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
             )
         except Exception:
             logger.exception(f"Failed to save query history export file {report_name}")
+            mark_task_as_finished_with_id(
+                db_session=db_session,
+                task_id=task_id,
+                success=False,
+            )
             raise
