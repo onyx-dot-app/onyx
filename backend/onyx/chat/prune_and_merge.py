@@ -155,6 +155,7 @@ def _apply_pruning(
 
     section_idx_token_count: dict[int, int] = {}
 
+    ind = 0
     final_section_ind = None
     total_tokens = 0
     for ind, section in enumerate(sections):

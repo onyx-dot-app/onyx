@@ -16,7 +16,8 @@ from onyx.utils.retry_wrapper import retry_builder
 
 logger = setup_logger()
 
-basic_retry_wrapper = retry_builder()
+# retry after 0.1, 1.2, 3.4, 7.8, 16.6, 34.2 seconds
+basic_retry_wrapper = retry_builder(tries=7)
 # number of messages we request per page when fetching paginated slack messages
 _SLACK_LIMIT = 900
 

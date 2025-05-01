@@ -42,6 +42,7 @@ from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
+from onyx.server.query_and_chat.chat_backend import RECENT_DOCS_FOLDER_ID
 from onyx.server.user_documents.models import MessageResponse
 from onyx.server.user_documents.models import UserFileSnapshot
 from onyx.server.user_documents.models import UserFolderSnapshot
@@ -141,9 +142,6 @@ def get_folder(
     return folder_snapshot
 
 
-RECENT_DOCS_FOLDER_ID = -1
-
-
 @router.post("/user/file/upload")
 def upload_user_files(
     files: List[UploadFile] = File(...),
@@ -157,7 +155,7 @@ def upload_user_files(
     try:
         # Use our consolidated function that handles indexing properly
         user_files = upload_files_to_user_files_with_indexing(
-            files, folder_id or -1, user, db_session
+            files, folder_id or RECENT_DOCS_FOLDER_ID, user, db_session
         )
 
         return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
