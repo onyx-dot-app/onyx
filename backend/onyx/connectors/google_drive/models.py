@@ -138,8 +138,8 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # only used for folder crawling. maps from parent folder id to seen file ids.
     # processed_folder_file_ids: ThreadSafeDict[str, set[str]] = ThreadSafeDict()
 
-    # maps file id to at most 5 users that can see the file
-    all_retrieved_file_ids: set[str]
+    # all file ids that have been retrieved
+    all_retrieved_file_ids: set[str] = set()
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
