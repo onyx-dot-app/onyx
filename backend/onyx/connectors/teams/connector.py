@@ -104,10 +104,21 @@ def _construct_semantic_identifier(channel: Channel, top_message: ChatMessage) -
     channel_name = channel.properties.get("displayName", "Unknown")
     thread_subject = top_message.properties.get("subject", "Unknown")
 
-    snippet = parse_html_page_basic(top_message.body.content.rstrip())
-    snippet = snippet[:50] + "..." if len(snippet) > 50 else snippet
+    try:
+        snippet = parse_html_page_basic(top_message.body.content.rstrip())
+        snippet = snippet[:50] + "..." if len(snippet) > 50 else snippet
+    except Exception:
+        logger.exception(
+            f"Error parsing snippet for message "
+            f"{top_message.id} with url {top_message.web_url}"
+        )
+        snippet = ""
 
-    return f"{first_poster} in {channel_name} about {thread_subject}: {snippet}"
+    semantic_identifier = f"{first_poster} in {channel_name} about {thread_subject}"
+    if snippet:
+        semantic_identifier += f": {snippet}"
+
+    return semantic_identifier
 
 
 def _convert_thread_to_document(
