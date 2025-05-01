@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from io import BytesIO
 from typing import Any
@@ -447,7 +448,10 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnector):
 if __name__ == "__main__":
     spot_names: List[str] = []
     connector = HighspotConnector(spot_names)
-    credentials = {"highspot_key": "", "highspot_secret": ""}
+    credentials = {
+        "highspot_key": os.environ.get("HIGHSPOT_KEY"),
+        "highspot_secret": os.environ.get("HIGHSPOT_SECRET"),
+    }
     connector.load_credentials(credentials=credentials)
     for doc in connector.load_from_state():
         print(doc)
