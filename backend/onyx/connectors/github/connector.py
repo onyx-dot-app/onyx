@@ -92,10 +92,6 @@ def _paginate_until_error(
         )
         pag_list = pag_list[prev_num_objs:]
         num_objs = 0
-        print("\n" * 10)
-        print("this is what it be")
-        print(pag_list.__iter__)
-        print("\n" * 10)
 
     try:
         # this for loop handles cursor-based pagination
@@ -131,11 +127,10 @@ def _paginate_until_error(
         raise
 
 
-# git_objs should produce a fresh PaginatedList each time it's called.
-# We don't want to use the same object for cursor-based pagination
-# after a partial offset-based pagination call. We expect the cursor-based approach
-# to repeat at most one page of work from the offset-based approach.
 def _get_batch_rate_limited(
+    # We pass in a callable because we want git_objs to produce a fresh
+    # PaginatedList each time it's called to avoid using the same object for cursor-based pagination
+    # from a partial offset-based pagination call.
     git_objs: Callable[[], PaginatedList],
     page_num: int,
     cursor_url: str | None,
