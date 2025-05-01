@@ -66,6 +66,7 @@ jobs:
           no-cache: true
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          no-cache: true
 
       - name: Export digest
         run: |

@@ -86,6 +86,7 @@ jobs:
             DANSWER_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
+          no-cache: true
 
   build-arm64:
     needs: [check_model_server_changes]
@@ -127,6 +128,7 @@ jobs:
             DANSWER_VERSION=${{ github.ref_name }}
           outputs: type=registry
           provenance: false
+          no-cache: true
 
   merge-and-scan:
     needs: [build-amd64, build-arm64, check_model_server_changes]
