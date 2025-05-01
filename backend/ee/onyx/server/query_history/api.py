@@ -263,7 +263,13 @@ def list_all_query_history_exports(
             QueryHistoryExport.from_file(file)
             for file in get_query_history_export_files(db_session=db_session)
         ]
-        return pending_tasks + generated_files
+        merged = pending_tasks + generated_files
+
+        # We sort based off of the start-time of the task.
+        # We also return it in reverse order since viewing generated reports in most-recent to least-recent is most common.
+        merged.sort(key=lambda task: task.start_time, reverse=True)
+
+        return merged
     except Exception as e:
         raise HTTPException(
             HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to get all tasks: {e}"
