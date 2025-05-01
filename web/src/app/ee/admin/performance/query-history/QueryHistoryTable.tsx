@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/table";
 import Text from "@/components/ui/text";
 
+import { FiDownload } from "react-icons/fi";
 import {
   Select,
   SelectItem,
@@ -30,6 +31,12 @@ import { DownloadAsCSV } from "./DownloadAsCSV";
 import CardSection from "@/components/admin/CardSection";
 import usePaginatedFetch from "@/hooks/usePaginatedFetch";
 import { ErrorCallout } from "@/components/ErrorCallout";
+import Title from "@/components/ui/title";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import useSWR from "swr";
+import { TaskQueueState } from "./types";
+import { withRequestId } from "./utils";
+import { DOWNLOAD_QUERY_HISTORY_URL } from "./constants";
 
 const ITEMS_PER_PAGE = 20;
 const PAGES_PER_BATCH = 2;
@@ -147,6 +154,18 @@ export function QueryHistoryTable() {
     filter: filters,
   });
 
+  const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
+    "/api/admin/query-history/list",
+    errorHandlingFetcher
+  );
+
+  const tasks = (queryHistoryTasks ?? []).map((queryHistory) => ({
+    taskId: queryHistory.task_id,
+    start: new Date(queryHistory.start),
+    end: new Date(queryHistory.end),
+    status: queryHistory.status,
+  }));
+
   const onTimeRangeChange = useCallback((value: DateRange) => {
     setDateRange(value);
 
@@ -176,8 +195,8 @@ export function QueryHistoryTable() {
   }
 
   return (
-    <CardSection className="mt-8">
-      <>
+    <>
+      <CardSection className="mt-8">
         <div className="flex">
           <div className="gap-y-3 flex flex-col">
             <SelectFeedbackType
@@ -245,7 +264,43 @@ export function QueryHistoryTable() {
             </div>
           </div>
         )}
-      </>
-    </CardSection>
+      </CardSection>
+
+      <Separator />
+
+      <Title className="mb-2 mt-6 mx-auto">
+        Previous Query History Exports
+      </Title>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Export ID</TableHead>
+            <TableHead>Start Range</TableHead>
+            <TableHead>End Range</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Download</TableHead>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
+          {tasks.map((task, index) => (
+            <TableRow key={index}>
+              <TableCell>{task.taskId}</TableCell>
+              <TableCell>{task.start.toDateString()}</TableCell>
+              <TableCell>{task.end.toDateString()}</TableCell>
+              <TableCell>{task.status}</TableCell>
+              <TableCell>
+                <Link
+                  className="flex justify-center"
+                  href={withRequestId(DOWNLOAD_QUERY_HISTORY_URL, task.taskId)}
+                >
+                  <FiDownload color="primary" />
+                </Link>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </>
   );
 }

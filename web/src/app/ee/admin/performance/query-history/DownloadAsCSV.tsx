@@ -4,39 +4,18 @@ import { useRef, useState } from "react";
 import { DateRange } from "../DateRangeSelector";
 import { FaSpinner } from "react-icons/fa";
 import { FiDownload } from "react-icons/fi";
-
-const START_QUERY_HISTORY_EXPORT_URL = "/api/admin/query-history/start-export";
-const CHECK_QUERY_HISTORY_EXPORT_STATUS_URL =
-  "/api/admin/query-history/export-status";
-const DOWNLOAD_QUERY_HISTORY_URL = "/api/admin/query-history/download";
-const MAX_RETRIES = 10;
-const RETRY_COOLDOWN_MILLISECONDS = 1000;
-
-type StartQueryHistoryExportResponse = { request_id: string };
-type CheckQueryHistoryExportStatusResponse = {
-  status: "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
-};
-
-// The status of the spinner.
-// If it's "static", then no spinning animation should be shown.
-// Otherwise, the spinning animation should be shown.
-type SpinnerStatus = "static" | "spinning";
-
-const withRequestId = (url: string, requestId: string): string =>
-  `${url}?request_id=${requestId}`;
-
-const withDateRange = (dateRange: DateRange): string => {
-  if (!dateRange) {
-    return START_QUERY_HISTORY_EXPORT_URL;
-  }
-
-  const { from, to } = dateRange;
-
-  const fromString = from.toISOString();
-  const toString = to.toISOString();
-
-  return `${START_QUERY_HISTORY_EXPORT_URL}?start=${fromString}&end=${toString}`;
-};
+import { withRequestId, withDateRange } from "./utils";
+import {
+  CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
+  DOWNLOAD_QUERY_HISTORY_URL,
+  MAX_RETRIES,
+  RETRY_COOLDOWN_MILLISECONDS,
+} from "./constants";
+import {
+  CheckQueryHistoryExportStatusResponse,
+  SpinnerStatus,
+  StartQueryHistoryExportResponse,
+} from "./types";
 
 export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
   const timerIdRef = useRef<null | number>(null);
@@ -133,7 +112,7 @@ export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
       {popup}
       <div className="flex flex-1 flex-col w-full justify-center">
         <Button
-          className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer hover:bg-accent-background text-sm"
+          className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer text-sm"
           onClick={startExport}
           variant={spinnerStatus === "spinning" ? "destructive" : "default"}
         >
