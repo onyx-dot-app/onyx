@@ -17,6 +17,7 @@ from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import MessageSnapshot
+from ee.onyx.server.query_history.models import TaskQueueState
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_display_email
 from onyx.background.task_utils import query_history_report_name
@@ -32,7 +33,6 @@ from onyx.db.chat import get_chat_sessions_by_user
 from onyx.db.engine import get_session
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatSession
-from onyx.db.models import TaskQueueState
 from onyx.db.models import User
 from onyx.db.tasks import get_all_tasks
 from onyx.db.tasks import get_task_with_id
@@ -249,8 +249,13 @@ def list_all_query_history_exports(
     db_session: Session = Depends(get_session),
 ) -> list[TaskQueueState]:
     assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
-
-    return get_all_tasks(db_session=db_session)
+    try:
+        return [
+            TaskQueueState.from_model(task)
+            for task in get_all_tasks(db_session=db_session)
+        ]
+    except Exception as e:
+        raise HTTPException(500, f"Failed to get all tasks: {e}")
 
 
 @router.post("/admin/query-history/start-export")

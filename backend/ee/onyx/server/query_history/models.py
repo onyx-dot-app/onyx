@@ -7,8 +7,10 @@ from onyx.auth.users import get_display_email
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import SessionType
+from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
+from onyx.db.models import TaskQueueState as TaskQueueStateModel
 
 
 class AbridgedSearchDoc(BaseModel):
@@ -216,3 +218,24 @@ class QuestionAnswerPairSnapshot(BaseModel):
             "time_created": str(self.time_created),
             "flow_type": self.flow_type,
         }
+
+
+class TaskQueueState(BaseModel):
+    id: int
+    task_id: str
+    task_name: str
+    status: TaskStatus
+    start_time: datetime | None
+
+    @classmethod
+    def from_model(
+        cls,
+        task_queue_state: TaskQueueStateModel,
+    ) -> "TaskQueueState":
+        return cls(
+            id=task_queue_state.id,
+            task_id=task_queue_state.task_id,
+            task_name=task_queue_state.task_name,
+            status=task_queue_state.status,
+            start_time=task_queue_state.start_time,
+        )
