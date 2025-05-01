@@ -39,11 +39,11 @@ import { withRequestId } from "./utils";
 import {
   DOWNLOAD_QUERY_HISTORY_URL,
   LIST_QUERY_HISTORY_URL,
+  NUM_IN_PAGE,
+  ITEMS_PER_PAGE,
+  PAGES_PER_BATCH,
 } from "./constants";
 import { humanReadableFormatWithTime } from "@/lib/time";
-
-const ITEMS_PER_PAGE = 20;
-const PAGES_PER_BATCH = 2;
 
 function QueryHistoryTableRow({
   chatSessionMinimal,
@@ -162,6 +162,7 @@ export function QueryHistoryTable() {
     LIST_QUERY_HISTORY_URL,
     errorHandlingFetcher
   );
+  const [taskPage, setTaskPage] = useState(1);
 
   const tasks = (queryHistoryTasks ?? []).map((queryHistory) => ({
     taskId: queryHistory.task_id,
@@ -177,6 +178,14 @@ export function QueryHistoryTable() {
     else if (task_a.start_time > task_b.start_time) return -1;
     else return 0;
   });
+
+  const paginatedTasks = tasks.slice(
+    NUM_IN_PAGE * (taskPage - 1),
+    NUM_IN_PAGE * taskPage
+  );
+
+  // const totalTaskPages = tasks.length / NUM_IN_PAGE + 1;
+  const totalTaskPages = Math.ceil(tasks.length / NUM_IN_PAGE);
 
   const onTimeRangeChange = useCallback((value: DateRange) => {
     setDateRange(value);
@@ -296,7 +305,7 @@ export function QueryHistoryTable() {
         </TableHeader>
 
         <TableBody>
-          {tasks.map((task, index) => (
+          {paginatedTasks.map((task, index) => (
             <TableRow key={index}>
               <TableCell>{task.taskId}</TableCell>
               <TableCell>{task.start.toDateString()}</TableCell>
@@ -324,6 +333,15 @@ export function QueryHistoryTable() {
           ))}
         </TableBody>
       </Table>
+      <div className="mt-3 flex">
+        <div className="mx-auto">
+          <PageSelector
+            currentPage={taskPage}
+            totalPages={totalTaskPages}
+            onPageChange={setTaskPage}
+          />
+        </div>
+      </div>
     </>
   );
 }
