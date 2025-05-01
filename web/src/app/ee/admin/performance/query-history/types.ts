@@ -2,12 +2,16 @@ export interface TaskQueueState {
   task_id: string;
   start: string;
   end: string;
-  status: string;
+  status: TaskStatus;
+  start_time: string;
 }
 
+export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
+
 export type StartQueryHistoryExportResponse = { request_id: string };
+
 export type CheckQueryHistoryExportStatusResponse = {
-  status: "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
+  status: TaskStatus;
 };
 
 // The status of the spinner.

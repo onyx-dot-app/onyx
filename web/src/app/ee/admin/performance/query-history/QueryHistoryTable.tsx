@@ -40,6 +40,7 @@ import {
   DOWNLOAD_QUERY_HISTORY_URL,
   LIST_QUERY_HISTORY_URL,
 } from "./constants";
+import { humanReadableFormatWithTime } from "@/lib/time";
 
 const ITEMS_PER_PAGE = 20;
 const PAGES_PER_BATCH = 2;
@@ -167,7 +168,15 @@ export function QueryHistoryTable() {
     start: new Date(queryHistory.start),
     end: new Date(queryHistory.end),
     status: queryHistory.status,
+    start_time: queryHistory.start_time,
   }));
+
+  // sort based off of "most-recently-exported" CSV file.
+  tasks.sort((task_a, task_b) => {
+    if (task_a.start_time < task_b.start_time) return 1;
+    else if (task_a.start_time > task_b.start_time) return -1;
+    else return 0;
+  });
 
   const onTimeRangeChange = useCallback((value: DateRange) => {
     setDateRange(value);
@@ -280,6 +289,7 @@ export function QueryHistoryTable() {
             <TableHead>Export ID</TableHead>
             <TableHead>Start Range</TableHead>
             <TableHead>End Range</TableHead>
+            <TableHead>Generated At</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Download</TableHead>
           </TableRow>
@@ -291,14 +301,24 @@ export function QueryHistoryTable() {
               <TableCell>{task.taskId}</TableCell>
               <TableCell>{task.start.toDateString()}</TableCell>
               <TableCell>{task.end.toDateString()}</TableCell>
+              <TableCell>
+                {humanReadableFormatWithTime(task.start_time)}
+              </TableCell>
               <TableCell>{task.status}</TableCell>
               <TableCell>
-                <Link
-                  className="flex justify-center"
-                  href={withRequestId(DOWNLOAD_QUERY_HISTORY_URL, task.taskId)}
-                >
-                  <FiDownload color="primary" />
-                </Link>
+                {task.status === "SUCCESS" ? (
+                  <Link
+                    className="flex justify-center"
+                    href={withRequestId(
+                      DOWNLOAD_QUERY_HISTORY_URL,
+                      task.taskId
+                    )}
+                  >
+                    <FiDownload color="primary" />
+                  </Link>
+                ) : (
+                  <FiDownload color="primary" className="opacity-20" />
+                )}
               </TableCell>
             </TableRow>
           ))}
