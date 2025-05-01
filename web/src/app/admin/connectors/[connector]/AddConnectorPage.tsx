@@ -58,6 +58,8 @@ import {
 import { CreateStdOAuthCredential } from "@/components/credentials/actions/CreateStdOAuthCredential";
 import { Spinner } from "@/components/Spinner";
 import { Button } from "@/components/ui/button";
+import { deleteConnector } from "@/lib/connector";
+
 export interface AdvancedConfig {
   refreshFreq: number;
   pruneFreq: number;
@@ -119,12 +121,6 @@ export async function submitConnector<T>(
   } catch (error) {
     return { message: `Error: ${error}`, isSuccess: false };
   }
-}
-
-export async function deleteConnector(connectorId: number): Promise<void> {
-  await fetch(`${BASE_CONNECTOR_URL}/${connectorId}`, {
-    method: "DELETE",
-  });
 }
 
 export default function AddConnector({
