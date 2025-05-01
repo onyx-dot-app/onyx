@@ -7,6 +7,7 @@ from celery.app.task import Task
 
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
 from ee.onyx.background.task_name_builders import name_chat_ttl_task
+from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
@@ -119,7 +120,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
     with get_session_with_current_tenant() as db_session:
         register_task(
             db_session=db_session,
-            task_name=f"{OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK}_{start}_{end}",
+            task_name=query_history_task_name(start=start, end=end),
             task_id=task_id,
             status=TaskStatus.STARTED,
         )
@@ -132,49 +133,48 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
             limit=None,
         )
 
-        def to_qa_pair(
-            chat_session_snapshot: ChatSessionSnapshot,
-        ) -> list[QuestionAnswerPairSnapshot]:
-            if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-                chat_session_snapshot.user_email = ONYX_ANONYMIZED_EMAIL
-            return QuestionAnswerPairSnapshot.from_chat_session_snapshot(
-                chat_session_snapshot
-            )
-
-        qa_pairs: list[QuestionAnswerPairSnapshot] = [
-            qa_pair
-            for chat_session_snapshot in complete_chat_session_history
-            for qa_pair in to_qa_pair(chat_session_snapshot)
-        ]
-
-        report_name = query_history_report_name(task_id)
-
-        file_store = get_default_file_store(db_session)
-        stream = io.StringIO()
-
-        writer = csv.DictWriter(
-            stream,
-            fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
+    def to_qa_pair(
+        chat_session_snapshot: ChatSessionSnapshot,
+    ) -> list[QuestionAnswerPairSnapshot]:
+        if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
+            chat_session_snapshot.user_email = ONYX_ANONYMIZED_EMAIL
+        return QuestionAnswerPairSnapshot.from_chat_session_snapshot(
+            chat_session_snapshot
         )
-        writer.writeheader()
-        for row in qa_pairs:
-            writer.writerow(row.to_json())
 
-        stream.seek(0)
+    qa_pairs: list[QuestionAnswerPairSnapshot] = [
+        qa_pair
+        for chat_session_snapshot in complete_chat_session_history
+        for qa_pair in to_qa_pair(chat_session_snapshot)
+    ]
 
+    report_name = query_history_report_name(task_id)
+
+    stream = io.StringIO()
+
+    writer = csv.DictWriter(
+        stream,
+        fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
+    )
+    writer.writeheader()
+    for row in qa_pairs:
+        writer.writerow(row.to_json())
+
+    with get_session_with_current_tenant() as db_session:
         try:
-            file_store.save_file(
+            stream.seek(0)
+            get_default_file_store(db_session).save_file(
                 file_name=report_name,
                 content=stream,
                 display_name=report_name,
                 file_origin=FileOrigin.GENERATED_REPORT,
                 file_type="text/csv",
             )
+
+            mark_task_as_finished_with_id(
+                db_session=db_session,
+                task_id=task_id,
+            )
         except Exception:
             logger.exception(f"Failed to save query history export file {report_name}")
             raise
-
-        mark_task_as_finished_with_id(
-            db_session=db_session,
-            task_id=task_id,
-        )

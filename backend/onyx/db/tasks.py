@@ -3,6 +3,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine import get_db_current_time
 from onyx.db.models import TaskQueueState
@@ -76,7 +77,7 @@ def get_all_query_history_export_tasks(
     return list(
         db_session.scalars(
             select(TaskQueueState).where(
-                TaskQueueState.task_name.like("export_query_history_task_%")
+                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}_%")
             )
         )
     )

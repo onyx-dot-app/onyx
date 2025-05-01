@@ -48,7 +48,7 @@ router = APIRouter()
 ONYX_ANONYMIZED_EMAIL = "anonymous@anonymous.invalid"
 
 
-def assert_query_history_is_enabled(
+def ensure_query_history_is_enabled(
     disallowed: list[QueryHistoryType],
 ) -> None:
     if ONYX_QUERY_HISTORY_TYPE in disallowed:
@@ -136,7 +136,7 @@ def get_user_chat_sessions(
 ) -> ChatSessionsResponse:
     # we specifically don't allow this endpoint if "anonymized" since
     # this is a direct query on the user id
-    assert_query_history_is_enabled(
+    ensure_query_history_is_enabled(
         [
             QueryHistoryType.DISABLED,
             QueryHistoryType.ANONYMIZED,
@@ -178,7 +178,7 @@ def get_chat_session_history(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> PaginatedReturn[ChatSessionMinimal]:
-    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     page_of_chat_sessions = get_page_of_chat_sessions(
         page_num=page_num,
@@ -216,7 +216,7 @@ def get_chat_session_admin(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> ChatSessionSnapshot:
-    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     try:
         chat_session = get_chat_session_by_id(
@@ -227,7 +227,8 @@ def get_chat_session_admin(
         )
     except ValueError:
         raise HTTPException(
-            400, f"Chat session with id '{chat_session_id}' does not exist."
+            HTTPStatus.BAD_REQUEST,
+            f"Chat session with id '{chat_session_id}' does not exist.",
         )
     snapshot = snapshot_from_chat_session(
         chat_session=chat_session, db_session=db_session
@@ -235,7 +236,7 @@ def get_chat_session_admin(
 
     if snapshot is None:
         raise HTTPException(
-            400,
+            HTTPStatus.BAD_REQUEST,
             f"Could not create snapshot for chat session with id '{chat_session_id}'",
         )
 
@@ -250,14 +251,16 @@ def list_all_query_history_exports(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> list[TaskQueueState]:
-    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
     try:
         return [
             TaskQueueState.from_model(task)
             for task in get_all_query_history_export_tasks(db_session=db_session)
         ]
     except Exception as e:
-        raise HTTPException(500, f"Failed to get all tasks: {e}")
+        raise HTTPException(
+            HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to get all tasks: {e}"
+        )
 
 
 @router.post("/admin/query-history/start-export")
@@ -267,14 +270,14 @@ def start_query_history_export(
     start: datetime | None = None,
     end: datetime | None = None,
 ) -> dict[str, str]:
-    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     start = start or datetime.fromtimestamp(0, tz=timezone.utc)
     end = end or datetime.now(tz=timezone.utc)
 
     if start >= end:
         raise HTTPException(
-            400,
+            HTTPStatus.BAD_REQUEST,
             f"Start time must come before end time, but instead got the start time coming after; {start=} {end=}",
         )
 
@@ -296,7 +299,7 @@ def get_query_history_export_status(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> dict[str, str]:
-    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     task = get_task_with_id(db_session=db_session, task_id=request_id)
 
@@ -317,7 +320,7 @@ def get_query_history_export_status(
 
     if not has_file:
         raise HTTPException(
-            404,
+            HTTPStatus.NOT_FOUND,
             f"No task with {request_id=} was found",
         )
 
@@ -330,29 +333,36 @@ def download_query_history_csv(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
 ) -> StreamingResponse:
-    assert_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
+    ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
     task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
         raise HTTPException(
-            404,
+            HTTPStatus.NOT_FOUND,
             f"No task with {request_id=} was found",
         )
 
     # Maybe we should handle each specific TaskStatus separately?
     # I.e., if it's a `TaskStatus.PENDING` return a different error code vs if it's a `TaskStatus.FAILURE`.
     if task.status in [TaskStatus.STARTED, TaskStatus.PENDING]:
-        raise HTTPException(202, f"Task with {request_id=} is still being worked on")
+        raise HTTPException(
+            HTTPStatus.ACCEPTED, f"Task with {request_id=} is still being worked on"
+        )
 
     elif task.status == TaskStatus.FAILURE:
-        raise HTTPException(500, f"Task with {request_id=} failed")
+        raise HTTPException(
+            HTTPStatus.INTERNAL_SERVER_ERROR, f"Task with {request_id=} failed"
+        )
 
     file_store = get_default_file_store(db_session)
     report_name = query_history_report_name(request_id)
     try:
         csv_stream = file_store.read_file(report_name)
     except Exception as e:
-        raise HTTPException(500, f"Failed to read query history file: {str(e)}")
+        raise HTTPException(
+            HTTPStatus.INTERNAL_SERVER_ERROR,
+            f"Failed to read query history file: {str(e)}",
+        )
     csv_stream.seek(0)
     return StreamingResponse(
         iter(csv_stream),
