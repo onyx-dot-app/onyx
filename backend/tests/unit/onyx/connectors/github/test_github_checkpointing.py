@@ -9,8 +9,8 @@ from unittest.mock import patch
 
 import pytest
 from github import Github
-from github import GithubException
 from github import RateLimitExceededException
+from github.GithubException import GithubException
 from github.Issue import Issue
 from github.PullRequest import PullRequest
 from github.RateLimit import RateLimit
@@ -24,6 +24,9 @@ from onyx.connectors.github.connector import GithubConnector
 from onyx.connectors.github.connector import SerializedRepository
 from onyx.connectors.models import Document
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
+from tests.unit.onyx.connectors.utils import (
+    load_everything_from_checkpoint_connector_from_checkpoint,
+)
 
 
 @pytest.fixture
@@ -439,3 +442,190 @@ def test_validate_connector_settings_success(
     github_connector.github_client.get_repo.assert_called_once_with(
         f"{github_connector.repo_owner}/{github_connector.repositories}"
     )
+
+
+def test_load_from_checkpoint_with_cursor_fallback(
+    github_connector: GithubConnector,
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+    create_mock_pr: Callable[..., MagicMock],
+) -> None:
+    """Test loading from checkpoint with fallback to cursor-based pagination"""
+    # Set up mocked repo
+    mock_repo = create_mock_repo()
+    github_connector.github_client = mock_github_client
+    mock_github_client.get_repo.return_value = mock_repo
+
+    # Set up mocked PRs
+    mock_pr1 = create_mock_pr(number=1, title="PR 1")
+    mock_pr2 = create_mock_pr(number=2, title="PR 2")
+
+    # Create a mock paginated list that will raise the 422 error on get_page
+    mock_paginated_list = MagicMock()
+    mock_paginated_list.get_page.side_effect = [
+        GithubException(
+            422,
+            {
+                "message": "Pagination with the page parameter is not supported for large datasets. Use cursor"
+            },
+            {},
+        ),
+    ]
+
+    # Create a new mock for cursor-based pagination
+    mock_cursor_paginated_list = MagicMock()
+    mock_cursor_paginated_list.__nextUrl = (
+        "https://api.github.com/repos/test-org/test-repo/pulls?cursor=abc123"
+    )
+    mock_cursor_paginated_list.__iter__.return_value = iter([mock_pr1, mock_pr2])
+
+    mock_repo.get_pulls.side_effect = [
+        mock_paginated_list,
+        mock_cursor_paginated_list,
+    ]
+
+    # Mock SerializedRepository.to_Repository to return our mock repo
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        # Call load_from_checkpoint
+        end_time = time.time()
+        outputs = load_everything_from_checkpoint_connector(
+            github_connector, 0, end_time
+        )
+
+        # Check that we got the documents via cursor-based pagination
+        assert len(outputs) >= 2
+        assert len(outputs[1].items) == 2
+        assert isinstance(outputs[1].items[0], Document)
+        assert outputs[1].items[0].id == "https://github.com/test-org/test-repo/pull/1"
+        assert isinstance(outputs[1].items[1], Document)
+        assert outputs[1].items[1].id == "https://github.com/test-org/test-repo/pull/2"
+
+        # Verify cursor URL is not set in checkpoint since pagination succeeded without failures
+        assert outputs[1].next_checkpoint.cursor_url is None
+        assert outputs[1].next_checkpoint.num_retrieved == 0
+
+
+def test_load_from_checkpoint_resume_cursor_pagination(
+    github_connector: GithubConnector,
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+    create_mock_pr: Callable[..., MagicMock],
+) -> None:
+    """Test resuming from a checkpoint that was using cursor-based pagination"""
+    # Set up mocked repo
+    mock_repo = create_mock_repo()
+    github_connector.github_client = mock_github_client
+    mock_github_client.get_repo.return_value = mock_repo
+
+    # Set up mocked PRs
+    mock_pr3 = create_mock_pr(number=3, title="PR 3")
+    mock_pr4 = create_mock_pr(number=4, title="PR 4")
+
+    # Create a checkpoint that was using cursor-based pagination
+    checkpoint = github_connector.build_dummy_checkpoint()
+    checkpoint.cursor_url = (
+        "https://api.github.com/repos/test-org/test-repo/pulls?cursor=abc123"
+    )
+    checkpoint.num_retrieved = 2
+
+    # Mock get_pulls to use cursor-based pagination
+    mock_paginated_list = MagicMock()
+    mock_paginated_list.__nextUrl = (
+        "https://api.github.com/repos/test-org/test-repo/pulls?cursor=def456"
+    )
+    mock_paginated_list.__iter__.return_value = iter([mock_pr3, mock_pr4])
+    mock_repo.get_pulls.return_value = mock_paginated_list
+
+    # Mock SerializedRepository.to_Repository to return our mock repo
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        # Call load_from_checkpoint with the checkpoint
+        end_time = time.time()
+        outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+            github_connector, 0, end_time, checkpoint
+        )
+
+        # Check that we got the documents via cursor-based pagination
+        assert len(outputs) >= 2
+        assert len(outputs[1].items) == 2
+        assert isinstance(outputs[1].items[0], Document)
+        assert outputs[1].items[0].id == "https://github.com/test-org/test-repo/pull/3"
+        assert isinstance(outputs[1].items[1], Document)
+        assert outputs[1].items[1].id == "https://github.com/test-org/test-repo/pull/4"
+
+        # Verify cursor URL was stored in checkpoint
+        assert outputs[1].next_checkpoint.cursor_url is None
+        assert outputs[1].next_checkpoint.num_retrieved == 0
+
+
+def test_load_from_checkpoint_cursor_expiration(
+    github_connector: GithubConnector,
+    mock_github_client: MagicMock,
+    create_mock_repo: Callable[..., MagicMock],
+    create_mock_pr: Callable[..., MagicMock],
+) -> None:
+    """Test handling of cursor expiration during cursor-based pagination"""
+    # Set up mocked repo
+    mock_repo = create_mock_repo()
+    github_connector.github_client = mock_github_client
+    mock_github_client.get_repo.return_value = mock_repo
+
+    # Set up mocked PRs
+    mock_pr4 = create_mock_pr(number=4, title="PR 4")
+
+    # Create a checkpoint with an expired cursor
+    checkpoint = github_connector.build_dummy_checkpoint()
+    checkpoint.cursor_url = (
+        "https://api.github.com/repos/test-org/test-repo/pulls?cursor=expired"
+    )
+    checkpoint.num_retrieved = 3  # We've already retrieved 3 items
+
+    # Mock get_pulls to simulate cursor expiration by raising an error before any results
+    mock_paginated_list = MagicMock()
+    mock_paginated_list.__nextUrl = (
+        "https://api.github.com/repos/test-org/test-repo/pulls?cursor=expired"
+    )
+    mock_paginated_list.__iter__.side_effect = GithubException(
+        422, {"message": "Cursor expired"}, {}
+    )
+
+    # Create a new mock for successful retrieval after retry
+    mock_retry_paginated_list = MagicMock()
+    mock_retry_paginated_list.__nextUrl = None
+
+    # Create an iterator that will yield the remaining PR
+    def retry_iterator() -> Generator[PullRequest, None, None]:
+        yield mock_pr4
+
+    # Create a mock for the _Slice object that will be returned by pag_list[prev_num_objs:]
+    mock_slice = MagicMock()
+    mock_slice.__iter__.return_value = retry_iterator()
+
+    # Set up the slice behavior for the retry paginated list
+    mock_retry_paginated_list.__getitem__.return_value = mock_slice
+
+    # Set up the side effect for get_pulls to return our mocks
+    mock_repo.get_pulls.side_effect = [
+        mock_paginated_list,
+        mock_retry_paginated_list,
+    ]
+
+    # Mock SerializedRepository.to_Repository to return our mock repo
+    with patch.object(SerializedRepository, "to_Repository", return_value=mock_repo):
+        # Call load_from_checkpoint with the checkpoint
+        end_time = time.time()
+        outputs = load_everything_from_checkpoint_connector_from_checkpoint(
+            github_connector, 0, end_time, checkpoint
+        )
+
+        # Check that we got the remaining document after retrying from the beginning
+        assert len(outputs) >= 2
+        assert len(outputs[1].items) == 1
+        assert isinstance(outputs[1].items[0], Document)
+        assert outputs[1].items[0].id == "https://github.com/test-org/test-repo/pull/4"
+
+        # Verify cursor URL was cleared in checkpoint
+        assert outputs[1].next_checkpoint.cursor_url is None
+        assert outputs[1].next_checkpoint.num_retrieved == 0
+
+        # Verify that the slice was called with the correct argument
+        mock_retry_paginated_list.__getitem__.assert_called_once_with(slice(3, None))

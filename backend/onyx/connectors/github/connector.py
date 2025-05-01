@@ -34,7 +34,6 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import DocumentFailure
-from onyx.connectors.models import EntityFailure
 from onyx.connectors.models import TextSection
 from onyx.utils.logger import setup_logger
 
@@ -76,7 +75,7 @@ def _paginate_until_error(
     prev_num_objs: int,
     cursor_url_callback: Callable[[str | None, int], None],
     retrying: bool = False,
-) -> Generator[PullRequest | Issue | ConnectorFailure, None, None]:
+) -> Generator[PullRequest | Issue, None, None]:
     num_objs = prev_num_objs
     pag_list = git_objs()
     if cursor_url:
@@ -93,6 +92,10 @@ def _paginate_until_error(
         )
         pag_list = pag_list[prev_num_objs:]
         num_objs = 0
+        print("\n" * 10)
+        print("this is what it be")
+        print(pag_list.__iter__)
+        print("\n" * 10)
 
     try:
         # this for loop handles cursor-based pagination
@@ -110,14 +113,8 @@ def _paginate_until_error(
 
     except Exception as e:
         logger.exception(f"Error during cursor-based pagination: {e}")
-        if num_objs > 0:
-            yield ConnectorFailure(
-                failed_entity=EntityFailure(
-                    entity_id="cursor_based_pagination",
-                ),
-                failure_message=str(e),
-            )
-            return
+        if num_objs - prev_num_objs > 0:
+            raise
 
         if pag_list.__nextUrl is not None and not retrying:
             logger.info(
@@ -146,7 +143,7 @@ def _get_batch_rate_limited(
     cursor_url_callback: Callable[[str | None, int], None],
     github_client: Github,
     attempt_num: int = 0,
-) -> Generator[PullRequest | Issue | ConnectorFailure, None, None]:
+) -> Generator[PullRequest | Issue, None, None]:
     if attempt_num > _MAX_NUM_RATE_LIMIT_RETRIES:
         raise RuntimeError(
             "Re-tried fetching batch too many times. Something is going wrong with fetching objects from Github"
@@ -178,7 +175,13 @@ def _get_batch_rate_limited(
             attempt_num + 1,
         )
     except GithubException as e:
-        if not (e.status == 422 and "cursor" in (e.message or "")):
+        if not (
+            e.status == 422
+            and (
+                "cursor" in (e.message or "")
+                or "cursor" in (e.data or {}).get("message", "")
+            )
+        ):
             raise
         # Fallback to a cursor-based pagination strategy
         # This can happen for "large datasets," but there's no documentation
@@ -357,9 +360,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # Try to get organization first
             try:
                 org = github_client.get_organization(self.repo_owner)
-                # return list(org.get_repos())
-                return [x for x in list(org.get_repos()) if x.name == "ffe"]
-            # TODO: remove
+                return list(org.get_repos())
 
             except GithubException:
                 # If not an org, try as a user
@@ -459,9 +460,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             pr = None
             for pr in pr_batch:
                 num_prs += 1
-                if isinstance(pr, ConnectorFailure):
-                    yield pr
-                    continue
 
                 # we iterate backwards in time, so at this point we stop processing prs
                 if (
@@ -493,17 +491,14 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     continue
 
             # If we reach this point with a cursor url in the checkpoint, we were using
-            # the fallback cursor-based pagination strategy. That strategy continues until
-            # a connectorfailure occurs, so if the last pr was NOT a connectorfailure, we
-            # are done with prs.
-            cursor_mode_done_with_prs = checkpoint.cursor_url and not isinstance(
-                pr, ConnectorFailure
-            )
+            # the fallback cursor-based pagination strategy. That strategy tries to get all
+            # PRs, so having curosr_url set means we are done with prs. However, we need to
+            # return AFTER the checkpoint reset to avoid infinite loops.
 
             # if we found any PRs on the page and there are more PRs to get, return the checkpoint.
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
-            if num_prs > 0 and not done_with_prs and not cursor_mode_done_with_prs:
+            if num_prs > 0 and not done_with_prs and not checkpoint.cursor_url:
                 return checkpoint
 
             # if we went past the start date during the loop or there are no more
@@ -511,7 +506,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             checkpoint.stage = GithubConnectorStage.ISSUES
             checkpoint.reset()
 
-            if cursor_mode_done_with_prs:
+            if checkpoint.cursor_url:
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
@@ -540,9 +535,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             num_issues = 0
             for issue in issue_batch:
                 num_issues += 1
-                if isinstance(issue, ConnectorFailure):
-                    yield issue
-                    continue
                 issue = cast(Issue, issue)
                 # we iterate backwards in time, so at this point we stop processing prs
                 if (
@@ -578,15 +570,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     )
                     continue
 
-            cursor_mode_done_with_issues = checkpoint.cursor_url and not isinstance(
-                issue, ConnectorFailure
-            )
-            # if we found any issues on the page, and we're not done, return the checkpoint
-            if (
-                num_issues > 0
-                and not done_with_issues
-                and not cursor_mode_done_with_issues
-            ):
+            # if we found any issues on the page, and we're not done, return the checkpoint.
+            # don't return if we're using cursor-based pagination to avoid infinite loops
+            if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
                 return checkpoint
 
             # if we went past the start date during the loop or there are no more
