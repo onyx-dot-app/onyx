@@ -9,7 +9,6 @@ from pydantic import field_validator
 from onyx.connectors.interfaces import ConnectorCheckpoint
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
-from onyx.utils.threadpool_concurrency import ThreadSafeSet
 
 
 class GDriveMimeType(str, Enum):
@@ -140,7 +139,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # processed_folder_file_ids: ThreadSafeDict[str, set[str]] = ThreadSafeDict()
 
     # maps file id to at most 5 users that can see the file
-    all_retrieved_file_ids: ThreadSafeSet[str]
+    all_retrieved_file_ids: set[str]
 
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
@@ -161,17 +160,3 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
         return ThreadSafeDict(
             {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )
-
-    @field_serializer("all_retrieved_file_ids")
-    def serialize_all_retrieved_file_ids(
-        self, all_retrieved_file_ids: ThreadSafeSet[str], _info: Any
-    ) -> set[str]:
-        return all_retrieved_file_ids._set
-
-    @field_validator("all_retrieved_file_ids", mode="before")
-    def validate_all_retrieved_file_ids(cls, v: Any) -> ThreadSafeSet[str]:
-        if isinstance(v, set):
-            return ThreadSafeSet(v)
-        if isinstance(v, ThreadSafeSet):
-            return v
-        raise ValueError("all_retrieved_file_ids must be a set")
