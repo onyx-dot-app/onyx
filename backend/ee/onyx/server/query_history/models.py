@@ -228,7 +228,7 @@ class QueryHistoryExport(BaseModel):
     status: TaskStatus
     start: datetime
     end: datetime
-    start_time: datetime | None
+    start_time: datetime
 
     @classmethod
     def from_task(
@@ -239,6 +239,9 @@ class QueryHistoryExport(BaseModel):
             QUERY_HISTORY_TASK_NAME_PREFIX
         )
         start, end = start_end.split("_")
+
+        if not task_queue_state.start_time:
+            raise RuntimeError("The start time of the task must always be present")
 
         return cls(
             task_id=task_queue_state.task_id,
