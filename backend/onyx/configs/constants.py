@@ -273,6 +273,11 @@ class FileOrigin(str, Enum):
     INDEXING_CHECKPOINT = "indexing_checkpoint"
     PLAINTEXT_CACHE = "plaintext_cache"
     OTHER = "other"
+    QUERY_HISTORY_CSV = "query_history_csv"
+
+
+class FileType(str, Enum):
+    CSV = "text/csv"
 
 
 class MilestoneRecordType(str, Enum):

@@ -5,13 +5,15 @@ from pydantic import BaseModel
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
+from onyx.background.task_utils import deconstruct_query_history_report_name
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import SessionType
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatMessage
 from onyx.db.models import ChatSession
-from onyx.db.models import TaskQueueState as TaskQueueStateModel
+from onyx.db.models import PGFileStore
+from onyx.db.models import TaskQueueState
 
 
 class AbridgedSearchDoc(BaseModel):
@@ -221,19 +223,20 @@ class QuestionAnswerPairSnapshot(BaseModel):
         }
 
 
-class TaskQueueState(BaseModel):
+class QueryHistoryExport(BaseModel):
     task_id: str
     status: TaskStatus
     start: datetime
     end: datetime
+    start_time: datetime | None
 
     @classmethod
-    def from_model(
+    def from_task(
         cls,
-        task_queue_state: TaskQueueStateModel,
-    ) -> "TaskQueueState":
+        task_queue_state: TaskQueueState,
+    ) -> "QueryHistoryExport":
         start_end = task_queue_state.task_name.removeprefix(
-            f"{QUERY_HISTORY_TASK_NAME_PREFIX}_"
+            QUERY_HISTORY_TASK_NAME_PREFIX
         )
         start, end = start_end.split("_")
 
@@ -242,4 +245,32 @@ class TaskQueueState(BaseModel):
             status=task_queue_state.status,
             start=datetime.fromisoformat(start),
             end=datetime.fromisoformat(end),
+            start_time=task_queue_state.start_time,
         )
+
+    @classmethod
+    def from_file(
+        cls,
+        file: PGFileStore,
+    ) -> "QueryHistoryExport":
+        if not file.file_metadata or not isinstance(file.file_metadata, dict):
+            raise RuntimeError(
+                "The file metadata must be non-null, and must be of type `dict[str, str]`"
+            )
+
+        metadata = QueryHistoryFileMetadata.model_validate(dict(file.file_metadata))
+        task_id = deconstruct_query_history_report_name(file.file_name)
+
+        return cls(
+            task_id=task_id,
+            status=TaskStatus.SUCCESS,
+            start=metadata.start,
+            end=metadata.end,
+            start_time=metadata.start_time,
+        )
+
+
+class QueryHistoryFileMetadata(BaseModel):
+    start: datetime
+    end: datetime
+    start_time: datetime

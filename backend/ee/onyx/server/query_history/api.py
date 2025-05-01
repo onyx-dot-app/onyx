@@ -16,14 +16,15 @@ from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
 from ee.onyx.server.query_history.models import ChatSessionMinimal
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import MessageSnapshot
-from ee.onyx.server.query_history.models import TaskQueueState
+from ee.onyx.server.query_history.models import QueryHistoryExport
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_display_email
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.background.task_utils import query_history_report_name
+from onyx.background.task_utils import construct_query_history_report_name
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import FileType
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
@@ -36,6 +37,7 @@ from onyx.db.engine import get_session
 from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import User
+from onyx.db.pg_file_store import get_query_history_export_files
 from onyx.db.tasks import get_all_query_history_export_tasks
 from onyx.db.tasks import get_task_with_id
 from onyx.file_store.file_store import get_default_file_store
@@ -250,13 +252,18 @@ def get_chat_session_admin(
 def list_all_query_history_exports(
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
-) -> list[TaskQueueState]:
+) -> list[QueryHistoryExport]:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
     try:
-        return [
-            TaskQueueState.from_model(task)
+        pending_tasks = [
+            QueryHistoryExport.from_task(task)
             for task in get_all_query_history_export_tasks(db_session=db_session)
         ]
+        generated_files = [
+            QueryHistoryExport.from_file(file)
+            for file in get_query_history_export_files(db_session=db_session)
+        ]
+        return pending_tasks + generated_files
     except Exception as e:
         raise HTTPException(
             HTTPStatus.INTERNAL_SERVER_ERROR, f"Failed to get all tasks: {e}"
@@ -311,11 +318,11 @@ def get_query_history_export_status(
     # If that *also* doesn't exist, then we can return a 404.
     file_store = get_default_file_store(db_session)
 
-    report_name = query_history_report_name(request_id)
+    report_name = construct_query_history_report_name(request_id)
     has_file = file_store.has_file(
         file_name=report_name,
-        file_origin=FileOrigin.GENERATED_REPORT,
-        file_type="text/csv",
+        file_origin=FileOrigin.QUERY_HISTORY_CSV,
+        file_type=FileType.CSV,
     )
 
     if not has_file:
@@ -335,6 +342,31 @@ def download_query_history_csv(
 ) -> StreamingResponse:
     ensure_query_history_is_enabled(disallowed=[QueryHistoryType.DISABLED])
 
+    report_name = construct_query_history_report_name(request_id)
+    file_store = get_default_file_store(db_session)
+    has_file = file_store.has_file(
+        file_name=report_name,
+        file_origin=FileOrigin.QUERY_HISTORY_CSV,
+        file_type=FileType.CSV,
+    )
+
+    if has_file:
+        try:
+            csv_stream = file_store.read_file(report_name)
+        except Exception as e:
+            raise HTTPException(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                f"Failed to read query history file: {str(e)}",
+            )
+        csv_stream.seek(0)
+        return StreamingResponse(
+            iter(csv_stream),
+            media_type=FileType.CSV,
+            headers={"Content-Disposition": f"attachment;filename={report_name}"},
+        )
+
+    # If the file doesn't exist yet, it may still be processing.
+    # Therefore, we check the task queue to determine its status, if there is any.
     task = get_task_with_id(db_session=db_session, task_id=request_id)
     if not task:
         raise HTTPException(
@@ -342,8 +374,6 @@ def download_query_history_csv(
             f"No task with {request_id=} was found",
         )
 
-    # Maybe we should handle each specific TaskStatus separately?
-    # I.e., if it's a `TaskStatus.PENDING` return a different error code vs if it's a `TaskStatus.FAILURE`.
     if task.status in [TaskStatus.STARTED, TaskStatus.PENDING]:
         raise HTTPException(
             HTTPStatus.ACCEPTED, f"Task with {request_id=} is still being worked on"
@@ -351,21 +381,11 @@ def download_query_history_csv(
 
     elif task.status == TaskStatus.FAILURE:
         raise HTTPException(
-            HTTPStatus.INTERNAL_SERVER_ERROR, f"Task with {request_id=} failed"
-        )
-
-    file_store = get_default_file_store(db_session)
-    report_name = query_history_report_name(request_id)
-    try:
-        csv_stream = file_store.read_file(report_name)
-    except Exception as e:
-        raise HTTPException(
             HTTPStatus.INTERNAL_SERVER_ERROR,
-            f"Failed to read query history file: {str(e)}",
+            f"Task with {request_id=} failed to be processed",
         )
-    csv_stream.seek(0)
-    return StreamingResponse(
-        iter(csv_stream),
-        media_type="text/csv",
-        headers={"Content-Disposition": f"attachment;filename={report_name}"},
-    )
+    else:
+        # This is the final case in which `task.status == SUCCESS`
+        raise RuntimeError(
+            "The task was marked as success, the file was not found in the file store; this is an internal error..."
+        )

@@ -13,16 +13,18 @@ from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import build_celery_task_wrapper
-from onyx.background.task_utils import query_history_report_name
+from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import FileOrigin
+from onyx.configs.constants import FileType
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import QueryHistoryType
 from onyx.db.chat import delete_chat_session
 from onyx.db.chat import get_chat_sessions_older_than
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import TaskStatus
+from onyx.db.tasks import delete_task_with_id
 from onyx.db.tasks import mark_task_as_finished_with_id
 from onyx.db.tasks import register_task
 from onyx.file_store.file_store import get_default_file_store
@@ -116,6 +118,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
         raise RuntimeError("No task id defined for this task; cannot identify it")
 
     task_id = self.request.id
+    start_time = datetime.now()
 
     with get_session_with_current_tenant() as db_session:
         try:
@@ -124,6 +127,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 task_name=query_history_task_name(start=start, end=end),
                 task_id=task_id,
                 status=TaskStatus.STARTED,
+                start_time=start_time,
             )
 
             complete_chat_session_history = fetch_and_process_chat_session_history(
@@ -157,7 +161,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
         for qa_pair in to_qa_pair(chat_session_snapshot)
     ]
 
-    report_name = query_history_report_name(task_id)
+    report_name = construct_query_history_report_name(task_id)
 
     stream = io.StringIO()
 
@@ -176,11 +180,16 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 file_name=report_name,
                 content=stream,
                 display_name=report_name,
-                file_origin=FileOrigin.GENERATED_REPORT,
-                file_type="text/csv",
+                file_origin=FileOrigin.QUERY_HISTORY_CSV,
+                file_type=FileType.CSV,
+                file_metadata={
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "start_time": start_time.isoformat(),
+                },
             )
 
-            mark_task_as_finished_with_id(
+            delete_task_with_id(
                 db_session=db_session,
                 task_id=task_id,
             )

@@ -14,6 +14,9 @@ from onyx.db.tasks import mark_task_start
 from onyx.db.tasks import register_task
 
 
+QUERY_REPORT_NAME_PREFIX = "query-history-"
+
+
 T = TypeVar("T", bound=Callable)
 
 
@@ -116,7 +119,11 @@ def build_celery_task_wrapper(
     return wrap_task
 
 
-def query_history_report_name(
+def construct_query_history_report_name(
     task_id: str,
 ) -> str:
-    return f"query-history-{task_id}.csv"
+    return f"{QUERY_REPORT_NAME_PREFIX}{task_id}.csv"
+
+
+def deconstruct_query_history_report_name(name: str) -> str:
+    return name.removeprefix(QUERY_REPORT_NAME_PREFIX).removesuffix(".csv")

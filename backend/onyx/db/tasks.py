@@ -1,7 +1,10 @@
+from datetime import datetime
+
 from sqlalchemy import desc
 from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql import delete
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.app_configs import JOB_TIMEOUT
@@ -49,11 +52,13 @@ def register_task(
     db_session: Session,
     task_id: str = "",
     status: TaskStatus = TaskStatus.PENDING,
+    start_time: datetime | None = None,
 ) -> TaskQueueState:
     new_task = TaskQueueState(
         task_id=task_id,
         task_name=task_name,
         status=status,
+        start_time=start_time,
     )
 
     db_session.add(new_task)
@@ -71,13 +76,21 @@ def get_task_with_id(
     )
 
 
+def delete_task_with_id(
+    db_session: Session,
+    task_id: str,
+) -> None:
+    db_session.execute(delete(TaskQueueState).where(TaskQueueState.task_id == task_id))
+    db_session.commit()
+
+
 def get_all_query_history_export_tasks(
     db_session: Session,
 ) -> list[TaskQueueState]:
     return list(
         db_session.scalars(
             select(TaskQueueState).where(
-                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}_%")
+                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}%")
             )
         )
     )
