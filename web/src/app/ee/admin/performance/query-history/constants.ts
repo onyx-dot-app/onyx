@@ -1,3 +1,4 @@
+export const LIST_QUERY_HISTORY_URL = "/api/admin/query-history/list";
 export const START_QUERY_HISTORY_EXPORT_URL =
   "/api/admin/query-history/start-export";
 export const CHECK_QUERY_HISTORY_EXPORT_STATUS_URL =

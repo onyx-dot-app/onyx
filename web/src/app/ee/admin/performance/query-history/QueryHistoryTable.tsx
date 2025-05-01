@@ -36,7 +36,10 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import useSWR from "swr";
 import { TaskQueueState } from "./types";
 import { withRequestId } from "./utils";
-import { DOWNLOAD_QUERY_HISTORY_URL } from "./constants";
+import {
+  DOWNLOAD_QUERY_HISTORY_URL,
+  LIST_QUERY_HISTORY_URL,
+} from "./constants";
 
 const ITEMS_PER_PAGE = 20;
 const PAGES_PER_BATCH = 2;
@@ -155,7 +158,7 @@ export function QueryHistoryTable() {
   });
 
   const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
-    "/api/admin/query-history/list",
+    LIST_QUERY_HISTORY_URL,
     errorHandlingFetcher
   );
 
