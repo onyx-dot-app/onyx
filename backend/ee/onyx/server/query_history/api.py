@@ -10,7 +10,6 @@ from fastapi import Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ee.onyx.background.celery.apps.primary import export_query_history_task
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
 from ee.onyx.db.query_history import get_page_of_chat_sessions
 from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
@@ -20,11 +19,14 @@ from ee.onyx.server.query_history.models import MessageSnapshot
 from ee.onyx.server.query_history.models import TaskQueueState
 from onyx.auth.users import current_admin_user
 from onyx.auth.users import get_display_email
+from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.background.task_utils import query_history_report_name
 from onyx.chat.chat_utils import create_chat_chain
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MessageType
+from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
 from onyx.configs.constants import SessionType
@@ -276,11 +278,13 @@ def start_query_history_export(
             f"Start time must come before end time, but instead got the start time coming after; {start=} {end=}",
         )
 
-    task = export_query_history_task.apply_async(
+    task = client_app.send_task(
+        OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
+        priority=OnyxCeleryPriority.MEDIUM,
         kwargs={
             "start": start,
             "end": end,
-        }
+        },
     )
 
     return {"request_id": task.id}

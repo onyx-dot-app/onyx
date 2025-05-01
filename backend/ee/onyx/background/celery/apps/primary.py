@@ -2,6 +2,7 @@ import csv
 import io
 from datetime import datetime
 
+from celery import shared_task
 from celery.app.task import Task
 
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
@@ -98,11 +99,12 @@ def autogenerate_usage_report_task(*, tenant_id: str) -> None:
         )
 
 
-@celery_app.task(
+@shared_task(
     name=OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
     ignore_result=True,
     soft_time_limit=JOB_TIMEOUT,
     bind=True,
+    trail=False,
 )
 def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> None:
     # Importing here because importing in the global namespace causes a circular dependency issue.
