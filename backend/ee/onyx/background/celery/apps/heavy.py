@@ -95,9 +95,9 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
     for row in qa_pairs:
         writer.writerow(row.to_json())
 
+    report_name = construct_query_history_report_name(task_id)
     with get_session_with_current_tenant() as db_session:
         try:
-            report_name = construct_query_history_report_name(task_id)
             stream.seek(0)
             get_default_file_store(db_session).save_file(
                 file_name=report_name,
@@ -117,7 +117,9 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 task_id=task_id,
             )
         except Exception:
-            logger.exception(f"Failed to save query history export file {report_name}")
+            logger.exception(
+                f"Failed to save query history export file; {report_name=}"
+            )
             mark_task_as_finished_with_id(
                 db_session=db_session,
                 task_id=task_id,
