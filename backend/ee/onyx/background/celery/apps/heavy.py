@@ -88,10 +88,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
         for qa_pair in to_qa_pair(chat_session_snapshot)
     ]
 
-    report_name = construct_query_history_report_name(task_id)
-
     stream = io.StringIO()
-
     writer = csv.DictWriter(
         stream,
         fieldnames=list(QuestionAnswerPairSnapshot.model_fields.keys()),
@@ -102,6 +99,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
 
     with get_session_with_current_tenant() as db_session:
         try:
+            report_name = construct_query_history_report_name(task_id)
             stream.seek(0)
             get_default_file_store(db_session).save_file(
                 file_name=report_name,
