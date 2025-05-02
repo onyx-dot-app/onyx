@@ -1,6 +1,7 @@
 import csv
 import io
 from datetime import datetime
+from datetime import timezone
 
 from celery import shared_task
 from celery.app.task import Task
@@ -118,7 +119,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
         raise RuntimeError("No task id defined for this task; cannot identify it")
 
     task_id = self.request.id
-    start_time = datetime.now()
+    start_time = datetime.now(tz=timezone.utc)
 
     with get_session_with_current_tenant() as db_session:
         try:

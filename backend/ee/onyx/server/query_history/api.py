@@ -267,7 +267,7 @@ def list_all_query_history_exports(
 
         # We sort based off of the start-time of the task.
         # We also return it in reverse order since viewing generated reports in most-recent to least-recent is most common.
-        merged.sort(key=lambda task: task.start_time.replace(tzinfo=None), reverse=True)
+        merged.sort(key=lambda task: task.start_time, reverse=True)
 
         return merged
     except Exception as e:
