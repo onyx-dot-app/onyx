@@ -896,7 +896,11 @@ def connector_indexing_task(
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
-        raise e
+
+        # special bulletproofing ... truncate long exception messages
+        sanitized_e = type(e)(str(e)[:1024])
+        sanitized_e.__traceback__ = e.__traceback__
+        raise sanitized_e
 
     finally:
         if lock.owned():
