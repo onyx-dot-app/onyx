@@ -218,7 +218,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
 
         # ids of folders and shared drives that have been traversed
-        self._retrieved_parent_ids: set[str] = set()
+        self._retrieved_folder_and_drive_ids: set[str] = set()
 
         self.allow_images = False
 
@@ -272,7 +272,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         return new_creds_dict
 
     def _update_traversed_parent_ids(self, folder_id: str) -> None:
-        self._retrieved_parent_ids.add(folder_id)
+        self._retrieved_folder_and_drive_ids.add(folder_id)
 
     def _get_all_user_emails(self) -> list[str]:
         if self._specific_user_emails:
@@ -333,14 +333,14 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         cv = threading.Condition()
 
         in_progress_drive_ids = {
-            completion.completed_until_parent_id: user_email
+            completion.current_folder_or_drive_id: user_email
             for user_email, completion in checkpoint.completion_map.items()
             if completion.stage == DriveRetrievalStage.SHARED_DRIVE_FILES
-            and completion.completed_until_parent_id is not None
+            and completion.current_folder_or_drive_id is not None
         }
-        drive_id_status = {}
+        drive_id_status: dict[str, DriveIdStatus] = {}
         for drive_id in drive_ids:
-            if drive_id in self._retrieved_parent_ids:
+            if drive_id in self._retrieved_folder_and_drive_ids:
                 drive_id_status[drive_id] = DriveIdStatus.FINISHED
             elif drive_id in in_progress_drive_ids:
                 drive_id_status[drive_id] = DriveIdStatus.IN_PROGRESS
@@ -350,7 +350,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         def _get_available_drive_id(processed_ids: set[str]) -> tuple[str | None, bool]:
             found_future_work = False
             for drive_id, status in drive_id_status.items():
-                if drive_id in self._retrieved_parent_ids:
+                if drive_id in self._retrieved_folder_and_drive_ids:
                     drive_id_status[drive_id] = DriveIdStatus.FINISHED
                     continue
                 if drive_id in processed_ids:
@@ -370,7 +370,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     completion.processed_drive_ids.add(drive_id)
                     drive_id_status[drive_id] = (
                         DriveIdStatus.FINISHED
-                        if drive_id in self._retrieved_parent_ids
+                        if drive_id in self._retrieved_folder_and_drive_ids
                         else DriveIdStatus.AVAILABLE
                     )
                     # wake up other threads waiting for work
@@ -380,9 +380,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             # just finished that drive from a previous run.
             if (
                 completion.stage == DriveRetrievalStage.MY_DRIVE_FILES
-                and completion.completed_until_parent_id is not None
+                and completion.current_folder_or_drive_id is not None
             ):
-                record_drive_processing(completion.completed_until_parent_id)
+                record_drive_processing(completion.current_folder_or_drive_id)
             # continue iterating until this thread has no more work to do
             while True:
                 # this locks operations on _retrieved_ids and drive_id_status
@@ -490,7 +490,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
             # resume from a checkpoint
             if resuming:
-                drive_id = curr_stage.completed_until_parent_id
+                drive_id = curr_stage.current_folder_or_drive_id
                 if drive_id is None:
                     raise ValueError("drive id not set in checkpoint")
                 resume_start = curr_stage.completed_until
@@ -503,7 +503,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     f"Getting files in shared drive '{drive_id}' as '{user_email}'"
                 )
                 curr_stage.completed_until = 0
-                curr_stage.completed_until_parent_id = drive_id
+                curr_stage.current_folder_or_drive_id = drive_id
                 yield from _yield_from_drive(drive_id, start)
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
             resuming = False  # we are starting the next stage for the first time
@@ -524,7 +524,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     parent_id=folder_id,
                     is_slim=is_slim,
                     user_email=user_email,
-                    traversed_parent_ids=self._retrieved_parent_ids,
+                    traversed_parent_ids=self._retrieved_folder_and_drive_ids,
                     update_traversed_ids_func=self._update_traversed_parent_ids,
                     start=folder_start,
                     end=end,
@@ -534,7 +534,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             # resume from a checkpoint
             last_processed_folder = None
             if resuming:
-                folder_id = curr_stage.completed_until_parent_id
+                folder_id = curr_stage.current_folder_or_drive_id
                 if folder_id is None:
                     raise ValueError("folder id not set in checkpoint")
                 resume_start = curr_stage.completed_until
@@ -550,11 +550,11 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     skipping_seen_folders = folder_id != last_processed_folder
                     continue
 
-                if folder_id in self._retrieved_parent_ids:
+                if folder_id in self._retrieved_folder_and_drive_ids:
                     continue
 
                 curr_stage.completed_until = 0
-                curr_stage.completed_until_parent_id = folder_id
+                curr_stage.current_folder_or_drive_id = folder_id
                 logger.info(f"Getting files in folder '{folder_id}' as '{user_email}'")
                 yield from _yield_from_folder_crawl(folder_id, start)
 
@@ -644,7 +644,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
         remaining_folders = (
             set(sorted_drive_ids) | set(sorted_folder_ids)
-        ) - self._retrieved_parent_ids
+        ) - self._retrieved_folder_and_drive_ids
         if remaining_folders:
             logger.warning(
                 f"Some folders/drives were not retrieved. IDs: {remaining_folders}"
@@ -757,7 +757,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         ):
             drive_id = checkpoint.completion_map[
                 self.primary_admin_email
-            ].completed_until_parent_id
+            ].current_folder_or_drive_id
             if drive_id is None:
                 raise ValueError("drive id not set in checkpoint")
             resume_start = checkpoint.completion_map[
@@ -766,7 +766,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             yield from _yield_from_drive(drive_id, resume_start)
 
         for drive_id in drive_ids_to_retrieve:
-            if drive_id in self._retrieved_parent_ids:
+            if drive_id in self._retrieved_folder_and_drive_ids:
                 logger.info(
                     f"Skipping drive '{drive_id}' as it has already been retrieved"
                 )
@@ -793,7 +793,9 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         """
         # Even if no folders were requested, we still check if any drives were requested
         # that could be folders.
-        remaining_folders = folder_ids_to_retrieve - self._retrieved_parent_ids
+        remaining_folders = (
+            folder_ids_to_retrieve - self._retrieved_folder_and_drive_ids
+        )
 
         def _yield_from_folder_crawl(
             folder_id: str, folder_start: SecondsSinceUnixEpoch | None
@@ -803,7 +805,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 parent_id=folder_id,
                 is_slim=is_slim,
                 user_email=self.primary_admin_email,
-                traversed_parent_ids=self._retrieved_parent_ids,
+                traversed_parent_ids=self._retrieved_folder_and_drive_ids,
                 update_traversed_ids_func=self._update_traversed_parent_ids,
                 start=folder_start,
                 end=end,
@@ -816,7 +818,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         ):
             folder_id = checkpoint.completion_map[
                 self.primary_admin_email
-            ].completed_until_parent_id
+            ].current_folder_or_drive_id
             if folder_id is None:
                 raise ValueError("folder id not set in checkpoint")
             resume_start = checkpoint.completion_map[
@@ -834,7 +836,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
         remaining_folders = (
             drive_ids_to_retrieve | folder_ids_to_retrieve
-        ) - self._retrieved_parent_ids
+        ) - self._retrieved_folder_and_drive_ids
         if remaining_folders:
             logger.warning(
                 f"Some folders/drives were not retrieved. IDs: {remaining_folders}"
@@ -864,7 +866,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 completed_until=datetime.fromisoformat(
                     file.drive_file[GoogleFields.MODIFIED_TIME.value]
                 ).timestamp(),
-                completed_until_parent_id=file.parent_id,
+                current_folder_or_drive_id=file.parent_id,
             )
             if file.drive_file["id"] not in checkpoint.all_retrieved_file_ids:
                 checkpoint.all_retrieved_file_ids.add(file.drive_file["id"])
@@ -882,7 +884,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             checkpoint.completion_map[self.primary_admin_email] = StageCompletion(
                 stage=DriveRetrievalStage.START,
                 completed_until=0,
-                completed_until_parent_id=None,
+                current_folder_or_drive_id=None,
             )
 
         drive_service = get_drive_service(self.creds, self.primary_admin_email)
@@ -1043,7 +1045,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
                 if batches_complete > BATCHES_PER_CHECKPOINT:
                     checkpoint.retrieved_folder_and_drive_ids = (
-                        self._retrieved_parent_ids
+                        self._retrieved_folder_and_drive_ids
                     )
                     return  # create a new checkpoint
 
@@ -1069,14 +1071,14 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             )
 
         checkpoint = copy.deepcopy(checkpoint)
-        self._retrieved_parent_ids = checkpoint.retrieved_folder_and_drive_ids
+        self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
         try:
             yield from self._extract_docs_from_google_drive(checkpoint, start, end)
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
-        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_parent_ids
+        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
         return checkpoint

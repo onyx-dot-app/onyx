@@ -76,7 +76,7 @@ class StageCompletion(BaseModel):
 
     stage: DriveRetrievalStage
     completed_until: SecondsSinceUnixEpoch
-    completed_until_parent_id: str | None = None
+    current_folder_or_drive_id: str | None = None
 
     # only used for shared drives
     processed_drive_ids: set[str] = set()
@@ -85,11 +85,11 @@ class StageCompletion(BaseModel):
         self,
         stage: DriveRetrievalStage,
         completed_until: SecondsSinceUnixEpoch,
-        completed_until_parent_id: str | None = None,
+        current_folder_or_drive_id: str | None = None,
     ) -> None:
         self.stage = stage
         self.completed_until = completed_until
-        self.completed_until_parent_id = completed_until_parent_id
+        self.current_folder_or_drive_id = current_folder_or_drive_id
 
 
 class RetrievedDriveFile(BaseModel):
@@ -134,9 +134,6 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # StageCompletion is used to track the completion of each stage, but the
     # timestamp part is not used for folder crawling.
     completion_map: ThreadSafeDict[str, StageCompletion]
-
-    # only used for folder crawling. maps from parent folder id to seen file ids.
-    # processed_folder_file_ids: ThreadSafeDict[str, set[str]] = ThreadSafeDict()
 
     # all file ids that have been retrieved
     all_retrieved_file_ids: set[str] = set()
