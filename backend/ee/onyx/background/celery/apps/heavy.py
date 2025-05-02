@@ -25,7 +25,9 @@ from onyx.db.tasks import register_task
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
-# We need to import `celery_app` so that celery can pick up this task handler.
+# We need to import `celery_app` so that celery can register this module.
+# For more information on why `from .. import celery_app` is required, read
+# `backend/onyx/background/celery/versioned_apps/heavy.py`.
 
 logger = setup_logger()
 
