@@ -292,7 +292,7 @@ def filter_channels(
         if channel not in all_channel_names:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
-                f"Available channels: {all_channel_names}"
+                f"Available channels (max 50 shown): {all_channel_names[:50]}"
             )
 
     return [
