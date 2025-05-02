@@ -197,7 +197,7 @@ def get_query_history_export_files(
         db_session.scalars(
             select(PGFileStore).where(
                 and_(
-                    PGFileStore.file_name.like(f"{QUERY_REPORT_NAME_PREFIX}%"),
+                    PGFileStore.file_name.like(f"{QUERY_REPORT_NAME_PREFIX}-%"),
                     PGFileStore.file_type == FileType.CSV,
                     PGFileStore.file_origin == FileOrigin.QUERY_HISTORY_CSV,
                 )
