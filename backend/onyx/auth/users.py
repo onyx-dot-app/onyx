@@ -92,7 +92,7 @@ from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.auth import SQLAlchemyUserAdminDB
 from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_with_tenant
+from onyx.db.engine import get_async_session_context_manager
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
@@ -253,7 +253,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         tenant_id = fetch_ee_implementation_or_noop(
             "onyx.server.tenants.user_mapping", "get_tenant_id_for_email", None
         )(user_email)
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             if MULTI_TENANT:
                 tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
@@ -296,7 +296,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         user: User
 
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
             verify_email_is_invited(user_create.email)
             verify_email_domain(user_create.email)
@@ -402,7 +402,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Proceed with the tenant context
         token = None
-        async with get_async_session_with_tenant(tenant_id) as db_session:
+        async with get_async_session_context_manager(tenant_id) as db_session:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
 
             verify_email_in_whitelist(account_email, tenant_id)
@@ -642,7 +642,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return None
 
         # Create a tenant-specific session
-        async with get_async_session_with_tenant(tenant_id) as tenant_session:
+        async with get_async_session_context_manager(tenant_id) as tenant_session:
             tenant_user_db: SQLAlchemyUserDatabase = SQLAlchemyUserDatabase(
                 tenant_session, User
             )

@@ -28,6 +28,7 @@ from onyx.configs.app_configs import SESSION_EXPIRE_TIME_SECONDS
 from onyx.db.auth import get_user_count
 from onyx.db.auth import get_user_db
 from onyx.db.engine import get_async_session
+from onyx.db.engine import get_async_session_context_manager
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -49,13 +50,10 @@ async def upsert_saml_user(email: str) -> User:
     Identity Provider, but we need a valid password to satisfy system requirements.
     """
     logger.debug(f"Attempting to upsert SAML user with email: {email}")
-    get_async_session_context = contextlib.asynccontextmanager(
-        get_async_session
-    )  # type:ignore
     get_user_db_context = contextlib.asynccontextmanager(get_user_db)
     get_user_manager_context = contextlib.asynccontextmanager(get_user_manager)
 
-    async with get_async_session_context() as session:
+    async with get_async_session_context_manager() as session:
         async with get_user_db_context(session) as user_db:
             async with get_user_manager_context(user_db) as user_manager:
                 try:

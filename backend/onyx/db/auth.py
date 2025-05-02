@@ -17,7 +17,7 @@ from onyx.auth.invited_users import get_invited_users
 from onyx.auth.schemas import UserRole
 from onyx.db.api_key import get_api_key_email_pattern
 from onyx.db.engine import get_async_session
-from onyx.db.engine import get_async_session_with_tenant
+from onyx.db.engine import get_async_session_context_manager
 from onyx.db.models import AccessToken
 from onyx.db.models import OAuthAccount
 from onyx.db.models import User
@@ -55,7 +55,7 @@ def get_total_users_count(db_session: Session) -> int:
 
 
 async def get_user_count(only_admin_users: bool = False) -> int:
-    async with get_async_session_with_tenant() as session:
+    async with get_async_session_context_manager() as session:
         count_stmt = func.count(User.id)  # type: ignore
         stmt = select(count_stmt)
         if only_admin_users:
