@@ -90,7 +90,7 @@ def get_all_query_history_export_tasks(
     return list(
         db_session.scalars(
             select(TaskQueueState).where(
-                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}%")
+                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}_%")
             )
         )
     )

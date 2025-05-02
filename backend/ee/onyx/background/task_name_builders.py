@@ -3,7 +3,7 @@ from datetime import datetime
 from onyx.configs.constants import OnyxCeleryTask
 
 
-QUERY_HISTORY_TASK_NAME_PREFIX = f"{OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK}_"
+QUERY_HISTORY_TASK_NAME_PREFIX = OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK
 
 
 def name_chat_ttl_task(retention_limit_days: int, tenant_id: str | None = None) -> str:
@@ -11,4 +11,4 @@ def name_chat_ttl_task(retention_limit_days: int, tenant_id: str | None = None) 
 
 
 def query_history_task_name(start: datetime, end: datetime) -> str:
-    return f"{QUERY_HISTORY_TASK_NAME_PREFIX}{start}_{end}"
+    return f"{QUERY_HISTORY_TASK_NAME_PREFIX}_{start}_{end}"

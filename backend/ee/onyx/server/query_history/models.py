@@ -236,7 +236,7 @@ class QueryHistoryExport(BaseModel):
         task_queue_state: TaskQueueState,
     ) -> "QueryHistoryExport":
         start_end = task_queue_state.task_name.removeprefix(
-            QUERY_HISTORY_TASK_NAME_PREFIX
+            f"{QUERY_HISTORY_TASK_NAME_PREFIX}_"
         )
         start, end = start_end.split("_")
 
