@@ -115,7 +115,7 @@ export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
       {popup}
       <div className="flex flex-1 flex-col w-full justify-center">
         <Button
-          className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer text-sm"
+          className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer text-sm w-[200px]"
           onClick={startExport}
           variant={spinnerStatus === "spinning" ? "destructive" : "default"}
         >
