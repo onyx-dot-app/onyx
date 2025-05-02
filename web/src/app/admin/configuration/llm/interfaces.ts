@@ -20,6 +20,13 @@ export interface CustomConfigKey {
   key_type: "text_input" | "file_input";
 }
 
+export interface ModelConfiguration {
+  name: string;
+  is_visible: boolean;
+  max_input_tokens: number | null;
+  supports_image_input: boolean;
+}
+
 export interface WellKnownLLMProviderDescriptor {
   name: string;
   display_name: string;
@@ -65,13 +72,6 @@ export interface LLMProviderView extends LLMProvider {
   id: number;
   is_default_provider: boolean | null;
   icon?: React.FC<{ size?: number; className?: string }>;
-}
-
-export interface ModelConfiguration {
-  name: string;
-  is_visible: boolean;
-  max_input_tokens: number | null;
-  supports_image_input: boolean;
 }
 
 export interface VisionProvider extends LLMProviderView {

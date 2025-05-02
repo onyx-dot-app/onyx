@@ -60,7 +60,7 @@ export function LLMProviderUpdateForm({
     default_model_name:
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
-        llmProviderDescriptor.model_configurations[0].name),
+        llmProviderDescriptor.model_configurations[0]?.name),
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ??
       (llmProviderDescriptor.default_fast_model || null),
