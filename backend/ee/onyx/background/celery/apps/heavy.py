@@ -71,19 +71,20 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
             )
             raise
 
-    def to_qa_pair(
-        chat_session_snapshot: ChatSessionSnapshot,
-    ) -> list[QuestionAnswerPairSnapshot]:
-        if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-            chat_session_snapshot.user_email = ONYX_ANONYMIZED_EMAIL
-        return QuestionAnswerPairSnapshot.from_chat_session_snapshot(
-            chat_session_snapshot
-        )
+    if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
+        complete_chat_session_history: list = [
+            ChatSessionSnapshot(
+                **chat_session_snapshot.model_dump(), user_email=ONYX_ANONYMIZED_EMAIL
+            )
+            for chat_session_snapshot in complete_chat_session_history
+        ]
 
     qa_pairs: list[QuestionAnswerPairSnapshot] = [
         qa_pair
         for chat_session_snapshot in complete_chat_session_history
-        for qa_pair in to_qa_pair(chat_session_snapshot)
+        for qa_pair in QuestionAnswerPairSnapshot.from_chat_session_snapshot(
+            chat_session_snapshot
+        )
     ]
 
     stream = io.StringIO()
