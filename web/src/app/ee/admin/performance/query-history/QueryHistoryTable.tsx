@@ -155,7 +155,10 @@ function PreviousQueryHistoryExportsModal({
 }) {
   const { data: queryHistoryTasks } = useSWR<TaskQueueState[]>(
     LIST_QUERY_HISTORY_URL,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    {
+      refreshInterval: 3000,
+    }
   );
 
   const tasks = (queryHistoryTasks ?? []).map((queryHistory) => ({
