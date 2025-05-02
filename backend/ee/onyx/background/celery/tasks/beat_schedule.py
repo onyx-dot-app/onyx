@@ -39,6 +39,15 @@ ee_beat_task_templates.extend(
                 "expires": BEAT_EXPIRES_DEFAULT,
             },
         },
+        {
+            "name": "export-query-history-cleanup-task",
+            "task": OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
+            "schedule": timedelta(hours=1),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
     ]
 )
 
@@ -58,6 +67,15 @@ if not MULTI_TENANT:
         {
             "name": "check-ttl-management",
             "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
+            "schedule": timedelta(hours=1),
+            "options": {
+                "priority": OnyxCeleryPriority.MEDIUM,
+                "expires": BEAT_EXPIRES_DEFAULT,
+            },
+        },
+        {
+            "name": "export-query-history-cleanup-task",
+            "task": OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
             "schedule": timedelta(hours=1),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
