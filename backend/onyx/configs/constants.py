@@ -314,6 +314,7 @@ class OnyxCeleryQueues:
     CONNECTOR_PRUNING = "connector_pruning"
     CONNECTOR_DOC_PERMISSIONS_SYNC = "connector_doc_permissions_sync"
     CONNECTOR_EXTERNAL_GROUP_SYNC = "connector_external_group_sync"
+    CSV_GENERATION = "csv_generation"
 
     # Indexing queue
     CONNECTOR_INDEXING = "connector_indexing"

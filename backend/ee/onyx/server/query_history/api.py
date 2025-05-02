@@ -27,6 +27,7 @@ from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import FileType
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import OnyxCeleryPriority
+from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import QueryHistoryType
@@ -301,6 +302,7 @@ def start_query_history_export(
             "start": start,
             "end": end,
         },
+        queue=OnyxCeleryQueues.CSV_GENERATION,
     )
 
     return {"request_id": task.id}
