@@ -7,6 +7,8 @@ from celery import shared_task
 from celery import Task
 
 from ee.onyx.background.task_name_builders import query_history_task_name
+from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
+from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.background.celery.apps.primary import celery_app
@@ -37,10 +39,6 @@ logger = setup_logger()
     trail=False,
 )
 def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> None:
-    # Importing here because importing in the global namespace causes a circular dependency issue.
-    from ee.onyx.server.query_history.api import fetch_and_process_chat_session_history
-    from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
-
     if not self.request.id:
         raise RuntimeError("No task id defined for this task; cannot identify it")
 
