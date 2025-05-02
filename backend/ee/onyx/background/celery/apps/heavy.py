@@ -9,6 +9,7 @@ from celery.app.task import Task
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
+from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
@@ -126,3 +127,6 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 success=False,
             )
             raise
+
+
+celery_app = celery_app
