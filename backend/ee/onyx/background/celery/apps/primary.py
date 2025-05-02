@@ -1,5 +1,3 @@
-from celery import shared_task
-
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
 from ee.onyx.background.task_name_builders import name_chat_ttl_task
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
@@ -82,11 +80,3 @@ def autogenerate_usage_report_task(*, tenant_id: str) -> None:
             user_id=None,
             period=None,
         )
-
-
-@shared_task(
-    name=OnyxCeleryTask.EXPORT_QUERY_HISTORY_CLEANUP_TASK,
-    ignore_result=True,
-    soft_time_limit=JOB_TIMEOUT,
-)
-def export_query_history_cleanup_task(*, tenant_id: str) -> None: ...

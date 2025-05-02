@@ -4,12 +4,12 @@ from datetime import datetime
 from datetime import timezone
 
 from celery import shared_task
-from celery.app.task import Task
+from celery import Task
 
 from ee.onyx.background.task_name_builders import query_history_task_name
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
-from onyx.background.celery.apps.primary import celery_app  # noqa: F401
+from onyx.background.celery.apps.primary import celery_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
@@ -25,9 +25,6 @@ from onyx.db.tasks import register_task
 from onyx.file_store.file_store import get_default_file_store
 from onyx.utils.logger import setup_logger
 
-# We need to import `celery_app` so that celery can register this module.
-# For more information on why `from .. import celery_app` is required, read
-# `backend/onyx/background/celery/versioned_apps/heavy.py`.
 
 logger = setup_logger()
 
@@ -131,3 +128,10 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 success=False,
             )
             raise
+
+
+celery_app.autodiscover_tasks(
+    [
+        "ee.onyx.background.celery.tasks.cleanup",
+    ]
+)
