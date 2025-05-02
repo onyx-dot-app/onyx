@@ -293,8 +293,9 @@ def filter_channels(
         if channel not in all_channel_names:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
-                f"Available channels (max 50 of {len(all_channel_names)} shown): "
-                f"{[itertools.islice(all_channel_names, 50)]}"
+                f"Available channels (Showing {len(all_channel_names)} of "
+                f"{min(len(all_channel_names), SlackConnector.MAX_CHANNELS_TO_LOG)}): "
+                f"{list(itertools.islice(all_channel_names, SlackConnector.MAX_CHANNELS_TO_LOG))}"
             )
 
     return [
@@ -514,6 +515,8 @@ class SlackConnector(
     FAST_TIMEOUT = 1
 
     MAX_RETRIES = 7  # arbitrarily selected
+
+    MAX_CHANNELS_TO_LOG = 50
 
     def __init__(
         self,

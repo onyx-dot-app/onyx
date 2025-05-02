@@ -178,6 +178,8 @@ def _convert_thread_to_document(
 
 
 class TeamsConnector(LoadConnector, PollConnector):
+    MAX_CHANNELS_TO_LOG = 50
+
     def __init__(
         self,
         batch_size: int = INDEX_BATCH_SIZE,
@@ -298,7 +300,11 @@ class TeamsConnector(LoadConnector, PollConnector):
         channels = _get_channels_from_teams(
             teams=teams,
         )
-        logger.debug(f"Found available channels: {[c.id for c in channels]}")
+
+        logger.debug(
+            f"Found available channels (max {TeamsConnector.MAX_CHANNELS_TO_LOG} shown): "
+            f"{[c.id for c in channels[:TeamsConnector.MAX_CHANNELS_TO_LOG]]}"
+        )
         if not channels:
             msg = "No channels found."
             logger.error(msg)
