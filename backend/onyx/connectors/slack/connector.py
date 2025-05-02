@@ -1,5 +1,6 @@
 import contextvars
 import copy
+import itertools
 import re
 from collections.abc import Callable
 from collections.abc import Generator
@@ -292,7 +293,8 @@ def filter_channels(
         if channel not in all_channel_names:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
-                f"Available channels (max 50 shown): {all_channel_names[:50]}"
+                f"Available channels (max 50 of {len(all_channel_names)} shown): "
+                f"{[itertools.islice(all_channel_names, 50)]}"
             )
 
     return [
