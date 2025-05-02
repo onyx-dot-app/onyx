@@ -102,7 +102,7 @@ def mark_task_as_started_with_id(
 ) -> None:
     task = get_task_with_id(db_session=db_session, task_id=task_id)
     if not task:
-        raise RuntimeError(f"A task with the task-id {task_id} does not exist")
+        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
 
     task.status = TaskStatus.STARTED
     db_session.commit()
@@ -115,7 +115,7 @@ def mark_task_as_finished_with_id(
 ) -> None:
     task = get_task_with_id(db_session=db_session, task_id=task_id)
     if not task:
-        raise RuntimeError(f"A task with the task-id {task_id} does not exist")
+        raise RuntimeError(f"A task with the task-id {task_id=} does not exist")
 
     task.status = TaskStatus.SUCCESS if success else TaskStatus.FAILURE
     db_session.commit()
