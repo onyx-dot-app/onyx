@@ -298,11 +298,11 @@ def start_query_history_export(
     task = client_app.send_task(
         OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK,
         priority=OnyxCeleryPriority.MEDIUM,
+        queue=OnyxCeleryQueues.CSV_GENERATION,
         kwargs={
             "start": start,
             "end": end,
         },
-        queue=OnyxCeleryQueues.CSV_GENERATION,
     )
 
     return {"request_id": task.id}
