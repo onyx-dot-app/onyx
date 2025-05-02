@@ -1,5 +1,8 @@
+import time
+
 from sqlalchemy.orm import Session
 
+from onyx.configs.app_configs import VESPA_NUM_ATTEMPTS_ON_STARTUP
 from onyx.configs.constants import KV_REINDEX_KEY
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
 from onyx.db.connector_credential_pair import resync_cc_pair
@@ -73,13 +76,37 @@ def _perform_index_swap(
 
     # remove the old index from the vector db
     document_index = get_default_document_index(secondary_search_settings, None)
-    document_index.ensure_indices_exist(
-        primary_embedding_dim=secondary_search_settings.final_embedding_dim,
-        primary_embedding_precision=secondary_search_settings.embedding_precision,
-        # just finished swap, no more secondary index
-        secondary_index_embedding_dim=None,
-        secondary_index_embedding_precision=None,
-    )
+
+    WAIT_SECONDS = 5
+
+    success = False
+    for x in range(VESPA_NUM_ATTEMPTS_ON_STARTUP):
+        try:
+            logger.notice(
+                f"Vespa index swap (attempt {x+1}/{VESPA_NUM_ATTEMPTS_ON_STARTUP})..."
+            )
+            document_index.ensure_indices_exist(
+                primary_embedding_dim=secondary_search_settings.final_embedding_dim,
+                primary_embedding_precision=secondary_search_settings.embedding_precision,
+                # just finished swap, no more secondary index
+                secondary_index_embedding_dim=None,
+                secondary_index_embedding_precision=None,
+            )
+
+            logger.notice("Vespa index swap complete.")
+            success = True
+        except Exception:
+            logger.exception(
+                f"Vespa index swap did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
+            )
+            time.sleep(WAIT_SECONDS)
+
+    if not success:
+        logger.error(
+            f"Vespa index swap did not succeed. Attempt limit reached. ({VESPA_NUM_ATTEMPTS_ON_STARTUP})"
+        )
+
+    return
 
 
 def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
