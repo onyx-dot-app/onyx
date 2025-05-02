@@ -18,6 +18,7 @@ from onyx.db.enums import EmbeddingPrecision
 from onyx.db.llm import fetch_embedding_provider
 from onyx.db.models import CloudEmbeddingProvider
 from onyx.db.models import IndexAttempt
+from onyx.db.models import IndexAttemptError
 from onyx.db.models import IndexModelStatus
 from onyx.db.models import SearchSettings
 from onyx.indexing.models import IndexingSetting
@@ -118,13 +119,28 @@ def delete_search_settings(db_session: Session, search_settings_id: int) -> None
     if current_settings.id == search_settings_id:
         raise ValueError("Cannot delete currently active search settings")
 
-    # First, delete associated index attempts
+    # First, identify the index attempts to be deleted
+    index_attempts = (
+        db_session.query(IndexAttempt)
+        .filter(IndexAttempt.search_settings_id == search_settings_id)
+        .all()
+    )
+
+    # Delete associated error records for all index attempts in a single query
+    attempt_ids = [attempt.id for attempt in index_attempts]
+    if attempt_ids:
+        error_records_query = delete(IndexAttemptError).where(
+            IndexAttemptError.index_attempt_id.in_(attempt_ids)
+        )
+        db_session.execute(error_records_query)
+
+    # Then, delete the index attempts
     index_attempts_query = delete(IndexAttempt).where(
         IndexAttempt.search_settings_id == search_settings_id
     )
     db_session.execute(index_attempts_query)
 
-    # Then, delete the search settings
+    # Finally, delete the search settings
     search_settings_query = delete(SearchSettings).where(
         and_(
             SearchSettings.id == search_settings_id,
