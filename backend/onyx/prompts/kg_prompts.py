@@ -527,15 +527,29 @@ to 'one object (or one set of objects)' may be, should the answer logicaly benef
 and conquer strategy, or it naturally relates to one or few individual objects. Also, you are \
 supposed whether a divide and conquer strategy would be appropriate.
 
+
+Here are the entity types that are available in the knowledge graph:
+{SEPARATOR_LINE}
+---possible_entities---
+{SEPARATOR_LINE}
+
+Here are the relationship types that are available in the knowledge graph:
+{SEPARATOR_LINE}
+---possible_relationships---
+{SEPARATOR_LINE}
+
 Here are more instructions:
 
 a) Regarding the strategy: there are two types of strategies available to you:
 
-1. SIMPLE: You think you can awnswer the question using a database that is aware of the entities, relationships, \
-and terms, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
+1. SIMPLE: You think you can awnswer the question using a database that is aware of the entities, relationships \
+above, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
 'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', etc.
 2. DEEP: You think you really should ALSO leverage the actual text of sources to answer the question, which sits \
-in a vector database. Examples are 'what is discussed in...', 'how does... relate to...', etc.
+in a vector database. Examples are 'what is discussed in...', 'summarize', 'what is the discussion about...',\
+'how does... relate to...', 'are there any mentions of... in..', 'what are the main points in...', \
+'what are the next steps...', etc. Those are usually questions 'about' \
+the entities retrieved from the knowledge graph, or questions about the underlying sources.
 
 Your task is to decide which of the two strategies to use.
 
@@ -786,6 +800,32 @@ Also, in case it is important, today is ---today_date--- and the user/employee a
 
 Your answer:
 """.strip()
+
+
+SIMPLE_SQL_CORRECTION_PROMPT = f"""
+You are an expert in reviewing and fixing SQL statements.
+
+Here is a draft SQL statement that you should consider as generally capturing the information intended. \
+However, it may or may not be syntactically 100% for our postgresql database.
+
+Guidance:
+ - Think about whether attributes should be numbers or strings. You may need to convert them.
+ - If we use SELECT DISTINCT we need to have the ORDER BY columns in the \
+SELECT statement as well! And it needs to be in the EXACT FORM! So if a \
+conversion took place, make sure to include the conversion in the SELECT and the ORDER BY clause!
+ - never should 'source_document' be in the SELECT clause! Remove if present!
+
+Draft SQL:
+{SEPARATOR_LINE}
+---draft_sql---
+{SEPARATOR_LINE}
+
+Please answer in the following format:
+
+<reasoning> - think briefly through the problem step by step - </reasoning> \
+<sql> - the corrected (or original one, if correct) SQL statement - </sql>
+""".strip()
+
 
 SQL_AGGREGATION_REMOVAL_PROMPT = f"""
 You are a SQL expert. You were provided with a SQL statement that returns an aggregation, and you are \

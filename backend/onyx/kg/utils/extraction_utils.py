@@ -13,6 +13,7 @@ from onyx.kg.models import (
     KGDocumentClassificationPrompt,
 )
 from onyx.kg.models import KGDocumentEntitiesRelationshipsAttributes
+from onyx.kg.models import KGEnhancedDocumentMetadata
 from onyx.kg.utils.formatting_utils import generalize_entities
 from onyx.kg.utils.formatting_utils import kg_email_processing
 from onyx.prompts.kg_prompts import CALL_CHUNK_PREPROCESSING_PROMPT
@@ -21,11 +22,17 @@ from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
 
 
 def kg_document_entities_relationships_attribute_generation(
-    document: Document, source_type: str
+    document: Document,
+    doc_metadata: KGEnhancedDocumentMetadata,
+    active_entities: list[str],
 ) -> KGDocumentEntitiesRelationshipsAttributes:
     """
     Generate entities, relationships, and attributes for a document.
     """
+
+    document_entity_type = doc_metadata.entity_type
+    assert document_entity_type is not None
+    document_attributes = doc_metadata.document_attributes
 
     implied_entities: set[str] = set()
     implied_relationships: set[str] = (
@@ -34,6 +41,11 @@ def kg_document_entities_relationships_attribute_generation(
     converted_relationships_to_attributes: dict[str, list[str]] = defaultdict(
         list
     )  # 'Relationships' that will be captured as KG entity attributes
+
+    converted_attributes_to_relationships: set[str] = (
+        set()
+    )  # Attributes that should be captures as entities and then relationships (Account = ...)
+
     company_participant_emails: set[str] = (
         set()
     )  # Quantity needed for call processing - participants from vendor
@@ -43,7 +55,7 @@ def kg_document_entities_relationships_attribute_generation(
 
     # Chunk treatment variables
 
-    document_is_from_call = source_type.lower() in [
+    document_is_from_call = document_entity_type.lower() in [
         call_type.value.lower() for call_type in OnyxCallTypes
     ]
 
@@ -59,7 +71,7 @@ def kg_document_entities_relationships_attribute_generation(
     if kg_core_document:
         kg_core_document_id_name = kg_core_document.id_name
     else:
-        kg_core_document_id_name = f"{source_type.upper()}:{document_id}"
+        kg_core_document_id_name = f"{document_entity_type.upper()}:{document_id}"
 
     # Get implied entities and relationships from primary/secondary owners
 
@@ -122,6 +134,51 @@ def kg_document_entities_relationships_attribute_generation(
             else:
                 converted_relationships_to_attributes["participates_in"].append(owner)
 
+    if document_attributes is not None:
+        cleaned_document_attributes = document_attributes.copy()
+        for attribute, value in document_attributes.items():
+            if attribute.lower() in [x.lower() for x in active_entities]:
+                converted_attributes_to_relationships.add(attribute)
+                if isinstance(value, str):
+                    implied_entity = f"{attribute.upper()}:{value.capitalize()}"
+                    implied_entities.add(implied_entity)
+                    implied_relationships.add(
+                        f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                    )
+
+                    implied_entity = f"{attribute.upper()}:*"
+                    implied_entities.add(implied_entity)
+                    implied_relationships.add(
+                        f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                    )
+
+                    implied_entity = f"{attribute.upper()}:*"
+                    implied_entities.add(implied_entity)
+                    implied_relationships.add(
+                        f"{implied_entity}__is_{attribute.lower()}_of__{document_entity_type.upper()}:*"
+                    )
+
+                    implied_entity = f"{attribute.upper()}:{value.capitalize()}"
+                    implied_entities.add(implied_entity)
+                    implied_relationships.add(
+                        f"{implied_entity}__is_{attribute.lower()}_of__{document_entity_type.upper()}:*"
+                    )
+
+                    cleaned_document_attributes.pop(attribute)
+
+                elif isinstance(value, list):
+                    for item in value:
+                        implied_entity = f"{attribute.upper()}:{item.capitalize()}"
+                        implied_entities.add(implied_entity)
+                        implied_relationships.add(
+                            f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                        )
+                        cleaned_document_attributes.pop(attribute)
+            if attribute.lower().endswith("_id") or attribute.endswith("Id"):
+                cleaned_document_attributes.pop(attribute)
+    else:
+        cleaned_document_attributes = None
+
     return KGDocumentEntitiesRelationshipsAttributes(
         kg_core_document_id_name=kg_core_document_id_name,
         implied_entities=implied_entities,
@@ -129,6 +186,8 @@ def kg_document_entities_relationships_attribute_generation(
         company_participant_emails=company_participant_emails,
         account_participant_emails=account_participant_emails,
         converted_relationships_to_attributes=converted_relationships_to_attributes,
+        converted_attributes_to_relationships=converted_attributes_to_relationships,
+        document_attributes=cleaned_document_attributes,
     )
 
 

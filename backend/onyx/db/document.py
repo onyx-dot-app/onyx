@@ -1133,3 +1133,16 @@ def update_extracted_document_kg_stages(db_session: Session) -> int:
     )
     result = db_session.execute(stmt)
     return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def get_skipped_kg_documents(db_session: Session) -> list[str]:
+    """
+    Retrieves all document IDs where kg_stage is SKIPPED.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        list[str]: List of document IDs that have been skipped in KG processing
+    """
+    stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.SKIPPED)
+
+    return list(db_session.scalars(stmt).all())

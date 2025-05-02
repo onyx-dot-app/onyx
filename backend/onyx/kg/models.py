@@ -91,6 +91,14 @@ class KGClassificationContent(BaseModel):
     classification_content: str
     source_type: str
     source_metadata: dict[str, Any] | None = None
+    entity_type: str | None = None
+    metadata: dict[str, Any] | None = None
+
+
+class KGEnrichedClassificationContent(KGClassificationContent):
+    classification_enabled: bool
+    classification_instructions: dict[str, Any]
+    deep_extraction: bool
 
 
 class KGClassificationDecisions(BaseModel):
@@ -105,7 +113,7 @@ class KGClassificationRule(BaseModel):
     extration: bool
 
 
-class KGClassificationInstructionStrings(BaseModel):
+class KGClassificationInstructions(BaseModel):
     classification_enabled: bool
     classification_options: str
     classification_class_definitions: dict[str, Dict[str, str | bool]]
@@ -117,8 +125,18 @@ class KGExtractionInstructions(BaseModel):
 
 
 class KGEntityTypeInstructions(BaseModel):
-    classification_instructions: KGClassificationInstructionStrings
+    classification_instructions: KGClassificationInstructions
     extraction_instructions: KGExtractionInstructions
+    filter_instructions: dict[str, Any] | None = None
+
+
+class KGEnhancedDocumentMetadata(BaseModel):
+    entity_type: str | None
+    document_attributes: dict[str, Any] | None
+    deep_extraction: bool
+    classification_enabled: bool
+    classification_instructions: KGClassificationInstructions | None
+    skip: bool
 
 
 class ContextPreparation(BaseModel):
@@ -163,6 +181,8 @@ class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
     converted_relationships_to_attributes: dict[str, list[str]]
     company_participant_emails: set[str]
     account_participant_emails: set[str]
+    converted_attributes_to_relationships: set[str]
+    document_attributes: dict[str, Any] | None
 
 
 class KGGroundingType(str, Enum):

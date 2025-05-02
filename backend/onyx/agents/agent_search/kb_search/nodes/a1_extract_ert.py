@@ -60,8 +60,8 @@ def extract_ert(
     question = graph_config.inputs.search_request.query
     today_date = datetime.now().strftime("%A, %Y-%m-%d")
 
-    all_entity_types = get_entity_types_str(active=None)
-    all_relationship_types = get_relationship_types_str(active=None)
+    all_entity_types = get_entity_types_str(active=True)
+    all_relationship_types = get_relationship_types_str(active=True)
 
     write_custom_event(
         "initial_agent_answer",

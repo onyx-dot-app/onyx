@@ -15,23 +15,13 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import get_entities_by_document_ids
 from onyx.db.entity_type import get_entity_types_with_grounded_source_name
-from onyx.kg.models import KGStage
 from onyx.prompts.kg_prompts import SEARCH_FILTER_CONSTRUCTION_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 
 logger = setup_logger()
-
-
-def _convert_document_ids_to_entities(source_document_filters: list[str]) -> list[str]:
-    with get_session_with_current_tenant() as db_session:
-        entities = get_entities_by_document_ids(
-            db_session, source_document_filters, kg_stage=KGStage.NORMALIZED
-        )
-        return entities
 
 
 def construct_deep_search_filters(
@@ -182,7 +172,10 @@ def construct_deep_search_filters(
         vespa_filter_results=filter_results,
         div_con_entities=div_con_structure,
         source_division=source_division,
-        global_entity_filters=filter_results.global_entity_filters,
+        global_entity_filters=[
+            f"{global_filter}:*"
+            for global_filter in filter_results.global_entity_filters
+        ],
         global_relationship_filters=filter_results.global_relationship_filters,
         local_entity_filters=filter_results.local_entity_filters,
         source_filters=filter_results.source_document_filters,

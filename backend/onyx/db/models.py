@@ -633,9 +633,9 @@ class KGEntityType(Base):
         postgresql.ARRAY(String), nullable=True, default=None
     )
 
-    grounded_source_subtypes: Mapped[str] = mapped_column(
+    attribute_filters: Mapped[str] = mapped_column(
         postgresql.JSONB,
-        nullable=False,
+        nullable=True,
         default=dict,
         server_default="{}",
         comment="Filtering based on document attribute",

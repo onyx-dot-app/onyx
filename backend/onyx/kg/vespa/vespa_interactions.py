@@ -17,6 +17,7 @@ def get_document_classification_content_for_kg_processing(
     index_name: str,
     batch_size: int = 8,
     num_classification_chunks: int = 3,
+    entity_type: str | None = None,
 ) -> Generator[list[KGClassificationContent], None, None]:
     """
     Generates the content used for initial classification of a document from
@@ -71,6 +72,7 @@ def get_document_classification_content_for_kg_processing(
                         "source_type"
                     ],
                     source_metadata=metadata,
+                    entity_type=entity_type,
                 )
             )
 

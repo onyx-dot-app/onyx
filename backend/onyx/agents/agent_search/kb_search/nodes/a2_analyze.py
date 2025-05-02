@@ -91,6 +91,10 @@ def analyze(
         )
         .replace("---relationships---", "\n".join(query_graph_relationships))
         .replace("---terms---", "\n".join(normalized_terms.terms))
+        .replace("---possible_entities---", "\n".join(state.entities_types_str))
+        .replace(
+            "---possible_relationships---", "\n".join(state.relationship_types_str)
+        )
         .replace("---question---", question)
     )
 

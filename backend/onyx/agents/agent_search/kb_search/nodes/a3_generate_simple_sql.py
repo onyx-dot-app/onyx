@@ -19,6 +19,7 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
+from onyx.prompts.kg_prompts import SIMPLE_SQL_CORRECTION_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
 from onyx.prompts.kg_prompts import SQL_AGGREGATION_REMOVAL_PROMPT
@@ -207,10 +208,43 @@ def generate_simple_sql(
             "kg_relationship", kg_relationships_view_name
         )
 
-        # reasoning = cleaned_response.split("SQL:")[0].strip()
+        reasoning = cleaned_response.split("SQL:")[0].strip()
 
     except Exception as e:
         logger.error(f"Error in strategy generation: {e}")
+        raise e
+
+    # Correction if needed:
+
+    correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
+        "---draft_sql---", sql_statement
+    )
+
+    msg = [
+        HumanMessage(
+            content=correction_prompt,
+        )
+    ]
+
+    try:
+        llm_response = run_with_timeout(
+            15,
+            primary_llm.invoke,
+            prompt=msg,
+            timeout_override=25,
+            max_tokens=1500,
+        )
+
+        cleaned_response = (
+            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+        )
+
+        sql_statement = cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
+        sql_statement = sql_statement.split(";")[0].strip() + ";"
+        sql_statement = sql_statement.replace("sql", "").strip()
+
+    except Exception as e:
+        logger.error(f"Error in sql correction: {e}")
         raise e
 
     # Get SQL for source documents
@@ -235,16 +269,16 @@ def generate_simple_sql(
     # else:
     individualized_sql_query = None
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=reasoning,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece=reasoning,
+            level=0,
+            level_question_num=0,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
 
     # write_custom_event(
     #     "initial_agent_answer",
