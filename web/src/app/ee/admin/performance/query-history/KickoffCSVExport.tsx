@@ -78,7 +78,7 @@ export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
 
   const checkStatus = async (requestId: string) => {
     if (retryCount.current >= MAX_RETRIES) {
-      reset(true);
+      reset();
       return;
     }
     retryCount.current += 1;
@@ -115,7 +115,7 @@ export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
       {popup}
       <div className="flex flex-1 flex-col w-full justify-center">
         <Button
-          className="flex ml-auto py-2 px-4 border border-border h-fit cursor-pointer text-sm w-[200px]"
+          className="flex ml-auto py-2 px-4 h-fit cursor-pointer text-sm w-[140px]"
           onClick={startExport}
           variant={spinnerStatus === "spinning" ? "destructive" : "default"}
         >
@@ -126,8 +126,8 @@ export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
             </>
           ) : (
             <>
-              <FaRegArrowAltCircleUp className="my-auto mr-2" />
-              Kickoff CSV Export
+              <FaRegArrowAltCircleUp />
+              Kickoff Export
             </>
           )}
         </Button>

@@ -11,4 +11,4 @@ export const ITEMS_PER_PAGE = 20;
 export const PAGES_PER_BATCH = 2;
 export const NUM_IN_PAGE = 10;
 
-export const PREVIOUS_CSV_TASK_BUTTON_NAME = "View Previous Exports";
+export const PREVIOUS_CSV_TASK_BUTTON_NAME = "View Exports";
