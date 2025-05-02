@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.auth.users import get_display_email
-from onyx.background.task_utils import deconstruct_query_history_report_name
+from onyx.background.task_utils import extract_task_id_from_query_history_report_name
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import QAFeedbackType
 from onyx.configs.constants import SessionType
@@ -262,7 +262,7 @@ class QueryHistoryExport(BaseModel):
             )
 
         metadata = QueryHistoryFileMetadata.model_validate(dict(file.file_metadata))
-        task_id = deconstruct_query_history_report_name(file.file_name)
+        task_id = extract_task_id_from_query_history_report_name(file.file_name)
 
         return cls(
             task_id=task_id,

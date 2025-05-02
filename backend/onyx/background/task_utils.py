@@ -125,5 +125,5 @@ def construct_query_history_report_name(
     return f"{QUERY_REPORT_NAME_PREFIX}-{task_id}.csv"
 
 
-def deconstruct_query_history_report_name(name: str) -> str:
+def extract_task_id_from_query_history_report_name(name: str) -> str:
     return name.removeprefix(f"{QUERY_REPORT_NAME_PREFIX}-").removesuffix(".csv")
