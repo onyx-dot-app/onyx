@@ -178,7 +178,9 @@ export function ConfiguredLLMProviderDisplay({
             llmProviderDescriptor={
               isSubset(
                 defaultProviderDesciptor
-                  ? defaultProviderDesciptor.llm_names
+                  ? defaultProviderDesciptor.model_configurations.map(
+                      (model_configuration) => model_configuration.name
+                    )
                   : [],
                 provider.model_configurations.map(
                   (model_configuration) => model_configuration.name

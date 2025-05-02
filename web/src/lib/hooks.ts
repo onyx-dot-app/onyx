@@ -506,7 +506,7 @@ export function useLlmManager(
       );
 
       if (provider) {
-        return { ...model, name: provider.name };
+        return { ...model, provider: provider.name };
       }
     }
     return { name: "", provider: "", modelName: "" };

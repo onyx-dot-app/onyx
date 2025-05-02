@@ -60,7 +60,7 @@ export function LLMProviderUpdateForm({
     default_model_name:
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
-        llmProviderDescriptor.llm_names[0]),
+        llmProviderDescriptor.model_configurations[0].name),
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ??
       (llmProviderDescriptor.default_fast_model || null),
@@ -82,12 +82,14 @@ export function LLMProviderUpdateForm({
     // This field only exists to store the selected model-names.
     // It is *not* passed into the JSON body that is submitted to the backend APIs.
     // It will be deleted from the map prior to submission.
-    selected_model_names: (existingLlmProvider?.model_configurations
-      .filter((modelConfiguration) => modelConfiguration.is_visible)
-      .map((modelConfiguration) => modelConfiguration.name) ?? []) as
-      | string[]
-      | null
-      | undefined,
+    selected_model_names: existingLlmProvider
+      ? existingLlmProvider.model_configurations
+          .filter((modelConfiguration) => modelConfiguration.is_visible)
+          .map((modelConfiguration) => modelConfiguration.name)
+      : // default case - use built in "visible" models
+        (llmProviderDescriptor.model_configurations
+          .filter((modelConfiguration) => modelConfiguration.is_visible)
+          .map((modelConfiguration) => modelConfiguration.name) as string[]),
   };
 
   // Setup validation schema if required
@@ -129,13 +131,7 @@ export function LLMProviderUpdateForm({
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
-    model_configurations: Yup.array(
-      Yup.object({
-        name: Yup.string().required("Model name is required"),
-        is_visible: Yup.boolean().required("Visibility is required"),
-        max_input_tokens: Yup.number().nullable().optional(),
-      })
-    ),
+    selected_model_names: Yup.array().of(Yup.string()),
   });
 
   return (
@@ -146,17 +142,16 @@ export function LLMProviderUpdateForm({
         setSubmitting(true);
 
         // build final payload
-        const visibleModels = new Set(values.selected_model_names);
-        const finalValues = { ...values };
-        finalValues.model_configurations = llmProviderDescriptor.llm_names.map(
-          (name) =>
-            ({
-              name,
-              is_visible: visibleModels.has(name),
-              max_input_tokens: null,
-            }) as ModelConfiguration
-        );
-        delete finalValues.selected_model_names;
+        const { selected_model_names: visibleModels, ...finalValues } = values;
+        finalValues.model_configurations =
+          llmProviderDescriptor.model_configurations.map(
+            (modelConfiguration) =>
+              ({
+                name: modelConfiguration.name,
+                is_visible: visibleModels.includes(modelConfiguration.name),
+                max_input_tokens: null,
+              }) as ModelConfiguration
+          );
         finalValues.api_key_changed = values.api_key !== initialValues.api_key;
 
         // test the configuration
@@ -332,17 +327,19 @@ export function LLMProviderUpdateForm({
             <>
               <Separator />
 
-              {llmProviderDescriptor.llm_names.length > 0 ? (
+              {llmProviderDescriptor.model_configurations.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
                   subtext="The model to use by default for this provider unless otherwise specified."
                   label="Default Model"
-                  options={llmProviderDescriptor.llm_names.map((name) => ({
-                    // don't clean up names here to give admins descriptive names / handle duplicates
-                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                    name: name,
-                    value: name,
-                  }))}
+                  options={llmProviderDescriptor.model_configurations.map(
+                    (modelConfiguration) => ({
+                      // don't clean up names here to give admins descriptive names / handle duplicates
+                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                      name: modelConfiguration.name,
+                      value: modelConfiguration.name,
+                    })
+                  )}
                   maxHeight="max-h-56"
                 />
               ) : (
@@ -363,19 +360,21 @@ export function LLMProviderUpdateForm({
               )}
 
               {!llmProviderDescriptor.single_model_supported &&
-                (llmProviderDescriptor.llm_names.length > 0 ? (
+                (llmProviderDescriptor.model_configurations.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
                     subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
             for this provider. If \`Default\` is specified, will use
             the Default Model configured above.`}
                     label="[Optional] Fast Model"
-                    options={llmProviderDescriptor.llm_names.map((name) => ({
-                      // don't clean up names here to give admins descriptive names / handle duplicates
-                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                      name: name,
-                      value: name,
-                    }))}
+                    options={llmProviderDescriptor.model_configurations.map(
+                      (modelConfiguration) => ({
+                        // don't clean up names here to give admins descriptive names / handle duplicates
+                        // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                        name: modelConfiguration.name,
+                        value: modelConfiguration.name,
+                      })
+                    )}
                     includeDefault
                     maxHeight="max-h-56"
                   />
@@ -398,7 +397,7 @@ export function LLMProviderUpdateForm({
                 />
                 {showAdvancedOptions && (
                   <>
-                    {llmProviderDescriptor.llm_names.length > 0 && (
+                    {llmProviderDescriptor.model_configurations.length > 0 && (
                       <div className="w-full">
                         <MultiSelectField
                           selectedInitially={
@@ -407,12 +406,12 @@ export function LLMProviderUpdateForm({
                           name="selected_model_names"
                           label="Display Models"
                           subtext="Select the models to make available to users. Unselected models will not be available."
-                          options={llmProviderDescriptor.llm_names.map(
-                            (name) => ({
-                              value: name,
+                          options={llmProviderDescriptor.model_configurations.map(
+                            (modelConfiguration) => ({
+                              value: modelConfiguration.name,
                               // don't clean up names here to give admins descriptive names / handle duplicates
                               // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                              label: name,
+                              label: modelConfiguration.name,
                             })
                           )}
                           onChange={(selected) =>

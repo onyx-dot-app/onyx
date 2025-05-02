@@ -3,6 +3,9 @@ from enum import Enum
 import litellm  # type: ignore
 from pydantic import BaseModel
 
+from onyx.llm.utils import model_supports_image_input
+from onyx.server.manage.llm.models import ModelConfigurationView
+
 
 class CustomConfigKeyType(Enum):
     # used for configuration values that require manual input
@@ -30,7 +33,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     api_base_required: bool
     api_version_required: bool
     custom_config_keys: list[CustomConfigKey] | None = None
-    llm_names: list[str]
+    model_configurations: list[ModelConfigurationView]
     default_model: str | None = None
     default_fast_model: str | None = None
     # set for providers like Azure, which require a deployment name.
@@ -160,7 +163,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider(OPENAI_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                OPENAI_PROVIDER_NAME
+            ),
             default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
         ),
@@ -171,7 +176,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider(ANTHROPIC_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                ANTHROPIC_PROVIDER_NAME
+            ),
             default_model="claude-3-7-sonnet-20250219",
             default_fast_model="claude-3-5-sonnet-20241022",
         ),
@@ -182,7 +189,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=True,
             api_version_required=True,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider(AZURE_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                AZURE_PROVIDER_NAME
+            ),
             deployment_name_required=True,
             single_model_supported=True,
         ),
@@ -211,7 +220,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
                 ),
             ],
-            llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                BEDROCK_PROVIDER_NAME
+            ),
             default_model=BEDROCK_DEFAULT_MODEL,
             default_fast_model=BEDROCK_DEFAULT_MODEL,
         ),
@@ -221,7 +232,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
-            llm_names=fetch_models_for_provider(VERTEXAI_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                VERTEXAI_PROVIDER_NAME
+            ),
             custom_config_keys=[
                 CustomConfigKey(
                     name=CREDENTIALS_FILE_CUSTOM_CONFIG_KEY,
@@ -254,3 +267,26 @@ def fetch_visible_model_names_for_provider_as_set(
         provider_name
     )
     return set(visible_model_names) if visible_model_names else None
+
+
+def fetch_model_configurations_for_provider(
+    provider_name: str,
+) -> list[ModelConfigurationView]:
+    # if there are no explicitly listed visible model names,
+    # then we won't mark any of them as "visible". This will get taken
+    # care of by the logic to make default models visible.
+    visible_model_names = (
+        fetch_visible_model_names_for_provider_as_set(provider_name) or set()
+    )
+    return [
+        ModelConfigurationView(
+            name=model_name,
+            is_visible=model_name in visible_model_names,
+            max_input_tokens=None,
+            supports_image_input=model_supports_image_input(
+                model_name=model_name,
+                model_provider=provider_name,
+            ),
+        )
+        for model_name in fetch_models_for_provider(provider_name)
+    ]

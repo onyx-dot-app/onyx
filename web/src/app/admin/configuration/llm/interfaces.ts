@@ -31,7 +31,7 @@ export interface WellKnownLLMProviderDescriptor {
 
   single_model_supported: boolean;
   custom_config_keys: CustomConfigKey[] | null;
-  llm_names: string[];
+  model_configurations: ModelConfiguration[];
   default_model: string | null;
   default_fast_model: string | null;
   is_public: boolean;

@@ -47,9 +47,9 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await verifyCurrentModel(page, "o3 Mini");
 
   // Test model switching within a chat
-  await switchModel(page, "o1 Mini");
+  await switchModel(page, "GPT 4o Mini");
   await sendMessage(page, "Sample message");
-  await verifyCurrentModel(page, "o1 Mini");
+  await verifyCurrentModel(page, "GPT 4o Mini");
 
   // Create a custom assistant with a specific model
   await page.getByRole("button", { name: "Explore Assistants" }).click();
