@@ -55,12 +55,14 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
                 start_time=start_time,
             )
 
-            complete_chat_session_history = fetch_and_process_chat_session_history(
-                db_session=db_session,
-                start=start,
-                end=end,
-                feedback_type=None,
-                limit=None,
+            complete_chat_session_history: list[ChatSessionSnapshot] = (
+                fetch_and_process_chat_session_history(
+                    db_session=db_session,
+                    start=start,
+                    end=end,
+                    feedback_type=None,
+                    limit=None,
+                )
             )
         except Exception:
             logger.exception(f"Failed to export query history with {task_id=}")
@@ -72,7 +74,7 @@ def export_query_history_task(self: Task, *, start: datetime, end: datetime) -> 
             raise
 
     if ONYX_QUERY_HISTORY_TYPE == QueryHistoryType.ANONYMIZED:
-        complete_chat_session_history: list = [
+        complete_chat_session_history = [
             ChatSessionSnapshot(
                 **chat_session_snapshot.model_dump(), user_email=ONYX_ANONYMIZED_EMAIL
             )
