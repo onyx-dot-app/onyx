@@ -2,7 +2,7 @@ import { usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
 import { DateRange } from "../DateRangeSelector";
-import { FaSpinner } from "react-icons/fa";
+import { FaSpinner, FaRegArrowAltCircleUp } from "react-icons/fa";
 import { FiDownload } from "react-icons/fi";
 import { withRequestId, withDateRange } from "./utils";
 import {
@@ -123,8 +123,8 @@ export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
             </>
           ) : (
             <>
-              <FiDownload className="my-auto mr-2" />
-              Download as CSV
+              <FaRegArrowAltCircleUp className="my-auto mr-2" />
+              Kickoff CSV Export
             </>
           )}
         </Button>
