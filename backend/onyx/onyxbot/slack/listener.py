@@ -327,6 +327,8 @@ class SlackbotHandler:
                         # No Slackbot tokens, pass
                         pass
                     except Exception as e:
+                        # Explicitly rollback the transaction to prevent it from staying in aborted state
+                        db_session.rollback()
                         logger.exception(
                             f"Error fetching Slack bots for tenant {tenant_id}: {e}"
                         )
@@ -347,6 +349,18 @@ class SlackbotHandler:
                             del self.redis_locks[tenant_id]
                         logger.debug(
                             f"No Slack bots for tenant {tenant_id}; lock released (if held)."
+                        )
+            except Exception as e:
+                # Handle any exceptions from the session context manager
+                logger.exception(f"Database session error for tenant {tenant_id}: {e}")
+                # Make sure we still release any locks if we acquired them
+                if lock_acquired and not DEV_MODE and tenant_id in self.redis_locks:
+                    try:
+                        self.redis_locks[tenant_id].release()
+                        del self.redis_locks[tenant_id]
+                    except Exception as lock_e:
+                        logger.error(
+                            f"Error releasing lock for tenant {tenant_id} during exception handling: {lock_e}"
                         )
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
