@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
 import { DateRange } from "../DateRangeSelector";
 import { FaSpinner, FaRegArrowAltCircleUp } from "react-icons/fa";
-import { FiDownload } from "react-icons/fi";
 import { withRequestId, withDateRange } from "./utils";
 import {
   CHECK_QUERY_HISTORY_EXPORT_STATUS_URL,
   DOWNLOAD_QUERY_HISTORY_URL,
   MAX_RETRIES,
+  PREVIOUS_CSV_TASK_BUTTON_NAME,
   RETRY_COOLDOWN_MILLISECONDS,
 } from "./constants";
 import {
@@ -17,7 +17,7 @@ import {
   StartQueryHistoryExportResponse,
 } from "./types";
 
-export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
+export function KickoffCSVExport({ dateRange }: { dateRange: DateRange }) {
   const timerIdRef = useRef<null | number>(null);
   const retryCount = useRef<number>(0);
   const [, rerender] = useState<void>();
@@ -51,6 +51,9 @@ export function DownloadAsCSV({ dateRange }: { dateRange: DateRange }) {
     }
 
     setSpinnerStatus("spinning");
+    setPopup({
+      message: `Generating CSV report. Click the '${PREVIOUS_CSV_TASK_BUTTON_NAME}' button to see all jobs.`,
+    });
     const response = await fetch(withDateRange(dateRange), {
       method: "POST",
       headers: {

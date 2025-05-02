@@ -1,3 +1,5 @@
+import { TaskStatus } from "@/lib/types";
+
 export interface TaskQueueState {
   task_id: string;
   start: string;
@@ -5,8 +7,6 @@ export interface TaskQueueState {
   status: TaskStatus;
   start_time: string;
 }
-
-export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 
 export type StartQueryHistoryExportResponse = { request_id: string };
 
