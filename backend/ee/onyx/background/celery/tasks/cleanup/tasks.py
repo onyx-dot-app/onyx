@@ -16,7 +16,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def log_error_message(task: TaskQueueState):
+def log_error_message(task: TaskQueueState) -> None:
     logger.error(f"Task with {task.task_id=} failed")
 
 
