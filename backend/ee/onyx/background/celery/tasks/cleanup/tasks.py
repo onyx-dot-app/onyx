@@ -1,11 +1,23 @@
+from datetime import datetime
+from datetime import timedelta
+
 from celery import shared_task
 
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
+from onyx.db.engine import get_session_with_tenant
+from onyx.db.enums import TaskStatus
+from onyx.db.models import TaskQueueState
+from onyx.db.tasks import delete_task_with_id
+from onyx.db.tasks import get_all_query_history_export_tasks
 from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
+
+
+def log_error_message(task: TaskQueueState):
+    logger.error(f"Task with {task.task_id=} failed")
 
 
 @shared_task(
@@ -14,4 +26,21 @@ logger = setup_logger()
     soft_time_limit=JOB_TIMEOUT,
 )
 def export_query_history_cleanup_task(*, tenant_id: str) -> None:
-    logger.error("!" * 80)
+    with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        tasks = get_all_query_history_export_tasks(db_session=db_session)
+
+        for task in tasks:
+            if task.status == TaskStatus.SUCCESS:
+                delete_task_with_id(db_session=db_session, task_id=task.task_id)
+            elif task.status == TaskStatus.FAILURE:
+                if not task.start_time:
+                    delete_task_with_id(db_session=db_session, task_id=task.task_id)
+                    log_error_message(task)
+                    continue
+
+                deadline = task.start_time + timedelta(hours=24)
+                now = datetime.now()
+
+                if now >= deadline:
+                    log_error_message(task)
+                    delete_task_with_id(db_session=db_session, task_id=task.task_id)
