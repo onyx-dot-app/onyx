@@ -10,10 +10,8 @@ import {
   destructureValue,
   structureValue,
 } from "@/lib/llm/utils";
-import {
-  getProviderIcon,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LlmManager } from "@/lib/hooks";
 

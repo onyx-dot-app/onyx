@@ -5,10 +5,8 @@ import {
   modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
-import {
-  getProviderIcon,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import {
   Select,
   SelectContent,

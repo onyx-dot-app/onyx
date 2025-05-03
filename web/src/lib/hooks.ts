@@ -23,11 +23,8 @@ import { AllUsersResponse } from "./types";
 import { Credential } from "./connectors/credentials";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { Persona, PersonaLabel } from "@/app/admin/assistants/interfaces";
-import {
-  isAnthropic,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
-
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { isAnthropic } from "@/app/admin/configuration/llm/utils";
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
