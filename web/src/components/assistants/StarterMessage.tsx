@@ -21,7 +21,7 @@ export function StarterMessages({
         ${
           isMobile
             ? "gap-x-2 w-2/3 justify-between"
-            : "justify-center max-w-[750px] items-start"
+            : "justify-center max-w-[750px] items-start gap-x-4"
         }
         flex
       mt-6
