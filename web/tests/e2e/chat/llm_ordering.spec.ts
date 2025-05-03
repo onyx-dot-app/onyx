@@ -24,7 +24,7 @@ test("LLM Ordering and Model Switching", async ({ page }) => {
   await page.getByRole("combobox").nth(1).click();
   await page.getByLabel("o3 Mini", { exact: true }).click();
   await page.getByLabel("Close modal").click();
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(5000);
   await verifyCurrentModel(page, "o3 Mini");
   // Test Art Assistant: Should use its own model (GPT 4o)
   await page.reload();
