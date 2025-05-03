@@ -73,8 +73,8 @@ jobs:
             NODE_OPTIONS=--max-old-space-size=8192
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/web-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
-          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/web-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/cloudweb-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/cloudweb-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
           # no-cache needed due to weird interactions with the builds for different platforms
           # NOTE(rkuo): this may not be true any more with the proper cache prefixing by architecture - currently testing with it off
 
