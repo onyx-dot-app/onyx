@@ -7,10 +7,13 @@ export interface CustomConfigKey {
   key_type: "text_input" | "file_input";
 }
 
-export interface ModelConfiguration {
+export interface ModelConfigurationUpsertRequest {
   name: string;
   is_visible: boolean;
   max_input_tokens: number | null;
+}
+
+export interface ModelConfiguration extends ModelConfigurationUpsertRequest {
   supports_image_input: boolean;
 }
 

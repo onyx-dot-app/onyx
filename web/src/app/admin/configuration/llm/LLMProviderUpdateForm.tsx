@@ -17,6 +17,7 @@ import { useSWRConfig } from "swr";
 import {
   LLMProviderView,
   ModelConfiguration,
+  ModelConfigurationUpsertRequest,
   WellKnownLLMProviderDescriptor,
 } from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
@@ -77,7 +78,6 @@ export function LLMProviderUpdateForm({
     groups: existingLlmProvider?.groups ?? [],
     model_configurations: existingLlmProvider?.model_configurations ?? [],
     deployment_name: existingLlmProvider?.deployment_name,
-    api_key_changed: false,
 
     // This field only exists to store the selected model-names.
     // It is *not* passed into the JSON body that is submitted to the backend APIs.
@@ -142,17 +142,24 @@ export function LLMProviderUpdateForm({
         setSubmitting(true);
 
         // build final payload
-        const { selected_model_names: visibleModels, ...finalValues } = values;
-        finalValues.model_configurations =
-          llmProviderDescriptor.model_configurations.map(
-            (modelConfiguration) =>
-              ({
-                name: modelConfiguration.name,
-                is_visible: visibleModels.includes(modelConfiguration.name),
-                max_input_tokens: null,
-              }) as ModelConfiguration
-          );
-        finalValues.api_key_changed = values.api_key !== initialValues.api_key;
+        const {
+          selected_model_names: visibleModels,
+          model_configurations: modelConfigurations,
+          ...rest
+        } = values;
+
+        // Create the final payload with proper typing
+        const finalValues = {
+          ...rest,
+          api_key_changed: values.api_key !== initialValues.api_key,
+          model_configurations: llmProviderDescriptor.model_configurations.map(
+            (modelConfiguration): ModelConfigurationUpsertRequest => ({
+              name: modelConfiguration.name,
+              is_visible: visibleModels.includes(modelConfiguration.name),
+              max_input_tokens: null,
+            })
+          ),
+        };
 
         // test the configuration
         if (!isEqual(finalValues, initialValues)) {
