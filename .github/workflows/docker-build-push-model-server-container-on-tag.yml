@@ -137,7 +137,6 @@ jobs:
           provenance: false
           cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/model-server-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-#           no-cache: true
 
   merge-and-scan:
     needs: [build-amd64, build-arm64, check_model_server_changes]

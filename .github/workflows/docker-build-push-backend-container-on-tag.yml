@@ -72,9 +72,8 @@ jobs:
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
           cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/backend-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
-#           no-cache: true
-      - name: Export digest
-      
+
+      - name: Export digest      
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
