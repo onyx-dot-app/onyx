@@ -1,7 +1,7 @@
 "use client";
 
 import { FiChevronRight, FiChevronLeft } from "react-icons/fi";
-import { FeedbackType } from "../types";
+import { FeedbackType } from "@/app/chat/interfaces";
 import React, {
   useCallback,
   useContext,
@@ -19,8 +19,8 @@ import {
   FileDescriptor,
   SubQuestionDetail,
   ToolCallMetadata,
-} from "../interfaces";
-import { SEARCH_TOOL_NAME } from "../tools/constants";
+} from "@/app/chat/interfaces";
+import { SEARCH_TOOL_NAME } from "@/app/chat/components/tools/constants";
 import { Hoverable, HoverableIcon } from "@/components/Hoverable";
 import { CodeBlock } from "./CodeBlock";
 import rehypePrism from "rehype-prism-plus";
@@ -38,7 +38,7 @@ import {
 import { ValidSources } from "@/lib/types";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import RegenerateOption from "../RegenerateOption";
+import RegenerateOption from "../components/RegenerateOption";
 import { LlmDescriptor } from "@/lib/hooks";
 import { ContinueGenerating } from "./ContinueMessage";
 import { MemoizedAnchor, MemoizedParagraph } from "./MemoizedTextComponents";
@@ -50,13 +50,13 @@ import {
   extractThinkingContent,
   isThinkingComplete,
   removeThinkingTokens,
-} from "../utils/thinkingTokens";
+} from "../services/thinkingTokens";
 
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
-import { StatusRefinement } from "../Refinement";
+import { StatusRefinement } from "../components/agentSearch/Refinement";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { ErrorBanner } from "./Resubmit";
 import { transformLinkUri } from "@/lib/utils";

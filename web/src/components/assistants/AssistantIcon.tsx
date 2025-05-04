@@ -1,12 +1,12 @@
 import React from "react";
 import crypto from "crypto";
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { buildImgUrl } from "@/app/chat/files/images/utils";
+import { buildImgUrl } from "@/app/chat/components/files/images/utils";
 import {
   ArtAsistantIcon,
   GeneralAssistantIcon,
   SearchAssistantIcon,
-} from "../icons/icons";
+} from "@/components/icons/icons";
 import {
   Tooltip,
   TooltipContent,

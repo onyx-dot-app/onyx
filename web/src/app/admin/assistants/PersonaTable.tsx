@@ -17,7 +17,7 @@ import {
 import { FiEdit2 } from "react-icons/fi";
 import { TrashIcon } from "@/components/icons/icons";
 import { useUser } from "@/components/user/UserProvider";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { ConfirmEntityModal } from "@/components/modals/ConfirmEntityModal";
 
 function PersonaTypeDisplay({ persona }: { persona: Persona }) {
@@ -48,7 +48,7 @@ export function PersonasTable() {
     allAssistants: assistants,
     refreshAssistants,
     editablePersonas,
-  } = useAssistants();
+  } = useAssistantsContext();
 
   const editablePersonaIds = useMemo(() => {
     return new Set(editablePersonas.map((p) => p.id.toString()));

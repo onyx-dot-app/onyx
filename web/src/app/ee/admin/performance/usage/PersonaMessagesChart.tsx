@@ -5,7 +5,7 @@ import {
   usePersonaMessages,
   usePersonaUniqueUsers,
 } from "../lib";
-import { useAssistants } from "@/components/context/AssistantsContext";
+import { useAssistantsContext } from "@/components/context/AssistantsContext";
 import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
@@ -30,7 +30,7 @@ export function PersonaMessagesChart({
   >(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const { allAssistants: personaList } = useAssistants();
+  const { allAssistants: personaList } = useAssistantsContext();
 
   const {
     data: personaMessagesData,

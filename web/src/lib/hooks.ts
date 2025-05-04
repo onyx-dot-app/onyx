@@ -31,8 +31,8 @@ import {
 import { getSourceMetadata } from "./sources";
 import { AuthType, NEXT_PUBLIC_CLOUD_ENABLED } from "./constants";
 import { useUser } from "@/components/user/UserProvider";
-import { SEARCH_TOOL_ID } from "@/app/chat/tools/constants";
-import { updateTemperatureOverrideForChatSession } from "@/app/chat/lib";
+import { SEARCH_TOOL_ID } from "@/app/chat/components/tools/constants";
+import { updateTemperatureOverrideForChatSession } from "@/app/chat/services/lib";
 
 const CREDENTIAL_URL = "/api/manage/admin/credential";
 

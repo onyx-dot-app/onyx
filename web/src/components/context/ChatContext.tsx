@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState } from "react";
 import { CCPairBasicInfo, DocumentSet, Tag, ValidSources } from "@/lib/types";
 import { ChatSession, InputPrompt } from "@/app/chat/interfaces";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
-import { Folder } from "@/app/chat/folders/interfaces";
+import { Folder } from "@/app/chat/components/folders/interfaces";
 import { useSearchParams } from "next/navigation";
 import { useRouter } from "next/navigation";
 
