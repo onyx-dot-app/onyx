@@ -75,6 +75,7 @@ def mock_get_side_effect(mock_responses: Dict[str, List[Dict[str, Any]]]) -> Any
             json=lambda: {
                 "count": 1,
                 "next": None,
+                "all": [1],
                 "results": (
                     mock_responses["documents"]
                     if DOCUMENTS_ENDPOINT in url
@@ -141,7 +142,7 @@ def test_load_from_state(
     with patch("requests.get") as mock_get:
         mock_get.side_effect = mock_get_side_effect
 
-        docs = next(setup_connector.load_from_state())
+        docs = next(setup_connector.load_from_state(), [])
 
         # Verify results
         assert len(docs) == 1
@@ -185,7 +186,7 @@ def test_retrieve_all_slim_documents(
     with patch("requests.get") as mock_get:
         mock_get.side_effect = mock_get_side_effect
 
-        docs = next(setup_connector.retrieve_all_slim_documents())
+        docs = next(setup_connector.retrieve_all_slim_documents(), [])
 
         assert len(docs) == 1
         doc = docs[0]
@@ -201,7 +202,7 @@ def test_poll_source(
 
         since = int(datetime(2023, 1, 1, tzinfo=timezone.utc).timestamp())
         til = int(datetime(2023, 2, 1, tzinfo=timezone.utc).timestamp())
-        docs = next(setup_connector.poll_source(since, til))
+        docs = next(setup_connector.poll_source(since, til), [])
 
         assert len(docs) == 1
         doc = docs[0]

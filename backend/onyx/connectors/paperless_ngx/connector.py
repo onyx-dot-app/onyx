@@ -203,7 +203,10 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         }
 
     def _make_request(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
+        self,
+        endpoint: str,
+        params: Optional[Dict[str, Any]] = None,
+        id_only: bool = False,
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Helper generator function to make paginated requests to the Paperless-ngx API.
@@ -234,6 +237,12 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 response.raise_for_status()  # Raises HTTPError for bad responses (4XX or 5XX)
                 data = response.json()
 
+                # If id_only is True, yield only the IDs of the documents
+                if id_only:
+                    for id in data.get("all", []):
+                        yield {"id": id}
+                    break
+
                 # Yield each result individually
                 for result in data.get("results", []):
                     yield result
@@ -257,6 +266,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         date_field: Optional[DateField] = None,
+        id_only: bool = False,
     ) -> Generator[Dict[str, Any], None, None]:
         """
         Generator function that retrieves documents based on configured filters.
@@ -265,6 +275,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             start_date: Optional start date in ISO format
             end_date: Optional end date in ISO format
             date_field: Optional DateField enum value for date filtering
+            id_only: Optional flag to return only document IDs
 
         This function uses the Paperless-ngx API to filter documents by:
         1. Tags (using tags__id__in parameter)
@@ -385,7 +396,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         logger.debug(
             f"Retrieving docs with tags: {self.ingest_tags} and/or users: {self.ingest_usernames}"
         )
-        yield from self._make_request(DOCUMENTS_ENDPOINT, params=params)
+        yield from self._make_request(
+            DOCUMENTS_ENDPOINT, params=params, id_only=id_only
+        )
 
         if self.ingest_noowner and self.ingest_usernames:
             logger.debug(
@@ -397,7 +410,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             if "owner__id__in" in noowner_params:
                 del noowner_params["owner__id__in"]
             noowner_params["owner__isnull"] = "true"
-            yield from self._make_request(DOCUMENTS_ENDPOINT, params=noowner_params)
+            yield from self._make_request(
+                DOCUMENTS_ENDPOINT, params=noowner_params, id_only=id_only
+            )
 
     def _parse_document(self, doc_data: Dict[str, Any]) -> Optional[Document]:
         """
@@ -633,7 +648,10 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         # Get only the IDs by making the request and extracting minimal information
         doc_data = self._get_docs(
-            start_date=start_iso, end_date=end_iso, date_field=DateField.MODIFIED_DATE
+            start_date=start_iso,
+            end_date=end_iso,
+            date_field=DateField.MODIFIED_DATE,
+            id_only=True,
         )
 
         # Convert to SlimDocument objects
@@ -655,13 +673,16 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                             f"Could not parse timestamp for slim document {doc_id}"
                         )
 
+                perm_sync_data: Dict[str, Any] = {
+                    "source": DocumentSource.PAPERLESS_NGX
+                }
+                if doc_updated_at:
+                    perm_sync_data["doc_updated_at"] = doc_updated_at
+
                 slim_docs.append(
                     SlimDocument(
                         id=str(doc_id),
-                        perm_sync_data={
-                            "source": DocumentSource.PAPERLESS_NGX,
-                            "doc_updated_at": doc_updated_at,
-                        },
+                        perm_sync_data=perm_sync_data,
                     )
                 )
             if len(slim_docs) >= DOC_BATCH_SIZE:  # Yield in batches of DOC_BATCH_SIZE
@@ -732,7 +753,7 @@ if __name__ == "__main__":
             f"Testing PaperlessNgxConnector with URL: {api_url} and Key: {masked_key}"
         )
         test_connector = PaperlessNgxConnector(
-            # ingest_tags="INBOX, TODO",
+            ingest_tags="INBOX, TODO",
             # ingest_tags="ai-process",
             # ingest_usernames="cbrown",
             # ingest_noowner=True,
