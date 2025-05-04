@@ -1,6 +1,7 @@
 import logging
 import os
 import time
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from enum import Enum
@@ -14,6 +15,7 @@ import requests
 from typing_extensions import override
 
 from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.interfaces import LoadConnector
@@ -39,6 +41,8 @@ DOCUMENT_TYPES_ENDPOINT = "/api/document_types/"
 PROFILE_ENDPOINT = "/api/profile/"
 
 PAPERLESS_NGX_DATE_FORMAT = "%Y-%m-%dT%H:%M:%S+00:00"
+
+DOC_BATCH_SIZE = 10  # Number of documents to process in each batch
 
 # TODO: handle custom fields?
 # CUSTOM_FIELDS_ENDPOINT = "/api/custom_fields/"
@@ -154,7 +158,6 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         """
         Loads Token from web user-provided credentials.
         """
-
         self.api_url = credentials["paperless_ngx_api_url"]
 
         self.auth_token = credentials["paperless_ngx_auth_token"]
@@ -165,7 +168,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         if not self.auth_token:
             raise PermissionError("Paperless-ngx auth token not found in settings.")
 
-        # verify credentials with profile endpoint
+    @override
+    def validate_connector_settings(self) -> None:
+        """Verify credentials with profile endpoint."""
         try:
             response = requests.get(
                 self.api_url + PROFILE_ENDPOINT, headers=self._get_headers()
@@ -184,7 +189,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 )
         except Exception as e:
             logger.error(f"Error fetching data from Paperless-ngx API: {e}")
-            raise PermissionError(
+            raise CredentialInvalidError(
                 f"Failed to connect to Paperless-ngx API. Invalid server or credentials: {e}"
             )
 
@@ -199,9 +204,9 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
     def _make_request(
         self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Generator[Dict[str, Any], None, None]:
         """
-        Helper function to make paginated requests to the Paperless-ngx API.
+        Helper generator function to make paginated requests to the Paperless-ngx API.
 
         Args:
             endpoint: The API endpoint path (e.g., 'api/documents/').
@@ -213,7 +218,6 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         if not self.api_url:
             raise ValueError("API URL not configured.")
 
-        results = []
         url = f"{self.api_url}{endpoint}"
         headers = self._get_headers()
 
@@ -230,7 +234,10 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 response.raise_for_status()  # Raises HTTPError for bad responses (4XX or 5XX)
                 data = response.json()
 
-                results.extend(data.get("results", []))
+                # Yield each result individually
+                for result in data.get("results", []):
+                    yield result
+
                 url = data.get("next")  # Get URL for the next page
                 params = None  # Parameters are included in the 'next' URL
 
@@ -245,20 +252,19 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 logger.error(f"Error fetching data from Paperless-ngx API: {e}")
                 raise ConnectionError(f"Failed to connect to Paperless-ngx API: {e}")
 
-        return results
-
     def _get_docs(
         self,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
         date_field: Optional[DateField] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> Generator[Dict[str, Any], None, None]:
         """
-        Retrieves documents based on configured filters (tags, usernames, no owner) and optional date range.
+        Generator function that retrieves documents based on configured filters.
 
         Args:
-            start_date: Optional start date in ISO format (YYYY-MM-DDTHH:MM:SS+00:00)
-            end_date: Optional end date in ISO format (YYYY-MM-DDTHH:MM:SS+00:00)
+            start_date: Optional start date in ISO format
+            end_date: Optional end date in ISO format
+            date_field: Optional DateField enum value for date filtering
 
         This function uses the Paperless-ngx API to filter documents by:
         1. Tags (using tags__id__in parameter)
@@ -266,21 +272,21 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         3. Documents with no owner (using owner__isnull parameter)
         4. Date ranges (using <date_field date type>__gte and <date_field date type>__lte)
 
-        Returns:
-            A list of document data dictionaries from the Paperless API
+        Yields:
+            Individual document dictionaries from the Paperless API
         """
 
         # update attribute lists so they can be added as needed for filters and when documents parsed
-        self.all_tags = self._make_request(TAGS_ENDPOINT)
-        self.all_users = self._make_request(USERS_ENDPOINT)
-        self.all_correspondents = self._make_request(CORRESPONDENTS_ENDPOINT)
-        self.all_doc_types = self._make_request(DOCUMENT_TYPES_ENDPOINT)
+        self.all_tags = list(self._make_request(TAGS_ENDPOINT))
+        self.all_users = list(self._make_request(USERS_ENDPOINT))
+        self.all_correspondents = list(self._make_request(CORRESPONDENTS_ENDPOINT))
+        self.all_doc_types = list(self._make_request(DOCUMENT_TYPES_ENDPOINT))
 
         # TODO: handle custom fields?
-        # self.all_custom_fields = self._make_request(CUSTOM_FIELDS_ENDPOINT)
+        # self.all_custom_fields = list(self._make_request(CUSTOM_FIELDS_ENDPOINT))
 
         # Build base parameters dict with date filters
-        params = {}
+        params: Dict[str, Union[str, int]] = {}
 
         date_field = date_field or self.master_date_field
         start_date = start_date or self.master_start_date
@@ -319,6 +325,8 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
             f"Getting docs with start date set to: {start_date} for field: {date_field}"
         )
 
+        params["limit"] = DOC_BATCH_SIZE  # Limit the number of results per request
+
         # Set the end date in params
         # TODO: Set up end for master date field?
         if end_date and date_field:
@@ -354,116 +362,42 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 user["username"].lower(): user["id"] for user in self.all_users
             }
 
-            for username in self.ingest_usernames:
-                username_lower = username.lower()
-                if username_lower in username_to_id:
-                    user_ids.append(username_to_id[username_lower])
-                else:
-                    logger.warning(
-                        f"User '{username}' not found in Paperless-ngx instance"
-                    )
+            user_ids = [
+                username_to_id[username.lower()]
+                for username in self.ingest_usernames
+                if username.lower() in username_to_id
+            ]
 
             if user_ids:
                 params["owner__id__in"] = ",".join(str(user_id) for user_id in user_ids)
 
         # Handle different filtering combinations
-        if self.ingest_tags and not self.ingest_usernames:
-            # Only filter by tags
-            logger.debug(f"Retrieving documents with tags: {self.ingest_tags}")
-            if not tag_ids:
-                logger.warning("No valid tags found, returning empty result")
-                return []
-            docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
-        elif self.ingest_usernames and not self.ingest_tags:
-            # Filter by users with optional no-owner inclusion
-            if not user_ids and not self.ingest_noowner:
-                logger.warning(
-                    "No valid users found and no-owner not enabled, returning empty result"
-                )
-                return []
+        if self.ingest_tags and not tag_ids:
+            logger.warning("No valid tags found, yielding empty result")
+            return
 
-            if self.ingest_noowner:
-                logger.debug(
-                    f"Retrieving documents for users: {self.ingest_usernames} and documents with no owner"
-                )
-                # We need to make two requests and combine the results
-                user_docs = []
-                if user_ids:
-                    user_docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
+        if self.ingest_usernames and not user_ids and not self.ingest_noowner:
+            logger.warning(
+                "No valid users found and no-owner not enabled, yielding empty result"
+            )
+            return
 
-                # Make a separate request for no-owner documents
-                noowner_params = params.copy()
-                if "owner__id__in" in noowner_params:
-                    del noowner_params["owner__id__in"]
-                noowner_params["owner__isnull"] = "true"
-                noowner_docs = self._make_request(
-                    DOCUMENTS_ENDPOINT, params=noowner_params
-                )
+        logger.debug(
+            f"Retrieving docs with tags: {self.ingest_tags} and/or users: {self.ingest_usernames}"
+        )
+        yield from self._make_request(DOCUMENTS_ENDPOINT, params=params)
 
-                # Combine and deduplicate
-                seen_ids = set()
-                docs = []
-                for doc_list in [user_docs, noowner_docs]:
-                    for doc in doc_list:
-                        doc_id = doc.get("id")
-                        if doc_id and doc_id not in seen_ids:
-                            seen_ids.add(doc_id)
-                            docs.append(doc)
-            else:
-                logger.debug(f"Retrieving documents for users: {self.ingest_usernames}")
-                docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
-        elif self.ingest_tags and self.ingest_usernames:
-            # Combined filter: documents with specified tags AND (specified users OR no owner if enabled)
-            if not tag_ids:
-                logger.warning("No valid tags found, returning empty result")
-                return []
+        if self.ingest_noowner and self.ingest_usernames:
+            logger.debug(
+                f"Retrieving docs with tags: {self.ingest_tags} and/or docs with no owner"
+            )
 
-            if not user_ids and not self.ingest_noowner:
-                logger.warning(
-                    "No valid users found and no-owner not enabled, returning empty result"
-                )
-                return []
-
-            if self.ingest_noowner:
-                logger.debug(
-                    f"Retrieving documents with tags: {self.ingest_tags} "
-                    + f"for users: {self.ingest_usernames} and documents with no owner"
-                )
-                # We need to make two requests and combine the results
-                user_docs = []
-                if user_ids:
-                    user_docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
-
-                # Make a separate request for no-owner documents
-                noowner_params = params.copy()
-                if "owner__id__in" in noowner_params:
-                    del noowner_params["owner__id__in"]
-                noowner_params["owner__isnull"] = "true"
-                noowner_docs = self._make_request(
-                    DOCUMENTS_ENDPOINT, params=noowner_params
-                )
-
-                # Combine and deduplicate
-                seen_ids = set()
-                docs = []
-                for doc_list in [user_docs, noowner_docs]:
-                    for doc in doc_list:
-                        doc_id = doc.get("id")
-                        if doc_id and doc_id not in seen_ids:
-                            seen_ids.add(doc_id)
-                            docs.append(doc)
-            else:
-                logger.debug(
-                    f"Retrieving documents with tags: {self.ingest_tags} for users: {self.ingest_usernames}"
-                )
-                docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
-        else:
-            # No specific filters, get all documents
-            logger.debug("No filters specified, retrieving all documents")
-            docs = self._make_request(DOCUMENTS_ENDPOINT, params=params)
-
-        logger.debug(f"Retrieved {len(docs)} documents matching the specified filters")
-        return docs
+            # Make a separate request for no-owner documents
+            noowner_params = params.copy()
+            if "owner__id__in" in noowner_params:
+                del noowner_params["owner__id__in"]
+            noowner_params["owner__isnull"] = "true"
+            yield from self._make_request(DOCUMENTS_ENDPOINT, params=noowner_params)
 
     def _parse_document(self, doc_data: Dict[str, Any]) -> Optional[Document]:
         """
@@ -607,15 +541,17 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         """
         Loads all documents from the Paperless-ngx instance.
         """
-        all_doc_data = self._get_docs()
         documents = []
-        for doc_data in all_doc_data:
+        for doc_data in self._get_docs():
             doc = self._parse_document(doc_data)
             if doc:
                 documents.append(doc)
+            if len(documents) >= DOC_BATCH_SIZE:  # Yield in batches of DOC_BATCH_SIZE
+                yield documents
+                documents = []
 
-        logger.info(f"Loaded {len(documents)} documents from Paperless-ngx.")
-        yield documents
+        if documents:  # Yield any remaining documents
+            yield documents
 
     @override
     def poll_source(
@@ -652,11 +588,12 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                     logger.debug(
                         f"Document {doc.id} timestamp {doc.doc_updated_at} not in range {start_dt} - {end_dt}, filtering out."
                     )
+            if len(documents) >= DOC_BATCH_SIZE:  # Yield in batches of DOC_BATCH_SIZE
+                yield documents
+                documents = []
 
-        logger.info(
-            f"Found {len(documents)} new/updated documents in Paperless-ngx in time range."
-        )
-        yield documents
+        if documents:  # Yield any remaining documents
+            yield documents
 
     @override
     def retrieve_all_slim_documents(
@@ -727,9 +664,12 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                         },
                     )
                 )
+            if len(slim_docs) >= DOC_BATCH_SIZE:  # Yield in batches of DOC_BATCH_SIZE
+                yield slim_docs
+                slim_docs = []
 
-        logger.info(f"Retrieved {len(slim_docs)} slim documents from Paperless-ngx")
-        yield slim_docs
+        if slim_docs:  # Yield any remaining documents
+            yield slim_docs
 
 
 # Development testing block

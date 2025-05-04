@@ -9,8 +9,10 @@ from unittest.mock import patch
 import pytest
 import requests
 
+from onyx.connectors.exceptions import CredentialInvalidError
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.paperless_ngx.connector import CORRESPONDENTS_ENDPOINT
+from onyx.connectors.paperless_ngx.connector import DOC_BATCH_SIZE
 from onyx.connectors.paperless_ngx.connector import DOCUMENT_TYPES_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import DOCUMENTS_ENDPOINT
 from onyx.connectors.paperless_ngx.connector import PaperlessNgxConnector
@@ -124,6 +126,9 @@ def test_load_credentials(
 
         assert connector.api_url == "http://test.com"
         assert connector.auth_token == "test_token"
+
+        connector.validate_connector_settings()
+
         mock_get.assert_called_with(
             f"http://test.com{PROFILE_ENDPOINT}",
             headers={"Authorization": "Token test_token", "Accept": "application/json"},
@@ -152,7 +157,9 @@ def test_load_from_state(
         }
         assert mock_get.call_count == 5  # One call for each endpoint
         mock_get.assert_any_call(
-            f"http://test.com{DOCUMENTS_ENDPOINT}", headers=expected_headers, params={}
+            f"http://test.com{DOCUMENTS_ENDPOINT}",
+            headers=expected_headers,
+            params={"limit": DOC_BATCH_SIZE},
         )
         mock_get.assert_any_call(
             f"http://test.com{TAGS_ENDPOINT}", headers=expected_headers, params={}
@@ -207,6 +214,7 @@ def test_poll_source(
         expected_params = {
             "modified__gte": f"{datetime.fromtimestamp(since, timezone.utc).isoformat()}",
             "modified__lte": f"{datetime.fromtimestamp(til, timezone.utc).isoformat()}",
+            "limit": DOC_BATCH_SIZE,
         }
         assert docs_call[1]["params"] == expected_params
 
@@ -215,7 +223,8 @@ def test_request_error_handling(setup_connector: PaperlessNgxConnector) -> None:
     with patch("requests.get") as mock_get:
         mock_get.side_effect = requests.exceptions.RequestException("Test error")
 
-        with pytest.raises(ConnectionError) as exc_info:
-            setup_connector._make_request(DOCUMENTS_ENDPOINT)
+        with pytest.raises(CredentialInvalidError) as exc_info:
+            setup_connector.validate_connector_settings()
 
         assert "Failed to connect" in str(exc_info.value)
+        assert "Test error" in str(exc_info.value)
