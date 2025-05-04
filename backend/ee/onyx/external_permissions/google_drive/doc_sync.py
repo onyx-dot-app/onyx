@@ -4,6 +4,8 @@ from datetime import timezone
 from typing import Any
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
+from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
+from ee.onyx.external_permissions.google_drive.models import PermissionType
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -17,7 +19,7 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
-_PERMISSION_ID_PERMISSION_MAP: dict[str, dict[str, Any]] = {}
+_PERMISSION_ID_PERMISSION_MAP: dict[str, GoogleDrivePermission] = {}
 
 
 def _get_slim_doc_generator(
@@ -43,7 +45,7 @@ def _fetch_permissions_for_permission_ids(
     google_drive_connector: GoogleDriveConnector,
     permission_ids: list[str],
     permission_info: dict[str, Any],
-) -> list[dict[str, Any]]:
+) -> list[GoogleDrivePermission]:
     doc_id = permission_info.get("doc_id")
     if not permission_info or not doc_id:
         return []
@@ -69,15 +71,21 @@ def _fetch_permissions_for_permission_ids(
         retrieval_function=drive_service.permissions().list,
         list_key="permissions",
         fileId=doc_id,
-        fields="permissions(id, emailAddress, type, domain),nextPageToken",
+        fields="permissions(id, emailAddress, type, domain, permissionDetails),nextPageToken",
         supportsAllDrives=True,
         continue_on_404_or_403=True,
     )
 
     permissions_for_doc_id = []
     for permission in fetched_permissions:
-        permissions_for_doc_id.append(permission)
-        _PERMISSION_ID_PERMISSION_MAP[permission["id"]] = permission
+        google_drive_permission = GoogleDrivePermission.from_drive_permission(
+            permission
+        )
+
+        permissions_for_doc_id.append(google_drive_permission)
+        _PERMISSION_ID_PERMISSION_MAP[google_drive_permission.id] = (
+            google_drive_permission
+        )
 
     return permissions_for_doc_id
 
@@ -88,8 +96,9 @@ def _get_permissions_from_slim_doc(
 ) -> ExternalAccess:
     permission_info = slim_doc.perm_sync_data or {}
 
-    permissions_list = permission_info.get("permissions", [])
-    if not permissions_list:
+    permissions_list: list[GoogleDrivePermission] = []
+    raw_permissions_list = permission_info.get("permissions", [])
+    if not raw_permissions_list:
         if permission_ids := permission_info.get("permission_ids"):
             permissions_list = _fetch_permissions_for_permission_ids(
                 google_drive_connector=google_drive_connector,
@@ -103,41 +112,62 @@ def _get_permissions_from_slim_doc(
                 external_user_group_ids=set(),
                 is_public=False,
             )
+    else:
+        permissions_list = [
+            GoogleDrivePermission.from_drive_permission(p) for p in raw_permissions_list
+        ]
 
     company_domain = google_drive_connector.google_domain
+    folder_ids_to_inherit_permissions_from: set[str] = set()
     user_emails: set[str] = set()
     group_emails: set[str] = set()
     public = False
-    skipped_permissions = 0
 
     for permission in permissions_list:
-        if not permission:
-            skipped_permissions += 1
+        # if the permission is inherited, do not add it directly to the file
+        # instead, add the folder ID as a group that has access to the file
+        # we will then handle mapping that folder to the list of Onyx users
+        # in the group sync job
+        # NOTE: this doesn't handle the case where a folder initially has no
+        # permissioning, but then later that folder is shared with a user or group.
+        # We could fetch all ancestors of the file to get the list of folders that
+        # might affect the permissions of the file, but this will get replaced with
+        # an audit-log based approach in the future so not doing it now.
+        if permission.permission_details.inherited:
+            if permission.permission_details.inherited_from:
+                folder_ids_to_inherit_permissions_from.add(
+                    permission.permission_details.inherited_from
+                )
+            else:
+                logger.error(
+                    "Permission is inherited but no folder ID is "
+                    f"provided for document {slim_doc.id}"
+                    f"\n {permission}"
+                )
             continue
 
-        permission_type = permission["type"]
-        if permission_type == "user":
-            user_emails.add(permission["emailAddress"])
-        elif permission_type == "group":
-            group_emails.add(permission["emailAddress"])
-        elif permission_type == "domain" and company_domain:
-            if permission.get("domain") == company_domain:
+        if permission.type == PermissionType.USER:
+            user_emails.add(permission.email_address)
+        elif permission.type == PermissionType.GROUP:
+            # groups are represented as email addresses within Drive
+            group_emails.add(permission.email_address)
+        elif permission.type == PermissionType.DOMAIN and company_domain:
+            if permission.domain == company_domain:
                 public = True
             else:
                 logger.warning(
                     "Permission is type domain but does not match company domain:"
                     f"\n {permission}"
                 )
-        elif permission_type == "anyone":
+        elif permission.type == PermissionType.ANYONE:
             public = True
 
-    if skipped_permissions > 0:
-        logger.warning(
-            f"Skipped {skipped_permissions} permissions of {len(permissions_list)} for document {slim_doc.id}"
-        )
-
     drive_id = permission_info.get("drive_id")
-    group_ids = group_emails | ({drive_id} if drive_id is not None else set())
+    group_ids = (
+        group_emails
+        | folder_ids_to_inherit_permissions_from
+        | ({drive_id} if drive_id is not None else set())
+    )
 
     return ExternalAccess(
         external_user_emails=user_emails,
