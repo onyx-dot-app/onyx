@@ -23,6 +23,7 @@ from onyx.configs.app_configs import ENABLE_EXPENSIVE_EXPERT_CALLS
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.app_configs import SLACK_NUM_THREADS
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
@@ -52,6 +53,7 @@ from onyx.connectors.slack.utils import SlackTextCleaner
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -855,7 +857,15 @@ if __name__ == "__main__":
     connector = SlackConnector(
         channels=[slack_channel] if slack_channel else None,
     )
-    connector.load_credentials({"slack_bot_token": os.environ["SLACK_BOT_TOKEN"]})
+
+    provider = OnyxStaticCredentialsProvider(
+        tenant_id=get_current_tenant_id(),
+        connector_name="slack",
+        credential_json={
+            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+        },
+    )
+    connector.set_credentials_provider(provider)
 
     current = time.time()
     one_day_ago = current - 24 * 60 * 60  # 1 day
