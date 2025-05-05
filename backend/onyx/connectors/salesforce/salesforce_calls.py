@@ -59,10 +59,10 @@ def _is_valid_child_object(
     if not object_description["queryable"]:
         return False
 
-    if child_relationship["field"]:
-        if child_relationship["field"] == "RelatedToId":
-            return False
-    else:
+    if not child_relationship["field"]:
+        return False
+
+    if child_relationship["field"] == "RelatedToId":
         return False
 
     return True
@@ -103,9 +103,18 @@ def _get_all_queryable_fields_of_sf_type(
             # We do want to get name fields even if they are compound
             if not field.get("nameField"):
                 field_names_to_remove.add(compound_field_name)
-        if field.get("type", "base64") == "base64":
+
+        field_name = field.get("name")
+        field_type = field.get("type")
+        if field_type in ["base64", "blob", "encryptedstring"]:
+            # print(f"skipping {sf_type=} {field_name=} {field_type=}")
             continue
-        if field_name := field.get("name"):
+
+        # field_custom = field.get("custom")
+        # if field_custom:
+        #     print(f"custom field: {sf_type=} {field_name=} {field_type=}")
+
+        if field_name:
             valid_fields.add(field_name)
 
     return list(valid_fields - field_names_to_remove)
@@ -130,6 +139,15 @@ def _get_time_filtered_query(
     queryable_fields: list[str], sf_type: str, time_filter: str
 ) -> str:
     query = f"SELECT {', '.join(queryable_fields)} FROM {sf_type}{time_filter}"
+    return query
+
+
+def _get_object_by_id_query(
+    object_id: str, sf_type: str, queryable_fields: list[str]
+) -> str:
+    query = (
+        f"SELECT {', '.join(queryable_fields)} FROM {sf_type} WHERE Id = '{object_id}'"
+    )
     return query
 
 
@@ -257,19 +275,19 @@ def fetch_all_csvs_in_parallel(
                 )
                 if time_filter_temp is None:
                     logger.warning(
-                        f"Object not filterable: type={sf_type} fields={queryable_fields}"
+                        f"Object type not filterable: type={sf_type} fields={queryable_fields}"
                     )
                     time_filter = ""
                 else:
                     logger.info(
-                        f"Object filterable: type={sf_type} filter={time_filter_temp}"
+                        f"Object type filterable: type={sf_type} filter={time_filter_temp}"
                     )
                     time_filter = time_filter_temp
 
             break
 
         if _object_type_has_api_data(sf_client, sf_type, time_filter):
-            logger.warning(f"Object skipped (no data available): type={sf_type}")
+            logger.warning(f"Object type skipped (no data available): type={sf_type}")
             continue
 
         query = _get_time_filtered_query(queryable_fields, sf_type, time_filter)
