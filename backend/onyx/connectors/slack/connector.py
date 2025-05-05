@@ -529,9 +529,7 @@ class SlackConnector(
         batch_size: int = INDEX_BATCH_SIZE,
         num_threads: int = SLACK_NUM_THREADS,
     ) -> None:
-        self.channels = (
-            [channel.removeprefix("#") for channel in channels] if channels else None
-        )
+        self.channels = channels
         self.channel_regex_enabled = channel_regex_enabled
         self.batch_size = batch_size
         self.num_threads = num_threads
@@ -544,6 +542,16 @@ class SlackConnector(
         self.credential_prefix: str | None = None
         self.delay_lock: str | None = None  # the redis key for the shared lock
         self.delay_key: str | None = None  # the redis key for the shared delay
+
+    @property
+    def channels(self) -> list[str] | None:
+        return self._channels
+
+    @channels.setter
+    def channels(self, channels: list[str] | None) -> None:
+        self._channels = (
+            [channel.removeprefix("#") for channel in channels] if channels else None
+        )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
