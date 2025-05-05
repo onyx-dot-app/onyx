@@ -15,6 +15,8 @@ def decrypt_raw_credential(encrypted_value: str) -> None:
         # If string starts with 'x', remove it as it's just a prefix indicating hex
         if encrypted_value.startswith("x"):
             encrypted_value = encrypted_value[1:]
+        elif encrypted_value.startswith("\\x"):
+            encrypted_value = encrypted_value[2:]
 
         # Convert hex string to bytes
         encrypted_bytes = binascii.unhexlify(encrypted_value)
@@ -29,11 +31,12 @@ def decrypt_raw_credential(encrypted_value: str) -> None:
 
     except binascii.Error:
         print("Error: Invalid hex encoded string")
-    except json.JSONDecodeError:
-        print("Decrypted raw value (not JSON):")
-        print(decrypted_str)
+
+    except json.JSONDecodeError as e:
+        print(f"Decrypted raw value (not JSON): {e}")
+
     except Exception as e:
-        print(f"Error decrypting value: {str(e)}")
+        print(f"Error decrypting value: {e}")
 
 
 if __name__ == "__main__":
