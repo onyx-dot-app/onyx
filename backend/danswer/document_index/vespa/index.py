@@ -706,7 +706,7 @@ def _query_vespa(query_params: Mapping[str, str | int | float]) -> list[Inferenc
     params["hits"] = 10
     params["yql"] = (
         params["yql"]
-        + ' and (source_type contains "web" or source_type contains "sfkabarticles")'
+        + ' and (source_type contains "web" or source_type contains "sfkbarticles")'
     )
     filtered_hits_web_sf = query_vespa_helper(params)
 
