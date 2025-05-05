@@ -79,6 +79,14 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         # TODO: implement UI changes for the above in web\src\lib\connectors\connectors.tsx?
     ) -> None:
 
+        # test for invalid characters in ingest_tags
+        if ingest_tags and not all(
+            char.isalnum() or char in ", " for char in ingest_tags
+        ):
+            raise ConnectorValidationError(
+                "Invalid characters in ingest_tags. Only alphanumeric characters, commas, and spaces are allowed."
+            )
+        # convert ingest_tags to list of tags
         try:
             self.ingest_tags: List[str] = (
                 [tag.strip() for tag in ingest_tags.split(",")] if ingest_tags else []
@@ -88,6 +96,14 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
                 f"Could not parse ingest_tags: {ingest_tags}. Error: {e}"
             )
 
+        # test for invalid characters in ingest_usernames
+        if ingest_usernames and not all(
+            char.isalnum() or char in ", " for char in ingest_usernames
+        ):
+            raise ConnectorValidationError(
+                "Invalid characters in ingest_usernames. Only alphanumeric characters, commas, and spaces are allowed."
+            )
+        # convert ingest_usernames to list of usernames
         try:
             self.ingest_usernames: List[str] = (
                 [username.strip() for username in ingest_usernames.split(",")]
@@ -101,16 +117,18 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
 
         self.ingest_noowner = ingest_noowner
 
-        # Allowed ui_min_start_date formats:
         # TODO: write code to allow for date-time?
-        # - yyyy-mm-dd
-        # - mm/dd/yyyy
-        # - dd/mm/yyyy
-        # - mm-dd-yyyy
-        # - dd-mm-yyyy
-        # - yyyy/mm/dd
-        # - dd.mm.yyyy
-        # - mm.dd.yyyy
+        """
+        Allowed ui_min_start_date formats:
+        - yyyy-mm-dd
+        - mm/dd/yyyy
+        - dd/mm/yyyy
+        - mm-dd-yyyy
+        - dd-mm-yyyy
+        - yyyy/mm/dd
+        - dd.mm.yyyy
+        - mm.dd.yyyy
+        """
         self.master_start_date: Optional[str] = None
         if ui_min_start_date:
             try:
@@ -163,7 +181,7 @@ class PaperlessNgxConnector(LoadConnector, PollConnector, SlimConnector):
         self.auth_token = credentials["paperless_ngx_auth_token"]
 
         if not self.api_url:
-            raise PermissionError("Paperless-ngx API URL not found in  settings.")
+            raise PermissionError("Paperless-ngx API URL not found in settings.")
 
         if not self.auth_token:
             raise PermissionError("Paperless-ngx auth token not found in settings.")
