@@ -3,9 +3,9 @@ from datetime import datetime
 from datetime import timedelta
 from datetime import timezone
 from typing import Any
-from urllib.error import HTTPError
 from urllib.parse import quote
 
+from requests.exceptions import HTTPError
 from typing_extensions import override
 
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_LABELS_TO_SKIP
