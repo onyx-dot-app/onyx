@@ -47,6 +47,7 @@ from onyx.configs.constants import OnyxRedisSignals
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.db.connector import mark_cc_pair_as_permissions_synced
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
+from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
@@ -449,7 +450,21 @@ def connector_permission_sync_generator_task(
             redis_connector.permissions.set_fence(new_payload)
 
             callback = PermissionSyncCallback(redis_connector, lock, r)
-            document_external_accesses = doc_sync_func(cc_pair, callback)
+
+            # pass in the capability to fetch all existing docs for the cc_pair
+            # this is can be used to determine documents that are "missing" and thus
+            # should no longer be accessible. The decision as to whether we should find
+            # every document during the doc sync process is connector-specific.
+            def fetch_all_existing_docs_fn() -> list[str]:
+                return get_document_ids_for_connector_credential_pair(
+                    db_session=db_session,
+                    connector_id=cc_pair.connector.id,
+                    credential_id=cc_pair.credential.id,
+                )
+
+            document_external_accesses = doc_sync_func(
+                cc_pair, fetch_all_existing_docs_fn, callback
+            )
 
             task_logger.info(
                 f"RedisConnector.permissions.generate_tasks starting. cc_pair={cc_pair_id}"

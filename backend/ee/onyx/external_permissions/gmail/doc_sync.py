@@ -2,6 +2,7 @@ from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.gmail.connector import GmailConnector
@@ -34,6 +35,7 @@ def _get_slim_doc_generator(
 
 def gmail_doc_sync(
     cc_pair: ConnectorCredentialPair,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """

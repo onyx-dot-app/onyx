@@ -3,6 +3,7 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -147,6 +148,7 @@ def _get_permissions_from_slim_doc(
 
 def gdrive_doc_sync(
     cc_pair: ConnectorCredentialPair,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """

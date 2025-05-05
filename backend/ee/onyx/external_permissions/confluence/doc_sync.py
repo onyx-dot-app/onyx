@@ -8,6 +8,7 @@ from typing import Any
 
 from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
@@ -17,10 +18,6 @@ from onyx.connectors.confluence.onyx_confluence import (
 from onyx.connectors.confluence.onyx_confluence import OnyxConfluence
 from onyx.connectors.credentials_provider import OnyxDBCredentialsProvider
 from onyx.connectors.models import SlimDocument
-from onyx.db.document import (
-    get_document_ids_for_connector_credential_pair,
-)
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -395,6 +392,7 @@ def _fetch_all_page_restrictions(
 
 def confluence_doc_sync(
     cc_pair: ConnectorCredentialPair,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
@@ -438,12 +436,7 @@ def confluence_doc_sync(
 
     # Find documents that are no longer accessible in Confluence
     logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id}")
-    with get_session_with_current_tenant() as db_session:
-        existing_doc_ids = get_document_ids_for_connector_credential_pair(
-            db_session=db_session,
-            connector_id=cc_pair.connector.id,
-            credential_id=cc_pair.credential.id,
-        )
+    existing_doc_ids = fetch_all_existing_docs_fn()
 
     # Find missing doc IDs
     fetched_doc_ids = {doc.id for doc in slim_docs}
