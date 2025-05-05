@@ -5,6 +5,7 @@ import sqlite3
 import time
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 from onyx.connectors.salesforce.utils import SalesforceObject
 from onyx.connectors.salesforce.utils import validate_salesforce_id
@@ -24,6 +25,15 @@ class OnyxSalesforceSQLite:
     # NOTE(rkuo): this string could probably occur naturally. A more unique value
     # might be appropriate here.
     NULL_ID_STRING = "N/A"
+
+    PREFIX_TO_ENTITY: dict[str, str] = {
+        "001": "Account",
+        "002": "Contact",
+        "005": "User",
+        "006": "Opportunity",
+        "007": "Activity",
+        "00D": "Organization",
+    }
 
     def __init__(self, filename: str, isolation_level: str | None = None):
         self.filename = filename
@@ -334,7 +344,76 @@ class OnyxSalesforceSQLite:
 
                         updated_parent_ids.update(newly_affected_ids)
 
-    def has_at_least_one_object_of_type(self, object_type: str) -> bool:
+    def get_changed_parent_ids_by_type_2(
+        self,
+        changed_ids: dict[str, str],
+        parent_types: set[str],
+        parent_relationship_fields_by_type: dict[str, dict[str, list[str]]],
+    ) -> Iterator[tuple[str, set[str], int]]:
+        """
+        Yields tuples of (changed_id, possible_parent_types, num_examined)
+        changed_id is the id of the changed parent record
+        possible_parent_type is a set of the possible parent records
+        - while unlikely, it is not necessarily known in advance what the type of the parent record is
+        num_examined is an integer which signifies our progress through the changed_id's dict
+
+        changed_ids is a list of all id's that changed, both parent and children.
+
+        This function yields back any changed parent id's based on
+        a relationship lookup.
+
+        This is much simpler than get_changed_parent_ids_by_type.
+
+        TODO(rkuo): for common entities, the first 3 chars identify the object type
+        see https://help.salesforce.com/s/articleView?id=000385203&type=1
+        """
+        changed_parent_ids: set[str] = (
+            set()
+        )  # dedupes parent id's that have already been yielded
+
+        # SQLite typically has a limit of 999 variables
+        num_examined = 0
+
+        for changed_id, changed_type in changed_ids.items():
+            num_examined += 1
+
+            # if we yielded this id already, continue
+            if changed_id in changed_parent_ids:
+                continue
+
+            # if this id is a parent type, yield it directly
+            if changed_type in parent_types:
+                yield changed_id, set(changed_type), num_examined
+                changed_parent_ids.update(changed_id)
+                continue
+
+            # if this id is a child type, then check the columns
+            # that relate it to the parent id and yield those ids
+            # NOTE: Although unlikely, id's yielded in this way may not be of the
+            # type we're interested in, so the caller must be prepared
+            # for the id to not be present
+
+            # get the child id record
+            sf_object = self.get_record(changed_id, changed_type)
+            if not sf_object:
+                continue
+
+            # get the fields that contain parent id's
+            parent_relationship_fields = parent_relationship_fields_by_type[
+                changed_type
+            ]
+            for field_name, field_parent_types in parent_relationship_fields.items():
+                parent_id = sf_object.data[field_name]
+                parent_id_prefix = parent_id[:3]
+                if parent_id_prefix in self.PREFIX_TO_ENTITY:
+                    yield parent_id, set(
+                        self.PREFIX_TO_ENTITY[parent_id_prefix]
+                    ), num_examined
+                else:
+                    yield parent_id, set(field_parent_types), num_examined
+                changed_parent_ids.update(parent_id)
+
+    def object_type_count(self, object_type: str) -> int:
         """Check if there is at least one object of the specified type in the database.
 
         Args:
@@ -353,7 +432,36 @@ class OnyxSalesforceSQLite:
                 (object_type,),
             )
             count = cursor.fetchone()[0]
-            return count > 0
+            return count
+
+    @staticmethod
+    def normalize_record(record: dict[str, Any]) -> tuple[str, set[str]]:
+        """Takes a dict of field names to values and removes fields
+        we don't want."""
+        parent_ids: set[str] = set()
+        fields_to_remove: set[str] = set()
+
+        for field, value in record.items():
+            # remove empty fields
+            if not value:
+                fields_to_remove.add(field)
+                continue
+
+            # remove salesforce id's (and add to parent id set)
+            if field != "Id" and validate_salesforce_id(value):
+                parent_ids.add(value)
+                fields_to_remove.add(field)
+                continue
+
+            # this field is real data, leave it alone
+
+        # Remove unwanted fields
+        for field in fields_to_remove:
+            if field != "LastModifiedById":
+                del record[field]
+
+        json_string = json.dumps(record)
+        return json_string, parent_ids
 
     def update_from_csv(
         self,
@@ -373,53 +481,31 @@ class OnyxSalesforceSQLite:
                 reader = csv.DictReader(f)
                 uncommitted_rows = 0
                 for row in reader:
-                    parent_ids = set()
-                    field_to_remove: set[str] = set()
-
                     if "Id" not in row:
                         logger.warning(
                             f"Row {row} does not have an Id field in {csv_download_path}"
                         )
                         continue
 
-                    id = row["Id"]
+                    row_id = row["Id"]
 
-                    # Process relationships and clean data
-                    # NOTE(rkuo): it looks like we just assume any field that
-                    # is a valid salesforce id references a parent
-                    for field, value in row.items():
-                        # remove empty fields
-                        if not value:
-                            field_to_remove.add(field)
-                            continue
-
-                        # remove salesforce id's (and add to parent id set)
-                        if validate_salesforce_id(value) and field != "Id":
-                            parent_ids.add(value)
-                            field_to_remove.add(field)
-                            continue
-
-                        # this field is real data, leave it alone
-
-                    # Remove unwanted fields
-                    for field in field_to_remove:
-                        if field != "LastModifiedById":
-                            del row[field]
+                    json_string, parent_ids = OnyxSalesforceSQLite.normalize_record(row)
 
                     # Update main object data
+                    # NOTE(rkuo): looks like we take a list and dump it as json into the db
                     cursor.execute(
                         """
                         INSERT OR REPLACE INTO salesforce_objects (id, object_type, data)
                         VALUES (?, ?, ?)
                         """,
-                        (id, object_type, json.dumps(row)),
+                        (row_id, object_type, json_string),
                     )
 
                     # Update relationships using the same connection
                     OnyxSalesforceSQLite._update_relationship_tables(
-                        cursor, id, parent_ids
+                        cursor, row_id, parent_ids
                     )
-                    updated_ids.append(id)
+                    updated_ids.append(row_id)
 
                     # periodically commit or else memory will balloon
                     uncommitted_rows += 1
