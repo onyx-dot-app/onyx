@@ -13,7 +13,7 @@ from onyx.chat.models import ChatOnyxBotResponse
 from onyx.chat.process_message import gather_stream_for_slack
 from onyx.chat.process_message import stream_chat_message_objects
 from onyx.configs.app_configs import DISABLE_GENERATIVE_AI
-from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.configs.onyxbot_configs import DANSWER_BOT_DISABLE_DOCS_ONLY_ANSWER
 from onyx.configs.onyxbot_configs import DANSWER_BOT_DISPLAY_ERROR_MSGS
 from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_RETRIES
@@ -38,6 +38,11 @@ from onyx.onyxbot.slack.utils import SlackRateLimiter
 from onyx.onyxbot.slack.utils import update_emote_react
 from onyx.server.query_and_chat.models import CreateChatMessageRequest
 from onyx.utils.logger import OnyxLoggingAdapter
+from onyx.file_store.models import ChatFileType, FileDescriptor
+from onyx.file_store.file_store import get_default_file_store
+from uuid import uuid4
+from io import BytesIO
+import requests
 
 srl = SlackRateLimiter()
 
@@ -157,6 +162,20 @@ def handle_regular_answer(
     # who previously posted in the thread.
     user_message = messages[-1]
     history_messages = messages[:-1]
+    logger.debug(f"Handling user message: {user_message}") # DEBUGGING
+
+    # --- REVERTED START ---
+    # # Combine message text with image URLs if present
+    # combined_message_text = user_message.message
+    # if user_message.image_urls:
+    #     logger.debug(f"Found image URLs in user message: {user_message.image_urls}") # DEBUGGING
+    #     image_url_texts = [f"\nImage Attached: {url}" for url in user_message.image_urls]
+    #     combined_message_text += "".join(image_url_texts)
+    #     logger.info(f"Added {len(user_message.image_urls)} image URLs to message text.")
+    # logger.debug(f"Combined message text for LLM: {combined_message_text}") # DEBUGGING
+    combined_message_text = user_message.message # Keep original message text
+    # --- REVERTED END ---
+
     single_message_history = slackify_message_thread(history_messages) or None
 
     # Always check for ACL permissions, also for documnt sets that were explicitly added
@@ -198,6 +217,60 @@ def handle_regular_answer(
         return answer
 
     try:
+        # --- DOWNLOAD AND SAVE IMAGES --- START
+        downloaded_file_descriptors: list[FileDescriptor] | None = None
+        if user_message.image_urls:
+            logger.info(f"Attempting to download and save {len(user_message.image_urls)} image(s)...")
+            saved_file_details: list[tuple[str, str]] = [] # Store (file_id, assumed_mimetype)
+            try:
+                # NOTE: This uses synchronous requests. Consider async if needed.
+                # import requests # Moved to top
+                # import base64 # Removed - Unused
+                # from onyx.file_store.file_store import get_default_file_store # Moved to top
+                # from onyx.configs.constants import FileOrigin # Moved to top
+                # from uuid import uuid4 # Moved to top
+                # from io import BytesIO # Moved to top
+
+                bot_token = client.token
+                headers = {"Authorization": f"Bearer {bot_token}"}
+
+                # Download and save one by one, using a default mimetype
+                with get_session_with_current_tenant() as db_session:
+                    file_store = get_default_file_store(db_session)
+                    for img_url in user_message.image_urls: # Iterate URLs only
+                        logger.debug(f"Downloading {img_url}")
+                        response = requests.get(img_url, headers=headers)
+                        response.raise_for_status()
+
+                        # Use default mimetype again
+                        assumed_mimetype = "image/png"
+
+                        unique_id = str(uuid4())
+                        file_store.save_file(
+                            file_name=unique_id,
+                            content=BytesIO(response.content),
+                            display_name="SlackUploadImage",
+                            file_origin=FileOrigin.CHAT_UPLOAD,
+                            file_type=assumed_mimetype,  # Use assumed mimetype
+                            commit=False,
+                        )
+                        saved_file_details.append((unique_id, assumed_mimetype))
+
+                    db_session.commit()
+
+                logger.info(f"Successfully downloaded and saved {len(saved_file_details)} image(s).")
+
+                if saved_file_details:
+                    downloaded_file_descriptors = [
+                        {"id": file_id, "type": ChatFileType.IMAGE}
+                        for file_id, _ in saved_file_details
+                    ]
+
+            except Exception as e:
+                logger.exception(f"Failed to download or save image file: {e}")
+                # Optionally notify user? For now, just log and continue without the image.
+        # --- DOWNLOAD AND SAVE IMAGES --- END
+
         # By leaving time_cutoff and favor_recent as None, and setting enable_auto_detect_filters
         # it allows the slack flow to extract out filters from the user query
         filters = BaseFilters(
@@ -223,7 +296,7 @@ def handle_regular_answer(
 
         with get_session_with_current_tenant() as db_session:
             answer_request = prepare_chat_message_request(
-                message_text=user_message.message,
+                message_text=combined_message_text, # Use original text
                 user=user,
                 persona_id=persona.id,
                 # This is not used in the Slack flow, only in the answer API
@@ -233,7 +306,9 @@ def handle_regular_answer(
                 retrieval_details=retrieval_details,
                 rerank_settings=None,  # Rerank customization supported in Slack flow
                 db_session=db_session,
+                file_descriptors=downloaded_file_descriptors, # Pass saved file descriptors
             )
+            # logger.debug(f"Prepared chat message request: {answer_request}") # DEBUGGING - Removed for now
 
         # if it's a DM or ephemeral message, answer based on private documents.
         # otherwise, answer based on public documents ONLY as to not leak information.
@@ -242,6 +317,7 @@ def handle_regular_answer(
             new_message_request=answer_request,
             onyx_user=user if can_search_over_private_docs else None,
         )
+        # logger.debug(f"Received answer from LLM stream: {answer}") # DEBUGGING - Removed for now
 
     except Exception as e:
         logger.exception(

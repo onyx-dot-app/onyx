@@ -34,6 +34,8 @@ from onyx.tools.tool_implementations.custom.custom_tool import (
 )
 from onyx.utils.logger import setup_logger
 
+from onyx.file_store.models import FileDescriptor
+
 logger = setup_logger()
 
 
@@ -50,6 +52,7 @@ def prepare_chat_message_request(
     db_session: Session,
     use_agentic_search: bool = False,
     skip_gen_ai_answer_generation: bool = False,
+    file_descriptors: list[FileDescriptor] | None = None,
 ) -> CreateChatMessageRequest:
     # Typically used for one shot flows like SlackBot or non-chat API endpoint use cases
     new_chat_session = create_chat_session(
@@ -66,7 +69,7 @@ def prepare_chat_message_request(
         chat_session_id=new_chat_session.id,
         parent_message_id=None,  # It's a standalone chat session each time
         message=message_text,
-        file_descriptors=[],  # Currently SlackBot/answer api do not support files in the context
+        file_descriptors=file_descriptors or [],
         prompt_id=prompt.id if prompt else None,
         # Can always override the persona for the single query, if it's a normal persona
         # then it will be treated the same

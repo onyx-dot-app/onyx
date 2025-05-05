@@ -2,6 +2,9 @@ import base64
 
 
 def get_image_type_from_bytes(raw_b64_bytes: bytes) -> str:
+    """
+    Get the mime type of an image from a base64 encoded string.
+    """
     magic_number = raw_b64_bytes[:4]
 
     if magic_number.startswith(b"\x89PNG"):

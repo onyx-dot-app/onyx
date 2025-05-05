@@ -726,7 +726,7 @@ def build_request_details(
 ) -> SlackMessageInfo:
     if req.type == "events_api":
         event = cast(dict[str, Any], req.payload["event"])
-        msg = cast(str, event["text"])
+        msg = cast(str, event.get("text", ""))
         channel = cast(str, event["channel"])
         # Check for both app_mention events and messages containing bot tag
         bot_tag_id = get_onyx_bot_slack_bot_id(client.web_client)
@@ -740,6 +740,16 @@ def build_request_details(
             sender_id, client.web_client, user_cache={}
         )
         email = expert_info.email if expert_info else None
+
+        # Extract image URLs if present
+        image_urls: list[str] = []
+        if files := event.get("files"):
+            for file_info in files:
+                mimetype = file_info.get("mimetype", "")
+                # Prioritize url_private_download, fallback to url_private
+                url = file_info.get("url_private_download") or file_info.get("url_private")
+                if mimetype.startswith("image/") and url:
+                    image_urls.append(url)
 
         msg = remove_onyx_bot_tag(msg, client=client.web_client)
 
@@ -772,11 +782,14 @@ def build_request_details(
                     )
                 if sender_display_name is None:
                     sender_display_name = expert_info.email
-            thread_messages = [
-                ThreadMessage(
-                    message=msg, sender=sender_display_name, role=MessageType.USER
-                )
-            ]
+            # Create the primary ThreadMessage with text and extracted images
+            created_thread_message = ThreadMessage(
+                message=msg,
+                sender=sender_display_name,
+                role=MessageType.USER,
+                image_urls=image_urls if image_urls else None,
+            )
+            thread_messages = [created_thread_message]
 
         return SlackMessageInfo(
             thread_messages=thread_messages,
@@ -799,6 +812,9 @@ def build_request_details(
         )
         email = expert_info.email if expert_info else None
 
+        # Slash commands generally don't support file uploads directly with text
+        # If needed later, this part would require modification
+        # DEBUGGING: Log slash command message creation
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
 
         return SlackMessageInfo(
