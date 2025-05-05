@@ -17,6 +17,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from httpx_oauth.clients.google import GoogleOAuth2
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.langchain import LangchainInstrumentor
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from prometheus_fastapi_instrumentator import Instrumentator
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.starlette import StarletteIntegration
@@ -223,6 +230,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # fill up Postgres connection pools
     await warm_up_connections()
+
+    # Configure OpenTelemetry
+    resource = Resource.create(attributes={"service.name": "onyx-backend"})
+
+    trace_provider = TracerProvider(resource=resource)
+    processor = BatchSpanProcessor(OTLPSpanExporter())
+    trace_provider.add_span_processor(processor)
+    trace.set_tracer_provider(trace_provider)
+
+    # Initialize instrumentations
+    FastAPIInstrumentor.instrument_app(app)
+    LangchainInstrumentor().instrument()
 
     if not MULTI_TENANT:
         # We cache this at the beginning so there is no delay in the first telemetry
