@@ -529,7 +529,9 @@ class SlackConnector(
         batch_size: int = INDEX_BATCH_SIZE,
         num_threads: int = SLACK_NUM_THREADS,
     ) -> None:
-        self.channels = channels
+        self.channels = (
+            [channel.removeprefix("#") for channel in channels] if channels else None
+        )
         self.channel_regex_enabled = channel_regex_enabled
         self.batch_size = batch_size
         self.num_threads = num_threads
