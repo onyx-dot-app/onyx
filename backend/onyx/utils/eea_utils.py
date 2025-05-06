@@ -57,17 +57,16 @@ def is_pdf_mime_type(url):
         return False
 
 def add_metadata_to_llm(llm, generation, user, user_message, chat_session):
-    if "llmgw.eea.europa.eu" in llm.config.api_base:
-        llm._model_kwargs={
-            'metadata':{
-                "debug_langfuse": True,
-                "generation_name": generation,
-                "user_id":user.email,
-                "session_id": str(chat_session.id),
-                "trace_name": user_message.message[:200],
-                "trace_id": str(user_message.id)
-            }
+    llm._model_kwargs={
+        'metadata':{
+            "debug_langfuse": True,
+            "generation_name": generation,
+            "user_id":user.email,
+            "session_id": str(chat_session.id),
+            "trace_name": user_message.message[:200],
+            "trace_id": str(user_message.id)
         }
+    }
     return llm
 
 def score(trace, feedback):
