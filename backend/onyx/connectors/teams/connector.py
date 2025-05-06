@@ -22,6 +22,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
@@ -187,6 +188,9 @@ def _convert_thread_to_document(
         metadata={},
     )
     return doc
+
+
+class TeamsCheckpoint(ConnectorCheckpoint): ...
 
 
 class TeamsConnector(LoadConnector, PollConnector):
