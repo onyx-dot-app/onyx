@@ -79,8 +79,7 @@ env:
   HIGHSPOT_SECRET: ${{ secrets.HIGHSPOT_SECRET }}
 
   # Slack
-  DANSWER_BOT_SLACK_BOT_TOKEN: ${{ secrets.DANSWER_BOT_SLACK_BOT_TOKEN }}
-  DANSWER_BOT_SLACK_APP_TOKEN: ${{ secrets.DANSWER_BOT_SLACK_APP_TOKEN }}
+  SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
 jobs:
   connectors-check:
