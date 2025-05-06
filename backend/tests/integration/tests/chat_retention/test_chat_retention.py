@@ -43,7 +43,7 @@ def test_chat_retention(reset: None, admin_user: DATestUser) -> None:
     )
     assert len(chat_history) > 0, "Chat session should have messages"
 
-    # Wait for TTL task to run (give it ~30 seconds)
+    # Wait for TTL task to run (give it ~60 seconds)
     print("Waiting for chat retention TTL task to run...")
     max_wait_time = 60  # maximum time to wait in seconds
     start_time = time.time()
