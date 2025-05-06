@@ -19,18 +19,18 @@ def mock_slack_client() -> MagicMock:
 @pytest.fixture
 def slack_connector(
     mock_slack_client: MagicMock,
-    slack_credentials_json: OnyxStaticCredentialsProvider,
+    slack_credentials_provider: OnyxStaticCredentialsProvider,
 ) -> Generator[SlackConnector]:
     connector = SlackConnector(
         channel_regex_enabled=False,
     )
     connector.client = mock_slack_client
-    connector.set_credentials_provider(credentials_provider=slack_credentials_json)
+    connector.set_credentials_provider(credentials_provider=slack_credentials_provider)
     yield connector
 
 
 @pytest.fixture
-def slack_credentials_json() -> OnyxStaticCredentialsProvider:
+def slack_credentials_provider() -> OnyxStaticCredentialsProvider:
     return OnyxStaticCredentialsProvider(
         tenant_id=get_current_tenant_id(),
         connector_name="slack",
@@ -42,7 +42,6 @@ def slack_credentials_json() -> OnyxStaticCredentialsProvider:
 
 def test_validate_slack_connector_settings(
     slack_connector: SlackConnector,
-    slack_credentials_json: OnyxStaticCredentialsProvider,
 ) -> None:
     slack_connector.validate_connector_settings()
 
@@ -63,7 +62,6 @@ def test_validate_slack_connector_settings(
 def test_indexing_channel(
     slack_connector: SlackConnector,
     channels: list[str],
-    slack_credentials_json: OnyxStaticCredentialsProvider,
 ) -> None:
     slack_connector.channels = channels
     slim_docs_generator = slack_connector.retrieve_all_slim_documents()
