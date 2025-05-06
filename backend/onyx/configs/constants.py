@@ -445,7 +445,11 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
     VESPA_METADATA_SYNC_TASK = "vespa_metadata_sync_task"
+
+    # chat retention
     CHECK_TTL_MANAGEMENT_TASK = "check_ttl_management_task"
+    PERFORM_TTL_MANAGEMENT_TASK = "perform_ttl_management_task"
+
     AUTOGENERATE_USAGE_REPORT_TASK = "autogenerate_usage_report_task"
 
     EXPORT_QUERY_HISTORY_TASK = "export_query_history_task"
