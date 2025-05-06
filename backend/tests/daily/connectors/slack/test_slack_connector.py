@@ -52,11 +52,11 @@ def test_validate_slack_connector_settings(
         # empty
         [],
         # w/o hashtag
-        ["danswerbot"],
+        ["testing"],
         # w/ hashtag
-        ["#danswerbot"],
+        ["#testing"],
         # duplicates w/ and w/o preceding hashtag
-        ["danswerbot", "#danswerbot"],
+        ["testing", "#testing"],
     ],
 )
 def test_indexing_channel(
