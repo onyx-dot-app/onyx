@@ -52,6 +52,10 @@ def test_validate_slack_connector_settings(
     [
         # empty
         [],
+        # w/o hashtag
+        ["danswerbot"],
+        # w/ hashtag
+        ["#danswerbot"],
         # duplicates w/ and w/o preceding hashtag
         ["danswerbot", "#danswerbot"],
     ],
