@@ -68,16 +68,37 @@ def _sleep_after_rate_limit_exception(github_client: Github) -> None:
 # checkpoint state on return
 # checkpoint progress (no infinite loop)
 
+_STORED_NEXT_URL_KEY: str = ""
 
-def get_nextUrl(pag_list: PaginatedList[PullRequest | Issue]) -> str | None:
+
+def _get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
+    if "_PaginatedList__nextUrl" in pag_list.__dict__:
+        return "_PaginatedList__nextUrl"
     for key in pag_list.__dict__:
         if "__nextUrl" in key:
-            return pag_list.__dict__[key]
-    # unknown if necessary
+            return key
     for key in pag_list.__dict__:
         if "nextUrl" in key:
-            return pag_list.__dict__[key]
-    return None
+            return key
+    return ""
+
+
+def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
+    key = _get_nextUrl_key(pag_list)
+    if key:
+        global _STORED_NEXT_URL_KEY
+        _STORED_NEXT_URL_KEY = key
+    return key
+
+
+def get_nextUrl(pag_list: PaginatedList[PullRequest | Issue]) -> str | None:
+    return getattr(pag_list, _STORED_NEXT_URL_KEY) if _STORED_NEXT_URL_KEY else None
+
+
+def set_nextUrl(pag_list: PaginatedList[PullRequest | Issue], key: str) -> None:
+    if not _STORED_NEXT_URL_KEY:
+        raise ValueError("Next URL key not found")
+    setattr(pag_list, _STORED_NEXT_URL_KEY, key)
 
 
 def _paginate_until_error(
@@ -89,8 +110,9 @@ def _paginate_until_error(
 ) -> Generator[PullRequest | Issue, None, None]:
     num_objs = prev_num_objs
     pag_list = git_objs()
+    get_nextUrl_key(pag_list)
     if cursor_url:
-        pag_list.__nextUrl = cursor_url
+        set_nextUrl(pag_list, cursor_url)
     elif retrying:
         # if we are retrying, we want to skip the objects retrieved
         # over previous calls. Unfortunately, this WILL retrieve all
