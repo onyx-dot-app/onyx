@@ -14,7 +14,8 @@ class PermissionType(str, Enum):
 class GoogleDrivePermissionDetails(BaseModel):
     # this is "file", "member", etc.
     # different from the `type` field within `GoogleDrivePermission`
-    permission_type: str
+    # Sometimes can be not, although not sure why...
+    permission_type: str | None
     # this is "reader", "writer", "owner", etc.
     role: str
     # this is the id of the parent permission
@@ -25,24 +26,37 @@ class GoogleDrivePermissionDetails(BaseModel):
 
 class GoogleDrivePermission(BaseModel):
     id: str
-    email_address: str  # groups are also represented as email addresses within Drive
+    # groups are also represented as email addresses within Drive
+    # will be None for domain/global permissions
+    email_address: str | None
     type: PermissionType
     domain: str | None  # only applies to domain permissions
-    permission_details: GoogleDrivePermissionDetails
+    permission_details: GoogleDrivePermissionDetails | None
 
     @classmethod
     def from_drive_permission(
         cls, drive_permission: dict[str, Any]
     ) -> "GoogleDrivePermission":
+        # we seem to only get details for permissions that are inherited
+        # we can get multiple details if a permission is inherited from multiple
+        # parents
+        permission_details_list = drive_permission.get("permissionDetails", [])
+        permission_details: dict[str, Any] | None = (
+            permission_details_list[0] if permission_details_list else None
+        )
         return cls(
             id=drive_permission["id"],
-            email_address=drive_permission["emailAddress"],
+            email_address=drive_permission.get("emailAddress"),
             type=PermissionType(drive_permission["type"]),
             domain=drive_permission.get("domain"),
-            permission_details=GoogleDrivePermissionDetails(
-                permission_type=drive_permission["permissionDetails"]["type"],
-                role=drive_permission["permissionDetails"]["role"],
-                inherited_from=drive_permission["permissionDetails"]["inheritedFrom"],
-                inherited=drive_permission["permissionDetails"]["inherited"],
+            permission_details=(
+                GoogleDrivePermissionDetails(
+                    permission_type=permission_details.get("type"),
+                    role=permission_details.get("role", ""),
+                    inherited_from=permission_details.get("inheritedFrom"),
+                    inherited=permission_details.get("inherited", False),
+                )
+                if permission_details
+                else None
             ),
         )

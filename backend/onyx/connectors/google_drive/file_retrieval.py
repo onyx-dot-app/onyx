@@ -21,12 +21,15 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+PERMISSION_FULL_DESCRIPTION = (
+    "permissions(id, emailAddress, type, domain, permissionDetails)"
+)
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, permissions, modifiedTime, webViewLink, "
     "shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
-    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type, domain, permissionDetails), "
+    f"nextPageToken, files(mimeType, driveId, id, name, {PERMISSION_FULL_DESCRIPTION}, "
     "permissionIds, webViewLink, owners(emailAddress))"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"

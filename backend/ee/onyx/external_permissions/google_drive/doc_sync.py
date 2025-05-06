@@ -133,7 +133,7 @@ def _get_permissions_from_slim_doc(
         # We could fetch all ancestors of the file to get the list of folders that
         # might affect the permissions of the file, but this will get replaced with
         # an audit-log based approach in the future so not doing it now.
-        if permission.permission_details.inherited:
+        if permission.permission_details and permission.permission_details.inherited:
             if permission.permission_details.inherited_from:
                 folder_ids_to_inherit_permissions_from.add(
                     permission.permission_details.inherited_from
@@ -147,10 +147,24 @@ def _get_permissions_from_slim_doc(
             continue
 
         if permission.type == PermissionType.USER:
-            user_emails.add(permission.email_address)
+            if permission.email_address:
+                user_emails.add(permission.email_address)
+            else:
+                logger.error(
+                    "Permission is type `user` but no email address is "
+                    f"provided for document {slim_doc.id}"
+                    f"\n {permission}"
+                )
         elif permission.type == PermissionType.GROUP:
             # groups are represented as email addresses within Drive
-            group_emails.add(permission.email_address)
+            if permission.email_address:
+                group_emails.add(permission.email_address)
+            else:
+                logger.error(
+                    "Permission is type `group` but no email address is "
+                    f"provided for document {slim_doc.id}"
+                    f"\n {permission}"
+                )
         elif permission.type == PermissionType.DOMAIN and company_domain:
             if permission.domain == company_domain:
                 public = True

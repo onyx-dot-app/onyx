@@ -11,7 +11,20 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # Only include fields we need - folder ID and permissions
-FOLDER_PERMISSION_FIELDS = "nextPageToken, files(id, name, permissions(emailAddress, type, domain, permissionDetails))"
+FOLDER_PERMISSION_FIELDS = (
+    "nextPageToken, "
+    "files("
+    "id, "
+    "name, "
+    "permissions("
+    "id, "
+    "emailAddress, "
+    "type, "
+    "domain, "
+    "permissionDetails"
+    ")"
+    ")"
+)
 
 
 def get_modified_folders(

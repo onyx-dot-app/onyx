@@ -46,11 +46,13 @@ def _get_folders(
             drive_service,
             start.timestamp() if start else None,
         ):
+            # if there are no access controls on the folder, the key won't be present
+            raw_permissions = folder.get("permissions", [])
             yield FolderInfo(
                 id=folder["id"],
                 permissions=[
                     GoogleDrivePermission.from_drive_permission(permission)
-                    for permission in folder["permissions"]
+                    for permission in raw_permissions
                 ],
             )
 
@@ -193,6 +195,11 @@ def _build_onyx_groups(
         folder_member_emails: set[str] = set()
         for permission in folder.permissions:
             if permission.type == "user":
+                if permission.email_address is None:
+                    logger.warning(
+                        f"User email is None for folder {folder.id} permission {permission}"
+                    )
+                    continue
                 folder_member_emails.add(permission.email_address)
             elif permission.type == "group":
                 if permission.email_address not in group_email_to_member_emails_map:
