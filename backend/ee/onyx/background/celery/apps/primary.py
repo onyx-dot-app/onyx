@@ -1,8 +1,6 @@
 from ee.onyx.background.celery_utils import should_perform_chat_ttl_check
-from ee.onyx.background.task_name_builders import name_chat_ttl_task
 from ee.onyx.server.reporting.usage_export_generation import create_new_usage_report
 from onyx.background.celery.apps.primary import celery_app
-from onyx.background.task_utils import build_celery_task_wrapper
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.chat import delete_chat_session
@@ -16,7 +14,6 @@ logger = setup_logger()
 # mark as EE for all tasks in this file
 
 
-@build_celery_task_wrapper(name_chat_ttl_task)
 @celery_app.task(soft_time_limit=JOB_TIMEOUT)
 def perform_ttl_management_task(retention_limit_days: int, *, tenant_id: str) -> None:
     with get_session_with_current_tenant() as db_session:
