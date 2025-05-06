@@ -6,6 +6,10 @@ import pytest
 from slack_sdk import WebClient
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.slack.connector import default_msg_filter
+from onyx.connectors.slack.connector import filter_channels
+from onyx.connectors.slack.connector import get_channel_messages
+from onyx.connectors.slack.connector import get_channels
 from onyx.connectors.slack.connector import SlackConnector
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -56,51 +60,89 @@ def test_validate_slack_connector_settings(
 
 
 @pytest.mark.parametrize(
-    "channels",
+    "channel_name,expected_messages",
     [
-        # empty
-        [],
-        # w/o hashtag
-        ["testing"],
-        # w/ hashtag
-        ["#testing"],
-        # duplicates w/ and w/o preceding hashtag
-        ["testing", "#testing"],
+        ("general", set()),
+        ("#general", set()),
+        (
+            "daily-connector-test-channel",
+            set(
+                [
+                    "Hello, world!",
+                    "",
+                    "Testing again...",
+                ]
+            ),
+        ),
+        (
+            "#daily-connector-test-channel",
+            set(
+                [
+                    "Hello, world!",
+                    "",
+                    "Testing again...",
+                ]
+            ),
+        ),
     ],
 )
-def test_indexing_channel(
+def test_indexing_channels_with_message_count(
     slack_connector: SlackConnector,
-    channels: list[str],
+    channel_name: str,
+    expected_messages: set[str],
 ) -> None:
-    slack_connector.channels = channels
-    slim_docs_generator = slack_connector.retrieve_all_slim_documents()
-    for slim_docs in slim_docs_generator:
-        # just test to make sure that the generator steps through all slim-docs appropriately
-        pass
+    if not slack_connector.client:
+        raise RuntimeError("Web client must be defined")
+
+    slack_connector.channels = [channel_name]
+
+    channels = get_channels(client=slack_connector.client, get_private=False)
+    [channel_info] = filter_channels(
+        all_channels=channels,
+        channels_to_connect=slack_connector.channels,
+        regex_enabled=False,
+    )
+    channel_id = channel_info.get("id")
+    if not channel_id:
+        raise RuntimeError("Channel id not present")
+
+    actual_messages = set(
+        message_type["text"]
+        for message_types in get_channel_messages(
+            client=slack_connector.client, channel=channel_info
+        )
+        for message_type in message_types
+        if not default_msg_filter(message_type) and "text" in message_type
+    )
+
+    assert expected_messages == actual_messages
 
 
 @pytest.mark.parametrize(
-    "channels",
+    "channel_name",
     [
         # w/o hashtag
-        ["doesnt-exist"],
+        "doesnt-exist",
         # w/ hashtag
-        ["#doesnt-exist"],
-        # duplicates w/ and w/o preceding hashtag
-        ["doesnt-exist", "#doesnt-exist"],
+        "#doesnt-exist",
     ],
 )
 def test_indexing_channels_that_dont_exist(
     slack_connector: SlackConnector,
-    channels: list[str],
+    channel_name: str,
 ) -> None:
-    slack_connector.channels = channels
-    slim_docs_generator = slack_connector.retrieve_all_slim_documents()
-    while True:
-        try:
-            next(slim_docs_generator)
-        except StopIteration:
-            break
-        except ValueError:
-            # accessing a non-existent channel should raise a `ValueError`
-            continue
+    if not slack_connector.client:
+        raise RuntimeError("Web client must be defined")
+
+    slack_connector.channels = [channel_name]
+    sanitized_channel_name = channel_name.removeprefix("#")
+    with pytest.raises(
+        ValueError,
+        match=rf"Channel '{sanitized_channel_name}' not found in workspace.*",
+    ):
+        channels = get_channels(client=slack_connector.client, get_private=False)
+        filter_channels(
+            all_channels=channels,
+            channels_to_connect=slack_connector.channels,
+            regex_enabled=False,
+        )
