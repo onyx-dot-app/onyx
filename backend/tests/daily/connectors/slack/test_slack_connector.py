@@ -31,11 +31,20 @@ def slack_connector(
 
 @pytest.fixture
 def slack_credentials_provider() -> OnyxStaticCredentialsProvider:
+    CI_ENV_VAR = "SLACK_BOT_TOKEN"
+    LOCAL_ENV_VAR = "DANSWER_BOT_SLACK_BOT_TOKEN"
+
+    slack_bot_token = os.environ.get(CI_ENV_VAR, os.environ.get(LOCAL_ENV_VAR))
+    if not slack_bot_token:
+        raise RuntimeError(
+            f"No slack credentials found; either set the {CI_ENV_VAR} env-var or the {LOCAL_ENV_VAR} env-var"
+        )
+
     return OnyxStaticCredentialsProvider(
         tenant_id=get_current_tenant_id(),
         connector_name="slack",
         credential_json={
-            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+            "slack_bot_token": slack_bot_token,
         },
     )
 
@@ -68,3 +77,30 @@ def test_indexing_channel(
     for slim_docs in slim_docs_generator:
         # just test to make sure that the generator steps through all slim-docs appropriately
         pass
+
+
+@pytest.mark.parametrize(
+    "channels",
+    [
+        # w/o hashtag
+        ["doesnt-exist"],
+        # w/ hashtag
+        ["#doesnt-exist"],
+        # duplicates w/ and w/o preceding hashtag
+        ["doesnt-exist", "#doesnt-exist"],
+    ],
+)
+def test_indexing_channels_that_dont_exist(
+    slack_connector: SlackConnector,
+    channels: list[str],
+) -> None:
+    slack_connector.channels = channels
+    slim_docs_generator = slack_connector.retrieve_all_slim_documents()
+    while True:
+        try:
+            next(slim_docs_generator)
+        except StopIteration:
+            break
+        except ValueError:
+            # accessing a non-existent channel should raise a `ValueError`
+            continue
