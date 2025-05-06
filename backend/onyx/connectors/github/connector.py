@@ -69,6 +69,17 @@ def _sleep_after_rate_limit_exception(github_client: Github) -> None:
 # checkpoint progress (no infinite loop)
 
 
+def get_nextUrl(pag_list: PaginatedList[PullRequest | Issue]) -> str | None:
+    for key in pag_list.__dict__:
+        if "__nextUrl" in key:
+            return pag_list.__dict__[key]
+    # unknown if necessary
+    for key in pag_list.__dict__:
+        if "nextUrl" in key:
+            return pag_list.__dict__[key]
+    return None
+
+
 def _paginate_until_error(
     git_objs: Callable[[], PaginatedList[PullRequest | Issue]],
     cursor_url: str | None,
@@ -100,11 +111,11 @@ def _paginate_until_error(
             yield issue_or_pr
             # used to store the current cursor url in the checkpoint. This value
             # is updated during iteration over pag_list.
-            cursor_url_callback(pag_list.__nextUrl, num_objs)
+            cursor_url_callback(get_nextUrl(pag_list), num_objs)
 
             if num_objs % CURSOR_LOG_FREQUENCY == 0:
                 logger.info(
-                    f"Retrieved {num_objs} objects with current cursor url: {pag_list.__nextUrl}"
+                    f"Retrieved {num_objs} objects with current cursor url: {get_nextUrl(pag_list)}"
                 )
 
     except Exception as e:
@@ -112,7 +123,7 @@ def _paginate_until_error(
         if num_objs - prev_num_objs > 0:
             raise
 
-        if pag_list.__nextUrl is not None and not retrying:
+        if get_nextUrl(pag_list) is not None and not retrying:
             logger.info(
                 "Assuming that this error is due to cursor "
                 "expiration because no objects were retrieved. "
