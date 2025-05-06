@@ -35,7 +35,7 @@ def slack_credentials_json() -> OnyxStaticCredentialsProvider:
         tenant_id=get_current_tenant_id(),
         connector_name="slack",
         credential_json={
-            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+            "slack_bot_token": os.environ["DANSWER_BOT_SLACK_BOT_TOKEN"],
         },
     )
 
