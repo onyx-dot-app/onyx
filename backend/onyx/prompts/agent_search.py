@@ -514,9 +514,10 @@ would have to rely on another question - that you do not have access to - to lea
 Correspondingly, you should not say that these are the products of competitors of A, but rather something like \
 "Here are some products of various companies".
 
-It is critical that you provide inline citations in the format [D1], [D2], [D3], etc! Please use format [D1][D2] and NOT \
+It is critical that you provide *inline* citations in the format [D1], [D2], [D3], etc! Please use format [D1][D2] and NOT \
 [D1, D2] format if you cite two or more documents together! \
-It is important that the citation is close to the information it supports. \
+It is important that the citation is close to the information it supports, so please try not to list all citations at the \
+end of your answer. \
 Proper citations are very important to the user!
 
 Here is the document context for you to consider:
@@ -573,8 +574,9 @@ The information provided below consists of:
 {{history}}
 
 It is critical that you provide proper inline citations to documents in the format [D1], [D2], [D3], etc.! \
-It is important that the citation is close to the information it supports. If you have multiple citations that support \
-a fact, please cite for example as [D1][D3], or [D2][D4], etc. \
+It is important that the citation is close to the information it supports, so please try not to list all citations at the \
+end of your answer unless absolutely needed. \
+If you have multiple citations that support a fact, please cite for example as [D1][D3], or [D2][D4], etc. \
 Feel free to also cite sub-questions in addition to documents, but make sure that you have documents cited with the \
 sub-question citation. If you want to cite both a document and a sub-question, please use [D1][Q3], or [D2][D7][Q4], etc. \
 Again, please NEVER cite sub-questions without a document citation! Proper citations are very important for the user!
@@ -625,8 +627,9 @@ The information provided below consists of a number of documents that were deeme
 
 Again, you should be sure that the answer is supported by the information provided!
 
-It is critical that you provide proper inline citations to documents in the format [D1], [D2], [D3], etc! \
-It is important that the citation is close to the information it supports. \
+It is critical that you provide proper *inline* citations to documents in the format [D1], [D2], [D3], etc! \
+It is important that each citation is close to the information it supports! So please try not to list all citations at the \
+end of your answer unless absolutely needed. \
 If you have multiple citations, please cite for example as [D1][D3], or [D2][D4], etc. \
 Citations are very important for the user!
 
