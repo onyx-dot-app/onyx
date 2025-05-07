@@ -67,7 +67,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import parallel_yield
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
-from onyx.utils.threadpool_concurrency import run_with_timeout
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 logger = setup_logger()
@@ -440,9 +439,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             logger.debug(f"Getting root folder id for user {user_email}")
             # default is ~17mins of retries, don't do that here for cases so we don't
             # waste 17mins everytime we run into a user without access to drive APIs
-            retry_builder(tries=3, delay=1)(
-                lambda: run_with_timeout(30, get_root_folder_id, drive_service)
-            )()
+            retry_builder(tries=3, delay=1)(get_root_folder_id)(drive_service)
         except HttpError as e:
             if e.status_code == 401:
                 # fail gracefully, let the other impersonations continue
@@ -455,20 +452,20 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 curr_stage.stage = DriveRetrievalStage.DONE
                 return
             raise
-        except TimeoutError:
-            logger.warning(
-                f"User '{user_email}' timed out when trying to access the drive APIs."
-            )
-            # mark this user as done so we don't try to retrieve anything for them
-            # again
-            curr_stage.stage = DriveRetrievalStage.DONE
-            return
         except RefreshError as e:
             logger.warning(
                 f"User '{user_email}' could not refresh their token. Error: {e}"
             )
             # mark this user as done so we don't try to retrieve anything for them
             # again
+            yield RetrievedDriveFile(
+                completion_stage=DriveRetrievalStage.DONE,
+                drive_file={
+                    "refresh_creds_error": f"Error refreshing credentials for user {user_email}"
+                },
+                user_email=user_email,
+                error=e,
+            )
             curr_stage.stage = DriveRetrievalStage.DONE
             return
         # if we are including my drives, try to get the current user's my
@@ -620,7 +617,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         sorted_drive_ids, sorted_folder_ids = self._determine_retrieval_ids(
             checkpoint, is_slim, DriveRetrievalStage.MY_DRIVE_FILES
         )
-        all_drive_ids = set(sorted_drive_ids)
 
         # Setup initial completion map on first connector run
         for email in all_org_emails:
@@ -630,8 +626,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             checkpoint.completion_map[email] = StageCompletion(
                 stage=DriveRetrievalStage.START,
                 completed_until=0,
-                processed_drive_ids=all_drive_ids
-                - self._get_all_drives_for_user(email),
+                processed_drive_ids=set(),
             )
 
         # we've found all users and drives, now time to actually start
