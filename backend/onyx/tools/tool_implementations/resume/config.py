@@ -1,0 +1,5 @@
+minio_access_key = '0oEhREGxtTdD9ppLUqGK'
+minio_secret_key = 'nrwNSu3NGDVu57CvSrazKFlTZ8i2oDY4UqUKsPkl'
+minio_host = 'dev.duc-smartsearch.ru'
+minio_port = '9000'
+bucket_name = 'resume'

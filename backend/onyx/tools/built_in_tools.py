@@ -19,6 +19,7 @@ from onyx.tools.tool_implementations.langflow.langflow_tool import LangflowTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool import Tool
 from onyx.utils.logger import setup_logger
+from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool
 
 logger = setup_logger()
 
@@ -51,6 +52,12 @@ BUILT_IN_TOOLS: list[InCodeToolInfo] = [
         description="Инструмент Langflow",
         in_code_tool_id=LangflowTool.__name__,
         display_name=LangflowTool._DISPLAY_NAME
+    ),
+    InCodeToolInfo(
+        cls=ResumeTool,
+        description="Инструмент резюме",
+        in_code_tool_id=ResumeTool.__name__,
+        display_name=ResumeTool._DISPLAY_NAME
     ),
     # don't show the InternetSearchTool as an option if BING_API_KEY is not available
     *(
