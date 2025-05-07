@@ -1,4 +1,5 @@
 import os
+import time
 from collections.abc import Generator
 from unittest.mock import MagicMock
 
@@ -6,12 +7,11 @@ import pytest
 from slack_sdk import WebClient
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
-from onyx.connectors.slack.connector import default_msg_filter
-from onyx.connectors.slack.connector import filter_channels
-from onyx.connectors.slack.connector import get_channel_messages
-from onyx.connectors.slack.connector import get_channels
+from onyx.connectors.models import Document
+from onyx.connectors.models import TextSection
 from onyx.connectors.slack.connector import SlackConnector
 from shared_configs.contextvars import get_current_tenant_id
+from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
 
 @pytest.fixture
@@ -70,6 +70,7 @@ def test_validate_slack_connector_settings(
                 [
                     "Hello, world!",
                     "",
+                    "Reply!",
                     "Testing again...",
                 ]
             ),
@@ -80,6 +81,7 @@ def test_validate_slack_connector_settings(
                 [
                     "Hello, world!",
                     "",
+                    "Reply!",
                     "Testing again...",
                 ]
             ),
@@ -91,30 +93,28 @@ def test_indexing_channels_with_message_count(
     channel_name: str,
     expected_messages: set[str],
 ) -> None:
+    slack_connector.channels = [channel_name]
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    slack_connector.channels = [channel_name]
-
-    channels = get_channels(client=slack_connector.client, get_private=False)
-    [channel_info] = filter_channels(
-        all_channels=channels,
-        channels_to_connect=slack_connector.channels,
-        regex_enabled=False,
+    docs = load_everything_from_checkpoint_connector(
+        connector=slack_connector,
+        start=0.0,
+        end=time.time(),
     )
-    channel_id = channel_info.get("id")
-    if not channel_id:
-        raise RuntimeError("Channel id not present")
 
-    actual_messages = set(
-        message_type["text"]
-        for message_types in get_channel_messages(
-            client=slack_connector.client, channel=channel_info
+    messages: list[str] = []
+
+    for doc_or_error in docs:
+        if not isinstance(doc_or_error, Document):
+            raise RuntimeError(doc_or_error)
+        messages.extend(
+            section.text
+            for section in doc_or_error.sections
+            if isinstance(section, TextSection)
         )
-        for message_type in message_types
-        if not default_msg_filter(message_type) and "text" in message_type
-    )
 
+    actual_messages = set(messages)
     assert expected_messages == actual_messages
 
 
@@ -131,18 +131,17 @@ def test_indexing_channels_that_dont_exist(
     slack_connector: SlackConnector,
     channel_name: str,
 ) -> None:
+    slack_connector.channels = [channel_name]
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    slack_connector.channels = [channel_name]
     sanitized_channel_name = channel_name.removeprefix("#")
     with pytest.raises(
         ValueError,
         match=rf"Channel '{sanitized_channel_name}' not found in workspace.*",
     ):
-        channels = get_channels(client=slack_connector.client, get_private=False)
-        filter_channels(
-            all_channels=channels,
-            channels_to_connect=slack_connector.channels,
-            regex_enabled=False,
+        load_everything_from_checkpoint_connector(
+            connector=slack_connector,
+            start=0.0,
+            end=time.time(),
         )
