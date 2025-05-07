@@ -905,22 +905,25 @@ def test_normalize_record() -> None:
             assert len(parent_ids) == 1
 
 
-# def _get_child_records_by_id_query(
-#     object_id: str, sf_type: str, child_relationships: list[str], relationships_to_fields: dict[str, list[str]]
-# ) -> str:
-#     """Returns a SOQL query given the object id, type and child relationships."""
-#     query = f"SELECT Id,"
-#     for child_relationship in child_relationships:
-#         # TODO(rkuo): what happens if there is a very large list of child records. is that possible
-#         # FIELDS(ALL) can include binary fields, so don't use that
-#         # FIELDS(CUSTOM) can include aggregate queries, so don't use that
-#         fields = relationships_to_fields[child_relationship]
-#         fields_fragment = ",".join(fields)
-#         query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT 10), "
+def _get_child_records_by_id_query(
+    object_id: str,
+    sf_type: str,
+    child_relationships: list[str],
+    relationships_to_fields: dict[str, list[str]],
+) -> str:
+    """Returns a SOQL query given the object id, type and child relationships."""
+    query = "SELECT Id,"
+    for child_relationship in child_relationships:
+        # TODO(rkuo): what happens if there is a very large list of child records. is that possible
+        # FIELDS(ALL) can include binary fields, so don't use that
+        # FIELDS(CUSTOM) can include aggregate queries, so don't use that
+        fields = relationships_to_fields[child_relationship]
+        fields_fragment = ",".join(fields)
+        query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT 10), "
 
-#     query = query.rstrip(", ")
-#     query += f" FROM {sf_type} WHERE Id = '{object_id}'"
-#     return query
+    query = query.rstrip(", ")
+    query += f" FROM {sf_type} WHERE Id = '{object_id}'"
+    return query
 
 
 # def test_salesforce_connector_single() -> None:
