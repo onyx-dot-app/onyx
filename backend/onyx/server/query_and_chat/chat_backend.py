@@ -236,6 +236,7 @@ def get_chat_session(
     )
 
     return ChatSessionDetailResponse(
+        user_id=chat_session.user_id,
         chat_session_id=session_id,
         description=chat_session.description,
         persona_id=chat_session.persona_id,
