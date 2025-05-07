@@ -715,7 +715,7 @@ def get_connector_credential_pairs_with_user_files(
     )
 
 
-def delete_userfile_for_cc_pair__no_commit(
+def delete_userfiles_for_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
 ) -> None:

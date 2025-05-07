@@ -29,7 +29,7 @@ from onyx.db.connector_credential_pair import (
     delete_connector_credential_pair__no_commit,
 )
 from onyx.db.connector_credential_pair import (
-    delete_userfile_for_cc_pair__no_commit,
+    delete_userfiles_for_cc_pair__no_commit,
 )
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.connector_credential_pair import get_connector_credential_pairs
@@ -471,8 +471,8 @@ def monitor_connector_deletion_taskset(
             # related to the deleted DocumentByConnectorCredentialPair during commit
             db_session.expire(cc_pair)
 
-            # delete the userfile for the cc_pair
-            delete_userfile_for_cc_pair__no_commit(
+            # delete all userfiles for the cc_pair
+            delete_userfiles_for_cc_pair__no_commit(
                 db_session=db_session,
                 cc_pair_id=cc_pair_id,
             )
