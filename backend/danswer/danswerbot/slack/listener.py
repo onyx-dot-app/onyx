@@ -28,13 +28,13 @@ from danswer.danswerbot.slack.handlers.handle_buttons import handle_followup_but
 from danswer.danswerbot.slack.handlers.handle_buttons import (
     handle_followup_resolved_button,
 )
-from danswer.danswerbot.slack.handlers.handle_buttons import handle_persona_selection
 from danswer.danswerbot.slack.handlers.handle_buttons import handle_slack_feedback
 from danswer.danswerbot.slack.handlers.handle_message import handle_message
 from danswer.danswerbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
 from danswer.danswerbot.slack.handlers.handle_message import schedule_feedback_reminder
+from danswer.danswerbot.slack.handlers.handle_modal import handle_modal_submission
 from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.danswerbot.slack.utils import ChannelIdAdapter
@@ -305,6 +305,7 @@ def build_request_details(
         msg = req.payload["text"]
         sender = req.payload["user_id"]
         command = req.payload["command"]
+        trigger_id = req.payload["trigger_id"]
 
         single_msg = ThreadMessage(message=msg, sender=None, role=MessageType.USER)
 
@@ -317,6 +318,7 @@ def build_request_details(
             is_bot_msg=True,
             is_bot_dm=False,
             command=command,
+            trigger_id=trigger_id,
         )
 
     raise RuntimeError("Programming fault, this should never happen.")
@@ -421,9 +423,6 @@ def action_routing(req: SocketModeRequest, client: SocketModeClient) -> None:
             return handle_followup_resolved_button(req, client, immediate=True)
         elif action["action_id"] == FOLLOWUP_BUTTON_RESOLVED_ACTION_ID:
             return handle_followup_resolved_button(req, client, immediate=False)
-        elif action["action_id"].startswith("set_persona_"):
-            # Persona selection
-            return handle_persona_selection(req, client)
 
 
 def view_routing(req: SocketModeRequest, client: SocketModeClient) -> None:
@@ -442,6 +441,9 @@ def process_slack_event(client: SocketModeClient, req: SocketModeRequest) -> Non
             if req.payload.get("type") == "block_actions":
                 return action_routing(req, client)
             elif req.payload.get("type") == "view_submission":
+                # Handle modal submissions
+                if req.payload["view"]["callback_id"] == "persona_selection_modal":
+                    handle_modal_submission(client.web_client, req.payload)
                 return view_routing(req, client)
         elif req.type == "events_api" or req.type == "slash_commands":
             return process_message(req, client)

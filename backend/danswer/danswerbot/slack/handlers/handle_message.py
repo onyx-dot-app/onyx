@@ -49,6 +49,8 @@ from danswer.db.models import SlackBotResponseType
 from danswer.db.persona import fetch_persona_by_id
 from danswer.db.persona import get_persona_with_docset_and_prompts
 from danswer.db.persona import get_personas
+from danswer.db.users import add_slack_persona_for_user
+from danswer.db.users import add_user_slack_persona
 from danswer.db.users import fetch_user_slack_persona
 from danswer.llm.answering.prompts.citations_prompt import (
     compute_max_document_tokens_for_persona,
@@ -230,7 +232,11 @@ def handle_message(
                 db_session=db_session, sender_id=sender_id
             )
             if user_slack_persona:
-                slack_persona_id = user_slack_persona.persona_id or None
+                slack_persona_id = (
+                    user_slack_persona.persona_id
+                    if user_slack_persona.persona_id is not None
+                    else None
+                )
                 persona = get_persona_with_docset_and_prompts(
                     persona_id=slack_persona_id, db_session=db_session
                 )
@@ -245,7 +251,7 @@ def handle_message(
         if command == "/personas":
             with Session(get_sqlalchemy_engine()) as db_session:
                 personas = get_personas(
-                    user_id=None, db_session=db_session, include_default=False
+                    user_id=None, db_session=db_session, include_default=True
                 )
 
             if not personas:
@@ -257,40 +263,124 @@ def handle_message(
                 )
                 return
 
-            persona_buttons = [
-                {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": persona.name},
-                    "value": str(persona.id),
-                    "action_id": f"set_persona_{persona.id}",
-                }
-                for persona in personas
-            ]
+            # Check if a persona name was provided in the command
+            if (
+                message_info.thread_messages
+                and message_info.thread_messages[0].message.strip()
+            ):
+                persona_name = message_info.thread_messages[0].message.strip()
+                matching_personas = [
+                    p for p in personas if p.name.lower() == persona_name.lower()
+                ]
 
-            blocks = [
-                {
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": "Here are the available personas. Click on one to set it:",
-                    },
-                }
-            ]
+                if matching_personas:
+                    # Found exact match, set it directly
+                    persona = matching_personas[0]
+                    try:
+                        user_slack_persona = fetch_user_slack_persona(
+                            db_session=db_session, sender_id=sender_id
+                        )
+                        if user_slack_persona:
+                            add_slack_persona_for_user(
+                                db_session=db_session,
+                                persona=persona,
+                                user_slack_persona=user_slack_persona,
+                            )
+                        else:
+                            add_user_slack_persona(
+                                db_session=db_session,
+                                sender_id=sender_id,
+                                persona=persona,
+                            )
+                        respond_in_thread(
+                            client=client,
+                            channel=channel,
+                            text=f"Persona '{persona.name}' has been set!",
+                            thread_ts=message_ts_to_respond_to,
+                        )
+                        return
+                    except Exception as e:
+                        logger.error(f"Error setting persona: {e}")
+                        respond_in_thread(
+                            client=client,
+                            channel=channel,
+                            text="Sorry, there was an error setting your persona. Please try again.",
+                            thread_ts=message_ts_to_respond_to,
+                        )
+                        return
 
-            for i in range(0, len(persona_buttons), MAX_BUTTONS_PER_BLOCK):
-                blocks.append(
+            sorted_personas = sorted(personas, key=lambda x: x.name.lower())
+
+            # Create select menu options for all personas
+            select_options = []
+            for persona in sorted_personas:
+                select_options.append(
                     {
-                        "type": "actions",
-                        "elements": persona_buttons[i : i + MAX_BUTTONS_PER_BLOCK],
+                        "text": {
+                            "type": "plain_text",
+                            "text": f"{persona.name} • {persona.description}",
+                            "emoji": True,
+                        },
+                        "value": str(persona.id),
                     }
                 )
 
-            respond_in_thread(
-                client=client,
-                channel=channel,
-                blocks=blocks,
-                thread_ts=message_ts_to_respond_to,
-            )
+            try:
+                if not message_info.trigger_id:
+                    raise ValueError("No trigger_id available to open modal")
+
+                client.views_open(
+                    trigger_id=message_info.trigger_id,
+                    view={
+                        "type": "modal",
+                        "callback_id": "persona_selection_modal",
+                        "private_metadata": channel,  # Pass channel ID to modal
+                        "title": {
+                            "type": "plain_text",
+                            "text": "Select a Persona",
+                            "emoji": True,
+                        },
+                        "submit": {
+                            "type": "plain_text",
+                            "text": "Select",
+                            "emoji": True,
+                        },
+                        "close": {
+                            "type": "plain_text",
+                            "text": "Cancel",
+                            "emoji": True,
+                        },
+                        "blocks": [
+                            {
+                                "type": "input",
+                                "block_id": "persona_selection",
+                                "element": {
+                                    "type": "static_select",
+                                    "placeholder": {
+                                        "type": "plain_text",
+                                        "text": "Choose a persona",
+                                        "emoji": True,
+                                    },
+                                    "options": select_options,
+                                    "action_id": "select_persona",
+                                },
+                                "label": {
+                                    "type": "plain_text",
+                                    "text": "Select a persona to use:",
+                                    "emoji": True,
+                                },
+                            }
+                        ],
+                    },
+                )
+            except SlackApiError as e:
+                logger.error(f"Error sending select menu: {e}")
+                respond_in_thread(
+                    client=client,
+                    channel=channel,
+                    text="Sorry, I couldn't show the persona selection menu. Please try again.",
+                    thread_ts=message_ts_to_respond_to,
+                )
             return
         elif command == "/current_persona":
             if persona_name is None:

@@ -12,3 +12,4 @@ class SlackMessageInfo(BaseModel):
     is_bot_msg: bool  # User is using /DanswerBot
     is_bot_dm: bool  # User is direct messaging to DanswerBot
     command: str | None  # Slash command used by user
+    trigger_id: str | None  # Trigger ID for opening modals
