@@ -713,3 +713,11 @@ def get_connector_credential_pairs_with_user_files(
         .distinct()
         .all()
     )
+
+
+def delete_userfile_for_cc_pair__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+) -> None:
+    stmt = delete(UserFile).where(UserFile.cc_pair_id == cc_pair_id)
+    db_session.execute(stmt)
