@@ -868,11 +868,19 @@ if __name__ == "__main__":
         channels=[slack_channel] if slack_channel else None,
     )
 
+    slack_bot_token = os.environ.get(
+        "SLACK_BOT_TOKEN", os.environ.get("DANSWER_BOT_SLACK_BOT_TOKEN")
+    )
+    if not slack_bot_token:
+        raise RuntimeError(
+            "`SLACK_BOT_TOKEN` or `DANSWER_BOT_SLACK_BOT_TOKEN` not found"
+        )
+
     provider = OnyxStaticCredentialsProvider(
         tenant_id=get_current_tenant_id(),
         connector_name="slack",
         credential_json={
-            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+            "slack_bot_token": slack_bot_token,
         },
     )
     connector.set_credentials_provider(provider)
