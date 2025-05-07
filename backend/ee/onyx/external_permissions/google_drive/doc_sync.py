@@ -5,11 +5,13 @@ from typing import Any
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
+from ee.onyx.external_permissions.google_drive.permission_retrieval import (
+    get_permissions_by_ids,
+)
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import SlimDocument
@@ -48,31 +50,20 @@ def _fetch_permissions_for_permission_ids(
         return []
 
     owner_email = permission_info.get("owner_email")
+    permission_ids = permission_info.get("permission_ids", [])
+    if not permission_ids:
+        return []
 
     drive_service = get_drive_service(
         creds=google_drive_connector.creds,
         user_email=(owner_email or google_drive_connector.primary_admin_email),
     )
 
-    # We continue on 404 or 403 because the document may not exist or the user may not have access to it
-    fetched_permissions = execute_paginated_retrieval(
-        retrieval_function=drive_service.permissions().list,
-        list_key="permissions",
-        fileId=doc_id,
-        fields="permissions(id, emailAddress, type, domain, permissionDetails),nextPageToken",
-        supportsAllDrives=True,
-        continue_on_404_or_403=True,
+    return get_permissions_by_ids(
+        drive_service=drive_service,
+        doc_id=doc_id,
+        permission_ids=permission_ids,
     )
-
-    permissions_for_doc_id = []
-    for permission in fetched_permissions:
-        google_drive_permission = GoogleDrivePermission.from_drive_permission(
-            permission
-        )
-
-        permissions_for_doc_id.append(google_drive_permission)
-
-    return permissions_for_doc_id
 
 
 def _get_permissions_from_slim_doc(

@@ -6,9 +6,13 @@ from pydantic import BaseModel
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.folder_retrieval import (
+    get_folder_permissions_by_ids,
+)
+from ee.onyx.external_permissions.google_drive.folder_retrieval import (
     get_modified_folders,
 )
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
+from ee.onyx.external_permissions.google_drive.models import PermissionType
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.google_utils.resources import AdminService
@@ -43,33 +47,29 @@ def _get_folders(
             user_email,
         )
 
-        # Check if user is admin
-        admin_service = get_admin_service(
-            google_drive_connector.creds,
-            user_email,
-        )
-        try:
-            admin_user_info = admin_service.users().get(userKey=user_email).execute()
-            is_admin = admin_user_info.get("isAdmin", False) or admin_user_info.get(
-                "isDelegatedAdmin", False
-            )
-        except HttpError:
-            # If we can't determine admin status, assume not admin
-            is_admin = False
-
         for folder in get_modified_folders(
             drive_service,
             start.timestamp() if start else None,
-            is_admin=is_admin,
         ):
-            # if there are no access controls on the folder, the key won't be present
+            folder_id = folder["id"]
+            # Check if the folder has permission IDs but no permissions
+            permission_ids = folder.get("permissionIds", [])
             raw_permissions = folder.get("permissions", [])
-            yield FolderInfo(
-                id=folder["id"],
-                permissions=[
+
+            if not raw_permissions and permission_ids:
+                # Fetch permissions using the IDs
+                permissions = get_folder_permissions_by_ids(
+                    drive_service, folder_id, permission_ids
+                )
+            else:
+                permissions = [
                     GoogleDrivePermission.from_drive_permission(permission)
                     for permission in raw_permissions
-                ],
+                ]
+
+            yield FolderInfo(
+                id=folder_id,
+                permissions=permissions,
             )
 
 
@@ -121,9 +121,11 @@ def _get_drive_members(
                 # is an admin
                 useDomainAdminAccess=is_admin,
             ):
-                if permission["type"] == "group":
+                # NOTE: don't need to check for PermissionType.ANYONE since
+                # you can't share a drive with the internet
+                if permission["type"] == PermissionType.GROUP:
                     group_emails.add(permission["emailAddress"])
-                elif permission["type"] == "user":
+                elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
         except HttpError as e:
             if e.status_code == 404:
@@ -208,16 +210,17 @@ def _build_onyx_groups(
 
     # Convert all folder permissions to onyx groups
     for folder in folder_info:
+        anyone_can_access = False
         folder_member_emails: set[str] = set()
         for permission in folder.permissions:
-            if permission.type == "user":
+            if permission.type == PermissionType.USER:
                 if permission.email_address is None:
                     logger.warning(
                         f"User email is None for folder {folder.id} permission {permission}"
                     )
                     continue
                 folder_member_emails.add(permission.email_address)
-            elif permission.type == "group":
+            elif permission.type == PermissionType.GROUP:
                 if permission.email_address not in group_email_to_member_emails_map:
                     logger.warning(
                         f"Group email {permission.email_address} for folder {folder.id} "
@@ -227,10 +230,14 @@ def _build_onyx_groups(
                 folder_member_emails.update(
                     group_email_to_member_emails_map[permission.email_address]
                 )
+            elif permission.type == PermissionType.ANYONE:
+                anyone_can_access = True
+
         onyx_groups.append(
             ExternalUserGroup(
                 id=folder.id,
                 user_emails=list(folder_member_emails),
+                gives_anyone_access=anyone_can_access,
             )
         )
 
