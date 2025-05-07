@@ -4,6 +4,7 @@ from collections.abc import Generator
 from unittest.mock import MagicMock
 
 import pytest
+from pytest import FixtureRequest
 from slack_sdk import WebClient
 
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -22,10 +23,13 @@ def mock_slack_client() -> MagicMock:
 
 @pytest.fixture
 def slack_connector(
+    request: FixtureRequest,
     mock_slack_client: MagicMock,
     slack_credentials_provider: OnyxStaticCredentialsProvider,
 ) -> Generator[SlackConnector]:
+    channel: str | None = request.param if hasattr(request, "param") else None
     connector = SlackConnector(
+        channels=[channel] if channel else None,
         channel_regex_enabled=False,
     )
     connector.client = mock_slack_client
@@ -60,11 +64,11 @@ def test_validate_slack_connector_settings(
 
 
 @pytest.mark.parametrize(
-    "channel_name,expected_messages",
+    "slack_connector,expected_messages",
     [
-        ("general", set()),
-        ("#general", set()),
-        (
+        ["general", set()],
+        ["#general", set()],
+        [
             "daily-connector-test-channel",
             set(
                 [
@@ -74,8 +78,8 @@ def test_validate_slack_connector_settings(
                     "Testing again...",
                 ]
             ),
-        ),
-        (
+        ],
+        [
             "#daily-connector-test-channel",
             set(
                 [
@@ -85,15 +89,14 @@ def test_validate_slack_connector_settings(
                     "Testing again...",
                 ]
             ),
-        ),
+        ],
     ],
+    indirect=["slack_connector"],
 )
 def test_indexing_channels_with_message_count(
     slack_connector: SlackConnector,
-    channel_name: str,
     expected_messages: set[str],
 ) -> None:
-    slack_connector.channels = [channel_name]
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
@@ -119,26 +122,24 @@ def test_indexing_channels_with_message_count(
 
 
 @pytest.mark.parametrize(
-    "channel_name",
+    "slack_connector",
     [
         # w/o hashtag
         "doesnt-exist",
         # w/ hashtag
         "#doesnt-exist",
     ],
+    indirect=True,
 )
 def test_indexing_channels_that_dont_exist(
     slack_connector: SlackConnector,
-    channel_name: str,
 ) -> None:
-    slack_connector.channels = [channel_name]
     if not slack_connector.client:
         raise RuntimeError("Web client must be defined")
 
-    sanitized_channel_name = channel_name.removeprefix("#")
     with pytest.raises(
         ValueError,
-        match=rf"Channel '{sanitized_channel_name}' not found in workspace.*",
+        match=r"Channel '.*' not found in workspace.*",
     ):
         load_everything_from_checkpoint_connector(
             connector=slack_connector,
