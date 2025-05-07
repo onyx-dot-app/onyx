@@ -460,10 +460,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             # again
             yield RetrievedDriveFile(
                 completion_stage=DriveRetrievalStage.DONE,
-                drive_file={
-                    "error_type": "refresh_creds_error",
-                    "error_message": f"Error refreshing credentials for user {user_email}",
-                },
+                drive_file={},
                 user_email=user_email,
                 error=e,
             )
