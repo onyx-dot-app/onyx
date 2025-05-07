@@ -40,7 +40,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 ITEMS_PER_PAGE = 100
-CURSOR_LOG_FREQUENCY = 100
+CURSOR_LOG_FREQUENCY = 50
 
 _MAX_NUM_RATE_LIMIT_RETRIES = 5
 
@@ -118,7 +118,7 @@ def _paginate_until_error(
             "This will retrieve all pages before the one we are resuming from, "
             "which may take a while and consume many API calls."
         )
-        pag_list = pag_list[prev_num_objs:]
+        pag_list = cast(PaginatedList[PullRequest | Issue], pag_list[prev_num_objs:])
         num_objs = 0
 
     try:
@@ -433,7 +433,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # save checkpoint with repo ids retrieved
             return checkpoint
 
-        assert checkpoint.cached_repo is not None, "No repo saved in checkpoint"
+        if checkpoint.cached_repo is None:
+            raise ValueError("No repo saved in checkpoint")
 
         # Try to access the requester - different PyGithub versions may use different attribute names
         try:
@@ -456,7 +457,10 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             repo = self.github_client.get_repo(repo_id)
 
         def cursor_url_callback(cursor_url: str | None, num_objs: int) -> None:
-            checkpoint.cursor_url = cursor_url
+            # we want to maintain the old cursor url so code after retrieval
+            # can determine that we are using the fallback cursor-based pagination strategy
+            if cursor_url:
+                checkpoint.cursor_url = cursor_url
             checkpoint.num_retrieved = num_objs
 
         # TODO: all PRs are also issues, so we should be able to _only_ get issues
@@ -527,9 +531,10 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # if we went past the start date during the loop or there are no more
             # prs to get, we move on to issues
             checkpoint.stage = GithubConnectorStage.ISSUES
+            last_cursor_url = checkpoint.cursor_url
             checkpoint.reset()
 
-            if checkpoint.cursor_url:
+            if last_cursor_url:
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
