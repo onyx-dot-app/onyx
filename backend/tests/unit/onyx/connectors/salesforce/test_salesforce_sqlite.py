@@ -5,6 +5,7 @@ import tempfile
 from collections import defaultdict
 from datetime import datetime
 from datetime import timezone
+from pathlib import Path
 
 import pytest
 from simple_salesforce import Salesforce
@@ -707,9 +708,9 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 1: Account directly in updated_ids and parent_types
     updated_ids = [_VALID_SALESFORCE_IDS[1]]  # Parent Account 2
-    parent_types = ["Account"]
+    parent_types = set("Account")
     affected_ids_by_type = defaultdict(set)
-    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+    for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
@@ -720,9 +721,9 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 2: Account with child in updated_ids
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = ["Account"]
+    parent_types = set("Account")
     affected_ids_by_type = defaultdict(set)
-    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+    for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
@@ -733,9 +734,9 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 3: Both direct and indirect affects
     updated_ids = [_VALID_SALESFORCE_IDS[1], _VALID_SALESFORCE_IDS[40]]  # Both cases
-    parent_types = ["Account"]
+    parent_types = set("Account")
     affected_ids_by_type = defaultdict(set)
-    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+    for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
@@ -750,9 +751,9 @@ def _test_get_affected_parent_ids(sf_db: OnyxSalesforceSQLite) -> None:
 
     # Test Case 4: No matches
     updated_ids = [_VALID_SALESFORCE_IDS[40]]  # Child Contact
-    parent_types = ["Opportunity"]  # Wrong type
+    parent_types = set("Opportunity")  # Wrong type
     affected_ids_by_type = defaultdict(set)
-    for parent_type, parent_id, _ in sf_db.get_affected_parent_ids_by_type(
+    for parent_type, parent_id, _ in sf_db.get_changed_parent_ids_by_type(
         updated_ids, parent_types
     ):
         affected_ids_by_type[parent_type].add(parent_id)
@@ -851,3 +852,228 @@ def test_salesforce_bulk_retrieve() -> None:
         )
 
         assert total_data_rows > 1100 and total_data_rows < 1200
+
+
+# def test_salesforce_client_sobjects():
+
+#     username = os.environ["SF_USERNAME"]
+#     password = os.environ["SF_PASSWORD"]
+#     security_token = os.environ["SF_SECURITY_TOKEN"]
+
+#     sf_client = Salesforce(
+#         username=username,
+#         password=password,
+#         security_token=security_token,
+#         domain=None,
+#     )
+
+#     # does exist
+#     record = sf_client.restful("sobjects/005bm000002bBHtAAM")
+
+#     # does exist
+#     record = sf_client.sobjects.get("005bm000002bBHtAAM")
+
+#     # doesn't exist
+#     record = sf_client.sobjects.get("01234567890ABCDEFG")
+
+
+def test_normalize_record() -> None:
+    """Test normalize record"""
+
+    expected_str = (
+        '{"Id": "001bm00000eu6n5AAA", '
+        '"LastModifiedDate": "2024-12-24T18:18:29.000Z", '
+        '"BillingStreet": "123 Nowhere Parkway", '
+        '"CreatedDate": "2024-12-24T18:18:29.000Z", '
+        '"IsDeleted": "false", '
+        '"SystemModstamp": "2024-12-24T18:18:29.000Z", '
+        '"Name": "Some Company", '
+        '"LastModifiedById": "005bm000002bBHtAAM", '
+        '"PhotoUrl": "/services/images/photo/001bm00000eu6n5AAA", '
+        '"BillingCity": "Some Town", '
+        '"CleanStatus": "Pending"}'
+    )
+    current_dir = Path(__file__).parent
+    with open(current_dir / "test_account.csv", "r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            assert len(row) == 64
+
+            normalized_str, parent_ids = OnyxSalesforceSQLite.normalize_record(row)
+            assert normalized_str == expected_str
+            assert "005bm000002bBHtAAM" in parent_ids
+            assert len(parent_ids) == 1
+
+
+# def _get_child_records_by_id_query(
+#     object_id: str, sf_type: str, child_relationships: list[str], relationships_to_fields: dict[str, list[str]]
+# ) -> str:
+#     """Returns a SOQL query given the object id, type and child relationships."""
+#     query = f"SELECT Id,"
+#     for child_relationship in child_relationships:
+#         # TODO(rkuo): what happens if there is a very large list of child records. is that possible
+#         # FIELDS(ALL) can include binary fields, so don't use that
+#         # FIELDS(CUSTOM) can include aggregate queries, so don't use that
+#         fields = relationships_to_fields[child_relationship]
+#         fields_fragment = ",".join(fields)
+#         query += f"(SELECT {fields_fragment} FROM {child_relationship} LIMIT 10), "
+
+#     query = query.rstrip(", ")
+#     query += f" FROM {sf_type} WHERE Id = '{object_id}'"
+#     return query
+
+
+# def test_salesforce_connector_single() -> None:
+#     """Test various manipulations of a single record"""
+
+#     parent_id = "001bm00000eu6n5AAA"
+#     parent_type = "Account"
+#     parent_types = [parent_type]
+
+#     username = os.environ["SF_USERNAME"]
+#     password = os.environ["SF_PASSWORD"]
+#     security_token = os.environ["SF_SECURITY_TOKEN"]
+
+#     sf_client = Salesforce(
+#         username=username,
+#         password=password,
+#         security_token=security_token,
+#         domain=None,
+#     )
+
+#     child_types: set[str] = set()
+#     parent_to_child_types: dict[str, set[str]] = {}  # map from parent to child types
+#     parent_to_child_relationships: dict[str, set[str]] = {}  # map from parent to child relationships
+#     child_to_parent_types: dict[str, set[str]] = {}  # reverse map from child to parent types
+#     child_relationship_to_queryable_fields: dict[str, list[str]] = {}
+
+#     # parent_reference_fields_by_type: dict[str, dict[str, list[str]]] = {}
+
+#     # Step 1 - make a list of all the types to download (parent + direct child + "User")
+#     logger.info(f"Parent object types: num={len(parent_types)} list={parent_types}")
+#     for parent_type_working in parent_types:
+#         child_types_working = get_children_of_sf_type(sf_client, parent_type_working)
+#         logger.debug(f"Found {len(child_types)} child types for {parent_type_working}")
+
+#         for child_type, child_relationship in child_types_working.items():
+
+#             # map parent to child type
+#             if parent_type_working not in parent_to_child_types:
+#                 parent_to_child_types[parent_type_working] = set()
+#             parent_to_child_types[parent_type_working].add(child_type)
+
+#             # map parent to child relationship
+#             if parent_type_working not in parent_to_child_relationships:
+#                 parent_to_child_relationships[parent_type_working] = set()
+#             parent_to_child_relationships[parent_type_working].add(child_relationship)
+
+#             # reverse map child to parent
+#             if child_relationship not in child_to_parent_types:
+#                 child_to_parent_types[child_type] = set()
+#             child_to_parent_types[child_type].add(parent_type_working)
+
+#             child_relationship_to_queryable_fields[child_relationship] =
+#                 _get_all_queryable_fields_of_sf_type(sf_client, child_type)
+
+#         child_types.update(list(child_types_working.keys()))
+#         logger.info(
+#             f"Child object types: parent={parent_type_working} num={len(child_types_working)} list={child_types_working.keys()}"
+#         )
+
+#     # queryable_fields_attachment = _get_all_queryable_fields_of_sf_type(sf_client, "Attachment")
+#     # queryable_fields_contact_point_email = _get_all_queryable_fields_of_sf_type(sf_client, "ContactPointEmail")
+
+#     # queryable_str = ",".join(queryable_fields_contact_point_email)
+#     queryable_fields = _get_all_queryable_fields_of_sf_type(sf_client, parent_type)
+
+#     query = _get_object_by_id_query(parent_id, parent_type, queryable_fields)
+#     result = sf_client.query(query)
+#     records = result["records"]
+#     record = records[0]
+#     assert record["attributes"]["type"] == "Account"
+
+#     time_start = time.monotonic()
+
+#     # hardcoded testing with just one parent id
+#     MAX_CHILD_TYPES_IN_QUERY = 20
+#     child_relationships: list[str] = list(parent_to_child_relationships[parent_type])
+
+#     relationship_status: dict[str, bool] = {}
+
+#     child_relationships_batch = []
+#     for child_relationship in child_relationships:
+
+#         # this is binary content, skip it
+#         if child_relationship == "Attachments":
+#             continue
+
+#         child_relationships_batch.append(child_relationship)
+#         if len(child_relationships_batch) < MAX_CHILD_TYPES_IN_QUERY:
+#             continue
+
+#         query = _get_child_records_by_id_query(parent_id,
+#                                                parent_type,
+#                                                child_relationships_batch,
+#                                                child_relationship_to_queryable_fields)
+#         print(f"{query=}")
+
+#         # sf_type = parent_type
+#         # query = (
+#         #     f"SELECT "
+#         #     f"Id, "
+#         #     f"(SELECT OwnerId,CreatedDate,Id,Name,BestTimeToContactStartTime,ActiveToDate,"
+#         #     f"EmailLatestBounceReasonText,CreatedById,LastModifiedDate,LastModifiedById,"
+#         #     f"PreferenceRank,EmailDomain,BestTimeToContactEndTime,SystemModstamp,EmailMailBox,"
+#         #     f"LastReferencedDate,UsageType,ActiveFromDate,ParentId,LastViewedDate,IsPrimary,"
+#         #     f"EmailAddress,EmailLatestBounceDateTime,IsDeleted,BestTimeToContactTimezone "
+#         #     f"FROM ContactPointEmails LIMIT 10) "
+#         #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
+#         # )
+
+#         # NOTE: Querying STANDARD and CUSTOM when there are no custom fields results in an
+#         # non-descriptive error (only root aggregation)
+#         # sf_type = parent_type
+#         # query = (
+#         #     f"SELECT "
+#         #     f"Id, "
+#         #     f"(SELECT FIELDS(STANDARD) FROM ContactPointEmails LIMIT 10) "
+#         #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
+#         # )
+
+#         # query = (
+#         #     f"SELECT "
+#         #     f"{sf_type}.Id "
+#         #     f"FROM {sf_type} WHERE Id = '{parent_id}'"
+#         # )
+#         try:
+#             result = sf_client.query(query)
+#             print(f"{result=}")
+#         except Exception:
+#             logger.exception(f"Query failed: {query=}")
+#             relationship_status[child_relationship] = False
+#         else:
+#             relationship_status[child_relationship] = True
+#         finally:
+#             child_relationships_batch.clear()
+
+#     if len(child_relationships_batch) > 0:
+#         query = _get_child_records_by_id_query(
+#             parent_id, parent_types[0], child_relationships_batch, child_relationship_to_queryable_fields
+#         )
+#         print(f"{result=}")
+
+#         try:
+#             result = sf_client.query(query)
+#             print(f"{result=}")
+#         except Exception:
+#             logger.exception(f"Query failed: {query=}")
+#             relationship_status[child_relationship] = False
+#         else:
+#             relationship_status[child_relationship] = True
+#         finally:
+#             child_relationships_batch.clear()
+
+#     time_elapsed = time.monotonic() - time_start
+#     print(f"elapsed={time_elapsed:.2f}")
+
+#     print(f"{relationship_status=}")

@@ -271,19 +271,21 @@ class OnyxSalesforceSQLite:
                 f"cache_bytes={cache_bytes}"
             )
 
-    def get_affected_parent_ids_by_type(
+    # get_changed_parent_ids_by_type_2 replaces this
+    def get_changed_parent_ids_by_type(
         self,
-        updated_ids: list[str],
-        parent_types: list[str],
+        changed_ids: list[str],
+        parent_types: set[str],
         batch_size: int = 500,
     ) -> Iterator[tuple[str, str, int]]:
         """Get IDs of objects that are of the specified parent types and are either in the
-        updated_ids or have children in the updated_ids. Yields tuples of (parent_type, affected_ids).
+        updated_ids or have children in the updated_ids. Yields tuples of (parent_type, affected_ids, num_examined).
 
-        This function has some interesting behavior ... it creates batches of id's
-        and yields back once for each parent type within that batch.
+        NOTE(rkuo): This function used to have some interesting behavior ... it created batches of id's
+        and yielded back a list once for each parent type within that batch.
 
-        NOTE(rkuo): this function queries for parent id's, but across
+        There's no need to expose the details of the internal batching to the caller, so
+        we're now yielding once per changed parent.
         """
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
@@ -294,7 +296,7 @@ class OnyxSalesforceSQLite:
 
         # SQLite typically has a limit of 999 variables
         num_examined = 0
-        updated_ids_batches = batch_list(updated_ids, batch_size)
+        updated_ids_batches = batch_list(changed_ids, batch_size)
 
         with self._conn:
             cursor = self._conn.cursor()
