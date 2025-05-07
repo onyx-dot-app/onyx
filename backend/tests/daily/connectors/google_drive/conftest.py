@@ -70,7 +70,6 @@ def get_credentials_from_env(email: str, oauth: bool) -> dict:
             _USER_TO_SERVICE_ACCOUNT_CREDENTIALS_MAP[email]
         ]
 
-    print(raw_credential_string)
     refried_credential_string = json.dumps(parse_credentials(raw_credential_string))
 
     if oauth:

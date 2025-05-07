@@ -42,9 +42,25 @@ def _get_folders(
             google_drive_connector.creds,
             user_email,
         )
+
+        # Check if user is admin
+        admin_service = get_admin_service(
+            google_drive_connector.creds,
+            user_email,
+        )
+        try:
+            admin_user_info = admin_service.users().get(userKey=user_email).execute()
+            is_admin = admin_user_info.get("isAdmin", False) or admin_user_info.get(
+                "isDelegatedAdmin", False
+            )
+        except HttpError:
+            # If we can't determine admin status, assume not admin
+            is_admin = False
+
         for folder in get_modified_folders(
             drive_service,
             start.timestamp() if start else None,
+            is_admin=is_admin,
         ):
             # if there are no access controls on the folder, the key won't be present
             raw_permissions = folder.get("permissions", [])

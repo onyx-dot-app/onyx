@@ -3,9 +3,9 @@ from datetime import datetime
 from datetime import timezone
 from typing import Any
 
-from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
@@ -18,8 +18,6 @@ from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-_PERMISSION_ID_PERMISSION_MAP: dict[str, GoogleDrivePermission] = {}
 
 
 def _get_slim_doc_generator(
@@ -43,21 +41,11 @@ def _get_slim_doc_generator(
 
 def _fetch_permissions_for_permission_ids(
     google_drive_connector: GoogleDriveConnector,
-    permission_ids: list[str],
     permission_info: dict[str, Any],
 ) -> list[GoogleDrivePermission]:
     doc_id = permission_info.get("doc_id")
     if not permission_info or not doc_id:
         return []
-
-    permissions = [
-        _PERMISSION_ID_PERMISSION_MAP[pid]
-        for pid in permission_ids
-        if pid in _PERMISSION_ID_PERMISSION_MAP
-    ]
-
-    if len(permissions) == len(permission_ids):
-        return permissions
 
     owner_email = permission_info.get("owner_email")
 
@@ -83,9 +71,6 @@ def _fetch_permissions_for_permission_ids(
         )
 
         permissions_for_doc_id.append(google_drive_permission)
-        _PERMISSION_ID_PERMISSION_MAP[google_drive_permission.id] = (
-            google_drive_permission
-        )
 
     return permissions_for_doc_id
 
@@ -99,12 +84,10 @@ def _get_permissions_from_slim_doc(
     permissions_list: list[GoogleDrivePermission] = []
     raw_permissions_list = permission_info.get("permissions", [])
     if not raw_permissions_list:
-        if permission_ids := permission_info.get("permission_ids"):
-            permissions_list = _fetch_permissions_for_permission_ids(
-                google_drive_connector=google_drive_connector,
-                permission_ids=permission_ids,
-                permission_info=permission_info,
-            )
+        permissions_list = _fetch_permissions_for_permission_ids(
+            google_drive_connector=google_drive_connector,
+            permission_info=permission_info,
+        )
         if not permissions_list:
             logger.warning(f"No permissions found for document {slim_doc.id}")
             return ExternalAccess(

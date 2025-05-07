@@ -1,3 +1,4 @@
+import copy
 import json
 import os
 from collections import defaultdict
@@ -12,6 +13,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from tests.daily.connectors.google_drive.consts_and_utils import ACCESS_MAPPING
 from tests.daily.connectors.google_drive.consts_and_utils import ADMIN_EMAIL
+from tests.daily.connectors.google_drive.consts_and_utils import PUBLIC_RANGE
 
 
 def _build_connector(
@@ -45,9 +47,9 @@ def test_gdrive_perm_sync_with_real_data(
     mock_cc_pair.connector = MagicMock()
     mock_cc_pair.connector.connector_specific_config = {}
     mock_cc_pair.credential_id = 1
-    mock_cc_pair.credential.credential_json = os.getenv(
-        "GOOGLE_SERVICE_ACCOUNT_CREDENTIALS"
-    )
+    mock_cc_pair.credential.credential_json = {}
+    mock_cc_pair.last_time_perm_sync = None
+    mock_cc_pair.last_time_external_group_sync = None
 
     # Create a mock heartbeat
     mock_heartbeat = MagicMock(spec=IndexingHeartbeatInterface)
@@ -68,7 +70,7 @@ def test_gdrive_perm_sync_with_real_data(
         return_value=_build_connector(google_drive_service_acct_connector_factory),
     ):
         # Call the function under test
-        doc_access_generator = gdrive_doc_sync(mock_cc_pair, mock_heartbeat)
+        doc_access_generator = gdrive_doc_sync(mock_cc_pair, lambda: [], mock_heartbeat)
         doc_access_list = list(doc_access_generator)
 
     # create new connector
@@ -84,27 +86,50 @@ def test_gdrive_perm_sync_with_real_data(
 
     # map group ids to emails
     group_id_to_email_mapping: dict[str, set[str]] = defaultdict(set)
+    groups_with_anyone_access: set[str] = set()
     for group in external_user_groups:
         for email in group.user_emails:
             group_id_to_email_mapping[group.id].add(email)
 
+        if group.gives_anyone_access:
+            groups_with_anyone_access.add(group.id)
+
     # Map documents to their permissions (flattening groups)
     doc_to_email_mapping: dict[str, set[str]] = {}
+    doc_to_raw_result_mapping: dict[str, set[str]] = {}
+    public_doc_ids: set[str] = set()
 
     for doc_access in doc_access_list:
         doc_id = doc_access.doc_id
-        doc_to_email_mapping[doc_id] = doc_access.external_access.external_user_emails
+        # make sure they are new sets to avoid mutating the original
+        doc_to_email_mapping[doc_id] = copy.deepcopy(
+            doc_access.external_access.external_user_emails
+        )
+        doc_to_raw_result_mapping[doc_id] = copy.deepcopy(
+            doc_access.external_access.external_user_emails
+        )
 
         for group_id in doc_access.external_access.external_user_group_ids:
             doc_to_email_mapping[doc_id].update(group_id_to_email_mapping[group_id])
+            doc_to_raw_result_mapping[doc_id].add(group_id)
+
+        if doc_access.external_access.is_public:
+            public_doc_ids.add(doc_id)
+
+        if any(
+            group_id in groups_with_anyone_access
+            for group_id in doc_access.external_access.external_user_group_ids
+        ):
+            public_doc_ids.add(doc_id)
 
     # Check permissions based on drive_id_mapping.json and ACCESS_MAPPING
     # For each document URL that exists in our mapping
     checked_files = 0
     for doc_id, emails_with_access in doc_to_email_mapping.items():
-        # Skip URLs that aren't in our mapping
+        # Skip URLs that aren't in our mapping, we don't want new stuff to interfere
+        # with the test.
         if doc_id not in url_to_id_mapping:
-            raise ValueError(f"File {doc_id} not found in drive_id_mapping.json")
+            continue
 
         file_numeric_id = url_to_id_mapping.get(doc_id)
         if file_numeric_id is None:
@@ -118,10 +143,22 @@ def test_gdrive_perm_sync_with_real_data(
             if file_numeric_id in file_ids:
                 expected_users.add(user_email)
 
+        # https://drive.google.com/file/d/1V6fOoKgA8QSTJYWPP5GVHz8WFAQIRLNB/view?usp=drivesdk
+        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
+        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
+        # https://docs.google.com/document/d/1eAaZJAqjXMZ2VvG_r04EGtn6EGcYycofdNUkDHEA8vY/edit?usp=drivesdk
+        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
+        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
+
         # Verify the permissions match
-        assert expected_users == emails_with_access, (
-            f"File {doc_id} (ID: {file_numeric_id}) should be accessible to users {expected_users} "
-            f"but is only accessible to {emails_with_access}"
-        )
+        if file_numeric_id in PUBLIC_RANGE:
+            assert (
+                doc_id in public_doc_ids
+            ), f"File {doc_id} (ID: {file_numeric_id}) should be public but is not in the public_doc_ids set"
+        else:
+            assert expected_users == emails_with_access, (
+                f"File {doc_id} (ID: {file_numeric_id}) should be accessible to users {expected_users} "
+                f"but is accessible to {emails_with_access}. Raw result: {doc_to_raw_result_mapping[doc_id]} "
+            )
 
     print(f"Checked permissions for {checked_files} files from drive_id_mapping.json")

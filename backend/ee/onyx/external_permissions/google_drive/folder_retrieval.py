@@ -11,26 +11,14 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 # Only include fields we need - folder ID and permissions
-FOLDER_PERMISSION_FIELDS = (
-    "nextPageToken, "
-    "files("
-    "id, "
-    "name, "
-    "permissions("
-    "id, "
-    "emailAddress, "
-    "type, "
-    "domain, "
-    "permissionDetails"
-    ")"
-    ")"
-)
+FOLDER_PERMISSION_FIELDS = "nextPageToken, files(id, name, permissions(id, emailAddress, type, domain, permissionDetails))"
 
 
 def get_modified_folders(
     service: Resource,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
+    is_admin: bool = False,
 ) -> Iterator[dict]:
     """
     Retrieves all folders that were modified within the specified time range.
@@ -40,6 +28,7 @@ def get_modified_folders(
         service: The Google Drive service instance
         start: The start time as seconds since Unix epoch (inclusive)
         end: The end time as seconds since Unix epoch (inclusive)
+        is_admin: Whether the user has admin access, enables useDomainAdminAccess
 
     Returns:
         An iterator yielding folder information including ID and permissions
@@ -57,6 +46,7 @@ def get_modified_folders(
         corpora="allDrives",
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
+        useDomainAdminAccess=is_admin,
         fields=FOLDER_PERMISSION_FIELDS,
         q=query,
     ):
