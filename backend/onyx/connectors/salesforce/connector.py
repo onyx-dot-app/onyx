@@ -17,6 +17,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -38,10 +39,23 @@ logger = setup_logger()
 _DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
 
 
+class SalesforceCheckpoint(ConnectorCheckpoint):
+    initial_sync_complete: bool
+    current_timestamp: SecondsSinceUnixEpoch
+
+
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     """Approach outline
 
+    Goal
+    - get data for every record of every parent object type
+    - The data should consist of the parent object record and all direct child relationship objects
+
+
     Initial sync
+    - Does a full sync, then indexes each parent object + children as a document via
+    the local sqlite db
+
     - get the first level children object types of parent object types
     - bulk export all object types to CSV
     -- NOTE: bulk exports of an object type contain parent id's, but not child id's
@@ -53,6 +67,11 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
       updated recently. The more recently updated records will not be pulled down in the query.
 
     Delta sync's
+    - delta sync's detect changes in parent objects, then perform a full sync of
+    each parent object and its children
+
+    If loading the entire db, this approach is much slower. For deltas, it works well.
+
     - query all changed records (includes children and parents)
     - extrapolate all changed parent objects
     - for each parent object, construct a query and yield the result back
