@@ -1,5 +1,4 @@
 import datetime
-from collections.abc import Iterator
 
 from googleapiclient.errors import HttpError  # type: ignore
 from pydantic import BaseModel
@@ -23,6 +22,8 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+ONE_HOUR_IN_SECONDS = 3600
+
 
 """
 Folder Permission Sync.
@@ -39,7 +40,10 @@ class FolderInfo(BaseModel):
 
 def _get_folders(
     google_drive_connector: GoogleDriveConnector, start: datetime.datetime | None
-) -> Iterator[FolderInfo]:
+) -> list[FolderInfo]:
+    all_folders: list[FolderInfo] = []
+    seen_folder_ids: set[str] = set()
+
     user_emails = google_drive_connector._get_all_user_emails()
     for user_email in user_emails:
         drive_service = get_drive_service(
@@ -47,11 +51,17 @@ def _get_folders(
             user_email,
         )
 
+        # leave some buffer
+        start_in_seconds = start.timestamp() - ONE_HOUR_IN_SECONDS if start else None
         for folder in get_modified_folders(
-            drive_service,
-            start.timestamp() if start else None,
+            service=drive_service,
+            start=start_in_seconds,
         ):
             folder_id = folder["id"]
+            if folder_id in seen_folder_ids:
+                logger.debug(f"Folder {folder_id} has already been seen. Skipping.")
+                continue
+
             # Check if the folder has permission IDs but no permissions
             permission_ids = folder.get("permissionIds", [])
             raw_permissions = folder.get("permissions", [])
@@ -67,10 +77,15 @@ def _get_folders(
                     for permission in raw_permissions
                 ]
 
-            yield FolderInfo(
-                id=folder_id,
-                permissions=permissions,
+            all_folders.append(
+                FolderInfo(
+                    id=folder_id,
+                    permissions=permissions,
+                )
             )
+            seen_folder_ids.add(folder_id)
+
+    return all_folders
 
 
 """Individual SharedDrive /My Drive Permission Sync"""
@@ -275,8 +290,8 @@ def gdrive_group_sync(
     )
 
     # Get all folder permissions
-    folder_info = list(
-        _get_folders(google_drive_connector, cc_pair.last_time_external_group_sync)
+    folder_info = _get_folders(
+        google_drive_connector, cc_pair.last_time_external_group_sync
     )
 
     # Map group emails to their members
