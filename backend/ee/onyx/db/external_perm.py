@@ -159,3 +159,11 @@ def fetch_external_groups_for_user_email_and_group_ids(
         )
     ).all()
     return list(user_ext_groups)
+
+
+def fetch_public_external_group_ids(
+    db_session: Session,
+) -> list[str]:
+    return list(
+        db_session.scalars(select(PublicExternalUserGroup.external_user_group_id)).all()
+    )
