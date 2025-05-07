@@ -461,7 +461,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             yield RetrievedDriveFile(
                 completion_stage=DriveRetrievalStage.DONE,
                 drive_file={
-                    "refresh_creds_error": f"Error refreshing credentials for user {user_email}"
+                    "error_type": "refresh_creds_error",
+                    "error_message": f"Error refreshing credentials for user {user_email}",
                 },
                 user_email=user_email,
                 error=e,
@@ -601,6 +602,14 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
+        """
+        The current implementation of the service account retrieval does some
+        initial setup work using the primary admin email, then runs MAX_DRIVE_WORKERS
+        concurrent threads, each of which impersonates a different user and retrieves
+        files for that user. Technically, the actual work each thread does is "yield the
+        next file retrieved by the user", at which point it returns to the thread pool;
+        see parallel_yield for more details.
+        """
         if checkpoint.completion_stage == DriveRetrievalStage.START:
             checkpoint.completion_stage = DriveRetrievalStage.USER_EMAILS
 
