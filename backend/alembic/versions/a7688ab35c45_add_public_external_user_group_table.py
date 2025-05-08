@@ -23,8 +23,7 @@ def upgrade() -> None:
         sa.Column("cc_pair_id", sa.Integer(), nullable=False),
         sa.PrimaryKeyConstraint("external_user_group_id", "cc_pair_id"),
         sa.ForeignKeyConstraint(
-            ["cc_pair_id"],
-            ["connector_credential_pair.id"],
+            ["cc_pair_id"], ["connector_credential_pair.id"], ondelete="CASCADE"
         ),
     )
 

@@ -2379,7 +2379,7 @@ class PublicExternalUserGroup(Base):
 
     external_user_group_id: Mapped[str] = mapped_column(String, primary_key=True)
     cc_pair_id: Mapped[int] = mapped_column(
-        ForeignKey("connector_credential_pair.id"), primary_key=True
+        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"), primary_key=True
     )
 
 
