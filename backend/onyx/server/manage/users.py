@@ -44,7 +44,7 @@ from onyx.configs.app_configs import VALID_EMAIL_DOMAINS
 from onyx.configs.constants import AuthType
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.db.api_key import is_api_key_email_address
-from onyx.db.auth import get_total_users_count
+from onyx.db.auth import get_live_users_count
 from onyx.db.engine import get_session
 from onyx.db.models import AccessToken
 from onyx.db.models import User
@@ -343,7 +343,7 @@ def bulk_invite_users(
         logger.info("Registering tenant users")
         fetch_ee_implementation_or_noop(
             "onyx.server.tenants.billing", "register_tenant_users", None
-        )(tenant_id, get_total_users_count(db_session))
+        )(tenant_id, get_live_users_count(db_session))
 
         return number_of_invited_users
     except Exception as e:
@@ -379,7 +379,7 @@ def remove_invited_user(
         if MULTI_TENANT and not DEV_MODE:
             fetch_ee_implementation_or_noop(
                 "onyx.server.tenants.billing", "register_tenant_users", None
-            )(tenant_id, get_total_users_count(db_session))
+            )(tenant_id, get_live_users_count(db_session))
     except Exception:
         logger.error(
             "Request to update number of seats taken in control plane failed. "
