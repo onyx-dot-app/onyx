@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import cast
+from typing import cast, Any
 
 import pytz
 import timeago  # type: ignore
@@ -561,17 +561,30 @@ def build_follow_up_resolved_blocks(
 def build_slack_response_blocks(
     answer: ChatOnyxBotResponse,
     message_info: SlackMessageInfo,
-    channel_conf: ChannelConfig | None,
+    channel_conf: dict[str, Any] | None, 
     use_citations: bool,
     feedback_reminder_id: str | None,
     skip_ai_feedback: bool = False,
     offer_ephemeral_publication: bool = False,
     expecting_search_result: bool = False,
     skip_restated_question: bool = False,
+    response_type: str | None = None, 
 ) -> list[Block]:
     """
     This function is a top level function that builds all the blocks for the Slack response.
     It also handles combining all the blocks together.
+    
+    Args:
+        answer: The chat response from OnyxBot
+        message_info: Information about the Slack message
+        channel_conf: Configuration for the channel or shortcut
+        use_citations: Whether to include citations
+        feedback_reminder_id: ID for the feedback reminder
+        skip_ai_feedback: Whether to skip AI feedback buttons
+        offer_ephemeral_publication: Whether to offer publishing ephemeral messages
+        expecting_search_result: Whether search results are expected
+        skip_restated_question: Whether to skip restating the question
+        response_type: Type of response format (citations, summary, bullets, etc.)
     """
     # If called with the OnyxBot slash command, the question is lost so we have to reshow it
     if not skip_restated_question:
@@ -581,19 +594,35 @@ def build_slack_response_blocks(
     else:
         restate_question_block = []
 
-    if expecting_search_result:
-        answer_blocks = _build_qa_response_blocks(
-            answer=answer,
-        )
-
-    else:
+    if response_type == "summary":
         answer_blocks = cast(
             list[Block],
             _build_answer_blocks(
                 answer=answer,
-                fallback_answer="Sorry, I was unable to generate an answer.",
+                fallback_answer="Sorry, I was unable to generate a summary.",
             ),
         )
+        use_citations = False
+        document_blocks = []
+    elif response_type == "bullets":
+        answer_text = answer.answer or "Sorry, I was unable to generate a response."
+        bullet_points = _convert_text_to_bullets(answer_text)
+        answer_blocks = [
+            SectionBlock(text=MarkdownText(text=bullet_points))
+        ]
+    else:  
+        if expecting_search_result:
+            answer_blocks = _build_qa_response_blocks(
+                answer=answer,
+            )
+        else:
+            answer_blocks = cast(
+                list[Block],
+                _build_answer_blocks(
+                    answer=answer,
+                    fallback_answer="Sorry, I was unable to generate an answer.",
+                ),
+            )
 
     web_follow_up_block = []
     if channel_conf and channel_conf.get("show_continue_in_web_ui"):
@@ -647,7 +676,8 @@ def build_slack_response_blocks(
     if use_citations and answer.citations:
         citations_blocks = _build_citations_blocks(answer)
     else:
-        document_blocks = _priority_ordered_documents_blocks(answer)
+        if response_type not in ["summary"]:
+            document_blocks = _priority_ordered_documents_blocks(answer)
 
     citations_divider = [DividerBlock()] if citations_blocks else []
     buttons_divider = [DividerBlock()] if web_follow_up_block or follow_up_block else []

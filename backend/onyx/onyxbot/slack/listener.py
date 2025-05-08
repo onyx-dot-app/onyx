@@ -6,6 +6,7 @@ import threading
 import time
 from collections.abc import Callable
 from contextvars import Token
+import json
 from threading import Event
 from types import FrameType
 from typing import Any
@@ -50,7 +51,7 @@ from onyx.db.slack_bot import fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.natural_language_processing.search_nlp_models import warm_up_bi_encoder
-from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel
+from onyx.onyxbot.slack.config import get_slack_channel_config_for_bot_and_channel, get_slack_shortcut_config_for_bot_and_callback
 from onyx.onyxbot.slack.config import MAX_TENANTS_PER_POD
 from onyx.onyxbot.slack.config import TENANT_ACQUISITION_INTERVAL
 from onyx.onyxbot.slack.config import TENANT_HEARTBEAT_EXPIRATION
@@ -83,6 +84,9 @@ from onyx.onyxbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
 from onyx.onyxbot.slack.handlers.handle_message import schedule_feedback_reminder
+from onyx.onyxbot.slack.handlers.handle_shortcut_modal_submission import (
+    handle_shortcut_modal_submission
+)
 from onyx.onyxbot.slack.models import SlackMessageInfo
 from onyx.onyxbot.slack.utils import check_message_limit
 from onyx.onyxbot.slack.utils import decompose_action_id
@@ -812,6 +816,80 @@ def build_request_details(
             is_bot_msg=True,
             is_bot_dm=False,
         )
+    elif req.type == "interactive":
+        payload = req.payload
+        
+        # Handle shortcuts only with messages
+        if payload.get("type") == "message_action":
+            user_id = payload.get("user", {}).get("id")
+            
+            # Get info about the user who triggered the shortcut
+            expert_info = expert_info_from_slack_id(
+                user_id, client.web_client, user_cache={}
+            )
+            email = expert_info.email if expert_info else None
+            
+            # Message shortcut - has message context
+            channel = payload.get("channel", {}).get("id")
+            message = payload.get("message", {})
+            msg = message.get("text", "")
+            message_ts = message.get("ts")
+            thread_ts = message.get("thread_ts")  # This can be None if not in a thread
+            
+            msg = remove_onyx_bot_tag(msg, client=client.web_client)
+
+            if DANSWER_BOT_REPHRASE_MESSAGE:
+                logger.info(f"Rephrasing Slack message. Original message: {msg}")
+                try:
+                    msg = rephrase_slack_message(msg)
+                    logger.info(f"Rephrased message: {msg}")
+                except Exception as e:
+                    logger.error(f"Error while trying to rephrase the Slack message: {e}")
+            else:
+                logger.info(f"Received Slack message: {msg}")
+
+            # If thread_ts is None, use message_ts as thread_ts to ensure replies go to a thread
+            if thread_ts is None:
+                thread_ts = message_ts
+            
+            # Check if the message is already in a thread
+            if thread_ts != message_ts and thread_ts is not None:
+                thread_messages = read_slack_thread(
+                    channel=channel, thread=thread_ts, client=client.web_client
+                )
+                logger.info(f"Readed {len(thread_messages)} messages from {thread_ts}: {thread_messages}")
+            else:
+                # Not in a thread, so we just use the single message
+                logger.info(f"Only one message in thread {thread_ts}")
+                sender_display_name = None
+                if expert_info:
+                    sender_display_name = expert_info.display_name
+                    if sender_display_name is None:
+                        sender_display_name = (
+                            f"{expert_info.first_name} {expert_info.last_name}"
+                            if expert_info.last_name
+                            else expert_info.first_name
+                        )
+                    if sender_display_name is None:
+                        sender_display_name = expert_info.email
+                thread_messages = [
+                    ThreadMessage(
+                        message=msg, sender=sender_display_name, role=MessageType.USER
+                    )
+                ]
+            
+            return SlackMessageInfo(
+                thread_messages=thread_messages,
+                channel_to_respond=channel,
+                msg_to_respond=cast(str, message_ts or thread_ts),
+                thread_to_respond=cast(str, thread_ts or message_ts),
+                sender_id=user_id,
+                email=email,
+                bypass_filters=True,  # Shortcuts bypass filters
+                is_bot_msg=False,
+                is_bot_dm=payload.get("channel", {}).get("is_im", False),
+                is_shortcut=True,
+            )
 
     raise RuntimeError("Programming fault, this should never happen.")
 
@@ -883,6 +961,148 @@ def process_message(
             if notify_no_answer:
                 apologize_for_fail(details, client)
 
+def process_shortcut(
+    req: SocketModeRequest,
+    client: TenantSocketModeClient,
+    respond_every_channel: bool = DANSWER_BOT_RESPOND_EVERY_CHANNEL,
+    notify_no_answer: bool = NOTIFY_SLACKBOT_NO_ANSWER,
+) -> None:
+    """
+    Process a shortcut interaction from Slack.
+    This function handles message shortcuts for OnyxBot by opening a modal dialog
+    where users can input or edit their prompt.
+    """
+    tenant_id = get_current_tenant_id()
+    callback_id = req.payload.get("callback_id")
+    shortcut_type = req.payload.get("type")
+    trigger_id = req.payload.get("trigger_id")
+    
+    logger.debug(
+        f"Received Slack shortcut with callback_id: '{callback_id}' for tenant {tenant_id}"
+    )
+
+    # Extract message context if this is a message shortcut
+    channel_id = req.payload.get("channel", {}).get("id")
+    message = req.payload.get("message", {})
+    message_text = message.get("text", "")
+    message_ts = message.get("ts")
+    thread_ts = message.get("thread_ts") or message_ts  # Use message_ts if not in a thread
+    user_id = req.payload.get("user", {}).get("id")
+    
+    # Get message context into a format we can store for later use
+    message_context = {
+        "channel_id": channel_id,
+        "message_ts": message_ts,
+        "thread_ts": thread_ts,
+        "user_id": user_id,
+        "original_text": message_text,
+    }
+    
+    with get_session_with_current_tenant() as db_session:
+        # Get the shortcut configuration based on the callback_id
+        slack_shortcut_config = get_slack_shortcut_config_for_bot_and_callback(
+            db_session=db_session,
+            slack_bot_id=client.slack_bot_id,
+            callback_id=callback_id,
+        )
+        
+        if not slack_shortcut_config:
+            logger.error(f"No shortcut configuration found for callback_id: {callback_id}")
+            respond_in_thread_or_channel(
+                client=client.web_client,
+                channel=channel_id,
+                thread_ts=thread_ts,
+                text="Sorry, this shortcut is not configured correctly.",
+                is_ephemeral=True,
+                user_id=user_id,
+            )
+            return
+            
+        # Check if the shortcut is disabled
+        if slack_shortcut_config.shortcut_config.get("disabled", False):
+            logger.info(f"Shortcut with callback_id {callback_id} is disabled.")
+            respond_in_thread_or_channel(
+                client=client.web_client,
+                channel=channel_id,
+                thread_ts=thread_ts,
+                text="This shortcut is currently disabled.",
+                is_ephemeral=True,
+                user_id=user_id,
+            )
+            return
+            
+        # Get the default message from the shortcut config
+        default_message = slack_shortcut_config.shortcut_config.get("default_message", "")
+        
+        # Store the shortcut configuration ID to retrieve later
+        shortcut_config_id = slack_shortcut_config.id
+        
+        # Create a unique private metadata identifier to track this specific shortcut invocation
+        private_metadata = json.dumps({
+            "shortcut_config_id": shortcut_config_id,
+            "message_context": message_context,
+        })
+        
+        # Open a modal dialog for the user to edit/confirm their prompt
+        try:
+            client.web_client.views_open(
+                trigger_id=trigger_id,
+                view={
+                    "type": "modal",
+                    "callback_id": "shortcut_prompt_modal",
+                    "private_metadata": private_metadata,
+                    "title": {
+                        "type": "plain_text",
+                        "text": f"{slack_shortcut_config.shortcut_config.get('shortcut_name', 'Ask a question')}",
+                    },
+                    "submit": {
+                        "type": "plain_text",
+                        "text": "Submit",
+                    },
+                    "close": {
+                        "type": "plain_text",
+                        "text": "Cancel",
+                    },
+                    "blocks": [
+                        {
+                            "type": "section",
+                            "text": {
+                                "type": "mrkdwn",
+                                "text": "Enter your question or edit the default prompt below:",
+                            }
+                        },
+                        {
+                            "type": "input",
+                            "block_id": "prompt_input",
+                            "element": {
+                                "type": "plain_text_input",
+                                "action_id": "prompt_text",
+                                "multiline": True,
+                                "initial_value": default_message or message_text,
+                                "placeholder": {
+                                    "type": "plain_text",
+                                    "text": "Type your question here..."
+                                }
+                            },
+                            "label": {
+                                "type": "plain_text",
+                                "text": "Question"
+                            }
+                        }
+                    ]
+                }
+            )
+        except SlackApiError as e:
+            logger.error(f"Error opening modal: {e}")
+            respond_in_thread_or_channel(
+                client=client.web_client,
+                channel=channel_id,
+                thread_ts=thread_ts,
+                text="Sorry, there was an error processing your request.",
+                is_ephemeral=True,
+                user_id=user_id,
+            )
+
 
 def acknowledge_message(req: SocketModeRequest, client: TenantSocketModeClient) -> None:
     response = SocketModeResponse(envelope_id=req.envelope_id)
@@ -921,8 +1141,9 @@ def view_routing(req: SocketModeRequest, client: TenantSocketModeClient) -> None
     if view := req.payload.get("view"):
         if view["callback_id"] == VIEW_DOC_FEEDBACK_ID:
             return process_feedback(req, client)
-
-
+        elif view["callback_id"] == "shortcut_prompt_modal":
+            return handle_shortcut_modal_submission(req, client)
+        
 def create_process_slack_event() -> (
     Callable[[TenantSocketModeClient, SocketModeRequest], None]
 ):
@@ -935,10 +1156,15 @@ def create_process_slack_event() -> (
 
         try:
             if req.type == "interactive":
-                if req.payload.get("type") == "block_actions":
+                payload_type = req.payload.get("type")
+                if payload_type == "block_actions":
                     return action_routing(req, client)
-                elif req.payload.get("type") == "view_submission":
+                elif payload_type == "view_submission":
                     return view_routing(req, client)
+                elif payload_type == "message_action":
+                    return process_shortcut(req, client)
+                elif payload_type == "shortcut": 
+                    return process_shortcut(req, client)
             elif req.type == "events_api" or req.type == "slash_commands":
                 return process_message(req, client)
         except Exception:

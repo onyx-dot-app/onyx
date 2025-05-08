@@ -6,8 +6,9 @@ from slack_sdk.errors import SlackApiError
 from onyx.configs.onyxbot_configs import DANSWER_BOT_FEEDBACK_REMINDER
 from onyx.configs.onyxbot_configs import DANSWER_REACT_EMOJI
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.models import SlackChannelConfig
+from onyx.db.models import SlackChannelConfig, SlackShortcutConfig
 from onyx.db.users import add_slack_user_if_not_exists
+from onyx.chat.models import ThreadMessage
 from onyx.onyxbot.slack.blocks import get_feedback_reminder_blocks
 from onyx.onyxbot.slack.handlers.handle_regular_answer import (
     handle_regular_answer,
@@ -103,10 +104,41 @@ def remove_scheduled_feedback_reminder(
                 "Unable to delete the scheduled message. It must have already been posted"
             )
 
+def replace_message_text(message_info: SlackMessageInfo, new_text: str) -> SlackMessageInfo:
+    """Create a new message_info with the last message text replaced"""
+    if not message_info.thread_messages:
+        return message_info
+    
+    # Create a copy of thread_messages
+    new_thread_messages = message_info.thread_messages.copy()
+    
+    # Replace the text of the last message
+    last_message = new_thread_messages[-1]
+    new_last_message = ThreadMessage(
+        message=new_text,
+        sender=last_message.sender,
+        role=last_message.role  
+    )
+    new_thread_messages[-1] = new_last_message
+
+    # Create a new SlackMessageInfo with the updated thread_messages
+    return SlackMessageInfo(
+        thread_messages=new_thread_messages,
+        channel_to_respond=message_info.channel_to_respond,
+        msg_to_respond=message_info.msg_to_respond,
+        thread_to_respond=message_info.thread_to_respond,
+        sender_id=message_info.sender_id,
+        email=message_info.email,
+        bypass_filters=message_info.bypass_filters,
+        is_bot_msg=message_info.is_bot_msg,
+        is_bot_dm=message_info.is_bot_dm,
+        is_shortcut=message_info.is_shortcut
+    )
 
 def handle_message(
     message_info: SlackMessageInfo,
-    slack_channel_config: SlackChannelConfig,
+    slack_channel_config: SlackChannelConfig | None,
+    slack_shortcut_config: SlackShortcutConfig | None,
     client: WebClient,
     feedback_reminder_id: str | None,
 ) -> bool:
@@ -126,18 +158,27 @@ def handle_message(
     bypass_filters = message_info.bypass_filters
     is_bot_msg = message_info.is_bot_msg
     is_bot_dm = message_info.is_bot_dm
+    is_shortcut = message_info.is_shortcut
 
+    # Determine the appropriate action for usage reporting
     action = "slack_message"
-    if is_bot_msg:
+    if is_shortcut:
+        action = "slack_shortcut"
+    elif is_bot_msg:
         action = "slack_slash_message"
     elif bypass_filters:
         action = "slack_tag_message"
     elif is_bot_dm:
         action = "slack_dm_message"
+    
     slack_usage_report(action=action, sender_id=sender_id, client=client)
 
+    # Determine which configuration to use (shortcut or channel)
+    config = slack_shortcut_config if is_shortcut else slack_channel_config
+    config_type = "shortcut" if is_shortcut else "channel"
+    
     document_set_names: list[str] | None = None
-    persona = slack_channel_config.persona if slack_channel_config else None
+    persona = config.persona if config else None
     prompt = None
     if persona:
         document_set_names = [
@@ -148,44 +189,52 @@ def handle_message(
     respond_tag_only = False
     respond_member_group_list = None
 
-    channel_conf = None
-    if slack_channel_config and slack_channel_config.channel_config:
-        channel_conf = slack_channel_config.channel_config
-        if not bypass_filters and "answer_filters" in channel_conf:
+    # Extract config details based on config type
+    if config:
+        config_details = slack_shortcut_config.shortcut_config if is_shortcut else slack_channel_config.channel_config
+        
+        if not bypass_filters and "answer_filters" in config_details:
             if (
-                "questionmark_prefilter" in channel_conf["answer_filters"]
+                "questionmark_prefilter" in config_details["answer_filters"]
                 and "?" not in messages[-1].message
             ):
                 logger.info(
-                    "Skipping message since it does not contain a question mark"
+                    f"Skipping {config_type} message since it does not contain a question mark"
                 )
                 return False
 
         logger.info(
-            "Found slack bot config for channel. Restricting bot to use document "
+            f"Found slack bot config for {config_type}. Restricting bot to use document "
             f"sets: {document_set_names}, "
-            f"validity checks enabled: {channel_conf.get('answer_filters', 'NA')}"
+            f"validity checks enabled: {config_details.get('answer_filters', 'NA')}"
         )
 
-        respond_tag_only = channel_conf.get("respond_tag_only") or False
-        respond_member_group_list = channel_conf.get("respond_member_group_list", None)
+        # For shortcuts, we don't need to check for respond_tag_only
+        if not is_shortcut:
+            respond_tag_only = config_details.get("respond_tag_only") or False
+        
+        respond_member_group_list = config_details.get("respond_member_group_list", None)
 
-    # NOTE: always respond in the DMs, as long the default config is not disabled.
-    if respond_tag_only and not bypass_filters and not is_bot_dm:
+    # Skip for tag-only channels (not applicable for shortcuts)
+    if not is_shortcut and respond_tag_only and not bypass_filters and not is_bot_dm:
         logger.info(
             "Skipping message since the channel is configured such that "
             "OnyxBot only responds to tags"
         )
         return False
 
-    if slack_channel_config.channel_config.get("disabled") and not bypass_filters:
+    # Check if the configuration is disabled
+    if config and (
+        (is_shortcut and config_details.get("disabled")) or
+        (not is_shortcut and config_details.get("disabled"))
+    ) and not bypass_filters:
         logger.info(
-            "Skipping message since the channel is configured such that "
+            f"Skipping message since the {config_type} is configured such that "
             "OnyxBot is disabled"
         )
         return False
 
-    # List of user id to send message to, if None, send to everyone in channel
+    # Process respond_member_group_list (same for both shortcuts and channels)
     send_to: list[str] | None = None
     missing_users: list[str] | None = None
     if respond_member_group_list:
@@ -200,8 +249,8 @@ def handle_message(
             logger.warning(f"Failed to find these users/groups: {missing_users}")
 
     # If configured to respond to team members only, then cannot be used with a /OnyxBot command
-    # which would just respond to the sender
-    if send_to and is_bot_msg:
+    # which would just respond to the sender (not applicable for shortcuts)
+    if send_to and is_bot_msg and not is_shortcut:
         if sender_id:
             respond_in_thread_or_channel(
                 client=client,
@@ -211,37 +260,61 @@ def handle_message(
                 thread_ts=None,
             )
 
-    try:
-        send_msg_ack_to_user(message_info, client)
-    except SlackApiError as e:
-        logger.error(f"Was not able to react to user message due to: {e}")
+    # Send message acknowledgment if not a shortcut (shortcuts typically use ephemeral messages)
+    if not is_shortcut:
+        try:
+            send_msg_ack_to_user(message_info, client)
+        except SlackApiError as e:
+            logger.error(f"Was not able to react to user message due to: {e}")
 
     with get_session_with_current_tenant() as db_session:
         if message_info.email:
             add_slack_user_if_not_exists(db_session, message_info.email)
 
-        # first check if we need to respond with a standard answer
-        # standard answers should be published in a thread
-        used_standard_answer = handle_standard_answers(
-            message_info=message_info,
-            receiver_ids=send_to,
-            slack_channel_config=slack_channel_config,
-            prompt=prompt,
-            logger=logger,
-            client=client,
-            db_session=db_session,
-        )
-        if used_standard_answer:
-            return False
+        # Determine if ephemeral response is needed (mainly for shortcuts)
+        is_ephemeral = False
+        if is_shortcut and config_details.get("is_ephemeral"):
+            is_ephemeral = True
 
-        # if no standard answer applies, try a regular answer
+        # Check for standard answers
+        # This part of code is closed in EE, so it handle only for channels
+        if not is_shortcut:
+            used_standard_answer = handle_standard_answers(
+                message_info=message_info,
+                receiver_ids=send_to,
+                slack_channel_config=config, 
+                prompt=prompt,
+                logger=logger,
+                client=client,
+                db_session=db_session,
+                is_ephemeral=is_ephemeral,
+            )
+            if used_standard_answer:
+                return False
+
+        # For shortcuts, we might want to use the default message if provided
+        if is_shortcut and config_details.get("default_message"):
+            message_info = replace_message_text(
+                message_info, 
+                config_details.get("default_message")
+            )
+
+        # If no standard answer applies, try a regular answer
+        # Get response_type from shortcut_config if available
+        response_type = slack_shortcut_config.response_type if is_shortcut else None
+        
         issue_with_regular_answer = handle_regular_answer(
             message_info=message_info,
             slack_channel_config=slack_channel_config,
+            slack_shortcut_config=slack_shortcut_config,
             receiver_ids=send_to,
             client=client,
             channel=channel,
             logger=logger,
             feedback_reminder_id=feedback_reminder_id,
+            is_ephemeral=is_ephemeral,
+            response_type=response_type,
         )
         return issue_with_regular_answer
+    
+    

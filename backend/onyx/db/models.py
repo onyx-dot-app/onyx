@@ -1999,6 +1999,12 @@ class SlackBot(Base):
         cascade="all, delete-orphan",
     )
 
+    slack_shortcut_configs: Mapped[list["SlackShortcutConfig"]] = relationship(
+        "SlackShortcutConfig", 
+        back_populates="slack_bot",
+        cascade="all, delete-orphan"
+    )
+
 
 class Milestone(Base):
     # This table is used to track significant events for a deployment towards finding value
@@ -2290,6 +2296,11 @@ class StandardAnswerCategory(Base):
         secondary=SlackChannelConfig__StandardAnswerCategory.__table__,
         back_populates="standard_answer_categories",
     )
+    slack_shortcut_configs: Mapped[list["SlackShortcutConfig"]] = relationship(
+        "SlackShortcutConfig",
+        secondary="slack_shortcut_config__standard_answer_category",
+        back_populates="standard_answer_categories",
+    )
 
 
 class StandardAnswer(Base):
@@ -2521,4 +2532,82 @@ class TenantAnonymousUserPath(Base):
     tenant_id: Mapped[str] = mapped_column(String, primary_key=True, nullable=False)
     anonymous_user_path: Mapped[str] = mapped_column(
         String, nullable=False, unique=True
+    )
+
+class ShortcutConfig(TypedDict):
+    """NOTE: is a `TypedDict` so it can be used as a type hint for a JSONB column
+    in Postgres"""
+
+    shortcut_name: str | None  # None for default shortcut config
+    default_message: NotRequired[str]  # default message for the shortcut
+    is_ephemeral: NotRequired[bool]  # defaults to False
+    respond_member_group_list: NotRequired[list[str]]
+    answer_filters: NotRequired[list[AllowedAnswerFilters]]
+    # If None then no follow up
+    # If empty list, follow up with no tags
+    follow_up_tags: NotRequired[list[str]]
+    show_continue_in_web_ui: NotRequired[bool]  # defaults to False
+    disabled: NotRequired[bool]  # defaults to False
+
+class SlackShortcutConfig__StandardAnswerCategory(Base):
+    __tablename__ = "slack_shortcut_config__standard_answer_category"
+
+    slack_shortcut_config_id: Mapped[int] = mapped_column(
+        ForeignKey("slack_shortcut_config.id"), primary_key=True
+    )
+    standard_answer_category_id: Mapped[int] = mapped_column(
+        ForeignKey("standard_answer_category.id"), primary_key=True
+    )
+
+
+class SlackShortcutConfig(Base):
+    __tablename__ = "slack_shortcut_config"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slack_bot_id: Mapped[int] = mapped_column(
+        ForeignKey("slack_bot.id"), nullable=False
+    )
+    persona_id: Mapped[int | None] = mapped_column(
+        ForeignKey("persona.id"), nullable=True
+    )
+    shortcut_config: Mapped[ShortcutConfig] = mapped_column(
+        postgresql.JSONB(), nullable=False
+    )
+
+    enable_auto_filters: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+
+    is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Add response_type directly to the model instead of in the config
+    response_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="citations"
+    )
+
+    persona: Mapped[Persona | None] = relationship("Persona")
+
+    slack_bot: Mapped["SlackBot"] = relationship(
+        "SlackBot",
+        back_populates="slack_shortcut_configs",
+    )
+    standard_answer_categories: Mapped[list["StandardAnswerCategory"]] = relationship(
+        "StandardAnswerCategory",
+        secondary=SlackShortcutConfig__StandardAnswerCategory.__table__,
+        back_populates="slack_shortcut_configs",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "slack_bot_id",
+            "is_default",
+            name="uq_slack_shortcut_config_slack_bot_id_default",
+        ),
+        Index(
+            "ix_slack_shortcut_config_slack_bot_id_default",
+            "slack_bot_id",
+            "is_default",
+            unique=True,
+            postgresql_where=(is_default is True),  # type: ignore
+        ),
     )

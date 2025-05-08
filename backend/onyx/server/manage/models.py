@@ -15,8 +15,10 @@ from onyx.configs.constants import AuthType
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db.models import AllowedAnswerFilters
 from onyx.db.models import ChannelConfig
+from onyx.db.models import ShortcutConfig
 from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
+from onyx.db.models import SlackShortcutConfig as SlackShortcutConfigModel
 from onyx.db.models import User
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot
@@ -228,6 +230,51 @@ class SlackChannelConfigCreationRequest(BaseModel):
         return self
 
 
+class SlackShortcutConfigCreationRequest(BaseModel):
+    slack_bot_id: int
+    # currently, a persona is created for each Slack shortcut config
+    # in the future, `document_sets` will probably be replaced
+    # by an optional `PersonaSnapshot` object. Keeping it like this
+    # for now for simplicity / speed of development
+    document_sets: list[int] | None = None
+
+    # NOTE: only one of `document_sets` / `persona_id` should be set
+    persona_id: int | None = None
+
+    shortcut_name: str
+    default_message: str = ""
+    is_ephemeral: bool = False
+    show_continue_in_web_ui: bool = False
+    enable_auto_filters: bool = False
+    # If no team members, assume respond in the channel to everyone
+    respond_member_group_list: list[str] = Field(default_factory=list)
+    answer_filters: list[AllowedAnswerFilters] = Field(default_factory=list)
+    # list of user emails
+    follow_up_tags: list[str] | None = None
+    response_type: SlackBotResponseType
+    # XXX this is going away soon
+    standard_answer_categories: list[int] = Field(default_factory=list)
+    disabled: bool = False
+
+    @field_validator("answer_filters", mode="before")
+    @classmethod
+    def validate_filters(cls, value: list[str]) -> list[str]:
+        if any(test not in VALID_SLACK_FILTERS for test in value):
+            raise ValueError(
+                f"Slack Answer filters must be one of {VALID_SLACK_FILTERS}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_document_sets_and_persona_id(
+        self,
+    ) -> "SlackShortcutConfigCreationRequest":
+        if self.document_sets and self.persona_id:
+            raise ValueError("Only one of `document_sets` / `persona_id` should be set")
+
+        return self
+
+
 class SlackChannelConfig(BaseModel):
     slack_bot_id: int
     id: int
@@ -260,6 +307,43 @@ class SlackChannelConfig(BaseModel):
             ],
             enable_auto_filters=slack_channel_config_model.enable_auto_filters,
             is_default=slack_channel_config_model.is_default,
+        )
+
+
+class SlackShortcutConfig(BaseModel):
+    slack_bot_id: int
+    id: int
+    persona: PersonaSnapshot | None
+    shortcut_config: ShortcutConfig
+    # XXX this is going away soon
+    standard_answer_categories: list[StandardAnswerCategory]
+    enable_auto_filters: bool
+    is_default: bool
+    response_type: str
+
+    @classmethod
+    def from_model(
+        cls, slack_shortcut_config_model: SlackShortcutConfigModel
+    ) -> "SlackShortcutConfig":
+        return cls(
+            id=slack_shortcut_config_model.id,
+            slack_bot_id=slack_shortcut_config_model.slack_bot_id,
+            persona=(
+                FullPersonaSnapshot.from_model(
+                    slack_shortcut_config_model.persona, allow_deleted=True
+                )
+                if slack_shortcut_config_model.persona
+                else None
+            ),
+            shortcut_config=slack_shortcut_config_model.shortcut_config,
+            # XXX this is going away soon
+            standard_answer_categories=[
+                StandardAnswerCategory.from_model(standard_answer_category_model)
+                for standard_answer_category_model in slack_shortcut_config_model.standard_answer_categories
+            ],
+            enable_auto_filters=slack_shortcut_config_model.enable_auto_filters,
+            is_default=slack_shortcut_config_model.is_default,
+            response_type=slack_shortcut_config_model.response_type,
         )
 
 

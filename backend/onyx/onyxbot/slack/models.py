@@ -15,6 +15,7 @@ class SlackMessageInfo(BaseModel):
     bypass_filters: bool  # User has tagged @OnyxBot
     is_bot_msg: bool  # User is using /OnyxBot
     is_bot_dm: bool  # User is direct messaging to OnyxBot
+    is_shortcut: bool # If it was shortcut call
 
 
 # Models used to encode the relevant data for the ephemeral message actions

@@ -228,14 +228,13 @@ def handle_publish_ephemeral_message_button(
 
     with get_session_with_current_tenant() as db_session:
         onyx_user = get_user_by_email(user_email, db_session)
-        if not onyx_user:
-            raise ValueError("Cannot determine onyx_user_id from email in payload")
         try:
-            chat_message = get_chat_message(chat_message_id, onyx_user.id, db_session)
-        except ValueError:
-            chat_message = get_chat_message(
-                chat_message_id, None, db_session
-            )  # is this good idea?
+            if onyx_user:
+                chat_message = get_chat_message(chat_message_id, onyx_user.id, db_session)
+            else:
+                chat_message = get_chat_message(
+                    chat_message_id, None, db_session
+                ) 
         except Exception as e:
             logger.error(f"Failed to get chat message: {e}")
             raise e

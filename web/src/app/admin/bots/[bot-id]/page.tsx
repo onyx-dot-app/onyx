@@ -7,9 +7,15 @@ import { ThreeDotsLoader } from "@/components/Loading";
 import { InstantSSRAutoRefresh } from "@/components/SSRAutoRefresh";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { SlackChannelConfigsTable } from "./SlackChannelConfigsTable";
-import { useSlackBot, useSlackChannelConfigsByBot } from "./hooks";
+import { SlackShortcutConfigsTable } from "./SlackShortcutConfigsTable";
+import { 
+  useSlackBot, 
+  useSlackChannelConfigsByBot,
+  useSlackShortcutConfigsByBot 
+} from "./hooks";
 import { ExistingSlackBotForm } from "../SlackBotUpdateForm";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 function SlackBotEditPage({
   params,
@@ -34,7 +40,14 @@ function SlackBotEditPage({
     refreshSlackChannelConfigs,
   } = useSlackChannelConfigsByBot(Number(unwrappedParams["bot-id"]));
 
-  if (isSlackBotLoading || isSlackChannelConfigsLoading) {
+  const {
+    data: slackShortcutConfigs,
+    isLoading: isSlackShortcutConfigsLoading,
+    error: slackShortcutConfigsError,
+    refreshSlackShortcutConfigs,
+  } = useSlackShortcutConfigsByBot(Number(unwrappedParams["bot-id"]));
+
+  if (isSlackBotLoading || isSlackChannelConfigsLoading || isSlackShortcutConfigsLoading) {
     return (
       <div className="flex justify-center items-center h-screen">
         <ThreeDotsLoader />
@@ -63,7 +76,20 @@ function SlackBotEditPage({
     return (
       <ErrorCallout
         errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch Slack Bot ${unwrappedParams["bot-id"]}: ${errorMsg}`}
+        errorMsg={`Failed to fetch Slack Channel Configs: ${errorMsg}`}
+      />
+    );
+  }
+
+  if (slackShortcutConfigsError || !slackShortcutConfigs) {
+    const errorMsg =
+      slackShortcutConfigsError?.info?.message ||
+      slackShortcutConfigsError?.info?.detail ||
+      "An unknown error occurred";
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={`Failed to fetch Slack Shortcut Configs: ${errorMsg}`}
       />
     );
   }
@@ -78,16 +104,32 @@ function SlackBotEditPage({
         existingSlackBot={slackBot}
         refreshSlackBot={refreshSlackBot}
       />
-      <Separator />
+      <Separator className="my-8" />
 
-      <div className="mt-8">
-        <SlackChannelConfigsTable
-          slackBotId={slackBot.id}
-          slackChannelConfigs={slackChannelConfigs}
-          refresh={refreshSlackChannelConfigs}
-          setPopup={setPopup}
-        />
-      </div>
+      <Tabs defaultValue="channels" className="w-full">
+        <TabsList className="mb-6">
+          <TabsTrigger value="channels">Channel Configurations</TabsTrigger>
+          <TabsTrigger value="shortcuts">Shortcut Configurations</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="channels">
+          <SlackChannelConfigsTable
+            slackBotId={slackBot.id}
+            slackChannelConfigs={slackChannelConfigs}
+            refresh={refreshSlackChannelConfigs}
+            setPopup={setPopup}
+          />
+        </TabsContent>
+        
+        <TabsContent value="shortcuts">
+          <SlackShortcutConfigsTable
+            slackBotId={slackBot.id}
+            slackShortcutConfigs={slackShortcutConfigs}
+            refresh={refreshSlackShortcutConfigs}
+            setPopup={setPopup}
+          />
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
