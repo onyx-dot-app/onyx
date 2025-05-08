@@ -166,7 +166,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
     history = prompt_builder.raw_message_history
     # Get the current message's files, if any
     current_files = getattr(prompt_builder, 'raw_user_uploaded_files', [])
-    
+
     if isinstance(prompt_builder, AnswerPromptBuilder):
         history = prompt_builder.get_message_history()
 

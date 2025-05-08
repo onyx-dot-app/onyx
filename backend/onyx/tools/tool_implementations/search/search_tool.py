@@ -229,10 +229,10 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
 
         # Use current_files passed in
         current_files = current_files or []
-        
+
         rephrased_query = history_based_query_rephrase(
-            query=query, 
-            history=history, 
+            query=query,
+            history=history,
             llm=llm,
             current_files=current_files
         )

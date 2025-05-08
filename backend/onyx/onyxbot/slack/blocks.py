@@ -431,9 +431,9 @@ def _build_answer_blocks(
         answer_processed = decode_escapes(
             remove_slack_text_interactions(formatted_answer)
         )
-        
+
         answer_chunks = _split_text(answer_processed)
-        
+
         limited_answer_chunks = answer_chunks[:SLACK_MAX_ANSWER_BLOCKS]
         answer_blocks = [SectionBlock(text=text) for text in limited_answer_chunks]
 
@@ -445,7 +445,7 @@ def _build_answer_blocks(
             answer_blocks.append(
                 SectionBlock(text=MarkdownTextObject(text=truncation_message))
             )
-            
+
     return answer_blocks
 
 
@@ -512,13 +512,13 @@ def _build_continue_in_web_ui_block(
             db_session=db_session,
             message_id=message_id,
         )
-        
+
         # Ensure WEB_DOMAIN has a scheme
         web_domain_url = WEB_DOMAIN
         if not web_domain_url.startswith(("http://", "https://")):
             # Default to https if no scheme is present
             web_domain_url = f"https://{web_domain_url}"
-            
+
         button_url = f"{web_domain_url}/chat?slackChatId={chat_session.id}"
         # Validate the URL (optional, but good practice)
         # from urllib.parse import urlparse
@@ -707,7 +707,7 @@ def build_slack_response_blocks(
             truncation_text += "Please use 'Continue Chat in Onyx!' (if available) or check the web UI for the full response._"
         else:
             truncation_text += "Some content may be missing due to these limits._"
-        
+
         all_blocks.append(
             SectionBlock(text=MarkdownTextObject(text=truncation_text))
         )

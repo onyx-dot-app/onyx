@@ -107,7 +107,7 @@ def history_based_query_rephrase(
     history_files = [file for msg in history for file in (getattr(msg, 'files', []) or [])]
     all_files = current_files + history_files
     logger.debug(f"Total files for rephrase: {len(all_files)}")
-    
+
     # For first query, skip only if no history and no attached files
     if skip_first_rephrase and not history and not all_files:
         return query
@@ -126,7 +126,7 @@ def history_based_query_rephrase(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
     logger.info(f"history_str: {history_str}")
-    
+
     # Check if we have images to include
     if all_files:
         prompt_str = prompt_template.format(question=query, chat_history=history_str)
@@ -135,7 +135,7 @@ def history_based_query_rephrase(
     else:
         # Use the regular dict-based approach for text-only inputs
         messages = get_contextual_rephrase_messages(
-            question=query, 
+            question=query,
             history_str=history_str,
             prompt_template=prompt_template
         )

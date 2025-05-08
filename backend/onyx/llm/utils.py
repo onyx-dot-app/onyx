@@ -309,7 +309,7 @@ def convert_lm_input_to_basic_string(lm_input: LanguageModelInput) -> str:
 def message_to_string(message: BaseMessage) -> str:
     if isinstance(message.content, str):
         return message.content
-    
+
     # Handle multi-part content with images
     if isinstance(message.content, list):
         texts = []
@@ -321,10 +321,10 @@ def message_to_string(message: BaseMessage) -> str:
                     text = part.get("text")
                     if text:
                         texts.append(text)
-        
+
         if texts:
             return "".join(texts)
-            
+
     # If we've tried everything and failed, raise an error
     raise RuntimeError("LLM message not in expected format.")
 
