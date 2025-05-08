@@ -26,7 +26,7 @@ from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
 
-T = TypeVar("T")
+T = TypeVar("T", bound=tuple[Any, ...])
 
 
 def get_default_admin_user_emails() -> list[str]:
