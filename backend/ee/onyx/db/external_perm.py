@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
+from onyx.db.models import PublicExternalUserGroup
 from onyx.db.models import User
 from onyx.db.models import User__ExternalUserGroupId
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
@@ -20,6 +21,12 @@ logger = setup_logger()
 class ExternalUserGroup(BaseModel):
     id: str
     user_emails: list[str]
+    # `True` for cases like a Folder in Google Drive that give domain-wide
+    # or "Anyone with link" access to all files in the folder.
+    # if this is set, `user_emails` don't really matter.
+    # When this is `True`, this `ExternalUserGroup` object doesn't really represent
+    # an actual "group" in the source.
+    gives_anyone_access: bool = False
 
 
 def delete_user__ext_group_for_user__no_commit(
@@ -40,6 +47,17 @@ def delete_user__ext_group_for_cc_pair__no_commit(
     db_session.execute(
         delete(User__ExternalUserGroupId).where(
             User__ExternalUserGroupId.cc_pair_id == cc_pair_id
+        )
+    )
+
+
+def delete_public_external_group_for_cc_pair__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+) -> None:
+    db_session.execute(
+        delete(PublicExternalUserGroup).where(
+            PublicExternalUserGroup.cc_pair_id == cc_pair_id
         )
     )
 
@@ -72,13 +90,22 @@ def replace_user__ext_group_for_cc_pair(
         db_session=db_session,
         cc_pair_id=cc_pair_id,
     )
+    delete_public_external_group_for_cc_pair__no_commit(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+    )
 
     # map emails to ids
     email_id_map = {user.email: user.id for user in all_group_members}
 
     # use these ids to create new external user group relations relating group_id to user_ids
-    new_external_permissions = []
+    new_external_permissions: list[User__ExternalUserGroupId] = []
+    new_public_external_groups: list[PublicExternalUserGroup] = []
     for external_group in group_defs:
+        external_group_id = build_ext_group_name_for_onyx(
+            ext_group_name=external_group.id,
+            source=source,
+        )
         for user_email in external_group.user_emails:
             user_id = email_id_map.get(user_email.lower())
             if user_id is None:
@@ -87,10 +114,6 @@ def replace_user__ext_group_for_cc_pair(
                     f" with email {user_email} not found"
                 )
                 continue
-            external_group_id = build_ext_group_name_for_onyx(
-                ext_group_name=external_group.id,
-                source=source,
-            )
             new_external_permissions.append(
                 User__ExternalUserGroupId(
                     user_id=user_id,
@@ -99,7 +122,16 @@ def replace_user__ext_group_for_cc_pair(
                 )
             )
 
+        if external_group.gives_anyone_access:
+            new_public_external_groups.append(
+                PublicExternalUserGroup(
+                    external_user_group_id=external_group_id,
+                    cc_pair_id=cc_pair_id,
+                )
+            )
+
     db_session.add_all(new_external_permissions)
+    db_session.add_all(new_public_external_groups)
     db_session.commit()
 
 
@@ -130,3 +162,11 @@ def fetch_external_groups_for_user_email_and_group_ids(
         )
     ).all()
     return list(user_ext_groups)
+
+
+def fetch_public_external_group_ids(
+    db_session: Session,
+) -> list[str]:
+    return list(
+        db_session.scalars(select(PublicExternalUserGroup.external_user_group_id)).all()
+    )

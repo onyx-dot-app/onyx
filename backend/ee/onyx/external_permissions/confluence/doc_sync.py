@@ -8,6 +8,7 @@ from typing import Any
 
 from ee.onyx.configs.app_configs import CONFLUENCE_ANONYMOUS_ACCESS_IS_PUBLIC
 from ee.onyx.external_permissions.confluence.constants import ALL_CONF_EMAILS_GROUP_NAME
+from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsFunction
 from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.confluence.connector import ConfluenceConnector
@@ -160,9 +161,17 @@ def _get_space_permissions(
 
         # Stores the permissions for each space
         space_permissions_by_space_key[space_key] = space_permissions
-        logger.info(
-            f"Found space permissions for space '{space_key}': {space_permissions}"
-        )
+        if (
+            not space_permissions.is_public
+            and not space_permissions.external_user_emails
+            and not space_permissions.external_user_group_ids
+        ):
+            logger.warning(
+                f"No permissions found for space '{space_key}'. This is very unlikely"
+                "to be correct and is more likely caused by an access token with"
+                "insufficient permissions. Make sure that the access token has Admin"
+                f"permissions for space '{space_key}'"
+            )
 
     return space_permissions_by_space_key
 
@@ -275,6 +284,10 @@ def _get_all_page_restrictions(
             # if inheriting restrictions from the parent, then the first one we run into
             # should be applied (the reason why we'd traverse more than one ancestor is if
             # the ancestor also is in "inherit" mode.)
+            logger.info(
+                f"Found user restrictions {ancestor_user_emails} and group restrictions {ancestor_group_names}"
+                f"for document {perm_sync_data.get('id')} based on ancestor {ancestor}"
+            )
             return ExternalAccess(
                 external_user_emails=ancestor_user_emails,
                 external_user_group_ids=ancestor_group_names,
@@ -312,6 +325,7 @@ def _fetch_all_page_restrictions(
             confluence_client=confluence_client,
             perm_sync_data=slim_doc.perm_sync_data,
         ):
+            logger.info(f"Found restrictions {restrictions} for document {slim_doc.id}")
             yield DocExternalAccess(
                 doc_id=slim_doc.id,
                 external_access=restrictions,
@@ -321,8 +335,9 @@ def _fetch_all_page_restrictions(
 
         space_key = slim_doc.perm_sync_data.get("space_key")
         if not (space_permissions := space_permissions_by_space_key.get(space_key)):
-            logger.debug(
-                f"Individually fetching space permissions for space {space_key}"
+            logger.warning(
+                f"Individually fetching space permissions for space {space_key}. This is "
+                "unexpected. It means the permissions were not able to fetched initially."
             )
             try:
                 # If the space permissions are not in the cache, then fetch them
@@ -345,6 +360,15 @@ def _fetch_all_page_restrictions(
             logger.warning(
                 f"No permissions found for document {slim_doc.id} in space {space_key}"
             )
+            # be safe, if we can't get the permissions then make the document inaccessible
+            yield DocExternalAccess(
+                doc_id=slim_doc.id,
+                external_access=ExternalAccess(
+                    external_user_emails=set(),
+                    external_user_group_ids=set(),
+                    is_public=False,
+                ),
+            )
             continue
 
         # If there are no restrictions, then use the space's restrictions
@@ -359,24 +383,24 @@ def _fetch_all_page_restrictions(
         ):
             logger.warning(
                 f"Permissions are empty for document: {slim_doc.id}\n"
-                "This means space permissions are may be wrong for"
+                "This means space permissions may be wrong for"
                 f" Space key: {space_key}"
             )
 
-    logger.debug("Finished fetching all page restrictions for space")
+    logger.info("Finished fetching all page restrictions")
 
 
 def confluence_doc_sync(
     cc_pair: ConnectorCredentialPair,
+    fetch_all_existing_docs_fn: FetchAllDocumentsFunction,
     callback: IndexingHeartbeatInterface | None,
 ) -> Generator[DocExternalAccess, None, None]:
     """
-    Adds the external permissions to the documents in postgres
-    if the document doesn't already exists in postgres, we create
-    it in postgres so that when it gets created later, the permissions are
-    already populated
+    Fetches document permissions from Confluence and yields DocExternalAccess objects.
+    Compares fetched documents against existing documents in the DB for the connector.
+    If a document exists in the DB but not in the Confluence fetch, it's marked as restricted.
     """
-    logger.debug("Starting confluence doc sync")
+    logger.info(f"Starting confluence doc sync for CC Pair ID: {cc_pair.id}")
     confluence_connector = ConfluenceConnector(
         **cc_pair.connector.connector_specific_config
     )
@@ -392,13 +416,16 @@ def confluence_doc_sync(
         confluence_client=confluence_connector.confluence_client,
         is_cloud=is_cloud,
     )
+    logger.info("Space permissions by space key:")
+    for space_key, space_permissions in space_permissions_by_space_key.items():
+        logger.info(f"Space key: {space_key}, Permissions: {space_permissions}")
 
-    slim_docs = []
-    logger.debug("Fetching all slim documents from confluence")
+    slim_docs: list[SlimDocument] = []
+    logger.info("Fetching all slim documents from confluence")
     for doc_batch in confluence_connector.retrieve_all_slim_documents(
         callback=callback
     ):
-        logger.debug(f"Got {len(doc_batch)} slim documents from confluence")
+        logger.info(f"Got {len(doc_batch)} slim documents from confluence")
         if callback:
             if callback.should_stop():
                 raise RuntimeError("confluence_doc_sync: Stop signal detected")
@@ -407,7 +434,32 @@ def confluence_doc_sync(
 
         slim_docs.extend(doc_batch)
 
-    logger.debug("Fetching all page restrictions for space")
+    # Find documents that are no longer accessible in Confluence
+    logger.info(f"Querying existing document IDs for CC Pair ID: {cc_pair.id}")
+    existing_doc_ids = fetch_all_existing_docs_fn()
+
+    # Find missing doc IDs
+    fetched_doc_ids = {doc.id for doc in slim_docs}
+    missing_doc_ids = set(existing_doc_ids) - fetched_doc_ids
+
+    # Yield access removal for missing docs. Better to be safe.
+    if missing_doc_ids:
+        logger.warning(
+            f"Found {len(missing_doc_ids)} documents that are in the DB but "
+            "not present in Confluence fetch. Making them inaccessible."
+        )
+        for missing_id in missing_doc_ids:
+            logger.warning(f"Removing access for document ID: {missing_id}")
+            yield DocExternalAccess(
+                doc_id=missing_id,
+                external_access=ExternalAccess(
+                    external_user_emails=set(),
+                    external_user_group_ids=set(),
+                    is_public=False,
+                ),
+            )
+
+    logger.info("Fetching all page restrictions for fetched documents")
     yield from _fetch_all_page_restrictions(
         confluence_client=confluence_connector.confluence_client,
         slim_docs=slim_docs,
@@ -415,3 +467,5 @@ def confluence_doc_sync(
         is_cloud=is_cloud,
         callback=callback,
     )
+
+    logger.info("Finished confluence doc sync")

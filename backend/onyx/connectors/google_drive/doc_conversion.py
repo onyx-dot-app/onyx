@@ -327,12 +327,16 @@ def convert_drive_item_to_document(
         doc_or_failure = _convert_drive_item_to_document(
             creds, allow_images, size_threshold, retriever_email, file
         )
+
+        # There are a variety of permissions-based errors that occasionally occur
+        # when retrieving files. Often when these occur, there is another user
+        # that can successfully retrieve the file, so we try the next user.
         if (
             doc_or_failure is None
             or isinstance(doc_or_failure, Document)
             or not (
                 isinstance(doc_or_failure.exception, HttpError)
-                and doc_or_failure.exception.status_code == 403
+                and doc_or_failure.exception.status_code in [401, 403, 404]
             )
         ):
             return doc_or_failure

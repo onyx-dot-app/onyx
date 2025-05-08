@@ -1,6 +1,7 @@
 import json
 import time
 from collections.abc import Callable
+from collections.abc import Generator
 from collections.abc import Iterator
 from datetime import datetime
 from datetime import timedelta
@@ -420,6 +421,62 @@ class OnyxConfluence:
 
         return rate_limited_method
 
+    def _try_one_by_one_for_paginated_url(
+        self,
+        url_suffix: str,
+        initial_start: int,
+        limit: int,
+    ) -> Generator[dict[str, Any], None, str | None]:
+        """
+        Go through `limit` items, starting at `initial_start` one by one (e.g. using
+        `limit=1` for each call).
+
+        If we encounter an error, we skip the item and try the next one. We will return
+        the items we were able to retrieve successfully.
+
+        Returns the expected next url_suffix. Returns None if it thinks we've hit the end.
+
+        TODO (chris): make this yield failures as well as successes.
+        TODO (chris): make this work for confluence cloud somehow.
+        """
+        if self._is_cloud:
+            raise RuntimeError("This method is not implemented for Confluence Cloud.")
+
+        found_empty_page = False
+        temp_url_suffix = url_suffix
+
+        for ind in range(limit):
+            try:
+                temp_url_suffix = update_param_in_path(
+                    url_suffix, "start", str(initial_start + ind)
+                )
+                temp_url_suffix = update_param_in_path(temp_url_suffix, "limit", "1")
+                logger.info(f"Making recovery confluence call to {temp_url_suffix}")
+                raw_response = self.get(path=temp_url_suffix, advanced_mode=True)
+                raw_response.raise_for_status()
+
+                latest_results = raw_response.json().get("results", [])
+                yield from latest_results
+
+                if not latest_results:
+                    # no more results, break out of the loop
+                    logger.info(
+                        f"No results found for call '{temp_url_suffix}'"
+                        "Stopping pagination."
+                    )
+                    found_empty_page = True
+                    break
+            except Exception:
+                logger.exception(
+                    f"Error in confluence call to {temp_url_suffix}. Continuing."
+                )
+
+        if found_empty_page:
+            return None
+
+        # if we got here, we successfully tried `limit` items
+        return update_param_in_path(url_suffix, "start", str(initial_start + limit))
+
     def _paginate_url(
         self,
         url_suffix: str,
@@ -464,31 +521,40 @@ class OnyxConfluence:
                         _REPLACEMENT_EXPANSIONS,
                     )
                     continue
-                if (
-                    raw_response.status_code == 500
-                    and limit > _MINIMUM_PAGINATION_LIMIT
-                ):
-                    new_limit = limit // 2
-                    logger.warning(
+
+                # If we fail due to a 500, try one by one.
+                # NOTE: this iterative approach only works for server, since cloud uses cursor-based
+                # pagination
+                if raw_response.status_code == 500 and not self._is_cloud:
+                    initial_start = get_start_param_from_url(url_suffix)
+                    if initial_start is None:
+                        # can't handle this if we don't have offset-based pagination
+                        raise
+
+                    # this will just yield the successful items from the batch
+                    new_url_suffix = yield from self._try_one_by_one_for_paginated_url(
+                        url_suffix,
+                        initial_start=initial_start,
+                        limit=limit,
+                    )
+
+                    # this means we ran into an empty page
+                    if new_url_suffix is None:
+                        if next_page_callback:
+                            next_page_callback("")
+                        break
+
+                    url_suffix = new_url_suffix
+                    continue
+
+                else:
+                    logger.exception(
                         f"Error in confluence call to {url_suffix} \n"
                         f"Raw Response Text: {raw_response.text} \n"
                         f"Full Response: {raw_response.__dict__} \n"
                         f"Error: {e} \n"
-                        f"Reducing limit from {limit} to {new_limit} and trying again."
                     )
-                    url_suffix = url_suffix.replace(
-                        f"limit={limit}", f"limit={new_limit}"
-                    )
-                    limit = new_limit
-                    continue
-
-                logger.exception(
-                    f"Error in confluence call to {url_suffix} \n"
-                    f"Raw Response Text: {raw_response.text} \n"
-                    f"Full Response: {raw_response.__dict__} \n"
-                    f"Error: {e} \n"
-                )
-                raise e
+                    raise
 
             try:
                 next_response = raw_response.json()
@@ -578,15 +644,13 @@ class OnyxConfluence:
         """
         This function will paginate through the top level query first, then
         paginate through all of the expansions.
-        The limit only applies to the top level query.
-        All expansion paginations use default pagination limit (defined by Atlassian).
         """
 
         def _traverse_and_update(data: dict | list) -> None:
             if isinstance(data, dict):
                 next_url = data.get("_links", {}).get("next")
                 if next_url and "results" in data:
-                    data["results"].extend(self._paginate_url(next_url))
+                    data["results"].extend(self._paginate_url(next_url, limit=limit))
 
                 for value in data.values():
                     _traverse_and_update(value)

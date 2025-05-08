@@ -69,6 +69,33 @@ def _sleep_after_rate_limit_exception(github_client: Github) -> None:
 # checkpoint progress (no infinite loop)
 
 
+def get_nextUrl_key(pag_list: PaginatedList[PullRequest | Issue]) -> str:
+    if "_PaginatedList__nextUrl" in pag_list.__dict__:
+        return "_PaginatedList__nextUrl"
+    for key in pag_list.__dict__:
+        if "__nextUrl" in key:
+            return key
+    for key in pag_list.__dict__:
+        if "nextUrl" in key:
+            return key
+    return ""
+
+
+def get_nextUrl(
+    pag_list: PaginatedList[PullRequest | Issue], nextUrl_key: str
+) -> str | None:
+    return getattr(pag_list, nextUrl_key) if nextUrl_key else None
+
+
+def set_nextUrl(
+    pag_list: PaginatedList[PullRequest | Issue], nextUrl_key: str, nextUrl: str
+) -> None:
+    if nextUrl_key:
+        setattr(pag_list, nextUrl_key, nextUrl)
+    elif nextUrl:
+        raise ValueError("Next URL key not found: " + str(pag_list.__dict__))
+
+
 def _paginate_until_error(
     git_objs: Callable[[], PaginatedList[PullRequest | Issue]],
     cursor_url: str | None,
@@ -78,8 +105,9 @@ def _paginate_until_error(
 ) -> Generator[PullRequest | Issue, None, None]:
     num_objs = prev_num_objs
     pag_list = git_objs()
+    nextUrl_key = get_nextUrl_key(pag_list)
     if cursor_url:
-        pag_list.__nextUrl = cursor_url
+        set_nextUrl(pag_list, nextUrl_key, cursor_url)
     elif retrying:
         # if we are retrying, we want to skip the objects retrieved
         # over previous calls. Unfortunately, this WILL retrieve all
@@ -100,11 +128,11 @@ def _paginate_until_error(
             yield issue_or_pr
             # used to store the current cursor url in the checkpoint. This value
             # is updated during iteration over pag_list.
-            cursor_url_callback(pag_list.__nextUrl, num_objs)
+            cursor_url_callback(get_nextUrl(pag_list, nextUrl_key), num_objs)
 
             if num_objs % CURSOR_LOG_FREQUENCY == 0:
                 logger.info(
-                    f"Retrieved {num_objs} objects with current cursor url: {pag_list.__nextUrl}"
+                    f"Retrieved {num_objs} objects with current cursor url: {get_nextUrl(pag_list, nextUrl_key)}"
                 )
 
     except Exception as e:
@@ -112,7 +140,7 @@ def _paginate_until_error(
         if num_objs - prev_num_objs > 0:
             raise
 
-        if pag_list.__nextUrl is not None and not retrying:
+        if get_nextUrl(pag_list, nextUrl_key) is not None and not retrying:
             logger.info(
                 "Assuming that this error is due to cursor "
                 "expiration because no objects were retrieved. "

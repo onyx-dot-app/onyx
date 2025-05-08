@@ -99,7 +99,7 @@ def test_confluence_connector_restriction_handling(
     mock_cc_pair.credential_id = 1
 
     # Call the confluence_doc_sync function directly with the mock cc_pair
-    doc_access_generator = confluence_doc_sync(mock_cc_pair, None)
+    doc_access_generator = confluence_doc_sync(mock_cc_pair, lambda: [], None)
     doc_access_list = list(doc_access_generator)
     assert len(doc_access_list) == 7
     assert all(

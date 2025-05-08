@@ -95,18 +95,30 @@ def _get_channels_from_teams(
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: ChatMessage) -> str:
-    first_poster = (
-        top_message.properties.get("from", {})
-        .get("user", {})
-        .get("displayName", "Unknown User")
-    )
+    # NOTE: needs to be done this weird way because sometime we get back `None` for
+    # the fields which causes things to explode
+    top_message_from = top_message.properties.get("from") or {}
+    top_message_user = top_message_from.get("user") or {}
+    first_poster = top_message_user.get("displayName", "Unknown User")
+
     channel_name = channel.properties.get("displayName", "Unknown")
     thread_subject = top_message.properties.get("subject", "Unknown")
 
-    snippet = parse_html_page_basic(top_message.body.content.rstrip())
-    snippet = snippet[:50] + "..." if len(snippet) > 50 else snippet
+    try:
+        snippet = parse_html_page_basic(top_message.body.content.rstrip())
+        snippet = snippet[:50] + "..." if len(snippet) > 50 else snippet
+    except Exception:
+        logger.exception(
+            f"Error parsing snippet for message "
+            f"{top_message.id} with url {top_message.web_url}"
+        )
+        snippet = ""
 
-    return f"{first_poster} in {channel_name} about {thread_subject}: {snippet}"
+    semantic_identifier = f"{first_poster} in {channel_name} about {thread_subject}"
+    if snippet:
+        semantic_identifier += f": {snippet}"
+
+    return semantic_identifier
 
 
 def _convert_thread_to_document(

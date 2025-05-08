@@ -1,42 +1,21 @@
-from collections.abc import Callable
-from collections.abc import Generator
-
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import CONFLUENCE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY
 from ee.onyx.configs.app_configs import SLACK_PERMISSION_DOC_SYNC_FREQUENCY
-from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.confluence.doc_sync import confluence_doc_sync
 from ee.onyx.external_permissions.confluence.group_sync import confluence_group_sync
 from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
+from ee.onyx.external_permissions.perm_sync_types import DocSyncFuncType
+from ee.onyx.external_permissions.perm_sync_types import GroupSyncFuncType
 from ee.onyx.external_permissions.post_query_censoring import (
     DOC_SOURCE_TO_CHUNK_CENSORING_FUNCTION,
 )
 from ee.onyx.external_permissions.slack.doc_sync import slack_doc_sync
 from ee.onyx.external_permissions.slack.group_sync import slack_group_sync
-from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import ConnectorCredentialPair
-from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 
-# Defining the input/output types for the sync functions
-DocSyncFuncType = Callable[
-    [
-        ConnectorCredentialPair,
-        IndexingHeartbeatInterface | None,
-    ],
-    Generator[DocExternalAccess, None, None],
-]
-
-GroupSyncFuncType = Callable[
-    [
-        str,
-        ConnectorCredentialPair,
-    ],
-    list[ExternalUserGroup],
-]
 
 # These functions update:
 # - the user_email <-> document mapping
@@ -75,6 +54,11 @@ def source_requires_external_group_sync(source: DocumentSource) -> bool:
 GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC: set[DocumentSource] = {
     DocumentSource.CONFLUENCE,
 }
+
+
+def source_group_sync_is_cc_pair_agnostic(source: DocumentSource) -> bool:
+    """Checks if the given DocumentSource requires external group syncing."""
+    return source in GROUP_PERMISSIONS_IS_CC_PAIR_AGNOSTIC
 
 
 # If nothing is specified here, we run the doc_sync every time the celery beat runs

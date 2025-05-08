@@ -1,6 +1,7 @@
 from datetime import timedelta
 from typing import Any
 
+from ee.onyx.configs.app_configs import CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS
 from onyx.background.celery.tasks.beat_schedule import (
     beat_cloud_tasks as base_beat_system_tasks,
 )
@@ -34,7 +35,7 @@ ee_beat_task_templates.extend(
         {
             "name": "check-ttl-management",
             "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
-            "schedule": timedelta(hours=1),
+            "schedule": timedelta(hours=CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -69,7 +70,7 @@ if not MULTI_TENANT:
         {
             "name": "check-ttl-management",
             "task": OnyxCeleryTask.CHECK_TTL_MANAGEMENT_TASK,
-            "schedule": timedelta(hours=1),
+            "schedule": timedelta(hours=CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,

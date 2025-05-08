@@ -71,6 +71,14 @@ SLACK_PERMISSION_DOC_SYNC_FREQUENCY = int(
 NUM_PERMISSION_WORKERS = int(os.environ.get("NUM_PERMISSION_WORKERS") or 2)
 
 
+####
+# Celery Job Frequency
+####
+CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS = float(
+    os.environ.get("CHECK_TTL_MANAGEMENT_TASK_FREQUENCY_IN_HOURS") or 1
+)  # float for easier testing
+
+
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE")
 

@@ -541,6 +541,16 @@ class SlackConnector(
         self.delay_lock: str | None = None  # the redis key for the shared lock
         self.delay_key: str | None = None  # the redis key for the shared delay
 
+    @property
+    def channels(self) -> list[str] | None:
+        return self._channels
+
+    @channels.setter
+    def channels(self, channels: list[str] | None) -> None:
+        self._channels = (
+            [channel.removeprefix("#") for channel in channels] if channels else None
+        )
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
 
@@ -850,12 +860,22 @@ class SlackConnector(
 if __name__ == "__main__":
     import os
     import time
+    from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+    from shared_configs.contextvars import get_current_tenant_id
 
     slack_channel = os.environ.get("SLACK_CHANNEL")
     connector = SlackConnector(
         channels=[slack_channel] if slack_channel else None,
     )
-    connector.load_credentials({"slack_bot_token": os.environ["SLACK_BOT_TOKEN"]})
+
+    provider = OnyxStaticCredentialsProvider(
+        tenant_id=get_current_tenant_id(),
+        connector_name="slack",
+        credential_json={
+            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+        },
+    )
+    connector.set_credentials_provider(provider)
 
     current = time.time()
     one_day_ago = current - 24 * 60 * 60  # 1 day

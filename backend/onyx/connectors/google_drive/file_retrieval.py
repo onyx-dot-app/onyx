@@ -21,18 +21,21 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+PERMISSION_FULL_DESCRIPTION = (
+    "permissions(id, emailAddress, type, domain, permissionDetails)"
+)
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, permissions, modifiedTime, webViewLink, "
     "shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
-    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type, domain), "
+    f"nextPageToken, files(mimeType, driveId, id, name, {PERMISSION_FULL_DESCRIPTION}, "
     "permissionIds, webViewLink, owners(emailAddress))"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
 
 
-def _generate_time_range_filter(
+def generate_time_range_filter(
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> str:
@@ -81,7 +84,7 @@ def _get_files_in_parent(
 ) -> Iterator[GoogleDriveFileType]:
     query = f"mimeType != '{DRIVE_FOLDER_TYPE}' and '{parent_id}' in parents"
     query += " and trashed = false"
-    query += _generate_time_range_filter(start, end)
+    query += generate_time_range_filter(start, end)
 
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -204,7 +207,7 @@ def get_files_in_shared_drive(
     # Get all files in the shared drive
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
     file_query += " and trashed = false"
-    file_query += _generate_time_range_filter(start, end)
+    file_query += generate_time_range_filter(start, end)
 
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -264,7 +267,7 @@ def get_all_files_in_my_drive_and_shared(
     file_query += " and trashed = false"
     if not include_shared_with_me:
         file_query += " and 'me' in owners"
-    file_query += _generate_time_range_filter(start, end)
+    file_query += generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
@@ -297,7 +300,7 @@ def get_all_files_for_oauth(
 
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
     file_query += " and trashed = false"
-    file_query += _generate_time_range_filter(start, end)
+    file_query += generate_time_range_filter(start, end)
 
     if not should_get_all:
         if include_files_shared_with_me and not include_my_drives:
