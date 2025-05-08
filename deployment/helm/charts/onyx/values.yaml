@@ -296,62 +296,222 @@ api:
   nodeSelector: {}
   tolerations: []
 
-background:
-  replicaCount: 1
+
+# background:
+#   replicaCount: 1
+#   autoscaling:
+#     enabled: false
+# #     minReplicas: 1
+# #     maxReplicas: 100
+# #     targetCPUUtilizationPercentage: 80
+# #     targetMemoryUtilizationPercentage: 80
+# 
+#   image:
+#     repository: onyxdotapp/onyx-backend
+#     pullPolicy: IfNotPresent
+#     # Overrides the image tag whose default is the chart appVersion.
+#     tag: ""
+#   podAnnotations: {}
+#   podLabels:
+#     scope: onyx-backend
+#     app: background
+#   deploymentLabels:
+#     app: background
+#   podSecurityContext:
+#     {}
+#     # fsGroup: 2000
+#   securityContext:
+#     privileged: true
+#     runAsUser: 0
+#   enableMiniChunk: "true"
+#   resources: {}
+#   # We usually recommend not to specify default resources and to leave this as a conscious
+#   # choice for the user. This also increases chances charts run on environments with little
+#   # resources, such as Minikube. If you do want to specify resources, uncomment the following
+#   # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+#   #  requests:
+#   #    cpu: 1000m  # Requests 1 CPU core
+#   #    memory: 1Gi  # Requests 1 GiB of memory
+#   #  limits:
+#   #    cpu: 2000m  # Limits to 2 CPU cores
+#   #    memory: 2Gi  # Limits to 2 GiB of memory
+# 
+# 
+#   # Additional volumes on the output Deployment definition.
+#   volumes: []
+#   # - name: foo
+#   #   secret:
+#   #     secretName: mysecret
+#   #     optional: false
+# 
+#   # Additional volumeMounts on the output Deployment definition.
+#   volumeMounts: []
+#   # - name: foo
+#   #   mountPath: "/etc/foo"
+#   #   readOnly: true
+# 
+#   nodeSelector: {}
+#   tolerations: []
+#   affinity: {}
+
+celery_shared:
   image:
     repository: onyxdotapp/onyx-backend
     pullPolicy: IfNotPresent
-    # Overrides the image tag whose default is the chart appVersion.
-    tag: ""
+    tag: ""  # Overrides the image tag whose default is the chart appVersion.
+
+celery_beat:
+  replicaCount: 1
   podAnnotations: {}
   podLabels:
-    scope: onyx-backend
-    app: background
+    scope: onyx-backend-celery
+    app: celery-beat
   deploymentLabels:
-    app: background
+    app: celery-beat
   podSecurityContext:
     {}
-    # fsGroup: 2000
   securityContext:
     privileged: true
     runAsUser: 0
-  enableMiniChunk: "true"
   resources: {}
-  # We usually recommend not to specify default resources and to leave this as a conscious
-  # choice for the user. This also increases chances charts run on environments with little
-  # resources, such as Minikube. If you do want to specify resources, uncomment the following
-  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
-  #  requests:
-  #    cpu: 1000m  # Requests 1 CPU core
-  #    memory: 1Gi  # Requests 1 GiB of memory
-  #  limits:
-  #    cpu: 2000m  # Limits to 2 CPU cores
-  #    memory: 2Gi  # Limits to 2 GiB of memory
-
-  autoscaling:
-    enabled: false
-    minReplicas: 1
-    maxReplicas: 100
-    targetCPUUtilizationPercentage: 80
-    targetMemoryUtilizationPercentage: 80
-
-  # Additional volumes on the output Deployment definition.
-  volumes: []
-  # - name: foo
-  #   secret:
-  #     secretName: mysecret
-  #     optional: false
-
-  # Additional volumeMounts on the output Deployment definition.
-  volumeMounts: []
-  # - name: foo
-  #   mountPath: "/etc/foo"
-  #   readOnly: true
-
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
   nodeSelector: {}
   tolerations: []
   affinity: {}
 
+celery_worker_heavy:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-heavy
+  deploymentLabels:
+    app: celery-worker-heavy
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+celery_worker_indexing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-indexing
+  deploymentLabels:
+    app: celery-worker-indexing
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+celery_worker_light:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-light
+  deploymentLabels:
+    app: celery-worker-light
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+celery_worker_monitoring:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-monitoring
+  deploymentLabels:
+    app: celery-worker-monitoring
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+celery_worker_primary:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-primary
+  deploymentLabels:
+    app: celery-worker-primary
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
+celery_worker_user_files_indexing:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  podAnnotations: {}
+  podLabels:
+    scope: onyx-backend-celery
+    app: celery-worker-user-files-indexing
+  deploymentLabels:
+    app: celery-worker-user-files-indexing
+  podSecurityContext:
+    {}
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  resources: {}
+  volumes: []  # Additional volumes on the output Deployment definition.
+  volumeMounts: []  # Additional volumeMounts on the output Deployment definition.
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  
 redis:
   enabled: true
   architecture: standalone

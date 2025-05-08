@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-celery-worker-user-files-indexing
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.celery_worker_user_files_indexing.autoscaling.enabled }}
+  replicas: {{ .Values.celery_worker_user_files_indexing.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.celery_worker_user_files_indexing.deploymentLabels }}
+      {{- toYaml .Values.celery_worker_user_files_indexing.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.celery_worker_user_files_indexing.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- with .Values.celery_worker_user_files_indexing.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.celery_worker_user_files_indexing.podSecurityContext | nindent 8 }}
+      containers:
+        - name: celery-worker-user-files-indexing
+          securityContext:
+            {{- toYaml .Values.celery_worker_user_files_indexing.securityContext | nindent 12 }}
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
+          command:
+            [
+              "celery",
+              "-A",
+              "onyx.background.celery.versioned_apps.indexing",
+              "worker",
+              "--loglevel=INFO",
+              "--hostname=user-files-indexing@%n",
+              "-Q",
+              "user_files_indexing",
+            ]
+          resources:
+            {{- toYaml .Values.celery_worker_user_files_indexing.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx-stack.envSecrets" . | nindent 12}}
