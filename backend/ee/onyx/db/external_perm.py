@@ -21,8 +21,11 @@ logger = setup_logger()
 class ExternalUserGroup(BaseModel):
     id: str
     user_emails: list[str]
-    # `True` for entities like shared drives that give domain-wide or public access
-    # if this is set, `user_emails` don't really matter
+    # `True` for cases like a Folder in Google Drive that give domain-wide
+    # or "Anyone with link" access to all files in the folder.
+    # if this is set, `user_emails` don't really matter.
+    # When this is `True`, this `ExternalUserGroup` object doesn't really represent
+    # an actual "group" in the source.
     gives_anyone_access: bool = False
 
 
