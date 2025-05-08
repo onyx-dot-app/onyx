@@ -242,8 +242,15 @@ def handle_regular_answer(
                         response = requests.get(img_url, headers=headers)
                         response.raise_for_status()
 
-                        # Use default mimetype again
-                        assumed_mimetype = "image/png"
+                        # Try to get mimetype from response headers, fallback to 'image/png'
+                        assumed_mimetype = response.headers.get('Content-Type', 'image/png')
+                        # Ensure it's a common image type or default to png
+                        if not assumed_mimetype.startswith('image/'):
+                            logger.debug(f"image download response headers: {response.headers}")
+                            logger.warning(f"Content-Type '{assumed_mimetype}' is not an image type. Defaulting to 'image/png' for URL: {img_url}")
+                            assumed_mimetype = 'image/png'
+                        # logic: Hardcoding mimetype as 'image/png' could cause issues with non-PNG images. Should detect actual mimetype from image content or response headers.
+                        # assumed_mimetype = "image/png"
 
                         unique_id = str(uuid4())
                         file_store.save_file(
