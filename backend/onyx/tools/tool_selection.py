@@ -41,6 +41,7 @@ def select_single_tool_for_non_tool_calling_llm(
     history: list[PreviousMessage],
     query: str,
     llm: LLM,
+    current_files: list = None,
 ) -> tuple[Tool, dict[str, Any]] | None:
     if len(tools_and_args) == 1:
         return tools_and_args[0]

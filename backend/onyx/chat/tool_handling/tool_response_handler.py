@@ -164,6 +164,9 @@ def get_tool_call_for_non_tool_calling_llm_impl(
 ) -> tuple[Tool, dict] | None:
     user_query = prompt_builder.raw_user_query
     history = prompt_builder.raw_message_history
+    # Get the current message's files, if any
+    current_files = getattr(prompt_builder, 'raw_user_uploaded_files', [])
+    
     if isinstance(prompt_builder, AnswerPromptBuilder):
         history = prompt_builder.get_message_history()
 
@@ -179,6 +182,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
                 history=history,
                 llm=llm,
                 force_run=True,
+                current_files=current_files,  # Pass current files
             )
         )
 
@@ -196,6 +200,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
             query=user_query,
             history=history,
             llm=llm,
+            current_files=current_files,  # Pass current files
         )
 
         available_tools_and_args = [
@@ -214,6 +219,7 @@ def get_tool_call_for_non_tool_calling_llm_impl(
                 history=history,
                 query=user_query,
                 llm=llm,
+                current_files=current_files,  # Pass current files
             )
             if available_tools_and_args
             else None

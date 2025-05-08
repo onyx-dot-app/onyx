@@ -220,14 +220,21 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         history: list[PreviousMessage],
         llm: LLM,
         force_run: bool = False,
+        current_files: list = None,
     ) -> dict[str, Any] | None:
         if not force_run and not check_if_need_search(
             query=query, history=history, llm=llm
         ):
             return None
 
+        # Use current_files passed in
+        current_files = current_files or []
+        
         rephrased_query = history_based_query_rephrase(
-            query=query, history=history, llm=llm
+            query=query, 
+            history=history, 
+            llm=llm,
+            current_files=current_files
         )
         return {QUERY_FIELD: rephrased_query}
 

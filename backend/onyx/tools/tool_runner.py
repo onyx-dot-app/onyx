@@ -56,10 +56,11 @@ class ToolRunner(Generic[R]):
 
 
 def check_which_tools_should_run_for_non_tool_calling_llm(
-    tools: list[Tool], query: str, history: list[PreviousMessage], llm: LLM
+    tools: list[Tool], query: str, history: list[PreviousMessage], llm: LLM, current_files: list = None
 ) -> list[dict[str, Any] | None]:
+    current_files = current_files or []
     tool_args_list: list[tuple[Callable[..., Any], tuple[Any, ...]]] = [
-        (tool.get_args_for_non_tool_calling_llm, (query, history, llm))
+        (tool.get_args_for_non_tool_calling_llm, (query, history, llm, False, current_files))
         for tool in tools
     ]
     return run_functions_tuples_in_parallel(tool_args_list)

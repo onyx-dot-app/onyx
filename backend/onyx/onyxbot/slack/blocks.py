@@ -21,6 +21,8 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import SearchFeedbackType
 from onyx.configs.onyxbot_configs import DANSWER_BOT_NUM_DOCS_TO_DISPLAY
+from onyx.configs.onyxbot_configs import SLACK_MAX_ANSWER_BLOCKS
+from onyx.configs.onyxbot_configs import SLACK_MESSAGE_BLOCK_LIMIT
 from onyx.context.search.models import SavedSearchDoc
 from onyx.db.chat import get_chat_session_by_message_id
 from onyx.db.engine import get_session_with_current_tenant
@@ -429,9 +431,21 @@ def _build_answer_blocks(
         answer_processed = decode_escapes(
             remove_slack_text_interactions(formatted_answer)
         )
-        answer_blocks = [
-            SectionBlock(text=text) for text in _split_text(answer_processed)
-        ]
+        
+        answer_chunks = _split_text(answer_processed)
+        
+        limited_answer_chunks = answer_chunks[:SLACK_MAX_ANSWER_BLOCKS]
+        answer_blocks = [SectionBlock(text=text) for text in limited_answer_chunks]
+
+        if len(answer_chunks) > SLACK_MAX_ANSWER_BLOCKS:
+            truncation_message = (
+                "_Answer truncated due to Slack message length limits. "
+                "Use 'Continue Chat in Onyx!' for the full response if available._"
+            )
+            answer_blocks.append(
+                SectionBlock(text=MarkdownTextObject(text=truncation_message))
+            )
+            
     return answer_blocks
 
 
@@ -498,6 +512,22 @@ def _build_continue_in_web_ui_block(
             db_session=db_session,
             message_id=message_id,
         )
+        
+        # Ensure WEB_DOMAIN has a scheme
+        web_domain_url = WEB_DOMAIN
+        if not web_domain_url.startswith(("http://", "https://")):
+            # Default to https if no scheme is present
+            web_domain_url = f"https://{web_domain_url}"
+            
+        button_url = f"{web_domain_url}/chat?slackChatId={chat_session.id}"
+        # Validate the URL (optional, but good practice)
+        # from urllib.parse import urlparse
+        # parsed_url = urlparse(button_url)
+        # if not all([parsed_url.scheme, parsed_url.netloc]):
+        #     # Log an error or handle invalid URL case
+        #     # For now, we'll let Slack catch it if it's still invalid
+        #     pass
+
         return ActionsBlock(
             block_id=build_continue_in_web_ui_id(message_id),
             elements=[
@@ -505,7 +535,7 @@ def _build_continue_in_web_ui_block(
                     action_id=CONTINUE_IN_WEB_UI_ACTION_ID,
                     text="Continue Chat in Onyx!",
                     style="primary",
-                    url=f"{WEB_DOMAIN}/chat?slackChatId={chat_session.id}",
+                    url=button_url,
                 ),
             ],
         )
@@ -664,5 +694,22 @@ def build_slack_response_blocks(
         + web_follow_up_block
         + follow_up_block
     )
+
+    if len(all_blocks) > SLACK_MESSAGE_BLOCK_LIMIT:
+        # If web_follow_up_block was going to be included, preserve its essence in the truncation message.
+        continue_in_web_ui_present = any(block.block_id and block.block_id.startswith(build_continue_in_web_ui_id(0)[:10]) for block in web_follow_up_block if hasattr(block, 'block_id'))
+
+        all_blocks = all_blocks[: SLACK_MESSAGE_BLOCK_LIMIT - 1]
+        truncation_text = (
+            "_Message truncated due to Slack length limits. Some content may be missing. "
+        )
+        if continue_in_web_ui_present or (channel_conf and channel_conf.get("show_continue_in_web_ui")):
+            truncation_text += "Please use 'Continue Chat in Onyx!' (if available) or check the web UI for the full response._"
+        else:
+            truncation_text += "Some content may be missing due to these limits._"
+        
+        all_blocks.append(
+            SectionBlock(text=MarkdownTextObject(text=truncation_text))
+        )
 
     return all_blocks

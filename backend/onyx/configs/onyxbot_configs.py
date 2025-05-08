@@ -71,3 +71,11 @@ DANSWER_BOT_RESPONSE_LIMIT_PER_TIME_PERIOD = int(
 DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS = int(
     os.environ.get("DANSWER_BOT_RESPONSE_LIMIT_TIME_PERIOD_SECONDS", "86400")
 )
+
+# Maximum number of answer blocks to send in a Slack message
+# Helps prevent "no more than 50 items" error from Slack
+SLACK_MAX_ANSWER_BLOCKS = int(os.environ.get("SLACK_MAX_ANSWER_BLOCKS", "15"))
+
+# Absolute maximum number of blocks to send in a single Slack message.
+# Slack's limit is 50. Setting this to 49 allows space for a truncation message.
+SLACK_MESSAGE_BLOCK_LIMIT = int(os.environ.get("SLACK_MESSAGE_BLOCK_LIMIT", "49"))

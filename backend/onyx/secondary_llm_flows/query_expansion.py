@@ -15,6 +15,8 @@ from onyx.prompts.miscellaneous_prompts import LANGUAGE_REPHRASE_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import count_punctuation
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.llm.utils import build_content_with_imgs
+from langchain.schema.messages import HumanMessage
 
 logger = setup_logger()
 
@@ -95,14 +97,19 @@ def history_based_query_rephrase(
     punctuation_heuristic: int = 10,
     skip_first_rephrase: bool = True,
     prompt_template: str = HISTORY_QUERY_REPHRASE,
+    current_files: list = None,
 ) -> str:
     # Globally disabled, just use the exact user query
     if DISABLE_LLM_QUERY_REPHRASE:
         return query
-
-    # For some use cases, the first query should be untouched. Later queries must be rephrased
-    # due to needing context but the first query has no context.
-    if skip_first_rephrase and not history:
+    logger.debug(f"Rephrasing query with history ({len(history)} messages) and current files ({len(current_files or [])})")
+    current_files = current_files or []
+    history_files = [file for msg in history for file in (getattr(msg, 'files', []) or [])]
+    all_files = current_files + history_files
+    logger.debug(f"Total files for rephrase: {len(all_files)}")
+    
+    # For first query, skip only if no history and no attached files
+    if skip_first_rephrase and not history and not all_files:
         return query
 
     # If it's a very large query, assume it's a copy paste which we may want to find exactly
@@ -118,16 +125,24 @@ def history_based_query_rephrase(
     history_str = combine_message_chain(
         messages=history, token_limit=GEN_AI_HISTORY_CUTOFF
     )
+    logger.info(f"history_str: {history_str}")
+    
+    # Check if we have images to include
+    if all_files:
+        prompt_str = prompt_template.format(question=query, chat_history=history_str)
+        content = build_content_with_imgs(prompt_str, all_files)
+        rephrased_query = message_to_string(llm.invoke([HumanMessage(content=content)]))
+    else:
+        # Use the regular dict-based approach for text-only inputs
+        messages = get_contextual_rephrase_messages(
+            question=query, 
+            history_str=history_str,
+            prompt_template=prompt_template
+        )
+        filled_llm_prompt = dict_based_prompt_to_langchain_prompt(messages)
+        rephrased_query = message_to_string(llm.invoke(filled_llm_prompt))
 
-    prompt_msgs = get_contextual_rephrase_messages(
-        question=query, history_str=history_str, prompt_template=prompt_template
-    )
-
-    filled_llm_prompt = dict_based_prompt_to_langchain_prompt(prompt_msgs)
-    rephrased_query = message_to_string(llm.invoke(filled_llm_prompt))
-
-    logger.debug(f"Rephrased combined query: {rephrased_query}")
-
+    logger.debug(f"Final rephrased query: {rephrased_query}")
     return rephrased_query
 
 

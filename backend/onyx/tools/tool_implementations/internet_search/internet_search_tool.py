@@ -191,6 +191,7 @@ class InternetSearchTool(Tool[None]):
         history: list[PreviousMessage],
         llm: LLM,
         force_run: bool = False,
+        current_files: list = None,
     ) -> dict[str, Any] | None:
         if not force_run and not self.check_if_needs_internet_search(
             query, history, llm
@@ -202,6 +203,7 @@ class InternetSearchTool(Tool[None]):
             history=history,
             llm=llm,
             prompt_template=INTERNET_SEARCH_QUERY_REPHRASE,
+            current_files=current_files,
         )
         return {
             "internet_search_query": rephrased_query,
