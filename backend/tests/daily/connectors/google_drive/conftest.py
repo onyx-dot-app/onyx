@@ -72,18 +72,16 @@ def get_credentials_from_env(email: str, oauth: bool) -> dict:
 
     refried_credential_string = json.dumps(parse_credentials(raw_credential_string))
 
-    if oauth:
-        return {
-            DB_CREDENTIALS_DICT_TOKEN_KEY: refried_credential_string,
-            DB_CREDENTIALS_PRIMARY_ADMIN_KEY: email,
-            DB_CREDENTIALS_AUTHENTICATION_METHOD: GoogleOAuthAuthenticationMethod.UPLOADED.value,
-        }
-    else:
-        return {
-            DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY: refried_credential_string,
-            DB_CREDENTIALS_PRIMARY_ADMIN_KEY: email,
-            DB_CREDENTIALS_AUTHENTICATION_METHOD: GoogleOAuthAuthenticationMethod.UPLOADED.value,
-        }
+    cred_key = (
+        DB_CREDENTIALS_DICT_TOKEN_KEY
+        if oauth
+        else DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY
+    )
+    return {
+        cred_key: refried_credential_string,
+        DB_CREDENTIALS_PRIMARY_ADMIN_KEY: email,
+        DB_CREDENTIALS_AUTHENTICATION_METHOD: GoogleOAuthAuthenticationMethod.UPLOADED.value,
+    }
 
 
 @pytest.fixture

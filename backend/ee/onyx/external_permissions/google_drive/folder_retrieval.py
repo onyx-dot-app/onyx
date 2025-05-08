@@ -8,6 +8,7 @@ from ee.onyx.external_permissions.google_drive.permission_retrieval import (
 )
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.file_retrieval import generate_time_range_filter
+from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_utils.google_utils import execute_paginated_retrieval
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
@@ -50,7 +51,7 @@ def get_modified_folders(
     service: Resource,
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[dict]:
+) -> Iterator[GoogleDriveFileType]:
     """
     Retrieves all folders that were modified within the specified time range.
     Only includes folder ID and permission information, not any contained files.

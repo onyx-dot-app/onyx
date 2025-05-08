@@ -143,13 +143,6 @@ def test_gdrive_perm_sync_with_real_data(
             if file_numeric_id in file_ids:
                 expected_users.add(user_email)
 
-        # https://drive.google.com/file/d/1V6fOoKgA8QSTJYWPP5GVHz8WFAQIRLNB/view?usp=drivesdk
-        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
-        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
-        # https://docs.google.com/document/d/1eAaZJAqjXMZ2VvG_r04EGtn6EGcYycofdNUkDHEA8vY/edit?usp=drivesdk
-        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
-        # https://drive.google.com/file/d/1ZwO5cCfBJgGpZTIpoi8p2js8zuHT_qxe/view?usp=drivesdk
-
         # Verify the permissions match
         if file_numeric_id in PUBLIC_RANGE:
             assert (

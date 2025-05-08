@@ -20,8 +20,6 @@ class GoogleDrivePermissionDetails(BaseModel):
     role: str
     # this is the id of the parent permission
     inherited_from: str | None
-    # this is a boolean that indicates if the permission is inherited
-    inherited: bool
 
 
 class GoogleDrivePermission(BaseModel):
@@ -54,7 +52,6 @@ class GoogleDrivePermission(BaseModel):
                     permission_type=permission_details.get("type"),
                     role=permission_details.get("role", ""),
                     inherited_from=permission_details.get("inheritedFrom"),
-                    inherited=permission_details.get("inherited", False),
                 )
                 if permission_details
                 else None

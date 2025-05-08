@@ -1,5 +1,3 @@
-import datetime
-
 from googleapiclient.errors import HttpError  # type: ignore
 from pydantic import BaseModel
 
@@ -38,9 +36,12 @@ class FolderInfo(BaseModel):
     permissions: list[GoogleDrivePermission]
 
 
-def _get_folders(
-    google_drive_connector: GoogleDriveConnector, start: datetime.datetime | None
-) -> list[FolderInfo]:
+def _get_all_folders(google_drive_connector: GoogleDriveConnector) -> list[FolderInfo]:
+    """Have to get all folders since the group syncing system assumes all groups
+    are returned every time.
+
+    TODO: tweak things so we can fetch deltas.
+    """
     all_folders: list[FolderInfo] = []
     seen_folder_ids: set[str] = set()
 
@@ -51,11 +52,8 @@ def _get_folders(
             user_email,
         )
 
-        # leave some buffer
-        start_in_seconds = start.timestamp() - ONE_HOUR_IN_SECONDS if start else None
         for folder in get_modified_folders(
             service=drive_service,
-            start=start_in_seconds,
         ):
             folder_id = folder["id"]
             if folder_id in seen_folder_ids:
@@ -88,7 +86,7 @@ def _get_folders(
     return all_folders
 
 
-"""Individual SharedDrive /My Drive Permission Sync"""
+"""Individual Shared Drive / My Drive Permission Sync"""
 
 
 def _get_drive_members(
@@ -290,9 +288,7 @@ def gdrive_group_sync(
     )
 
     # Get all folder permissions
-    folder_info = _get_folders(
-        google_drive_connector, cc_pair.last_time_external_group_sync
-    )
+    folder_info = _get_all_folders(google_drive_connector)
 
     # Map group emails to their members
     group_email_to_member_emails_map = _map_group_email_to_member_emails(
