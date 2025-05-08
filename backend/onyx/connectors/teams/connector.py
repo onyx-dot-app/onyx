@@ -17,9 +17,9 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.exceptions import CredentialExpiredError
 from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
+from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import CheckpointOutput
 from onyx.connectors.interfaces import GenerateDocumentsOutput
-from onyx.connectors.interfaces import LoadConnector
-from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
@@ -190,10 +190,13 @@ def _convert_thread_to_document(
     return doc
 
 
-class TeamsCheckpoint(ConnectorCheckpoint): ...
+class TeamsCheckpoint(ConnectorCheckpoint):
+    channel_ids: list[str] | None
 
 
-class TeamsConnector(LoadConnector, PollConnector):
+class TeamsConnector(
+    CheckpointedConnector[TeamsCheckpoint],
+):
     MAX_CHANNELS_TO_LOG = 50
 
     def __init__(
@@ -207,6 +210,8 @@ class TeamsConnector(LoadConnector, PollConnector):
         self.graph_client: GraphClient | None = None
         self.requested_team_list: list[str] = teams
         self.msal_app: msal.ConfidentialClientApplication | None = None
+
+    # impls for BaseConnector
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         teams_client_id = credentials["teams_client_id"]
@@ -230,10 +235,85 @@ class TeamsConnector(LoadConnector, PollConnector):
             token = self.msal_app.acquire_token_for_client(
                 scopes=["https://graph.microsoft.com/.default"]
             )
+
+            if not isinstance(token, dict):
+                raise RuntimeError("...")
+                ...
+
             return token
 
         self.graph_client = GraphClient(_acquire_token_func)
         return None
+
+    def validate_connector_settings(self) -> None:
+        if self.graph_client is None:
+            raise ConnectorMissingCredentialError("Teams credentials not loaded.")
+
+        try:
+            # Minimal call to confirm we can retrieve Teams
+            # make sure it doesn't take forever, since this is a syncronous call
+            found_teams = run_with_timeout(10, self._get_all_teams)
+
+        except ClientRequestException as e:
+            status_code = e.response.status_code
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Microsoft Teams credentials (401 Unauthorized)."
+                )
+            elif status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
+                )
+            raise UnexpectedValidationError(f"Unexpected error retrieving teams: {e}")
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if (
+                "unauthorized" in error_str
+                or "401" in error_str
+                or "invalid_grant" in error_str
+            ):
+                raise CredentialExpiredError(
+                    "Invalid or expired Microsoft Teams credentials."
+                )
+            elif "forbidden" in error_str or "403" in error_str:
+                raise InsufficientPermissionsError(
+                    "App lacks required permissions to read from Microsoft Teams."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Teams validation: {e}"
+            )
+
+        if not found_teams:
+            raise ConnectorValidationError(
+                "No Teams found for the given credentials. "
+                "Either there are no Teams in this tenant, or your app does not have permission to view them."
+            )
+
+    # impls for CheckpointedConnector
+
+    def build_dummy_checkpoint(self) -> TeamsCheckpoint:
+        return TeamsCheckpoint(
+            channel_ids=None,
+            has_more=True,
+        )
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> TeamsCheckpoint:
+        return TeamsCheckpoint.model_validate_json(checkpoint_json)
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: TeamsCheckpoint,
+    ) -> CheckpointOutput[TeamsCheckpoint]:
+        if self.graph_client is None:
+            ...
+
+        # TODO!
+        ...
+
+    # private helpers
 
     def _get_all_teams(self) -> list[Team]:
         if self.graph_client is None:
@@ -341,71 +421,42 @@ class TeamsConnector(LoadConnector, PollConnector):
                 doc_batch = []
         yield doc_batch
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
-        return self._fetch_from_teams()
-
-    def poll_source(
-        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> GenerateDocumentsOutput:
-        start_datetime = datetime.fromtimestamp(start, timezone.utc)
-        end_datetime = datetime.fromtimestamp(end, timezone.utc)
-        return self._fetch_from_teams(start=start_datetime, end=end_datetime)
-
-    def validate_connector_settings(self) -> None:
-        if self.graph_client is None:
-            raise ConnectorMissingCredentialError("Teams credentials not loaded.")
-
-        try:
-            # Minimal call to confirm we can retrieve Teams
-            # make sure it doesn't take forever, since this is a syncronous call
-            found_teams = run_with_timeout(10, self._get_all_teams)
-
-        except ClientRequestException as e:
-            status_code = e.response.status_code
-            if status_code == 401:
-                raise CredentialExpiredError(
-                    "Invalid or expired Microsoft Teams credentials (401 Unauthorized)."
-                )
-            elif status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
-                )
-            raise UnexpectedValidationError(f"Unexpected error retrieving teams: {e}")
-
-        except Exception as e:
-            error_str = str(e).lower()
-            if (
-                "unauthorized" in error_str
-                or "401" in error_str
-                or "invalid_grant" in error_str
-            ):
-                raise CredentialExpiredError(
-                    "Invalid or expired Microsoft Teams credentials."
-                )
-            elif "forbidden" in error_str or "403" in error_str:
-                raise InsufficientPermissionsError(
-                    "App lacks required permissions to read from Microsoft Teams."
-                )
-            raise ConnectorValidationError(
-                f"Unexpected error during Teams validation: {e}"
-            )
-
-        if not found_teams:
-            raise ConnectorValidationError(
-                "No Teams found for the given credentials. "
-                "Either there are no Teams in this tenant, or your app does not have permission to view them."
-            )
-
 
 if __name__ == "__main__":
-    connector = TeamsConnector(teams=os.environ["TEAMS"].split(","))
+    import time
+
+    app_id = os.environ["TEAMS_APPLICATION_ID"]
+    dir_id = os.environ["TEAMS_DIRECTORY_ID"]
+    secret = os.environ["TEAMS_SECRET"]
+    teams = os.environ.get("TEAMS", "").split(",")
+
+    connector = TeamsConnector(teams=teams)
 
     connector.load_credentials(
         {
-            "teams_client_id": os.environ["TEAMS_CLIENT_ID"],
-            "teams_client_secret": os.environ["TEAMS_CLIENT_SECRET"],
-            "teams_directory_id": os.environ["TEAMS_CLIENT_DIRECTORY_ID"],
+            "teams_client_id": app_id,
+            "teams_directory_id": dir_id,
+            "teams_client_secret": secret,
         }
     )
-    document_batches = connector.load_from_state()
-    print(next(document_batches))
+
+    start = 0.0
+    end = time.time()
+    checkpoint = connector.build_dummy_checkpoint()
+
+    gen = connector.load_from_checkpoint(
+        start=start,
+        end=end,
+        checkpoint=checkpoint,
+    )
+
+    try:
+        for doc_or_failure in gen:
+            if isinstance(doc_or_failure, Document):
+                print(doc_or_failure)
+            elif isinstance(doc_or_failure, Document):
+                print(doc_or_failure)
+    except StopIteration as e:
+        checkpoint = e.value
+
+    print(checkpoint)
