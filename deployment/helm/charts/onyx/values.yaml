@@ -305,7 +305,7 @@ api:
 # #     maxReplicas: 100
 # #     targetCPUUtilizationPercentage: 80
 # #     targetMemoryUtilizationPercentage: 80
-# 
+#
 #   image:
 #     repository: onyxdotapp/onyx-backend
 #     pullPolicy: IfNotPresent
@@ -335,21 +335,21 @@ api:
 #   #  limits:
 #   #    cpu: 2000m  # Limits to 2 CPU cores
 #   #    memory: 2Gi  # Limits to 2 GiB of memory
-# 
-# 
+#
+#
 #   # Additional volumes on the output Deployment definition.
 #   volumes: []
 #   # - name: foo
 #   #   secret:
 #   #     secretName: mysecret
 #   #     optional: false
-# 
+#
 #   # Additional volumeMounts on the output Deployment definition.
 #   volumeMounts: []
 #   # - name: foo
 #   #   mountPath: "/etc/foo"
 #   #   readOnly: true
-# 
+#
 #   nodeSelector: {}
 #   tolerations: []
 #   affinity: {}
@@ -467,7 +467,7 @@ celery_worker_monitoring:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  
+
 celery_worker_primary:
   replicaCount: 1
   autoscaling:
@@ -489,7 +489,7 @@ celery_worker_primary:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  
+
 celery_worker_user_files_indexing:
   replicaCount: 1
   autoscaling:
@@ -511,7 +511,7 @@ celery_worker_user_files_indexing:
   nodeSelector: {}
   tolerations: []
   affinity: {}
-  
+
 redis:
   enabled: true
   architecture: standalone
