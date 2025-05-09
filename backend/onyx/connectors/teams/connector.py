@@ -43,6 +43,169 @@ class TodoChannel(BaseModel):
     channel_id: str
 
 
+class TeamsCheckpoint(ConnectorCheckpoint):
+    todos: list[TodoTeam | TodoChannel] | None = None
+
+
+class TeamsConnector(
+    CheckpointedConnector[TeamsCheckpoint],
+):
+    MAX_CHANNELS_TO_LOG = 50
+
+    def __init__(
+        self,
+        batch_size: int = INDEX_BATCH_SIZE,
+        # TODO: (chris) move from "Display Names" to IDs, since display names
+        # are NOT guaranteed to be unique
+        teams: list[str] = [],
+    ) -> None:
+        self.batch_size = batch_size
+        self.graph_client: GraphClient | None = None
+        self.requested_team_list: list[str] = teams
+        self.msal_app: msal.ConfidentialClientApplication | None = None
+
+    # impls for BaseConnector
+
+    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
+        teams_client_id = credentials["teams_client_id"]
+        teams_client_secret = credentials["teams_client_secret"]
+        teams_directory_id = credentials["teams_directory_id"]
+
+        authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
+        self.msal_app = msal.ConfidentialClientApplication(
+            authority=authority_url,
+            client_id=teams_client_id,
+            client_credential=teams_client_secret,
+        )
+
+        def _acquire_token_func() -> dict[str, Any]:
+            """
+            Acquire token via MSAL
+            """
+            if self.msal_app is None:
+                raise RuntimeError("MSAL app is not initialized")
+
+            token = self.msal_app.acquire_token_for_client(
+                scopes=["https://graph.microsoft.com/.default"]
+            )
+
+            if not isinstance(token, dict):
+                raise RuntimeError("...")
+                ...
+
+            return token
+
+        self.graph_client = GraphClient(_acquire_token_func)
+        return None
+
+    def validate_connector_settings(self) -> None:
+        if self.graph_client is None:
+            raise ConnectorMissingCredentialError("Teams credentials not loaded.")
+
+        try:
+            # Minimal call to confirm we can retrieve Teams
+            # make sure it doesn't take forever, since this is a syncronous call
+            # found_teams = run_with_timeout(10, self._get_all_teams)
+            found_teams = _collect_all_teams(self.graph_client)
+
+        except ClientRequestException as e:
+            if not e.response:
+                raise RuntimeError("TODO!")
+            status_code = e.response.status_code
+            if status_code == 401:
+                raise CredentialExpiredError(
+                    "Invalid or expired Microsoft Teams credentials (401 Unauthorized)."
+                )
+            elif status_code == 403:
+                raise InsufficientPermissionsError(
+                    "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
+                )
+            raise UnexpectedValidationError(f"Unexpected error retrieving teams: {e}")
+
+        except Exception as e:
+            error_str = str(e).lower()
+            if (
+                "unauthorized" in error_str
+                or "401" in error_str
+                or "invalid_grant" in error_str
+            ):
+                raise CredentialExpiredError(
+                    "Invalid or expired Microsoft Teams credentials."
+                )
+            elif "forbidden" in error_str or "403" in error_str:
+                raise InsufficientPermissionsError(
+                    "App lacks required permissions to read from Microsoft Teams."
+                )
+            raise ConnectorValidationError(
+                f"Unexpected error during Teams validation: {e}"
+            )
+
+        if not found_teams:
+            raise ConnectorValidationError(
+                "No Teams found for the given credentials. "
+                "Either there are no Teams in this tenant, or your app does not have permission to view them."
+            )
+
+    # impls for CheckpointedConnector
+
+    def build_dummy_checkpoint(self) -> TeamsCheckpoint:
+        return TeamsCheckpoint(
+            has_more=True,
+        )
+
+    def validate_checkpoint_json(self, checkpoint_json: str) -> TeamsCheckpoint:
+        return TeamsCheckpoint.model_validate_json(checkpoint_json)
+
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: TeamsCheckpoint,
+    ) -> CheckpointOutput[TeamsCheckpoint]:
+        if self.graph_client is None:
+            raise ConnectorMissingCredentialError("Teams")
+
+        checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
+
+        if checkpoint.todos is None:
+            root_todos = _collect_all_teams(self.graph_client)
+            return TeamsCheckpoint(
+                todos=root_todos,
+                has_more=True if root_todos else False,
+            )
+
+        todos = checkpoint.todos
+
+        if not todos:
+            return TeamsCheckpoint(
+                todos=[],
+                has_more=False,
+            )
+
+        while todos:
+            todo = todos[-1]
+            if isinstance(todo, TodoTeam):
+                todo_channels = _collect_all_channels_for_team_id(
+                    graph_client=self.graph_client, team_id=todo.team_id
+                )
+                todos.pop()
+                todos.extend(todo_channels)
+            elif isinstance(todo, TodoChannel):
+                doc = _collect_document_for_channel_id(
+                    graph_client=self.graph_client,
+                    team_id=todo.team_id,
+                    channel_id=todo.channel_id,
+                )
+                todos.pop()
+                if doc:
+                    yield doc
+
+        return TeamsCheckpoint(
+            todos=[],
+            has_more=False,
+        )
+
+
 def _get_created_datetime(chat_message: ChatMessage) -> datetime:
     # Extract the 'createdDateTime' value from the 'properties' dictionary and convert it to a datetime object
     return time_str_to_utc(chat_message.properties["createdDateTime"])
@@ -249,169 +412,6 @@ def _collect_document_for_channel_id(
         channel=channel,
         thread=chat_messages,
     )
-
-
-class TeamsCheckpoint(ConnectorCheckpoint):
-    todos: list[TodoTeam | TodoChannel] | None = None
-
-
-class TeamsConnector(
-    CheckpointedConnector[TeamsCheckpoint],
-):
-    MAX_CHANNELS_TO_LOG = 50
-
-    def __init__(
-        self,
-        batch_size: int = INDEX_BATCH_SIZE,
-        # TODO: (chris) move from "Display Names" to IDs, since display names
-        # are NOT guaranteed to be unique
-        teams: list[str] = [],
-    ) -> None:
-        self.batch_size = batch_size
-        self.graph_client: GraphClient | None = None
-        self.requested_team_list: list[str] = teams
-        self.msal_app: msal.ConfidentialClientApplication | None = None
-
-    # impls for BaseConnector
-
-    def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
-        teams_client_id = credentials["teams_client_id"]
-        teams_client_secret = credentials["teams_client_secret"]
-        teams_directory_id = credentials["teams_directory_id"]
-
-        authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
-        self.msal_app = msal.ConfidentialClientApplication(
-            authority=authority_url,
-            client_id=teams_client_id,
-            client_credential=teams_client_secret,
-        )
-
-        def _acquire_token_func() -> dict[str, Any]:
-            """
-            Acquire token via MSAL
-            """
-            if self.msal_app is None:
-                raise RuntimeError("MSAL app is not initialized")
-
-            token = self.msal_app.acquire_token_for_client(
-                scopes=["https://graph.microsoft.com/.default"]
-            )
-
-            if not isinstance(token, dict):
-                raise RuntimeError("...")
-                ...
-
-            return token
-
-        self.graph_client = GraphClient(_acquire_token_func)
-        return None
-
-    def validate_connector_settings(self) -> None:
-        if self.graph_client is None:
-            raise ConnectorMissingCredentialError("Teams credentials not loaded.")
-
-        try:
-            # Minimal call to confirm we can retrieve Teams
-            # make sure it doesn't take forever, since this is a syncronous call
-            # found_teams = run_with_timeout(10, self._get_all_teams)
-            found_teams = _collect_all_teams(self.graph_client)
-
-        except ClientRequestException as e:
-            if not e.response:
-                raise RuntimeError("TODO!")
-            status_code = e.response.status_code
-            if status_code == 401:
-                raise CredentialExpiredError(
-                    "Invalid or expired Microsoft Teams credentials (401 Unauthorized)."
-                )
-            elif status_code == 403:
-                raise InsufficientPermissionsError(
-                    "Your app lacks sufficient permissions to read Teams (403 Forbidden)."
-                )
-            raise UnexpectedValidationError(f"Unexpected error retrieving teams: {e}")
-
-        except Exception as e:
-            error_str = str(e).lower()
-            if (
-                "unauthorized" in error_str
-                or "401" in error_str
-                or "invalid_grant" in error_str
-            ):
-                raise CredentialExpiredError(
-                    "Invalid or expired Microsoft Teams credentials."
-                )
-            elif "forbidden" in error_str or "403" in error_str:
-                raise InsufficientPermissionsError(
-                    "App lacks required permissions to read from Microsoft Teams."
-                )
-            raise ConnectorValidationError(
-                f"Unexpected error during Teams validation: {e}"
-            )
-
-        if not found_teams:
-            raise ConnectorValidationError(
-                "No Teams found for the given credentials. "
-                "Either there are no Teams in this tenant, or your app does not have permission to view them."
-            )
-
-    # impls for CheckpointedConnector
-
-    def build_dummy_checkpoint(self) -> TeamsCheckpoint:
-        return TeamsCheckpoint(
-            has_more=True,
-        )
-
-    def validate_checkpoint_json(self, checkpoint_json: str) -> TeamsCheckpoint:
-        return TeamsCheckpoint.model_validate_json(checkpoint_json)
-
-    def load_from_checkpoint(
-        self,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
-        checkpoint: TeamsCheckpoint,
-    ) -> CheckpointOutput[TeamsCheckpoint]:
-        if self.graph_client is None:
-            raise ConnectorMissingCredentialError("Teams")
-
-        checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
-
-        if checkpoint.todos is None:
-            root_todos = _collect_all_teams(self.graph_client)
-            return TeamsCheckpoint(
-                todos=root_todos,
-                has_more=True if root_todos else False,
-            )
-
-        todos = checkpoint.todos
-
-        if not todos:
-            return TeamsCheckpoint(
-                todos=[],
-                has_more=False,
-            )
-
-        while todos:
-            todo = todos[-1]
-            if isinstance(todo, TodoTeam):
-                todo_channels = _collect_all_channels_for_team_id(
-                    graph_client=self.graph_client, team_id=todo.team_id
-                )
-                todos.pop()
-                todos.extend(todo_channels)
-            elif isinstance(todo, TodoChannel):
-                doc = _collect_document_for_channel_id(
-                    graph_client=self.graph_client,
-                    team_id=todo.team_id,
-                    channel_id=todo.channel_id,
-                )
-                todos.pop()
-                if doc:
-                    yield doc
-
-        return TeamsCheckpoint(
-            todos=[],
-            has_more=False,
-        )
 
 
 if __name__ == "__main__":
