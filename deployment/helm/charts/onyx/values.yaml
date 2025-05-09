@@ -45,13 +45,12 @@ vespa:
   resources:
     # The Vespa Helm chart specifies default resources, which are quite modest. We override
     # them here to increase chances of the chart running successfully.
-    # NOTE(rkuo): some instant failures with 4GB, raising to 6GB
     requests:
       cpu: 1500m
-      memory: 6000Mi
+      memory: 4000Mi
     limits:
       cpu: 1500m
-      memory: 6000Mi
+      memory: 4000Mi
 
 persistent:
   storageClassName: ""
