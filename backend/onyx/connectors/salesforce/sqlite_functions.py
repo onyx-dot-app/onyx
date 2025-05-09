@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import sqlite3
+import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -350,6 +351,9 @@ class OnyxSalesforceSQLite:
         """Update the SF DB with a CSV file using SQLite storage."""
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
+
+        # some customers need this to be larger than the default 128KB
+        csv.field_size_limit(sys.maxsize)
 
         updated_ids = []
 
