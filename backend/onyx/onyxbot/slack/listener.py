@@ -270,7 +270,7 @@ class SlackbotHandler:
             "onyx.server.tenants.product_gating",
             "get_gated_tenants",
             set(),
-        )
+        )()
         all_tenants = [
             tenant_id
             for tenant_id in get_all_tenant_ids()
