@@ -11,7 +11,7 @@ from typing import cast
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.runtime.client_request_exception import ClientRequestException  # type: ignore
-from office365.runtime.http.request_options import RequestOptions
+from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from pydantic import BaseModel  # type: ignore
@@ -334,14 +334,14 @@ def _convert_thread_to_document(
     return doc
 
 
-def _update_request_url(request: RequestOptions, next_url: str):
+def _update_request_url(request: RequestOptions, next_url: str) -> None:
     request.url = next_url
 
 
 def _collect_all_teams(
     graph_client: GraphClient,
 ) -> list[TodoTeam | TodoChannel]:
-    todo_teams = []
+    todo_teams: list[TodoTeam | TodoChannel] = []
     next_url = None
 
     while True:
@@ -381,7 +381,7 @@ def _collect_all_channels_for_team_id(
 
     [team] = team_collection
 
-    todo_channels = []
+    todo_channels: list[TodoTeam | TodoChannel] = []
     next_url = None
 
     while True:
@@ -441,8 +441,8 @@ if __name__ == "__main__":
     dir_id = os.environ["TEAMS_DIRECTORY_ID"]
     secret = os.environ["TEAMS_SECRET"]
 
-    teams = os.environ.get("TEAMS", None)
-    teams = teams.split(",") if teams else []
+    teams_env_var = os.environ.get("TEAMS", None)
+    teams = teams_env_var.split(",") if teams_env_var else []
     connector = TeamsConnector(teams=teams)
 
     connector.load_credentials(
