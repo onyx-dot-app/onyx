@@ -12,6 +12,7 @@ from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_act
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_step_answer_explicit,
 )
+from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import SQLSimpleGenerationUpdate
 from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
@@ -142,6 +143,7 @@ def generate_simple_sql(
     relationship_types_str = state.relationship_types_str
 
     single_doc_id = state.single_doc_id
+    state.search_type
 
     ## STEP 3 - articulate goals
 
@@ -155,7 +157,7 @@ def generate_simple_sql(
         user_email = graph_config.tooling.search_tool.user.email
         user_name = user_email.split("@")[0]
 
-    if single_doc_id:
+    if state.search_type == KGSearchType.SQL and single_doc_id:
 
         # If single doc id already identified, we do not need to go through the KG
         # query cycle, saving a lot of time.
@@ -169,6 +171,18 @@ def generate_simple_sql(
         )
 
         step_answer = f"Source document already identified: {single_doc_id}"
+
+    elif state.search_type == KGSearchType.SEARCH:
+        # If we do a filtered search, then we do not need to go through the SQL
+        # generation process.
+
+        main_sql_statement = None
+        query_results = None
+        source_documents_sql = None
+        source_document_results = None
+        reasoning = "A KG query was not required as we will use a filtered search."
+
+        step_answer = "Filtered search will be used."
 
     else:
         # If no single doc id already identified, we need to go through the KG
@@ -352,7 +366,8 @@ def generate_simple_sql(
 
         main_sql_statement = sql_statement
 
-    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
+    if reasoning:
+        stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
 
     stream_close_step_answer(writer, _KG_STEP_NR)
 

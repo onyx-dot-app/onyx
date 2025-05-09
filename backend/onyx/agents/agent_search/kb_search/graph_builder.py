@@ -17,6 +17,7 @@ from onyx.agents.agent_search.kb_search.nodes.b1_construct_deep_search_filters i
 from onyx.agents.agent_search.kb_search.nodes.b2p_process_individual_deep_search import (
     process_individual_deep_search,
 )
+from onyx.agents.agent_search.kb_search.nodes.b2s_filtered_search import filtered_search
 from onyx.agents.agent_search.kb_search.nodes.b3_consolidate_individual_deep_search import (
     consolidate_individual_deep_search,
 )
@@ -51,6 +52,11 @@ def kb_graph_builder() -> StateGraph:
     graph.add_node(
         "generate_simple_sql",
         generate_simple_sql,
+    )
+
+    graph.add_node(
+        "filtered_search",
+        filtered_search,
     )
 
     graph.add_node(
@@ -101,7 +107,7 @@ def kb_graph_builder() -> StateGraph:
     graph.add_conditional_edges(
         source="construct_deep_search_filters",
         path=research_individual_object,
-        path_map=["process_individual_deep_search"],
+        path_map=["process_individual_deep_search", "filtered_search"],
     )
 
     graph.add_edge(
@@ -111,6 +117,11 @@ def kb_graph_builder() -> StateGraph:
 
     graph.add_edge(
         start_key="consoldidate_individual_deep_search", end_key="generate_answer"
+    )
+
+    graph.add_edge(
+        start_key="filtered_search",
+        end_key="generate_answer",
     )
 
     graph.add_edge(

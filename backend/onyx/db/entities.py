@@ -243,7 +243,7 @@ def get_entity_names_for_types(
             # Construct the final string
             names.append((entity.id_name, f"{entity_type}:{doc_semantic_id}"))
         else:
-            names.append((entity.id_name, None))
+            names.append((entity.id_name, entity.id_name))
 
     return names
 

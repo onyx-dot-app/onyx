@@ -2,6 +2,7 @@ from pydantic import BaseModel
 
 from onyx.agents.agent_search.kb_search.states import KGAnswerFormat
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
+from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import YesNoEnum
 
 
@@ -12,7 +13,8 @@ class KGQuestionEntityExtractionResult(BaseModel):
 
 
 class KGAnswerApproach(BaseModel):
-    strategy: KGAnswerStrategy
+    search_type: KGSearchType
+    search_strategy: KGAnswerStrategy
     format: KGAnswerFormat
     broken_down_question: str | None = None
     divide_and_conquer: YesNoEnum | None = None
