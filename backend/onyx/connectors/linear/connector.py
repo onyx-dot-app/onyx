@@ -193,12 +193,19 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             team {
                                 name
                             }
+                            assignee {
+                                email
+                            }
                             previousIdentifiers
                             subIssueSortOrder
                             priorityLabel
                             identifier
                             url
                             branchName
+                            state {
+                                id
+                                name
+                            }
                             customerTicketCount
                             description
                             comments {
@@ -267,7 +274,45 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                         title=node["title"],
                         doc_updated_at=time_str_to_utc(node["updatedAt"]),
                         metadata={
-                            "team": node["team"]["name"],
+                            k: v
+                            for k, v in {
+                                "team": (node.get("team", {}) or {}).get("name"),
+                                "assignee": (node.get("assignee", {}) or {}).get(
+                                    "email"
+                                ),
+                                "state": (node.get("state", {}) or {}).get("name"),
+                                "priority": (
+                                    str(node.get("priority"))
+                                    if node.get("priority") is not None
+                                    else None
+                                ),
+                                "estimate": (
+                                    str(node.get("estimate"))
+                                    if node.get("estimate") is not None
+                                    else None
+                                ),
+                                "started_at": (
+                                    str(node.get("startedAt"))
+                                    if node.get("startedAt") is not None
+                                    else None
+                                ),
+                                "completed_at": (
+                                    str(node.get("completedAt"))
+                                    if node.get("completedAt") is not None
+                                    else None
+                                ),
+                                "created_at": (
+                                    str(node.get("createdAt"))
+                                    if node.get("createdAt") is not None
+                                    else None
+                                ),
+                                "due_date": (
+                                    str(node.get("dueDate"))
+                                    if node.get("dueDate") is not None
+                                    else None
+                                ),
+                            }.items()
+                            if v is not None
                         },
                     )
                 )

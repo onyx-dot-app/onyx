@@ -54,6 +54,39 @@ def build_vespa_filters(
 
         return result
 
+    def _build_kg_filter(
+        kg_entities: list[str] | None,
+        kg_relationships: list[str] | None,
+        kg_terms: list[str] | None,
+    ) -> str:
+        if not kg_entities and not kg_relationships and not kg_terms:
+            return ""
+
+        filter_parts = []
+
+        # Process each filter type using the same pattern
+        for filter_type, values in [
+            ("kg_entities", kg_entities),
+            ("kg_relationships", kg_relationships),
+            ("kg_terms", kg_terms),
+        ]:
+            if values:
+                filter_parts.append(
+                    " and ".join(f'({filter_type} contains "{val}") ' for val in values)
+                )
+
+        return f"({' and '.join(filter_parts)}) and "
+
+    def _build_kg_source_filters(
+        kg_sources: list[str] | None,
+    ) -> str:
+        if not kg_sources:
+            return ""
+
+        source_phrases = [f'{DOCUMENT_ID} contains "{source}"' for source in kg_sources]
+
+        return f"({' or '.join(source_phrases)}) and "
+
     def _build_time_filter(
         cutoff: datetime | None,
         untimed_doc_cutoff: timedelta = timedelta(days=92),
@@ -105,6 +138,15 @@ def build_vespa_filters(
 
     # Time filter
     filter_str += _build_time_filter(filters.time_cutoff)
+
+    # Knowledge Graph Filters
+    filter_str += _build_kg_filter(
+        kg_entities=filters.kg_entities,
+        kg_relationships=filters.kg_relationships,
+        kg_terms=filters.kg_terms,
+    )
+
+    filter_str += _build_kg_source_filters(filters.kg_sources)
 
     # Trim trailing " and "
     if remove_trailing_and and filter_str.endswith(" and "):

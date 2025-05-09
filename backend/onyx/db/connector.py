@@ -16,6 +16,7 @@ from onyx.db.enums import IndexingMode
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import IndexAttempt
+from onyx.kg.models import KGConnectorData
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import ObjectCreationIdResponse
 from onyx.server.models import StatusResponse
@@ -334,3 +335,29 @@ def mark_ccpair_with_indexing_trigger(
     except Exception:
         db_session.rollback()
         raise
+
+
+def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
+    """
+    Retrieves a list of connector IDs that have not been KG processed for a given tenant.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        list[int]: List of connector IDs that have enabled KG extraction but have unprocessed documents
+    """
+    try:
+        stmt = select(Connector.id, Connector.source).where(
+            Connector.kg_processing_enabled
+        )
+        result = db_session.execute(stmt)
+
+        connector_results = [
+            KGConnectorData(id=row[0], source=row[1].lower())
+            for row in result.fetchall()
+        ]
+
+        return connector_results
+
+    except Exception as e:
+        logger.error(f"Error fetching unprocessed connector IDs: {str(e)}")
+        raise e

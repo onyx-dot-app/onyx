@@ -23,6 +23,8 @@ from sqlalchemy.sql.expression import null
 
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import InferenceSection
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
@@ -38,6 +40,7 @@ from onyx.db.models import User
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata
+from onyx.kg.models import KGStage
 from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.utils.logger import setup_logger
 
@@ -392,6 +395,7 @@ def upsert_documents(
                     last_modified=datetime.now(timezone.utc),
                     primary_owners=doc.primary_owners,
                     secondary_owners=doc.secondary_owners,
+                    kg_stage=KGStage.NOT_STARTED,
                 )
             )
             for doc in seen_documents.values()
@@ -858,3 +862,287 @@ def fetch_chunk_count_for_document(
 ) -> int | None:
     stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
     return db_session.execute(stmt).scalar_one_or_none()
+
+
+def get_unprocessed_kg_document_batch_for_connector(
+    db_session: Session,
+    connector_id: int,
+    batch_size: int = 100,
+) -> list[DbDocument]:
+    """
+    Retrieves a batch of documents that have not been processed for knowledge graph extraction.
+    Args:
+        db_session (Session): The database session to use
+        connector_id (int): The ID of the connector to get documents for
+        batch_size (int): The maximum number of documents to retrieve
+    Returns:
+        list[DbDocument]: List of documents that need KG processing
+    """
+
+    stmt = (
+        select(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .where(
+            and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                or_(
+                    DbDocument.kg_stage.is_(None),
+                    DbDocument.kg_stage == KGStage.NOT_STARTED,
+                ),
+            )
+        )
+        .distinct()
+        .order_by(DbDocument.doc_updated_at.desc())
+        .limit(batch_size)
+    )
+
+    documents = db_session.scalars(stmt).all()
+    db_session.flush()
+
+    return list(documents)
+
+
+def get_kg_extracted_document_ids(db_session: Session) -> list[str]:
+    """
+    Retrieves all document IDs where kg_stage is EXTRACTED.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        list[str]: List of document IDs that have been KG processed
+    """
+    stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.EXTRACTED)
+
+    return list(db_session.scalars(stmt).all())
+
+
+def update_document_kg_info(
+    db_session: Session, document_id: str, kg_stage: KGStage
+) -> None:
+    """Updates the knowledge graph related information for a document.
+    Args:
+        db_session (Session): The database session to use
+        document_id (str): The ID of the document to update
+        kg_stage (KGStage): The stage of the knowledge graph processing for the document
+    Raises:
+        ValueError: If the document with the given ID is not found
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.id == document_id)
+        .values(
+            kg_stage=kg_stage,
+        )
+    )
+    db_session.execute(stmt)
+
+
+def update_document_kg_stage(
+    db_session: Session,
+    document_id: str,
+    kg_stage: KGStage,
+) -> None:
+    stmt = (
+        update(DbDocument).where(DbDocument.id == document_id).values(kg_stage=kg_stage)
+    )
+    db_session.execute(stmt)
+    db_session.flush()
+
+
+def get_document_kg_info(
+    db_session: Session,
+    document_id: str,
+) -> KGStage | None:
+    """Retrieves the knowledge graph processing status and data for a document.
+    Args:
+        db_session (Session): The database session to use
+        document_id (str): The ID of the document to query
+    Returns:
+        Optional[Tuple[bool, dict]]: A tuple containing:
+            - bool: Whether the document has been KG processed
+            - dict: The KG data containing 'entities', 'relationships', and 'terms'
+            Returns None if the document is not found
+    """
+    stmt = select(DbDocument.kg_stage).where(DbDocument.id == document_id)
+    result = db_session.execute(stmt).one_or_none()
+
+    if result is None:
+        return None
+
+    return result.kg_stage or KGStage.NOT_STARTED
+
+
+def get_all_kg_extracted_documents_info(
+    db_session: Session,
+) -> list[str]:
+    """Retrieves the knowledge graph data for all documents that have been processed.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        List[Tuple[str, dict]]: A list of tuples containing:
+            - str: The document ID
+            - dict: The KG data containing 'entities', 'relationships', and 'terms'
+        Only returns documents where kg_stage is EXTRACTED
+    """
+    stmt = (
+        select(DbDocument.id)
+        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
+        .order_by(DbDocument.id)
+    )
+
+    results = db_session.execute(stmt).all()
+    return [str(doc_id) for doc_id in results]
+
+
+def get_base_llm_doc_information(
+    db_session: Session, document_ids: list[str]
+) -> list[InferenceSection]:
+    stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
+    results = db_session.execute(stmt).all()
+
+    inference_sections = []
+
+    for doc in results:
+        bare_doc = doc[0]
+        inference_section = InferenceSection(
+            center_chunk=InferenceChunk(
+                document_id=bare_doc.id,
+                chunk_id=0,
+                source_type=DocumentSource.NOT_APPLICABLE,
+                semantic_identifier=bare_doc.semantic_id,
+                title=None,
+                boost=0,
+                recency_bias=0,
+                score=0,
+                hidden=False,
+                metadata={},
+                blurb="",
+                content="",
+                source_links=None,
+                image_file_name=None,
+                section_continuation=False,
+                match_highlights=[],
+                doc_summary="",
+                chunk_context="",
+                updated_at=None,
+            ),
+            chunks=[],
+            combined_content="",
+        )
+
+        inference_sections.append(inference_section)
+    return inference_sections
+
+
+def get_document_updated_at(
+    document_id: str,
+    db_session: Session,
+) -> datetime | None:
+    """Retrieves the doc_updated_at timestamp for a given document ID.
+    Args:
+        document_id (str): The ID of the document to query
+        db_session (Session): The database session to use
+    Returns:
+        Optional[datetime]: The doc_updated_at timestamp if found, None if document doesn't exist
+    """
+    if len(document_id.split(":")) == 2:
+        document_id = document_id.split(":")[1]
+    elif len(document_id.split(":")) > 2:
+        raise ValueError(f"Invalid document ID: {document_id}")
+    else:
+        pass
+
+    stmt = select(DbDocument.doc_updated_at).where(DbDocument.id == document_id)
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def reset_all_document_kg_stages(db_session: Session) -> int:
+    """Reset the KG stage of all documents that are not in NOT_STARTED state to NOT_STARTED.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage != KGStage.NOT_STARTED)
+        .values(kg_stage=KGStage.NOT_STARTED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def reset_extracted_document_kg_stages(db_session: Session) -> int:
+    """Reset the KG stage only of documents back to NOT_STARTED.
+    Part of reset flow for documemnts that have been extracted but not clustered.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
+        .values(kg_stage=KGStage.NOT_STARTED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def reset_normalized_document_kg_stages(db_session: Session) -> int:
+    """Reset the KG stage only of documents back to NOT_STARTED.
+    Part of reset flow for documemnts that have been normalized.
+    This essentialy requires that the extractions are still available.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage == KGStage.NORMALIZED)
+        .values(kg_stage=KGStage.EXTRACTED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def update_extracted_document_kg_stages(db_session: Session) -> int:
+    """Update the KG stage only of documents  to NORMALIZED.
+    Part of reset flow for documemnts that have been normalized.
+    This essentialy requires that the extractions are still available.
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        int: Number of documents that were reset
+    """
+    stmt = (
+        update(DbDocument)
+        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
+        .values(kg_stage=KGStage.NORMALIZED)
+    )
+    result = db_session.execute(stmt)
+    return result.rowcount if hasattr(result, "rowcount") else 0
+
+
+def get_skipped_kg_documents(db_session: Session) -> list[str]:
+    """
+    Retrieves all document IDs where kg_stage is SKIPPED.
+    Args:
+        db_session (Session): The database session to use
+    Returns:
+        list[str]: List of document IDs that have been skipped in KG processing
+    """
+    stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.SKIPPED)
+
+    return list(db_session.scalars(stmt).all())
