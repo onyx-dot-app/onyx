@@ -792,6 +792,7 @@ def build_request_details(
             bypass_filters=tagged,
             is_bot_msg=False,
             is_bot_dm=event.get("channel_type") == "im",
+            is_shortcut=False,
         )
 
     elif req.type == "slash_commands":
@@ -815,6 +816,7 @@ def build_request_details(
             bypass_filters=True,
             is_bot_msg=True,
             is_bot_dm=False,
+            is_shortcut=False,
         )
     elif req.type == "interactive":
         payload = req.payload
@@ -946,6 +948,7 @@ def process_message(
         failed = handle_message(
             message_info=details,
             slack_channel_config=slack_channel_config,
+            slack_shortcut_config=None,
             client=client.web_client,
             feedback_reminder_id=feedback_reminder_id,
         )

@@ -287,7 +287,6 @@ def handle_message(
                 logger=logger,
                 client=client,
                 db_session=db_session,
-                is_ephemeral=is_ephemeral,
             )
             if used_standard_answer:
                 return False
