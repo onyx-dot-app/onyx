@@ -506,16 +506,6 @@ if __name__ == "__main__":
         }
     )
 
-    # assert connector.graph_client
-    # todo_teams = _collect_all_todo_teams(graph_client=connector.graph_client)
-    # for todo_team in todo_teams:
-    #     todo_channels = _collect_all_todo_channels_from_team_id(
-    #         graph_client=connector.graph_client,
-    #         team_id=todo_team.team_id,
-    #     )
-    #     print(todo_channels)
-    # print(_collect_all_todo_teams(graph_client=connector.graph_client))
-
     print(
         load_everything_from_checkpoint_connector(
             connector=connector,
