@@ -27,16 +27,21 @@ jobs:
       uses: helm/chart-testing-action@v2.7.0
 
     # even though we specify chart-dirs in ct.yaml, it isn't used by ct for the list-changed command...
-    - name: Run chart-testing (list-changed)
-      id: list-changed
-      run: |
-        echo "default_branch: ${{ github.event.repository.default_branch }}"
-        changed=$(ct list-changed --remote origin --target-branch ${{ github.event.repository.default_branch }} --chart-dirs deployment/helm/charts)
-        echo "list-changed output: $changed"
-        if [[ -n "$changed" ]]; then
-          echo "changed=true" >> "$GITHUB_OUTPUT"
-        fi
+#     - name: Run chart-testing (list-changed)
+#       id: list-changed
+#       run: |
+#         echo "default_branch: ${{ github.event.repository.default_branch }}"
+#         changed=$(ct list-changed --remote origin --target-branch ${{ github.event.repository.default_branch }} --chart-dirs deployment/helm/charts)
+#         echo "list-changed output: $changed"
+#         if [[ -n "$changed" ]]; then
+#           echo "changed=true" >> "$GITHUB_OUTPUT"
+#         fi
 
+    # uncomment to force run chart-testing
+    - name: Force run chart-testing (list-changed)
+      id: list-changed
+      run: echo "changed=true" >> $GITHUB_OUTPUT
+        
     # lint all charts if any changes were detected
     - name: Run chart-testing (lint)
       if: steps.list-changed.outputs.changed == 'true'
