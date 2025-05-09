@@ -95,6 +95,7 @@ def _perform_index_swap(
 
             logger.notice("Vespa index swap complete.")
             success = True
+            break
         except Exception:
             logger.exception(
                 f"Vespa index swap did not succeed. The Vespa service may not be ready yet. Retrying in {WAIT_SECONDS} seconds."
