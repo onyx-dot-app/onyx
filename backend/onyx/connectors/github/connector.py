@@ -541,6 +541,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
             used_cursor = checkpoint.cursor_url is not None
+            logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
             if num_prs > 0 and not done_with_prs and not used_cursor:
                 return checkpoint
 
@@ -552,8 +553,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             if used_cursor:
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
-
-        logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
 
         checkpoint.stage = GithubConnectorStage.ISSUES
 
@@ -609,6 +608,7 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     )
                     continue
 
+            logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
             # if we found any issues on the page, and we're not done, return the checkpoint.
             # don't return if we're using cursor-based pagination to avoid infinite loops
             if num_issues > 0 and not done_with_issues and not checkpoint.cursor_url:
@@ -618,8 +618,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # issues to get, we move on to the next repo
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
-
-        logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
 
         checkpoint.has_more = len(checkpoint.cached_repo_ids) > 0
         if checkpoint.cached_repo_ids:
