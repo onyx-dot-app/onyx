@@ -15,11 +15,11 @@ spec:
         - -c
       args:
         - |
-          for i in $(seq 1 20); do
+          for i in $(seq 1 40); do
             echo "Attempt $i: wget {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }}"
             wget {{ include "onyx-stack.fullname" . }}-webserver:{{ .Values.webserver.service.servicePort }} && exit 0
             sleep 15
           done
-          echo "Service unavailable after 20 attempts"
+          echo "Service unavailable after 40 attempts"
           exit 1
   restartPolicy: Never
