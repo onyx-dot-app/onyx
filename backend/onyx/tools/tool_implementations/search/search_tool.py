@@ -316,7 +316,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             kg_relationships = override_kwargs.kg_relationships
             kg_terms = override_kwargs.kg_terms
             kg_sources = override_kwargs.kg_sources
-
+            kg_chunk_id_zero_only = override_kwargs.kg_chunk_id_zero_only
         # Fast path for ordering-only search
         if ordering_only:
             yield from self._run_ordering_only_search(
@@ -375,6 +375,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             retrieval_options.filters.kg_terms = kg_terms
         if kg_sources:
             retrieval_options.filters.kg_sources = kg_sources
+        if kg_chunk_id_zero_only:
+            retrieval_options.filters.kg_chunk_id_zero_only = kg_chunk_id_zero_only
 
         search_pipeline = SearchPipeline(
             search_request=SearchRequest(

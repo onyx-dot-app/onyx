@@ -1,6 +1,6 @@
 from collections.abc import Hashable
 from datetime import datetime
-from typing import Literal
+from enum import Enum
 
 from langgraph.types import Send
 
@@ -9,14 +9,19 @@ from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
 
 
+class KGAnalysisPath(str, Enum):
+    PROCESS_KG_ONLY_ANSWERS = "process_kg_only_answers"
+    CONSTRUCT_DEEP_SEARCH_FILTERS = "construct_deep_search_filters"
+
+
 def simple_vs_search(
     state: MainState,
-) -> Literal["process_kg_only_answers", "construct_deep_search_filters"]:
+) -> str:
 
     if state.strategy == KGAnswerStrategy.DEEP:
-        return "construct_deep_search_filters"
+        return KGAnalysisPath.CONSTRUCT_DEEP_SEARCH_FILTERS.value
     else:
-        return "process_kg_only_answers"
+        return KGAnalysisPath.PROCESS_KG_ONLY_ANSWERS.value
 
 
 def research_individual_object(
@@ -32,6 +37,7 @@ def research_individual_object(
         Send(
             "process_individual_deep_search",
             ResearchObjectInput(
+                research_nr=research_nr + 1,
                 entity=entity,
                 broken_down_question=state.broken_down_question,
                 vespa_filter_results=state.vespa_filter_results,
@@ -40,7 +46,8 @@ def research_individual_object(
                 log_messages=[
                     f"{edge_start_time} -- Main Edge - Parallelize Initial Sub-question Answering"
                 ],
+                step_results=[],
             ),
         )
-        for entity in state.div_con_entities
+        for research_nr, entity in enumerate(state.div_con_entities)
     ]

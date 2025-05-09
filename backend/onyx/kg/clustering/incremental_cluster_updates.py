@@ -39,7 +39,7 @@ def kg_incremental_cluster_updates(
     source_documents_w_successful_transfers: Set[str] = set()
     source_documents_w_failed_transfers: Set[str] = set()
 
-    # get onjects that are now in the Staging tables
+    # get objects that are now in the Staging tables
 
     with get_session_with_current_tenant() as db_session:
 
@@ -69,7 +69,7 @@ def kg_incremental_cluster_updates(
                 KGStage.NORMALIZED,
                 entity_type=grounded_entity.entity_type_id_name,
                 name=grounded_entity.name,
-                occurences=grounded_entity.occurences or 1,
+                occurrences=grounded_entity.occurrences or 1,
                 document_id=grounded_entity.document_id or None,
                 attributes=grounded_entity.attributes or None,
             )
@@ -88,7 +88,7 @@ def kg_incremental_cluster_updates(
                 source_entity_type=relationship_type.source_entity_type_id_name,
                 relationship_type=relationship_type.type,
                 target_entity_type=relationship_type.target_entity_type_id_name,
-                extraction_count=relationship_type.occurences or 1,
+                extraction_count=relationship_type.occurrences or 1,
             )
 
             db_session.commit()
@@ -104,7 +104,7 @@ def kg_incremental_cluster_updates(
                     KGStage.NORMALIZED,
                     relationship_id_name=relationship.id_name,
                     source_document_id=relationship.source_document or "",
-                    occurences=relationship.occurences or 1,
+                    occurrences=relationship.occurrences or 1,
                 )
 
                 if relationship.source_document:

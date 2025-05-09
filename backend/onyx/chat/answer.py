@@ -25,8 +25,8 @@ from onyx.chat.models import SubQuestionKey
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.constants import BASIC_KEY
-from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.context.search.models import SearchRequest
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
@@ -130,8 +130,9 @@ class Answer:
         self.search_behavior_config = GraphSearchConfig(
             use_agentic_search=use_agentic_search,
             skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-            allow_refinement=True,
+            allow_refinement=False,
             allow_agent_reranking=allow_agent_reranking,
+            kg_config_settings=get_kg_config_settings(db_session),
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,
@@ -146,7 +147,15 @@ class Answer:
             yield from self._processed_stream
             return
 
-        if self.graph_config.behavior.use_agentic_search:
+        if self.graph_config.behavior.use_agentic_search and (
+            self.graph_config.inputs.search_request.persona
+            and self.graph_config.behavior.kg_config_settings.KG_ENABLED
+            and self.graph_config.inputs.search_request.persona.name.startswith(
+                "KG Dev"
+            )
+        ):
+            run_langgraph = run_kb_graph
+        elif self.graph_config.behavior.use_agentic_search:
             run_langgraph = run_main_graph
         elif (
             self.graph_config.inputs.search_request.persona
@@ -156,14 +165,6 @@ class Answer:
             )
         ):
             run_langgraph = run_dc_graph
-        elif (
-            self.graph_config.inputs.search_request.persona
-            and USE_KG_APPROACH
-            and self.graph_config.inputs.search_request.persona.name.startswith(
-                "KG Dev"
-            )
-        ):
-            run_langgraph = run_kb_graph
         else:
             run_langgraph = run_basic_graph
 

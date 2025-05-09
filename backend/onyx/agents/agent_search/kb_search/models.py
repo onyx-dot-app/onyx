@@ -32,3 +32,16 @@ class KGQuestionExtractionResult(BaseModel):
 class KGExpandedGraphObjects(BaseModel):
     entities: list[str]
     relationships: list[str]
+
+
+class KGSteps(BaseModel):
+    description: str
+    activities: list[str]
+
+
+class KGEntityDocInfo(BaseModel):
+    doc_id: str | None
+    doc_semantic_id: str | None
+    doc_link: str | None
+    semantic_entity_name: str
+    semantic_linked_entity_name: str

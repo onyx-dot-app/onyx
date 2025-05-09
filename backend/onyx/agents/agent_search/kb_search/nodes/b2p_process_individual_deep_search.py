@@ -6,6 +6,11 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    get_doc_information_for_entity,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import write_custom_event
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import ResearchObjectInput
 from onyx.agents.agent_search.kb_search.states import ResearchObjectUpdate
@@ -16,12 +21,12 @@ from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import LlmDoc
+from onyx.chat.models import SubQueryPiece
+from onyx.context.search.models import InferenceSection
 from onyx.prompts.kg_prompts import KG_OBJECT_SOURCE_RESEARCH_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
-
 
 logger = setup_logger()
 
@@ -34,6 +39,9 @@ def process_individual_deep_search(
     """
     LangGraph node to start the agentic search process.
     """
+
+    _KG_STEP_NR = 4
+
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
@@ -42,15 +50,18 @@ def process_individual_deep_search(
     source_division = state.source_division
     source_filters = state.source_entity_filters
 
+    object = state.entity.replace(":", ": ").lower()
+
+    object_id = object.split(":")[1].strip()
+
     if not search_tool:
         raise ValueError("search_tool is not provided")
 
-    object = state.entity.replace(":", ": ").lower()
+    research_nr = state.research_nr
 
+    extended_question = f"{question} in regards to {object}"
     if source_division:
         extended_question = question
-    else:
-        extended_question = f"{question} in regards to {object}"
 
     raw_kg_entity_filters = copy.deepcopy(
         list(set((state.vespa_filter_results.global_entity_filters + [state.entity])))
@@ -67,20 +78,30 @@ def process_individual_deep_search(
         state.vespa_filter_results.global_relationship_filters
     )
 
+    # if this is a single-object analysis and object is a source,
+    # drop the other filters as they already were included
+    # in the KG query that led to this analysis
+
+    if source_division and source_filters:
+        for source_filter in source_filters:
+            if object_id.lower() == source_filter.lower():
+                source_filters = [source_filter]
+                kg_relationship_filters = []
+                kg_entity_filters = []
+                break
+
     logger.info("Research for object: " + object)
     logger.info(f"kg_entity_filters: {kg_entity_filters}")
     logger.info(f"kg_relationship_filters: {kg_relationship_filters}")
 
-    # Add random wait between 1-3 seconds
-    # time.sleep(random.uniform(0, 3))
-
+    # Step 4 - stream out the research query
     write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=f"Researching {object}...  -  ",
+        "subqueries",
+        SubQueryPiece(
+            sub_query=f"{get_doc_information_for_entity(object).semantic_entity_name}",
             level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
+            level_question_num=_KG_STEP_NR,
+            query_id=research_nr + 1,
         ),
         writer,
     )
@@ -94,8 +115,11 @@ def process_individual_deep_search(
     )
 
     document_texts_list = []
-    for doc_num, doc in enumerate(retrieved_docs):
-        chunk_text = "Document " + str(doc_num + 1) + ":\n" + doc.content
+
+    for doc_num, retrieved_doc in enumerate(retrieved_docs):
+        if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
+            raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")
+        chunk_text = build_document_context(retrieved_doc, doc_num + 1)
         document_texts_list.append(chunk_text)
 
     document_texts = "\n\n".join(document_texts_list)
@@ -120,7 +144,6 @@ def process_individual_deep_search(
             ),
         )
     ]
-    # fast_llm = graph_config.tooling.fast_llm
     primary_llm = graph_config.tooling.primary_llm
     llm = primary_llm
     # Grader
@@ -154,4 +177,5 @@ def process_individual_deep_search(
                 node_start_time=node_start_time,
             )
         ],
+        step_results=[],
     )

@@ -1,12 +1,24 @@
 import re
-from typing import Set
+from time import sleep
 
+from langgraph.types import StreamWriter
+
+from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.agents.agent_search.kb_search.models import KGExpandedGraphObjects
+from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import AgentAnswerPiece
+from onyx.chat.models import LlmDoc
+from onyx.chat.models import StreamStopInfo
+from onyx.chat.models import StreamStopReason
+from onyx.chat.models import StreamType
+from onyx.chat.models import SubQueryPiece
+from onyx.chat.models import SubQuestionPiece
+from onyx.context.search.models import InferenceSection
+from onyx.db.document import get_kg_doc_info_for_entity_name
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entities import get_document_id_for_entity
 from onyx.db.entity_type import get_entity_types
-from onyx.db.models import Document
-from onyx.db.models import KGEntity
-from onyx.db.relationships import get_relationships_of_entity
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -68,220 +80,346 @@ def _check_entities_disconnected(
 
 
 def create_minimal_connected_query_graph(
-    entities: list[str], relationships: list[str], max_depth: int = 2
+    entities: list[str], relationships: list[str], max_depth: int = 1
 ) -> KGExpandedGraphObjects:
     """
-    Find the minimal subgraph that connects all input entities, using only general entities
-    (<entity_type>:*) as intermediate nodes. The subgraph will include only the relationships
-    necessary to connect all input entities through the shortest possible paths.
-
-    Args:
-        entities: Initial list of entity IDs
-        relationships: Initial list of relationships in format source__relationship__target
-        max_depth: Maximum depth to expand the graph (default: 2)
-
-    Returns:
-        KGExpandedGraphObjects containing expanded entities and relationships
+    TODO: Implement this. For now we'll trust the SQL generation to do the right thing.
+    Return the original entities and relationships.
     """
-    # Create copies of input lists to avoid modifying originals
-    expanded_entities = entities.copy()
-    expanded_relationships = relationships.copy()
+    return KGExpandedGraphObjects(entities=entities, relationships=relationships)
 
-    # Keep track of original entities
-    original_entities = set(entities)
 
-    # Build initial graph from existing relationships
-    graph: dict[str, set[tuple[str, str]]] = {
-        entity: set() for entity in expanded_entities
-    }
-    for rel in relationships:
-        try:
-            source, rel_name, target = rel.split("__")
-            if source in graph and target in graph:
-                graph[source].add((target, rel_name))
-                graph[target].add((source, rel_name))
-        except ValueError:
-            continue
+# def rename_entities_in_answer(answer: str) -> str:
+#     """
+#     Rename entities in the answer to be more readable by replacing entity references
+#     with their semantic_id and link. This is case-insensitive and handles spaces between
+#     entity type and ID. Trailing quotes are removed from entity names.
+#     """
+#     # Create a mapping of entity IDs to new names
+#     entity_mapping = {}
 
-    # For each depth level
-    counter = 0
-    while counter < max_depth:
-        # Find all connected components in the current graph
-        components = []
-        visited = set()
 
-        def dfs(node: str, component: set[str]) -> None:
-            visited.add(node)
-            component.add(node)
-            for neighbor, _ in graph.get(node, set()):
-                if neighbor not in visited:
-                    dfs(neighbor, component)
+#     with get_session_with_current_tenant() as db_session:
+#         # Get all entity types
+#         entity_types = get_entity_types(db_session)
 
-        # Find all components
-        for entity in expanded_entities:
-            if entity not in visited:
-                component: Set[str] = set()
-                dfs(entity, component)
-                components.append(component)
+#         # For each entity type, find all entities in the answer
+#         for entity_type in entity_types:
+#             # Find all occurrences of <entity_type>:<entity_name> in the answer (case-insensitive)
+#             # Pattern now handles spaces after the colon
+#             pattern = f"{entity_type.id_name}:\\s*([^\\s,;.]+)"
+#             matches = re.finditer(pattern, answer, re.IGNORECASE)
 
-        # If we only have one component, we're done
-        if len(components) == 1:
-            break
+#             for match in matches:
+#                 # Get the full match including any spaces
+#                 full_match = match.group(0)
+#                 # Get just the entity ID part (without spaces) and remove trailing quotes
+#                 entity_name = match.group(1).rstrip("\"'")
+#                 entity_id = f"{entity_type.id_name}:{entity_name}"
 
-        # Find the shortest path between any two components using general entities
-        shortest_path = None
-        shortest_path_length = float("inf")
+#                 if entity_id.lower() in entity_mapping:
+#                     continue
 
-        for comp1 in components:
-            for comp2 in components:
-                if comp1 == comp2:
-                    continue
+#                 # Get the document for this entity
+#                 entity = (
+#                     db_session.query(KGEntity)
+#                     .filter(
+#                         KGEntity.id_name.ilike(
+#                             entity_id
+#                         )  # Case-insensitive comparison
+#                     )
+#                     .first()
+#                 )
 
-                # Try to find path between entities in different components
-                for entity1 in comp1:
-                    if not any(e in original_entities for e in comp1):
-                        continue
+#                 if entity and entity.document_id:
+#                     # Get the document's semantic_id and link
+#                     document = (
+#                         db_session.query(Document)
+#                         .filter(Document.id == entity.document_id)
+#                         .first()
+#                     )
 
-                    # entity1_type = entity1.split(":")[0]
+#                     if document:
+#                         # Create the replacement text with semantic_id and link
+#                         replacement = f"{document.semantic_id}"
+#                         if document.link:
+#                             replacement = f"[{replacement}]({document.link})"
+#                         entity_mapping[entity_id.lower()] = replacement
+#                         # Also map the full match (with spaces) to the same replacement
+#                         entity_mapping[full_match.lower()] = replacement
 
-                    with get_session_with_current_tenant() as db_session:
-                        entity1_rels = get_relationships_of_entity(db_session, entity1)
+#     # Replace all entity references in the answer (case-insensitive)
+#     for entity_id, replacement in entity_mapping.items():
+#         # Use regex for case-insensitive replacement
+#         answer = re.sub(re.escape(entity_id), replacement, answer, flags=re.IGNORECASE)
 
-                    for rel1 in entity1_rels:
-                        try:
-                            source1, rel_name1, target1 = rel1.split("__")
-                            if source1 != entity1:
-                                continue
+#     return answer
 
-                            target1_type = target1.split(":")[0]
-                            general_target = f"{target1_type}:*"
 
-                            # Try to find path from general_target to comp2
-                            for entity2 in comp2:
-                                if not any(e in original_entities for e in comp2):
-                                    continue
+def stream_write_step_description(
+    writer: StreamWriter, step_nr: int, level: int = 0
+) -> None:
 
-                                with get_session_with_current_tenant() as db_session:
-                                    entity2_rels = get_relationships_of_entity(
-                                        db_session, entity2
-                                    )
-
-                                for rel2 in entity2_rels:
-                                    try:
-                                        source2, rel_name2, target2 = rel2.split("__")
-                                        if target2 != entity2:
-                                            continue
-
-                                        source2_type = source2.split(":")[0]
-                                        general_source = f"{source2_type}:*"
-
-                                        if general_target == general_source:
-                                            # Found a path of length 2
-                                            path = [
-                                                (entity1, rel_name1, general_target),
-                                                (general_target, rel_name2, entity2),
-                                            ]
-                                            if len(path) < shortest_path_length:
-                                                shortest_path = path
-                                                shortest_path_length = len(path)
-
-                                    except ValueError:
-                                        continue
-
-                        except ValueError:
-                            continue
-
-        # If we found a path, add it to our graph
-        if shortest_path:
-            for source, rel_name, target in shortest_path:
-                # Add general entity if needed
-                if ":*" in source and source not in expanded_entities:
-                    expanded_entities.append(source)
-                if ":*" in target and target not in expanded_entities:
-                    expanded_entities.append(target)
-
-                # Add relationship
-                rel = f"{source}__{rel_name}__{target}"
-                if rel not in expanded_relationships:
-                    expanded_relationships.append(rel)
-
-                # Update graph
-                if source not in graph:
-                    graph[source] = set()
-                if target not in graph:
-                    graph[target] = set()
-                graph[source].add((target, rel_name))
-                graph[target].add((source, rel_name))
-
-        counter += 1
-
-    logger.debug(f"Number of expanded entities: {len(expanded_entities)}")
-    logger.debug(f"Number of expanded relationships: {len(expanded_relationships)}")
-
-    return KGExpandedGraphObjects(
-        entities=expanded_entities, relationships=expanded_relationships
+    write_custom_event(
+        "decomp_qs",
+        SubQuestionPiece(
+            sub_question=STEP_DESCRIPTIONS[step_nr].description,
+            level=level,
+            level_question_num=step_nr,
+        ),
+        writer,
     )
+
+    sleep(0.2)
+
+
+def stream_write_step_activities(
+    writer: StreamWriter, step_nr: int, level: int = 0
+) -> None:
+    for activity_nr, activity in enumerate(STEP_DESCRIPTIONS[step_nr].activities):
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query=activity,
+                level=level,
+                level_question_num=step_nr,
+                query_id=activity_nr + 1,
+            ),
+            writer,
+        )
+
+
+def stream_write_step_activity_explicit(
+    writer: StreamWriter, step_nr: int, query_id: int, activity: str, level: int = 0
+) -> None:
+    for activity_nr, activity in enumerate(STEP_DESCRIPTIONS[step_nr].activities):
+        write_custom_event(
+            "subqueries",
+            SubQueryPiece(
+                sub_query=activity,
+                level=level,
+                level_question_num=step_nr,
+                query_id=query_id,
+            ),
+            writer,
+        )
+
+
+def stream_write_step_answer_explicit(
+    writer: StreamWriter, step_nr: int, answer: str, level: int = 0
+) -> None:
+    write_custom_event(
+        "sub_answers",
+        AgentAnswerPiece(
+            answer_piece=answer,
+            level=level,
+            level_question_num=step_nr,
+            answer_type="agent_sub_answer",
+        ),
+        writer,
+    )
+
+
+def stream_write_step_structure(writer: StreamWriter, level: int = 0) -> None:
+    for step_nr, step_detail in STEP_DESCRIPTIONS.items():
+
+        write_custom_event(
+            "decomp_qs",
+            SubQuestionPiece(
+                sub_question=step_detail.description,
+                level=level,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    for step_nr in STEP_DESCRIPTIONS.keys():
+
+        write_custom_event(
+            "stream_finished",
+            StreamStopInfo(
+                stop_reason=StreamStopReason.FINISHED,
+                stream_type=StreamType.SUB_QUESTIONS,
+                level=level,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+
+def stream_close_step_answer(
+    writer: StreamWriter, step_nr: int, level: int = 0
+) -> None:
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.SUB_ANSWER,
+        level=level,
+        level_question_num=step_nr,
+    )
+    write_custom_event("stream_finished", stop_event, writer)
+
+
+def stream_write_close_steps(writer: StreamWriter, level: int = 0) -> None:
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.SUB_QUESTIONS,
+        level=level,
+    )
+
+    write_custom_event("stream_finished", stop_event, writer)
+
+
+def stream_write_close_main_answer(writer: StreamWriter, level: int = 0) -> None:
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.MAIN_ANSWER,
+        level=level,
+        level_question_num=0,
+    )
+    write_custom_event("stream_finished", stop_event, writer)
+
+
+def stream_write_main_answer_token(
+    writer: StreamWriter, token: str, level: int = 0, level_question_num: int = 0
+) -> None:
+    write_custom_event(
+        "initial_agent_answer",
+        AgentAnswerPiece(
+            answer_piece=token,  # No need to add space as tokenizer handles this
+            level=level,
+            level_question_num=level_question_num,
+            answer_type="agent_level_answer",
+        ),
+        writer,
+    )
+
+
+def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
+    """
+    Get document information for an entity, including its semantic name and document details.
+    """
+    if ":" not in entity_id_name:
+        return KGEntityDocInfo(
+            doc_id=None,
+            doc_semantic_id=None,
+            doc_link=None,
+            semantic_entity_name=entity_id_name,
+            semantic_linked_entity_name=entity_id_name,
+        )
+
+    entity_type, entity_name = map(str.strip, entity_id_name.split(":", 1))
+
+    with get_session_with_current_tenant() as db_session:
+        entity_document_id = get_document_id_for_entity(db_session, entity_id_name)
+        if not entity_document_id:
+            return KGEntityDocInfo(
+                doc_id=None,
+                doc_semantic_id=None,
+                doc_link=None,
+                semantic_entity_name=entity_id_name,
+                semantic_linked_entity_name=entity_id_name,
+            )
+        return get_kg_doc_info_for_entity_name(
+            db_session, entity_document_id, entity_type
+        )
 
 
 def rename_entities_in_answer(answer: str) -> str:
     """
-    Rename entities in the answer to be more readable by replacing entity references
-    with their semantic_id and link. This is case-insensitive and handles spaces between
-    entity type and ID. Trailing quotes are removed from entity names.
+    Process entity references in the answer string by:
+    1. Extracting all strings matching <str>:<str> or <str>: <str> patterns
+    2. Looking up these references in the entity table
+    3. Replacing valid references with their corresponding values
+
+    Args:
+        answer: The input string containing potential entity references
+
+    Returns:
+        str: The processed string with entity references replaced
     """
-    # Create a mapping of entity IDs to new names
-    entity_mapping = {}
+    # Extract all entity references using regex
+    # Pattern matches both <str>:<str> and <str>: <str> formats
+    pattern = r"([^:\s]+):\s*([^\s,;.]+)"
+    matches = re.finditer(pattern, answer)
 
+    # get active entity types
     with get_session_with_current_tenant() as db_session:
-        # Get all entity types
-        entity_types = get_entity_types(db_session)
+        active_entity_types = [
+            x.id_name for x in get_entity_types(db_session, active=True)
+        ]
 
-        # For each entity type, find all entities in the answer
-        for entity_type in entity_types:
-            # Find all occurrences of <entity_type>:<entity_name> in the answer (case-insensitive)
-            # Pattern now handles spaces after the colon
-            pattern = f"{entity_type.id_name}:\\s*([^\\s,;.]+)"
-            matches = re.finditer(pattern, answer, re.IGNORECASE)
+    # Collect extracted references
+    entity_refs = [match.group(0).strip(":") for match in matches]
 
-            for match in matches:
-                # Get the full match including any spaces
-                full_match = match.group(0)
-                # Get just the entity ID part (without spaces) and remove trailing quotes
-                entity_name = match.group(1).rstrip("\"'")
-                entity_id = f"{entity_type.id_name}:{entity_name}"
+    # Create dictionary for processed references
+    processed_refs = {}
 
-                if entity_id.lower() not in entity_mapping:
-                    # Get the document for this entity
-                    entity = (
-                        db_session.query(KGEntity)
-                        .filter(
-                            KGEntity.id_name.ilike(
-                                entity_id
-                            )  # Case-insensitive comparison
-                        )
-                        .first()
-                    )
+    for entity_ref in entity_refs:
+        if len(entity_ref.split(":")) != 2:
+            continue
+        entity_type, entity_name = entity_ref.split(":")
+        entity_type = entity_type.upper().strip()
+        if entity_type not in active_entity_types:
+            continue
+        entity_name = entity_name.capitalize().strip()
+        potential_entity_id_name = f"{entity_type}:{entity_name}"
 
-                    if entity and entity.document_id:
-                        # Get the document's semantic_id and link
-                        document = (
-                            db_session.query(Document)
-                            .filter(Document.id == entity.document_id)
-                            .first()
-                        )
+        replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)
 
-                        if document:
-                            # Create the replacement text with semantic_id and link
-                            replacement = f"{document.semantic_id}"
-                            if document.link:
-                                replacement = f"[{replacement}]({document.link})"
-                            entity_mapping[entity_id.lower()] = replacement
-                            # Also map the full match (with spaces) to the same replacement
-                            entity_mapping[full_match.lower()] = replacement
+        if replacement_candidate.doc_id:
+            processed_refs[entity_ref] = (
+                replacement_candidate.semantic_linked_entity_name
+            )
+        else:
+            continue
 
-    # Replace all entity references in the answer (case-insensitive)
-    for entity_id, replacement in entity_mapping.items():
-        # Use regex for case-insensitive replacement
-        answer = re.sub(re.escape(entity_id), replacement, answer, flags=re.IGNORECASE)
+    # Replace all references in the answer
+    for ref, replacement in processed_refs.items():
+        answer = answer.replace(ref, replacement)
 
     return answer
+
+
+def build_document_context(
+    document: InferenceSection | LlmDoc, document_number: int
+) -> str:
+    """
+    Build a context string for a document.
+    """
+
+    metadata_list: list[str] = []
+
+    if isinstance(document, InferenceSection):
+        for key, value in document.center_chunk.metadata.items():
+            metadata_list.append(f"   - {key}: {value}")
+
+        if metadata_list:
+            metadata_str = "- Document Metadata:\n" + "\n".join(metadata_list)
+        else:
+            metadata_str = ""
+
+        # Construct document header with number and semantic identifier
+        doc_header = f"Document {str(document_number)}: {document.center_chunk.semantic_identifier}"
+
+        # Combine all parts with proper spacing
+        document_content = (
+            f"{doc_header}\n\n{metadata_str}\n\n{document.combined_content}"
+        )
+
+    elif isinstance(document, LlmDoc):
+
+        for key, value in document.metadata.items():
+            metadata_list.append(f"   - {key}: {value}")
+
+        if metadata_list:
+            metadata_str = "- Document Metadata:\n" + "\n".join(metadata_list)
+        else:
+            metadata_str = ""
+
+        # Construct document header with number and semantic identifier
+        doc_header = f"Document {str(document_number)}: {document.semantic_identifier}"
+
+        # Combine all parts with proper spacing
+        document_content = f"{doc_header}\n\n{metadata_str}\n\n{document.content}"
+
+    return document_content

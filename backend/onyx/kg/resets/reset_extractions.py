@@ -1,8 +1,9 @@
-from onyx.db.document import reset_extracted_document_kg_stages
+from onyx.db.document import update_document_kg_stages
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGRelationshipExtractionStaging
 from onyx.db.models import KGRelationshipTypeExtractionStaging
+from onyx.kg.models import KGStage
 
 
 def reset_extraction_kg_index() -> None:
@@ -16,5 +17,5 @@ def reset_extraction_kg_index() -> None:
         db_session.commit()
 
     with get_session_with_current_tenant() as db_session:
-        reset_extracted_document_kg_stages(db_session)
+        update_document_kg_stages(db_session, KGStage.EXTRACTED, KGStage.NOT_STARTED)
         db_session.commit()

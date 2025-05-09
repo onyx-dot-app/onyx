@@ -294,7 +294,7 @@ def _create_relationship_mapping(
         clustered_id = f"{source_node}__{rel_name}__{target_node}"
 
         relationship_replacements[original_id] = clustered_id
-        reverse_relationship_replacements_count[clustered_id] += rel.occurences or 1
+        reverse_relationship_replacements_count[clustered_id] += rel.occurrences or 1
 
     return relationship_replacements, reverse_relationship_replacements_count
 
@@ -475,7 +475,9 @@ def kg_clustering(
     """
     Here we will cluster the extractions based on their cluster frameworks.
     Initially, this will only focus on grounded entities with pre-determined
-    relationships, so clustering is actually not yet required.
+    relationships, so 'clustering' is actually not yet required.
+    However, we may need to reconcile entities coming from different sources.
+
     The primary purpose of this function is to populate the actual KG tables
     from the temp_extraction tables.
 
@@ -527,7 +529,7 @@ def kg_clustering(
                 KGStage.NORMALIZED,
                 entity_type=grounded_entity.entity_type_id_name,
                 name=grounded_entity.name,
-                occurences=grounded_entity.occurences or 1,
+                occurrences=grounded_entity.occurrences or 1,
                 document_id=grounded_entity.document_id or None,
                 attributes=grounded_entity.attributes or None,
             )
@@ -546,7 +548,7 @@ def kg_clustering(
                 source_entity_type=relationship_type.source_entity_type_id_name,
                 relationship_type=relationship_type.type,
                 target_entity_type=relationship_type.target_entity_type_id_name,
-                extraction_count=relationship_type.occurences or 1,
+                extraction_count=relationship_type.occurrences or 1,
             )
 
             db_session.commit()
@@ -562,7 +564,7 @@ def kg_clustering(
                     KGStage.NORMALIZED,
                     relationship_id_name=relationship.id_name,
                     source_document_id=relationship.source_document or "",
-                    occurences=relationship.occurences or 1,
+                    occurrences=relationship.occurrences or 1,
                 )
 
                 if relationship.source_document:

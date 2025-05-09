@@ -117,6 +117,7 @@ class BaseFilters(BaseModel):
     kg_relationships: list[str] | None = None
     kg_terms: list[str] | None = None
     kg_sources: list[str] | None = None
+    kg_chunk_id_zero_only: bool | None = False
 
 
 class IndexFilters(BaseFilters):

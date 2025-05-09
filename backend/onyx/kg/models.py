@@ -5,6 +5,13 @@ from typing import Dict
 from pydantic import BaseModel
 
 
+class KGConfigSettings(BaseModel):
+    KG_ENABLED: bool = False
+    KG_VENDOR: str | None = None
+    KG_VENDOR_DOMAINS: list[str] | None = None
+    KG_IGNORE_EMAIL_DOMAINS: list[str] | None = None
+
+
 class KGChunkFormat(BaseModel):
     connector_id: int | None = None
     document_id: str

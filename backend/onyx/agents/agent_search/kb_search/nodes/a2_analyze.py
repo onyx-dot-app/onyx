@@ -8,18 +8,26 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.kb_search.graph_utils import (
     create_minimal_connected_query_graph,
 )
+from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
+from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_step_answer_explicit,
+)
 from onyx.agents.agent_search.kb_search.models import KGAnswerApproach
 from onyx.agents.agent_search.kb_search.states import AnalysisUpdate
 from onyx.agents.agent_search.kb_search.states import KGAnswerFormat
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import YesNoEnum
+from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.entities import get_document_id_for_entity
 from onyx.kg.clustering.normalizations import normalize_entities
 from onyx.kg.clustering.normalizations import normalize_entities_w_attributes_from_map
 from onyx.kg.clustering.normalizations import normalize_relationships
@@ -31,12 +39,76 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 
+def _analyze_connectedness(entities: list[str], relationships: list[str]) -> list[str]:
+    """
+    Analyze the connectedness of the entities and relationships.
+    """
+    # Build a dictionary to track connections for each entity
+    entity_connections: dict[str, set[str]] = {entity: set() for entity in entities}
+
+    # Parse relationships to build connection graph
+    for relationship in relationships:
+        # Split relationship into parts
+        parts = relationship.split("__")
+        if len(parts) != 3:
+            raise ValueError(f"Invalid relationship: {relationship}")
+
+        entity1 = parts[0]
+        entity2 = parts[2]
+
+        # Add bidirectional connections
+        if entity1 in entity_connections:
+            entity_connections[entity1].add(entity2)
+        if entity2 in entity_connections:
+            entity_connections[entity2].add(entity1)
+
+    # Find entities connected to all others
+    fully_connected_entities = []
+    all_entities = set(entities)
+
+    for entity, connections in entity_connections.items():
+        # Check if this entity is connected to all other entities
+        if connections == all_entities - {entity}:
+            fully_connected_entities.append(entity)
+
+    return fully_connected_entities
+
+
+def _check_for_single_doc(
+    normalized_entities: list[str],
+    raw_entities: list[str],
+    normalized_relationships: list[str],
+    raw_relationships: list[str],
+    normalized_time_filter: str | None,
+) -> str | None:
+    """
+    Check if the query is for a single document, like 'Summarize ticket ENG-2243K'
+    """
+    if (
+        len(normalized_entities) == 1
+        and len(raw_entities) == 1
+        and len(normalized_relationships) == 0
+        and len(raw_relationships) == 0
+        and normalized_time_filter is None
+    ):
+        with get_session_with_current_tenant() as db_session:
+            single_doc_id = get_document_id_for_entity(
+                db_session, normalized_entities[0]
+            )
+    else:
+        single_doc_id = None
+    return single_doc_id
+
+
 def analyze(
     state: MainState, config: RunnableConfig, writer: StreamWriter = lambda _: None
 ) -> AnalysisUpdate:
     """
     LangGraph node to start the agentic search process.
     """
+
+    _KG_STEP_NR = 2
+
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
@@ -47,6 +119,12 @@ def analyze(
     relationships = state.extracted_relationships
     terms = state.extracted_terms
     time_filter = state.time_filter
+
+    ## STEP 2 - stream out goals
+
+    stream_write_step_activities(writer, _KG_STEP_NR)
+
+    # Continue with node
 
     normalized_entities = normalize_entities(entities)
 
@@ -61,15 +139,14 @@ def analyze(
     normalized_terms = normalize_terms(terms)
     normalized_time_filter = time_filter
 
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Normalizing and strategizing...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
+    # If single-doc inquiry, send to single-doc processing directly
+
+    single_doc_id = _check_for_single_doc(
+        normalized_entities=normalized_entities.entities,
+        raw_entities=entities,
+        normalized_relationships=normalized_relationships.relationships,
+        raw_relationships=relationships,
+        normalized_time_filter=normalized_time_filter,
     )
 
     # Expand the entities and relationships to make sure that entities are connected
@@ -90,11 +167,8 @@ def analyze(
             "---entities---", "\n".join(query_graph_entities)
         )
         .replace("---relationships---", "\n".join(query_graph_relationships))
-        .replace("---terms---", "\n".join(normalized_terms.terms))
-        .replace("---possible_entities---", "\n".join(state.entities_types_str))
-        .replace(
-            "---possible_relationships---", "\n".join(state.relationship_types_str)
-        )
+        .replace("---possible_entities---", state.entities_types_str)
+        .replace("---possible_relationships---", state.relationship_types_str)
         .replace("---question---", question)
     )
 
@@ -103,7 +177,6 @@ def analyze(
             content=strategy_generation_prompt,
         )
     ]
-    # fast_llm = graph_config.tooling.fast_llm
     primary_llm = graph_config.tooling.primary_llm
     # Grader
     try:
@@ -149,71 +222,21 @@ def analyze(
         logger.error(f"Error in strategy generation: {e}")
         raise e
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece="\n".join(normalized_entities.entities),
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece="\n".join(normalized_relationships.relationships),
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+    # Stream out relevant results
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece="\n".join(query_graph_entities),
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece="\n".join(query_graph_relationships),
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+    if single_doc_id:
+        strategy = (
+            KGAnswerStrategy.DEEP
+        )  # if a sinbgle doc is identified, we will want to look at the details.
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=strategy.value,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+    step_answer = f"Strategy and format have been extracted from query. Strategy: {strategy.value}, \
+Format: {output_format.value}, Broken down question: {broken_down_question}"
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=output_format.value,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
+    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
 
-    # dispatch_main_answer_stop_info(0, writer)
+    stream_close_step_answer(writer, _KG_STEP_NR)
+
+    # End node
 
     return AnalysisUpdate(
         normalized_core_entities=normalized_entities.entities,
@@ -227,11 +250,32 @@ def analyze(
         broken_down_question=broken_down_question,
         output_format=output_format,
         divide_and_conquer=divide_and_conquer,
+        single_doc_id=single_doc_id,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
                 node_name="analyze",
                 node_start_time=node_start_time,
+            )
+        ],
+        step_results=[
+            SubQuestionAnswerResults(
+                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
+                question_id="0_" + str(_KG_STEP_NR),
+                answer=step_answer,
+                verified_high_quality=True,
+                sub_query_retrieval_results=[],
+                verified_reranked_documents=[],
+                context_documents=[],
+                cited_documents=[],
+                sub_question_retrieval_stats=AgentChunkRetrievalStats(
+                    verified_count=None,
+                    verified_avg_scores=None,
+                    rejected_count=None,
+                    rejected_avg_scores=None,
+                    verified_doc_chunk_ids=[],
+                    dismissed_doc_chunk_ids=[],
+                ),
             )
         ],
     )

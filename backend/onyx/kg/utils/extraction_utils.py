@@ -3,9 +3,10 @@ from collections import defaultdict
 from typing import Dict
 
 from onyx.configs.constants import OnyxCallTypes
-from onyx.configs.kg_configs import KG_IGNORE_EMAIL_DOMAINS
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_kg_entity_by_document
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Document
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGClassificationContent
@@ -21,17 +22,62 @@ from onyx.prompts.kg_prompts import CALL_DOCUMENT_CLASSIFICATION_PROMPT
 from onyx.prompts.kg_prompts import GENERAL_CHUNK_PREPROCESSING_PROMPT
 
 
+def _update_implied_entities_relationships(
+    kg_core_document_id_name: str,
+    owner_list: list[str],
+    implied_entities: set[str],
+    implied_relationships: set[str],
+    company_participant_emails: set[str],
+    account_participant_emails: set[str],
+    relationship_type: str,
+    kg_config_settings: KGConfigSettings,
+    converted_relationships_to_attributes: dict[str, list[str]],
+) -> tuple[set[str], set[str], set[str], set[str], dict[str, list[str]]]:
+
+    for owner in owner_list or []:
+        if is_email(owner):
+            (
+                implied_entities,
+                implied_relationships,
+                company_participant_emails,
+                account_participant_emails,
+            ) = kg_process_person(
+                owner,
+                kg_core_document_id_name,
+                implied_entities,
+                implied_relationships,
+                company_participant_emails,
+                account_participant_emails,
+                relationship_type,
+                kg_config_settings,
+            )
+        else:
+            converted_relationships_to_attributes[relationship_type].append(owner)
+
+    return (
+        implied_entities,
+        implied_relationships,
+        company_participant_emails,
+        account_participant_emails,
+        converted_relationships_to_attributes,
+    )
+
+
 def kg_document_entities_relationships_attribute_generation(
     document: Document,
     doc_metadata: KGEnhancedDocumentMetadata,
     active_entities: list[str],
+    kg_config_settings: KGConfigSettings,
 ) -> KGDocumentEntitiesRelationshipsAttributes:
     """
     Generate entities, relationships, and attributes for a document.
     """
 
+    # Get document entity type from the KGEnhancedDocumentMetadata
     document_entity_type = doc_metadata.entity_type
     assert document_entity_type is not None
+
+    # Get additional document attributes from the KGEnhancedDocumentMetadata
     document_attributes = doc_metadata.document_attributes
 
     implied_entities: set[str] = set()
@@ -76,63 +122,59 @@ def kg_document_entities_relationships_attribute_generation(
     # Get implied entities and relationships from primary/secondary owners
 
     if document_is_from_call:
-        owners = (primary_owners or []) + (secondary_owners or [])
-        for owner in owners:
-            if is_email(owner):
-                (
-                    implied_entities,
-                    implied_relationships,
-                    company_participant_emails,
-                    account_participant_emails,
-                ) = kg_process_person(
-                    owner,
-                    kg_core_document_id_name,
-                    implied_entities,
-                    implied_relationships,
-                    company_participant_emails,
-                    account_participant_emails,
-                    "participates_in",
-                )
-            else:
-                converted_relationships_to_attributes["participates_in"].append(owner)
+        (
+            implied_entities,
+            implied_relationships,
+            company_participant_emails,
+            account_participant_emails,
+            converted_relationships_to_attributes,
+        ) = _update_implied_entities_relationships(
+            kg_core_document_id_name,
+            owner_list=(primary_owners or []) + (secondary_owners or []),
+            implied_entities=implied_entities,
+            implied_relationships=implied_relationships,
+            company_participant_emails=company_participant_emails,
+            account_participant_emails=account_participant_emails,
+            relationship_type="participates_in",
+            kg_config_settings=kg_config_settings,
+            converted_relationships_to_attributes=converted_relationships_to_attributes,
+        )
     else:
-        for owner in primary_owners or []:
-            if is_email(owner):
-                (
-                    implied_entities,
-                    implied_relationships,
-                    company_participant_emails,
-                    account_participant_emails,
-                ) = kg_process_person(
-                    owner,
-                    kg_core_document_id_name,
-                    implied_entities,
-                    implied_relationships,
-                    company_participant_emails,
-                    account_participant_emails,
-                    "leads",
-                )
-            else:
-                converted_relationships_to_attributes["leads"].append(owner)
+        (
+            implied_entities,
+            implied_relationships,
+            company_participant_emails,
+            account_participant_emails,
+            converted_relationships_to_attributes,
+        ) = _update_implied_entities_relationships(
+            kg_core_document_id_name,
+            owner_list=primary_owners or [],
+            implied_entities=implied_entities,
+            implied_relationships=implied_relationships,
+            company_participant_emails=company_participant_emails,
+            account_participant_emails=account_participant_emails,
+            relationship_type="leads",
+            kg_config_settings=kg_config_settings,
+            converted_relationships_to_attributes=converted_relationships_to_attributes,
+        )
 
-        for owner in secondary_owners or []:
-            if is_email(owner):
-                (
-                    implied_entities,
-                    implied_relationships,
-                    company_participant_emails,
-                    account_participant_emails,
-                ) = kg_process_person(
-                    owner,
-                    kg_core_document_id_name,
-                    implied_entities,
-                    implied_relationships,
-                    company_participant_emails,
-                    account_participant_emails,
-                    "participates_in",
-                )
-            else:
-                converted_relationships_to_attributes["participates_in"].append(owner)
+        (
+            implied_entities,
+            implied_relationships,
+            company_participant_emails,
+            account_participant_emails,
+            converted_relationships_to_attributes,
+        ) = _update_implied_entities_relationships(
+            kg_core_document_id_name,
+            owner_list=secondary_owners or [],
+            implied_entities=implied_entities,
+            implied_relationships=implied_relationships,
+            company_participant_emails=company_participant_emails,
+            account_participant_emails=account_participant_emails,
+            relationship_type="participates_in",
+            kg_config_settings=kg_config_settings,
+            converted_relationships_to_attributes=converted_relationships_to_attributes,
+        )
 
     if document_attributes is not None:
         cleaned_document_attributes = document_attributes.copy()
@@ -195,6 +237,7 @@ def _prepare_llm_document_content_call(
     document_classification_content: KGClassificationContent,
     category_list: str,
     category_definition_string: str,
+    kg_config_settings: KGConfigSettings,
 ) -> KGDocumentClassificationPrompt:
     """
     Calls - prepare prompt for the LLM classification.
@@ -204,6 +247,7 @@ def _prepare_llm_document_content_call(
         beginning_of_call_content=document_classification_content.classification_content,
         category_list=category_list,
         category_options=category_definition_string,
+        vendor=kg_config_settings.KG_VENDOR,
     )
 
     return KGDocumentClassificationPrompt(
@@ -219,6 +263,7 @@ def kg_process_person(
     company_participant_emails: set[str],
     account_participant_emails: set[str],
     relationship_type: str,
+    kg_config_settings: KGConfigSettings,
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     """
     Process a single owner and return updated sets with entities and relationships.
@@ -226,12 +271,18 @@ def kg_process_person(
     Returns:
         tuple containing (implied_entities, implied_relationships, company_participant_emails, account_participant_emails)
     """
-    assert isinstance(KG_IGNORE_EMAIL_DOMAINS, list)
 
-    kg_person = kg_email_processing(person)
+    with get_session_with_current_tenant() as db_session:
+        kg_config_settings = get_kg_config_settings(db_session)
+    if not kg_config_settings.KG_ENABLED:
+        raise ValueError("KG is not enabled")
+
+    assert isinstance(kg_config_settings.KG_IGNORE_EMAIL_DOMAINS, list)
+
+    kg_person = kg_email_processing(person, kg_config_settings)
     if any(
         domain.lower() in kg_person.company.lower()
-        for domain in KG_IGNORE_EMAIL_DOMAINS
+        for domain in kg_config_settings.KG_IGNORE_EMAIL_DOMAINS
     ):
         return (
             implied_entities,
@@ -298,6 +349,7 @@ def prepare_llm_content_extraction(
     chunk: KGChunkFormat,
     company_participant_emails: set[str],
     account_participant_emails: set[str],
+    kg_config_settings: KGConfigSettings,
 ) -> str:
 
     chunk_is_from_call = chunk.source_type.lower() in [
@@ -309,11 +361,13 @@ def prepare_llm_content_extraction(
         llm_context = CALL_CHUNK_PREPROCESSING_PROMPT.format(
             participant_string=company_participant_emails,
             account_participant_string=account_participant_emails,
+            vendor=kg_config_settings.KG_VENDOR,
             content=chunk.content,
         )
     else:
         llm_context = GENERAL_CHUNK_PREPROCESSING_PROMPT.format(
             content=chunk.content,
+            vendor=kg_config_settings.KG_VENDOR,
         )
 
     return llm_context
@@ -323,6 +377,7 @@ def prepare_llm_document_content(
     document_classification_content: KGClassificationContent,
     category_list: str,
     category_definitions: dict[str, Dict[str, str | bool]],
+    kg_config_settings: KGConfigSettings,
 ) -> KGDocumentClassificationPrompt:
     """
     Prepare the content for the extraction classification.
@@ -336,7 +391,10 @@ def prepare_llm_document_content(
         call_type.value.lower() for call_type in OnyxCallTypes
     ]:
         return _prepare_llm_document_content_call(
-            document_classification_content, category_list, category_definition_string
+            document_classification_content,
+            category_list,
+            category_definition_string,
+            kg_config_settings,
         )
 
     else:

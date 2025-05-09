@@ -17,8 +17,8 @@ from onyx.agents.agent_search.kb_search.nodes.b1_construct_deep_search_filters i
 from onyx.agents.agent_search.kb_search.nodes.b2p_process_individual_deep_search import (
     process_individual_deep_search,
 )
-from onyx.agents.agent_search.kb_search.nodes.b3_consoldidate_individual_deep_search import (
-    consoldidate_individual_deep_search,
+from onyx.agents.agent_search.kb_search.nodes.b3_consolidate_individual_deep_search import (
+    consolidate_individual_deep_search,
 )
 from onyx.agents.agent_search.kb_search.nodes.c1_process_kg_only_answers import (
     process_kg_only_answers,
@@ -75,7 +75,7 @@ def kb_graph_builder() -> StateGraph:
 
     graph.add_node(
         "consoldidate_individual_deep_search",
-        consoldidate_individual_deep_search,
+        consolidate_individual_deep_search,
     )
 
     graph.add_node("process_kg_only_answers", process_kg_only_answers)
