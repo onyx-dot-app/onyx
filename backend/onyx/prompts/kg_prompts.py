@@ -526,8 +526,24 @@ Here are the relationship types that are available in the knowledge graph:
 
 Here are more instructions:
 
-a) Regarding the strategy: there are two types of strategies available to you:
+a) Regarding the strategy, there are two aspects to it:
 
+a1) Search Type:
+Should the question be answered as a 'filtered search', or as a 'SQL query search'?
+
+The options are:
+1. SEARCH: A filtered search simply uses the entities and relationships that you have been extracted earlier and \
+applies those as filters to search the underlying documents, which are indexed with them. Examples  are \
+'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nile about pricing?'.
+2. 'SQL': Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
+if the query refers to specific entities that first need to be identified and then those entities are analyzed/searched/listed. \
+Examples here are 'what did I say about pricing in my call with Nile last week?' (the specific call needs to \
+be identified first and then  that call is analyzed),  \
+'what are the next steps of our two largest opportunities?', or 'summarize my 3 most recent customer calls'.
+
+
+a2) Search Strategy:
+If a SQL search is chosen, i.e., documents have to be identified first, there are two approaches:
 1. SIMPLE: You think you can awnswer the question using a database that is aware of the entities, relationships \
 above, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
 'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', etc.
@@ -591,11 +607,12 @@ Here is the question you are asked to answer:
 Please answer in json format in this form:
 
 {{
-    "strategy": <answer with "DEEP" or "SIMPLE">,
-    "format": <answer with "LIST" or "TEXT">,
-    "broken_down_question": <the question that should be used to analyze each object/each source (or 'the object' that \
-fits all criteria).>,
-"divide_and_conquer": <answer with "yes" or "no">
+    "search_type": <see search-type instructions above, answer with "SEARCH" or "SQL">,
+    "search_strategy": <see search-strategy instructions above, answer with "DEEP" or "SIMPLE">,
+    "format": <see format instructions above, answer with "LIST" or "TEXT">,
+    "broken_down_question": <see broken-down-question instructions above, answer with the question \
+that should be used to analyze each object/each source (or 'the object' that fits all criteria).>,
+    "divide_and_conquer": <see divide-and-conquer instructions above, answer with "yes" or "no">
 }}
 
 Do not include any other text or explanations.

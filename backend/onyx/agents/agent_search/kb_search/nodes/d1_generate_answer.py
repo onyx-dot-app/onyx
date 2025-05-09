@@ -26,6 +26,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import ExtendedToolResponse
+from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
 from onyx.db.chat import log_agent_sub_question_results
@@ -66,26 +67,40 @@ def generate_answer(
 
     ## MAIN ANSWER
 
-    # get a search done and send the results to the UI
+    # identify whether documents have already been retrieved
 
-    assert graph_config.tooling.search_tool is not None
-    retrieved_docs = research(
-        question=question,
-        kg_entities=[],
-        kg_relationships=[],
-        kg_sources=state.source_document_results,
-        search_tool=graph_config.tooling.search_tool,
-        kg_chunk_id_zero_only=True,
-        inference_sections_only=True,
-    )
+    retrieved_docs: list[InferenceSection] = []
+    for step_result in state.step_results:
+        if step_result.verified_reranked_documents:
+            retrieved_docs += step_result.verified_reranked_documents
 
-    retrieved_docs = cast(list[InferenceSection], retrieved_docs)
+    # if still needed, get a search done and send the results to the UI
+
+    if not retrieved_docs and state.source_document_results:
+        assert graph_config.tooling.search_tool is not None
+        retrieved_docs = cast(
+            list[InferenceSection],
+            research(
+                question=question,
+                kg_entities=[],
+                kg_relationships=[],
+                kg_sources=state.source_document_results,
+                search_tool=graph_config.tooling.search_tool,
+                kg_chunk_id_zero_only=True,
+                inference_sections_only=True,
+            ),
+        )
+
+    elif retrieved_docs:
+        pass
+    else:
+        retrieved_docs = []
 
     answer_generation_documents = get_answer_generation_documents(
         relevant_docs=retrieved_docs,
         context_documents=retrieved_docs,
         original_question_docs=retrieved_docs,
-        max_docs=5,
+        max_docs=KG_RESEARCH_NUM_RETRIEVED_DOCS,
     )
 
     relevance_list = relevance_from_docs(

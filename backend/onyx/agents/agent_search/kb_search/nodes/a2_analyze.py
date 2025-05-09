@@ -17,6 +17,7 @@ from onyx.agents.agent_search.kb_search.models import KGAnswerApproach
 from onyx.agents.agent_search.kb_search.states import AnalysisUpdate
 from onyx.agents.agent_search.kb_search.states import KGAnswerFormat
 from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
+from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import YesNoEnum
 from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
@@ -203,7 +204,8 @@ def analyze(
             approach_extraction_result = KGAnswerApproach.model_validate_json(
                 cleaned_response
             )
-            strategy = approach_extraction_result.strategy
+            search_type = approach_extraction_result.search_type
+            search_strategy = approach_extraction_result.search_strategy
             output_format = approach_extraction_result.format
             broken_down_question = approach_extraction_result.broken_down_question
             divide_and_conquer = approach_extraction_result.divide_and_conquer
@@ -211,11 +213,12 @@ def analyze(
             logger.error(
                 "Failed to parse LLM response as JSON in Entity-Term Extraction"
             )
-            strategy = KGAnswerStrategy.DEEP
+            search_type = KGSearchType.SEARCH
+            search_strategy = KGAnswerStrategy.DEEP
             output_format = KGAnswerFormat.TEXT
             broken_down_question = None
             divide_and_conquer = YesNoEnum.NO
-        if strategy is None or output_format is None:
+        if search_strategy is None or output_format is None:
             raise ValueError(f"Invalid strategy: {cleaned_response}")
 
     except Exception as e:
@@ -225,11 +228,11 @@ def analyze(
     # Stream out relevant results
 
     if single_doc_id:
-        strategy = (
+        search_strategy = (
             KGAnswerStrategy.DEEP
-        )  # if a sinbgle doc is identified, we will want to look at the details.
+        )  # if a single doc is identified, we will want to look at the details.
 
-    step_answer = f"Strategy and format have been extracted from query. Strategy: {strategy.value}, \
+    step_answer = f"Strategy and format have been extracted from query. Strategy: {search_strategy.value}, \
 Format: {output_format.value}, Broken down question: {broken_down_question}"
 
     stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
@@ -246,11 +249,12 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
         query_graph_relationships=query_graph_relationships,
         normalized_terms=normalized_terms.terms,
         normalized_time_filter=normalized_time_filter,
-        strategy=strategy,
+        strategy=search_strategy,
         broken_down_question=broken_down_question,
         output_format=output_format,
         divide_and_conquer=divide_and_conquer,
         single_doc_id=single_doc_id,
+        search_type=search_type,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

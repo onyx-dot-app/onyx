@@ -42,6 +42,11 @@ class KGFilterConstructionResults(BaseModel):
     structure: list[str]
 
 
+class KGSearchType(Enum):
+    SEARCH = "SEARCH"
+    SQL = "SQL"
+
+
 class KGAnswerStrategy(Enum):
     DEEP = "DEEP"
     SIMPLE = "SIMPLE"
@@ -70,6 +75,7 @@ class AnalysisUpdate(LoggerUpdate):
     broken_down_question: str | None = None
     divide_and_conquer: YesNoEnum | None = None
     single_doc_id: str | None = None
+    search_type: KGSearchType | None = None
 
 
 class SQLSimpleGenerationUpdate(LoggerUpdate):
