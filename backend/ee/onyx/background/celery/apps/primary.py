@@ -128,3 +128,11 @@ def autogenerate_usage_report_task(*, tenant_id: str) -> None:
             user_id=None,
             period=None,
         )
+
+
+celery_app.autodiscover_tasks(
+    [
+        "ee.onyx.background.celery.tasks.doc_permission_syncing",
+        "ee.onyx.background.celery.tasks.external_group_syncing",
+    ]
+)
