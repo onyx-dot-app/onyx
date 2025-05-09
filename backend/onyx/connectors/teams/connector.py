@@ -10,7 +10,6 @@ from office365.runtime.client_request_exception import ClientRequestException  #
 from office365.runtime.http.request_options import RequestOptions
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
-from office365.teams.team import Team
 from pydantic import BaseModel  # type: ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
@@ -413,78 +412,6 @@ class TeamsConnector(
             todos=[],
             has_more=False,
         )
-
-    # private helpers
-
-    def _get_all_teams(self) -> list[Team]:
-        if self.graph_client is None:
-            raise ConnectorMissingCredentialError("Teams")
-
-        teams: list[Team] = []
-        try:
-            # Use get_all() to handle pagination automatically
-            if not self.requested_team_list:
-                team_collection = self.graph_client.teams.get_all(
-                    page_loaded=lambda _: None
-                ).execute_query()
-                teams = [team for team in team_collection]
-            else:
-                # Construct filter using proper Microsoft Graph API syntax
-                filter_conditions = " or ".join(
-                    [
-                        f"displayName eq '{team_name}'"
-                        for team_name in self.requested_team_list
-                    ]
-                )
-
-                # Initialize pagination variables
-                page_size = 100  # Maximum allowed by Microsoft Graph API
-                skip = 0
-
-                while True:
-                    # Get a page of teams with the filter
-                    teams_page = (
-                        self.graph_client.teams.get()
-                        .filter(filter_conditions)
-                        .top(page_size)
-                        .skip(skip)
-                        .execute_query()
-                    )
-
-                    if not teams_page:
-                        break
-
-                    teams.extend(teams_page)
-                    skip += page_size
-
-                    # If we got fewer results than the page size, we've reached the end
-                    if len(teams_page) < page_size:
-                        break
-
-                # Validate that we found all requested teams
-                if len(teams) != len(self.requested_team_list):
-                    found_team_names = {
-                        team.properties["displayName"] for team in teams
-                    }
-                    missing_teams = set(self.requested_team_list) - found_team_names
-                    raise ConnectorValidationError(
-                        f"Requested teams not found: {list(missing_teams)}"
-                    )
-        except ClientRequestException as e:
-            if not e.response:
-                raise RuntimeError("TODO!")
-            if e.response.status_code == 403:
-                raise InsufficientPermissionsError(
-                    "App lacks required permissions to read Teams. "
-                    "Please ensure the app has the following permissions: "
-                    "Team.ReadBasic.All, TeamMember.Read.All, "
-                    "Channel.ReadBasic.All, ChannelMessage.Read.All, "
-                    "Group.Read.All, TeamSettings.ReadWrite.All, "
-                    "ChannelMember.Read.All, ChannelSettings.ReadWrite.All"
-                )
-            raise
-
-        return teams
 
 
 if __name__ == "__main__":
