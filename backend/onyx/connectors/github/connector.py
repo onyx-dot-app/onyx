@@ -485,8 +485,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
         cursor_url_callback = make_cursor_url_callback(checkpoint)
 
-        # TODO: all PRs are also issues, so we should be able to _only_ get issues
-        # and then filter appropriately whenever include_issues is True
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
@@ -555,6 +553,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
+        logger.info(f"Fetched {num_prs} PRs for repo: {repo.name}")
+
         checkpoint.stage = GithubConnectorStage.ISSUES
 
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
@@ -592,7 +592,6 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
                 if issue.pull_request is not None:
                     # PRs are handled separately
-                    # TODO: but they shouldn't always be
                     continue
 
                 try:
@@ -620,6 +619,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             checkpoint.stage = GithubConnectorStage.PRS
             checkpoint.reset()
 
+        logger.info(f"Fetched {num_issues} issues for repo: {repo.name}")
+
         checkpoint.has_more = len(checkpoint.cached_repo_ids) > 0
         if checkpoint.cached_repo_ids:
             next_id = checkpoint.cached_repo_ids.pop()
@@ -629,6 +630,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 headers=next_repo.raw_headers,
                 raw_data=next_repo.raw_data,
             )
+
+        logger.info(f"{len(checkpoint.cached_repo_ids)} repos remaining")
 
         return checkpoint
 
