@@ -1,14 +1,17 @@
+import copy
 import os
 from datetime import datetime
-from datetime import timezone
 from typing import Any
+from typing import cast
 
 import msal  # type: ignore
 from office365.graph_client import GraphClient  # type: ignore
 from office365.runtime.client_request_exception import ClientRequestException  # type: ignore
+from office365.runtime.http.request_options import RequestOptions
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
-from office365.teams.team import Team  # type: ignore
+from office365.teams.team import Team
+from pydantic import BaseModel  # type: ignore
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
@@ -19,7 +22,6 @@ from onyx.connectors.exceptions import InsufficientPermissionsError
 from onyx.connectors.exceptions import UnexpectedValidationError
 from onyx.connectors.interfaces import CheckpointedConnector
 from onyx.connectors.interfaces import CheckpointOutput
-from onyx.connectors.interfaces import GenerateDocumentsOutput
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import BasicExpertInfo
 from onyx.connectors.models import ConnectorCheckpoint
@@ -28,71 +30,31 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_with_timeout
+from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
 logger = setup_logger()
 
 
-def get_created_datetime(chat_message: ChatMessage) -> datetime:
+class TodoTeam(BaseModel):
+    team_id: str
+
+
+class TodoChannel(BaseModel):
+    team_id: str
+    channel_id: str
+
+
+def _get_created_datetime(chat_message: ChatMessage) -> datetime:
     # Extract the 'createdDateTime' value from the 'properties' dictionary and convert it to a datetime object
     return time_str_to_utc(chat_message.properties["createdDateTime"])
 
 
 def _extract_channel_members(channel: Channel) -> list[BasicExpertInfo]:
     channel_members_list: list[BasicExpertInfo] = []
-    members = channel.members.get_all().execute_query_retry()
+    members = channel.members.get_all(page_loaded=lambda _: None).execute_query_retry()
     for member in members:
         channel_members_list.append(BasicExpertInfo(display_name=member.display_name))
     return channel_members_list
-
-
-def _get_threads_from_channel(
-    channel: Channel,
-    start: datetime | None = None,
-    end: datetime | None = None,
-) -> list[list[ChatMessage]]:
-    # Ensure start and end are timezone-aware
-    if start and start.tzinfo is None:
-        start = start.replace(tzinfo=timezone.utc)
-    if end and end.tzinfo is None:
-        end = end.replace(tzinfo=timezone.utc)
-
-    query = channel.messages.get_all()
-    base_messages: list[ChatMessage] = query.execute_query_retry()
-
-    threads: list[list[ChatMessage]] = []
-    for base_message in base_messages:
-        message_datetime = time_str_to_utc(
-            base_message.properties["lastModifiedDateTime"]
-        )
-
-        if start and message_datetime < start:
-            continue
-        if end and message_datetime > end:
-            continue
-
-        reply_query = base_message.replies.get_all()
-        replies = reply_query.execute_query_retry()
-
-        # start a list containing the base message and its replies
-        thread: list[ChatMessage] = [base_message]
-        thread.extend(replies)
-
-        threads.append(thread)
-
-    return threads
-
-
-def _get_channels_from_teams(
-    teams: list[Team],
-) -> list[Channel]:
-    channels_list: list[Channel] = []
-    for team in teams:
-        query = team.channels.get_all()
-        channels = query.execute_query_retry()
-        channels_list.extend(channels)
-
-    return channels_list
 
 
 def _construct_semantic_identifier(channel: Channel, top_message: ChatMessage) -> str:
@@ -134,7 +96,7 @@ def _convert_thread_to_document(
     post_members_list: list[BasicExpertInfo] = []
     thread_text = ""
 
-    sorted_thread = sorted(thread, key=get_created_datetime, reverse=True)
+    sorted_thread = sorted(thread, key=_get_created_datetime, reverse=True)
 
     if sorted_thread:
         most_recent_message = sorted_thread[0]
@@ -190,8 +152,108 @@ def _convert_thread_to_document(
     return doc
 
 
+def _update_request_url(request: RequestOptions, next_url: str):
+    request.url = next_url
+
+
+def _collect_all_teams(
+    graph_client: GraphClient,
+) -> list[TodoTeam | TodoChannel]:
+    todo_teams = []
+    next_url = None
+
+    while True:
+        query = graph_client.teams.get_all(page_loaded=lambda _: None)
+        if next_url:
+            url = next_url
+            query.before_execute(
+                lambda req: _update_request_url(request=req, next_url=url)
+            )
+
+        team_collection = query.execute_query()
+
+        todo_teams.extend(
+            [TodoTeam(team_id=team.id) for team in team_collection if team.id]
+        )
+
+        if team_collection.has_next:
+            next_url = cast(str, team_collection._next_request_url)
+        else:
+            break
+
+    return todo_teams
+
+
+def _collect_all_channels_for_team_id(
+    graph_client: GraphClient,
+    team_id: str,
+) -> list[TodoTeam | TodoChannel]:
+    team_collection = (
+        graph_client.teams.get().filter(f"id eq '{team_id}'").top(1).execute_query()
+    )
+
+    if not team_collection:
+        raise RuntimeError(f"No team with {team_id=} was found")
+    elif team_collection.has_next:
+        raise RuntimeError(f"Multiple teams with {team_id=} were found; this is weird")
+
+    [team] = team_collection
+
+    todo_channels = []
+    next_url = None
+
+    while True:
+        query = team.channels.get_all(page_loaded=lambda _: None)
+        if next_url:
+            url = next_url
+            query = query.before_execute(
+                lambda req: _update_request_url(request=req, next_url=url)
+            )
+
+        channel_collection = query.execute_query()
+        todo_channels.extend(
+            [
+                TodoChannel(team_id=team_id, channel_id=channel.id)
+                for channel in channel_collection
+                if channel.id
+            ]
+        )
+
+        if not channel_collection.has_next:
+            break
+
+    return todo_channels
+
+
+def _collect_document_for_channel_id(
+    graph_client: GraphClient,
+    team_id: str,
+    channel_id: str,
+) -> Document | None:
+    team_collection = (
+        graph_client.teams.get().filter(f"id eq '{team_id}'").top(1).execute_query()
+    )
+    [team] = team_collection
+
+    channel_collection = (
+        team.channels.get().filter(f"id eq '{channel_id}'").execute_query()
+    )
+    [channel] = channel_collection
+
+    message_collection = channel.messages.get_all(
+        page_loaded=lambda _: None
+    ).execute_query()
+
+    chat_messages = [message for message in message_collection]
+
+    return _convert_thread_to_document(
+        channel=channel,
+        thread=chat_messages,
+    )
+
+
 class TeamsCheckpoint(ConnectorCheckpoint):
-    channel_ids: list[str] | None
+    todos: list[TodoTeam | TodoChannel] | None = None
 
 
 class TeamsConnector(
@@ -252,9 +314,12 @@ class TeamsConnector(
         try:
             # Minimal call to confirm we can retrieve Teams
             # make sure it doesn't take forever, since this is a syncronous call
-            found_teams = run_with_timeout(10, self._get_all_teams)
+            # found_teams = run_with_timeout(10, self._get_all_teams)
+            found_teams = _collect_all_teams(self.graph_client)
 
         except ClientRequestException as e:
+            if not e.response:
+                raise RuntimeError("TODO!")
             status_code = e.response.status_code
             if status_code == 401:
                 raise CredentialExpiredError(
@@ -294,7 +359,6 @@ class TeamsConnector(
 
     def build_dummy_checkpoint(self) -> TeamsCheckpoint:
         return TeamsCheckpoint(
-            channel_ids=None,
             has_more=True,
         )
 
@@ -308,10 +372,47 @@ class TeamsConnector(
         checkpoint: TeamsCheckpoint,
     ) -> CheckpointOutput[TeamsCheckpoint]:
         if self.graph_client is None:
-            ...
+            raise ConnectorMissingCredentialError("Teams")
 
-        # TODO!
-        ...
+        checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
+
+        if checkpoint.todos is None:
+            root_todos = _collect_all_teams(self.graph_client)
+            return TeamsCheckpoint(
+                todos=root_todos,
+                has_more=True if root_todos else False,
+            )
+
+        todos = checkpoint.todos
+
+        if not todos:
+            return TeamsCheckpoint(
+                todos=[],
+                has_more=False,
+            )
+
+        while todos:
+            todo = todos[-1]
+            if isinstance(todo, TodoTeam):
+                todo_channels = _collect_all_channels_for_team_id(
+                    graph_client=self.graph_client, team_id=todo.team_id
+                )
+                todos.pop()
+                todos.extend(todo_channels)
+            elif isinstance(todo, TodoChannel):
+                doc = _collect_document_for_channel_id(
+                    graph_client=self.graph_client,
+                    team_id=todo.team_id,
+                    channel_id=todo.channel_id,
+                )
+                todos.pop()
+                if doc:
+                    yield doc
+
+        return TeamsCheckpoint(
+            todos=[],
+            has_more=False,
+        )
 
     # private helpers
 
@@ -323,7 +424,10 @@ class TeamsConnector(
         try:
             # Use get_all() to handle pagination automatically
             if not self.requested_team_list:
-                teams = self.graph_client.teams.get_all().execute_query()
+                team_collection = self.graph_client.teams.get_all(
+                    page_loaded=lambda _: None
+                ).execute_query()
+                teams = [team for team in team_collection]
             else:
                 # Construct filter using proper Microsoft Graph API syntax
                 filter_conditions = " or ".join(
@@ -367,6 +471,8 @@ class TeamsConnector(
                         f"Requested teams not found: {list(missing_teams)}"
                     )
         except ClientRequestException as e:
+            if not e.response:
+                raise RuntimeError("TODO!")
             if e.response.status_code == 403:
                 raise InsufficientPermissionsError(
                     "App lacks required permissions to read Teams. "
@@ -380,47 +486,6 @@ class TeamsConnector(
 
         return teams
 
-    def _fetch_from_teams(
-        self, start: datetime | None = None, end: datetime | None = None
-    ) -> GenerateDocumentsOutput:
-        if self.graph_client is None:
-            raise ConnectorMissingCredentialError("Teams")
-
-        teams = self._get_all_teams()
-        logger.debug(f"Found available teams: {[str(t) for t in teams]}")
-        if not teams:
-            msg = "No teams found."
-            logger.error(msg)
-            raise ValueError(msg)
-
-        channels = _get_channels_from_teams(
-            teams=teams,
-        )
-
-        logger.debug(
-            f"Found available channels (max {TeamsConnector.MAX_CHANNELS_TO_LOG} shown): "
-            f"{[c.id for c in channels[:TeamsConnector.MAX_CHANNELS_TO_LOG]]}"
-        )
-        if not channels:
-            msg = "No channels found."
-            logger.error(msg)
-            raise ValueError(msg)
-
-        # goes over channels, converts them into Document objects and then yields them in batches
-        doc_batch: list[Document] = []
-        for channel in channels:
-            logger.info(f"Fetching threads from channel: {channel.id}")
-            thread_list = _get_threads_from_channel(channel, start=start, end=end)
-            for thread in thread_list:
-                converted_doc = _convert_thread_to_document(channel, thread)
-                if converted_doc:
-                    doc_batch.append(converted_doc)
-
-            if len(doc_batch) >= self.batch_size:
-                yield doc_batch
-                doc_batch = []
-        yield doc_batch
-
 
 if __name__ == "__main__":
     import time
@@ -428,8 +493,9 @@ if __name__ == "__main__":
     app_id = os.environ["TEAMS_APPLICATION_ID"]
     dir_id = os.environ["TEAMS_DIRECTORY_ID"]
     secret = os.environ["TEAMS_SECRET"]
-    teams = os.environ.get("TEAMS", "").split(",")
 
+    teams = os.environ.get("TEAMS", None)
+    teams = teams.split(",") if teams else []
     connector = TeamsConnector(teams=teams)
 
     connector.load_credentials(
@@ -440,23 +506,20 @@ if __name__ == "__main__":
         }
     )
 
-    start = 0.0
-    end = time.time()
-    checkpoint = connector.build_dummy_checkpoint()
+    # assert connector.graph_client
+    # todo_teams = _collect_all_todo_teams(graph_client=connector.graph_client)
+    # for todo_team in todo_teams:
+    #     todo_channels = _collect_all_todo_channels_from_team_id(
+    #         graph_client=connector.graph_client,
+    #         team_id=todo_team.team_id,
+    #     )
+    #     print(todo_channels)
+    # print(_collect_all_todo_teams(graph_client=connector.graph_client))
 
-    gen = connector.load_from_checkpoint(
-        start=start,
-        end=end,
-        checkpoint=checkpoint,
+    print(
+        load_everything_from_checkpoint_connector(
+            connector=connector,
+            start=0.0,
+            end=time.time(),
+        )
     )
-
-    try:
-        for doc_or_failure in gen:
-            if isinstance(doc_or_failure, Document):
-                print(doc_or_failure)
-            elif isinstance(doc_or_failure, Document):
-                print(doc_or_failure)
-    except StopIteration as e:
-        checkpoint = e.value
-
-    print(checkpoint)
