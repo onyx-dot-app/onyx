@@ -55,7 +55,7 @@ def sync_cc_pair(
     cc_pair_id: int,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> StatusResponse[list[int]]:
+) -> StatusResponse[None]:
     """Triggers permissions sync on a particular cc_pair immediately"""
     tenant_id = get_current_tenant_id()
 
@@ -129,7 +129,7 @@ def sync_cc_pair_groups(
     cc_pair_id: int,
     user: User = Depends(current_curator_or_admin_user),
     db_session: Session = Depends(get_session),
-) -> StatusResponse[list[int]]:
+) -> StatusResponse[None]:
     """Triggers group sync on a particular cc_pair immediately"""
     tenant_id = get_current_tenant_id()
 
