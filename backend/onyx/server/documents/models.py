@@ -9,8 +9,6 @@ from uuid import UUID
 from pydantic import BaseModel
 from pydantic import Field
 
-from ee.onyx.server.query_history.models import ChatSessionMinimal
-from onyx.background.indexing.models import IndexAttemptErrorPydantic
 from onyx.configs.app_configs import MASK_CREDENTIAL_PREFIX
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import InputType
@@ -23,8 +21,6 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import IndexAttempt
 from onyx.db.models import IndexingStatus
 from onyx.db.models import TaskStatus
-from onyx.server.models import FullUserSnapshot
-from onyx.server.models import InvitedUserSnapshot
 from onyx.server.utils import mask_credential_dict
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
@@ -193,14 +189,7 @@ class IndexAttemptSnapshot(BaseModel):
 
 # These are the types currently supported by the pagination hook
 # More api endpoints can be refactored and be added here for use with the pagination hook
-PaginatedType = TypeVar(
-    "PaginatedType",
-    IndexAttemptSnapshot,
-    FullUserSnapshot,
-    InvitedUserSnapshot,
-    ChatSessionMinimal,
-    IndexAttemptErrorPydantic,
-)
+PaginatedType = TypeVar("PaginatedType", bound=BaseModel)
 
 
 class PaginatedReturn(BaseModel, Generic[PaginatedType]):

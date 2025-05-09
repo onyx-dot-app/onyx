@@ -21,7 +21,6 @@ from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import SUPER_USERS
 from onyx.auth.email_utils import send_user_email_invite
 from onyx.auth.invited_users import get_invited_users
 from onyx.auth.invited_users import write_invited_users
@@ -72,6 +71,9 @@ from onyx.server.models import MinimalUserSnapshot
 from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
+from onyx.utils.variable_functionality import (
+    fetch_versioned_implementation_with_fallback,
+)
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -649,11 +651,19 @@ def verify_user_logged_in(
             "onyx.server.tenants.user_mapping", "get_tenant_invitation", None
         )(user.email)
 
+    super_users_list = cast(
+        list[str],
+        fetch_versioned_implementation_with_fallback(
+            "onyx.configs.app_configs",
+            "SUPER_USERS",
+            [],
+        ),
+    )
     user_info = UserInfo.from_model(
         user,
         current_token_created_at=token_created_at,
         expiry_length=SESSION_EXPIRE_TIME_SECONDS,
-        is_cloud_superuser=user.email in SUPER_USERS,
+        is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
         tenant_info=TenantInfo(
             new_tenant=new_tenant,

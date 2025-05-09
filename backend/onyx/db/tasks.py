@@ -6,7 +6,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import delete
 
-from ee.onyx.background.task_name_builders import QUERY_HISTORY_TASK_NAME_PREFIX
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.db.engine import get_db_current_time
 from onyx.db.models import TaskQueueState
@@ -84,13 +83,13 @@ def delete_task_with_id(
     db_session.commit()
 
 
-def get_all_query_history_export_tasks(
-    db_session: Session,
+def get_all_tasks_with_prefix(
+    db_session: Session, task_name_prefix: str
 ) -> list[TaskQueueState]:
     return list(
         db_session.scalars(
             select(TaskQueueState).where(
-                TaskQueueState.task_name.like(f"{QUERY_HISTORY_TASK_NAME_PREFIX}_%")
+                TaskQueueState.task_name.like(f"{task_name_prefix}_%")
             )
         )
     )
