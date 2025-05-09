@@ -1,5 +1,9 @@
+import contextvars
 import copy
 import os
+from concurrent.futures import as_completed
+from concurrent.futures import Future
+from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from typing import Any
 from typing import cast
@@ -12,7 +16,6 @@ from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from pydantic import BaseModel  # type: ignore
 
-from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -50,19 +53,19 @@ class TeamsCheckpoint(ConnectorCheckpoint):
 class TeamsConnector(
     CheckpointedConnector[TeamsCheckpoint],
 ):
-    MAX_CHANNELS_TO_LOG = 50
+    MAX_WORKERS = 10
 
     def __init__(
         self,
-        batch_size: int = INDEX_BATCH_SIZE,
         # TODO: (chris) move from "Display Names" to IDs, since display names
         # are NOT guaranteed to be unique
         teams: list[str] = [],
+        max_workers: int = MAX_WORKERS,
     ) -> None:
-        self.batch_size = batch_size
         self.graph_client: GraphClient | None = None
-        self.requested_team_list: list[str] = teams
         self.msal_app: msal.ConfidentialClientApplication | None = None
+        self.max_workers = max_workers
+        self.requested_team_list: list[str] = teams
 
     # impls for BaseConnector
 
@@ -191,14 +194,31 @@ class TeamsConnector(
                 todos.pop()
                 todos.extend(todo_channels)
             elif isinstance(todo, TodoChannel):
-                doc = _collect_document_for_channel_id(
-                    graph_client=self.graph_client,
-                    team_id=todo.team_id,
-                    channel_id=todo.channel_id,
-                )
-                todos.pop()
-                if doc:
-                    yield doc
+                tc: list[TodoChannel] = []
+                while todos and isinstance(todos[-1], TodoChannel):
+                    todo = todos.pop()
+                    assert isinstance(todo, TodoChannel)
+                    tc.append(todo)
+
+                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                    futures: list[Future[Document | None]] = []
+                    for todo_channel in tc:
+                        curr_ctx = contextvars.copy_context()
+                        futures.append(
+                            executor.submit(
+                                curr_ctx.run,
+                                _collect_document_for_channel_id,
+                                graph_client=self.graph_client,
+                                team_id=todo_channel.team_id,
+                                channel_id=todo_channel.channel_id,
+                            )
+                        )
+
+                    for future in as_completed(futures):
+                        doc = future.result()
+                        if doc:
+                            print(doc)
+                            yield doc
 
         return TeamsCheckpoint(
             todos=[],
