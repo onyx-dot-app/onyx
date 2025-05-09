@@ -297,6 +297,19 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
         self.cursor_url = None
 
 
+def make_cursor_url_callback(
+    checkpoint: GithubConnectorCheckpoint,
+) -> Callable[[str | None, int], None]:
+    def cursor_url_callback(cursor_url: str | None, num_objs: int) -> None:
+        # we want to maintain the old cursor url so code after retrieval
+        # can determine that we are using the fallback cursor-based pagination strategy
+        if cursor_url:
+            checkpoint.cursor_url = cursor_url
+        checkpoint.num_retrieved = num_objs
+
+    return cursor_url_callback
+
+
 class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
     def __init__(
         self,
@@ -393,6 +406,20 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             _sleep_after_rate_limit_exception(github_client)
             return self._get_all_repos(github_client, attempt_num + 1)
 
+    def _pull_requests_func(
+        self, repo: Repository.Repository
+    ) -> Callable[[], PaginatedList[PullRequest]]:
+        return lambda: repo.get_pulls(
+            state=self.state_filter, sort="updated", direction="desc"
+        )
+
+    def _issues_func(
+        self, repo: Repository.Repository
+    ) -> Callable[[], PaginatedList[Issue]]:
+        return lambda: repo.get_issues(
+            state=self.state_filter, sort="updated", direction="desc"
+        )
+
     def _fetch_from_github(
         self,
         checkpoint: GithubConnectorCheckpoint,
@@ -456,25 +483,15 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             repo_id = checkpoint.cached_repo.id
             repo = self.github_client.get_repo(repo_id)
 
-        def cursor_url_callback(cursor_url: str | None, num_objs: int) -> None:
-            # we want to maintain the old cursor url so code after retrieval
-            # can determine that we are using the fallback cursor-based pagination strategy
-            if cursor_url:
-                checkpoint.cursor_url = cursor_url
-            checkpoint.num_retrieved = num_objs
+        cursor_url_callback = make_cursor_url_callback(checkpoint)
 
         # TODO: all PRs are also issues, so we should be able to _only_ get issues
         # and then filter appropriately whenever include_issues is True
         if self.include_prs and checkpoint.stage == GithubConnectorStage.PRS:
             logger.info(f"Fetching PRs for repo: {repo.name}")
 
-            def pull_requests_func() -> PaginatedList[PullRequest]:
-                return repo.get_pulls(
-                    state=self.state_filter, sort="updated", direction="desc"
-                )
-
             pr_batch = _get_batch_rate_limited(
-                pull_requests_func,
+                self._pull_requests_func(repo),
                 checkpoint.curr_page,
                 checkpoint.cursor_url,
                 checkpoint.num_retrieved,
@@ -525,16 +542,16 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
             # if we found any PRs on the page and there are more PRs to get, return the checkpoint.
             # In offset mode, while indexing without time constraints, the pr batch
             # will be empty when we're done.
-            if num_prs > 0 and not done_with_prs and not checkpoint.cursor_url:
+            used_cursor = checkpoint.cursor_url is not None
+            if num_prs > 0 and not done_with_prs and not used_cursor:
                 return checkpoint
 
             # if we went past the start date during the loop or there are no more
             # prs to get, we move on to issues
             checkpoint.stage = GithubConnectorStage.ISSUES
-            last_cursor_url = checkpoint.cursor_url
             checkpoint.reset()
 
-            if last_cursor_url:
+            if used_cursor:
                 # save the checkpoint after changing stage; next run will continue from issues
                 return checkpoint
 
@@ -543,14 +560,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
         if self.include_issues and checkpoint.stage == GithubConnectorStage.ISSUES:
             logger.info(f"Fetching issues for repo: {repo.name}")
 
-            def issues_func() -> PaginatedList[Issue]:
-                return repo.get_issues(
-                    state=self.state_filter, sort="updated", direction="desc"
-                )
-
             issue_batch = list(
                 _get_batch_rate_limited(
-                    issues_func,
+                    self._issues_func(repo),
                     checkpoint.curr_page,
                     checkpoint.cursor_url,
                     checkpoint.num_retrieved,
