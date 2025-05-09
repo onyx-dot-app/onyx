@@ -32,7 +32,6 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
-from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
 logger = setup_logger()
 
@@ -436,6 +435,7 @@ def _collect_document_for_channel_id(
 
 if __name__ == "__main__":
     import time
+    from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
     app_id = os.environ["TEAMS_APPLICATION_ID"]
     dir_id = os.environ["TEAMS_DIRECTORY_ID"]
