@@ -6,7 +6,7 @@ faker==37.1.0
 lxml==5.3.0
 lxml_html_clean==0.2.2
 mypy-extensions==1.0.0
-mypy==mypy-1.16.0+dev.79ff4ff3cedd6ca2786bdf8a8d531e944c51758a
+mypy==1.13.0
 pandas-stubs==2.2.3.241009
 pandas==2.2.3
 posthog==3.7.4
