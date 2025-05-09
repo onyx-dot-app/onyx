@@ -51,10 +51,10 @@ def _add_live_user_count_where_clause(
     select_stmt = select_stmt.where(~User.email.endswith(get_api_key_email_pattern()))  # type: ignore
     if only_admin_users:
         return select_stmt.where(User.role == UserRole.ADMIN)
-    else:
-        return select_stmt.where(
-            User.role != UserRole.EXT_PERM_USER,
-        )
+
+    return select_stmt.where(
+        User.role != UserRole.EXT_PERM_USER,
+    )
 
 
 def get_live_users_count(db_session: Session) -> int:
