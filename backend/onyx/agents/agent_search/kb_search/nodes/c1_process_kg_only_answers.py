@@ -5,13 +5,21 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_step_answer_explicit,
+)
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResultsDataUpdate
+from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.models import ReferenceResults
+from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
+from onyx.chat.models import SubQueryPiece
 from onyx.db.document import get_base_llm_doc_information
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.utils.logger import setup_logger
@@ -22,47 +30,38 @@ logger = setup_logger()
 
 def _general_format(result: dict[str, Any]) -> str:
     name = result.get("name")
-    entity_type_id_name = result.get("entity_type_id_name")
+    entity_type_id_name: Any = result.get("entity_type_id_name")
     result.get("id_name")
 
-    if entity_type_id_name:
-        return f"{entity_type_id_name.capitalize()}: {name}"
-    else:
-        return f"{name}"
+    assert entity_type_id_name is str
+    return f"{entity_type_id_name.capitalize()}: {name}"
 
 
-def _generate_reference_results(
-    individualized_query_results: list[dict[str, Any]],
-) -> ReferenceResults:
+def _get_formated_source_reference_results(
+    source_document_results: list[str] | None,
+) -> str | None:
     """
     Generate reference results from the query results data string.
     """
 
-    citations: list[str] = []
-    general_entities = []
+    if source_document_results is None:
+        return None
 
-    # get all entities that correspond to an Onu=yx document
-    document_ids: list[str] = [
-        cast(str, x.get("document_id"))
-        for x in individualized_query_results
-        if x.get("document_id")
-    ]
+    # get all entities that correspond to an Onyx document
+    document_ids = source_document_results
 
     with get_session_with_current_tenant() as session:
         llm_doc_information_results = get_base_llm_doc_information(
             session, document_ids
         )
 
-    for llm_doc_information_result in llm_doc_information_results:
-        citations.append(llm_doc_information_result.center_chunk.semantic_identifier)
+    if len(llm_doc_information_results) == 0:
+        return ""
 
-    for result in individualized_query_results:
-        document_id: str | None = result.get("document_id")
-
-        if not document_id:
-            general_entities.append(_general_format(result))
-
-    return ReferenceResults(citations=citations, general_entities=general_entities)
+    return (
+        f"\n \n Here are {len(llm_doc_information_results)} examples: \n \n "
+        + " \n \n ".join(llm_doc_information_results)
+    )
 
 
 def process_kg_only_answers(
@@ -71,12 +70,29 @@ def process_kg_only_answers(
     """
     LangGraph node to start the agentic search process.
     """
+
+    _KG_STEP_NR = 4
+
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     graph_config.inputs.search_request.query
     query_results = state.sql_query_results
-    individualized_query_results = state.individualized_query_results
+    state.individualized_query_results
+    source_document_results = state.source_document_results
+
+    # we use this stream write explicitly
+
+    write_custom_event(
+        "subqueries",
+        SubQueryPiece(
+            sub_query="Formatted References",
+            level=0,
+            level_question_num=_KG_STEP_NR,
+            query_id=1,
+        ),
+        writer,
+    )
 
     query_results_list = []
 
@@ -88,20 +104,49 @@ def process_kg_only_answers(
 
     query_results_data_str = "\n".join(query_results_list)
 
-    if individualized_query_results:
-        reference_results = _generate_reference_results(individualized_query_results)
-    else:
-        reference_results = None
+    source_reference_result_str = _get_formated_source_reference_results(
+        source_document_results
+    )
+
+    ## STEP 4 - same components as Step 1
+
+    step_answer = (
+        "No further research is needed, the answer is derived from the knowledge graph."
+    )
+
+    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=step_answer)
+
+    stream_close_step_answer(writer, _KG_STEP_NR)
 
     return ResultsDataUpdate(
         query_results_data_str=query_results_data_str,
         individualized_query_results_data_str="",
-        reference_results=reference_results,
+        reference_results_str=source_reference_result_str,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
                 node_name="kg query results data processing",
                 node_start_time=node_start_time,
+            )
+        ],
+        step_results=[
+            SubQuestionAnswerResults(
+                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
+                question_id="0_" + str(_KG_STEP_NR),
+                answer=step_answer,
+                verified_high_quality=True,
+                sub_query_retrieval_results=[],
+                verified_reranked_documents=[],
+                context_documents=[],
+                cited_documents=[],
+                sub_question_retrieval_stats=AgentChunkRetrievalStats(
+                    verified_count=None,
+                    verified_avg_scores=None,
+                    rejected_count=None,
+                    rejected_avg_scores=None,
+                    verified_doc_chunk_ids=[],
+                    dismissed_doc_chunk_ids=[],
+                ),
             )
         ],
     )

@@ -2,7 +2,7 @@ import json
 from collections.abc import Generator
 
 from onyx.configs.constants import OnyxCallTypes
-from onyx.configs.kg_configs import KG_IGNORE_EMAIL_DOMAINS
+from onyx.db.kg_config import KGConfigSettings
 from onyx.document_index.vespa.chunk_retrieval import _get_chunks_via_visit_api
 from onyx.document_index.vespa.chunk_retrieval import VespaChunkRequest
 from onyx.document_index.vespa.index import IndexFilters
@@ -15,6 +15,7 @@ def get_document_classification_content_for_kg_processing(
     document_ids: list[str],
     source: str,
     index_name: str,
+    kg_config_settings: KGConfigSettings,
     batch_size: int = 8,
     num_classification_chunks: int = 3,
     entity_type: str | None = None,
@@ -56,7 +57,8 @@ def get_document_classification_content_for_kg_processing(
             )[:num_classification_chunks]
 
             classification_content = _get_classification_content_from_chunks(
-                first_num_classification_chunks
+                first_num_classification_chunks,
+                kg_config_settings,
             )
 
             metadata = first_num_classification_chunks[0]["fields"]["metadata"]
@@ -163,12 +165,13 @@ def get_document_chunks_for_kg_processing(
 
 def _get_classification_content_from_call_chunks(
     first_num_classification_chunks: list[dict],
+    kg_config_settings: KGConfigSettings,
 ) -> str:
     """
     Creates a KGClassificationContent object from a list of call chunks.
     """
 
-    assert isinstance(KG_IGNORE_EMAIL_DOMAINS, list)
+    assert isinstance(kg_config_settings.KG_IGNORE_EMAIL_DOMAINS, list)
 
     primary_owners = first_num_classification_chunks[0]["fields"].get(
         "primary_owners", []
@@ -181,10 +184,10 @@ def _get_classification_content_from_call_chunks(
     account_participant_emails = set()
 
     for owner in primary_owners + secondary_owners:
-        kg_owner = kg_email_processing(owner)
+        kg_owner = kg_email_processing(owner, kg_config_settings)
         if any(
             domain.lower() in kg_owner.company.lower()
-            for domain in KG_IGNORE_EMAIL_DOMAINS
+            for domain in kg_config_settings.KG_IGNORE_EMAIL_DOMAINS
         ):
             continue
 
@@ -212,6 +215,7 @@ Other Participants:\n{account_participant_string}\n\nBeginning of Call:\n{conten
 
 def _get_classification_content_from_chunks(
     first_num_classification_chunks: list[dict],
+    kg_config_settings: KGConfigSettings,
 ) -> str:
     """
     Creates a KGClassificationContent object from a list of chunks.
@@ -221,7 +225,8 @@ def _get_classification_content_from_chunks(
 
     if source_type.lower() in [call_type.value.lower() for call_type in OnyxCallTypes]:
         classification_content = _get_classification_content_from_call_chunks(
-            first_num_classification_chunks
+            first_num_classification_chunks,
+            kg_config_settings,
         )
 
     else:

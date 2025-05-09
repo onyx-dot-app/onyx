@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from typing import cast
 
 from langchain_core.messages import HumanMessage
@@ -6,14 +7,20 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 from sqlalchemy import text
 
+from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
+from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_step_answer_explicit,
+)
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import SQLSimpleGenerationUpdate
+from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
 from onyx.db.engine import get_kg_readonly_user_session_with_current_tenant
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
@@ -65,8 +72,7 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
         cleaned_response = (
             str(llm_response.content).replace("```json\n", "").replace("\n```", "")
         )
-        sql_statement = cleaned_response.split("SQL:")[1].strip()
-        sql_statement = sql_statement.split(";")[0].strip() + ";"
+        sql_statement = cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
         sql_statement = sql_statement.replace("sql", "").strip()
 
     except Exception as e:
@@ -76,7 +82,7 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
     return sql_statement
 
 
-def _get_source_documents(sql_statement: str, llm: LLM) -> str:
+def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
     """
     Remove aggregate functions from the SQL statement.
     """
@@ -108,8 +114,13 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str:
         sql_statement = sql_statement.split("</sql>")[0].strip()
 
     except Exception as e:
-        logger.error(f"Error in strategy generation: {e}")
-        raise e
+        if cleaned_response is not None:
+            logger.error(
+                f"Could not generate source documents SQL: {e}. Original model response: {cleaned_response}"
+            )
+        else:
+            logger.error(f"Could not generate source documents SQL: {e}")
+        return None
 
     return sql_statement
 
@@ -120,12 +131,21 @@ def generate_simple_sql(
     """
     LangGraph node to start the agentic search process.
     """
+
+    _KG_STEP_NR = 3
+
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
     entities_types_str = state.entities_types_str
     relationship_types_str = state.relationship_types_str
+
+    single_doc_id = state.single_doc_id
+
+    ## STEP 3 - articulate goals
+
+    stream_write_step_activities(writer, _KG_STEP_NR)
 
     if graph_config.tooling.search_tool is None:
         raise ValueError("Search tool is not set")
@@ -134,208 +154,156 @@ def generate_simple_sql(
     else:
         user_email = graph_config.tooling.search_tool.user.email
         user_name = user_email.split("@")[0]
-    simple_sql_prompt = (
-        SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
-        .replace("---relationship_types---", relationship_types_str)
-        .replace("---question---", question)
-        .replace(
-            "---query_entities_with_attributes---",
-            "\n".join(state.query_graph_entities_w_attributes),
-        )
-        .replace(
-            "---query_relationships---", "\n".join(state.query_graph_relationships)
-        )
-        .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
-        .replace("---user_name---", f"EMPLOYEE:{user_name}")
-    )
 
-    # Create temporary view
+    if single_doc_id:
 
-    allowed_docs_view_name = f"allowed_docs_{user_email}".replace("@", "_").replace(
-        ".", "_"
-    )
-    kg_relationships_view_name = f"kg_relationships_with_access_{user_email}".replace(
-        "@", "_"
-    ).replace(".", "_")
+        # If single doc id already identified, we do not need to go through the KG
+        # query cycle, saving a lot of time.
 
-    with get_session_with_current_tenant() as db_session:
-        create_views(
-            db_session,
-            user_email=user_email,
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
+        main_sql_statement: str | None = None
+        query_results: list[dict[str, Any]] | None = None
+        source_documents_sql: str | None = None
+        source_document_results: list[str] | None = [single_doc_id]
+        reasoning: str | None = (
+            f"A KG query was not required as the source document was already identified: {single_doc_id}"
         )
 
-    # prepare SQL query generation
+        step_answer = f"Source document already identified: {single_doc_id}"
 
-    msg = [
-        HumanMessage(
-            content=simple_sql_prompt,
-        )
-    ]
+    else:
+        # If no single doc id already identified, we need to go through the KG
+        # query cycle, including generating the SQL for the answer and the sources
 
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Generating the SQL query...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
+        # Build prompt
 
-    primary_llm = graph_config.tooling.primary_llm
-    # Grader
-    try:
-        llm_response = run_with_timeout(
-            15,
-            primary_llm.invoke,
-            prompt=msg,
-            timeout_override=25,
-            max_tokens=1500,
+        simple_sql_prompt = (
+            SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
+            .replace("---relationship_types---", relationship_types_str)
+            .replace("---question---", question)
+            .replace(
+                "---query_entities_with_attributes---",
+                "\n".join(state.query_graph_entities_w_attributes),
+            )
+            .replace(
+                "---query_relationships---", "\n".join(state.query_graph_relationships)
+            )
+            .replace("---today_date---", datetime.now().strftime("%Y-%m-%d"))
+            .replace("---user_name---", f"EMPLOYEE:{user_name}")
         )
 
-        cleaned_response = (
-            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+        # Create temporary view
+
+        allowed_docs_view_name = f"allowed_docs_{user_email}".replace("@", "_").replace(
+            ".", "_"
         )
-        sql_statement = (
-            cleaned_response.split("<start sql>")[1].split("<end sql>")[0].strip()
-        )
-        sql_statement = sql_statement.split(";")[0].strip() + ";"
-        sql_statement = sql_statement.replace("sql", "").strip()
-        sql_statement = sql_statement.replace(
-            "kg_relationship", kg_relationships_view_name
-        )
-
-        reasoning = cleaned_response.split("SQL:")[0].strip()
-
-    except Exception as e:
-        logger.error(f"Error in strategy generation: {e}")
-        raise e
-
-    # Correction if needed:
-
-    correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
-        "---draft_sql---", sql_statement
-    )
-
-    msg = [
-        HumanMessage(
-            content=correction_prompt,
-        )
-    ]
-
-    try:
-        llm_response = run_with_timeout(
-            15,
-            primary_llm.invoke,
-            prompt=msg,
-            timeout_override=25,
-            max_tokens=1500,
+        kg_relationships_view_name = (
+            f"kg_relationships_with_access_{user_email}".replace("@", "_").replace(
+                ".", "_"
+            )
         )
 
-        cleaned_response = (
-            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
-        )
+        with get_session_with_current_tenant() as db_session:
+            create_views(
+                db_session,
+                user_email=user_email,
+                allowed_docs_view_name=allowed_docs_view_name,
+                kg_relationships_view_name=kg_relationships_view_name,
+            )
 
-        sql_statement = cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
-        sql_statement = sql_statement.split(";")[0].strip() + ";"
-        sql_statement = sql_statement.replace("sql", "").strip()
+        # prepare SQL query generation
 
-    except Exception as e:
-        logger.error(f"Error in sql correction: {e}")
-        raise e
+        msg = [
+            HumanMessage(
+                content=simple_sql_prompt,
+            )
+        ]
 
-    # Get SQL for source documents
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Generating the query for the underlyng source documents...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
-
-    source_documents_sql = _get_source_documents(sql_statement, llm=primary_llm)
-
-    logger.debug(f"source_documents_sql: {source_documents_sql}")
-
-    # if _sql_is_aggregate_query(sql_statement):
-    #     individualized_sql_query = _remove_aggregation(sql_statement, llm=fast_llm)
-    # else:
-    individualized_sql_query = None
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece=reasoning,
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
-
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=cleaned_response,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-
-    # SQL Query is executed by using read-only user on the custom view
-
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Executing the SQL query...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
-
-    scalar_result = None
-    query_results = None
-
-    with get_kg_readonly_user_session_with_current_tenant() as db_session:
+        primary_llm = graph_config.tooling.primary_llm
+        # Grader
         try:
-            result = db_session.execute(text(sql_statement))
-            # Handle scalar results (like COUNT)
-            if sql_statement.upper().startswith("SELECT COUNT"):
-                scalar_result = result.scalar()
-                query_results = (
-                    [{"count": int(scalar_result)}] if scalar_result is not None else []
-                )
-            else:
-                # Handle regular row results
-                rows = result.fetchall()
-                query_results = [dict(row._mapping) for row in rows]
-        except Exception as e:
-            logger.error(f"Error executing SQL query: {e}")
+            llm_response = run_with_timeout(
+                15,
+                primary_llm.invoke,
+                prompt=msg,
+                timeout_override=25,
+                max_tokens=1500,
+            )
 
+            cleaned_response = (
+                str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+            )
+            sql_statement = (
+                cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
+            )
+            sql_statement = sql_statement.split(";")[0].strip() + ";"
+            sql_statement = sql_statement.replace("sql", "").strip()
+            sql_statement = sql_statement.replace(
+                "kg_relationship", kg_relationships_view_name
+            )
+
+            reasoning = (
+                cleaned_response.split("<reasoning>")[1]
+                .strip()
+                .split("</reasoning>")[0]
+            )
+
+        except Exception as e:
+            logger.error(f"Error in strategy generation: {e}")
             raise e
 
-    if (
-        individualized_sql_query is not None
-        and individualized_sql_query != sql_statement
-    ):
+        # Correction if needed:
+
+        correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
+            "---draft_sql---", sql_statement
+        )
+
+        msg = [
+            HumanMessage(
+                content=correction_prompt,
+            )
+        ]
+
+        try:
+            llm_response = run_with_timeout(
+                15,
+                primary_llm.invoke,
+                prompt=msg,
+                timeout_override=25,
+                max_tokens=1500,
+            )
+
+            cleaned_response = (
+                str(llm_response.content).replace("```json\n", "").replace("\n```", "")
+            )
+
+            sql_statement = (
+                cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
+            )
+            sql_statement = sql_statement.split(";")[0].strip() + ";"
+            sql_statement = sql_statement.replace("sql", "").strip()
+
+        except Exception as e:
+            logger.error(
+                f"Error in generating the sql correction: {e}. Original model response: {cleaned_response}"
+            )
+            raise e
+
+        # Get SQL for source documents
+
+        source_documents_sql = _get_source_documents(sql_statement, llm=primary_llm)
+
+        logger.debug(f"source_documents_sql: {source_documents_sql}")
+
+        scalar_result = None
+        query_results = None
+
         with get_kg_readonly_user_session_with_current_tenant() as db_session:
             try:
-                result = db_session.execute(text(individualized_sql_query))
+                result = db_session.execute(text(sql_statement))
                 # Handle scalar results (like COUNT)
-                if individualized_sql_query.upper().startswith("SELECT COUNT"):
+                if sql_statement.upper().startswith("SELECT COUNT"):
                     scalar_result = result.scalar()
-                    individualized_query_results = (
+                    query_results = (
                         [{"count": int(scalar_result)}]
                         if scalar_result is not None
                         else []
@@ -343,60 +311,56 @@ def generate_simple_sql(
                 else:
                     # Handle regular row results
                     rows = result.fetchall()
-                    individualized_query_results = [dict(row._mapping) for row in rows]
+                    query_results = [dict(row._mapping) for row in rows]
             except Exception as e:
-                # No stopping here, the individualized SQL query is not mandatory
-                logger.error(f"Error executing Individualized SQL query: {e}")
-                individualized_query_results = None
+                logger.error(f"Error executing SQL query: {e}")
 
-    else:
-        individualized_query_results = None
+                raise e
 
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Finding the underlying source documents...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
-    )
+        source_document_results = None
+        if source_documents_sql is not None and source_documents_sql != sql_statement:
+            with get_kg_readonly_user_session_with_current_tenant() as db_session:
+                try:
+                    result = db_session.execute(text(source_documents_sql))
+                    rows = result.fetchall()
+                    query_source_document_results = [dict(row._mapping) for row in rows]
+                    source_document_results = [
+                        source_document_result["source_document"]
+                        for source_document_result in query_source_document_results
+                    ]
+                except Exception as e:
+                    # No stopping here, the individualized SQL query is not mandatory
+                    logger.error(f"Error executing Individualized SQL query: {e}")
+                    # individualized_query_results = None
 
-    source_document_results = None
-    if source_documents_sql is not None and source_documents_sql != sql_statement:
-        with get_kg_readonly_user_session_with_current_tenant() as db_session:
-            try:
-                result = db_session.execute(text(source_documents_sql))
-                rows = result.fetchall()
-                query_source_document_results = [dict(row._mapping) for row in rows]
-                source_document_results = [
-                    source_document_result["source_document"]
-                    for source_document_result in query_source_document_results
-                ]
-            except Exception as e:
-                # No stopping here, the individualized SQL query is not mandatory
-                logger.error(f"Error executing Individualized SQL query: {e}")
-                individualized_query_results = None
+        else:
+            source_document_results = None
 
-    else:
-        individualized_query_results = None
+        with get_session_with_current_tenant() as db_session:
+            drop_views(
+                db_session,
+                allowed_docs_view_name=allowed_docs_view_name,
+                kg_relationships_view_name=kg_relationships_view_name,
+            )
 
-    with get_session_with_current_tenant() as db_session:
-        drop_views(
-            db_session,
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
-        )
+        logger.info(f"query_results: {query_results}")
+        logger.debug(f"sql_statement: {sql_statement}")
 
-    logger.info(f"query_results: {query_results}")
-    logger.debug(f"sql_statement: {sql_statement}")
+        # Stream out reasoning and SQL query
+
+        step_answer = f"Reasoning: {reasoning} \n \n SQL Query: {sql_statement}"
+
+        main_sql_statement = sql_statement
+
+    stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
+
+    stream_close_step_answer(writer, _KG_STEP_NR)
 
     return SQLSimpleGenerationUpdate(
-        sql_query=sql_statement,
+        sql_query=main_sql_statement,
         sql_query_results=query_results,
-        individualized_sql_query=individualized_sql_query,
-        individualized_query_results=individualized_query_results,
+        individualized_sql_query=None,
+        individualized_query_results=None,
         source_documents_sql=source_documents_sql,
         source_document_results=source_document_results or [],
         log_messages=[
@@ -404,6 +368,26 @@ def generate_simple_sql(
                 graph_component="main",
                 node_name="generate simple sql",
                 node_start_time=node_start_time,
+            )
+        ],
+        step_results=[
+            SubQuestionAnswerResults(
+                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
+                question_id="0_" + str(_KG_STEP_NR),
+                answer=step_answer,
+                verified_high_quality=True,
+                sub_query_retrieval_results=[],
+                verified_reranked_documents=[],
+                context_documents=[],
+                cited_documents=[],
+                sub_question_retrieval_stats=AgentChunkRetrievalStats(
+                    verified_count=None,
+                    verified_avg_scores=None,
+                    rejected_count=None,
+                    rejected_avg_scores=None,
+                    verified_doc_chunk_ids=[],
+                    dismissed_doc_chunk_ids=[],
+                ),
             )
         ],
     )

@@ -5,21 +5,29 @@ from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
+from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_step_answer_explicit,
+)
 from onyx.agents.agent_search.kb_search.models import KGQuestionEntityExtractionResult
 from onyx.agents.agent_search.kb_search.models import (
     KGQuestionRelationshipExtractionResult,
 )
-from onyx.agents.agent_search.kb_search.states import (
-    ERTExtractionUpdate,
-)
+from onyx.agents.agent_search.kb_search.states import ERTExtractionUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
+from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
+from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
-from onyx.configs.kg_configs import USE_KG_APPROACH
+from onyx.chat.models import StreamStopInfo
+from onyx.chat.models import StreamStopReason
+from onyx.chat.models import StreamType
+from onyx.chat.models import SubQuestionPiece
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.relationships import get_allowed_relationship_type_pairs
 from onyx.kg.extractions.extraction_processing import get_entity_types_str
@@ -39,9 +47,13 @@ def extract_ert(
     LangGraph node to start the agentic search process.
     """
 
-    if not USE_KG_APPROACH:
+    # recheck KG enablement at outset KG graph
+
+    if not config["metadata"]["config"].behavior.kg_config_settings.KG_ENABLED:
         logger.error("KG approach is not enabled, the KG agent flow cannot run.")
         raise Exception("KG approach is not enabled, the KG agent flow cannot run.")
+
+    _KG_STEP_NR = 1
 
     node_start_time = datetime.now()
 
@@ -63,16 +75,44 @@ def extract_ert(
     all_entity_types = get_entity_types_str(active=True)
     all_relationship_types = get_relationship_types_str(active=True)
 
-    write_custom_event(
-        "initial_agent_answer",
-        AgentAnswerPiece(
-            answer_piece="Analyzing the question...  -  ",
-            level=0,
-            level_question_num=0,
-            answer_type="agent_level_answer",
-        ),
-        writer,
+    # Stream structure of substeps out to the UI
+    # stream_write_step_structure(writer)
+
+    for step_nr, step_detail in STEP_DESCRIPTIONS.items():
+
+        write_custom_event(
+            "decomp_qs",
+            SubQuestionPiece(
+                sub_question=step_detail.description,
+                level=0,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    for step_nr in STEP_DESCRIPTIONS.keys():
+
+        write_custom_event(
+            "stream_finished",
+            StreamStopInfo(
+                stop_reason=StreamStopReason.FINISHED,
+                stream_type=StreamType.SUB_QUESTIONS,
+                level=0,
+                level_question_num=step_nr,
+            ),
+            writer,
+        )
+
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.SUB_QUESTIONS,
+        level=0,
     )
+
+    write_custom_event("stream_finished", stop_event, writer)
+
+    # Now specify core activities in the step (step 1)
+    stream_write_step_activities(writer, _KG_STEP_NR)
 
     ### get the entities, terms, and filters
 
@@ -94,12 +134,12 @@ def extract_ert(
             content=query_extraction_prompt,
         )
     ]
-    fast_llm = graph_config.tooling.primary_llm
+    primary_llm = graph_config.tooling.primary_llm
     # Grader
     try:
         llm_response = run_with_timeout(
             15,
-            fast_llm.invoke,
+            primary_llm.invoke,
             prompt=msg,
             timeout_override=15,
             max_tokens=300,
@@ -217,53 +257,23 @@ def extract_ert(
             relationships=[],
         )
 
-    # ert_relationships_string = (
-    #     f"Relationships: {relationship_extraction_result.relationships}\n"
-    # )
+    ## STEP 1
+    # Stream answer pieces out to the UI for Step 1
 
-    ##
+    extracted_entity_string = " \n ".join(
+        [x.split("--")[0] for x in entity_extraction_result.entities]
+    )
+    extracted_relationship_string = " \n ".join(
+        relationship_extraction_result.relationships
+    )
 
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=ert_entities_string,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=ert_relationships_string,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=ert_terms_string,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-    # write_custom_event(
-    #     "initial_agent_answer",
-    #     AgentAnswerPiece(
-    #         answer_piece=ert_time_filter_string,
-    #         level=0,
-    #         level_question_num=0,
-    #         answer_type="agent_level_answer",
-    #     ),
-    #     writer,
-    # )
-    # dispatch_main_answer_stop_info(0, writer)
+    step_answer = f"""Entities and relationships have been extracted from query - \n \
+Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_string}"""
+
+    stream_write_step_answer_explicit(writer, step_nr=1, answer=step_answer)
+
+    # Finish Step 1
+    stream_close_step_answer(writer, _KG_STEP_NR)
 
     return ERTExtractionUpdate(
         entities_types_str=all_entity_types,
@@ -278,6 +288,26 @@ def extract_ert(
                 graph_component="main",
                 node_name="extract entities terms",
                 node_start_time=node_start_time,
+            )
+        ],
+        step_results=[
+            SubQuestionAnswerResults(
+                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
+                question_id="0_" + str(_KG_STEP_NR),
+                answer=step_answer,
+                verified_high_quality=True,
+                sub_query_retrieval_results=[],
+                verified_reranked_documents=[],
+                context_documents=[],
+                cited_documents=[],
+                sub_question_retrieval_stats=AgentChunkRetrievalStats(
+                    verified_count=None,
+                    verified_avg_scores=None,
+                    rejected_count=None,
+                    rejected_avg_scores=None,
+                    verified_doc_chunk_ids=[],
+                    dismissed_doc_chunk_ids=[],
+                ),
             )
         ],
     )

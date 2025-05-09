@@ -612,6 +612,17 @@ class Document(Base):
     )
 
 
+class KGConfig(Base):
+    __tablename__ = "kg_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    kg_variable_name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
+    kg_variable_values: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+
 class KGEntityType(Base):
     __tablename__ = "kg_entity_type"
 
@@ -625,15 +636,8 @@ class KGEntityType(Base):
     grounding: Mapped[str] = mapped_column(
         NullFilteredString, nullable=False, index=False
     )
-    grounded_source_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=False, index=False
-    )
 
-    entity_values: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), nullable=True, default=None
-    )
-
-    attribute_filters: Mapped[str] = mapped_column(
+    attributes: Mapped[str] = mapped_column(
         postgresql.JSONB,
         nullable=True,
         default=dict,
@@ -641,23 +645,7 @@ class KGEntityType(Base):
         comment="Filtering based on document attribute",
     )
 
-    clustering: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Clustering information for this entity type",
-    )
-
-    attributes: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Pre-extraction classification requirements and instructions",
-    )
-
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -673,6 +661,22 @@ class KGEntityType(Base):
     )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
+    )
+
+    grounded_source_name: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=False, index=False
+    )
+
+    entity_values: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=True, default=None
+    )
+
+    clustering: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Clustering information for this entity type",
     )
 
 
@@ -722,7 +726,7 @@ class KGRelationshipType(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -793,7 +797,7 @@ class KGRelationshipTypeExtractionStaging(Base):
 
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -862,7 +866,7 @@ class KGEntity(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -941,7 +945,7 @@ class KGEntityExtractionStaging(Base):
         postgresql.ARRAY(String), nullable=False, default=list
     )
 
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Access control
     acl: Mapped[list[str]] = mapped_column(
@@ -1023,7 +1027,7 @@ class KGRelationship(Base):
         "KGRelationshipType", backref="relationship"
     )
 
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(
@@ -1114,7 +1118,7 @@ class KGRelationshipExtractionStaging(Base):
         "KGRelationshipTypeExtractionStaging", backref="relationship_staging"
     )
 
-    occurences: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
     time_updated: Mapped[datetime.datetime] = mapped_column(

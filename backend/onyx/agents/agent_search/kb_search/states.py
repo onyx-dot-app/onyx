@@ -11,12 +11,27 @@ from onyx.agents.agent_search.core_state import CoreState
 from onyx.agents.agent_search.orchestration.states import ToolCallUpdate
 from onyx.agents.agent_search.orchestration.states import ToolChoiceInput
 from onyx.agents.agent_search.orchestration.states import ToolChoiceUpdate
-from onyx.agents.agent_search.shared_graph_utils.models import ReferenceResults
+from onyx.agents.agent_search.shared_graph_utils.models import QueryRetrievalResult
+from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
+from onyx.context.search.models import InferenceSection
 
 
 ### States ###
+
+
+class StepResults(BaseModel):
+    question: str
+    question_id: str
+    answer: str
+    sub_query_retrieval_results: list[QueryRetrievalResult]
+    verified_reranked_documents: list[InferenceSection]
+    context_documents: list[InferenceSection]
+    cited_documents: list[InferenceSection]
+
+
 class LoggerUpdate(BaseModel):
     log_messages: Annotated[list[str], add] = []
+    step_results: Annotated[list[SubQuestionAnswerResults], add]
 
 
 class KGFilterConstructionResults(BaseModel):
@@ -54,6 +69,7 @@ class AnalysisUpdate(LoggerUpdate):
     output_format: KGAnswerFormat | None = None
     broken_down_question: str | None = None
     divide_and_conquer: YesNoEnum | None = None
+    single_doc_id: str | None = None
 
 
 class SQLSimpleGenerationUpdate(LoggerUpdate):
@@ -96,7 +112,7 @@ class ERTExtractionUpdate(LoggerUpdate):
 class ResultsDataUpdate(LoggerUpdate):
     query_results_data_str: str | None = None
     individualized_query_results_data_str: str | None = None
-    reference_results: ReferenceResults | None = None
+    reference_results_str: str | None = None
 
 
 class ResearchObjectUpdate(LoggerUpdate):
@@ -133,6 +149,7 @@ class MainOutput(TypedDict):
 
 
 class ResearchObjectInput(LoggerUpdate):
+    research_nr: int
     entity: str
     broken_down_question: str
     vespa_filter_results: KGFilterConstructionResults

@@ -53,7 +53,6 @@ from onyx.configs.constants import BASIC_KEY
 from onyx.configs.constants import MessageType
 from onyx.configs.constants import MilestoneRecordType
 from onyx.configs.constants import NO_AUTH_USER_ID
-from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.context.search.enums import LLMEvaluationType
 from onyx.context.search.enums import OptionalSearchSetting
 from onyx.context.search.enums import QueryFlow
@@ -81,6 +80,7 @@ from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
@@ -576,7 +576,10 @@ def stream_chat_message_objects(
 
     # TODO: INITIAL DEV ONLY!!!
 
-    if USE_KG_APPROACH:
+    kg_config_settings = get_kg_config_settings(db_session)
+    _USE_KG_APPROACH = kg_config_settings.KG_ENABLED
+
+    if _USE_KG_APPROACH:
         # Temporarily, until we have a draft UI for the KG Operations/Management
         if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)

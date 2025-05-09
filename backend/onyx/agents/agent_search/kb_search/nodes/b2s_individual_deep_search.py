@@ -113,10 +113,10 @@ def individual_deep_search(
 
     if state.sql_query_results:
         div_con_entities = [
-            x["id_name"] for x in state.sql_query_results if x["id_name"] is not None
+            x["id_name"]
+            for x in (state.sql_query_results or [])
+            if x["id_name"] is not None
         ]
-    else:
-        div_con_entities = []
 
     return DeepSearchFilterUpdate(
         vespa_filter_results=vespa_filter_results,
@@ -128,4 +128,5 @@ def individual_deep_search(
                 node_start_time=node_start_time,
             )
         ],
+        step_results=[],
     )

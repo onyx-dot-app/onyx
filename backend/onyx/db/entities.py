@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import cast
 from typing import List
 from typing import Type
 
@@ -21,7 +22,7 @@ def add_entity(
     entity_type: str,
     name: str,
     document_id: str | None = None,
-    occurences: int = 0,
+    occurrences: int = 0,
     event_time: datetime | None = None,
     attributes: dict[str, str] | None = None,
 ) -> "KGEntity | KGEntityExtractionStaging | None":
@@ -32,7 +33,7 @@ def add_entity(
         kg_stage: KGStage of the entity
         entity_type: Type of the entity (must match an existing KGEntityType)
         name: Name of the entity
-        occurences: Number of clusters this entity has been found
+        occurrences: Number of clusters this entity has been found
 
     Returns:
         KGEntity: The created entity
@@ -57,7 +58,7 @@ def add_entity(
             entity_type_id_name=entity_type,
             document_id=document_id,
             name=name,
-            occurences=occurences,
+            occurrences=occurrences,
             event_time=event_time,
             attributes=attributes,
         )
@@ -65,7 +66,7 @@ def add_entity(
             index_elements=["id_name"],
             set_=dict(
                 # Direct numeric addition without text()
-                occurences=_KGEntityObject.occurences + occurences,
+                occurrences=_KGEntityObject.occurrences + occurrences,
                 # Keep other fields updated as before
                 entity_type_id_name=entity_type,
                 document_id=document_id,
@@ -120,30 +121,28 @@ def get_entities_by_grounding(
 
     _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
 
+    if kg_stage not in [KGStage.EXTRACTED, KGStage.NORMALIZED]:
+        raise ValueError(f"Invalid KGStage: {kg_stage}")
+
     if kg_stage == KGStage.EXTRACTED:
         _KGEntityObject = KGEntityExtractionStaging
-        return (
-            db_session.query(_KGEntityObject)
-            .join(
-                KGEntityType,
-                _KGEntityObject.entity_type_id_name == KGEntityType.id_name,
-            )
-            .filter(KGEntityType.grounding == grounding)
-            .all()
-        )
     elif kg_stage == KGStage.NORMALIZED:
         _KGEntityObject = KGEntity
-        return (
-            db_session.query(_KGEntityObject)
-            .join(
-                KGEntityType,
-                _KGEntityObject.entity_type_id_name == KGEntityType.id_name,
-            )
-            .filter(KGEntityType.grounding == grounding)
-            .all()
+
+    result = list(
+        db_session.query(_KGEntityObject)
+        .join(
+            KGEntityType,
+            _KGEntityObject.entity_type_id_name == KGEntityType.id_name,
         )
+        .filter(KGEntityType.grounding == grounding)
+        .all()
+    )
+
+    if kg_stage == KGStage.EXTRACTED:
+        return cast(List[KGEntityExtractionStaging], result)
     else:
-        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
+        return cast(List[KGEntity], result)
 
 
 def get_grounded_entities_by_types(
@@ -180,28 +179,30 @@ def delete_entities_by_id_names(
     Returns:
         Number of entities deleted
     """
+
+    if kg_stage not in [KGStage.EXTRACTED, KGStage.NORMALIZED]:
+        raise ValueError(f"Invalid KGStage: {kg_stage}")
+
     if kg_stage == KGStage.EXTRACTED:
-        deleted_count = (
-            db_session.query(KGEntityExtractionStaging)
-            .filter(KGEntityExtractionStaging.id_name.in_(id_names))
-            .delete(synchronize_session=False)
+        _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging] = (
+            KGEntityExtractionStaging
         )
+
     elif kg_stage == KGStage.NORMALIZED:
-        deleted_count = (
-            db_session.query(KGEntity)
-            .filter(KGEntity.id_name.in_(id_names))
-            .delete(synchronize_session=False)
-        )
-    else:
-        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
+        _KGEntityObject = KGEntity
+    deleted_count = (
+        db_session.query(_KGEntityObject)
+        .filter(_KGEntityObject.id_name.in_(id_names))
+        .delete(synchronize_session=False)
+    )
 
     db_session.flush()  # Flush to ensure deletion is processed
     return deleted_count
 
 
-def get_entities_for_types(
-    db_session: Session, entity_types: List[str], kg_stage: KGStage
-) -> List[KGEntity] | List[KGEntityExtractionStaging]:
+def get_entity_names_for_types(
+    db_session: Session, entity_types: List[str]
+) -> List[tuple[str, str | None]]:
     """Get all entities that belong to the specified entity types.
 
     Args:
@@ -209,27 +210,42 @@ def get_entities_for_types(
         entity_types: List of entity type id_names to filter by
 
     Returns:
-        List of KGEntity objects belonging to the specified entity types
+        List of entity id_names belonging to the specified entity types
     """
-    if kg_stage == KGStage.EXTRACTED:
-        return (
-            db_session.query(KGEntityExtractionStaging)
-            .join(
-                KGEntityType,
-                KGEntityExtractionStaging.entity_type_id_name == KGEntityType.id_name,
-            )
-            .filter(KGEntityExtractionStaging.entity_type_id_name.in_(entity_types))
-            .all()
-        )
-    elif kg_stage == KGStage.NORMALIZED:
-        return (
-            db_session.query(KGEntity)
-            .join(KGEntityType, KGEntity.entity_type_id_name == KGEntityType.id_name)
-            .filter(KGEntity.entity_type_id_name.in_(entity_types))
-            .all()
-        )
-    else:
-        raise ValueError(f"Invalid KGStage: {kg_stage.value}")
+    entity_query = db_session.query(KGEntity).filter(
+        KGEntity.entity_type_id_name.in_(entity_types)
+    )
+
+    # Get document IDs from the filtered entities
+    doc_ids = [e.document_id for e in entity_query.all() if e.document_id is not None]
+
+    # Get document info for those IDs
+    doc_info: dict[str, tuple[str | None, str | None]] = {
+        row[0].capitalize(): (row[1], row[2])
+        for row in db_session.query(Document.id, Document.semantic_id, Document.link)
+        .filter(Document.id.in_(doc_ids))
+        .all()
+    }
+
+    # Return entities with their document info
+
+    names: list[tuple[str, str | None]] = []
+    for entity in entity_query.all():
+        if entity.document_id is not None:
+            # Extract entity type from the full type ID
+            entity_type = entity.entity_type_id_name.split(":")[0].upper()
+
+            # Get document info, defaulting to None if not found
+            doc_semantic_id = doc_info.get(
+                entity.document_id.capitalize(), (None, None)
+            )[0]
+
+            # Construct the final string
+            names.append((entity.id_name, f"{entity_type}:{doc_semantic_id}"))
+        else:
+            names.append((entity.id_name, None))
+
+    return names
 
 
 def get_entities_by_document_ids(
@@ -256,3 +272,34 @@ def get_entities_by_document_ids(
         raise ValueError(f"Invalid KGStage: {kg_stage.value}")
     result = db_session.execute(stmt).scalars().all()
     return list(result)
+
+
+def get_document_id_for_entity(
+    db_session: Session, entity: str, kg_stage: KGStage = KGStage.NORMALIZED
+) -> str | None:
+    """Get the document ID associated with an entity.
+
+    Args:
+        db_session: SQLAlchemy database session
+        entity: The entity id_name to look up
+        kg_stage: The knowledge graph stage to search in (defaults to NORMALIZED)
+
+    Returns:
+        The document ID if found, None otherwise
+    """
+
+    entity = entity.replace(": ", ":")
+
+    if kg_stage == KGStage.EXTRACTED:
+        stmt = select(KGEntityExtractionStaging.document_id).where(
+            func.lower(KGEntityExtractionStaging.id_name) == func.lower(entity)
+        )
+    elif kg_stage == KGStage.NORMALIZED:
+        stmt = select(KGEntity.document_id).where(
+            func.lower(KGEntity.id_name) == func.lower(entity)
+        )
+    else:
+        raise ValueError(f"Invalid KGStage: {kg_stage}")
+
+    result = db_session.execute(stmt).scalars().first()
+    return result

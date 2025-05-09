@@ -21,10 +21,10 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.expression import null
 
+from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.configs.constants import DEFAULT_BOOST
 from onyx.configs.constants import DocumentSource
-from onyx.context.search.models import InferenceChunk
-from onyx.context.search.models import InferenceSection
+from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
@@ -34,6 +34,7 @@ from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
 from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
+from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import User
@@ -998,42 +999,19 @@ def get_all_kg_extracted_documents_info(
 
 def get_base_llm_doc_information(
     db_session: Session, document_ids: list[str]
-) -> list[InferenceSection]:
+) -> list[str]:
     stmt = select(DbDocument).where(DbDocument.id.in_(document_ids))
     results = db_session.execute(stmt).all()
 
-    inference_sections = []
+    documents = []
 
-    for doc in results:
+    for doc_nr, doc in enumerate(results):
         bare_doc = doc[0]
-        inference_section = InferenceSection(
-            center_chunk=InferenceChunk(
-                document_id=bare_doc.id,
-                chunk_id=0,
-                source_type=DocumentSource.NOT_APPLICABLE,
-                semantic_identifier=bare_doc.semantic_id,
-                title=None,
-                boost=0,
-                recency_bias=0,
-                score=0,
-                hidden=False,
-                metadata={},
-                blurb="",
-                content="",
-                source_links=None,
-                image_file_name=None,
-                section_continuation=False,
-                match_highlights=[],
-                doc_summary="",
-                chunk_context="",
-                updated_at=None,
-            ),
-            chunks=[],
-            combined_content="",
+        documents.append(
+            f"""* [{bare_doc.semantic_id}]({bare_doc.link}) ({bare_doc.doc_updated_at})"""
         )
 
-        inference_sections.append(inference_section)
-    return inference_sections
+    return documents[:KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES]
 
 
 def get_document_updated_at(
@@ -1073,10 +1051,15 @@ def reset_all_document_kg_stages(db_session: Session) -> int:
         .values(kg_stage=KGStage.NOT_STARTED)
     )
     result = db_session.execute(stmt)
+
+    # The hasattr check is needed for type checking, even though rowcount
+    # is guaranteed to exist at runtime for UPDATE operations
     return result.rowcount if hasattr(result, "rowcount") else 0
 
 
-def reset_extracted_document_kg_stages(db_session: Session) -> int:
+def update_document_kg_stages(
+    db_session: Session, source_stage: KGStage, target_stage: KGStage
+) -> int:
     """Reset the KG stage only of documents back to NOT_STARTED.
     Part of reset flow for documemnts that have been extracted but not clustered.
 
@@ -1088,50 +1071,12 @@ def reset_extracted_document_kg_stages(db_session: Session) -> int:
     """
     stmt = (
         update(DbDocument)
-        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
-        .values(kg_stage=KGStage.NOT_STARTED)
+        .where(DbDocument.kg_stage == source_stage)
+        .values(kg_stage=target_stage)
     )
     result = db_session.execute(stmt)
-    return result.rowcount if hasattr(result, "rowcount") else 0
-
-
-def reset_normalized_document_kg_stages(db_session: Session) -> int:
-    """Reset the KG stage only of documents back to NOT_STARTED.
-    Part of reset flow for documemnts that have been normalized.
-    This essentialy requires that the extractions are still available.
-
-    Args:
-        db_session (Session): The database session to use
-
-    Returns:
-        int: Number of documents that were reset
-    """
-    stmt = (
-        update(DbDocument)
-        .where(DbDocument.kg_stage == KGStage.NORMALIZED)
-        .values(kg_stage=KGStage.EXTRACTED)
-    )
-    result = db_session.execute(stmt)
-    return result.rowcount if hasattr(result, "rowcount") else 0
-
-
-def update_extracted_document_kg_stages(db_session: Session) -> int:
-    """Update the KG stage only of documents  to NORMALIZED.
-    Part of reset flow for documemnts that have been normalized.
-    This essentialy requires that the extractions are still available.
-
-    Args:
-        db_session (Session): The database session to use
-
-    Returns:
-        int: Number of documents that were reset
-    """
-    stmt = (
-        update(DbDocument)
-        .where(DbDocument.kg_stage == KGStage.EXTRACTED)
-        .values(kg_stage=KGStage.NORMALIZED)
-    )
-    result = db_session.execute(stmt)
+    # The hasattr check is needed for type checking, even though rowcount
+    # is guaranteed to exist at runtime for UPDATE operations
     return result.rowcount if hasattr(result, "rowcount") else 0
 
 
@@ -1146,3 +1091,34 @@ def get_skipped_kg_documents(db_session: Session) -> list[str]:
     stmt = select(DbDocument.id).where(DbDocument.kg_stage == KGStage.SKIPPED)
 
     return list(db_session.scalars(stmt).all())
+
+
+def get_kg_doc_info_for_entity_name(
+    db_session: Session, document_id: str, entity_type: str
+) -> KGEntityDocInfo:
+    """
+    Get the semantic ID and the link for an entity name.
+    """
+
+    result = (
+        db_session.query(Document.semantic_id, Document.link)
+        .filter(Document.id == document_id)
+        .first()
+    )
+
+    if result is None:
+        return KGEntityDocInfo(
+            doc_id=None,
+            doc_semantic_id=None,
+            doc_link=None,
+            semantic_entity_name=f"{entity_type}:{document_id}",
+            semantic_linked_entity_name=f"{entity_type}:{document_id}",
+        )
+
+    return KGEntityDocInfo(
+        doc_id=document_id,
+        doc_semantic_id=result[0],
+        doc_link=result[1],
+        semantic_entity_name=f"{entity_type.upper()}:{result.semantic_id}",
+        semantic_linked_entity_name=f"[{entity_type.upper()}:{result.semantic_id}]({result[1]})",
+    )

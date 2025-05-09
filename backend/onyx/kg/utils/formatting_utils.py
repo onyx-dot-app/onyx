@@ -1,7 +1,6 @@
 from collections import defaultdict
 
-from onyx.configs.kg_configs import KG_VENDOR
-from onyx.configs.kg_configs import KG_VENDOR_DOMAINS
+from onyx.db.kg_config import KGConfigSettings
 from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGPerson
 
@@ -88,17 +87,20 @@ def aggregate_kg_extractions(
     return aggregated_kg_extractions
 
 
-def kg_email_processing(email: str) -> KGPerson:
+def kg_email_processing(email: str, kg_config_settings: KGConfigSettings) -> KGPerson:
     """
     Process the email.
     """
     name, company_domain = email.split("@")
+    assert isinstance(company_domain, str)
+    assert isinstance(kg_config_settings.KG_VENDOR_DOMAINS, list)
+    assert isinstance(kg_config_settings.KG_VENDOR, str)
 
-    assert isinstance(KG_VENDOR_DOMAINS, list)
-
-    employee = any(domain in company_domain for domain in KG_VENDOR_DOMAINS)
+    employee = any(
+        domain in company_domain for domain in kg_config_settings.KG_VENDOR_DOMAINS
+    )
     if employee:
-        company = KG_VENDOR
+        company = kg_config_settings.KG_VENDOR
     else:
         company = company_domain.capitalize()
 

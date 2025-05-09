@@ -2,6 +2,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.models import KGEntityType
 from onyx.kg.kg_default_entity_definitions import KGDefaultAccountEmployeeDefinitions
 from onyx.kg.kg_default_entity_definitions import (
@@ -111,6 +112,17 @@ def populate_default_primary_grounded_entity_type_information(
     Args:
         db_session: SQLAlchemy session
     """
+
+    # get kg config information
+    kg_config_settings = get_kg_config_settings(db_session)
+
+    if not kg_config_settings.KG_ENABLED:
+        raise ValueError("KG is not enabled")
+    if not kg_config_settings.KG_VENDOR:
+        raise ValueError("KG_VENDOR is not set")
+    if not kg_config_settings.KG_VENDOR_DOMAINS:
+        raise ValueError("KG_VENDOR_DOMAINS is not set")
+
     # Get all existing entity types
     existing_entity_types = {et.id_name for et in db_session.query(KGEntityType).all()}
 
@@ -124,11 +136,16 @@ def populate_default_primary_grounded_entity_type_information(
             continue
 
         # Create new entity type
+
+        description = definition["description"].replace(
+            "---vendor_name---", kg_config_settings.KG_VENDOR
+        )
+
         new_entity_type = KGEntityType(
             id_name=id_name,
-            description=definition["description"],
+            description=description,
             grounding=definition["grounding"],
-            grounded_source_name=id_name.lower(),
+            grounded_source_name=definition["grounded_source_name"],
             active=False,
         )
 
@@ -145,6 +162,17 @@ def populate_default_employee_account_information(db_session: Session) -> None:
     Args:
         db_session: SQLAlchemy session
     """
+
+    # get kg config information
+    kg_config_settings = get_kg_config_settings(db_session)
+
+    if not kg_config_settings.KG_ENABLED:
+        raise ValueError("KG is not enabled")
+    if not kg_config_settings.KG_VENDOR:
+        raise ValueError("KG_VENDOR is not set")
+    if not kg_config_settings.KG_VENDOR_DOMAINS:
+        raise ValueError("KG_VENDOR_DOMAINS is not set")
+
     # Get all existing entity types
     existing_entity_types = {et.id_name for et in db_session.query(KGEntityType).all()}
 
@@ -158,11 +186,14 @@ def populate_default_employee_account_information(db_session: Session) -> None:
             continue
 
         # Create new entity type
+        description = definition["description"].replace(
+            "---vendor_name---", kg_config_settings.KG_VENDOR
+        )
         new_entity_type = KGEntityType(
             id_name=id_name,
-            description=definition["description"],
+            description=description,
             grounding=definition["grounding"],
-            grounded_source_name=id_name,
+            grounded_source_name=definition["grounded_source_name"],
             active=True,
         )
 
@@ -208,3 +239,19 @@ def get_entity_types_by_grounding(
     return (
         db_session.query(KGEntityType).filter(KGEntityType.grounding == grounding).all()
     )
+
+
+def get_grounded_source_name(db_session: Session, entity_type: str) -> str | None:
+    """
+    Get the grounded source name for an entity type.
+    """
+
+    result = (
+        db_session.query(KGEntityType)
+        .filter(KGEntityType.id_name == entity_type)
+        .first()
+    )
+    if result is None:
+        return None
+
+    return result.grounded_source_name

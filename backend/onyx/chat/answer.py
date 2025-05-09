@@ -27,9 +27,9 @@ from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.configs.constants import BASIC_KEY
-from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.context.search.models import RerankingDetails
 from onyx.db.models import Persona
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
@@ -123,6 +123,7 @@ class Answer:
             allow_refinement=AGENT_ALLOW_REFINEMENT,
             allow_agent_reranking=allow_agent_reranking,
             perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
+            kg_config_settings=get_kg_config_settings(db_session),
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,
@@ -137,7 +138,15 @@ class Answer:
             yield from self._processed_stream
             return
 
-        if self.graph_config.behavior.use_agentic_search:
+        if self.graph_config.behavior.use_agentic_search and (
+            self.graph_config.inputs.persona
+            and self.graph_config.behavior.kg_config_settings.KG_ENABLED
+            and self.graph_config.inputs.persona.name.startswith(
+                "KG Dev"
+            )
+        ):
+            run_langgraph = run_kb_graph
+        elif self.graph_config.behavior.use_agentic_search:
             run_langgraph = run_agent_search_graph
         elif (
             self.graph_config.inputs.persona
@@ -147,14 +156,6 @@ class Answer:
             )
         ):
             run_langgraph = run_dc_graph
-        elif (
-            self.graph_config.inputs.search_request.persona
-            and USE_KG_APPROACH
-            and self.graph_config.inputs.search_request.persona.name.startswith(
-                "KG Dev"
-            )
-        ):
-            run_langgraph = run_kb_graph
         else:
             run_langgraph = run_basic_graph
 

@@ -33,7 +33,6 @@ def upgrade() -> None:
     # environment variables MUST be set. Otherwise, an exception will be raised.
 
     if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
-
         raise Exception("KG_READONLY_DB_USER or KG_READONLY_DB_PASSWORD is not set")
 
     try:
@@ -62,6 +61,13 @@ def upgrade() -> None:
     )
 
     op.create_table(
+        "kg_config",
+        sa.Column("id", sa.Integer(), primary_key=True, nullable=False, index=True),
+        sa.Column("kg_variable_name", sa.String(), nullable=False, index=True),
+        sa.Column("kg_variable_values", postgresql.ARRAY(sa.String()), nullable=False),
+    )
+
+    op.create_table(
         "kg_entity_type",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("description", sa.String(), nullable=True),
@@ -72,7 +78,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=False),
         sa.Column("deep_extraction", sa.Boolean(), nullable=False, default=False),
         sa.Column(
@@ -84,11 +90,14 @@ def upgrade() -> None:
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        sa.Column(
-            "grounded_source_subtypes", postgresql.ARRAY(sa.String()), nullable=True
-        ),
+        sa.Column("grounded_source_name", sa.String(), nullable=True),
         sa.Column("entity_values", postgresql.ARRAY(sa.String()), nullable=True),
-        sa.Column("ge_grounding_signature", sa.String(), nullable=True),
+        sa.Column(
+            "clustering",
+            postgresql.JSONB,
+            nullable=False,
+            server_default="{}",
+        ),
     )
 
     # Create KGRelationshipType table
@@ -103,7 +112,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -114,6 +123,12 @@ def upgrade() -> None:
         ),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
+        ),
+        sa.Column(
+            "clustering",
+            postgresql.JSONB,
+            nullable=False,
+            server_default="{}",
         ),
         sa.ForeignKeyConstraint(
             ["source_entity_type_id_name"], ["kg_entity_type.id_name"]
@@ -135,7 +150,7 @@ def upgrade() -> None:
             "target_entity_type_id_name", sa.String(), nullable=False, index=True
         ),
         sa.Column("definition", sa.Boolean(), nullable=False, default=False),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("active", sa.Boolean(), nullable=False, default=True),
         sa.Column(
@@ -146,6 +161,12 @@ def upgrade() -> None:
         ),
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
+        ),
+        sa.Column(
+            "clustering",
+            postgresql.JSONB,
+            nullable=False,
+            server_default="{}",
         ),
         sa.ForeignKeyConstraint(
             ["source_entity_type_id_name"], ["kg_entity_type.id_name"]
@@ -176,7 +197,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
@@ -220,7 +241,7 @@ def upgrade() -> None:
             nullable=False,
             server_default="{}",
         ),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column(
             "acl", postgresql.ARRAY(sa.String()), nullable=False, server_default="{}"
         ),
@@ -260,7 +281,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -301,7 +322,7 @@ def upgrade() -> None:
         sa.Column("source_document", sa.String(), nullable=True, index=True),
         sa.Column("type", sa.String(), nullable=False, index=True),
         sa.Column("relationship_type_id_name", sa.String(), nullable=False, index=True),
-        sa.Column("occurences", sa.Integer(), nullable=True),
+        sa.Column("occurrences", sa.Integer(), nullable=True),
         sa.Column(
             "time_updated",
             sa.DateTime(timezone=True),
@@ -394,6 +415,7 @@ def downgrade() -> None:
     op.drop_column("connector", "kg_processing_enabled")
     op.drop_column("document_by_connector_credential_pair", "kg_stage")
     op.drop_column("document", "kg_stage")
+    op.drop_table("kg_config")
 
     op.execute(
         text(

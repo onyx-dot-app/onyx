@@ -6,23 +6,36 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_close_main_answer,
+)
+from onyx.agents.agent_search.kb_search.graph_utils import stream_write_close_steps
+from onyx.agents.agent_search.kb_search.graph_utils import (
+    stream_write_main_answer_token,
+)
+from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import MainOutput
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.utils import (
-    dispatch_main_answer_stop_info,
+from onyx.agents.agent_search.shared_graph_utils.calculations import (
+    get_answer_generation_documents,
 )
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
-from onyx.chat.models import AgentAnswerPiece
-from onyx.chat.models import StreamStopInfo
-from onyx.chat.models import StreamStopReason
-from onyx.chat.models import StreamType
+from onyx.chat.models import ExtendedToolResponse
+from onyx.context.search.enums import SearchType
+from onyx.context.search.models import InferenceSection
+from onyx.db.chat import log_agent_sub_question_results
+from onyx.db.engine import get_session_with_current_tenant
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
-from onyx.prompts.kg_prompts import OUTPUT_FORMAT_PROMPT
+from onyx.tools.tool_implementations.search.search_tool import IndexFilters
+from onyx.tools.tool_implementations.search.search_tool import SearchQueryInfo
+from onyx.tools.tool_implementations.search.search_tool import yield_search_responses
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -35,54 +48,100 @@ def generate_answer(
     """
     LangGraph node to start the agentic search process.
     """
+
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = graph_config.inputs.search_request.query
 
-    introductory_answer = state.query_results_data_str
-
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:
         raise ValueError("Search tool is not set")
 
+    # Close out previous streams of steps
+
+    # DECLARE STEPS DONE
+
+    stream_write_close_steps(writer)
+
+    ## MAIN ANSWER
+
+    # get a search done and send the results to the UI
+
+    assert graph_config.tooling.search_tool is not None
+    retrieved_docs = research(
+        question=question,
+        kg_entities=[],
+        kg_relationships=[],
+        kg_sources=state.source_document_results,
+        search_tool=graph_config.tooling.search_tool,
+        kg_chunk_id_zero_only=True,
+        inference_sections_only=True,
+    )
+
+    retrieved_docs = cast(list[InferenceSection], retrieved_docs)
+
+    answer_generation_documents = get_answer_generation_documents(
+        relevant_docs=retrieved_docs,
+        context_documents=retrieved_docs,
+        original_question_docs=retrieved_docs,
+        max_docs=5,
+    )
+
+    relevance_list = relevance_from_docs(
+        answer_generation_documents.streaming_documents
+    )
+
+    assert graph_config.tooling.search_tool is not None
+
+    for tool_response in yield_search_responses(
+        query=question,
+        get_retrieved_sections=lambda: answer_generation_documents.context_documents,
+        get_final_context_sections=lambda: answer_generation_documents.context_documents,
+        search_query_info=SearchQueryInfo(
+            predicted_search=SearchType.KEYWORD,
+            final_filters=IndexFilters(access_control_list=[]),
+            recency_bias_multiplier=1.0,
+        ),
+        get_section_relevance=lambda: relevance_list,
+        search_tool=graph_config.tooling.search_tool,
+    ):
+        write_custom_event(
+            "tool_response",
+            ExtendedToolResponse(
+                id=tool_response.id,
+                response=tool_response.response,
+                level=0,
+                level_question_num=0,  # 0, 0 is the base question
+            ),
+            writer,
+        )
+
+    # continue with the answer generation
+
+    output_format = (
+        state.output_format.value
+        if state.output_format
+        else "<you be the judge how to best present the data>"
+    )
+
+    # if deep path was taken:
+
     consolidated_research_object_results_str = (
         state.consolidated_research_object_results_str
     )
+    reference_results_str = (
+        state.reference_results_str
+    )  # will not be part of LLM. Manually added to the answer
 
-    question = graph_config.inputs.search_request.query
-
-    if state.output_format is None:
-        output_format = "<you be the judge how to best present the data>"
-    else:
-        output_format = state.output_format.value
-
-    if state.reference_results:
-        examples = (
-            state.reference_results.citations
-            or state.reference_results.general_entities
-            or []
-        )
-        research_results = "\n".join([f"- {example}" for example in examples])
-    elif consolidated_research_object_results_str:
+    # if simple path was taken:
+    introductory_answer = state.query_results_data_str  # from simple answer path only
+    if consolidated_research_object_results_str:
         research_results = consolidated_research_object_results_str
     else:
         research_results = ""
 
-    if research_results and introductory_answer:
-        output_format_prompt = (
-            OUTPUT_FORMAT_PROMPT.replace("---question---", question)
-            .replace(
-                "---introductory_answer---",
-                rename_entities_in_answer(introductory_answer),
-            )
-            .replace("---output_format---", str(output_format) if output_format else "")
-            .replace(
-                "---research_results---", rename_entities_in_answer(research_results)
-            )
-        )
-
-    elif not research_results and introductory_answer:
+    if introductory_answer:
         output_format_prompt = (
             OUTPUT_FORMAT_NO_EXAMPLES_PROMPT.replace("---question---", question)
             .replace(
@@ -91,9 +150,26 @@ def generate_answer(
             )
             .replace("---output_format---", str(output_format) if output_format else "")
         )
-    elif research_results and not introductory_answer:
+    elif research_results and consolidated_research_object_results_str:
+        output_format_prompt = (
+            OUTPUT_FORMAT_NO_EXAMPLES_PROMPT.replace("---question---", question)
+            .replace(
+                "---introductory_answer---",
+                rename_entities_in_answer(consolidated_research_object_results_str),
+            )
+            .replace("---output_format---", str(output_format) if output_format else "")
+        )
+    elif research_results and not consolidated_research_object_results_str:
         output_format_prompt = (
             OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT.replace("---question---", question)
+            .replace("---output_format---", str(output_format) if output_format else "")
+            .replace(
+                "---research_results---", rename_entities_in_answer(research_results)
+            )
+        )
+    elif consolidated_research_object_results_str:
+        output_format_prompt = (
+            OUTPUT_FORMAT_NO_EXAMPLES_PROMPT.replace("---question---", question)
             .replace("---output_format---", str(output_format) if output_format else "")
             .replace(
                 "---research_results---", rename_entities_in_answer(research_results)
@@ -113,6 +189,12 @@ def generate_answer(
     response: list[str] = []
 
     def stream_answer() -> list[str]:
+        # Get the LLM's tokenizer
+        llm_tokenizer = get_tokenizer(
+            model_name=fast_llm.config.model_name,
+            provider_type=fast_llm.config.model_provider,
+        )
+
         for message in fast_llm.stream(
             prompt=msg,
             timeout_override=30,
@@ -124,23 +206,19 @@ def generate_answer(
                 raise ValueError(
                     f"Expected content to be a string, but got {type(content)}"
                 )
-            start_stream_token = datetime.now()
-            write_custom_event(
-                "initial_agent_answer",
-                AgentAnswerPiece(
-                    answer_piece=content,
-                    level=0,
-                    level_question_num=0,
-                    answer_type="agent_level_answer",
-                ),
-                writer,
-            )
-            # logger.debug(f"Answer piece: {content}")
-            end_stream_token = datetime.now()
-            dispatch_timings.append(
-                (end_stream_token - start_stream_token).microseconds
-            )
-            response.append(content)
+
+            # Tokenize the content using the LLM's tokenizer
+            tokens = llm_tokenizer.tokenize(content)
+            for token in tokens:
+                start_stream_token = datetime.now()
+                stream_write_main_answer_token(
+                    writer, token, level=0, level_question_num=0
+                )
+                end_stream_token = datetime.now()
+                dispatch_timings.append(
+                    (end_stream_token - start_stream_token).microseconds
+                )
+                response.append(token)
         return response
 
     try:
@@ -149,18 +227,38 @@ def generate_answer(
             stream_answer,
         )
 
+        if reference_results_str:
+            # Get the LLM's tokenizer
+            llm_tokenizer = get_tokenizer(
+                model_name=fast_llm.config.model_name,
+                provider_type=fast_llm.config.model_provider,
+            )
+
+            # Tokenize and stream the reference results
+            tokens = llm_tokenizer.tokenize(reference_results_str)
+            for token in tokens:
+                # Replace newlines with HTML line breaks
+                # if token == ' \n':
+                #    token = ' <br>'
+                stream_write_main_answer_token(writer, token)
+
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")
 
-    stop_event = StreamStopInfo(
-        stop_reason=StreamStopReason.FINISHED,
-        stream_type=StreamType.SUB_ANSWER,
-        level=0,
-        level_question_num=0,
-    )
-    write_custom_event("stream_finished", stop_event, writer)
+    stream_write_close_main_answer(writer)
 
-    dispatch_main_answer_stop_info(0, writer)
+    # Persist the sub-answer in the database
+    with get_session_with_current_tenant() as db_session:
+        chat_session_id = graph_config.persistence.chat_session_id
+        primary_message_id = graph_config.persistence.message_id
+        sub_question_answer_results = state.step_results
+
+        log_agent_sub_question_results(
+            db_session=db_session,
+            chat_session_id=chat_session_id,
+            primary_message_id=primary_message_id,
+            sub_question_answer_results=sub_question_answer_results,
+        )
 
     return MainOutput(
         log_messages=[

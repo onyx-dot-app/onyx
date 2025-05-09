@@ -4,12 +4,13 @@ from passlib.exc import PasswordSizeError
 from passlib.pwd import genword
 from sqlalchemy import text
 
-from onyx.configs.kg_configs import USE_KG_APPROACH
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import populate_default_employee_account_information
 from onyx.db.entity_type import (
     populate_default_primary_grounded_entity_type_information,
 )
+from onyx.db.kg_config import get_kg_enablement
+from onyx.db.kg_config import KGConfigSettings
 from onyx.utils.logger import setup_logger
 
 KG_READONLY_DB_USER = os.getenv("KG_READONLY_DB_USER")
@@ -19,15 +20,15 @@ logger = setup_logger()
 
 
 def populate_default_grounded_entity_types() -> None:
-    if not USE_KG_APPROACH:
-        logger.error(
-            "KG approach is not enabled, the entity types cannot be populated."
-        )
-        raise Exception(
-            "KG approach is not enabled, the entity types cannot be populated."
-        )
-
     with get_session_with_current_tenant() as db_session:
+        if not get_kg_enablement(db_session):
+            logger.error(
+                "KG approach is not enabled, the entity types cannot be populated."
+            )
+            raise Exception(
+                "KG approach is not enabled, the entity types cannot be populated."
+            )
+
         populate_default_primary_grounded_entity_type_information(db_session)
 
         db_session.commit()
@@ -36,15 +37,15 @@ def populate_default_grounded_entity_types() -> None:
 
 
 def populate_default_account_employee_definitions() -> None:
-    if not USE_KG_APPROACH:
-        logger.error(
-            "KG approach is not enabled, the entity types cannot be populated."
-        )
-        raise Exception(
-            "KG approach is not enabled, the entity types cannot be populated."
-        )
-
     with get_session_with_current_tenant() as db_session:
+        if not get_kg_enablement(db_session):
+            logger.error(
+                "KG approach is not enabled, the entity types cannot be populated."
+            )
+            raise Exception(
+                "KG approach is not enabled, the entity types cannot be populated."
+            )
+
         populate_default_employee_account_information(db_session)
 
         db_session.commit()
@@ -53,7 +54,11 @@ def populate_default_account_employee_definitions() -> None:
 
 
 def create_kg_readonly_user() -> None:
-    if not USE_KG_APPROACH:
+
+    with get_session_with_current_tenant() as db_session:
+        _USE_KG_APPROACH = get_kg_enablement(db_session)
+
+    if not _USE_KG_APPROACH:
         logger.error(
             "KG approach is not enabled, the entity types cannot be populated."
         )
@@ -83,3 +88,12 @@ def create_kg_readonly_user() -> None:
         db_session.commit()
 
     return None
+
+
+def execute_kg_setting_tests(kg_config_settings: KGConfigSettings) -> None:
+    if not kg_config_settings.KG_ENABLED:
+        raise ValueError("KG is not enabled")
+    if not kg_config_settings.KG_VENDOR:
+        raise ValueError("KG_VENDOR is not set")
+    if not kg_config_settings.KG_VENDOR_DOMAINS:
+        raise ValueError("KG_VENDOR_DOMAINS is not set")

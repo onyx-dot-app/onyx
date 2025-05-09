@@ -7,7 +7,6 @@ from typing import Dict
 
 from langchain_core.messages import HumanMessage
 
-from onyx.configs.kg_configs import KG_VENDOR
 from onyx.db.connector import get_kg_enabled_connectors
 from onyx.db.document import get_document_updated_at
 from onyx.db.document import get_skipped_kg_documents
@@ -17,6 +16,8 @@ from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
 from onyx.db.entity_type import get_entity_types
+from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.kg_config import KGConfigSettings
 from onyx.db.models import Document
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
@@ -26,6 +27,7 @@ from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
+from onyx.kg.configuration import execute_kg_setting_tests
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGBatchExtractionStats
@@ -94,7 +96,10 @@ def _get_classification_extraction_instructions() -> (
         else:
             classification_enabled = False
 
-        filter_instructions = cast(dict[str, Any] | None, entity_type.attribute_filters)
+        filter_instructions = cast(
+            dict[str, Any] | None,
+            entity_type.attributes.get("entity_filter_attributes", {}),
+        )
 
         classification_instructions_dict[grounded_source_name][entity_type.id_name] = (
             KGEntityTypeInstructions(
@@ -220,6 +225,7 @@ def _get_batch_metadata(
         str, KGEntityTypeInstructions
     ],
     index_name: str,
+    kg_config_settings: KGConfigSettings,
     processing_chunk_batch_size: int,
 ) -> dict[str, KGEnhancedDocumentMetadata]:
     """
@@ -254,6 +260,7 @@ def _get_batch_metadata(
         ],
         connector_source,
         index_name,
+        kg_config_settings=kg_config_settings,
         batch_size=processing_chunk_batch_size,
         num_classification_chunks=1,
     )
@@ -343,6 +350,13 @@ def kg_extraction(
 
     logger.info(f"Starting kg extraction for tenant {tenant_id}")
 
+    with get_session_with_current_tenant() as db_session:
+        kg_config_settings = get_kg_config_settings(db_session)
+
+    execute_kg_setting_tests(kg_config_settings)
+    assert kg_config_settings.KG_VENDOR is not None
+    assert kg_config_settings.KG_VENDOR_DOMAINS is not None
+
     # get connector ids that are enabled for KG extraction
 
     with get_session_with_current_tenant() as db_session:
@@ -427,6 +441,7 @@ def kg_extraction(
                 connector_source,
                 document_classification_extraction_instructions[connector_source],
                 index_name,
+                kg_config_settings,
                 processing_chunk_batch_size,
             )  # need doc attributes, entity type, and various instructions
 
@@ -475,6 +490,7 @@ def kg_extraction(
                     classification_batch_list,
                     connector_source,
                     index_name,
+                    kg_config_settings=kg_config_settings,
                     batch_size=processing_chunk_batch_size,
                     entity_type=batch_metadata[unprocessed_document.id].entity_type,
                 )
@@ -505,6 +521,7 @@ def kg_extraction(
                         _kg_document_classification(
                             generated_doc_classification_content_list,
                             batch_classification_instructions,
+                            kg_config_settings,
                         )
                     )
             except Exception as e:
@@ -520,10 +537,13 @@ def kg_extraction(
                     document_classification_outcome[0]
                     and document_classification_outcome[1].classification_decision
                 ):
-                    document_classification_result = document_classification_outcome[1]
-                    document_classifications[
-                        document_classification_result.document_id
-                    ] = document_classification_result
+                    document_classification_result: KGClassificationDecisions | None = (
+                        document_classification_outcome[1]
+                    )
+                    if document_classification_result:
+                        document_classifications[
+                            document_classification_result.document_id
+                        ] = document_classification_result
 
                 else:
                     documents_to_process.remove(
@@ -561,6 +581,7 @@ def kg_extraction(
                                 connector_source
                             ].keys()
                         ),
+                        kg_config_settings,
                     )
                 )
 
@@ -605,6 +626,7 @@ def kg_extraction(
                             chunk_doc_extractions=processing_chunk_doc_extractions,
                             index_name=index_name,
                             tenant_id=tenant_id,
+                            kg_config_settings=kg_config_settings,
                         )
 
                         # Consider removing the stats expressions here and rather write to the db(?)
@@ -691,6 +713,7 @@ def kg_extraction(
                 chunk_doc_extractions=processing_chunk_doc_extractions,
                 index_name=index_name,
                 tenant_id=tenant_id,
+                kg_config_settings=kg_config_settings,
             )
 
             # Consider removing the stats expressions here and rather write to the db(?)
@@ -809,7 +832,7 @@ def kg_extraction(
                                 kg_stage=KGStage.EXTRACTED,
                                 entity_type=entity_type,
                                 name=entity_name,
-                                occurences=extraction_count,
+                                occurrences=extraction_count,
                             )
                         else:
                             # Primary grounded entities
@@ -868,7 +891,7 @@ def kg_extraction(
                                 kg_stage=KGStage.EXTRACTED,
                                 entity_type=entity_type,
                                 name=entity_name,
-                                occurences=extraction_count,
+                                occurrences=extraction_count,
                                 document_id=document_id,
                                 event_time=event_time,
                                 attributes=entity_attributes,
@@ -1059,6 +1082,7 @@ def _kg_chunk_batch_extraction(
     ],
     index_name: str,
     tenant_id: str,
+    kg_config_settings: KGConfigSettings,
 ) -> KGBatchExtractionStats:
     _, fast_llm = get_default_llms()
 
@@ -1075,6 +1099,7 @@ def _kg_chunk_batch_extraction(
             KGChunkFormat, KGDocumentEntitiesRelationshipsAttributes
         ],
         preformatted_prompt: str,
+        kg_config_settings: KGConfigSettings,
     ) -> tuple[bool, KGUChunkUpdateRequest]:
         """Process a single chunk and return update request and other important KG processing information"""
 
@@ -1123,6 +1148,7 @@ def _kg_chunk_batch_extraction(
                             company_participant_emails=attribute_company_participant_emails,
                             account_participant_emails=attribute_account_participant_emails,
                             relationship_type=f"is_{attribute}_of",
+                            kg_config_settings=kg_config_settings,
                         )
 
                         converted_attributes_to_relationships.add(attribute)
@@ -1146,6 +1172,7 @@ def _kg_chunk_batch_extraction(
                                 company_participant_emails=attribute_company_participant_emails,
                                 account_participant_emails=attribute_account_participant_emails,
                                 relationship_type=f"is_{attribute}_of",
+                                kg_config_settings=kg_config_settings,
                             )
                             email_attribute = True
                             converted_attributes_to_relationships.add(attribute)
@@ -1169,7 +1196,10 @@ def _kg_chunk_batch_extraction(
 
         if chunk_needs_deep_extraction:
             llm_context = prepare_llm_content_extraction(
-                chunk, company_participant_emails, account_participant_emails
+                chunk,
+                company_participant_emails,
+                account_participant_emails,
+                kg_config_settings,
             )
 
             formatted_prompt = MASTER_EXTRACTION_PROMPT.replace(
@@ -1247,7 +1277,7 @@ def _kg_chunk_batch_extraction(
 
         if not all_relationships:
             all_relationships.append(
-                f"VENDOR:{KG_VENDOR}"
+                f"VENDOR:{kg_config_settings.KG_VENDOR}"
                 + "__"
                 + "relates_to"
                 + "__"
@@ -1280,7 +1310,7 @@ def _kg_chunk_batch_extraction(
     # Assume for prototype: use_threads = True. TODO: Make thread safe!
 
     functions_with_args: list[tuple[Callable, tuple]] = [
-        (process_single_chunk, (chunk_doc_extraction, ""))
+        (process_single_chunk, (chunk_doc_extraction, "", kg_config_settings))
         for chunk_doc_extraction in chunk_doc_extractions
     ]
 
@@ -1382,12 +1412,14 @@ def _kg_document_classification(
     classification_extraction_instructions: dict[
         str, KGClassificationInstructions | None
     ],
+    kg_config_settings: KGConfigSettings,
 ) -> list[tuple[bool, KGClassificationDecisions]]:
     primary_llm, fast_llm = get_default_llms()
 
     def classify_single_document(
         document_classification_content: KGClassificationContent,
         document_classification_extraction_instructions: KGClassificationInstructions,
+        kg_config_settings: KGConfigSettings,
     ) -> tuple[bool, KGClassificationDecisions]:
         """Classify a single document whether it should be kg-processed or not"""
 
@@ -1398,6 +1430,7 @@ def _kg_document_classification(
             document_classification_content,
             category_list=document_classification_extraction_instructions.classification_options,
             category_definitions=document_classification_extraction_instructions.classification_class_definitions,
+            kg_config_settings=kg_config_settings,
         )
 
         if classification_prompt.llm_prompt is None:
@@ -1473,6 +1506,7 @@ def _kg_document_classification(
                 classification_extraction_instructions[
                     document_classification_content.document_id
                 ],
+                kg_config_settings,
             ),
         )
         for document_classification_content in document_classification_content_list

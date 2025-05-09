@@ -155,7 +155,13 @@ def run_kb_graph(
     graph = kb_graph_builder()
     compiled_graph = graph.compile()
     input = KBMainInput(log_messages=[])
-    return run_graph(compiled_graph, config, input)
+
+    yield ToolCallKickoff(
+        tool_name="agent_search_0",
+        tool_args={"query": config.inputs.search_request.query},
+    )
+
+    yield from run_graph(compiled_graph, config, input)
 
 
 def run_dc_graph(

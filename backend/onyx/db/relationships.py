@@ -22,7 +22,7 @@ def add_relationship(
     kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-    occurences: int | None = None,
+    occurrences: int | None = None,
 ) -> Union["KGRelationship", "KGRelationshipExtractionStaging"]:
     """
     Add a relationship between two entities to the database.
@@ -31,7 +31,7 @@ def add_relationship(
         db_session: SQLAlchemy database session
         relationship_type: Type of relationship
         source_document_id: ID of the source document
-        occurences: Optional count of similar relationships clustered together
+        occurrences: Optional count of similar relationships clustered together
 
     Returns:
         The created KGRelationship object
@@ -63,7 +63,7 @@ def add_relationship(
         "type": relationship_string.lower(),
         "relationship_type_id_name": relationship_type,
         "source_document": source_document_id,
-        "occurences": occurences or 1,
+        "occurrences": occurrences or 1,
     }
 
     relationship: KGRelationship | KGRelationshipExtractionStaging
@@ -85,8 +85,8 @@ def add_relationship(
                 else "kg_relationship_extraction_staging_pkey"
             ),
             set_={
-                "occurences": int(str(relationship_data["occurences"] or 0))
-                + (occurences or 1),
+                "occurrences": int(str(relationship_data["occurrences"] or 0))
+                + (occurrences or 1),
                 "time_updated": func.now(),
             },
         )
@@ -123,11 +123,11 @@ def add_or_increment_relationship(
     kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-    new_occurences: int = 1,
+    new_occurrences: int = 1,
 ) -> KGRelationship | KGRelationshipExtractionStaging:
     """
     Add a relationship between two entities to the database if it doesn't exist,
-    or increment its occurences by 1 if it already exists.
+    or increment its occurrences by 1 if it already exists.
 
     Args:
         db_session: SQLAlchemy database session
@@ -159,24 +159,24 @@ def add_or_increment_relationship(
     )
 
     if existing_relationship:
-        # If it exists, increment the occurences
+        # If it exists, increment the occurrences
         existing_relationship = cast(
             KGRelationship | KGRelationshipExtractionStaging, existing_relationship
         )
-        existing_relationship.occurences = (
-            existing_relationship.occurences or 0
-        ) + new_occurences
+        existing_relationship.occurrences = (
+            existing_relationship.occurrences or 0
+        ) + new_occurrences
         db_session.flush()
         return existing_relationship
     else:
-        # If it doesn't exist, add it with occurences=1
+        # If it doesn't exist, add it with occurrences=1
         db_session.flush()
         return add_relationship(
             db_session,
             KGStage(kg_stage),
             relationship_id_name,
             source_document_id,
-            occurences=new_occurences,
+            occurrences=new_occurrences,
         )
 
 
@@ -215,7 +215,7 @@ def add_relationship_type(
         "source_entity_type_id_name": source_entity_type.upper(),
         "target_entity_type_id_name": target_entity_type.upper(),
         "definition": definition,
-        "occurences": extraction_count,
+        "occurrences": extraction_count,
         "type": relationship_type,  # Using the relationship_type as the type
         "active": True,  # Setting as active by default
     }
@@ -244,7 +244,7 @@ def add_relationship_type(
                     "target_entity_type_id_name"
                 ],
                 "definition": relationship_data["definition"],
-                "occurences": int(str(relationship_data["occurences"] or 0))
+                "occurrences": int(str(relationship_data["occurrences"] or 0))
                 + extraction_count,
                 "type": relationship_data["type"],
                 "active": relationship_data["active"],
@@ -438,6 +438,37 @@ def get_relationships_of_entity(db_session: Session, entity_id: str) -> List[str
                 or_(
                     KGRelationship.source_node == entity_id,
                     KGRelationship.target_node == entity_id,
+                )
+            )
+            .all()
+        )
+    ]
+
+
+def get_relationship_types_of_entity_types(
+    db_session: Session, entity_types_id: str
+) -> List[str]:
+    """Get all relationship ID names where the given entity is either the source or target node.
+
+    Args:
+        db_session: SQLAlchemy session
+        entity_types_id: ID of the entity to find relationships for
+
+    Returns:
+        List of relationship ID names where the entity is either source or target
+    """
+
+    if entity_types_id.endswith(":*"):
+        entity_types_id = entity_types_id[:-2]
+
+    return [
+        row[0]
+        for row in (
+            db_session.query(KGRelationshipType.id_name)
+            .filter(
+                or_(
+                    KGRelationshipType.source_entity_type_id_name == entity_types_id,
+                    KGRelationshipType.target_entity_type_id_name == entity_types_id,
                 )
             )
             .all()

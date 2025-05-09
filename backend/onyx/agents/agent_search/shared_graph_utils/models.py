@@ -162,6 +162,5 @@ class QueryExpansionType(Enum):
 
 
 class ReferenceResults(BaseModel):
-    # citations: list[InferenceSection]
     citations: list[str]
     general_entities: list[str]

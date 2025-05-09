@@ -87,6 +87,14 @@ def build_vespa_filters(
 
         return f"({' or '.join(source_phrases)}) and "
 
+    def _build_kg_chunk_id_zero_only_filter(
+        kg_chunk_id_zero_only: bool,
+    ) -> str:
+        if not kg_chunk_id_zero_only:
+            return ""
+
+        return "(chunk_id = 0 ) and "
+
     def _build_time_filter(
         cutoff: datetime | None,
         untimed_doc_cutoff: timedelta = timedelta(days=92),
@@ -147,6 +155,10 @@ def build_vespa_filters(
     )
 
     filter_str += _build_kg_source_filters(filters.kg_sources)
+
+    filter_str += _build_kg_chunk_id_zero_only_filter(
+        filters.kg_chunk_id_zero_only or False
+    )
 
     # Trim trailing " and "
     if remove_trailing_and and filter_str.endswith(" and "):

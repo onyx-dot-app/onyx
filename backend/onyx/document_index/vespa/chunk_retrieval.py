@@ -166,7 +166,7 @@ def _get_chunks_via_visit_api(
 
     # build the list of fields to retrieve
     field_set_list = (
-        [] if not field_names else [f"{field_name}" for field_name in field_names]
+        [f"{field_name}" for field_name in field_names] if field_names else []
     )
     acl_fieldset_entry = f"{ACCESS_CONTROL_LIST}"
     if (

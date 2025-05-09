@@ -4,19 +4,21 @@ from typing import List
 from typing import Optional
 
 import numpy as np
+from thefuzz import fuzz  # type: ignore
 from thefuzz import process  # type: ignore
 
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import get_entities_for_types
+from onyx.db.entities import get_entity_names_for_types
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
-from onyx.kg.models import KGStage
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
 
 
-def _get_existing_normalized_entities(raw_entities: List[str]) -> List[str]:
+def _get_existing_normalized_entities(
+    raw_entities: List[str],
+) -> List[tuple[str, str | None]]:
     """
     Get existing normalized entities from the database.
     """
@@ -24,11 +26,9 @@ def _get_existing_normalized_entities(raw_entities: List[str]) -> List[str]:
     entity_types = list(set([entity.split(":")[0] for entity in raw_entities]))
 
     with get_session_with_current_tenant() as db_session:
-        entities = get_entities_for_types(
-            db_session, entity_types, kg_stage=KGStage.NORMALIZED
-        )
+        entities = get_entity_names_for_types(db_session, entity_types)
 
-    return [entity.id_name for entity in entities]
+    return entities
 
 
 def _get_existing_normalized_relationships(
@@ -79,28 +79,57 @@ def normalize_entities(
     Returns:
         List of normalized entity strings
     """
+    # TODO: this probably should move to a new Vespa schema for entity normalization
+    # TODO: as is, this should be converted to a generator going through the entities
+    # in large batches, to avoid memory issues
+
     # Assume this is your predefined list of normalized entities
     norm_entities = _get_existing_normalized_entities(raw_entities_no_attributes)
+
+    norm_entity_semantic_to_id_map: dict[str, dict[str, str]] = defaultdict(dict)
+
+    for norm_entity_tuple in norm_entities:
+        if norm_entity_tuple[1] is None:
+            continue
+        entity_type, norm_entity_semantic_name = norm_entity_tuple[1].split(":")
+        norm_entity_semantic_to_id_map[entity_type][norm_entity_semantic_name] = (
+            norm_entity_tuple[0].split(":")[1]
+        )
 
     normalized_results: List[str] = []
     normalized_map: Dict[str, str | None] = {}
     threshold = 80  # Adjust threshold as needed
 
+    base_norm_entities = [norm_entity[0] for norm_entity in norm_entities]
+
     for entity in raw_entities_no_attributes:
-        if "*" in entity:
+        entity_type, entity_name = entity.split(":")
+        if entity_name == "*":
             normalized_results.append(entity)
             normalized_map[entity] = entity
             continue
 
         # Find the best match and its score from norm_entities
-        best_match, score = process.extractOne(entity, norm_entities)
+        all_entity_match_possibilities = norm_entity_semantic_to_id_map[
+            entity_type
+        ].keys()
+        best_match, score = process.extractOne(
+            entity_name, all_entity_match_possibilities, scorer=fuzz.partial_ratio
+        )
+
+        if best_match not in base_norm_entities:
+            best_match_id = norm_entity_semantic_to_id_map[entity_type][
+                best_match
+            ]  # replace semantic_id with the actual id
+        else:
+            best_match_id = best_match
 
         if score >= threshold:
-            normalized_results.append(best_match)
-            normalized_map[entity] = best_match
+            normalized_results.append(f"{entity_type}:{best_match_id}")
+            normalized_map[entity] = f"{entity_type}:{best_match_id}"
         else:
             # If no good match found, keep original
-            normalized_map[entity] = None
+            normalized_map[entity] = entity
 
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map

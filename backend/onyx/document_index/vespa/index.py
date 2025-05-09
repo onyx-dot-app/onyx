@@ -88,6 +88,17 @@ httpx_logger = logging.getLogger("httpx")
 httpx_logger.setLevel(logging.WARNING)
 
 
+def update_kg_type_dict(
+    dict_to_update: dict[str, dict], kg_type: str, value_set: set[str]
+) -> dict[str, dict]:
+    if "fields" not in dict_to_update:
+        dict_to_update["fields"] = {}
+    dict_to_update["fields"][kg_type] = {
+        "assign": {kg_type_object: 1 for kg_type_object in value_set}
+    }
+    return dict_to_update
+
+
 @dataclass
 class _VespaUpdateRequest:
     document_id: str
@@ -686,12 +697,9 @@ class VespaIndex(DocumentIndex):
                         implied_entities.add(kg_relationship_split[0])
                         implied_entities.add(kg_relationship_split[2])
 
-                kg_update_dict["fields"]["kg_relationships"] = {
-                    "assign": {
-                        kg_relationship: 1
-                        for kg_relationship in kg_update_request.relationships
-                    }
-                }
+                kg_update_dict = update_kg_type_dict(
+                    kg_update_dict, "kg_relationships", kg_update_request.relationships
+                )
 
             if kg_update_request.entities is not None or implied_entities:
                 if kg_update_request.entities is None:
@@ -700,14 +708,14 @@ class VespaIndex(DocumentIndex):
                     kg_entities = set(kg_update_request.entities)
                     kg_entities.update(implied_entities)
 
-                kg_update_dict["fields"]["kg_entities"] = {
-                    "assign": {kg_entity: 1 for kg_entity in kg_entities}
-                }
+                kg_update_dict = update_kg_type_dict(
+                    kg_update_dict, "kg_entities", kg_entities
+                )
 
             if kg_update_request.terms is not None:
-                kg_update_dict["fields"]["kg_terms"] = {
-                    "assign": {kg_term: 1 for kg_term in kg_update_request.terms}
-                }
+                kg_update_dict = update_kg_type_dict(
+                    kg_update_dict, "kg_terms", kg_update_request.terms
+                )
 
             if not kg_update_dict["fields"]:
                 logger.error("Update request received but nothing to update")
