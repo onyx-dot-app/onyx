@@ -34,7 +34,9 @@ class FolderInfo(BaseModel):
     permissions: list[GoogleDrivePermission]
 
 
-def _get_all_folders(google_drive_connector: GoogleDriveConnector) -> list[FolderInfo]:
+def _get_all_folders(
+    google_drive_connector: GoogleDriveConnector, skip_folders_without_permissions: bool
+) -> list[FolderInfo]:
     """Have to get all folders since the group syncing system assumes all groups
     are returned every time.
 
@@ -72,6 +74,9 @@ def _get_all_folders(google_drive_connector: GoogleDriveConnector) -> list[Folde
                     GoogleDrivePermission.from_drive_permission(permission)
                     for permission in raw_permissions
                 ]
+
+            if not permissions and skip_folders_without_permissions:
+                continue
 
             all_folders.append(
                 FolderInfo(
@@ -286,7 +291,10 @@ def gdrive_group_sync(
     )
 
     # Get all folder permissions
-    folder_info = _get_all_folders(google_drive_connector)
+    folder_info = _get_all_folders(
+        google_drive_connector=google_drive_connector,
+        skip_folders_without_permissions=True,
+    )
 
     # Map group emails to their members
     group_email_to_member_emails_map = _map_group_email_to_member_emails(
