@@ -94,7 +94,5 @@ def on_setup_logging(
 celery_app.autodiscover_tasks(
     [
         "onyx.background.celery.tasks.pruning",
-        "onyx.background.celery.tasks.doc_permission_syncing",
-        "onyx.background.celery.tasks.external_group_syncing",
     ]
 )

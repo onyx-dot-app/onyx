@@ -14,6 +14,9 @@ from pydantic import ValidationError
 from redis import Redis
 from redis.lock import Lock as RedisLock
 
+from ee.onyx.background.celery.tasks.external_group_syncing.group_sync_utils import (
+    mark_all_relevant_cc_pairs_as_external_group_synced,
+)
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
 from ee.onyx.db.connector_credential_pair import get_cc_pairs_by_source
 from ee.onyx.db.external_perm import ExternalUserGroup
@@ -26,9 +29,6 @@ from ee.onyx.external_permissions.sync_params import (
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
-from onyx.background.celery.tasks.external_group_syncing.group_sync_utils import (
-    mark_all_relevant_cc_pairs_as_external_group_synced,
-)
 from onyx.background.error_logging import emit_background_error
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_EXTERNAL_GROUP_SYNC_LOCK_TIMEOUT

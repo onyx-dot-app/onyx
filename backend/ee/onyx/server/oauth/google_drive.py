@@ -11,11 +11,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from ee.onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
-from ee.onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.users import current_admin_user
 from onyx.configs.app_configs import DEV_MODE
+from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
+from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.google_auth import get_google_oauth_creds

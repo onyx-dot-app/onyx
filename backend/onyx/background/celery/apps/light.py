@@ -113,6 +113,5 @@ celery_app.autodiscover_tasks(
         "onyx.background.celery.tasks.doc_permission_syncing",
         "onyx.background.celery.tasks.user_file_folder_sync",
         "onyx.background.celery.tasks.indexing",
-        "onyx.background.celery.tasks.tenant_provisioning",
     ]
 )

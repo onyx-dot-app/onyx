@@ -11,6 +11,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
+from ee.onyx.db.query_history import get_all_query_history_export_tasks
 from ee.onyx.db.query_history import get_page_of_chat_sessions
 from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
 from ee.onyx.server.query_history.models import ChatSessionMinimal
@@ -39,7 +40,6 @@ from onyx.db.enums import TaskStatus
 from onyx.db.models import ChatSession
 from onyx.db.models import User
 from onyx.db.pg_file_store import get_query_history_export_files
-from onyx.db.tasks import get_all_query_history_export_tasks
 from onyx.db.tasks import get_task_with_id
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn

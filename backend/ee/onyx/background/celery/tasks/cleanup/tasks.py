@@ -3,12 +3,12 @@ from datetime import timedelta
 
 from celery import shared_task
 
+from ee.onyx.db.query_history import get_all_query_history_export_tasks
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import TaskStatus
 from onyx.db.tasks import delete_task_with_id
-from onyx.db.tasks import get_all_query_history_export_tasks
 from onyx.utils.logger import setup_logger
 
 

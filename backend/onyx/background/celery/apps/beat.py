@@ -256,3 +256,9 @@ def on_setup_logging(
 
 celery_app.conf.beat_scheduler = DynamicTenantScheduler
 celery_app.conf.task_default_base = app_base.TenantAwareTask
+
+celery_app.autodiscover_tasks(
+    [
+        "ee.onyx.background.celery.tasks.cloud",
+    ]
+)

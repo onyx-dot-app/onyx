@@ -25,7 +25,6 @@ from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.orm import Session
 
-from ee.onyx.server.tenants.product_gating import get_gated_tenants
 from onyx.chat.models import ThreadMessage
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.app_configs import POD_NAME
@@ -96,6 +95,7 @@ from onyx.onyxbot.slack.utils import TenantSocketModeClient
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from onyx.utils.variable_functionality import set_is_ee_based_on_env_variable
 from shared_configs.configs import DISALLOWED_SLACK_BOT_TENANT_LIST
 from shared_configs.configs import MODEL_SERVER_HOST
@@ -264,10 +264,17 @@ class SlackbotHandler:
         - If a tenant in self.tenant_ids no longer has Slack bots, remove it (and release the lock in this scope).
         """
 
+        # tenants that are disabled (e.g. their trial is over and haven't subscribed)
+        # for non-cloud, this will return an empty set
+        gated_tenants = fetch_ee_implementation_or_noop(
+            "onyx.server.tenants.product_gating",
+            "get_gated_tenants",
+            set(),
+        )()
         all_tenants = [
             tenant_id
             for tenant_id in get_all_tenant_ids()
-            if tenant_id not in get_gated_tenants()
+            if tenant_id not in gated_tenants
         ]
 
         token: Token[str | None]

@@ -24,6 +24,7 @@ FASTAPI_USERS_AUTH_COOKIE_NAME = (
     "fastapiusersauth"  # Currently a constant, but logic allows for configuration
 )
 TENANT_ID_COOKIE_NAME = "onyx_tid"  # tenant id - for workaround cases
+ANONYMOUS_USER_COOKIE_NAME = "onyx_anonymous_user"
 
 NO_AUTH_USER_ID = "__no_auth_user__"
 NO_AUTH_USER_EMAIL = "anonymous@onyx.app"
