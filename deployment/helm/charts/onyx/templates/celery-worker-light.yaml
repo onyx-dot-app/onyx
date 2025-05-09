@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onyx-stack.fullname" . }}-celery-worker-light
+  labels:
+    {{- include "onyx-stack.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.celery_worker_light.autoscaling.enabled }}
+  replicas: {{ .Values.celery_worker_light.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "onyx-stack.selectorLabels" . | nindent 6 }}
+      {{- if .Values.celery_worker_light.deploymentLabels }}
+      {{- toYaml .Values.celery_worker_light.deploymentLabels | nindent 6 }}
+      {{- end }}
+  template:
+    metadata:
+      {{- with .Values.celery_worker_light.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "onyx-stack.labels" . | nindent 8 }}
+        {{- with .Values.celery_worker_light.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "onyx-stack.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.celery_worker_light.podSecurityContext | nindent 8 }}
+      containers:
+        - name: celery-worker-light
+          securityContext:
+            {{- toYaml .Values.celery_worker_light.securityContext | nindent 12 }}
+          image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.celery_shared.image.pullPolicy }}
+          command:
+            [
+              "celery",
+              "-A",
+              "onyx.background.celery.versioned_apps.light",
+              "worker",
+              "--loglevel=INFO",
+              "--hostname=light@%n",
+              "-Q",
+              "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,checkpoint_cleanup",
+            ]
+          resources:
+            {{- toYaml .Values.celery_worker_light.resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ .Values.config.envConfigMapName }}
+          env:
+            {{- include "onyx-stack.envSecrets" . | nindent 12}}

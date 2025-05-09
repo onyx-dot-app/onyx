@@ -1,6 +1,11 @@
+from http import HTTPStatus
+
+import requests
+
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import AccessType
 from onyx.db.models import UserRole
+from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -80,3 +85,8 @@ def test_admin_can_create_and_verify_cc_pair(reset_multitenant: None) -> None:
 
     # Verify cc_pair
     CCPairManager.verify(cc_pair=test_cc_pair, user_performing_action=test_user)
+
+
+def test_settings_access() -> None:
+    response = requests.get(url=f"{API_SERVER_URL}/enterprise-settings")
+    assert response.status_code == HTTPStatus.FORBIDDEN
