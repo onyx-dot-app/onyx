@@ -2,7 +2,6 @@ import csv
 import json
 import os
 import sqlite3
-import sys
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -352,8 +351,8 @@ class OnyxSalesforceSQLite:
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
 
-        # some customers need this to be larger than the default 128KB
-        csv.field_size_limit(sys.maxsize)
+        # some customers need this to be larger than the default 128KB, go with 16MB
+        csv.field_size_limit(16 * 1024 * 1024)
 
         updated_ids = []
 
