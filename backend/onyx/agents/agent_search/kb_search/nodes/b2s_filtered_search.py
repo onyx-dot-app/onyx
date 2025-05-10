@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.graph_utils import build_document_context
+from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
 from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_step_answer_explicit,
@@ -14,8 +15,6 @@ from onyx.agents.agent_search.kb_search.graph_utils import write_custom_event
 from onyx.agents.agent_search.kb_search.ops import research
 from onyx.agents.agent_search.kb_search.states import ConsolidatedResearchUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
-from onyx.agents.agent_search.kb_search.states import SubQuestionAnswerResults
-from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
     trim_prompt_piece,
@@ -23,11 +22,9 @@ from onyx.agents.agent_search.shared_graph_utils.agent_prompt_ops import (
 from onyx.agents.agent_search.shared_graph_utils.calculations import (
     get_answer_generation_documents,
 )
-from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.chat.models import LlmDoc
 from onyx.chat.models import SubQueryPiece
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.models import InferenceSection
@@ -65,9 +62,8 @@ def filtered_search(
     kg_entity_filters = []
     for raw_kg_entity_filter in raw_kg_entity_filters:
         if ":" not in raw_kg_entity_filter:
-            kg_entity_filters.append(f"{raw_kg_entity_filter}:*")
-        else:
-            kg_entity_filters.append(raw_kg_entity_filter)
+            raw_kg_entity_filter += ":*"
+        kg_entity_filters.append(raw_kg_entity_filter)
 
     kg_relationship_filters = state.vespa_filter_results.global_relationship_filters
 
@@ -106,17 +102,11 @@ def filtered_search(
         max_docs=KG_RESEARCH_NUM_RETRIEVED_DOCS,
     )
 
-    # relevance_list = relevance_from_docs(
-    #     answer_generation_documents.streaming_documents
-    # )
-
     document_texts_list = []
 
     for doc_num, retrieved_doc in enumerate(
         answer_generation_documents.context_documents
     ):
-        if not isinstance(retrieved_doc, (InferenceSection, LlmDoc)):
-            raise ValueError(f"Unexpected document type: {type(retrieved_doc)}")
         chunk_text = build_document_context(retrieved_doc, doc_num + 1)
         document_texts_list.append(chunk_text)
 
@@ -177,23 +167,10 @@ def filtered_search(
             )
         ],
         step_results=[
-            SubQuestionAnswerResults(
-                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
-                question_id="0_" + str(_KG_STEP_NR),
-                answer=step_answer,
-                verified_high_quality=True,
-                sub_query_retrieval_results=[],
+            get_near_empty_step_results(
+                step_number=_KG_STEP_NR,
+                step_answer=step_answer,
                 verified_reranked_documents=retrieved_docs,
-                context_documents=[],
-                cited_documents=[],
-                sub_question_retrieval_stats=AgentChunkRetrievalStats(
-                    verified_count=None,
-                    verified_avg_scores=None,
-                    rejected_count=None,
-                    rejected_avg_scores=None,
-                    verified_doc_chunk_ids=[],
-                    dismissed_doc_chunk_ids=[],
-                ),
             )
         ],
     )

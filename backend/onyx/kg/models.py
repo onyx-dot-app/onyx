@@ -12,6 +12,13 @@ class KGConfigSettings(BaseModel):
     KG_IGNORE_EMAIL_DOMAINS: list[str] | None = None
 
 
+class KGConfigVars(str, Enum):
+    KG_ENABLED = "KG_ENABLED"
+    KG_VENDOR = "KG_VENDOR"
+    KG_VENDOR_DOMAINS = "KG_VENDOR_DOMAINS"
+    KG_IGNORE_EMAIL_DOMAINS = "KG_IGNORE_EMAIL_DOMAINS"
+
+
 class KGChunkFormat(BaseModel):
     connector_id: int | None = None
     document_id: str

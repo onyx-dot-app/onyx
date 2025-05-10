@@ -25,7 +25,7 @@ def populate_default_grounded_entity_types() -> None:
             logger.error(
                 "KG approach is not enabled, the entity types cannot be populated."
             )
-            raise Exception(
+            raise ValueError(
                 "KG approach is not enabled, the entity types cannot be populated."
             )
 
@@ -42,7 +42,7 @@ def populate_default_account_employee_definitions() -> None:
             logger.error(
                 "KG approach is not enabled, the entity types cannot be populated."
             )
-            raise Exception(
+            raise ValueError(
                 "KG approach is not enabled, the entity types cannot be populated."
             )
 

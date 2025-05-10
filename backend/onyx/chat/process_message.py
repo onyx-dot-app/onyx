@@ -577,9 +577,8 @@ def stream_chat_message_objects(
     # TODO: INITIAL DEV ONLY!!!
 
     kg_config_settings = get_kg_config_settings(db_session)
-    _USE_KG_APPROACH = kg_config_settings.KG_ENABLED
 
-    if _USE_KG_APPROACH:
+    if kg_config_settings.KG_ENABLED:
         # Temporarily, until we have a draft UI for the KG Operations/Management
         if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)

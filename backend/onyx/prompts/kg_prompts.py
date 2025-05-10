@@ -528,21 +528,28 @@ Here are more instructions:
 
 a) Regarding the strategy, there are two aspects to it:
 
-a1) Search Type:
+a1) "Search Type":
 Should the question be answered as a 'filtered search', or as a 'SQL query search'?
 
 The options are:
 1. SEARCH: A filtered search simply uses the entities and relationships that you have been extracted earlier and \
 applies those as filters to search the underlying documents, which are indexed with them. Examples  are \
-'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nile about pricing?'.
+'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nile about pricing?'. So this \
+is used really when there is *no implicit constraint or requirements* on underlying source documents outside of filters, \
+and there is no ordering, no limiting their number, etc. So use this for a question that tries to get information \
+*across* documents which may be filtered by their related relationships and entities, but without \
+other constraints.
+
 2. 'SQL': Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
 if the query refers to specific entities that first need to be identified and then those entities are analyzed/searched/listed. \
 Examples here are 'what did I say about pricing in my call with Nile last week?' (the specific call needs to \
 be identified first and then  that call is analyzed),  \
-'what are the next steps of our two largest opportunities?', or 'summarize my 3 most recent customer calls'.
+'what are the next steps of our two largest opportunities?', or 'summarize my 3 most recent customer calls'. So \
+this is used if there *are implicit constraints* on the underlying source documents beyond filtering, including \
+ordering, limiting, etc. Use this also if the answer expects to analyze each source independently as part \
+of the overall answer.
 
-
-a2) Search Strategy:
+a2) "Search Strategy":
 If a SQL search is chosen, i.e., documents have to be identified first, there are two approaches:
 1. SIMPLE: You think you can awnswer the question using a database that is aware of the entities, relationships \
 above, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \

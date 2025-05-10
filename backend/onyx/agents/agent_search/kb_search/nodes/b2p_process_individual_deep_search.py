@@ -70,9 +70,8 @@ def process_individual_deep_search(
     kg_entity_filters = []
     for raw_kg_entity_filter in raw_kg_entity_filters:
         if ":" not in raw_kg_entity_filter:
-            kg_entity_filters.append(f"{raw_kg_entity_filter}:*")
-        else:
-            kg_entity_filters.append(raw_kg_entity_filter)
+            raw_kg_entity_filter += ":*"
+        kg_entity_filters.append(raw_kg_entity_filter)
 
     kg_relationship_filters = copy.deepcopy(
         state.vespa_filter_results.global_relationship_filters

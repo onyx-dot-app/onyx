@@ -5,7 +5,9 @@ from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.kb_search.models import KGEntityDocInfo
 from onyx.agents.agent_search.kb_search.models import KGExpandedGraphObjects
+from onyx.agents.agent_search.kb_search.states import SubQuestionAnswerResults
 from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
+from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import LlmDoc
@@ -246,6 +248,14 @@ def stream_write_step_structure(writer: StreamWriter, level: int = 0) -> None:
             writer,
         )
 
+    stop_event = StreamStopInfo(
+        stop_reason=StreamStopReason.FINISHED,
+        stream_type=StreamType.SUB_QUESTIONS,
+        level=0,
+    )
+
+    write_custom_event("stream_finished", stop_event, writer)
+
 
 def stream_close_step_answer(
     writer: StreamWriter, step_nr: int, level: int = 0
@@ -423,3 +433,31 @@ def build_document_context(
         document_content = f"{doc_header}\n\n{metadata_str}\n\n{document.content}"
 
     return document_content
+
+
+def get_near_empty_step_results(
+    step_number: int,
+    step_answer: str,
+    verified_reranked_documents: list[InferenceSection] = [],
+) -> SubQuestionAnswerResults:
+    """
+    Get near-empty step results from a list of step results.
+    """
+    return SubQuestionAnswerResults(
+        question=STEP_DESCRIPTIONS[step_number].description,
+        question_id="0_" + str(step_number),
+        answer=step_answer,
+        verified_high_quality=True,
+        sub_query_retrieval_results=[],
+        verified_reranked_documents=verified_reranked_documents,
+        context_documents=[],
+        cited_documents=[],
+        sub_question_retrieval_stats=AgentChunkRetrievalStats(
+            verified_count=None,
+            verified_avg_scores=None,
+            rejected_count=None,
+            rejected_avg_scores=None,
+            verified_doc_chunk_ids=[],
+            dismissed_doc_chunk_ids=[],
+        ),
+    )

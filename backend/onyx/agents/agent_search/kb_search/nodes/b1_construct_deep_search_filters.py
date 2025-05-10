@@ -95,7 +95,7 @@ def construct_deep_search_filters(
             llm.invoke,
             prompt=msg,
             timeout_override=15,
-            max_tokens=700,
+            max_tokens=1400,
         )
 
         cleaned_response = (

@@ -4,6 +4,7 @@ from typing import cast
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
 
+from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
 from onyx.agents.agent_search.kb_search.graph_utils import rename_entities_in_answer
 from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
 from onyx.agents.agent_search.kb_search.graph_utils import (
@@ -11,10 +12,7 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
 )
 from onyx.agents.agent_search.kb_search.states import ConsolidatedResearchUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
-from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
-from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -65,23 +63,8 @@ def consolidate_individual_deep_search(
             )
         ],
         step_results=[
-            SubQuestionAnswerResults(
-                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
-                question_id="0_" + str(_KG_STEP_NR),
-                answer=step_answer,
-                verified_high_quality=True,
-                sub_query_retrieval_results=[],
-                verified_reranked_documents=[],
-                context_documents=[],
-                cited_documents=[],
-                sub_question_retrieval_stats=AgentChunkRetrievalStats(
-                    verified_count=None,
-                    verified_avg_scores=None,
-                    rejected_count=None,
-                    rejected_avg_scores=None,
-                    verified_doc_chunk_ids=[],
-                    dismissed_doc_chunk_ids=[],
-                ),
+            get_near_empty_step_results(
+                step_number=_KG_STEP_NR, step_answer=step_answer
             )
         ],
     )

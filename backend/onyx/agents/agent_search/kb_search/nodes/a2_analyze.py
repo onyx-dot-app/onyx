@@ -8,6 +8,7 @@ from langgraph.types import StreamWriter
 from onyx.agents.agent_search.kb_search.graph_utils import (
     create_minimal_connected_query_graph,
 )
+from onyx.agents.agent_search.kb_search.graph_utils import get_near_empty_step_results
 from onyx.agents.agent_search.kb_search.graph_utils import stream_close_step_answer
 from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_activities
 from onyx.agents.agent_search.kb_search.graph_utils import (
@@ -20,10 +21,7 @@ from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import YesNoEnum
-from onyx.agents.agent_search.kb_search.step_definitions import STEP_DESCRIPTIONS
 from onyx.agents.agent_search.models import GraphConfig
-from onyx.agents.agent_search.shared_graph_utils.models import AgentChunkRetrievalStats
-from onyx.agents.agent_search.shared_graph_utils.models import SubQuestionAnswerResults
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -40,7 +38,9 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 
-def _analyze_connectedness(entities: list[str], relationships: list[str]) -> list[str]:
+def _get_fully_connected_entities(
+    entities: list[str], relationships: list[str]
+) -> list[str]:
     """
     Analyze the connectedness of the entities and relationships.
     """
@@ -49,7 +49,8 @@ def _analyze_connectedness(entities: list[str], relationships: list[str]) -> lis
 
     # Parse relationships to build connection graph
     for relationship in relationships:
-        # Split relationship into parts
+        # Split relationship into parts. Test for proper formatting just in case.
+        # Should never be an error though at this point.
         parts = relationship.split("__")
         if len(parts) != 3:
             raise ValueError(f"Invalid relationship: {relationship}")
@@ -83,7 +84,8 @@ def _check_for_single_doc(
     normalized_time_filter: str | None,
 ) -> str | None:
     """
-    Check if the query is for a single document, like 'Summarize ticket ENG-2243K'
+    Check if the query is for a single document, like 'Summarize ticket ENG-2243K'.
+    None is returned if the query is not for a single document.
     """
     if (
         len(normalized_entities) == 1
@@ -263,23 +265,10 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
             )
         ],
         step_results=[
-            SubQuestionAnswerResults(
-                question=STEP_DESCRIPTIONS[_KG_STEP_NR].description,
-                question_id="0_" + str(_KG_STEP_NR),
-                answer=step_answer,
-                verified_high_quality=True,
-                sub_query_retrieval_results=[],
+            get_near_empty_step_results(
+                step_number=_KG_STEP_NR,
+                step_answer=step_answer,
                 verified_reranked_documents=[],
-                context_documents=[],
-                cited_documents=[],
-                sub_question_retrieval_stats=AgentChunkRetrievalStats(
-                    verified_count=None,
-                    verified_avg_scores=None,
-                    rejected_count=None,
-                    rejected_avg_scores=None,
-                    verified_doc_chunk_ids=[],
-                    dismissed_doc_chunk_ids=[],
-                ),
             )
         ],
     )

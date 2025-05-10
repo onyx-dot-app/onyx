@@ -71,8 +71,7 @@ def generate_answer(
 
     retrieved_docs: list[InferenceSection] = []
     for step_result in state.step_results:
-        if step_result.verified_reranked_documents:
-            retrieved_docs += step_result.verified_reranked_documents
+        retrieved_docs += step_result.verified_reranked_documents
 
     # if still needed, get a search done and send the results to the UI
 
@@ -90,11 +89,6 @@ def generate_answer(
                 inference_sections_only=True,
             ),
         )
-
-    elif retrieved_docs:
-        pass
-    else:
-        retrieved_docs = []
 
     answer_generation_documents = get_answer_generation_documents(
         relevant_docs=retrieved_docs,
@@ -115,6 +109,8 @@ def generate_answer(
         get_final_context_sections=lambda: answer_generation_documents.context_documents,
         search_query_info=SearchQueryInfo(
             predicted_search=SearchType.KEYWORD,
+            # acl here is empty, because the searach alrady happened and
+            # we are streaming out the results.
             final_filters=IndexFilters(access_control_list=[]),
             recency_bias_multiplier=1.0,
         ),

@@ -231,19 +231,19 @@ def get_entity_names_for_types(
 
     names: list[tuple[str, str | None]] = []
     for entity in entity_query.all():
-        if entity.document_id is not None:
-            # Extract entity type from the full type ID
-            entity_type = entity.entity_type_id_name.split(":")[0].upper()
 
-            # Get document info, defaulting to None if not found
-            doc_semantic_id = doc_info.get(
-                entity.document_id.capitalize(), (None, None)
-            )[0]
-
-            # Construct the final string
-            names.append((entity.id_name, f"{entity_type}:{doc_semantic_id}"))
-        else:
+        if entity.document_id is None:
             names.append((entity.id_name, entity.id_name))
+            continue
+
+        # Extract entity type from the full type ID
+        entity_type = entity.entity_type_id_name.split(":")[0].upper()
+
+        # Get document info, defaulting to None if not found
+        doc_semantic_id = doc_info.get(entity.document_id.capitalize(), (None, None))[0]
+
+        # Construct the final string
+        names.append((entity.id_name, f"{entity_type}:{doc_semantic_id}"))
 
     return names
 
@@ -291,15 +291,17 @@ def get_document_id_for_entity(
     entity = entity.replace(": ", ":")
 
     if kg_stage == KGStage.EXTRACTED:
-        stmt = select(KGEntityExtractionStaging.document_id).where(
-            func.lower(KGEntityExtractionStaging.id_name) == func.lower(entity)
+        _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging] = (
+            KGEntityExtractionStaging
         )
     elif kg_stage == KGStage.NORMALIZED:
-        stmt = select(KGEntity.document_id).where(
-            func.lower(KGEntity.id_name) == func.lower(entity)
-        )
+        _KGEntityObject = KGEntity
     else:
         raise ValueError(f"Invalid KGStage: {kg_stage}")
+
+    stmt = select(_KGEntityObject.document_id).where(
+        func.lower(_KGEntityObject.id_name) == func.lower(entity)
+    )
 
     result = db_session.execute(stmt).scalars().first()
     return result

@@ -78,6 +78,7 @@ def _get_classification_extraction_instructions() -> (
         entity_types = get_entity_types(db_session, active=True)
 
     for entity_type in entity_types:
+        assert isinstance(entity_type.attributes, dict)
         grounded_source_name = entity_type.grounded_source_name
 
         if grounded_source_name not in classification_instructions_dict:
@@ -127,7 +128,7 @@ def get_entity_types_str(active: bool | None = None) -> str:
     with get_session_with_current_tenant() as db_session:
         active_entity_types = get_entity_types(db_session, active)
 
-        entity_types_list = []
+        entity_types_list: list[str] = []
         for entity_type in active_entity_types:
             if entity_type.description:
                 entity_description = "\n  - Description: " + entity_type.description
@@ -141,7 +142,8 @@ def get_entity_types_str(active: bool | None = None) -> str:
             else:
                 allowed_values = ""
 
-            entity_type_attribute_list = []
+            entity_type_attribute_list: list[str] = []
+            assert isinstance(entity_type.attributes, dict)
             if entity_type.attributes.get("metadata_attributes"):
 
                 for attribute, values in entity_type.attributes.get(
