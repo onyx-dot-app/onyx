@@ -26,7 +26,7 @@ export function AdminSidebar({ collections }: { collections: Collection[] }) {
   const enterpriseSettings = combinedSettings.enterpriseSettings;
 
   return (
-    <div className="text-text-settings-sidebar pl-0">
+    <div className="text-text-settings-sidebar pl-4">
       <nav className="space-y-2">
         <div className="w-full ml-4  mt-1 h-8 justify-start mb-4 flex">
           <LogoComponent
