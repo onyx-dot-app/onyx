@@ -44,6 +44,7 @@ import {
   FileIcon2,
   GitbookIcon,
   HighspotIcon,
+  PaperlessNgxIcon,
 } from "@/components/icons/icons";
 import { ValidSources } from "./types";
 import { SourceCategory, SourceMetadata } from "./search/interfaces";
@@ -330,6 +331,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Highspot",
     category: SourceCategory.Wiki,
     docs: "https://docs.onyx.app/connectors/highspot",
+  },
+  paperless_ngx: {
+    icon: PaperlessNgxIcon,
+    displayName: "Paperless-ngx",
+    category: SourceCategory.Storage,
+    docs: "https://docs.onyx.app/connectors/paperless_ngx",
   },
   // currently used for the Internet Search tool docs, which is why
   // a globe is used
