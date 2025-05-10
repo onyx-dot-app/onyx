@@ -6,6 +6,7 @@ from uuid import UUID
 
 from pydantic import BaseModel
 from pydantic import Field
+from slack_sdk import WebClient
 
 from onyx.auth.schemas import UserRole
 from onyx.configs.constants import QAFeedbackType
@@ -181,6 +182,22 @@ class DATestSettings(BaseModel):
     anonymous_user_enabled: bool | None = None
     image_extraction_and_analysis_enabled: bool | None = False
     search_time_image_analysis_enabled: bool | None = False
+
+
+class SlackTestContext(BaseModel):
+    class Config:
+        arbitrary_types_allowed = True
+
+    admin_user: DATestUser
+    slack_bot: dict[str, Any]
+    slack_bot_client: WebClient
+    slack_user_client: WebClient
+    slack_secondary_user_client: WebClient
+    std_ans_category: dict[str, Any]
+    std_answer: dict[str, Any]
+    test_channel_1: dict[str, Any]
+    test_channel_2: dict[str, Any]
+    slack_channel_config: dict[str, Any]
 
 
 @dataclass

@@ -10,56 +10,16 @@ from datetime import timezone
 from time import sleep
 from typing import Any
 
-import uvicorn
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-
 from onyx.server.documents.models import DocumentSource
 from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_server_utils import fastapi_server_context
 from tests.integration.common_utils.vespa import vespa_fixture
 
 logger = setup_logger()
-
-
-# FastAPI server for serving files
-def create_fastapi_app(directory: str) -> FastAPI:
-    app = FastAPI()
-
-    # Mount the directory to serve static files
-    app.mount("/", StaticFiles(directory=directory, html=True), name="static")
-
-    return app
-
-
-# as far as we know, this doesn't hang when crawled. This is good.
-@contextmanager
-def fastapi_server_context(
-    directory: str, port: int = 8000
-) -> Generator[None, None, None]:
-    app = create_fastapi_app(directory)
-
-    config = uvicorn.Config(app=app, host="0.0.0.0", port=port, log_level="info")
-    server = uvicorn.Server(config)
-
-    # Create a thread to run the FastAPI server
-    server_thread = threading.Thread(target=server.run)
-    server_thread.daemon = (
-        True  # Ensures the thread will exit when the main program exits
-    )
-
-    try:
-        # Start the server in the background
-        server_thread.start()
-        sleep(5)  # Give it a few seconds to start
-        yield  # Yield control back to the calling function (context manager in use)
-    finally:
-        # Shutdown the server
-        server.should_exit = True
-        server_thread.join()
 
 
 # Leaving this here for posterity and experimentation, but the reason we're

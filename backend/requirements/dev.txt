@@ -14,6 +14,7 @@ pre-commit==3.2.2
 pytest-asyncio==0.22.0
 pytest-xdist==3.6.1
 pytest==8.3.5
+pytest-order==1.3.0
 reorder-python-imports-black==3.14.0
 ruff==0.0.286
 sentence-transformers==4.0.2

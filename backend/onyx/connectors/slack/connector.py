@@ -133,7 +133,9 @@ def get_channel_messages(
 ) -> Generator[list[MessageType], None, None]:
     """Get all messages in a channel"""
     # join so that the bot can access messages
-    if not channel["is_member"]:
+    #if is_member is not available, it means the channel is dm, so we assume bot is a member
+    is_member = channel.get("is_member", True)
+    if not is_member:
         make_slack_api_call_w_retries(
             client.conversations_join,
             channel=channel["id"],

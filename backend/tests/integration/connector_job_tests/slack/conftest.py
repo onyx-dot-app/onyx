@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
+from tests.integration.common_utils.managers.slack import SlackManager
 
 # from tests.load_env_vars import load_env_vars
 
