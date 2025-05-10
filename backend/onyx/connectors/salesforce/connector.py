@@ -1,7 +1,9 @@
+import csv
 import gc
 import os
 import sys
 import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -15,6 +17,7 @@ from onyx.connectors.interfaces import LoadConnector
 from onyx.connectors.interfaces import PollConnector
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.interfaces import SlimConnector
+from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.models import Document
 from onyx.connectors.models import SlimDocument
@@ -36,21 +39,46 @@ logger = setup_logger()
 _DEFAULT_PARENT_OBJECT_TYPES = ["Account"]
 
 
+class SalesforceCheckpoint(ConnectorCheckpoint):
+    initial_sync_complete: bool
+    current_timestamp: SecondsSinceUnixEpoch
+
+
 class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
     """Approach outline
 
+    Goal
+    - get data for every record of every parent object type
+    - The data should consist of the parent object record and all direct child relationship objects
+
+
     Initial sync
+    - Does a full sync, then indexes each parent object + children as a document via
+    the local sqlite db
+
     - get the first level children object types of parent object types
     - bulk export all object types to CSV
-    -- bulk exports of an object type contain parent id's, but not child id's
+    -- NOTE: bulk exports of an object type contain parent id's, but not child id's
     - Load all CSV's to the DB
     - generate all parent object types as documents and yield them
 
+    - Initial sync's must always be for the entire dataset.
+      Otherwise, you can have cases where some records relate to other records that were
+      updated recently. The more recently updated records will not be pulled down in the query.
+
     Delta sync's
+    - delta sync's detect changes in parent objects, then perform a full sync of
+    each parent object and its children
+
+    If loading the entire db, this approach is much slower. For deltas, it works well.
+
     - query all changed records (includes children and parents)
     - extrapolate all changed parent objects
     - for each parent object, construct a query and yield the result back
 
+    - Delta sync's can be done object by object by identifying the parent id of any changed
+      record, and querying a single record at a time to get all the updated data.  In this way,
+      we avoid having to keep a locally synchronized copy of the entire salesforce db.
     """
 
     MAX_BATCH_BYTES = 1024 * 1024
@@ -182,11 +210,20 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
 
             # Go through each csv path and use it to update the db
             for csv_path in csv_paths:
+                num_records = 0
+
                 logger.debug(
                     f"Processing CSV: object_type={object_type} "
                     f"csv={csv_path} "
-                    f"len={Path(csv_path).stat().st_size}"
+                    f"len={Path(csv_path).stat().st_size} "
+                    f"records={num_records}"
                 )
+
+                with open(csv_path, "r", newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        num_records += 1
+
                 new_ids = sf_db.update_from_csv(
                     object_type=object_type,
                     csv_download_path=csv_path,
@@ -196,6 +233,12 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     f"Added {len(new_ids)} new/updated records for {object_type}"
                 )
 
+                logger.info(
+                    f"Processed CSV: object_type={object_type} "
+                    f"csv={csv_path} "
+                    f"len={Path(csv_path).stat().st_size} "
+                    f"records={num_records}"
+                )
                 os.remove(csv_path)
 
         return updated_ids
@@ -230,12 +273,14 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> GenerateDocumentsOutput:
+        type_to_processed: dict[str, int] = {}
+
         logger.info("_fetch_from_salesforce starting.")
         if not self._sf_client:
             raise RuntimeError("self._sf_client is None!")
 
         updated_ids: set[str] = set()
-        docs_processed = 0
+        parents_changed = 0
 
         sf_db = OnyxSalesforceSQLite(os.path.join(temp_dir, "salesforce_db.sqlite"))
         sf_db.connect()
@@ -254,10 +299,9 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             because this occurs after we check for existing csvs which covers this case"""
             all_types_to_filter: dict[str, bool] = {}
             for sf_type in all_types:
-                if sf_db.has_at_least_one_object_of_type(sf_type):
-                    all_types_to_filter[sf_type] = True
-                else:
-                    all_types_to_filter[sf_type] = False
+                # NOTE(rkuo): I'm not convinced it makes sense to restrict filtering at all
+                # all_types_to_filter[sf_type] = sf_db.has_at_least_one_object_of_type(sf_type)
+                all_types_to_filter[sf_type] = True
 
             # Step 1.2 - bulk download the CSV for each object type
             SalesforceConnector._download_object_csvs(
@@ -275,62 +319,76 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
             )
 
             # Step 3 - extract and index docs
-            batches_processed = 0
             docs_to_yield: list[Document] = []
             docs_to_yield_bytes = 0
 
+            last_log_time = 0.0
+
             # Takes 15-20 seconds per batch
-            for parent_type, parent_id_batch in sf_db.get_affected_parent_ids_by_type(
+            # this yields batches in a rather unintuitive manner, see docstring
+            for (
+                parent_type,
+                parent_id,
+                examined_ids,
+            ) in sf_db.get_affected_parent_ids_by_type(
                 updated_ids=list(updated_ids),
                 parent_types=self.parent_object_list,
             ):
-                batches_processed += 1
-                logger.info(
-                    f"Processing batch: index={batches_processed} "
-                    f"object_type={parent_type} "
-                    f"len={len(parent_id_batch)} "
-                    f"processed={docs_processed} "
-                    f"remaining={len(updated_ids) - docs_processed}"
-                )
-                for parent_id in parent_id_batch:
-                    parent_object = sf_db.get_record(parent_id, parent_type)
-                    if not parent_object:
-                        logger.warning(
-                            f"Failed to get parent object {parent_id} for {parent_type}"
-                        )
-                        continue
+                now = time.monotonic()
 
-                    doc = convert_sf_object_to_doc(
-                        sf_db,
-                        sf_object=parent_object,
-                        sf_instance=self.sf_client.sf_instance,
+                if now - last_log_time > 10.0:
+                    logger.info(
+                        f"Processing stats: {type_to_processed} "
+                        f"processed={examined_ids} "
+                        f"remaining={len(updated_ids) - examined_ids}"
                     )
-                    doc_sizeof = sys.getsizeof(doc)
-                    docs_to_yield_bytes += doc_sizeof
-                    docs_to_yield.append(doc)
-                    docs_processed += 1
+                    last_log_time = now
 
-                    # memory usage is sensitive to the input length, so we're yielding immediately
-                    # if the batch exceeds a certain byte length
-                    if (
-                        len(docs_to_yield) >= self.batch_size
-                        or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
-                    ):
-                        yield docs_to_yield
-                        docs_to_yield = []
-                        docs_to_yield_bytes = 0
+                type_to_processed[parent_type] = (
+                    type_to_processed.get(parent_type, 0) + 1
+                )
 
-                        # observed a memory leak / size issue with the account table if we don't gc.collect here.
-                        gc.collect()
+                parent_object = sf_db.get_record(parent_id, parent_type)
+                if not parent_object:
+                    logger.warning(
+                        f"Failed to get parent object {parent_id} for {parent_type}"
+                    )
+                    continue
+
+                doc = convert_sf_object_to_doc(
+                    sf_db,
+                    sf_object=parent_object,
+                    sf_instance=self.sf_client.sf_instance,
+                )
+                doc_sizeof = sys.getsizeof(doc)
+                docs_to_yield_bytes += doc_sizeof
+                docs_to_yield.append(doc)
+                parents_changed += 1
+
+                # memory usage is sensitive to the input length, so we're yielding immediately
+                # if the batch exceeds a certain byte length
+                if (
+                    len(docs_to_yield) >= self.batch_size
+                    or docs_to_yield_bytes > SalesforceConnector.MAX_BATCH_BYTES
+                ):
+                    yield docs_to_yield
+                    docs_to_yield = []
+                    docs_to_yield_bytes = 0
+
+                    # observed a memory leak / size issue with the account table if we don't gc.collect here.
+                    gc.collect()
 
             yield docs_to_yield
 
         finally:
             logger.info(
                 f"Final processing stats: "
-                f"processed={docs_processed} "
-                f"remaining={len(updated_ids) - docs_processed}"
+                f"examined={examined_ids} "
+                f"parents_changed={parents_changed} "
+                f"remaining={len(updated_ids) - examined_ids}"
             )
+
+            logger.info(f"Top level object types processed: {type_to_processed}")
 
             sf_db.close()
 
@@ -345,11 +403,13 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
         if os.path.exists(sqlite_db_path):
             logger.info(f"load_from_state: Removing db at {sqlite_db_path}.")
             os.remove(sqlite_db_path)
-        return self._fetch_from_salesforce(BASE_DATA_PATH)
+        return self._fetch_from_salesforce(BASE_DATA_PATH, start=0, end=time.time())
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
+        """Poll source will synchronized updated parent objects one by one."""
+
         if MULTI_TENANT:
             # if multi tenant, we cannot expect the sqlite db to be cached/present
             with tempfile.TemporaryDirectory() as temp_dir:
@@ -364,7 +424,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 )
                 os.remove(sqlite_db_path)
 
-        return self._fetch_from_salesforce(BASE_DATA_PATH)
+        return self._fetch_from_salesforce(BASE_DATA_PATH, start=start, end=end)
 
     def retrieve_all_slim_documents(
         self,
