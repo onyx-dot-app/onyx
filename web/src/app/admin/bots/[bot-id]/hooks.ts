@@ -1,5 +1,5 @@
 import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SlackBot, SlackChannelConfig } from "@/lib/types";
+import { SlackBot, SlackChannelConfig, SlackShortcutConfig } from "@/lib/types";
 import useSWR, { mutate } from "swr";
 
 export const useSlackChannelConfigs = () => {
@@ -9,6 +9,16 @@ export const useSlackChannelConfigs = () => {
   return {
     ...swrResponse,
     refreshSlackChannelConfigs: () => mutate(url),
+  };
+};
+
+export const useSlackShortcutConfigs = () => {
+  const url = "/api/manage/admin/slack-app/shortcut";
+  const swrResponse = useSWR<SlackShortcutConfig[]>(url, errorHandlingFetcher);
+
+  return {
+    ...swrResponse,
+    refreshSlackShortcutConfigs: () => mutate(url),
   };
 };
 
@@ -39,5 +49,15 @@ export const useSlackChannelConfigsByBot = (botId: number) => {
   return {
     ...swrResponse,
     refreshSlackChannelConfigs: () => mutate(url),
+  };
+};
+
+export const useSlackShortcutConfigsByBot = (botId: number) => {
+  const url = `/api/manage/admin/slack-app/bots/${botId}/shortcuts`;
+  const swrResponse = useSWR<SlackShortcutConfig[]>(url, errorHandlingFetcher);
+
+  return {
+    ...swrResponse,
+    refreshSlackShortcutConfigs: () => mutate(url),
   };
 };

@@ -2,9 +2,12 @@ import os
 
 from sqlalchemy.orm import Session
 
-from onyx.db.models import SlackChannelConfig
+from onyx.db.models import SlackChannelConfig, SlackShortcutConfig
 from onyx.db.slack_channel_config import (
-    fetch_slack_channel_config_for_channel_or_default,
+    fetch_slack_channel_config_for_channel_or_default, 
+)
+from onyx.db.slack_shortcut_config import (
+    fetch_slack_shortcut_config_for_callback_or_default
 )
 from onyx.db.slack_channel_config import fetch_slack_channel_configs
 
@@ -57,6 +60,20 @@ def validate_channel_name(
 
     return cleaned_channel_name
 
+def get_slack_shortcut_config_for_bot_and_callback(
+    db_session: Session,
+    slack_bot_id: int,
+    callback_id: str,
+) -> SlackShortcutConfig:
+    slack_shortcut_config = fetch_slack_shortcut_config_for_callback_or_default(
+        db_session=db_session, slack_bot_id=slack_bot_id, callback_id=callback_id
+    )
+    if not slack_shortcut_config:
+        raise ValueError(
+            "No default configuration has been set for this Slack bot shortcut. This should not be possible."
+        )
+
+    return slack_shortcut_config
 
 # Scaling configurations for multi-tenant Slack channel handling
 TENANT_LOCK_EXPIRATION = 1800  # How long a pod can hold exclusive access to a tenant before other pods can acquire it

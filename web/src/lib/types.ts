@@ -306,6 +306,28 @@ export interface SlackChannelConfig {
   is_default: boolean;
 }
 
+export interface ShortcutConfig {
+  shortcut_name: string;
+  default_message: string;
+  is_ephemeral: boolean;
+  show_continue_in_web_ui: boolean;
+  respond_member_group_list: string[];
+  follow_up_tags?: string[];
+  answer_filters: string[];
+  disabled?: boolean;
+}
+
+export interface SlackShortcutConfig {
+  id: number;
+  slack_bot_id: number;
+  is_default: boolean;
+  shortcut_config: ShortcutConfig;  
+  enable_auto_filters: boolean;
+  response_type: SlackBotResponseType;
+  standard_answer_categories: StandardAnswerCategory[];
+  persona?: Persona;
+}
+
 export interface SlackChannelDescriptor {
   id: string;
   name: string;
@@ -418,3 +440,4 @@ export const oauthSupportedSources: ConfigurableSources[] = [
 ];
 
 export type OAuthSupportedSource = (typeof oauthSupportedSources)[number];
+

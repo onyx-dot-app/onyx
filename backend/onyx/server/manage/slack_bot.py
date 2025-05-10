@@ -10,6 +10,7 @@ from onyx.configs.constants import MilestoneRecordType
 from onyx.db.constants import SLACK_BOT_PERSONA_PREFIX
 from onyx.db.engine import get_session
 from onyx.db.models import ChannelConfig
+from onyx.db.models import ShortcutConfig
 from onyx.db.models import User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.slack_bot import fetch_slack_bot
@@ -30,6 +31,8 @@ from onyx.server.manage.models import SlackBotCreationRequest
 from onyx.server.manage.models import SlackChannel
 from onyx.server.manage.models import SlackChannelConfig
 from onyx.server.manage.models import SlackChannelConfigCreationRequest
+from onyx.server.manage.models import SlackShortcutConfigCreationRequest
+from onyx.server.manage.models import SlackShortcutConfig
 from onyx.server.manage.validate_tokens import validate_app_token
 from onyx.server.manage.validate_tokens import validate_bot_token
 from onyx.utils.logger import setup_logger
@@ -83,7 +86,7 @@ def _form_channel_config(
     ):
         raise ValueError(
             "Cannot set OnyxBot to respond to users in a private (ephemeral) message "
-            "and also respond to a selected list of users."
+            "and also respond to a predetermined set of users."
         )
 
     channel_config: ChannelConfig = {
@@ -111,6 +114,68 @@ def _form_channel_config(
     channel_config["disabled"] = slack_channel_config_creation_request.disabled
 
     return channel_config
+
+
+def _form_shortcut_config(
+    db_session: Session,
+    slack_shortcut_config_creation_request: SlackShortcutConfigCreationRequest,
+    current_slack_shortcut_config_id: int | None,
+) -> ShortcutConfig:
+    shortcut_name = slack_shortcut_config_creation_request.shortcut_name
+    default_message = slack_shortcut_config_creation_request.default_message
+    respond_member_group_list = (
+        slack_shortcut_config_creation_request.respond_member_group_list
+    )
+    answer_filters = slack_shortcut_config_creation_request.answer_filters
+    follow_up_tags = slack_shortcut_config_creation_request.follow_up_tags
+
+    # Check if shortcut name already exists for this bot (only for creation)
+    if current_slack_shortcut_config_id is None:
+        from onyx.db.slack_shortcut_config import fetch_slack_shortcut_configs
+        
+        existing_configs = fetch_slack_shortcut_configs(
+            db_session=db_session,
+            slack_bot_id=slack_shortcut_config_creation_request.slack_bot_id,
+        )
+        for config in existing_configs:
+            if (
+                config.shortcut_config.get("shortcut_name") == shortcut_name
+                and config.id != current_slack_shortcut_config_id
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Shortcut with name '{shortcut_name}' already exists for this bot",
+                )
+
+    if (
+        slack_shortcut_config_creation_request.is_ephemeral
+        and slack_shortcut_config_creation_request.respond_member_group_list
+    ):
+        raise ValueError(
+            "Cannot set OnyxBot to respond to users in a private (ephemeral) message "
+            "and also respond to a predetermined set of users."
+        )
+
+    shortcut_config: ShortcutConfig = {
+        "shortcut_name": shortcut_name,
+        "default_message": default_message,
+    }
+    
+    if respond_member_group_list:
+        shortcut_config["respond_member_group_list"] = respond_member_group_list
+    if answer_filters:
+        shortcut_config["answer_filters"] = answer_filters
+    if follow_up_tags is not None:
+        shortcut_config["follow_up_tags"] = follow_up_tags
+
+    shortcut_config["show_continue_in_web_ui"] = (
+        slack_shortcut_config_creation_request.show_continue_in_web_ui
+    )
+
+    shortcut_config["is_ephemeral"] = slack_shortcut_config_creation_request.is_ephemeral
+    shortcut_config["disabled"] = slack_shortcut_config_creation_request.disabled
+
+    return shortcut_config
 
 
 @router.post("/admin/slack-app/channel")
@@ -151,6 +216,65 @@ def create_slack_channel_config(
         enable_auto_filters=slack_channel_config_creation_request.enable_auto_filters,
     )
     return SlackChannelConfig.from_model(slack_channel_config_model)
+
+
+@router.post("/admin/slack-app/shortcut")
+def create_slack_shortcut_config(
+    slack_shortcut_config_creation_request: SlackShortcutConfigCreationRequest,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_admin_user),
+) -> SlackShortcutConfig:
+    from onyx.server.manage.models import SlackShortcutConfig
+    
+    shortcut_config = _form_shortcut_config(
+        db_session=db_session,
+        slack_shortcut_config_creation_request=slack_shortcut_config_creation_request,
+        current_slack_shortcut_config_id=None,
+    )
+
+    if shortcut_config["shortcut_name"] is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Shortcut name is required",
+        )
+
+    # Validate that the bot exists
+    bot = fetch_slack_bot(
+        db_session=db_session,
+        slack_bot_id=slack_shortcut_config_creation_request.slack_bot_id
+    )
+    if not bot:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Slack bot with ID {slack_shortcut_config_creation_request.slack_bot_id} not found",
+        )
+
+    persona_id = None
+    if slack_shortcut_config_creation_request.persona_id is not None:
+        persona_id = slack_shortcut_config_creation_request.persona_id
+    elif slack_shortcut_config_creation_request.document_sets:
+        from onyx.db.slack_shortcut_config import create_slack_shortcut_persona
+        
+        persona_id = create_slack_shortcut_persona(
+            db_session=db_session,
+            shortcut_name=shortcut_config["shortcut_name"],
+            document_set_ids=slack_shortcut_config_creation_request.document_sets,
+            existing_persona_id=None,
+            enable_auto_filters=slack_shortcut_config_creation_request.enable_auto_filters,
+        ).id
+
+    from onyx.db.slack_shortcut_config import insert_slack_shortcut_config
+    
+    slack_shortcut_config_model = insert_slack_shortcut_config(
+        db_session=db_session,
+        slack_bot_id=slack_shortcut_config_creation_request.slack_bot_id,
+        persona_id=persona_id,
+        shortcut_config=shortcut_config,
+        standard_answer_category_ids=slack_shortcut_config_creation_request.standard_answer_categories,
+        enable_auto_filters=slack_shortcut_config_creation_request.enable_auto_filters,
+        response_type=slack_shortcut_config_creation_request.response_type,
+    )
+    return SlackShortcutConfig.from_model(slack_shortcut_config_model)
 
 
 @router.patch("/admin/slack-app/channel/{slack_channel_config_id}")
@@ -241,6 +365,103 @@ def list_slack_channel_configs(
     ]
 
 
+@router.put("/admin/slack-app/shortcut/{slack_shortcut_config_id}")
+def update_slack_shortcut_config_endpoint(
+    slack_shortcut_config_id: int,
+    slack_shortcut_config_creation_request: SlackShortcutConfigCreationRequest,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_admin_user),
+) -> SlackShortcutConfig:
+    from onyx.server.manage.models import SlackShortcutConfig
+    from onyx.db.slack_shortcut_config import fetch_slack_shortcut_config, update_slack_shortcut_config
+    from onyx.db.slack_shortcut_config import create_slack_shortcut_persona
+    
+    shortcut_config = _form_shortcut_config(
+        db_session=db_session,
+        slack_shortcut_config_creation_request=slack_shortcut_config_creation_request,
+        current_slack_shortcut_config_id=slack_shortcut_config_id,
+    )
+
+    persona_id = None
+    if slack_shortcut_config_creation_request.persona_id is not None:
+        persona_id = slack_shortcut_config_creation_request.persona_id
+    elif slack_shortcut_config_creation_request.document_sets:
+        existing_slack_shortcut_config = fetch_slack_shortcut_config(
+            db_session=db_session, slack_shortcut_config_id=slack_shortcut_config_id
+        )
+        if existing_slack_shortcut_config is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Slack shortcut config not found",
+            )
+
+        existing_persona_id = existing_slack_shortcut_config.persona_id
+        if existing_persona_id is not None:
+            persona = get_persona_by_id(
+                persona_id=existing_persona_id,
+                user=None,
+                db_session=db_session,
+                is_for_edit=False,
+            )
+
+            if not persona.name.startswith(SLACK_BOT_PERSONA_PREFIX):
+                # Don't update actual non-slackbot specific personas
+                # Since this one specified document sets, we have to create a new persona
+                # for this OnyxBot config
+                existing_persona_id = None
+            else:
+                existing_persona_id = existing_slack_shortcut_config.persona_id
+
+        persona_id = create_slack_shortcut_persona(
+            db_session=db_session,
+            shortcut_name=shortcut_config["shortcut_name"],
+            document_set_ids=slack_shortcut_config_creation_request.document_sets,
+            existing_persona_id=existing_persona_id,
+            enable_auto_filters=slack_shortcut_config_creation_request.enable_auto_filters,
+        ).id
+
+    slack_shortcut_config_model = update_slack_shortcut_config(
+        db_session=db_session,
+        slack_shortcut_config_id=slack_shortcut_config_id,
+        persona_id=persona_id,
+        shortcut_config=shortcut_config,
+        standard_answer_category_ids=slack_shortcut_config_creation_request.standard_answer_categories,
+        enable_auto_filters=slack_shortcut_config_creation_request.enable_auto_filters,
+        disabled=slack_shortcut_config_creation_request.disabled,
+    )
+    return SlackShortcutConfig.from_model(slack_shortcut_config_model)
+
+
+@router.delete("/admin/slack-app/shortcut/{slack_shortcut_config_id}")
+def delete_slack_shortcut_config(
+    slack_shortcut_config_id: int,
+    db_session: Session = Depends(get_session),
+    user: User | None = Depends(current_admin_user),
+) -> None:
+    from onyx.db.slack_shortcut_config import remove_slack_shortcut_config
+    
+    remove_slack_shortcut_config(
+        db_session=db_session,
+        slack_shortcut_config_id=slack_shortcut_config_id,
+        user=user,
+    )
+
+
+@router.get("/admin/slack-app/shortcut")
+def list_slack_shortcut_configs(
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_admin_user),
+) -> list[SlackShortcutConfig]:
+    from onyx.server.manage.models import SlackShortcutConfig
+    from onyx.db.slack_shortcut_config import fetch_slack_shortcut_configs
+    
+    slack_shortcut_config_models = fetch_slack_shortcut_configs(db_session=db_session)
+    return [
+        SlackShortcutConfig.from_model(slack_shortcut_config_model)
+        for slack_shortcut_config_model in slack_shortcut_config_models
+    ]
+
+
 @router.post("/admin/slack-app/bots")
 def create_bot(
     slack_bot_creation_request: SlackBotCreationRequest,
@@ -270,6 +491,25 @@ def create_bot(
         slack_bot_id=slack_bot_model.id,
         persona_id=None,
         channel_config=default_channel_config,
+        standard_answer_category_ids=[],
+        enable_auto_filters=False,
+        is_default=True,
+    )
+
+    # Create a default Slack shortcut config
+    from onyx.db.slack_shortcut_config import insert_slack_shortcut_config
+    
+    default_shortcut_config = ShortcutConfig(
+        shortcut_name=None,
+        default_message="",
+        is_ephemeral=False,
+        show_continue_in_web_ui=True,
+    )
+    insert_slack_shortcut_config(
+        db_session=db_session,
+        slack_bot_id=slack_bot_model.id,
+        persona_id=None,
+        shortcut_config=default_shortcut_config,
         standard_answer_category_ids=[],
         enable_auto_filters=False,
         is_default=True,
@@ -357,6 +597,24 @@ def list_bot_configs(
     ]
 
 
+@router.get("/admin/slack-app/bots/{bot_id}/shortcuts")
+def list_bot_shortcut_configs(
+    bot_id: int,
+    db_session: Session = Depends(get_session),
+    _: User | None = Depends(current_admin_user),
+) -> list[SlackShortcutConfig]:
+    from onyx.server.manage.models import SlackShortcutConfig
+    from onyx.db.slack_shortcut_config import fetch_slack_shortcut_configs
+    
+    slack_shortcut_config_models = fetch_slack_shortcut_configs(
+        db_session=db_session, slack_bot_id=bot_id
+    )
+    return [
+        SlackShortcutConfig.from_model(slack_shortcut_config_model)
+        for slack_shortcut_config_model in slack_shortcut_config_models
+    ]
+
+
 @router.get(
     "/admin/slack-app/bots/{bot_id}/channels",
 )
@@ -434,3 +692,4 @@ def get_all_channels_from_slack_api(
             status_code=500,
             detail=f"Error fetching channels from Slack API: {str(e)}",
         )
+    
