@@ -145,6 +145,7 @@ class CustomTool(BaseTool):
         history: list[PreviousMessage],
         llm: LLM,
         force_run: bool = False,
+        current_files: list = None,
     ) -> dict[str, Any] | None:
         if not force_run:
             should_use_result = llm.invoke(

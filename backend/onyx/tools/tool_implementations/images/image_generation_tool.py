@@ -150,6 +150,7 @@ class ImageGenerationTool(Tool[None]):
         history: list[PreviousMessage],
         llm: LLM,
         force_run: bool = False,
+        current_files: list = None,
     ) -> dict[str, Any] | None:
         args = {"prompt": query}
         if force_run:
