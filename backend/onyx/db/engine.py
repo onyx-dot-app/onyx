@@ -653,7 +653,7 @@ def get_kg_readonly_user_session_with_current_tenant() -> (
 
     readonly_engine = get_readonly_sqlalchemy_engine()
 
-    event.listen(readonly_engine, "checkout", set_search_path_on_checkout)
+    event.listen(readonly_engine, "checkout", _set_search_path_on_checkout__listener)
 
     if not is_valid_schema_name(tenant_id):
         raise HTTPException(status_code=400, detail="Invalid tenant ID")
