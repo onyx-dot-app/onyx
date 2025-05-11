@@ -371,7 +371,7 @@ def _collect_all_channels_for_team_id(
         # shouldn't happen, but catching it regardless
         raise RuntimeError(f"Multiple teams with {team_id=} were found")
 
-    [team] = team_collection
+    team = team_collection[0]
 
     todo_channels: list[TodoTeam | TodoChannel] = []
     next_url = None
@@ -407,12 +407,12 @@ def _collect_document_for_channel_id(
     team_collection = (
         graph_client.teams.get().filter(f"id eq '{team_id}'").top(1).execute_query()
     )
-    [team] = team_collection
+    team = team_collection[0]
 
     channel_collection = (
         team.channels.get().filter(f"id eq '{channel_id}'").execute_query()
     )
-    [channel] = channel_collection
+    channel = channel_collection[0]
 
     message_collection = channel.messages.get_all(
         page_loaded=lambda _: None
