@@ -898,9 +898,12 @@ def connector_indexing_task(
         )
 
         # special bulletproofing ... truncate long exception messages
-        sanitized_e = type(e)(str(e)[:1024])
-        sanitized_e.__traceback__ = e.__traceback__
-        raise sanitized_e
+        try:
+            sanitized_e = type(e)(str(e)[:1024])
+            sanitized_e.__traceback__ = e.__traceback__
+            raise sanitized_e
+        except Exception:
+            raise e
 
     finally:
         if lock.owned():

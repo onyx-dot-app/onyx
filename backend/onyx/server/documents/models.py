@@ -167,6 +167,8 @@ class IndexAttemptSnapshot(BaseModel):
     full_exception_trace: str | None
     time_started: str | None
     time_updated: str
+    poll_range_start: datetime | None = None
+    poll_range_end: datetime | None = None
 
     @classmethod
     def from_index_attempt_db_model(
@@ -188,6 +190,8 @@ class IndexAttemptSnapshot(BaseModel):
                 else None
             ),
             time_updated=index_attempt.time_updated.isoformat(),
+            poll_range_start=index_attempt.poll_range_start,
+            poll_range_end=index_attempt.poll_range_end,
         )
 
 
