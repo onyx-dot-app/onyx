@@ -194,7 +194,7 @@ def populate_default_employee_account_information(db_session: Session) -> None:
             description=description,
             grounding=definition["grounding"],
             grounded_source_name=definition["grounded_source_name"],
-            active=True,
+            active=definition["active"],
         )
 
         # Add to session

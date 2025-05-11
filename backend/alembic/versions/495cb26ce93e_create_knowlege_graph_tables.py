@@ -14,6 +14,7 @@ from passlib.exc import PasswordSizeError
 from sqlalchemy import text
 
 from onyx.kg.configuration import KG_READONLY_DB_USER, KG_READONLY_DB_PASSWORD
+from shared_configs.configs import MULTI_TENANT
 
 
 # revision identifiers, used by Alembic.
@@ -32,33 +33,36 @@ def upgrade() -> None:
     # Note: in order for the migration to run, the KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD
     # environment variables MUST be set. Otherwise, an exception will be raised.
 
-    if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
-        raise Exception("KG_READONLY_DB_USER or KG_READONLY_DB_PASSWORD is not set")
+    if not MULTI_TENANT:
+        # Create read-only db user here only in single tenant mode. For multi-tenant mode,
+        # the user is created in the alembic_tenants migration.
+        if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
+            raise Exception("KG_READONLY_DB_USER or KG_READONLY_DB_PASSWORD is not set")
 
-    try:
-        # Validate password length and complexity
-        genword(
-            length=13, charset="ascii_72"
-        )  # This will raise PasswordSizeError if too short
-        # Additional checks can be added here if needed
-    except PasswordSizeError:
-        raise Exception("KG_READONLY_DB_PASSWORD is too short or too weak")
+        try:
+            # Validate password length and complexity
+            genword(
+                length=13, charset="ascii_72"
+            )  # This will raise PasswordSizeError if too short
+            # Additional checks can be added here if needed
+        except PasswordSizeError:
+            raise Exception("KG_READONLY_DB_PASSWORD is too short or too weak")
 
-    op.execute(
-        text(
-            f"""
-        DO $$
-        BEGIN
-            IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
-                EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{KG_READONLY_DB_USER}', '{KG_READONLY_DB_PASSWORD}');
-                -- Explicitly revoke all privileges including CONNECT
-                EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
-            END IF;
-        END
-        $$;
-    """
+        op.execute(
+            text(
+                f"""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
+                    EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{KG_READONLY_DB_USER}', '{KG_READONLY_DB_PASSWORD}');
+                    -- Explicitly revoke all privileges including CONNECT
+                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
+                END IF;
+            END
+            $$;
+        """
+            )
         )
-    )
 
     op.create_table(
         "kg_config",
@@ -417,16 +421,20 @@ def downgrade() -> None:
     op.drop_column("document", "kg_stage")
     op.drop_table("kg_config")
 
-    op.execute(
-        text(
-            f"""
-        DO $$
-        BEGIN
-            IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
-                EXECUTE format('DROP USER %I', '{KG_READONLY_DB_USER}');
-            END IF;
-        END
-        $$;
-    """
+    if not MULTI_TENANT:
+        # Drop read-only db user here only in single tenant mode. For multi-tenant mode,
+        # the user is dropped in the alembic_tenants migration.
+
+        op.execute(
+            text(
+                f"""
+            DO $$
+            BEGIN
+                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
+                    EXECUTE format('DROP USER %I', '{KG_READONLY_DB_USER}');
+                END IF;
+            END
+            $$;
+        """
+            )
         )
-    )
