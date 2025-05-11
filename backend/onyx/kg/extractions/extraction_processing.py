@@ -282,6 +282,8 @@ def _get_batch_metadata(
                 chunk_attributes
             )
 
+            doc_entity: str | None = None
+
             if batch_entity:
                 doc_entity = batch_entity
                 found_current_entity_type = True

@@ -398,6 +398,7 @@ def build_document_context(
     """
 
     metadata_list: list[str] = []
+    document_content: str | None = None
 
     if isinstance(document, InferenceSection):
         for key, value in document.center_chunk.metadata.items():
@@ -431,6 +432,9 @@ def build_document_context(
 
         # Combine all parts with proper spacing
         document_content = f"{doc_header}\n\n{metadata_str}\n\n{document.content}"
+
+    if document_content is None:
+        raise ValueError("Document content is None")
 
     return document_content
 

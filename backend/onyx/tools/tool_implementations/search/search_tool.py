@@ -312,7 +312,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             kg_relationships = override_kwargs.kg_relationships
             kg_terms = override_kwargs.kg_terms
             kg_sources = override_kwargs.kg_sources
-            kg_chunk_id_zero_only = override_kwargs.kg_chunk_id_zero_only
+            kg_chunk_id_zero_only = override_kwargs.kg_chunk_id_zero_only or False
 
         if self.selected_sections:
             yield from self._build_response_for_specified_sections(query)

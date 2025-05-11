@@ -58,7 +58,6 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
         )
     ]
 
-    # Grader
     try:
         llm_response = run_with_timeout(
             15,
@@ -96,7 +95,7 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
         )
     ]
 
-    # Grader
+    cleaned_response: str | None = None
     try:
         llm_response = run_with_timeout(
             15,
