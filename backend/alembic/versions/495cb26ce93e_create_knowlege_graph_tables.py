@@ -431,6 +431,9 @@ def downgrade() -> None:
             DO $$
             BEGIN
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
+                    -- First revoke all privileges
+                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
+                    -- Then drop the user
                     EXECUTE format('DROP USER %I', '{KG_READONLY_DB_USER}');
                 END IF;
             END
