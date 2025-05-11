@@ -437,6 +437,7 @@ def handle_message(
         bypass_acl = True
 
     channel_conf = None
+    prioritized_sources = None
     if channel_config and channel_config.channel_config:
         channel_conf = channel_config.channel_config
         if not bypass_filters and "answer_filters" in channel_conf:
