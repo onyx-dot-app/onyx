@@ -210,7 +210,6 @@ class TeamsConnector(
                     for future in as_completed(futures):
                         doc = future.result()
                         if doc:
-                            print(doc)
                             yield doc
 
         return TeamsCheckpoint(
