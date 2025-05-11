@@ -1,4 +1,4 @@
-from onyx.background.celery.apps.monitoring import celery_app
+from onyx.background.celery.apps.light import celery_app
 
 celery_app.autodiscover_tasks(
     [
