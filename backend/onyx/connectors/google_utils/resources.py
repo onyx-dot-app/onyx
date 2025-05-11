@@ -28,6 +28,7 @@ def _get_google_service(
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
     service: Resource
     if isinstance(creds, ServiceAccountCredentials):
+        # NOTE: https://developers.google.com/identity/protocols/oauth2/service-account#error-codes
         creds = creds.with_subject(user_email)
         service = build(service_name, service_version, credentials=creds)
     elif isinstance(creds, OAuthCredentials):

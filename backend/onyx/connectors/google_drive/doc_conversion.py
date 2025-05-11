@@ -59,6 +59,20 @@ GOOGLE_MIME_TYPES = {
     GDriveMimeType.PPT.value: "text/plain",
 }
 
+DRIVE_IGNORE_EXTENSIONS = {
+    "dll",
+    "gz",
+    "zip",
+    "7z",
+    "rar",
+    "tar",
+    "dds",
+    "deb",
+    "dmg",
+    "pkg",
+    "pyc",
+}
+
 
 def _summarize_drive_image(
     image_data: bytes, image_name: str, image_analysis_llm: LLM | None
