@@ -459,7 +459,7 @@ def handle_message(
         respond_tag_only = channel_conf.get("respond_tag_only") or False
         respond_team_member_list = channel_conf.get("respond_team_member_list") or None
         respond_slack_group_list = channel_conf.get("respond_slack_group_list") or None
-
+        prioritized_sources = channel_conf.get("prioritized_sources") or None
     if respond_tag_only and not bypass_filters:
         logger.info(
             "Skipping message since the channel is configured such that "
@@ -572,6 +572,7 @@ def handle_message(
             source_type=None,
             document_set=document_set_names,
             time_cutoff=None,
+            prioritized_sources=prioritized_sources,
         )
 
         # Default True because no other ways to apply filters in Slack (no nice UI)

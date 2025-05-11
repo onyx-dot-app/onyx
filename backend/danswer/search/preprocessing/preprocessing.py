@@ -141,6 +141,7 @@ def retrieval_preprocessing(
         time_cutoff=preset_filters.time_cutoff or predicted_time_cutoff,
         tags=preset_filters.tags,  # Tags are never auto-extracted
         access_control_list=user_acl_filters,
+        prioritized_sources=preset_filters.prioritized_sources,  # Use prioritized_sources from filters
     )
 
     llm_chunk_filter = False

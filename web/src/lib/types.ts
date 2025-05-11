@@ -543,6 +543,7 @@ export interface ChannelConfig {
   respond_slack_group_list?: string[];
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];
+  prioritized_sources?: string[];
 }
 
 export type SlackBotResponseType = "quotes" | "citations";

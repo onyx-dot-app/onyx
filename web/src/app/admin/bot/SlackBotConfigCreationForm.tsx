@@ -31,6 +31,8 @@ import { useRouter } from "next/navigation";
 import { Persona } from "../assistants/interfaces";
 import { useState } from "react";
 import { BookmarkIcon, RobotIcon } from "@/components/icons/icons";
+import { SourceIcon } from "@/components/SourceIcon";
+import { getSourceMetadata } from "@/lib/sources";
 
 export const SlackBotCreationForm = ({
   documentSets,
@@ -50,6 +52,15 @@ export const SlackBotCreationForm = ({
     : false;
   const [usingPersonas, setUsingPersonas] = useState(
     existingSlackBotUsesPersona
+  );
+
+  // Get unique sources from document sets
+  const availableSources = Array.from(
+    new Set(
+      documentSets.flatMap((docSet) =>
+        docSet.cc_pair_descriptors.map((desc) => desc.connector.source)
+      )
+    )
   );
 
   return (
@@ -95,6 +106,8 @@ export const SlackBotCreationForm = ({
                 ? existingSlackBotConfig.persona.id
                 : null,
             response_type: existingSlackBotConfig?.response_type || "citations",
+            prioritized_sources:
+              existingSlackBotConfig?.channel_config?.prioritized_sources || [],
           }}
           validationSchema={Yup.object().shape({
             channel_names: Yup.array().of(Yup.string()),
@@ -110,6 +123,7 @@ export const SlackBotCreationForm = ({
             follow_up_tags: Yup.array().of(Yup.string()),
             document_sets: Yup.array().of(Yup.number()),
             persona_id: Yup.number().nullable(),
+            prioritized_sources: Yup.array().of(Yup.string()),
           })}
           onSubmit={async (values, formikHelpers) => {
             formikHelpers.setSubmitting(true);
@@ -162,7 +176,7 @@ export const SlackBotCreationForm = ({
             }
           }}
         >
-          {({ isSubmitting, values }) => (
+          {({ isSubmitting, values, setFieldValue }) => (
             <Form>
               <div className="px-6 pb-6">
                 <SectionHeader>The Basics</SectionHeader>
@@ -196,13 +210,12 @@ export const SlackBotCreationForm = ({
                       choose this option.
                       <br />
                       <br />
-                      If set to Quotes, Darwin will respond with a direct
-                      answer as well as with quotes pulled from the context
-                      documents to support that answer. Darwin will also
-                      give a list of relevant documents. Choose this option if
-                      you want a very detailed response AND/OR a list of
-                      relevant documents would be useful just in case the LLM
-                      missed anything.
+                      If set to Quotes, Darwin will respond with a direct answer
+                      as well as with quotes pulled from the context documents
+                      to support that answer. Darwin will also give a list of
+                      relevant documents. Choose this option if you want a very
+                      detailed response AND/OR a list of relevant documents
+                      would be useful just in case the LLM missed anything.
                     </>
                   }
                   options={[
@@ -289,8 +302,8 @@ export const SlackBotCreationForm = ({
                     Use either a Persona <b>or</b> Document Sets to control how
                     Darwin answers.
                   </Text>
-                  <Text>
-                    <ul className="list-disc mt-2 ml-4">
+                  <div className="mt-2">
+                    <ul className="list-disc ml-4">
                       <li>
                         You should use a Persona if you also want to customize
                         the prompt and retrieval settings.
@@ -300,7 +313,7 @@ export const SlackBotCreationForm = ({
                         which documents Darwin uses as references.
                       </li>
                     </ul>
-                  </Text>
+                  </div>
                   <Text className="mt-2">
                     <b>NOTE:</b> whichever tab you are when you submit the form
                     will be the one that is used. For example, if you are on the
@@ -389,6 +402,54 @@ export const SlackBotCreationForm = ({
                     </TabPanel>
                   </TabPanels>
                 </TabGroup>
+
+                <Divider />
+
+                <SectionHeader>Source Selection</SectionHeader>
+                <Text className="mb-2">
+                  Select the sources to emphasize in your search. Sources not
+                  selected will still be included, but fewer results from them
+                  may appear. If no sources are selected, Web and Salesforce KB
+                  articles are taken as default.
+                </Text>
+                <div className="mb-3 mt-2 flex gap-2 flex-wrap text-sm">
+                  {availableSources.map((source) => {
+                    const isSelected =
+                      values.prioritized_sources.includes(source);
+                    return (
+                      <div
+                        key={source}
+                        className={
+                          `
+                          px-3 
+                          py-1
+                          rounded-lg 
+                          border
+                          border-border 
+                          w-fit 
+                          flex 
+                          items-center
+                          gap-2
+                          cursor-pointer ` +
+                          (isSelected
+                            ? " bg-hover"
+                            : " bg-background hover:bg-hover-light")
+                        }
+                        onClick={() => {
+                          const newSources = isSelected
+                            ? values.prioritized_sources.filter(
+                                (s) => s !== source
+                              )
+                            : [...values.prioritized_sources, source];
+                          setFieldValue("prioritized_sources", newSources);
+                        }}
+                      >
+                        <SourceIcon sourceType={source} iconSize={16} />
+                        <span>{getSourceMetadata(source).displayName}</span>
+                      </div>
+                    );
+                  })}
+                </div>
 
                 <Divider />
 

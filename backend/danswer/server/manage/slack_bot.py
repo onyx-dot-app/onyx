@@ -43,6 +43,7 @@ def _form_channel_config(
     )
     answer_filters = slack_bot_config_creation_request.answer_filters
     follow_up_tags = slack_bot_config_creation_request.follow_up_tags
+    prioritized_sources = slack_bot_config_creation_request.prioritized_sources
 
     if not raw_channel_names:
         raise HTTPException(
@@ -83,6 +84,8 @@ def _form_channel_config(
         channel_config["answer_filters"] = answer_filters
     if follow_up_tags is not None:
         channel_config["follow_up_tags"] = follow_up_tags
+    if prioritized_sources:
+        channel_config["prioritized_sources"] = prioritized_sources
 
     channel_config[
         "respond_to_bots"

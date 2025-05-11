@@ -698,19 +698,24 @@ def _query_vespa(query_params: Mapping[str, str | int | float]) -> list[Inferenc
         else {},
     )
 
-    # All records including web
+    # Get prioritized sources from filters, default to web and sfkbarticles if none
+    prioritized_sources = query_params.get("prioritized_sources") or [
+        "web",
+        "sfkbarticles",
+    ]
+    # All records
     params["hits"] = 50
     filtered_hits_all = query_vespa_helper(params)
 
-    # Only Web Records and Salesforce KB articles
+    # Records from prioritized sources
     params["hits"] = 10
-    params["yql"] = (
-        params["yql"]
-        + ' and (source_type contains "web" or source_type contains "sfkbarticles")'
+    source_conditions = " or ".join(
+        f'source_type contains "{source}"' for source in prioritized_sources
     )
-    filtered_hits_web_sf = query_vespa_helper(params)
+    params["yql"] = params["yql"] + f" and ({source_conditions})"
+    filtered_hits_prioritized = query_vespa_helper(params)
 
-    filtered_hits_final = filtered_hits_web_sf + filtered_hits_all
+    filtered_hits_final = filtered_hits_prioritized + filtered_hits_all
 
     inference_chunks = [
         _vespa_hit_to_inference_chunk(hit) for hit in filtered_hits_final
@@ -1099,6 +1104,7 @@ class VespaIndex(DocumentIndex):
             "offset": offset,
             "ranking.profile": "keyword_search",
             "timeout": _VESPA_TIMEOUT,
+            "prioritized_sources": filters.prioritized_sources,
         }
 
         return _query_vespa(params)
@@ -1141,6 +1147,7 @@ class VespaIndex(DocumentIndex):
             "offset": offset,
             "ranking.profile": f"hybrid_search{len(query_embedding)}",
             "timeout": _VESPA_TIMEOUT,
+            "prioritized_sources": filters.prioritized_sources,
         }
 
         return _query_vespa(params)
@@ -1191,6 +1198,7 @@ class VespaIndex(DocumentIndex):
             "offset": offset,
             "ranking.profile": f"hybrid_search{len(query_embedding)}",
             "timeout": _VESPA_TIMEOUT,
+            "prioritized_sources": filters.prioritized_sources,  # Use the non-None value
         }
 
         return _query_vespa(params)
@@ -1220,6 +1228,7 @@ class VespaIndex(DocumentIndex):
             "offset": 0,
             "ranking.profile": "admin_search",
             "timeout": _VESPA_TIMEOUT,
+            "prioritized_sources": filters.prioritized_sources,
         }
 
         return _query_vespa(params)

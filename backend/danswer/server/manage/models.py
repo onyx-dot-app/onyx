@@ -108,6 +108,8 @@ class SlackBotConfigCreationRequest(BaseModel):
     answer_filters: list[AllowedAnswerFilters] = []
     # list of user emails
     follow_up_tags: list[str] | None = None
+    # List of source types to prioritize in search results
+    prioritized_sources: list[str] | None = None
     response_type: SlackBotResponseType
 
     @validator("answer_filters", pre=True)

@@ -31,6 +31,7 @@ class BaseFilters(BaseModel):
     document_set: list[str] | None = None
     time_cutoff: datetime | None = None
     tags: list[Tag] | None = None
+    prioritized_sources: list[str] | None = None  # Will be set from channel config
 
 
 class IndexFilters(BaseFilters):

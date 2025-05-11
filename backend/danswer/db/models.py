@@ -1083,6 +1083,8 @@ class ChannelConfig(TypedDict):
     # If None then no follow up
     # If empty list, follow up with no tags
     follow_up_tags: NotRequired[list[str]]
+    # List of source types to prioritize in search results
+    prioritized_sources: NotRequired[list[str]]
 
 
 class SlackBotResponseType(str, PyEnum):
