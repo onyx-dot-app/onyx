@@ -92,8 +92,7 @@ class TeamsConnector(
             )
 
             if not isinstance(token, dict):
-                raise RuntimeError("...")
-                ...
+                raise RuntimeError("`token` instance must be of type dict")
 
             return token
 
@@ -419,11 +418,9 @@ def _collect_document_for_channel_id(
         page_loaded=lambda _: None
     ).execute_query()
 
-    chat_messages = [message for message in message_collection]
-
     return _convert_thread_to_document(
         channel=channel,
-        thread=chat_messages,
+        thread=list(message_collection),
     )
 
 
