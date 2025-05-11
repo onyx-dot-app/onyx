@@ -26,7 +26,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.context.search.models import RerankingDetails
-from onyx.db.kg_config import KGConfigSettings
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
@@ -61,10 +60,11 @@ def _answer_fixture_impl(
     mocker: MockerFixture,
     rerank_settings: RerankingDetails | None = None,
 ) -> Answer:
-    mocker.patch(
-        "onyx.db.kg_config.get_kg_config_settings",
-        return_value=KGConfigSettings(),
-    )
+    mock_db_session = Mock(spec=Session)
+    mock_query = Mock()
+    mock_query.all.return_value = []
+    mock_db_session.query.return_value = mock_query
+
     return Answer(
         prompt_builder=AnswerPromptBuilder(
             user_message=default_build_user_message(
@@ -79,7 +79,7 @@ def _answer_fixture_impl(
             raw_user_query=QUERY,
             raw_user_uploaded_files=[],
         ),
-        db_session=Mock(spec=Session),
+        db_session=mock_db_session,
         answer_style_config=answer_style_config,
         llm=mock_llm,
         fast_llm=mock_llm,
