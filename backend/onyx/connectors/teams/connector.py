@@ -14,7 +14,7 @@ from office365.runtime.client_request_exception import ClientRequestException  #
 from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
-from pydantic import BaseModel  # type: ignore
+from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -173,7 +173,7 @@ class TeamsConnector(
             root_todos = _collect_all_teams(self.graph_client)
             return TeamsCheckpoint(
                 todos=root_todos,
-                has_more=True if root_todos else False,
+                has_more=bool(root_todos),
             )
 
         todos = checkpoint.todos
