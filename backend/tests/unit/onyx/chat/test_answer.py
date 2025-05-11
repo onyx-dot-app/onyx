@@ -26,6 +26,7 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.context.search.models import RerankingDetails
+from onyx.db.kg_config import KGConfigSettings
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
@@ -62,7 +63,7 @@ def _answer_fixture_impl(
 ) -> Answer:
     mocker.patch(
         "onyx.db.kg_config.get_kg_config_settings",
-        return_value=list(),
+        return_value=KGConfigSettings(),
     )
     return Answer(
         prompt_builder=AnswerPromptBuilder(
