@@ -50,15 +50,20 @@ def answer_instance(
         "onyx.chat.answer.fast_gpu_status_request",
         return_value=True,
     )
-    return _answer_fixture_impl(mock_llm, answer_style_config, prompt_config)
+    return _answer_fixture_impl(mock_llm, answer_style_config, prompt_config, mocker)
 
 
 def _answer_fixture_impl(
     mock_llm: LLM,
     answer_style_config: AnswerStyleConfig,
     prompt_config: PromptConfig,
+    mocker: MockerFixture,
     rerank_settings: RerankingDetails | None = None,
 ) -> Answer:
+    mocker.patch(
+        "onyx.db.kg_config.get_kg_config_settings",
+        return_value=list(),
+    )
     return Answer(
         prompt_builder=AnswerPromptBuilder(
             user_message=default_build_user_message(
@@ -404,7 +409,11 @@ def test_no_slow_reranking(
         )
     )
     answer_instance = _answer_fixture_impl(
-        mock_llm, answer_style_config, prompt_config, rerank_settings=rerank_settings
+        mock_llm,
+        answer_style_config,
+        prompt_config,
+        mocker,
+        rerank_settings=rerank_settings,
     )
 
     assert answer_instance.graph_config.inputs.rerank_settings == rerank_settings

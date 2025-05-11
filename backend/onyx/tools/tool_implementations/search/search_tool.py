@@ -296,6 +296,11 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         document_sources = None
         time_cutoff = None
         expanded_queries = None
+        kg_entities = None
+        kg_relationships = None
+        kg_terms = None
+        kg_sources = None
+        kg_chunk_id_zero_only = False
         if override_kwargs:
             force_no_rerank = use_alt_not_None(override_kwargs.force_no_rerank, False)
             alternate_db_session = override_kwargs.alternate_db_session

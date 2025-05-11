@@ -271,7 +271,7 @@ def _get_batch_metadata(
         for first_chunk in first_chunk_list:
 
             document_id = first_chunk.document_id
-
+            doc_entity = None
             found_current_entity_type = False
 
             if not isinstance(document_id, str):
@@ -281,8 +281,6 @@ def _get_batch_metadata(
             kg_document_meta_data_dict[document_id].document_attributes = (
                 chunk_attributes
             )
-
-            doc_entity: str | None = None
 
             if batch_entity:
                 doc_entity = batch_entity
@@ -315,6 +313,7 @@ def _get_batch_metadata(
                         break
 
             if found_current_entity_type:
+                assert isinstance(doc_entity, str)
                 kg_document_meta_data_dict[document_id].entity_type = doc_entity
                 entity_instructions = (
                     source_type_classification_extraction_instructions[doc_entity]
