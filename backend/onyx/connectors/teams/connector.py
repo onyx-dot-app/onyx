@@ -369,7 +369,8 @@ def _collect_all_channels_for_team_id(
     if not team_collection:
         raise RuntimeError(f"No team with {team_id=} was found")
     elif team_collection.has_next:
-        raise RuntimeError(f"Multiple teams with {team_id=} were found; this is weird")
+        # shouldn't happen, but catching it regardless
+        raise RuntimeError(f"Multiple teams with {team_id=} were found")
 
     [team] = team_collection
 
