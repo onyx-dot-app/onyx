@@ -898,6 +898,8 @@ def connector_indexing_task(
         )
 
         # special bulletproofing ... truncate long exception messages
+        # for exception types that require more args, this will fail
+        # thus the try/except
         try:
             sanitized_e = type(e)(str(e)[:1024])
             sanitized_e.__traceback__ = e.__traceback__
