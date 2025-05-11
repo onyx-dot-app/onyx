@@ -178,12 +178,6 @@ class TeamsConnector(
 
         todos = checkpoint.todos
 
-        if not todos:
-            return TeamsCheckpoint(
-                todos=[],
-                has_more=False,
-            )
-
         while todos:
             todo = todos[-1]
             if isinstance(todo, TodoTeam):
