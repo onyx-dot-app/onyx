@@ -24,7 +24,7 @@ export type DateRange =
     }
   | undefined;
 
-export const AdminDateRangeSelector = memo(function DateRangeSelector({
+export const AdminDateRangeSelector = memo(function AdminDateRangeSelector({
   value,
   onValueChange,
 }: {
