@@ -152,10 +152,12 @@ def onyx_redis(
             "*reply.celery.pidbox", "list", batch, dry_run, r
         )
     elif command == OnyxRedisCommand.get_list_element:
+        # just hardcoded for now
         result = r.lrange(
             "0097a564-d343-3c1f-9fd1-af8cce038115.reply.celery.pidbox", 0, 0
         )
         print(f"{result}")
+        return 0
     elif command == OnyxRedisCommand.get_user_token:
         if not user_email:
             logger.error("You must specify --user-email with get_user_token")

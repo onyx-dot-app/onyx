@@ -10,6 +10,7 @@ from onyx.configs.constants import PUBLIC_DOC_PAT
 class ExternalAccess:
 
     # arbitrary limit to prevent excessively large permissions sets
+    # not internally enforced ... the caller can check this before using the instance
     MAX_NUM_ENTRIES = 1000
 
     # Emails of external users with access to the doc externally

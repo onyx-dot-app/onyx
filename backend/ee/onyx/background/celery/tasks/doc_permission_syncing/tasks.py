@@ -497,6 +497,7 @@ def connector_permission_sync_generator_task(
 
     except Exception as e:
         error_msg = format_error_for_logging(e)
+
         task_logger.warning(
             f"Permission sync exceptioned: cc_pair={cc_pair_id} payload_id={payload_id} {error_msg}"
         )

@@ -184,15 +184,18 @@ class RedisConnectorPermissionSync:
                 permissions.external_access.num_entries
                 > permissions.external_access.MAX_NUM_ENTRIES
             ):
-                num_users = len(permissions.external_access.external_user_emails)
-                num_groups = len(permissions.external_access.external_user_group_ids)
                 if task_logger:
+                    num_users = len(permissions.external_access.external_user_emails)
+                    num_groups = len(
+                        permissions.external_access.external_user_group_ids
+                    )
                     task_logger.warning(
                         f"Permissions length exceeded, skipping...: "
                         f"{permissions.doc_id} "
                         f"{num_users=} {num_groups=} "
                         f"{permissions.external_access.MAX_NUM_ENTRIES=}"
                     )
+                continue
 
             # NOTE(rkuo): this used to fire a task instead of directly writing to the DB,
             # but the permissions can be excessively large if sent over the wire.
