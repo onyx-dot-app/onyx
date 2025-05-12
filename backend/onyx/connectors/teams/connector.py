@@ -15,7 +15,6 @@ from office365.runtime.http.request_options import RequestOptions  # type: ignor
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
 from office365.teams.team import Team
-from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
@@ -38,17 +37,8 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 
-class TodoTeam(BaseModel):
-    team_id: str
-
-
-class TodoChannel(BaseModel):
-    team_id: str
-    channel_id: str
-
-
 class TeamsCheckpoint(ConnectorCheckpoint):
-    todos: list[TodoTeam | TodoChannel] | None = None
+    todo_team_ids: list[str] | None = None
 
 
 class TeamsConnector(
@@ -110,8 +100,10 @@ class TeamsConnector(
             # make sure it doesn't take forever, since this is a syncronous call
             found_teams = run_with_timeout(
                 timeout=10,
-                func=_collect_all_teams,
+                func=_collect_all_team_ids,
                 graph_client=self.graph_client,
+                start=0.0,
+                end=time.time(),
             )
 
         except ClientRequestException as e:
@@ -173,56 +165,52 @@ class TeamsConnector(
 
         checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
 
-        if checkpoint.todos is None:
-            root_todos = _collect_all_teams(self.graph_client)
+        if checkpoint.todo_team_ids is None:
+            root_todos = _collect_all_team_ids(
+                graph_client=self.graph_client,
+                start=start,
+                end=end,
+            )
             return TeamsCheckpoint(
-                todos=root_todos,
+                todo_team_ids=root_todos,
                 has_more=bool(root_todos),
             )
 
-        todos = checkpoint.todos
+        todos = checkpoint.todo_team_ids
 
         while todos:
-            todo = todos[-1]
-            if isinstance(todo, TodoTeam):
-                todo_channels = _collect_all_channels_for_team_id(
-                    graph_client=self.graph_client, team_id=todo.team_id
-                )
-                todos.pop()
-                todos.extend(todo_channels)
-            elif isinstance(todo, TodoChannel):
-                tc: list[TodoChannel] = []
-                while todos and isinstance(todos[-1], TodoChannel):
-                    todo = todos.pop()
-                    assert isinstance(todo, TodoChannel)
-                    tc.append(todo)
+            todo_team_id = todos[-1]
+            team = _get_team_with_id(
+                graph_client=self.graph_client,
+                team_id=todo_team_id,
+            )
+            team_and_channel_id_pairs = _collect_all_channels_for_team_id(
+                graph_client=self.graph_client,
+                team=team,
+            )
+            todos.pop()
 
-                team = _get_team_with_id(
-                    graph_client=self.graph_client,
-                    team_id=todo.team_id,
-                )
-
-                with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                    futures: list[Future[Document | None]] = []
-                    for todo_channel in tc:
-                        curr_ctx = contextvars.copy_context()
-                        futures.append(
-                            executor.submit(
-                                curr_ctx.run,
-                                _collect_document_for_channel_id,
-                                graph_client=self.graph_client,
-                                team=team,
-                                channel_id=todo_channel.channel_id,
-                            )
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures: list[Future[Document | None]] = []
+                for team_id, channel_id in team_and_channel_id_pairs:
+                    curr_ctx = contextvars.copy_context()
+                    futures.append(
+                        executor.submit(
+                            curr_ctx.run,
+                            _collect_document_for_channel_id,
+                            graph_client=self.graph_client,
+                            team=team,
+                            channel_id=channel_id,
                         )
+                    )
 
-                    for future in as_completed(futures):
-                        doc = future.result()
-                        if doc:
-                            yield doc
+                for future in as_completed(futures):
+                    doc = future.result()
+                    if doc:
+                        yield doc
 
         return TeamsCheckpoint(
-            todos=[],
+            todo_team_ids=[],
             has_more=False,
         )
 
@@ -339,10 +327,14 @@ def _update_request_url(request: RequestOptions, next_url: str) -> None:
     request.url = next_url
 
 
-def _collect_all_teams(
+def _collect_all_team_ids(
     graph_client: GraphClient,
-) -> list[TodoTeam | TodoChannel]:
-    todo_teams: list[TodoTeam | TodoChannel] = []
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> list[str]:
+    # The MS Office 365 Graph API does not allow you to filter on start/end datetimes...
+
+    team_ids: list[str] = []
     next_url = None
 
     while True:
@@ -355,16 +347,14 @@ def _collect_all_teams(
 
         team_collection = query.execute_query()
 
-        todo_teams.extend(
-            [TodoTeam(team_id=team.id) for team in team_collection if team.id]
-        )
+        team_ids.extend([team.id for team in team_collection if team.id])
 
         if team_collection.has_next:
             next_url = cast(str, team_collection._next_request_url)
         else:
             break
 
-    return todo_teams
+    return team_ids
 
 
 def _get_team_with_id(
@@ -386,11 +376,12 @@ def _get_team_with_id(
 
 def _collect_all_channels_for_team_id(
     graph_client: GraphClient,
-    team_id: str,
-) -> list[TodoTeam | TodoChannel]:
-    team = _get_team_with_id(graph_client=graph_client, team_id=team_id)
+    team: Team,
+) -> list[tuple[str, str]]:
+    if not team.id:
+        raise RuntimeError(f"The {team=} has an empty `id` field")
 
-    todo_channels: list[TodoTeam | TodoChannel] = []
+    team_and_channel_id_pairs: list[tuple[str, str]] = []
     next_url = None
 
     while True:
@@ -402,18 +393,14 @@ def _collect_all_channels_for_team_id(
             )
 
         channel_collection = query.execute_query()
-        todo_channels.extend(
-            [
-                TodoChannel(team_id=team_id, channel_id=channel.id)
-                for channel in channel_collection
-                if channel.id
-            ]
+        team_and_channel_id_pairs.extend(
+            [(team.id, channel.id) for channel in channel_collection if channel.id]
         )
 
         if not channel_collection.has_next:
             break
 
-    return todo_channels
+    return team_and_channel_id_pairs
 
 
 def _collect_document_for_channel_id(
