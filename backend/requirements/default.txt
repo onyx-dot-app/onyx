@@ -102,3 +102,5 @@ prometheus_fastapi_instrumentator==7.1.0
 langfuse==2.60.2
 python-redmine==2.5.0
 docxtpl==0.20.0
+minio==7.2.15
+APScheduler==3.11.0

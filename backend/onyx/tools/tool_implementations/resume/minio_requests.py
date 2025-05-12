@@ -7,8 +7,8 @@ import io
 import base64
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from danswer.tools.resume import config
-from danswer.utils.logger import setup_logger
+from onyx.tools.tool_implementations.resume import config
+from onyx.utils.logger import setup_logger
 
 scheduler = BackgroundScheduler()
 scheduler.start()
