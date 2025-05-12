@@ -8,14 +8,12 @@ import redis
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 
-from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
-    document_update_permissions,
-)
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
+from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 
 class RedisConnectorPermissionSyncPayload(BaseModel):
@@ -170,6 +168,11 @@ class RedisConnectorPermissionSync:
     ) -> int | None:
         last_lock_time = time.monotonic()
 
+        document_update_permissions_fn = fetch_versioned_implementation(
+            "onyx.background.celery.tasks.doc_permission_syncing.tasks",
+            "document_update_permissions",
+        )
+
         num_permissions = 0
         # Create a task for each document permission sync
         for permissions in new_permissions:
@@ -205,7 +208,7 @@ class RedisConnectorPermissionSync:
 
             # This can internally exception due to db issues but still continue
             # we may want to change this
-            document_update_permissions(
+            document_update_permissions_fn(
                 self.tenant_id, permissions, source_string, connector_id, credential_id
             )
 

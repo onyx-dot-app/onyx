@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_curator_or_admin_user
 from onyx.auth.users import current_user
-from onyx.background.celery.celery_utils import get_deletion_attempt_snapshot
 from onyx.background.celery.tasks.pruning.tasks import (
     try_creating_prune_generator_task,
 )
@@ -45,6 +44,7 @@ from onyx.db.models import User
 from onyx.db.search_settings import get_active_search_settings_list
 from onyx.db.search_settings import get_current_search_settings
 from onyx.redis.redis_connector import RedisConnector
+from onyx.redis.redis_connector_utils import get_deletion_attempt_snapshot
 from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CCPairFullInfo
 from onyx.server.documents.models import CCPropertyUpdateRequest
