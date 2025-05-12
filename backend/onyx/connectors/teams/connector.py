@@ -32,6 +32,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
 
@@ -106,8 +107,11 @@ class TeamsConnector(
         try:
             # Minimal call to confirm we can retrieve Teams
             # make sure it doesn't take forever, since this is a syncronous call
-            # found_teams = run_with_timeout(10, self._get_all_teams)
-            found_teams = _collect_all_teams(self.graph_client)
+            found_teams = run_with_timeout(
+                timeout=10,
+                func=_collect_all_teams,
+                graph_client=self.graph_client,
+            )
 
         except ClientRequestException as e:
             if not e.response:
@@ -443,6 +447,8 @@ if __name__ == "__main__":
             "teams_client_secret": secret,
         }
     )
+
+    connector.validate_connector_settings()
 
     print(
         load_everything_from_checkpoint_connector(
