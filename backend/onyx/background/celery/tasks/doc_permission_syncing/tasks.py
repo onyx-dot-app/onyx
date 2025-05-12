@@ -16,10 +16,6 @@ from redis import Redis
 from redis.exceptions import LockError
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
-from tenacity import retry
-from tenacity import retry_if_exception
-from tenacity import stop_after_delay
-from tenacity import wait_random_exponential
 
 from ee.onyx.configs.app_configs import DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY
 from ee.onyx.db.connector_credential_pair import get_all_auto_sync_cc_pairs
@@ -35,6 +31,7 @@ from onyx.background.celery.celery_redis import celery_find_task
 from onyx.background.celery.celery_redis import celery_get_queue_length
 from onyx.background.celery.celery_redis import celery_get_queued_task_ids
 from onyx.background.celery.celery_redis import celery_get_unacked_task_ids
+from onyx.background.celery.tasks.shared.tasks import OnyxCeleryTaskCompletionStatus
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
@@ -53,7 +50,6 @@ from onyx.db.connector_credential_pair import get_connector_credential_pair_from
 from onyx.db.document import get_document_ids_for_connector_credential_pair
 from onyx.db.document import upsert_document_by_connector_credential_pair
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.engine import get_session_with_tenant
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import SyncStatus
@@ -62,7 +58,6 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
 from onyx.db.users import batch_add_ext_perm_user_if_not_exists
-from onyx.db.utils import is_retryable_sqlalchemy_error
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_doc_perm_sync import RedisConnectorPermissionSync
@@ -79,12 +74,11 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import optional_telemetry
 from onyx.utils.telemetry import RecordType
 
+
 logger = setup_logger()
 
 
 DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES = 3
-DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER = 10 * 60
-DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT = 60
 
 
 # 5 seconds more than RetryDocumentIndex STOP_AFTER+MAX_WAIT
@@ -479,12 +473,12 @@ def connector_permission_sync_generator_task(
             tasks_generated = 0
             for doc_external_access in document_external_accesses:
                 redis_connector.permissions.update_db(
+                    celery_app=self.app,
                     lock=lock,
                     new_permissions=[doc_external_access],
                     source_string=source_type,
                     connector_id=cc_pair.connector.id,
                     credential_id=cc_pair.credential.id,
-                    task_logger=task_logger,
                 )
                 tasks_generated += 1
 
@@ -517,28 +511,33 @@ def connector_permission_sync_generator_task(
     )
 
 
-# NOTE(rkuo): this should probably move to the db layer
-@retry(
-    retry=retry_if_exception(is_retryable_sqlalchemy_error),
-    wait=wait_random_exponential(
-        multiplier=1, max=DOCUMENT_PERMISSIONS_UPDATE_MAX_WAIT
-    ),
-    stop=stop_after_delay(DOCUMENT_PERMISSIONS_UPDATE_STOP_AFTER),
+@shared_task(
+    name=OnyxCeleryTask.UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK,
+    soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
+    time_limit=LIGHT_TIME_LIMIT,
+    max_retries=DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES,
+    bind=True,
 )
-def document_update_permissions(
+def update_external_document_permissions_task(
+    self: Task,
     tenant_id: str,
-    permissions: DocExternalAccess,
-    source_type_str: str,
+    serialized_doc_external_access: dict,
+    source_string: str,
     connector_id: int,
     credential_id: int,
 ) -> bool:
     start = time.monotonic()
 
-    doc_id = permissions.doc_id
-    external_access = permissions.external_access
+    completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
+
+    document_external_access = DocExternalAccess.from_dict(
+        serialized_doc_external_access
+    )
+    doc_id = document_external_access.doc_id
+    external_access = document_external_access.external_access
 
     try:
-        with get_session_with_tenant(tenant_id=tenant_id) as db_session:
+        with get_session_with_current_tenant() as db_session:
             # Add the users to the DB if they don't exist
             batch_add_ext_perm_user_if_not_exists(
                 db_session=db_session,
@@ -550,7 +549,7 @@ def document_update_permissions(
                 db_session=db_session,
                 doc_id=doc_id,
                 external_access=external_access,
-                source_type=DocumentSource(source_type_str),
+                source_type=DocumentSource(source_string),
             )
 
             if created_new_doc:
@@ -569,103 +568,30 @@ def document_update_permissions(
                 f"action=update_permissions "
                 f"elapsed={elapsed:.2f}"
             )
+
+        completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
     except Exception as e:
+        error_msg = format_error_for_logging(e)
+        task_logger.warning(
+            f"Exception in update_external_document_permissions_task: connector_id={connector_id} doc_id={doc_id} {error_msg}"
+        )
         task_logger.exception(
-            f"document_update_permissions exceptioned: "
+            f"update_external_document_permissions_task exceptioned: "
             f"connector_id={connector_id} doc_id={doc_id}"
         )
-        raise e
+        completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
     finally:
         task_logger.info(
-            f"document_update_permissions completed: connector_id={connector_id} doc={doc_id}"
+            f"update_external_document_permissions_task completed: status={completion_status.value} doc={doc_id}"
         )
 
+    if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
+        return False
+
+    task_logger.info(
+        f"update_external_document_permissions_task finished: connector_id={connector_id} doc_id={doc_id}"
+    )
     return True
-
-
-# NOTE(rkuo): Deprecating this due to degenerate behavior in Redis from sending
-# large permissions through celery (over 1MB in size)
-# @shared_task(
-#     name=OnyxCeleryTask.UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK,
-#     soft_time_limit=LIGHT_SOFT_TIME_LIMIT,
-#     time_limit=LIGHT_TIME_LIMIT,
-#     max_retries=DOCUMENT_PERMISSIONS_UPDATE_MAX_RETRIES,
-#     bind=True,
-# )
-# def update_external_document_permissions_task(
-#     self: Task,
-#     tenant_id: str,
-#     serialized_doc_external_access: dict,
-#     source_string: str,
-#     connector_id: int,
-#     credential_id: int,
-# ) -> bool:
-#     start = time.monotonic()
-
-#     completion_status = OnyxCeleryTaskCompletionStatus.UNDEFINED
-
-#     document_external_access = DocExternalAccess.from_dict(
-#         serialized_doc_external_access
-#     )
-#     doc_id = document_external_access.doc_id
-#     external_access = document_external_access.external_access
-
-#     try:
-#         with get_session_with_current_tenant() as db_session:
-#             # Add the users to the DB if they don't exist
-#             batch_add_ext_perm_user_if_not_exists(
-#                 db_session=db_session,
-#                 emails=list(external_access.external_user_emails),
-#                 continue_on_error=True,
-#             )
-#             # Then upsert the document's external permissions
-#             created_new_doc = upsert_document_external_perms(
-#                 db_session=db_session,
-#                 doc_id=doc_id,
-#                 external_access=external_access,
-#                 source_type=DocumentSource(source_string),
-#             )
-
-#             if created_new_doc:
-#                 # If a new document was created, we associate it with the cc_pair
-#                 upsert_document_by_connector_credential_pair(
-#                     db_session=db_session,
-#                     connector_id=connector_id,
-#                     credential_id=credential_id,
-#                     document_ids=[doc_id],
-#                 )
-
-#             elapsed = time.monotonic() - start
-#             task_logger.info(
-#                 f"connector_id={connector_id} "
-#                 f"doc={doc_id} "
-#                 f"action=update_permissions "
-#                 f"elapsed={elapsed:.2f}"
-#             )
-
-#         completion_status = OnyxCeleryTaskCompletionStatus.SUCCEEDED
-#     except Exception as e:
-#         error_msg = format_error_for_logging(e)
-#         task_logger.warning(
-#             f"Exception in update_external_document_permissions_task: connector_id={connector_id} doc_id={doc_id} {error_msg}"
-#         )
-#         task_logger.exception(
-#             f"update_external_document_permissions_task exceptioned: "
-#             f"connector_id={connector_id} doc_id={doc_id}"
-#         )
-#         completion_status = OnyxCeleryTaskCompletionStatus.NON_RETRYABLE_EXCEPTION
-#     finally:
-#         task_logger.info(
-#             f"update_external_document_permissions_task completed: status={completion_status.value} doc={doc_id}"
-#         )
-
-#     if completion_status != OnyxCeleryTaskCompletionStatus.SUCCEEDED:
-#         return False
-
-#     task_logger.info(
-#         f"update_external_document_permissions_task finished: connector_id={connector_id} doc_id={doc_id}"
-#     )
-#     return True
 
 
 def validate_permission_sync_fences(

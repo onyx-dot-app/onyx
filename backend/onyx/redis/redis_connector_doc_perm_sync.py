@@ -1,20 +1,19 @@
 import time
 from datetime import datetime
+from logging import Logger
 from typing import Any
 from typing import cast
-from uuid import uuid4
 
 import redis
-from celery import Celery
 from pydantic import BaseModel
 from redis.lock import Lock as RedisLock
 
+from ee.onyx.background.celery.tasks.doc_permission_syncing.tasks import (
+    document_update_permissions,
+)
 from onyx.access.models import DocExternalAccess
 from onyx.configs.constants import CELERY_GENERIC_BEAT_LOCK_TIMEOUT
 from onyx.configs.constants import CELERY_PERMISSIONS_SYNC_LOCK_TIMEOUT
-from onyx.configs.constants import OnyxCeleryPriority
-from onyx.configs.constants import OnyxCeleryQueues
-from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.redis.redis_pool import SCAN_ITER_COUNT_DEFAULT
 
@@ -160,47 +159,56 @@ class RedisConnectorPermissionSync:
 
         self.redis.set(self.generator_complete_key, payload)
 
-    def generate_tasks(
+    def update_db(
         self,
-        celery_app: Celery,
         lock: RedisLock | None,
         new_permissions: list[DocExternalAccess],
         source_string: str,
         connector_id: int,
         credential_id: int,
+        task_logger: Logger | None = None,
     ) -> int | None:
         last_lock_time = time.monotonic()
-        async_results = []
 
+        num_permissions = 0
         # Create a task for each document permission sync
-        for doc_perm in new_permissions:
+        for permissions in new_permissions:
             current_time = time.monotonic()
             if lock and current_time - last_lock_time >= (
                 CELERY_GENERIC_BEAT_LOCK_TIMEOUT / 4
             ):
                 lock.reacquire()
                 last_lock_time = current_time
-            # Add task for document permissions sync
-            custom_task_id = f"{self.subtask_prefix}_{uuid4()}"
-            self.redis.sadd(self.taskset_key, custom_task_id)
 
-            result = celery_app.send_task(
-                OnyxCeleryTask.UPDATE_EXTERNAL_DOCUMENT_PERMISSIONS_TASK,
-                kwargs=dict(
-                    tenant_id=self.tenant_id,
-                    serialized_doc_external_access=doc_perm.to_dict(),
-                    source_string=source_string,
-                    connector_id=connector_id,
-                    credential_id=credential_id,
-                ),
-                queue=OnyxCeleryQueues.DOC_PERMISSIONS_UPSERT,
-                task_id=custom_task_id,
-                priority=OnyxCeleryPriority.MEDIUM,
-                ignore_result=True,
+            if (
+                permissions.external_access.num_entries
+                > permissions.external_access.MAX_NUM_ENTRIES
+            ):
+                num_users = len(permissions.external_access.external_user_emails)
+                num_groups = len(permissions.external_access.external_user_group_ids)
+                if task_logger:
+                    task_logger.warning(
+                        f"Permissions length exceeded, skipping...: "
+                        f"{permissions.doc_id} "
+                        f"{num_users=} {num_groups=} "
+                        f"{permissions.external_access.MAX_NUM_ENTRIES=}"
+                    )
+
+            # NOTE(rkuo): this used to fire a task instead of directly writing to the DB,
+            # but the permissions can be excessively large if sent over the wire.
+            # On the other hand, the downside of doing db updates here is that we can
+            # block and fail if we can't make the calls to the DB ... but that's probably
+            # a rare enough case to be acceptable.
+
+            # This can internally exception due to db issues but still continue
+            # we may want to change this
+            document_update_permissions(
+                self.tenant_id, permissions, source_string, connector_id, credential_id
             )
-            async_results.append(result)
 
-        return len(async_results)
+            num_permissions += 1
+
+        return num_permissions
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)
