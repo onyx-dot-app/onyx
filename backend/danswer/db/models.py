@@ -1085,6 +1085,8 @@ class ChannelConfig(TypedDict):
     follow_up_tags: NotRequired[list[str]]
     # List of source types to prioritize in search results
     prioritized_sources: NotRequired[list[str]]
+    # OpsGenie schedule name for DRI on-call
+    opsgenie_schedule: NotRequired[str]
 
 
 class SlackBotResponseType(str, PyEnum):

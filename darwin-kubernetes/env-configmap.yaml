@@ -74,6 +74,7 @@ data:
   DANSWER_BOT_DISPLAY_ERROR_MSGS: ""
   DANSWER_BOT_RESPOND_EVERY_CHANNEL: ""
   DANSWER_BOT_DISABLE_COT: ""  # Currently unused
+  OPSGENIE_API_KEY: ""
   NOTIFY_SLACKBOT_NO_ANSWER: ""
   # Logging
   # Optional Telemetry, please keep it on (nothing sensitive is collected)? <3

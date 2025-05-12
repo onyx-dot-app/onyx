@@ -10,6 +10,7 @@ import {
   SelectorFormField,
   SubLabel,
   TextArrayField,
+  TextFormField,
 } from "@/components/admin/connectors/Field";
 import {
   createSlackBotConfig,
@@ -94,6 +95,8 @@ export const SlackBotCreationForm = ({
               undefined,
             follow_up_tags:
               existingSlackBotConfig?.channel_config?.follow_up_tags,
+            opsgenie_schedule:
+              existingSlackBotConfig?.channel_config?.opsgenie_schedule || "",
             document_sets:
               existingSlackBotConfig && existingSlackBotConfig.persona
                 ? existingSlackBotConfig.persona.document_sets.map(
@@ -121,6 +124,7 @@ export const SlackBotCreationForm = ({
             respond_member_group_list: Yup.array().of(Yup.string()).required(),
             still_need_help_enabled: Yup.boolean().required(),
             follow_up_tags: Yup.array().of(Yup.string()),
+            opsgenie_schedule: Yup.string(),
             document_sets: Yup.array().of(Yup.number()),
             persona_id: Yup.number().nullable(),
             prioritized_sources: Yup.array().of(Yup.string()),
@@ -143,6 +147,7 @@ export const SlackBotCreationForm = ({
                   !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(slackGroupName)
               ),
               usePersona: usingPersonas,
+              opsgenie_schedule: values.opsgenie_schedule || undefined,
             };
             if (!cleanedValues.still_need_help_enabled) {
               cleanedValues.follow_up_tags = undefined;
@@ -197,6 +202,12 @@ export const SlackBotCreationForm = ({
                       auto-add the bot to the channel.
                     </div>
                   }
+                />
+
+                <TextFormField
+                  name="opsgenie_schedule"
+                  label="OpsGenie Schedule"
+                  subtext="The name of the OpsGenie schedule to use for getting the DRI on call when someone requests more help"
                 />
 
                 <SelectorFormField

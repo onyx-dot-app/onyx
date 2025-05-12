@@ -17,6 +17,7 @@ interface SlackBotConfigCreationRequest {
   respond_slack_group_list: string[];
   follow_up_tags?: string[];
   prioritized_sources?: string[];
+  opsgenie_schedule?: string;
   usePersona: boolean;
   response_type: SlackBotResponseType;
 }
@@ -46,6 +47,7 @@ const buildRequestBodyFromCreationRequest = (
     answer_filters: buildFiltersFromCreationRequest(creationRequest),
     follow_up_tags: creationRequest.follow_up_tags?.filter((tag) => tag !== ""),
     prioritized_sources: creationRequest.prioritized_sources,
+    opsgenie_schedule: creationRequest.opsgenie_schedule,
     ...(creationRequest.usePersona
       ? { persona_id: creationRequest.persona_id }
       : { document_sets: creationRequest.document_sets }),
