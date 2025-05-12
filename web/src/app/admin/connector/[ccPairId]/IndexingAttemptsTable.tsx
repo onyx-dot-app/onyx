@@ -25,6 +25,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { FaBarsProgress } from "react-icons/fa6";
 
 export interface IndexingAttemptsTableProps {
   ccPair: CCPairFullInfo;
@@ -81,7 +82,7 @@ export function IndexingAttemptsTable({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="cursor-help flex items-center">
+                      <span className="flex items-center">
                         Total Docs
                         <InfoIcon className="ml-1 w-4 h-4" />
                       </span>
@@ -137,7 +138,35 @@ export function IndexingAttemptsTable({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>{indexAttempt.total_docs_indexed}</TableCell>
+                <TableCell>
+                  <div className="flex items-center">
+                    {indexAttempt.total_docs_indexed}
+                    {indexAttempt.from_beginning && (
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help flex items-center">
+                              <FaBarsProgress className="ml-2 h-3.5 w-3.5" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            This index attempt{" "}
+                            {indexAttempt.status === "in_progress" ||
+                            indexAttempt.status === "not_started"
+                              ? "is"
+                              : "was"}{" "}
+                            a full re-index. All documents from the source{" "}
+                            {indexAttempt.status === "in_progress" ||
+                            indexAttempt.status === "not_started"
+                              ? "are being "
+                              : "were "}
+                            synced into the system.
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <div>
                     {indexAttempt.status === "success" && (

@@ -34,14 +34,11 @@ export function Modal({
   width,
   titleSize,
   hideDividerForTitle,
-  height,
   noPadding,
   icon,
   hideCloseButton,
-  noScroll,
   heightOverride,
   removeBottomPadding,
-  removePadding,
   increasedPadding,
   hideOverflow,
 }: ModalProps) {
@@ -80,11 +77,11 @@ export function Modal({
         className={`
           bg-neutral-50 dark:bg-neutral-800
           text-neutral-950 dark:text-neutral-50
-          rounded 
-          shadow-2xl 
-          transform 
-          transition-all 
-          duration-300 
+          rounded
+          shadow-2xl
+          transform
+          transition-all
+          duration-300
           ease-in-out
           relative
           ${width ?? "w-11/12 max-w-4xl"}
@@ -92,8 +89,9 @@ export function Modal({
           ${className || ""}
           flex
           flex-col
+
           ${heightOverride ? `h-${heightOverride}` : "max-h-[90vh]"}
-          ${hideOverflow ? "overflow-hidden" : "overflow-auto"}
+          ${hideOverflow ? "overflow-hidden" : "overflow-visible"}
         `}
       >
         {onOutsideClick && !hideCloseButton && (

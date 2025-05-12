@@ -30,7 +30,7 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
 from onyx.chat.models import ToolResponse
-from onyx.configs.agent_configs import ALLOW_REFINEMENT
+from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.context.search.models import SearchRequest
 from onyx.db.engine import get_session_context_manager
@@ -51,7 +51,6 @@ def _parse_agent_event(
     Parse the event into a typed object.
     Return None if we are not interested in the event.
     """
-
     event_type = event["event"]
 
     # We always just yield the event data, but this piece is useful for two development reasons:
@@ -105,7 +104,7 @@ def run_graph(
     config.behavior.perform_initial_search_decomposition = (
         INITIAL_SEARCH_DECOMPOSITION_ENABLED
     )
-    config.behavior.allow_refinement = ALLOW_REFINEMENT
+    config.behavior.allow_refinement = AGENT_ALLOW_REFINEMENT
 
     for event in manage_sync_streaming(
         compiled_graph=compiled_graph, config=config, graph_input=input

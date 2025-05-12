@@ -507,7 +507,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         search_settings_instance.id
                     )
                     if redis_connector_index.fenced:
-                        task_logger.info(
+                        task_logger.debug(
                             f"check_for_indexing - Skipping fenced connector: "
                             f"cc_pair={cc_pair_id} search_settings={search_settings_instance.id}"
                         )
@@ -529,14 +529,14 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
                         secondary_index_building=len(search_settings_list) > 1,
                         db_session=db_session,
                     ):
-                        task_logger.info(
+                        task_logger.debug(
                             f"check_for_indexing - Not indexing cc_pair_id: {cc_pair_id} "
                             f"search_settings={search_settings_instance.id}, "
                             f"secondary_index_building={len(search_settings_list) > 1}"
                         )
                         continue
                     else:
-                        task_logger.info(
+                        task_logger.debug(
                             f"check_for_indexing - Will index cc_pair_id: {cc_pair_id} "
                             f"search_settings={search_settings_instance.id}, "
                             f"secondary_index_building={len(search_settings_list) > 1}"
@@ -896,7 +896,11 @@ def connector_indexing_task(
             f"cc_pair={cc_pair_id} "
             f"search_settings={search_settings_id}"
         )
-        raise e
+
+        # special bulletproofing ... truncate long exception messages
+        sanitized_e = type(e)(str(e)[:1024])
+        sanitized_e.__traceback__ = e.__traceback__
+        raise sanitized_e
 
     finally:
         if lock.owned():
@@ -1061,6 +1065,10 @@ def connector_indexing_proxy_task(
     # Track the last time memory info was emitted
     last_memory_emit_time = 0.0
 
+    # track the last ttl and the time it was observed
+    last_activity_ttl_observed: float = time.monotonic()
+    last_activity_ttl: int = 0
+
     try:
         with get_session_with_current_tenant() as db_session:
             index_attempt = get_index_attempt(
@@ -1074,10 +1082,14 @@ def connector_indexing_proxy_task(
             )
 
         redis_connector_index.set_active()  # renew active signal
-        redis_connector_index.set_connector_active()  # prime the connective active signal
+
+        # prime the connector active signal (renewed inside the connector)
+        redis_connector_index.set_connector_active()
 
         while True:
             sleep(5)
+
+            now = time.monotonic()
 
             # renew watchdog signal (this has a shorter timeout than set_active)
             redis_connector_index.set_watchdog(True)
@@ -1128,18 +1140,37 @@ def connector_indexing_proxy_task(
                 break
 
             # if activity timeout is detected, break (exit point will clean up)
-            if not redis_connector_index.connector_active():
-                task_logger.warning(
-                    log_builder.build(
-                        "Indexing watchdog - activity timeout exceeded",
-                        timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+            ttl = redis_connector_index.connector_active_ttl()
+            if ttl < 0:
+                # verify expectations around ttl
+                last_observed = last_activity_ttl_observed - now
+                if now > last_activity_ttl_observed + last_activity_ttl:
+                    task_logger.warning(
+                        log_builder.build(
+                            "Indexing watchdog - activity timeout exceeded",
+                            last_observed=f"{last_observed:.2f}s",
+                            last_ttl=f"{last_activity_ttl}",
+                            timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                        )
                     )
-                )
 
-                result.status = (
-                    IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT
-                )
-                break
+                    result.status = (
+                        IndexingWatchdogTerminalStatus.TERMINATED_BY_ACTIVITY_TIMEOUT
+                    )
+                    break
+                else:
+                    task_logger.warning(
+                        log_builder.build(
+                            "Indexing watchdog - activity timeout expired unexpectedly, "
+                            "waiting for last observed TTL before exiting",
+                            last_observed=f"{last_observed:.2f}s",
+                            last_ttl=f"{last_activity_ttl}",
+                            timeout=f"{CELERY_INDEXING_WATCHDOG_CONNECTOR_TIMEOUT}s",
+                        )
+                    )
+            else:
+                last_activity_ttl_observed = now
+                last_activity_ttl = ttl
 
             # if the spawned task is still running, restart the check once again
             # if the index attempt is not in a finished status

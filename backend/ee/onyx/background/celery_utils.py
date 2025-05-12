@@ -9,7 +9,7 @@ logger = setup_logger()
 
 
 def should_perform_chat_ttl_check(
-    retention_limit_days: int | None, db_session: Session
+    retention_limit_days: float | None, db_session: Session
 ) -> bool:
     # TODO: make this a check for None and add behavior for 0 day TTL
     if not retention_limit_days:

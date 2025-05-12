@@ -129,6 +129,8 @@ class IndexingCallbackBase(IndexingHeartbeatInterface):
         return False
 
     def progress(self, tag: str, amount: int) -> None:
+        """Amount isn't used yet."""
+
         # rkuo: this shouldn't be necessary yet because we spawn the process this runs inside
         # with daemon=True. It seems likely some indexing tasks will need to spawn other processes
         # eventually, which daemon=True prevents, so leave this code in until we're ready to test it.

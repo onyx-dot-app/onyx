@@ -1,5 +1,6 @@
 import contextvars
 import copy
+import itertools
 import re
 from collections.abc import Callable
 from collections.abc import Generator
@@ -108,14 +109,13 @@ def get_channels(
             channel_types=channel_types,
         )
     except SlackApiError as e:
-        logger.info(
-            f"Unable to fetch private channels due to: {e}. Trying again without private channels."
-        )
-        if get_public:
-            channel_types = ["public_channel"]
-        else:
-            logger.warning("No channels to fetch.")
+        msg = f"Unable to fetch private channels due to: {e}."
+        if not get_public:
+            logger.warning(msg + " Public channels are not enabled.")
             return []
+
+        logger.warning(msg + " Trying again with public channels only.")
+        channel_types = ["public_channel"]
         channels = _collect_paginated_channels(
             client=client,
             exclude_archived=exclude_archived,
@@ -256,7 +256,6 @@ def default_msg_filter(message: MessageType) -> bool:
     # Don't keep messages from bots
     if message.get("bot_id") or message.get("app_id"):
         bot_profile_name = message.get("bot_profile", {}).get("name")
-        print(f"bot_profile_name: {bot_profile_name}")
         if bot_profile_name == "DanswerBot Testing":
             return False
         return True
@@ -294,7 +293,9 @@ def filter_channels(
         if channel not in all_channel_names:
             raise ValueError(
                 f"Channel '{channel}' not found in workspace. "
-                f"Available channels: {all_channel_names}"
+                f"Available channels (Showing {len(all_channel_names)} of "
+                f"{min(len(all_channel_names), SlackConnector.MAX_CHANNELS_TO_LOG)}): "
+                f"{list(itertools.islice(all_channel_names, SlackConnector.MAX_CHANNELS_TO_LOG))}"
             )
 
     return [
@@ -332,11 +333,19 @@ def _get_messages(
 
     # have to be in the channel in order to read messages
     if not channel["is_member"]:
-        make_slack_api_call_w_retries(
-            client.conversations_join,
-            channel=channel["id"],
-            is_private=channel["is_private"],
-        )
+        try:
+            make_slack_api_call_w_retries(
+                client.conversations_join,
+                channel=channel["id"],
+                is_private=channel["is_private"],
+            )
+        except SlackApiError as e:
+            if e.response["error"] == "is_archived":
+                logger.warning(f"Channel {channel['name']} is archived. Skipping.")
+                return [], False
+
+            logger.exception(f"Error joining channel {channel['name']}")
+            raise
         logger.info(f"Successfully joined '{channel['name']}'")
 
     response = make_slack_api_call_w_retries(
@@ -507,6 +516,8 @@ class SlackConnector(
 
     MAX_RETRIES = 7  # arbitrarily selected
 
+    MAX_CHANNELS_TO_LOG = 50
+
     def __init__(
         self,
         channels: list[str] | None = None,
@@ -529,6 +540,16 @@ class SlackConnector(
         self.credential_prefix: str | None = None
         self.delay_lock: str | None = None  # the redis key for the shared lock
         self.delay_key: str | None = None  # the redis key for the shared delay
+
+    @property
+    def channels(self) -> list[str] | None:
+        return self._channels
+
+    @channels.setter
+    def channels(self, channels: list[str] | None) -> None:
+        self._channels = (
+            [channel.removeprefix("#") for channel in channels] if channels else None
+        )
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError("Use set_credentials_provider with this connector.")
@@ -615,6 +636,10 @@ class SlackConnector(
             filtered_channels = filter_channels(
                 raw_channels, self.channels, self.channel_regex_enabled
             )
+            logger.info(
+                f"Channels: all={len(raw_channels)} post_filtering={len(filtered_channels)}"
+            )
+
             checkpoint.channel_ids = [c["id"] for c in filtered_channels]
             if len(filtered_channels) == 0:
                 checkpoint.has_more = False
@@ -645,6 +670,7 @@ class SlackConnector(
             )
             new_latest = message_batch[-1]["ts"] if message_batch else latest
 
+            num_threads_start = len(seen_thread_ts)
             # Process messages in parallel using ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
                 futures: list[Future[ProcessedSlackMessage]] = []
@@ -678,12 +704,12 @@ class SlackConnector(
                         if thread_or_message_ts not in seen_thread_ts:
                             yield doc
 
-                        assert (
-                            thread_or_message_ts
-                        ), "found non-None doc with None thread_or_message_ts"
                         seen_thread_ts.add(thread_or_message_ts)
                     elif failure:
                         yield failure
+
+            num_threads_processed = len(seen_thread_ts) - num_threads_start
+            logger.info(f"Processed {num_threads_processed} threads.")
 
             checkpoint.seen_thread_ts = list(seen_thread_ts)
             checkpoint.channel_completion_map[channel["id"]] = new_latest
@@ -834,12 +860,22 @@ class SlackConnector(
 if __name__ == "__main__":
     import os
     import time
+    from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+    from shared_configs.contextvars import get_current_tenant_id
 
     slack_channel = os.environ.get("SLACK_CHANNEL")
     connector = SlackConnector(
         channels=[slack_channel] if slack_channel else None,
     )
-    connector.load_credentials({"slack_bot_token": os.environ["SLACK_BOT_TOKEN"]})
+
+    provider = OnyxStaticCredentialsProvider(
+        tenant_id=get_current_tenant_id(),
+        connector_name="slack",
+        credential_json={
+            "slack_bot_token": os.environ["SLACK_BOT_TOKEN"],
+        },
+    )
+    connector.set_credentials_provider(provider)
 
     current = time.time()
     one_day_ago = current - 24 * 60 * 60  # 1 day

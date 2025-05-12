@@ -39,7 +39,7 @@ langchainhub==0.1.21
 langgraph==0.2.72
 langgraph-checkpoint==2.0.13
 langgraph-sdk==0.1.44
-litellm==1.63.8
+litellm==1.66.3
 lxml==5.3.0
 lxml_html_clean==0.2.2
 llama-index==0.12.28
@@ -48,7 +48,7 @@ msal==1.28.0
 nltk==3.9.1
 Office365-REST-Python-Client==2.5.9
 oauthlib==3.2.2
-openai==1.66.3
+openai==1.75.0
 openpyxl==3.1.2
 passlib==1.7.4
 playwright==1.41.2
@@ -60,7 +60,7 @@ pycryptodome==3.19.1
 pydantic==2.8.2
 PyGithub==2.5.0
 python-dateutil==2.8.2
-python-gitlab==3.9.0
+python-gitlab==5.6.0
 python-pptx==0.6.23
 pypdf==5.4.0
 pytest-mock==3.12.0
@@ -99,3 +99,4 @@ sentry-sdk==2.14.0
 prometheus_client==0.21.0
 fastapi-limiter==0.1.6
 prometheus_fastapi_instrumentator==7.1.0
+sendgrid==6.11.0

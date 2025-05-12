@@ -44,6 +44,18 @@ JIRA_API_VERSION = os.environ.get("JIRA_API_VERSION") or "2"
 _JIRA_SLIM_PAGE_SIZE = 500
 _JIRA_FULL_PAGE_SIZE = 50
 
+# Constants for Jira field names
+_FIELD_REPORTER = "reporter"
+_FIELD_ASSIGNEE = "assignee"
+_FIELD_PRIORITY = "priority"
+_FIELD_STATUS = "status"
+_FIELD_RESOLUTION = "resolution"
+_FIELD_LABELS = "labels"
+_FIELD_KEY = "key"
+_FIELD_CREATED = "created"
+_FIELD_DUEDATE = "duedate"
+_FIELD_ISSUETYPE = "issuetype"
+
 
 def _perform_jql_search(
     jira_client: JIRA,
@@ -107,32 +119,40 @@ def process_jira_issue(
 
     page_url = build_jira_url(jira_client, issue.key)
 
+    metadata_dict: dict[str, str | list[str]] = {}
     people = set()
     try:
-        creator = best_effort_get_field_from_issue(issue, "creator")
+        creator = best_effort_get_field_from_issue(issue, _FIELD_REPORTER)
         if basic_expert_info := best_effort_basic_expert_info(creator):
             people.add(basic_expert_info)
+            metadata_dict[_FIELD_REPORTER] = basic_expert_info.get_semantic_name()
     except Exception:
         # Author should exist but if not, doesn't matter
         pass
 
     try:
-        assignee = best_effort_get_field_from_issue(issue, "assignee")
+        assignee = best_effort_get_field_from_issue(issue, _FIELD_ASSIGNEE)
         if basic_expert_info := best_effort_basic_expert_info(assignee):
             people.add(basic_expert_info)
+            metadata_dict[_FIELD_ASSIGNEE] = basic_expert_info.get_semantic_name()
     except Exception:
         # Author should exist but if not, doesn't matter
         pass
 
-    metadata_dict = {}
-    if priority := best_effort_get_field_from_issue(issue, "priority"):
-        metadata_dict["priority"] = priority.name
-    if status := best_effort_get_field_from_issue(issue, "status"):
-        metadata_dict["status"] = status.name
-    if resolution := best_effort_get_field_from_issue(issue, "resolution"):
-        metadata_dict["resolution"] = resolution.name
-    if labels := best_effort_get_field_from_issue(issue, "labels"):
-        metadata_dict["labels"] = labels
+    if priority := best_effort_get_field_from_issue(issue, _FIELD_PRIORITY):
+        metadata_dict[_FIELD_PRIORITY] = priority.name
+    if status := best_effort_get_field_from_issue(issue, _FIELD_STATUS):
+        metadata_dict[_FIELD_STATUS] = status.name
+    if resolution := best_effort_get_field_from_issue(issue, _FIELD_RESOLUTION):
+        metadata_dict[_FIELD_RESOLUTION] = resolution.name
+    if labels := best_effort_get_field_from_issue(issue, _FIELD_LABELS):
+        metadata_dict[_FIELD_LABELS] = labels
+    if created := best_effort_get_field_from_issue(issue, _FIELD_CREATED):
+        metadata_dict[_FIELD_CREATED] = created
+    if duedate := best_effort_get_field_from_issue(issue, _FIELD_DUEDATE):
+        metadata_dict[_FIELD_DUEDATE] = duedate
+    if issuetype := best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE):
+        metadata_dict[_FIELD_ISSUETYPE] = issuetype.name
 
     return Document(
         id=page_url,
@@ -277,7 +297,7 @@ class JiraConnector(CheckpointedConnector[JiraConnectorCheckpoint], SlimConnecto
             max_results=_JIRA_SLIM_PAGE_SIZE,
             fields="key",
         ):
-            issue_key = best_effort_get_field_from_issue(issue, "key")
+            issue_key = best_effort_get_field_from_issue(issue, _FIELD_KEY)
             id = build_jira_url(self.jira_client, issue_key)
             slim_doc_batch.append(
                 SlimDocument(

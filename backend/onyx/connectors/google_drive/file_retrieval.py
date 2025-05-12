@@ -21,18 +21,21 @@ from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+PERMISSION_FULL_DESCRIPTION = (
+    "permissions(id, emailAddress, type, domain, permissionDetails)"
+)
 FILE_FIELDS = (
     "nextPageToken, files(mimeType, id, name, permissions, modifiedTime, webViewLink, "
     "shortcutDetails, owners(emailAddress), size)"
 )
 SLIM_FILE_FIELDS = (
-    "nextPageToken, files(mimeType, driveId, id, name, permissions(emailAddress, type, domain), "
+    f"nextPageToken, files(mimeType, driveId, id, name, {PERMISSION_FULL_DESCRIPTION}, "
     "permissionIds, webViewLink, owners(emailAddress))"
 )
 FOLDER_FIELDS = "nextPageToken, files(id, name, permissions, modifiedTime, webViewLink, shortcutDetails)"
 
 
-def _generate_time_range_filter(
+def generate_time_range_filter(
     start: SecondsSinceUnixEpoch | None = None,
     end: SecondsSinceUnixEpoch | None = None,
 ) -> str:
@@ -81,7 +84,7 @@ def _get_files_in_parent(
 ) -> Iterator[GoogleDriveFileType]:
     query = f"mimeType != '{DRIVE_FOLDER_TYPE}' and '{parent_id}' in parents"
     query += " and trashed = false"
-    query += _generate_time_range_filter(start, end)
+    query += generate_time_range_filter(start, end)
 
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -204,7 +207,7 @@ def get_files_in_shared_drive(
     # Get all files in the shared drive
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
     file_query += " and trashed = false"
-    file_query += _generate_time_range_filter(start, end)
+    file_query += generate_time_range_filter(start, end)
 
     for file in execute_paginated_retrieval(
         retrieval_function=service.files().list,
@@ -221,6 +224,9 @@ def get_files_in_shared_drive(
         # If we found any files, mark this drive as traversed. When a user has access to a drive,
         # they have access to all the files in the drive. Also not a huge deal if we re-traverse
         # empty drives.
+        # NOTE: ^^ the above is not actually true due to folder restrictions:
+        # https://support.google.com/a/users/answer/12380484?hl=en
+        # So we may have to change this logic for people who use folder restrictions.
         update_traversed_ids_func(drive_id)
         yield file
 
@@ -244,14 +250,14 @@ def get_all_files_in_my_drive_and_shared(
     if not include_shared_with_me:
         folder_query += " and 'me' in owners"
     found_folders = False
-    for file in execute_paginated_retrieval(
+    for folder in execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
         corpora="user",
         fields=SLIM_FILE_FIELDS if is_slim else FILE_FIELDS,
         q=folder_query,
     ):
-        update_traversed_ids_func(file[GoogleFields.ID])
+        update_traversed_ids_func(folder[GoogleFields.ID])
         found_folders = True
     if found_folders:
         update_traversed_ids_func(get_root_folder_id(service))
@@ -261,7 +267,7 @@ def get_all_files_in_my_drive_and_shared(
     file_query += " and trashed = false"
     if not include_shared_with_me:
         file_query += " and 'me' in owners"
-    file_query += _generate_time_range_filter(start, end)
+    file_query += generate_time_range_filter(start, end)
     yield from execute_paginated_retrieval(
         retrieval_function=service.files().list,
         list_key="files",
@@ -294,7 +300,7 @@ def get_all_files_for_oauth(
 
     file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
     file_query += " and trashed = false"
-    file_query += _generate_time_range_filter(start, end)
+    file_query += generate_time_range_filter(start, end)
 
     if not should_get_all:
         if include_files_shared_with_me and not include_my_drives:

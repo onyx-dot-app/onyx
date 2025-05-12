@@ -47,6 +47,7 @@ from onyx.natural_language_processing.search_nlp_models import warm_up_cross_enc
 from onyx.seeding.load_docs import seed_initial_documents
 from onyx.seeding.load_yamls import load_chat_yamls
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.server.settings.store import load_settings
 from onyx.server.settings.store import store_settings
 from onyx.tools.built_in_tools import auto_add_search_tool_to_personas
@@ -311,12 +312,14 @@ def setup_postgres(db_session: Session) -> None:
             fast_default_model_name=fast_model,
             is_public=True,
             groups=[],
-            display_model_names=OPEN_AI_MODEL_NAMES,
-            model_names=OPEN_AI_MODEL_NAMES,
+            model_configurations=[
+                ModelConfigurationUpsertRequest(name=name, is_visible=True)
+                for name in OPEN_AI_MODEL_NAMES
+            ],
             api_key_changed=True,
         )
         new_llm_provider = upsert_llm_provider(
-            llm_provider=model_req, db_session=db_session
+            llm_provider_upsert_request=model_req, db_session=db_session
         )
         update_default_provider(provider_id=new_llm_provider.id, db_session=db_session)
 

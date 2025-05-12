@@ -31,21 +31,22 @@ from onyx.db.models import User
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
 from onyx.db.user_documents import calculate_user_files_token_count
-from onyx.db.user_documents import create_user_file_with_indexing
 from onyx.db.user_documents import create_user_files
 from onyx.db.user_documents import get_user_file_indexing_status
 from onyx.db.user_documents import share_file_with_assistant
 from onyx.db.user_documents import share_folder_with_assistant
 from onyx.db.user_documents import unshare_file_with_assistant
 from onyx.db.user_documents import unshare_folder_with_assistant
+from onyx.db.user_documents import upload_files_to_user_files_with_indexing
 from onyx.file_processing.html_utils import web_html_cleanup
 from onyx.server.documents.connector import trigger_indexing_for_cc_pair
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
+from onyx.server.query_and_chat.chat_backend import RECENT_DOCS_FOLDER_ID
 from onyx.server.user_documents.models import MessageResponse
 from onyx.server.user_documents.models import UserFileSnapshot
 from onyx.server.user_documents.models import UserFolderSnapshot
-from onyx.setup import setup_logger
+from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -90,8 +91,25 @@ def get_folders(
     db_session: Session = Depends(get_session),
 ) -> list[UserFolderSnapshot]:
     user_id = user.id if user else None
-    folders = db_session.query(UserFolder).filter(UserFolder.user_id == user_id).all()
-    return [UserFolderSnapshot.from_model(folder) for folder in folders]
+    # Get folders that belong to the user or have the RECENT_DOCS_FOLDER_ID
+    folders = (
+        db_session.query(UserFolder)
+        .filter(
+            (UserFolder.user_id == user_id) | (UserFolder.id == RECENT_DOCS_FOLDER_ID)
+        )
+        .all()
+    )
+
+    # For each folder, filter files to only include those belonging to the current user
+    result = []
+    for folder in folders:
+        folder_snapshot = UserFolderSnapshot.from_model(folder)
+        folder_snapshot.files = [
+            file for file in folder_snapshot.files if file.user_id == user_id
+        ]
+        result.append(folder_snapshot)
+
+    return result
 
 
 @router.get("/user/folder/{folder_id}")
@@ -103,16 +121,25 @@ def get_folder(
     user_id = user.id if user else None
     folder = (
         db_session.query(UserFolder)
-        .filter(UserFolder.id == folder_id, UserFolder.user_id == user_id)
+        .filter(
+            UserFolder.id == folder_id,
+            (
+                (UserFolder.user_id == user_id)
+                | (UserFolder.id == RECENT_DOCS_FOLDER_ID)
+            ),
+        )
         .first()
     )
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
 
-    return UserFolderSnapshot.from_model(folder)
+    folder_snapshot = UserFolderSnapshot.from_model(folder)
+    # Filter files to only include those belonging to the current user
+    folder_snapshot.files = [
+        file for file in folder_snapshot.files if file.user_id == user_id
+    ]
 
-
-RECENT_DOCS_FOLDER_ID = -1
+    return folder_snapshot
 
 
 @router.post("/user/file/upload")
@@ -127,8 +154,8 @@ def upload_user_files(
 
     try:
         # Use our consolidated function that handles indexing properly
-        user_files = create_user_file_with_indexing(
-            files, folder_id or -1, user, db_session
+        user_files = upload_files_to_user_files_with_indexing(
+            files, folder_id or RECENT_DOCS_FOLDER_ID, user, db_session
         )
 
         return [UserFileSnapshot.from_model(user_file) for user_file in user_files]
@@ -381,6 +408,7 @@ def create_file_from_link(
                 input_type=InputType.LOAD_STATE,
                 connector_specific_config={
                     "file_locations": [user_file.file_id],
+                    "zip_metadata": {},
                 },
                 refresh_freq=None,
                 prune_freq=None,

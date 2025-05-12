@@ -289,15 +289,21 @@ Rephrased query for search engine:
 
 
 QUERY_KEYWORD_EXPANSION_WITHOUT_HISTORY_PROMPT = """
-Please rephrase the following user question as a keyword query that would be appropriate for a \
-search engine.
+Please rephrase the following user question as a pure keyword query that would be appropriate for a \
+search engine. IMPORTANT: the rephrased query MUST ONLY use EXISTING KEYWORDS from the original query \
+(exception: critical verbs that are converted to nouns)!
+Also, keywords are usually nouns or adjectives, so you will likely need to drop \
+any verbs. IF AND ONLY IF you really think that a verb would be critical to FINDING the document, \
+convert the verb to a noun. \
+This will be rare though. Verbs like 'find, summarize, describe, etc. would NOT fall into this category, \
+for example, and should be omitted from the rephrased keyword query.
 
 Here is the user question:
 {question}
 
-Respond with EXACTLY and ONLY one rephrased query.
+Respond with EXACTLY and ONLY one rephrased keyword query.
 
-Rephrased query for search engine:
+Rephrased keyword query for search engine:
 """.strip()
 
 

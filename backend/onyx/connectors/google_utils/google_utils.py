@@ -97,6 +97,65 @@ def _execute_with_retry(request: Any) -> Any:
     raise Exception(f"Failed to execute request after {max_attempts} attempts")
 
 
+def get_file_owners(file: GoogleDriveFileType) -> list[str]:
+    """
+    Get the owners of a file if the attribute is present.
+    """
+    return [
+        owner.get("emailAddress")
+        for owner in file.get("owners", [])
+        if owner.get("emailAddress")
+    ]
+
+
+def _execute_single_retrieval(
+    retrieval_function: Callable,
+    continue_on_404_or_403: bool = False,
+    **request_kwargs: Any,
+) -> GoogleDriveFileType:
+    """Execute a single retrieval from Google Drive API"""
+    try:
+        results = retrieval_function(**request_kwargs).execute()
+    except HttpError as e:
+        if e.resp.status >= 500:
+            results = add_retries(
+                lambda: retrieval_function(**request_kwargs).execute()
+            )()
+        elif e.resp.status == 404 or e.resp.status == 403:
+            if continue_on_404_or_403:
+                logger.debug(f"Error executing request: {e}")
+                results = {}
+            else:
+                raise e
+        elif e.resp.status == 429:
+            results = _execute_with_retry(
+                lambda: retrieval_function(**request_kwargs).execute()
+            )
+        else:
+            logger.exception("Error executing request:")
+            raise e
+
+    return results
+
+
+def execute_single_retrieval(
+    retrieval_function: Callable,
+    list_key: str | None = None,
+    continue_on_404_or_403: bool = False,
+    **request_kwargs: Any,
+) -> Iterator[GoogleDriveFileType]:
+    results = _execute_single_retrieval(
+        retrieval_function,
+        continue_on_404_or_403,
+        **request_kwargs,
+    )
+    if list_key:
+        for item in results.get(list_key, []):
+            yield item
+    else:
+        yield results
+
+
 def execute_paginated_retrieval(
     retrieval_function: Callable,
     list_key: str | None = None,
@@ -108,32 +167,20 @@ def execute_paginated_retrieval(
         retrieval_function: The specific list function to call (e.g., service.files().list)
         **kwargs: Arguments to pass to the list function
     """
+    if "fields" not in kwargs or "nextPageToken" not in kwargs["fields"]:
+        raise ValueError(
+            "fields must contain nextPageToken for execute_paginated_retrieval"
+        )
     next_page_token = kwargs.get(PAGE_TOKEN_KEY, "")
     while next_page_token is not None:
         request_kwargs = kwargs.copy()
         if next_page_token:
             request_kwargs[PAGE_TOKEN_KEY] = next_page_token
-
-        try:
-            results = retrieval_function(**request_kwargs).execute()
-        except HttpError as e:
-            if e.resp.status >= 500:
-                results = add_retries(
-                    lambda: retrieval_function(**request_kwargs).execute()
-                )()
-            elif e.resp.status == 404 or e.resp.status == 403:
-                if continue_on_404_or_403:
-                    logger.debug(f"Error executing request: {e}")
-                    results = {}
-                else:
-                    raise e
-            elif e.resp.status == 429:
-                results = _execute_with_retry(
-                    lambda: retrieval_function(**request_kwargs).execute()
-                )
-            else:
-                logger.exception("Error executing request:")
-                raise e
+        results = _execute_single_retrieval(
+            retrieval_function,
+            continue_on_404_or_403,
+            **request_kwargs,
+        )
 
         next_page_token = results.get(NEXT_PAGE_TOKEN_KEY)
         if list_key:

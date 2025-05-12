@@ -6,14 +6,12 @@ import {
 } from "@/components/ui/popover";
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
-  checkLLMSupportsImageInput,
+  modelSupportsImageInput,
   destructureValue,
   structureValue,
 } from "@/lib/llm/utils";
-import {
-  getProviderIcon,
-  LLMProviderDescriptor,
-} from "@/app/admin/configuration/llm/interfaces";
+import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
+import { getProviderIcon } from "@/app/admin/configuration/llm/utils";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { LlmManager } from "@/lib/hooks";
 
@@ -70,22 +68,26 @@ export default function LLMPopover({
           llmOptionsByProvider[llmProvider.provider] = [];
         }
 
-        (llmProvider.display_model_names || llmProvider.model_names).forEach(
-          (modelName) => {
-            if (!uniqueModelNames.has(modelName)) {
-              uniqueModelNames.add(modelName);
-              llmOptionsByProvider[llmProvider.provider].push({
-                name: modelName,
-                value: structureValue(
-                  llmProvider.name,
-                  llmProvider.provider,
-                  modelName
-                ),
-                icon: getProviderIcon(llmProvider.provider, modelName),
-              });
-            }
+        llmProvider.model_configurations.forEach((modelConfiguration) => {
+          if (
+            !uniqueModelNames.has(modelConfiguration.name) &&
+            modelConfiguration.is_visible
+          ) {
+            uniqueModelNames.add(modelConfiguration.name);
+            llmOptionsByProvider[llmProvider.provider].push({
+              name: modelConfiguration.name,
+              value: structureValue(
+                llmProvider.name,
+                llmProvider.provider,
+                modelConfiguration.name
+              ),
+              icon: getProviderIcon(
+                llmProvider.provider,
+                modelConfiguration.name
+              ),
+            });
           }
-        );
+        });
       });
 
       const llmOptions = Object.entries(llmOptionsByProvider).flatMap(
@@ -171,7 +173,10 @@ export default function LLMPopover({
       >
         <div className="flex-grow max-h-[300px] default-scrollbar overflow-y-auto">
           {llmOptions.map(({ name, icon, value }, index) => {
-            if (!requiresImageGeneration || checkLLMSupportsImageInput(name)) {
+            if (
+              !requiresImageGeneration ||
+              modelSupportsImageInput(llmProviders, name)
+            ) {
               return (
                 <button
                   key={index}
@@ -202,7 +207,7 @@ export default function LLMPopover({
                     }
                   })()}
                   {llmManager.imageFilesPresent &&
-                    !checkLLMSupportsImageInput(name) && (
+                    !modelSupportsImageInput(llmProviders, name) && (
                       <TooltipProvider>
                         <Tooltip delayDuration={0}>
                           <TooltipTrigger className="my-auto flex items-center ml-auto">

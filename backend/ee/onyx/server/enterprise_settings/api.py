@@ -29,7 +29,11 @@ from onyx.auth.users import UserManager
 from onyx.db.engine import get_session
 from onyx.db.models import User
 from onyx.file_store.file_store import PostgresBackedFileStore
+from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from shared_configs.contextvars import get_current_tenant_id
 
 admin_router = APIRouter(prefix="/admin/enterprise-settings")
 basic_router = APIRouter(prefix="/enterprise-settings")
@@ -118,6 +122,11 @@ def put_settings(
 
 @basic_router.get("")
 def fetch_settings() -> EnterpriseSettings:
+    if MULTI_TENANT:
+        tenant_id = get_current_tenant_id()
+        if not tenant_id or tenant_id == POSTGRES_DEFAULT_SCHEMA:
+            raise BasicAuthenticationError(detail="User must authenticate")
+
     return load_settings()
 
 

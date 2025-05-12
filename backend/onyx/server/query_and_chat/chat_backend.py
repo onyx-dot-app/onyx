@@ -76,6 +76,7 @@ from onyx.secondary_llm_flows.chat_session_naming import (
 )
 from onyx.server.documents.models import ConnectorBase
 from onyx.server.documents.models import CredentialBase
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.server.query_and_chat.models import ChatFeedbackRequest
 from onyx.server.query_and_chat.models import ChatMessageIdentifier
 from onyx.server.query_and_chat.models import ChatRenameRequest
@@ -96,6 +97,7 @@ from onyx.server.query_and_chat.models import SearchFeedbackRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionTemperatureRequest
 from onyx.server.query_and_chat.models import UpdateChatSessionThreadRequest
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.utils.file_types import UploadMimeTypes
 from onyx.utils.headers import get_custom_tool_additional_request_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import create_milestone_and_report
@@ -661,51 +663,45 @@ def upload_files_for_chat(
     db_session: Session = Depends(get_session),
     user: User | None = Depends(current_user),
 ) -> dict[str, list[FileDescriptor]]:
-    image_content_types = {"image/jpeg", "image/png", "image/webp"}
-    csv_content_types = {"text/csv"}
-    text_content_types = {
-        "text/plain",
-        "text/markdown",
-        "text/x-markdown",
-        "text/x-config",
-        "text/tab-separated-values",
-        "application/json",
-        "application/xml",
-        "text/xml",
-        "application/x-yaml",
-    }
-    document_content_types = {
-        "application/pdf",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        "message/rfc822",
-        "application/epub+zip",
-    }
 
-    allowed_content_types = (
-        image_content_types.union(text_content_types)
-        .union(document_content_types)
-        .union(csv_content_types)
-    )
+    # NOTE(rkuo): Unify this with file_validation.py and extract_file_text.py
+    # image_content_types = {"image/jpeg", "image/png", "image/webp"}
+    # csv_content_types = {"text/csv"}
+    # text_content_types = {
+    #     "text/plain",
+    #     "text/markdown",
+    #     "text/x-markdown",
+    #     "text/x-config",
+    #     "text/tab-separated-values",
+    #     "application/json",
+    #     "application/xml",
+    #     "text/xml",
+    #     "application/x-yaml",
+    # }
+    # document_content_types = {
+    #     "application/pdf",
+    #     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    #     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    #     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    #     "message/rfc822",
+    #     "application/epub+zip",
+    # }
+
+    # allowed_content_types = (
+    #     image_content_types.union(text_content_types)
+    #     .union(document_content_types)
+    #     .union(csv_content_types)
+    # )
 
     for file in files:
         if not file.content_type:
             raise HTTPException(status_code=400, detail="File content type is required")
 
-        if file.content_type not in allowed_content_types:
-            if file.content_type in image_content_types:
-                error_detail = "Unsupported image file type. Supported image types include .jpg, .jpeg, .png, .webp."
-            elif file.content_type in text_content_types:
-                error_detail = "Unsupported text file type."
-            elif file.content_type in csv_content_types:
-                error_detail = "Unsupported CSV file type."
-            else:
-                error_detail = "Unsupported document file type."
-            raise HTTPException(status_code=400, detail=error_detail)
+        if file.content_type not in UploadMimeTypes.ALLOWED_MIME_TYPES:
+            raise HTTPException(status_code=400, detail="Unsupported file type.")
 
         if (
-            file.content_type in image_content_types
+            file.content_type in UploadMimeTypes.IMAGE_MIME_TYPES
             and file.size
             and file.size > 20 * 1024 * 1024
         ):
@@ -718,19 +714,7 @@ def upload_files_for_chat(
 
     file_info: list[tuple[str, str | None, ChatFileType]] = []
     for file in files:
-        file_type = (
-            ChatFileType.IMAGE
-            if file.content_type in image_content_types
-            else (
-                ChatFileType.CSV
-                if file.content_type in csv_content_types
-                else (
-                    ChatFileType.DOC
-                    if file.content_type in document_content_types
-                    else ChatFileType.PLAIN_TEXT
-                )
-            )
-        )
+        file_type = mime_type_to_chat_file_type(file.content_type)
 
         file_content = file.file.read()  # Read the file content
 
@@ -785,6 +769,7 @@ def upload_files_for_chat(
                 input_type=InputType.LOAD_STATE,
                 connector_specific_config={
                     "file_locations": [user_file.file_id],
+                    "zip_metadata": {},
                 },
                 refresh_freq=None,
                 prune_freq=None,

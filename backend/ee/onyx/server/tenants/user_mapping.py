@@ -9,7 +9,7 @@ from onyx.db.engine import get_session_with_shared_schema
 from onyx.db.engine import get_session_with_tenant
 from onyx.db.models import UserTenantMapping
 from onyx.server.manage.models import TenantSnapshot
-from onyx.setup import setup_logger
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR

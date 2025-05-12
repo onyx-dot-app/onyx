@@ -24,6 +24,7 @@ from onyx.configs.constants import SSL_CERT_FILE
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from onyx.db.models import Base
 from celery.backends.database.session import ResultModelBase  # type: ignore
+from onyx.db.engine import SqlEngine
 
 # Make sure in alembic.ini [logger_root] level=INFO is set or most logging will be
 # hidden! (defaults to level=WARN)
@@ -147,6 +148,9 @@ async def run_async_migrations() -> None:
         continue_on_error,
     ) = get_schema_options()
 
+    # without init_engine, subsequent engine calls fail hard intentionally
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
+
     engine = create_async_engine(
         build_connection_string(),
         poolclass=pool.NullPool,
@@ -180,10 +184,10 @@ async def run_async_migrations() -> None:
             except Exception as e:
                 logger.error(f"Error migrating schema {schema}: {e}")
                 if not continue_on_error:
-                    logger.error("--continue is not set, raising exception!")
+                    logger.error("--continue=true is not set, raising exception!")
                     raise
 
-                logger.warning("--continue is set, continuing to next schema.")
+                logger.warning("--continue=true is set, continuing to next schema.")
 
     else:
         try:
@@ -202,9 +206,20 @@ async def run_async_migrations() -> None:
 
 
 def run_migrations_offline() -> None:
-    """This doesn't really get used when we migrate in the cloud."""
+    """
+    NOTE(rkuo): This generates a sql script that can be used to migrate the database ...
+    instead of migrating the db live via an open connection
+
+    Not clear on when this would be used by us or if it even works.
+
+    If it is offline, then why are there calls to the db engine?
+
+    This doesn't really get used when we migrate in the cloud."""
 
     logger.info("run_migrations_offline starting.")
+
+    # without init_engine, subsequent engine calls fail hard intentionally
+    SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
     schema_name, _, upgrade_all_tenants, continue_on_error = get_schema_options()
     url = build_connection_string()

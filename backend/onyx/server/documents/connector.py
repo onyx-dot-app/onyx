@@ -1,8 +1,10 @@
+import json
 import mimetypes
 import os
 import uuid
 import zipfile
 from io import BytesIO
+from typing import Any
 from typing import cast
 
 from fastapi import APIRouter
@@ -26,6 +28,7 @@ from onyx.configs.app_configs import MOCK_CONNECTOR_FILE_PATH
 from onyx.configs.constants import DocumentSource
 from onyx.configs.constants import FileOrigin
 from onyx.configs.constants import MilestoneRecordType
+from onyx.configs.constants import ONYX_METADATA_FILENAME
 from onyx.configs.constants import OnyxCeleryPriority
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.connectors.exceptions import ConnectorValidationError
@@ -128,12 +131,13 @@ from onyx.utils.telemetry import create_milestone_and_report
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 
-
 logger = setup_logger()
 
 _GMAIL_CREDENTIAL_ID_COOKIE_NAME = "gmail_credential_id"
 _GOOGLE_DRIVE_CREDENTIAL_ID_COOKIE_NAME = "google_drive_credential_id"
 
+SEEN_ZIP_DETAIL = "Only one zip file is allowed per file connector, \
+use the ingestion APIs for multiple files"
 
 router = APIRouter(prefix="/manage")
 
@@ -390,6 +394,31 @@ def check_drive_tokens(
     return AuthStatus(authenticated=True)
 
 
+def extract_zip_metadata(zf: zipfile.ZipFile) -> dict[str, Any]:
+    zip_metadata = {}
+    try:
+        metadata_file_info = zf.getinfo(ONYX_METADATA_FILENAME)
+        with zf.open(metadata_file_info, "r") as metadata_file:
+            try:
+                zip_metadata = json.load(metadata_file)
+                if isinstance(zip_metadata, list):
+                    # convert list of dicts to dict of dicts
+                    # Use just the basename for matching since metadata may not include
+                    # the full path within the ZIP file
+                    zip_metadata = {d["filename"]: d for d in zip_metadata}
+            except json.JSONDecodeError as e:
+                logger.warning(f"Unable to load {ONYX_METADATA_FILENAME}: {e}")
+                # should fail loudly here to let users know that their metadata
+                # file is not valid JSON
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unable to load {ONYX_METADATA_FILENAME}: {e}",
+                )
+    except KeyError:
+        logger.info(f"No {ONYX_METADATA_FILENAME} file")
+    return zip_metadata
+
+
 def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResponse:
     for file in files:
         if not file.filename:
@@ -400,13 +429,18 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
         normalized_path = os.path.normpath(file_path)
         return not any(part.startswith(".") for part in normalized_path.split(os.sep))
 
+    deduped_file_paths = []
+    zip_metadata = {}
     try:
         file_store = get_default_file_store(db_session)
-        deduped_file_paths = []
-
+        seen_zip = False
         for file in files:
             if file.content_type and file.content_type.startswith("application/zip"):
+                if seen_zip:
+                    raise HTTPException(status_code=400, detail=SEEN_ZIP_DETAIL)
+                seen_zip = True
                 with zipfile.ZipFile(file.file, "r") as zf:
+                    zip_metadata = extract_zip_metadata(zf)
                     for file_info in zf.namelist():
                         if zf.getinfo(file_info).is_dir():
                             continue
@@ -452,7 +486,7 @@ def upload_files(files: list[UploadFile], db_session: Session) -> FileUploadResp
 
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return FileUploadResponse(file_paths=deduped_file_paths)
+    return FileUploadResponse(file_paths=deduped_file_paths, zip_metadata=zip_metadata)
 
 
 @router.post("/admin/connector/file/upload")

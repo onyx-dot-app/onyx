@@ -24,7 +24,7 @@ function convertObjectToString(obj: any): string | any {
   return obj;
 }
 
-function buildConfigEntries(
+export function buildConfigEntries(
   obj: any,
   sourceType: ValidSources
 ): { [key: string]: string } {
@@ -189,24 +189,15 @@ export function AdvancedConfigDisplay({
 }
 
 export function ConfigDisplay({
-  connectorSpecificConfig,
-  sourceType,
+  configEntries,
   onEdit,
 }: {
-  connectorSpecificConfig: any;
-  sourceType: ValidSources;
+  configEntries: { [key: string]: string };
   onEdit?: (key: string) => void;
 }) {
-  const configEntries = Object.entries(
-    buildConfigEntries(connectorSpecificConfig, sourceType)
-  );
-  if (!configEntries.length) {
-    return null;
-  }
-
   return (
     <ul className="w-full divide-y divide-background-200 dark:divide-background-700">
-      {configEntries.map(([key, value]) => (
+      {Object.entries(configEntries).map(([key, value]) => (
         <ConfigItem
           key={key}
           label={key}

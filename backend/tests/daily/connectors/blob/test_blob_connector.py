@@ -9,7 +9,6 @@ from onyx.connectors.blob.connector import BlobStorageConnector
 from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.extract_file_text import ACCEPTED_DOCUMENT_FILE_EXTENSIONS
-from onyx.file_processing.extract_file_text import ACCEPTED_IMAGE_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import ACCEPTED_PLAIN_TEXT_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import get_file_ext
 
@@ -42,7 +41,8 @@ def test_blob_s3_connector(
     """
     Plain and document file types should be fully indexed.
 
-    Multimedia and unknown file types will be indexed by title only with one empty section.
+    Multimedia and unknown file types will be indexed be skipped unless `set_allow_images`
+    is called with `True`.
 
     This is intentional in order to allow searching by just the title even if we can't
     index the file content.
@@ -53,8 +53,7 @@ def test_blob_s3_connector(
         for doc in doc_batch:
             all_docs.append(doc)
 
-    #
-    assert len(all_docs) == 19
+    assert len(all_docs) == 15
 
     for doc in all_docs:
         section = doc.sections[0]
@@ -67,10 +66,6 @@ def test_blob_s3_connector(
 
         if file_extension in ACCEPTED_DOCUMENT_FILE_EXTENSIONS:
             assert len(section.text) > 0
-            continue
-
-        if file_extension in ACCEPTED_IMAGE_FILE_EXTENSIONS:
-            assert len(section.text) == 0
             continue
 
         # unknown extension

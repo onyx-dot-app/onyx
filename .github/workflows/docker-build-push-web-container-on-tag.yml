@@ -8,7 +8,8 @@ on:
 env:
   REGISTRY_IMAGE: onyxdotapp/onyx-web-server
   LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
-
+  DEPLOYMENT: standalone
+  
 jobs:
   build:
     runs-on:
@@ -62,11 +63,13 @@ jobs:
             ONYX_VERSION=${{ github.ref_name }}
             NODE_OPTIONS=--max-old-space-size=8192
 
-          # needed due to weird interactions with the builds for different platforms
-          no-cache: true
           labels: ${{ steps.meta.outputs.labels }}
           outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
-
+          cache-from: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/web-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }}
+          cache-to: type=s3,prefix=cache/${{ github.repository }}/${{ env.DEPLOYMENT }}/web-${{ env.PLATFORM_PAIR }}/,region=${{ env.RUNS_ON_AWS_REGION }},bucket=${{ env.RUNS_ON_S3_BUCKET_CACHE }},mode=max
+          # no-cache needed due to weird interactions with the builds for different platforms
+          # NOTE(rkuo): this may not be true any more with the proper cache prefixing by architecture - currently testing with it off
+          
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
@@ -76,7 +79,7 @@ jobs:
       - name: Upload digest
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ env.PLATFORM_PAIR }}
+          name: web-digests-${{ env.PLATFORM_PAIR }}-${{ github.run_id }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
@@ -90,7 +93,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: /tmp/digests
-          pattern: digests-*
+          pattern: web-digests-*-${{ github.run_id }}
           merge-multiple: true
 
       - name: Set up Docker Buildx

@@ -27,9 +27,20 @@ def load_everything_from_checkpoint_connector(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[SingleConnectorCallOutput[CT]]:
-    num_iterations = 0
 
     checkpoint = cast(CT, connector.build_dummy_checkpoint())
+    return load_everything_from_checkpoint_connector_from_checkpoint(
+        connector, start, end, checkpoint
+    )
+
+
+def load_everything_from_checkpoint_connector_from_checkpoint(
+    connector: CheckpointedConnector[CT],
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+    checkpoint: CT,
+) -> list[SingleConnectorCallOutput[CT]]:
+    num_iterations = 0
     outputs: list[SingleConnectorCallOutput[CT]] = []
     while checkpoint.has_more:
         items: list[Document | ConnectorFailure] = []

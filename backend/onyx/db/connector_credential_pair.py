@@ -14,12 +14,14 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.orm import Session
 
 from onyx.configs.app_configs import DISABLE_AUTH
+from onyx.configs.constants import DocumentSource
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.credentials import fetch_credential_by_id
 from onyx.db.credentials import fetch_credential_by_id_for_user
 from onyx.db.engine import get_session_context_manager
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
+from onyx.db.models import Connector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.db.models import Credential
 from onyx.db.models import IndexAttempt
@@ -267,6 +269,18 @@ def get_connector_credential_pair_from_id(
 
     result = db_session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def get_connector_credential_pairs_for_source(
+    db_session: Session,
+    source: DocumentSource,
+) -> list[ConnectorCredentialPair]:
+    stmt = (
+        select(ConnectorCredentialPair)
+        .join(ConnectorCredentialPair.connector)
+        .where(Connector.source == source)
+    )
+    return list(db_session.scalars(stmt).unique().all())
 
 
 def get_last_successful_attempt_time(
@@ -699,3 +713,11 @@ def get_connector_credential_pairs_with_user_files(
         .distinct()
         .all()
     )
+
+
+def delete_userfiles_for_cc_pair__no_commit(
+    db_session: Session,
+    cc_pair_id: int,
+) -> None:
+    stmt = delete(UserFile).where(UserFile.cc_pair_id == cc_pair_id)
+    db_session.execute(stmt)

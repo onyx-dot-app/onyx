@@ -167,13 +167,11 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
   const pageContainerRef = useRef<HTMLDivElement>(null);
 
   const modelDescriptors = llmProviders.flatMap((provider) =>
-    Object.entries(provider.model_token_limits ?? {}).map(
-      ([modelName, maxTokens]) => ({
-        modelName,
-        provider: provider.provider,
-        maxTokens,
-      })
-    )
+    provider.model_configurations.map((modelConfiguration) => ({
+      modelName: modelConfiguration.name,
+      provider: provider.provider,
+      maxTokens: modelConfiguration.max_input_tokens!,
+    }))
   );
 
   const { popup: folderCreatedPopup } = usePopupFromQuery({
@@ -590,29 +588,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
       {/* Invalid file message */}
 
-      {/* Add a visual overlay when dragging files */}
-      {isDraggingOver && (
-        <div className="fixed inset-0 bg-neutral-950/10 backdrop-blur-sm z-50 pointer-events-none flex items-center justify-center transition-all duration-200 ease-in-out">
-          <div className="bg-white dark:bg-neutral-900 rounded-lg p-8 shadow-lg text-center border border-neutral-200 dark:border-neutral-800 max-w-md mx-auto">
-            <div className="bg-neutral-100 dark:bg-neutral-800 p-4 rounded-full w-20 h-20 mx-auto mb-5 flex items-center justify-center">
-              <Upload
-                className="w-10 h-10 text-neutral-600 dark:text-neutral-300"
-                strokeWidth={1.5}
-              />
-            </div>
-            <h3 className="text-xl font-medium mb-2 text-neutral-900 dark:text-neutral-50">
-              Drop files to upload
-            </h3>
-            <p className="text-neutral-500 dark:text-neutral-400 text-sm">
-              Files will be uploaded to{" "}
-              <span className="font-medium text-neutral-900 dark:text-neutral-200">
-                {folderDetails?.name || "this folder"}
-              </span>
-            </p>
-          </div>
-        </div>
-      )}
-
       <DeleteEntityModal
         isOpen={isDeleteModalOpen}
         onClose={() => setIsDeleteModalOpen(false)}
@@ -636,9 +611,9 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
 
       <div className="flex  -mt-[1px] flex-col w-full">
         <div className="flex items-center mb-3">
-          <nav className="flex text-lg gap-x-1 items-center">
+          <nav className="flex text-base md:text-lg  gap-x-1 items-center">
             <span
-              className="font-medium leading-tight tracking-tight text-lg text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center text-base"
+              className="font-medium leading-tight tracking-tight  text-neutral-800 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-neutral-100 cursor-pointer flex items-center"
               onClick={handleBack}
             >
               My Documents

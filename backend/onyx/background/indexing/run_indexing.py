@@ -407,8 +407,12 @@ def _run_indexing(
 
             # don't use a checkpoint if we're explicitly indexing from
             # the beginning in order to avoid weird interactions between
-            # checkpointing / failure handling.
-            if index_attempt.from_beginning:
+            # checkpointing / failure handling
+            # OR
+            # if the last attempt was successful
+            if index_attempt.from_beginning or (
+                most_recent_attempt and most_recent_attempt.status.is_successful()
+            ):
                 checkpoint = connector_runner.connector.build_dummy_checkpoint()
             else:
                 checkpoint = get_latest_valid_checkpoint(
@@ -450,6 +454,11 @@ def _run_indexing(
                 if callback:
                     if callback.should_stop():
                         raise ConnectorStopSignal("Connector stop signal detected")
+
+                    # NOTE: this progress callback runs on every loop. We've seen cases
+                    # where we loop many times with no new documents and eventually time
+                    # out, so only doing the callback after indexing isn't sufficient.
+                    callback.progress("_run_indexing", 0)
 
                 # TODO: should we move this into the above callback instead?
                 with get_session_with_current_tenant() as db_session_temp:

@@ -34,3 +34,8 @@ export function transformLinkUri(href: string) {
   }
   return href;
 }
+
+export function isSubset(parent: string[], child: string[]): boolean {
+  const parentSet = new Set(parent);
+  return Array.from(new Set(child)).every((item) => parentSet.has(item));
+}

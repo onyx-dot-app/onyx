@@ -2,7 +2,7 @@ import { fetchSS } from "@/lib/utilsSS";
 import { Persona } from "@/app/admin/assistants/interfaces";
 import { fetchLLMProvidersSS } from "@/lib/llm/fetchLLMs";
 import { fetchAssistantsSS } from "../assistants/fetchAssistantsSS";
-import { checkLLMSupportsImageInput } from "../llm/utils";
+import { modelSupportsImageInput } from "../llm/utils";
 import { filterAssistants } from "../assistants/utils";
 
 interface AssistantData {
@@ -46,7 +46,9 @@ export async function fetchAssistantData(): Promise<AssistantData> {
     const hasImageCompatibleModel = llmProviders.some(
       (provider) =>
         provider.provider === "openai" ||
-        provider.model_names.some((model) => checkLLMSupportsImageInput(model))
+        provider.model_configurations.some((modelConfiguration) =>
+          modelSupportsImageInput(llmProviders, modelConfiguration.name)
+        )
     );
 
     let filteredAssistants = filterAssistants(

@@ -34,7 +34,12 @@ def confluence_connector() -> ConfluenceConnector:
 
 # This should never fail because even if the docs in the cloud change,
 # the full doc ids retrieved should always be a subset of the slim doc ids
+@patch(
+    "onyx.file_processing.extract_file_text.get_unstructured_api_key",
+    return_value=None,
+)
 def test_confluence_connector_permissions(
+    mock_get_api_key: MagicMock,
     confluence_connector: ConfluenceConnector,
 ) -> None:
     # Get all doc IDs from the full connector
@@ -76,6 +81,8 @@ def test_confluence_connector_restriction_handling(
         "confluence_username": os.environ["CONFLUENCE_USER_NAME"],
         "confluence_access_token": os.environ["CONFLUENCE_ACCESS_TOKEN"],
     }
+    # this prevents redis calls inside of OnyxConfluence
+    mock_provider_instance.is_dynamic.return_value = False
     # Make the class return our configured instance when called
     mock_db_provider_class.return_value = mock_provider_instance
 
@@ -92,7 +99,7 @@ def test_confluence_connector_restriction_handling(
     mock_cc_pair.credential_id = 1
 
     # Call the confluence_doc_sync function directly with the mock cc_pair
-    doc_access_generator = confluence_doc_sync(mock_cc_pair, None)
+    doc_access_generator = confluence_doc_sync(mock_cc_pair, lambda: [], None)
     doc_access_list = list(doc_access_generator)
     assert len(doc_access_list) == 7
     assert all(

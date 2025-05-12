@@ -3,8 +3,10 @@ import io
 import json
 from collections.abc import Callable
 from collections.abc import Iterator
+from functools import lru_cache
 from typing import Any
 from typing import cast
+from typing import TYPE_CHECKING
 
 import litellm  # type: ignore
 import tiktoken
@@ -49,6 +51,11 @@ from onyx.utils.b64 import get_image_type
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import LOG_LEVEL
+
+
+if TYPE_CHECKING:
+    from onyx.server.manage.llm.models import LLMProviderView
+
 
 logger = setup_logger()
 
@@ -378,6 +385,7 @@ def test_llm(llm: LLM) -> str | None:
     return error_msg
 
 
+@lru_cache(maxsize=1)  # the copy.deepcopy is expensive, so we cache the result
 def get_model_map() -> dict:
     starting_map = copy.deepcopy(cast(dict, litellm.model_cost))
 
@@ -615,6 +623,24 @@ def get_max_input_tokens(
         return GEN_AI_MODEL_FALLBACK_MAX_TOKENS
 
     return input_toks
+
+
+def get_max_input_tokens_from_llm_provider(
+    llm_provider: "LLMProviderView",
+    model_name: str,
+) -> int:
+    max_input_tokens = None
+    for model_configuration in llm_provider.model_configurations:
+        if model_configuration.name == model_name:
+            max_input_tokens = model_configuration.max_input_tokens
+    return (
+        max_input_tokens
+        if max_input_tokens
+        else get_max_input_tokens(
+            model_provider=llm_provider.name,
+            model_name=model_name,
+        )
+    )
 
 
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:

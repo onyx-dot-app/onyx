@@ -76,7 +76,7 @@ class StageCompletion(BaseModel):
 
     stage: DriveRetrievalStage
     completed_until: SecondsSinceUnixEpoch
-    completed_until_parent_id: str | None = None
+    current_folder_or_drive_id: str | None = None
 
     # only used for shared drives
     processed_drive_ids: set[str] = set()
@@ -85,11 +85,11 @@ class StageCompletion(BaseModel):
         self,
         stage: DriveRetrievalStage,
         completed_until: SecondsSinceUnixEpoch,
-        completed_until_parent_id: str | None = None,
+        current_folder_or_drive_id: str | None = None,
     ) -> None:
         self.stage = stage
         self.completed_until = completed_until
-        self.completed_until_parent_id = completed_until_parent_id
+        self.current_folder_or_drive_id = current_folder_or_drive_id
 
 
 class RetrievedDriveFile(BaseModel):
@@ -135,6 +135,9 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # timestamp part is not used for folder crawling.
     completion_map: ThreadSafeDict[str, StageCompletion]
 
+    # all file ids that have been retrieved
+    all_retrieved_file_ids: set[str] = set()
+
     # cached version of the drive and folder ids to retrieve
     drive_ids_to_retrieve: list[str] | None = None
     folder_ids_to_retrieve: list[str] | None = None
@@ -152,5 +155,5 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     def validate_completion_map(cls, v: Any) -> ThreadSafeDict[str, StageCompletion]:
         assert isinstance(v, dict) or isinstance(v, ThreadSafeDict)
         return ThreadSafeDict(
-            {k: StageCompletion.model_validate(v) for k, v in v.items()}
+            {k: StageCompletion.model_validate(val) for k, val in v.items()}
         )

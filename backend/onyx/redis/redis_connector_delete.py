@@ -16,8 +16,7 @@ from onyx.configs.constants import OnyxCeleryQueues
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.configs.constants import OnyxRedisConstants
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.document import construct_document_select_for_connector_credential_pair
-from onyx.db.models import Document as DbDocument
+from onyx.db.document import construct_document_id_select_for_connector_credential_pair
 
 
 class RedisConnectorDeletePayload(BaseModel):
@@ -116,7 +115,6 @@ class RedisConnectorDelete:
         Otherwise, returns an int with the number of generated tasks."""
         last_lock_time = time.monotonic()
 
-        async_results = []
         cc_pair = get_connector_credential_pair_from_id(
             db_session=db_session,
             cc_pair_id=int(self.id),
@@ -124,11 +122,13 @@ class RedisConnectorDelete:
         if not cc_pair:
             return None
 
-        stmt = construct_document_select_for_connector_credential_pair(
+        num_tasks_sent = 0
+
+        stmt = construct_document_id_select_for_connector_credential_pair(
             cc_pair.connector_id, cc_pair.credential_id
         )
-        for doc_temp in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
-            doc: DbDocument = doc_temp
+        for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+            doc_id = cast(str, doc_id)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
                 CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4
@@ -143,10 +143,10 @@ class RedisConnectorDelete:
             self.redis.sadd(self.taskset_key, custom_task_id)
 
             # Priority on sync's triggered by new indexing should be medium
-            result = celery_app.send_task(
+            celery_app.send_task(
                 OnyxCeleryTask.DOCUMENT_BY_CC_PAIR_CLEANUP_TASK,
                 kwargs=dict(
-                    document_id=doc.id,
+                    document_id=doc_id,
                     connector_id=cc_pair.connector_id,
                     credential_id=cc_pair.credential_id,
                     tenant_id=self.tenant_id,
@@ -157,9 +157,9 @@ class RedisConnectorDelete:
                 ignore_result=True,
             )
 
-            async_results.append(result)
+            num_tasks_sent += 1
 
-        return len(async_results)
+        return num_tasks_sent
 
     def reset(self) -> None:
         self.redis.srem(OnyxRedisConstants.ACTIVE_FENCES, self.fence_key)

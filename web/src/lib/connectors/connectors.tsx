@@ -126,6 +126,10 @@ export interface ConnectionConfiguration {
     | TabOption
   )[];
   overrideDefaultFreq?: number;
+  advancedValuesVisibleCondition?: (
+    values: any,
+    currentCredential: Credential<any> | null
+  ) => boolean;
 }
 
 export const connectorConfigs: Record<
@@ -249,24 +253,25 @@ export const connectorConfigs: Record<
         name: "project_name",
         optional: false,
       },
+    ],
+    advanced_values: [
       {
         type: "checkbox",
         query: "Include merge requests?",
         label: "Include MRs",
         name: "include_mrs",
+        description: "Index merge requests from repositories",
         default: true,
-        hidden: true,
       },
       {
         type: "checkbox",
         query: "Include issues?",
         label: "Include Issues",
         name: "include_issues",
-        optional: true,
-        hidden: true,
+        description: "Index issues from repositories",
+        default: true,
       },
     ],
-    advanced_values: [],
   },
   gitbook: {
     description: "Configure GitBook connector",
@@ -379,7 +384,20 @@ export const connectorConfigs: Record<
         defaultTab: "space",
       },
     ],
-    advanced_values: [],
+    advanced_values: [
+      {
+        type: "text",
+        description:
+          "Enter a comma separated list of specific user emails to index. This will only index files accessible to these users.",
+        label: "Specific User Emails",
+        name: "specific_user_emails",
+        optional: true,
+        default: "",
+        isTextArea: true,
+      },
+    ],
+    advancedValuesVisibleCondition: (values, currentCredential) =>
+      !currentCredential?.credential_json?.google_tokens,
   },
   gmail: {
     description: "Configure Gmail connector",
@@ -1500,6 +1518,7 @@ export interface LoopioConfig {
 
 export interface FileConfig {
   file_locations: string[];
+  zip_metadata: Record<string, any>;
 }
 
 export interface ZulipConfig {

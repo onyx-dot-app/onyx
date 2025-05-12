@@ -674,3 +674,7 @@ ul > li > p {
 .animate-fadeIn {
   animation: fadeIn 0.2s ease-out forwards;
 }
+
+.container {
+  margin-bottom: 1rem;
+}

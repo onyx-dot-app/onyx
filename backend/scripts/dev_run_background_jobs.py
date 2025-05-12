@@ -56,7 +56,7 @@ def run_jobs() -> None:
         "--loglevel=INFO",
         "--hostname=heavy@%n",
         "-Q",
-        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync",
+        "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation",
     ]
 
     cmd_worker_indexing = [

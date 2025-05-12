@@ -12,6 +12,7 @@ from onyx.db.pg_file_store import create_populate_lobj
 from onyx.db.pg_file_store import delete_lobj_by_id
 from onyx.db.pg_file_store import delete_pgfilestore_by_file_name
 from onyx.db.pg_file_store import get_pgfilestore_by_file_name
+from onyx.db.pg_file_store import get_pgfilestore_by_file_name_optional
 from onyx.db.pg_file_store import read_lobj
 from onyx.db.pg_file_store import upsert_pgfilestore
 from onyx.utils.file import FileWithMimeType
@@ -21,6 +22,25 @@ class FileStore(ABC):
     """
     An abstraction for storing files and large binary objects.
     """
+
+    @abstractmethod
+    def has_file(
+        self,
+        file_name: str,
+        file_origin: FileOrigin,
+        file_type: str,
+        display_name: str | None = None,
+    ) -> bool:
+        """
+        Check if a file exists in the blob store
+
+        Parameters:
+        - file_name: Name of the file to save
+        - display_name: Display name of the file
+        - file_origin: Origin of the file
+        - file_type: Type of the file
+        """
+        raise NotImplementedError
 
     @abstractmethod
     def save_file(
@@ -50,7 +70,7 @@ class FileStore(ABC):
 
     @abstractmethod
     def read_file(
-        self, file_name: str, mode: str | None, use_tempfile: bool = False
+        self, file_name: str, mode: str | None = None, use_tempfile: bool = False
     ) -> IO:
         """
         Read the content of a given file by the name
@@ -84,6 +104,22 @@ class FileStore(ABC):
 class PostgresBackedFileStore(FileStore):
     def __init__(self, db_session: Session):
         self.db_session = db_session
+
+    def has_file(
+        self,
+        file_name: str,
+        file_origin: FileOrigin,
+        file_type: str,
+        display_name: str | None = None,
+    ) -> bool:
+        file_record = get_pgfilestore_by_file_name_optional(
+            file_name=display_name or file_name, db_session=self.db_session
+        )
+        return (
+            file_record is not None
+            and file_record.file_origin == file_origin
+            and file_record.file_type == file_type
+        )
 
     def save_file(
         self,

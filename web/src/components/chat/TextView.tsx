@@ -16,7 +16,6 @@ interface TextViewProps {
   presentingDocument: MinimalOnyxDocument;
   onClose: () => void;
 }
-
 export default function TextView({
   presentingDocument,
   onClose,
@@ -27,6 +26,13 @@ export default function TextView({
   const [fileName, setFileName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [fileType, setFileType] = useState("application/octet-stream");
+  const [renderCount, setRenderCount] = useState(0);
+
+  // Log render count on each render
+  useEffect(() => {
+    setRenderCount((prevCount) => prevCount + 1);
+    console.log(`TextView component rendered ${renderCount + 1} times`);
+  }, []);
 
   // Detect if a given MIME type is one of the recognized markdown formats
   const isMarkdownFormat = (mimeType: string): boolean => {
@@ -63,6 +69,7 @@ export default function TextView({
   };
 
   const fetchFile = useCallback(async () => {
+    console.log("fetching file");
     setIsLoading(true);
     const fileId =
       presentingDocument.document_id.split("__")[1] ||
@@ -107,13 +114,14 @@ export default function TextView({
       // Keep the slight delay for a smoother loading experience
       setTimeout(() => {
         setIsLoading(false);
+        console.log("finished loading");
       }, 1000);
     }
   }, [presentingDocument]);
 
   useEffect(() => {
     fetchFile();
-  }, [fetchFile]);
+  }, []);
 
   const handleDownload = () => {
     const link = document.createElement("a");

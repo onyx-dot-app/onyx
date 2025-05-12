@@ -145,6 +145,30 @@ class ThreadSafeDict(MutableMapping[KT, VT]):
         with self.lock:
             return collections.abc.ValuesView(self)
 
+    @overload
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[VT], VT], default: VT
+    ) -> tuple[VT, VT]: ...
+
+    @overload
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[VT | _T], VT], default: VT | _T
+    ) -> tuple[VT | _T, VT]: ...
+
+    def atomic_get_set(
+        self, key: KT, value_callback: Callable[[Any], VT], default: Any = None
+    ) -> tuple[Any, VT]:
+        """Replace a value from the dict with a function applied to the previous value, atomically.
+
+        Returns:
+            A tuple of the previous value and the new value.
+        """
+        with self.lock:
+            val = self._dict.get(key, default)
+            new_val = value_callback(val)
+            self._dict[key] = new_val
+            return val, new_val
+
 
 class CallableProtocol(Protocol):
     def __call__(self, *args: Any, **kwargs: Any) -> Any: ...

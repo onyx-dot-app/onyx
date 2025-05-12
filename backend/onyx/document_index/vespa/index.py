@@ -16,6 +16,7 @@ from typing import List
 from uuid import UUID
 
 import httpx  # type: ignore
+import jinja2
 import requests  # type: ignore
 from retry import retry
 
@@ -61,21 +62,13 @@ from onyx.document_index.vespa_constants import ACCESS_CONTROL_LIST
 from onyx.document_index.vespa_constants import BATCH_SIZE
 from onyx.document_index.vespa_constants import BOOST
 from onyx.document_index.vespa_constants import CONTENT_SUMMARY
-from onyx.document_index.vespa_constants import DANSWER_CHUNK_REPLACEMENT_PAT
-from onyx.document_index.vespa_constants import DATE_REPLACEMENT
 from onyx.document_index.vespa_constants import DOCUMENT_ID_ENDPOINT
-from onyx.document_index.vespa_constants import DOCUMENT_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import DOCUMENT_SETS
-from onyx.document_index.vespa_constants import EMBEDDING_PRECISION_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import HIDDEN
 from onyx.document_index.vespa_constants import NUM_THREADS
-from onyx.document_index.vespa_constants import SEARCH_THREAD_NUMBER_PAT
-from onyx.document_index.vespa_constants import TENANT_ID_PAT
-from onyx.document_index.vespa_constants import TENANT_ID_REPLACEMENT
 from onyx.document_index.vespa_constants import USER_FILE
 from onyx.document_index.vespa_constants import USER_FOLDER
 from onyx.document_index.vespa_constants import VESPA_APPLICATION_ENDPOINT
-from onyx.document_index.vespa_constants import VESPA_DIM_REPLACEMENT_PAT
 from onyx.document_index.vespa_constants import VESPA_TIMEOUT
 from onyx.document_index.vespa_constants import YQL_BASE
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -118,21 +111,6 @@ def _create_document_xml_lines(doc_names: list[str | None] | list[str]) -> str:
     return "\n".join(doc_lines)
 
 
-def _replace_template_values_in_schema(
-    schema_template: str,
-    index_name: str,
-    embedding_dim: int,
-    embedding_precision: EmbeddingPrecision,
-) -> str:
-    return (
-        schema_template.replace(
-            EMBEDDING_PRECISION_REPLACEMENT_PAT, embedding_precision.value
-        )
-        .replace(DANSWER_CHUNK_REPLACEMENT_PAT, index_name)
-        .replace(VESPA_DIM_REPLACEMENT_PAT, str(embedding_dim))
-    )
-
-
 def add_ngrams_to_schema(schema_content: str) -> str:
     # Add the match blocks containing gram and gram-size to title and content fields
     schema_content = re.sub(
@@ -149,6 +127,9 @@ def add_ngrams_to_schema(schema_content: str) -> str:
 
 
 class VespaIndex(DocumentIndex):
+
+    VESPA_SCHEMA_JINJA_FILENAME = "danswer_chunk.sd.jinja"
+
     def __init__(
         self,
         index_name: str,
@@ -195,26 +176,32 @@ class VespaIndex(DocumentIndex):
             )
             return None
 
+        jinja_env = jinja2.Environment()
+
         deploy_url = f"{VESPA_APPLICATION_ENDPOINT}/tenant/default/prepareandactivate"
         logger.notice(f"Deploying Vespa application package to {deploy_url}")
 
         vespa_schema_path = os.path.join(
             os.getcwd(), "onyx", "document_index", "vespa", "app_config"
         )
-        schema_file = os.path.join(vespa_schema_path, "schemas", "danswer_chunk.sd")
-        services_file = os.path.join(vespa_schema_path, "services.xml")
-        overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
-
-        with open(services_file, "r") as services_f:
-            services_template = services_f.read()
-
-        schema_names = [self.index_name, self.secondary_index_name]
-
-        doc_lines = _create_document_xml_lines(schema_names)
-        services = services_template.replace(DOCUMENT_REPLACEMENT_PAT, doc_lines)
-        services = services.replace(
-            SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
+        schema_jinja_file = os.path.join(
+            vespa_schema_path, "schemas", VespaIndex.VESPA_SCHEMA_JINJA_FILENAME
         )
+        services_jinja_file = os.path.join(vespa_schema_path, "services.xml.jinja")
+        overrides_jinja_file = os.path.join(
+            vespa_schema_path, "validation-overrides.xml.jinja"
+        )
+
+        with open(services_jinja_file, "r") as services_f:
+            schema_names = [self.index_name, self.secondary_index_name]
+            doc_lines = _create_document_xml_lines(schema_names)
+
+            services_template_str = services_f.read()
+            services_template = jinja_env.from_string(services_template_str)
+            services = services_template.render(
+                document_elements=doc_lines,
+                num_search_threads=str(VESPA_SEARCHER_THREADS),
+            )
 
         kv_store = get_shared_kv_store()
 
@@ -224,35 +211,36 @@ class VespaIndex(DocumentIndex):
         except Exception:
             logger.debug("Could not load the reindexing flag. Using ngrams")
 
-        with open(overrides_file, "r") as overrides_f:
-            overrides_template = overrides_f.read()
-
         # Vespa requires an override to erase data including the indices we're no longer using
         # It also has a 30 day cap from current so we set it to 7 dynamically
-        now = datetime.now()
-        date_in_7_days = now + timedelta(days=7)
-        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+        with open(overrides_jinja_file, "r") as overrides_f:
+            overrides_template_str = overrides_f.read()
+            overrides_template = jinja_env.from_string(overrides_template_str)
 
-        overrides = overrides_template.replace(DATE_REPLACEMENT, formatted_date)
+            now = datetime.now()
+            date_in_7_days = now + timedelta(days=7)
+            formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+            overrides = overrides_template.render(
+                until_date=formatted_date,
+            )
 
         zip_dict = {
             "services.xml": services.encode("utf-8"),
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
 
-        with open(schema_file, "r") as schema_f:
-            schema_template = schema_f.read()
-        schema_template = schema_template.replace(TENANT_ID_PAT, "")
+        with open(schema_jinja_file, "r") as schema_f:
+            template_str = schema_f.read()
 
-        schema = _replace_template_values_in_schema(
-            schema_template,
-            self.index_name,
-            primary_embedding_dim,
-            primary_embedding_precision,
+        template = jinja_env.from_string(template_str)
+        schema = template.render(
+            multi_tenant=MULTI_TENANT,
+            schema_name=self.index_name,
+            dim=primary_embedding_dim,
+            embedding_precision=primary_embedding_precision.value,
         )
 
         schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
-        schema = schema.replace(TENANT_ID_PAT, "")
         zip_dict[f"schemas/{schema_names[0]}.sd"] = schema.encode("utf-8")
 
         if self.secondary_index_name:
@@ -261,12 +249,13 @@ class VespaIndex(DocumentIndex):
             if secondary_index_embedding_precision is None:
                 raise ValueError("Secondary index embedding precision is required")
 
-            upcoming_schema = _replace_template_values_in_schema(
-                schema_template,
-                self.secondary_index_name,
-                secondary_index_embedding_dim,
-                secondary_index_embedding_precision,
+            upcoming_schema = template.render(
+                multi_tenant=MULTI_TENANT,
+                schema_name=self.secondary_index_name,
+                dim=secondary_index_embedding_dim,
+                embedding_precision=secondary_index_embedding_precision.value,
             )
+
             zip_dict[f"schemas/{schema_names[1]}.sd"] = upcoming_schema.encode("utf-8")
 
         zip_file = in_memory_zip_from_file_bytes(zip_dict)
@@ -296,24 +285,27 @@ class VespaIndex(DocumentIndex):
         vespa_schema_path = os.path.join(
             os.getcwd(), "onyx", "document_index", "vespa", "app_config"
         )
-        schema_file = os.path.join(vespa_schema_path, "schemas", "danswer_chunk.sd")
-        services_file = os.path.join(vespa_schema_path, "services.xml")
-        overrides_file = os.path.join(vespa_schema_path, "validation-overrides.xml")
+        schema_jinja_file = os.path.join(
+            vespa_schema_path, "schemas", VespaIndex.VESPA_SCHEMA_JINJA_FILENAME
+        )
+        services_jinja_file = os.path.join(vespa_schema_path, "services.xml.jinja")
+        overrides_jinja_file = os.path.join(
+            vespa_schema_path, "validation-overrides.xml.jinja"
+        )
 
-        with open(services_file, "r") as services_f:
-            services_template = services_f.read()
+        jinja_env = jinja2.Environment()
 
         # Generate schema names from index settings
-        schema_names = [index_name for index_name in indices]
+        with open(services_jinja_file, "r") as services_f:
+            schema_names = [index_name for index_name in indices]
+            doc_lines = _create_document_xml_lines(schema_names)
 
-        full_schemas = schema_names
-
-        doc_lines = _create_document_xml_lines(full_schemas)
-
-        services = services_template.replace(DOCUMENT_REPLACEMENT_PAT, doc_lines)
-        services = services.replace(
-            SEARCH_THREAD_NUMBER_PAT, str(VESPA_SEARCHER_THREADS)
-        )
+            services_template_str = services_f.read()
+            services_template = jinja_env.from_string(services_template_str)
+            services = services_template.render(
+                document_elements=doc_lines,
+                num_search_threads=str(VESPA_SEARCHER_THREADS),
+            )
 
         kv_store = get_shared_kv_store()
 
@@ -323,24 +315,28 @@ class VespaIndex(DocumentIndex):
         except Exception:
             logger.debug("Could not load the reindexing flag. Using ngrams")
 
-        with open(overrides_file, "r") as overrides_f:
-            overrides_template = overrides_f.read()
-
         # Vespa requires an override to erase data including the indices we're no longer using
         # It also has a 30 day cap from current so we set it to 7 dynamically
-        now = datetime.now()
-        date_in_7_days = now + timedelta(days=7)
-        formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+        with open(overrides_jinja_file, "r") as overrides_f:
+            overrides_template_str = overrides_f.read()
+            overrides_template = jinja_env.from_string(overrides_template_str)
 
-        overrides = overrides_template.replace(DATE_REPLACEMENT, formatted_date)
+            now = datetime.now()
+            date_in_7_days = now + timedelta(days=7)
+            formatted_date = date_in_7_days.strftime("%Y-%m-%d")
+            overrides = overrides_template.render(
+                until_date=formatted_date,
+            )
 
         zip_dict = {
             "services.xml": services.encode("utf-8"),
             "validation-overrides.xml": overrides.encode("utf-8"),
         }
 
-        with open(schema_file, "r") as schema_f:
-            schema_template = schema_f.read()
+        with open(schema_jinja_file, "r") as schema_f:
+            schema_template_str = schema_f.read()
+
+        schema_template = jinja_env.from_string(schema_template_str)
 
         for i, index_name in enumerate(indices):
             embedding_dim = embedding_dims[i]
@@ -349,12 +345,13 @@ class VespaIndex(DocumentIndex):
                 f"Creating index: {index_name} with embedding dimension: {embedding_dim}"
             )
 
-            schema = _replace_template_values_in_schema(
-                schema_template, index_name, embedding_dim, embedding_precision
+            schema = schema_template.render(
+                multi_tenant=MULTI_TENANT,
+                schema_name=index_name,
+                dim=embedding_dim,
+                embedding_precision=embedding_precision.value,
             )
-            schema = schema.replace(
-                TENANT_ID_PAT, TENANT_ID_REPLACEMENT if MULTI_TENANT else ""
-            )
+
             schema = add_ngrams_to_schema(schema) if needs_reindexing else schema
             zip_dict[f"schemas/{index_name}.sd"] = schema.encode("utf-8")
 
@@ -824,6 +821,8 @@ class VespaIndex(DocumentIndex):
             ranking_profile = f"hybrid_search_keyword_base_{len(query_embedding)}"
         else:
             ranking_profile = f"hybrid_search_semantic_base_{len(query_embedding)}"
+
+        logger.info(f"Selected ranking profile: {ranking_profile}")
 
         logger.debug(f"Query YQL: {yql}")
 

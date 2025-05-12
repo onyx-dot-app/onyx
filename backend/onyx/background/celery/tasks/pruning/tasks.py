@@ -49,6 +49,7 @@ from onyx.db.models import ConnectorCredentialPair
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.sync_record import insert_sync_record
 from onyx.db.sync_record import update_sync_record_status
+from onyx.db.tag import delete_orphan_tags__no_commit
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_connector_prune import RedisConnectorPrune
 from onyx.redis.redis_connector_prune import RedisConnectorPrunePayload
@@ -560,6 +561,8 @@ def monitor_ccpair_pruning_taskset(
         sync_status=SyncStatus.SUCCESS,
         num_docs_synced=initial,
     )
+
+    delete_orphan_tags__no_commit(db_session)
 
     redis_connector.prune.taskset_clear()
     redis_connector.prune.generator_clear()

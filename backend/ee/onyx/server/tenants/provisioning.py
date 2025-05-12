@@ -39,10 +39,13 @@ from onyx.db.models import SearchSettings
 from onyx.db.models import UserTenantMapping
 from onyx.llm.llm_provider_options import ANTHROPIC_MODEL_NAMES
 from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.llm_provider_options import ANTHROPIC_VISIBLE_MODEL_NAMES
 from onyx.llm.llm_provider_options import OPEN_AI_MODEL_NAMES
+from onyx.llm.llm_provider_options import OPEN_AI_VISIBLE_MODEL_NAMES
 from onyx.llm.llm_provider_options import OPENAI_PROVIDER_NAME
 from onyx.server.manage.embedding.models import CloudEmbeddingProviderCreationRequest
 from onyx.server.manage.llm.models import LLMProviderUpsertRequest
+from onyx.server.manage.llm.models import ModelConfigurationUpsertRequest
 from onyx.setup import setup_onyx
 from onyx.utils.telemetry import create_milestone_and_report
 from shared_configs.configs import MULTI_TENANT
@@ -269,8 +272,14 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key=ANTHROPIC_DEFAULT_API_KEY,
             default_model_name="claude-3-7-sonnet-20250219",
             fast_default_model_name="claude-3-5-sonnet-20241022",
-            model_names=ANTHROPIC_MODEL_NAMES,
-            display_model_names=["claude-3-5-sonnet-20241022"],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=name,
+                    is_visible=name in ANTHROPIC_VISIBLE_MODEL_NAMES,
+                    max_input_tokens=None,
+                )
+                for name in ANTHROPIC_MODEL_NAMES
+            ],
             api_key_changed=True,
         )
         try:
@@ -290,8 +299,14 @@ def configure_default_api_keys(db_session: Session) -> None:
             api_key=OPENAI_DEFAULT_API_KEY,
             default_model_name="gpt-4o",
             fast_default_model_name="gpt-4o-mini",
-            model_names=OPEN_AI_MODEL_NAMES,
-            display_model_names=["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"],
+            model_configurations=[
+                ModelConfigurationUpsertRequest(
+                    name=model_name,
+                    is_visible=model_name in OPEN_AI_VISIBLE_MODEL_NAMES,
+                    max_input_tokens=None,
+                )
+                for model_name in OPEN_AI_MODEL_NAMES
+            ],
             api_key_changed=True,
         )
         try:

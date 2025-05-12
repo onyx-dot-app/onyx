@@ -14,8 +14,12 @@ import {
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-import { defaultModelsByProvider } from "@/lib/hooks";
-import { LLMProviderView, WellKnownLLMProviderDescriptor } from "./interfaces";
+import {
+  LLMProviderView,
+  ModelConfiguration,
+  ModelConfigurationUpsertRequest,
+  WellKnownLLMProviderDescriptor,
+} from "./interfaces";
 import { PopupSpec } from "@/components/admin/connectors/Popup";
 import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
@@ -57,7 +61,7 @@ export function LLMProviderUpdateForm({
     default_model_name:
       existingLlmProvider?.default_model_name ??
       (llmProviderDescriptor.default_model ||
-        llmProviderDescriptor.llm_names[0]),
+        llmProviderDescriptor.model_configurations[0]?.name),
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ??
       (llmProviderDescriptor.default_fast_model || null),
@@ -72,12 +76,20 @@ export function LLMProviderUpdateForm({
       ),
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
-    display_model_names:
-      existingLlmProvider?.display_model_names ||
-      defaultModelsByProvider[llmProviderDescriptor.name] ||
-      [],
+    model_configurations: existingLlmProvider?.model_configurations ?? [],
     deployment_name: existingLlmProvider?.deployment_name,
-    api_key_changed: false,
+
+    // This field only exists to store the selected model-names.
+    // It is *not* passed into the JSON body that is submitted to the backend APIs.
+    // It will be deleted from the map prior to submission.
+    selected_model_names: existingLlmProvider
+      ? existingLlmProvider.model_configurations
+          .filter((modelConfiguration) => modelConfiguration.is_visible)
+          .map((modelConfiguration) => modelConfiguration.name)
+      : // default case - use built in "visible" models
+        (llmProviderDescriptor.model_configurations
+          .filter((modelConfiguration) => modelConfiguration.is_visible)
+          .map((modelConfiguration) => modelConfiguration.name) as string[]),
   };
 
   // Setup validation schema if required
@@ -119,8 +131,7 @@ export function LLMProviderUpdateForm({
     // EE Only
     is_public: Yup.boolean().required(),
     groups: Yup.array().of(Yup.number()),
-    display_model_names: Yup.array().of(Yup.string()),
-    api_key_changed: Yup.boolean(),
+    selected_model_names: Yup.array().of(Yup.string()),
   });
 
   return (
@@ -130,10 +141,28 @@ export function LLMProviderUpdateForm({
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
-        values.api_key_changed = values.api_key !== initialValues.api_key;
+        // build final payload
+        const {
+          selected_model_names: visibleModels,
+          model_configurations: modelConfigurations,
+          ...rest
+        } = values;
+
+        // Create the final payload with proper typing
+        const finalValues = {
+          ...rest,
+          api_key_changed: values.api_key !== initialValues.api_key,
+          model_configurations: llmProviderDescriptor.model_configurations.map(
+            (modelConfiguration): ModelConfigurationUpsertRequest => ({
+              name: modelConfiguration.name,
+              is_visible: visibleModels.includes(modelConfiguration.name),
+              max_input_tokens: null,
+            })
+          ),
+        };
 
         // test the configuration
-        if (!isEqual(values, initialValues)) {
+        if (!isEqual(finalValues, initialValues)) {
           setIsTesting(true);
 
           const response = await fetch("/api/admin/llm/test", {
@@ -143,7 +172,7 @@ export function LLMProviderUpdateForm({
             },
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
-              ...values,
+              ...finalValues,
             }),
           });
           setIsTesting(false);
@@ -166,9 +195,10 @@ export function LLMProviderUpdateForm({
             },
             body: JSON.stringify({
               provider: llmProviderDescriptor.name,
-              ...values,
+              ...finalValues,
               fast_default_model_name:
-                values.fast_default_model_name || values.default_model_name,
+                finalValues.fast_default_model_name ||
+                finalValues.default_model_name,
             }),
           }
         );
@@ -304,17 +334,19 @@ export function LLMProviderUpdateForm({
             <>
               <Separator />
 
-              {llmProviderDescriptor.llm_names.length > 0 ? (
+              {llmProviderDescriptor.model_configurations.length > 0 ? (
                 <SelectorFormField
                   name="default_model_name"
                   subtext="The model to use by default for this provider unless otherwise specified."
                   label="Default Model"
-                  options={llmProviderDescriptor.llm_names.map((name) => ({
-                    // don't clean up names here to give admins descriptive names / handle duplicates
-                    // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                    name: name,
-                    value: name,
-                  }))}
+                  options={llmProviderDescriptor.model_configurations.map(
+                    (modelConfiguration) => ({
+                      // don't clean up names here to give admins descriptive names / handle duplicates
+                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                      name: modelConfiguration.name,
+                      value: modelConfiguration.name,
+                    })
+                  )}
                   maxHeight="max-h-56"
                 />
               ) : (
@@ -335,19 +367,21 @@ export function LLMProviderUpdateForm({
               )}
 
               {!llmProviderDescriptor.single_model_supported &&
-                (llmProviderDescriptor.llm_names.length > 0 ? (
+                (llmProviderDescriptor.model_configurations.length > 0 ? (
                   <SelectorFormField
                     name="fast_default_model_name"
                     subtext={`The model to use for lighter flows like \`LLM Chunk Filter\`
             for this provider. If \`Default\` is specified, will use
             the Default Model configured above.`}
                     label="[Optional] Fast Model"
-                    options={llmProviderDescriptor.llm_names.map((name) => ({
-                      // don't clean up names here to give admins descriptive names / handle duplicates
-                      // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                      name: name,
-                      value: name,
-                    }))}
+                    options={llmProviderDescriptor.model_configurations.map(
+                      (modelConfiguration) => ({
+                        // don't clean up names here to give admins descriptive names / handle duplicates
+                        // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
+                        name: modelConfiguration.name,
+                        value: modelConfiguration.name,
+                      })
+                    )}
                     includeDefault
                     maxHeight="max-h-56"
                   />
@@ -370,33 +404,32 @@ export function LLMProviderUpdateForm({
                 />
                 {showAdvancedOptions && (
                   <>
-                    {llmProviderDescriptor.llm_names.length > 0 && (
+                    {llmProviderDescriptor.model_configurations.length > 0 && (
                       <div className="w-full">
                         <MultiSelectField
                           selectedInitially={
-                            formikProps.values.display_model_names
+                            formikProps.values.selected_model_names ?? []
                           }
-                          name="display_model_names"
+                          name="selected_model_names"
                           label="Display Models"
                           subtext="Select the models to make available to users. Unselected models will not be available."
-                          options={llmProviderDescriptor.llm_names.map(
-                            (name) => ({
-                              value: name,
+                          options={llmProviderDescriptor.model_configurations.map(
+                            (modelConfiguration) => ({
+                              value: modelConfiguration.name,
                               // don't clean up names here to give admins descriptive names / handle duplicates
                               // like us.anthropic.claude-3-7-sonnet-20250219-v1:0 and anthropic.claude-3-7-sonnet-20250219-v1:0
-                              label: name,
+                              label: modelConfiguration.name,
                             })
                           )}
                           onChange={(selected) =>
                             formikProps.setFieldValue(
-                              "display_model_names",
+                              "selected_model_names",
                               selected
                             )
                           }
                         />
                       </div>
                     )}
-
                     <IsPublicGroupSelector
                       formikProps={formikProps}
                       objectName="LLM Provider"

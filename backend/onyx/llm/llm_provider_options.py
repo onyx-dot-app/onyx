@@ -3,6 +3,9 @@ from enum import Enum
 import litellm  # type: ignore
 from pydantic import BaseModel
 
+from onyx.llm.utils import model_supports_image_input
+from onyx.server.manage.llm.models import ModelConfigurationView
+
 
 class CustomConfigKeyType(Enum):
     # used for configuration values that require manual input
@@ -30,7 +33,7 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     api_base_required: bool
     api_version_required: bool
     custom_config_keys: list[CustomConfigKey] | None = None
-    llm_names: list[str]
+    model_configurations: list[ModelConfigurationView]
     default_model: str | None = None
     default_fast_model: str | None = None
     # set for providers like Azure, which require a deployment name.
@@ -41,10 +44,13 @@ class WellKnownLLMProviderDescriptor(BaseModel):
 
 OPENAI_PROVIDER_NAME = "openai"
 OPEN_AI_MODEL_NAMES = [
+    "o4-mini",
     "o3-mini",
     "o1-mini",
+    "o3",
     "o1",
     "gpt-4",
+    "gpt-4.1",
     "gpt-4o",
     "gpt-4o-mini",
     "o1-preview",
@@ -64,6 +70,7 @@ OPEN_AI_MODEL_NAMES = [
     "gpt-3.5-turbo-16k-0613",
     "gpt-3.5-turbo-0301",
 ]
+OPEN_AI_VISIBLE_MODEL_NAMES = ["o1", "o3-mini", "gpt-4o", "gpt-4o-mini"]
 
 BEDROCK_PROVIDER_NAME = "bedrock"
 # need to remove all the weird "bedrock/eu-central-1/anthropic.claude-v1" named
@@ -75,6 +82,7 @@ BEDROCK_MODEL_NAMES = [
     for model in litellm.bedrock_models + litellm.bedrock_converse_models
     if "/" not in model and "embed" not in model
 ][::-1]
+BEDROCK_DEFAULT_MODEL = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 
 IGNORABLE_ANTHROPIC_MODELS = [
     "claude-2",
@@ -87,6 +95,10 @@ ANTHROPIC_MODEL_NAMES = [
     for model in litellm.anthropic_models
     if model not in IGNORABLE_ANTHROPIC_MODELS
 ][::-1]
+ANTHROPIC_VISIBLE_MODEL_NAMES = [
+    "claude-3-5-sonnet-20241022",
+    "claude-3-7-sonnet-20250219",
+]
 
 AZURE_PROVIDER_NAME = "azure"
 
@@ -118,6 +130,10 @@ VERTEXAI_MODEL_NAMES = [
     "gemini-1.5-flash-001",
     "gemini-1.5-flash-002",
 ]
+VERTEXAI_VISIBLE_MODEL_NAMES = [
+    VERTEXAI_DEFAULT_MODEL,
+    VERTEXAI_DEFAULT_FAST_MODEL,
+]
 
 
 _PROVIDER_TO_MODELS_MAP = {
@@ -125,6 +141,13 @@ _PROVIDER_TO_MODELS_MAP = {
     BEDROCK_PROVIDER_NAME: BEDROCK_MODEL_NAMES,
     ANTHROPIC_PROVIDER_NAME: ANTHROPIC_MODEL_NAMES,
     VERTEXAI_PROVIDER_NAME: VERTEXAI_MODEL_NAMES,
+}
+
+_PROVIDER_TO_VISIBLE_MODELS_MAP = {
+    OPENAI_PROVIDER_NAME: OPEN_AI_VISIBLE_MODEL_NAMES,
+    BEDROCK_PROVIDER_NAME: [BEDROCK_DEFAULT_MODEL],
+    ANTHROPIC_PROVIDER_NAME: ANTHROPIC_VISIBLE_MODEL_NAMES,
+    VERTEXAI_PROVIDER_NAME: VERTEXAI_VISIBLE_MODEL_NAMES,
 }
 
 
@@ -140,7 +163,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider(OPENAI_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                OPENAI_PROVIDER_NAME
+            ),
             default_model="gpt-4o",
             default_fast_model="gpt-4o-mini",
         ),
@@ -151,7 +176,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=False,
             api_version_required=False,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider(ANTHROPIC_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                ANTHROPIC_PROVIDER_NAME
+            ),
             default_model="claude-3-7-sonnet-20250219",
             default_fast_model="claude-3-5-sonnet-20241022",
         ),
@@ -162,7 +189,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_base_required=True,
             api_version_required=True,
             custom_config_keys=[],
-            llm_names=fetch_models_for_provider(AZURE_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                AZURE_PROVIDER_NAME
+            ),
             deployment_name_required=True,
             single_model_supported=True,
         ),
@@ -191,9 +220,11 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
                     description="If using AWS IAM roles, AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY can be left blank.",
                 ),
             ],
-            llm_names=fetch_models_for_provider(BEDROCK_PROVIDER_NAME),
-            default_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
-            default_fast_model="anthropic.claude-3-5-sonnet-20241022-v2:0",
+            model_configurations=fetch_model_configurations_for_provider(
+                BEDROCK_PROVIDER_NAME
+            ),
+            default_model=BEDROCK_DEFAULT_MODEL,
+            default_fast_model=BEDROCK_DEFAULT_MODEL,
         ),
         WellKnownLLMProviderDescriptor(
             name=VERTEXAI_PROVIDER_NAME,
@@ -201,7 +232,9 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
             api_key_required=False,
             api_base_required=False,
             api_version_required=False,
-            llm_names=fetch_models_for_provider(VERTEXAI_PROVIDER_NAME),
+            model_configurations=fetch_model_configurations_for_provider(
+                VERTEXAI_PROVIDER_NAME
+            ),
             custom_config_keys=[
                 CustomConfigKey(
                     name=CREDENTIALS_FILE_CUSTOM_CONFIG_KEY,
@@ -220,3 +253,40 @@ def fetch_available_well_known_llms() -> list[WellKnownLLMProviderDescriptor]:
 
 def fetch_models_for_provider(provider_name: str) -> list[str]:
     return _PROVIDER_TO_MODELS_MAP.get(provider_name, [])
+
+
+def fetch_model_names_for_provider_as_set(provider_name: str) -> set[str] | None:
+    model_names = fetch_models_for_provider(provider_name)
+    return set(model_names) if model_names else None
+
+
+def fetch_visible_model_names_for_provider_as_set(
+    provider_name: str,
+) -> set[str] | None:
+    visible_model_names: list[str] | None = _PROVIDER_TO_VISIBLE_MODELS_MAP.get(
+        provider_name
+    )
+    return set(visible_model_names) if visible_model_names else None
+
+
+def fetch_model_configurations_for_provider(
+    provider_name: str,
+) -> list[ModelConfigurationView]:
+    # if there are no explicitly listed visible model names,
+    # then we won't mark any of them as "visible". This will get taken
+    # care of by the logic to make default models visible.
+    visible_model_names = (
+        fetch_visible_model_names_for_provider_as_set(provider_name) or set()
+    )
+    return [
+        ModelConfigurationView(
+            name=model_name,
+            is_visible=model_name in visible_model_names,
+            max_input_tokens=None,
+            supports_image_input=model_supports_image_input(
+                model_name=model_name,
+                model_provider=provider_name,
+            ),
+        )
+        for model_name in fetch_models_for_provider(provider_name)
+    ]

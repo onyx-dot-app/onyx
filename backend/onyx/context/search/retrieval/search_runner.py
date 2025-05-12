@@ -161,7 +161,9 @@ def doc_index_retrieval(
 
     keyword_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
     semantic_embeddings_thread: TimeoutThread[list[Embedding]] | None = None
-    top_base_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = None
+    top_base_chunks_standard_ranking_thread: (
+        TimeoutThread[list[InferenceChunkUncleaned]] | None
+    ) = None
 
     top_semantic_chunks_thread: TimeoutThread[list[InferenceChunkUncleaned]] | None = (
         None
@@ -173,7 +175,7 @@ def doc_index_retrieval(
     top_semantic_chunks: list[InferenceChunkUncleaned] | None = None
 
     # original retrieveal method
-    top_base_chunks_thread = run_in_background(
+    top_base_chunks_standard_ranking_thread = run_in_background(
         document_index.hybrid_retrieval,
         query.query,
         query_embedding,
@@ -182,7 +184,7 @@ def doc_index_retrieval(
         query.hybrid_alpha,
         query.recency_bias_multiplier,
         query.num_hits,
-        "semantic",
+        QueryExpansionType.SEMANTIC,
         query.offset,
     )
 
@@ -243,7 +245,9 @@ def doc_index_retrieval(
                 query.offset,
             )
 
-        top_base_chunks = wait_on_background(top_base_chunks_thread)
+        top_base_chunks_standard_ranking = wait_on_background(
+            top_base_chunks_standard_ranking_thread
+        )
 
         top_keyword_chunks = wait_on_background(top_keyword_chunks_thread)
 
@@ -251,7 +255,7 @@ def doc_index_retrieval(
             assert top_semantic_chunks_thread is not None
             top_semantic_chunks = wait_on_background(top_semantic_chunks_thread)
 
-        all_top_chunks = top_base_chunks + top_keyword_chunks
+        all_top_chunks = top_base_chunks_standard_ranking + top_keyword_chunks
 
         # use all three retrieval methods to retrieve top chunks
 
@@ -263,8 +267,13 @@ def doc_index_retrieval(
 
     else:
 
-        top_base_chunks = wait_on_background(top_base_chunks_thread)
-        top_chunks = _dedupe_chunks(top_base_chunks)
+        top_base_chunks_standard_ranking = wait_on_background(
+            top_base_chunks_standard_ranking_thread
+        )
+
+        top_chunks = _dedupe_chunks(top_base_chunks_standard_ranking)
+
+    logger.info(f"Overall number of top initial retrieval chunks: {len(top_chunks)}")
 
     retrieval_requests: list[VespaChunkRequest] = []
     normal_chunks: list[InferenceChunkUncleaned] = []

@@ -17,13 +17,11 @@ export function ContextLimitPanel({
 }: ContextLimitPanelProps) {
   const { llmProviders } = useChatContext();
   const modelDescriptors = llmProviders.flatMap((provider) =>
-    Object.entries(provider.model_token_limits ?? {}).map(
-      ([modelName, maxTokens]) => ({
-        modelName,
-        provider: provider.provider,
-        maxTokens,
-      })
-    )
+    provider.model_configurations.map((modelConfiguration) => ({
+      modelName: modelConfiguration.name,
+      provider: provider.provider,
+      maxTokens: modelConfiguration.max_input_tokens!,
+    }))
   );
 
   return (

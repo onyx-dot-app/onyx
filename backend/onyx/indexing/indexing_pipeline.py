@@ -74,7 +74,6 @@ from onyx.llm.factory import get_default_llm_with_vision
 from onyx.llm.factory import get_default_llms
 from onyx.llm.factory import get_llm_for_contextual_rag
 from onyx.llm.interfaces import LLM
-from onyx.llm.utils import get_max_input_tokens
 from onyx.llm.utils import MAX_CONTEXT_TOKENS
 from onyx.llm.utils import message_to_string
 from onyx.natural_language_processing.search_nlp_models import (
@@ -664,17 +663,12 @@ def add_contextual_summaries(
     Adds Document summary and chunk-within-document context to the chunks
     based on which environment variables are set.
     """
-    max_context = get_max_input_tokens(
-        model_name=llm.config.model_name,
-        model_provider=llm.config.model_provider,
-        output_tokens=MAX_CONTEXT_TOKENS,
-    )
     doc2chunks = defaultdict(list)
     for chunk in chunks:
         doc2chunks[chunk.source_document.id].append(chunk)
 
     # The number of tokens allowed for the document when computing a document summary
-    trunc_doc_summary_tokens = max_context - len(
+    trunc_doc_summary_tokens = llm.config.max_input_tokens - len(
         tokenizer.encode(DOCUMENT_SUMMARY_PROMPT)
     )
 
@@ -683,7 +677,9 @@ def add_contextual_summaries(
     )
     # The number of tokens allowed for the document when computing a
     # "chunk in context of document" summary
-    trunc_doc_chunk_tokens = max_context - prompt_tokens - chunk_token_limit
+    trunc_doc_chunk_tokens = (
+        llm.config.max_input_tokens - prompt_tokens - chunk_token_limit
+    )
     for chunks_by_doc in doc2chunks.values():
         doc_tokens = None
         if USE_DOCUMENT_SUMMARY:
@@ -786,7 +782,10 @@ def index_doc_batch(
         # Because the chunker's tokens are different from the LLM's tokens,
         # We add a fudge factor to ensure we truncate prompts to the LLM's token limit
         chunks = add_contextual_summaries(
-            chunks, llm, llm_tokenizer, chunker.chunk_token_limit * 2
+            chunks=chunks,
+            llm=llm,
+            tokenizer=llm_tokenizer,
+            chunk_token_limit=chunker.chunk_token_limit * 2,
         )
 
     logger.debug("Starting embedding")

@@ -160,35 +160,12 @@ export type PacketType =
   | AgenticMessageResponseIDInfo
   | UserKnowledgeFilePacket;
 
-export async function* sendMessage({
-  regenerate,
-  message,
-  fileDescriptors,
-  userFileIds,
-  userFolderIds,
-  parentMessageId,
-  chatSessionId,
-  promptId,
-  filters,
-  selectedDocumentIds,
-  queryOverride,
-  forceSearch,
-  modelProvider,
-  modelVersion,
-  temperature,
-  systemPromptOverride,
-  useExistingUserMessage,
-  alternateAssistantId,
-  signal,
-  forceUserFileSearch,
-  useLanggraph,
-}: {
+export interface SendMessageParams {
   regenerate: boolean;
   message: string;
   fileDescriptors: FileDescriptor[];
   parentMessageId: number | null;
   chatSessionId: string;
-  promptId: number | null | undefined;
   filters: Filters | null;
   selectedDocumentIds: number[] | null;
   queryOverride?: string;
@@ -204,7 +181,30 @@ export async function* sendMessage({
   userFolderIds?: number[];
   forceUserFileSearch?: boolean;
   useLanggraph?: boolean;
-}): AsyncGenerator<PacketType, void, unknown> {
+}
+
+export async function* sendMessage({
+  regenerate,
+  message,
+  fileDescriptors,
+  userFileIds,
+  userFolderIds,
+  parentMessageId,
+  chatSessionId,
+  filters,
+  selectedDocumentIds,
+  queryOverride,
+  forceSearch,
+  modelProvider,
+  modelVersion,
+  temperature,
+  systemPromptOverride,
+  useExistingUserMessage,
+  alternateAssistantId,
+  signal,
+  forceUserFileSearch,
+  useLanggraph,
+}: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
     selectedDocumentIds && selectedDocumentIds.length > 0;
   const body = JSON.stringify({
@@ -212,7 +212,10 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     message: message,
-    prompt_id: promptId,
+    // just use the default prompt for the assistant.
+    // should remove this in the future, as we don't support multiple prompts for a
+    // single assistant anyways
+    prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
     force_user_file_search: forceUserFileSearch,
     file_descriptors: fileDescriptors,
@@ -221,13 +224,7 @@ export async function* sendMessage({
     regenerate,
     retrieval_options: !documentsAreSelected
       ? {
-          run_search:
-            promptId === null ||
-            promptId === undefined ||
-            queryOverride ||
-            forceSearch
-              ? "always"
-              : "auto",
+          run_search: queryOverride || forceSearch ? "always" : "auto",
           real_time: true,
           filters: filters,
         }

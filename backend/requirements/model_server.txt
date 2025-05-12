@@ -4,7 +4,7 @@ cohere==5.6.1
 fastapi==0.115.12
 google-cloud-aiplatform==1.58.0
 numpy==1.26.4
-openai==1.66.3
+openai==1.75.0
 pydantic==2.8.2
 retry==0.9.2
 safetensors==0.5.3
@@ -14,7 +14,7 @@ torch==2.6.0
 transformers==4.49.0
 uvicorn==0.21.1
 voyageai==0.2.3
-litellm==1.63.8
+litellm==1.66.3
 sentry-sdk[fastapi,celery,starlette]==2.14.0
 aioboto3==14.0.0
 prometheus_fastapi_instrumentator==7.1.0

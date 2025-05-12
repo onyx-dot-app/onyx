@@ -112,7 +112,8 @@ class DocumentManager:
             )
             response.raise_for_status()
 
-        print("Seeding completed successfully.")
+        api_key_id = api_key.api_key_id if api_key else ""
+        print(f"Seeding docs for api_key_id={api_key_id} completed successfully.")
         return [
             SimpleTestDocument(
                 id=document["document"]["id"],
@@ -140,7 +141,8 @@ class DocumentManager:
         )
         response.raise_for_status()
 
-        print("Seeding completed successfully.")
+        api_key_id = api_key.api_key_id if api_key else ""
+        print(f"Seeding doc for api_key_id={api_key_id} completed successfully.")
 
         return SimpleTestDocument(
             id=document["document"]["id"],

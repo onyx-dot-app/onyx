@@ -24,7 +24,11 @@ class LLMProviderManager:
         is_public: bool | None = None,
         user_performing_action: DATestUser | None = None,
     ) -> DATestLLMProvider:
-        print("Seeding LLM Providers...")
+        email = "Unknown"
+        if user_performing_action:
+            email = user_performing_action.email
+
+        print(f"Seeding LLM Providers for {email}...")
 
         llm_provider = LLMProviderUpsertRequest(
             name=name or f"test-provider-{uuid4()}",
@@ -37,13 +41,12 @@ class LLMProviderManager:
             fast_default_model_name=default_model_name or "gpt-4o-mini",
             is_public=is_public or True,
             groups=groups or [],
-            display_model_names=None,
-            model_names=None,
+            model_configurations=[],
             api_key_changed=True,
         )
 
         llm_response = requests.put(
-            f"{API_SERVER_URL}/admin/llm/provider",
+            f"{API_SERVER_URL}/admin/llm/provider?is_creation=true",
             json=llm_provider.model_dump(),
             headers=(
                 user_performing_action.headers

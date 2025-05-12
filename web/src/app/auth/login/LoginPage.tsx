@@ -29,37 +29,51 @@ export default function LoginPage({
   useSendAuthRequiredMessage();
   return (
     <div className="flex flex-col w-full justify-center">
-      {authUrl && authTypeMetadata && (
-        <>
+      {authUrl &&
+        authTypeMetadata &&
+        authTypeMetadata.authType !== "cloud" &&
+        // basic auth is handled below w/ the EmailPasswordForm
+        authTypeMetadata.authType !== "basic" && (
+          <>
+            <h2 className="text-center text-xl text-strong font-bold">
+              <LoginText />
+            </h2>
+            <SignInButton
+              authorizeUrl={authUrl}
+              authType={authTypeMetadata?.authType}
+            />
+          </>
+        )}
+
+      {authTypeMetadata?.authType === "cloud" && (
+        <div className="w-full justify-center">
           <h2 className="text-center text-xl text-strong font-bold">
             <LoginText />
           </h2>
-
-          <SignInButton
-            authorizeUrl={authUrl}
-            authType={authTypeMetadata?.authType}
-          />
-        </>
-      )}
-
-      {authTypeMetadata?.authType === "cloud" && (
-        <div className="mt-4 w-full justify-center">
-          <div className="flex items-center w-full my-4">
-            <div className="flex-grow border-t border-background-300"></div>
-            <span className="px-4 text-text-500">or</span>
-            <div className="flex-grow border-t border-background-300"></div>
-          </div>
           <EmailPasswordForm shouldVerify={true} nextUrl={nextUrl} />
-
           {NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED && (
             <div className="flex mt-4 justify-between">
               <Link
                 href="/auth/forgot-password"
-                className="text-link font-medium"
+                className="ml-auto text-link font-medium"
               >
                 Reset Password
               </Link>
             </div>
+          )}
+          {authUrl && authTypeMetadata && (
+            <>
+              <div className="flex items-center w-full my-4">
+                <div className="flex-grow border-t border-background-300"></div>
+                <span className="px-4 text-text-500">or</span>
+                <div className="flex-grow border-t border-background-300"></div>
+              </div>
+
+              <SignInButton
+                authorizeUrl={authUrl}
+                authType={authTypeMetadata?.authType}
+              />
+            </>
           )}
         </div>
       )}

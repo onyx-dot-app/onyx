@@ -120,8 +120,10 @@ SMTP_SERVER = os.environ.get("SMTP_SERVER") or "smtp.gmail.com"
 SMTP_PORT = int(os.environ.get("SMTP_PORT") or "587")
 SMTP_USER = os.environ.get("SMTP_USER", "your-email@gmail.com")
 SMTP_PASS = os.environ.get("SMTP_PASS", "your-gmail-password")
-EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS])
 EMAIL_FROM = os.environ.get("EMAIL_FROM") or SMTP_USER
+
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY") or ""
+EMAIL_CONFIGURED = all([SMTP_SERVER, SMTP_USER, SMTP_PASS]) or SENDGRID_API_KEY
 
 # If set, Onyx will listen to the `expires_at` returned by the identity
 # provider (e.g. Okta, Google, etc.) and force the user to re-authenticate
@@ -351,6 +353,11 @@ NOTION_CONNECTOR_DISABLE_RECURSIVE_PAGE_LOOKUP = (
     == "true"
 )
 
+
+#####
+# Confluence Connector Configs
+#####
+
 CONFLUENCE_CONNECTOR_LABELS_TO_SKIP = [
     ignored_tag
     for ignored_tag in os.environ.get("CONFLUENCE_CONNECTOR_LABELS_TO_SKIP", "").split(
@@ -372,6 +379,26 @@ CONFLUENCE_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD = int(
 # large files from freezing indexing. 200,000 is ~100 google doc pages.
 CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD = int(
     os.environ.get("CONFLUENCE_CONNECTOR_ATTACHMENT_CHAR_COUNT_THRESHOLD", 200_000)
+)
+
+# A JSON-formatted array. Each item in the array should have the following structure:
+# {
+#     "user_id": "1234567890",
+#     "username": "bob",
+#     "display_name": "Bob Fitzgerald",
+#     "email": "bob@example.com",
+#     "type": "known"
+# }
+_RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = os.environ.get(
+    "CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE", ""
+)
+CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE = cast(
+    list[dict[str, str]] | None,
+    (
+        json.loads(_RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE)
+        if _RAW_CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+        else None
+    ),
 )
 
 # Due to breakages in the confluence API, the timezone offset must be specified client side

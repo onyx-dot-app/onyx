@@ -16,7 +16,6 @@ import { LLM_PROVIDERS_ADMIN_URL } from "./constants";
 import {
   Label,
   SubLabel,
-  TextArrayField,
   TextFormField,
 } from "@/components/admin/connectors/Field";
 import { useState } from "react";
@@ -27,6 +26,7 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { IsPublicGroupSelector } from "@/components/IsPublicGroupSelector";
 import { usePaidEnterpriseFeaturesEnabled } from "@/components/settings/usePaidEnterpriseFeaturesEnabled";
+import { ModelConfigurationField } from "./ModelConfigurationField";
 
 function customConfigProcessing(customConfigsList: [string, string][]) {
   const customConfig: { [key: string]: string } = {};
@@ -66,13 +66,19 @@ export function CustomLLMProviderUpdateForm({
     default_model_name: existingLlmProvider?.default_model_name ?? null,
     fast_default_model_name:
       existingLlmProvider?.fast_default_model_name ?? null,
-    model_names: existingLlmProvider?.model_names ?? [],
+    model_configurations: existingLlmProvider?.model_configurations.map(
+      (modelConfiguration) => ({
+        ...modelConfiguration,
+        max_input_tokens: modelConfiguration.max_input_tokens ?? null,
+      })
+    ) ?? [{ name: "", is_visible: true, max_input_tokens: null }],
     custom_config_list: existingLlmProvider?.custom_config
       ? Object.entries(existingLlmProvider.custom_config)
       : [],
     is_public: existingLlmProvider?.is_public ?? true,
     groups: existingLlmProvider?.groups ?? [],
     deployment_name: existingLlmProvider?.deployment_name ?? null,
+    api_key_changed: false,
   };
 
   // Setup validation schema if required
@@ -82,7 +88,13 @@ export function CustomLLMProviderUpdateForm({
     api_key: Yup.string(),
     api_base: Yup.string(),
     api_version: Yup.string(),
-    model_names: Yup.array(Yup.string().required("Model name is required")),
+    model_configurations: Yup.array(
+      Yup.object({
+        name: Yup.string().required("Model name is required"),
+        is_visible: Yup.boolean().required("Visibility is required"),
+        max_input_tokens: Yup.number().nullable().optional(),
+      })
+    ),
     default_model_name: Yup.string().required("Model name is required"),
     fast_default_model_name: Yup.string().nullable(),
     custom_config_list: Yup.array(),
@@ -101,7 +113,22 @@ export function CustomLLMProviderUpdateForm({
       onSubmit={async (values, { setSubmitting }) => {
         setSubmitting(true);
 
-        if (values.model_names.length === 0) {
+        // build final payload
+        const finalValues = { ...values };
+        finalValues.model_configurations = finalValues.model_configurations.map(
+          (modelConfiguration) => ({
+            ...modelConfiguration,
+            max_input_tokens:
+              modelConfiguration.max_input_tokens === null ||
+              modelConfiguration.max_input_tokens === undefined
+                ? null
+                : modelConfiguration.max_input_tokens,
+            supports_image_input: false, // doesn't matter, not used
+          })
+        );
+        finalValues.api_key_changed = values.api_key !== initialValues.api_key;
+
+        if (values.model_configurations.length === 0) {
           const fullErrorMsg = "At least one model name is required";
           if (setPopup) {
             setPopup({
@@ -138,18 +165,21 @@ export function CustomLLMProviderUpdateForm({
           }
         }
 
-        const response = await fetch(LLM_PROVIDERS_ADMIN_URL, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...values,
-            // For custom llm providers, all model names are displayed
-            display_model_names: values.model_names,
-            custom_config: customConfigProcessing(values.custom_config_list),
-          }),
-        });
+        const response = await fetch(
+          `${LLM_PROVIDERS_ADMIN_URL}${
+            existingLlmProvider ? "" : "?is_creation=true"
+          }`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...values,
+              custom_config: customConfigProcessing(values.custom_config_list),
+            }),
+          }
+        );
 
         if (!response.ok) {
           const errorMsg = (await response.json()).detail;
@@ -376,34 +406,14 @@ export function CustomLLMProviderUpdateForm({
             />
 
             <Separator />
-
             {!existingLlmProvider?.deployment_name && (
-              <TextArrayField
-                name="model_names"
-                label="Model Names"
-                values={formikProps.values}
-                subtext={
-                  <>
-                    List the individual models that you want to make available
-                    as a part of this provider. At least one must be specified.
-                    For the best experience your [Provider Name]/[Model Name]
-                    should match one of the pairs listed{" "}
-                    <a
-                      target="_blank"
-                      href="https://models.litellm.ai/"
-                      className="text-link"
-                      rel="noreferrer"
-                    >
-                      here
-                    </a>
-                    .
-                  </>
-                }
+              <ModelConfigurationField
+                name="model_configurations"
+                formikProps={formikProps as any}
               />
             )}
 
             <Separator />
-
             <TextFormField
               name="default_model_name"
               subtext={`
