@@ -8,9 +8,9 @@ import {
   convertDateToEndOfDay,
   convertDateToStartOfDay,
   getXDaysAgo,
-} from "./dateUtils";
-import { THIRTY_DAYS } from "./DateRangeSelector";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+} from "../../../../components/dateRangeSelectors/dateUtils";
+import { THIRTY_DAYS } from "../../../../components/dateRangeSelectors/AdminDateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 
 export const useTimeRange = () => {
   return useState<DateRangePickerValue>({

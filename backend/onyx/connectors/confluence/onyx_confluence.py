@@ -16,9 +16,9 @@ from atlassian import Confluence  # type:ignore
 from redis import Redis
 from requests import HTTPError
 
-from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
-from ee.onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from onyx.configs.app_configs import CONFLUENCE_CONNECTOR_USER_PROFILES_OVERRIDE
+from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_ID
+from onyx.configs.app_configs import OAUTH_CONFLUENCE_CLOUD_CLIENT_SECRET
 from onyx.connectors.confluence.models import ConfluenceUser
 from onyx.connectors.confluence.user_profile_override import (
     process_confluence_user_profiles_override,

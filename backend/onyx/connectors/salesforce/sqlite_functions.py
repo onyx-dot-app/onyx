@@ -351,6 +351,9 @@ class OnyxSalesforceSQLite:
         if self._conn is None:
             raise RuntimeError("Database connection is closed")
 
+        # some customers need this to be larger than the default 128KB, go with 16MB
+        csv.field_size_limit(16 * 1024 * 1024)
+
         updated_ids = []
 
         with self._conn:

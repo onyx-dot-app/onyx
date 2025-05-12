@@ -1,6 +1,6 @@
 import React from "react";
 import { InfoItem } from "./InfoItem";
-import { statusToDisplay } from "./utils";
+import { statusToDisplay } from "@/lib/billing/utils";
 
 interface SubscriptionSummaryProps {
   billingInformation: any;

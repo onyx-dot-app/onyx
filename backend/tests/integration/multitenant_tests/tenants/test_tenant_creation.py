@@ -88,5 +88,8 @@ def test_admin_can_create_and_verify_cc_pair(reset_multitenant: None) -> None:
 
 
 def test_settings_access() -> None:
+    """Calls to the enterprise settings endpoint without authentication should fail with
+    403 (and not 500, which will lock the web UI into a "maintenance mode" page)"""
+
     response = requests.get(url=f"{API_SERVER_URL}/enterprise-settings")
     assert response.status_code == HTTPStatus.FORBIDDEN

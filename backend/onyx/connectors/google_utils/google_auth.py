@@ -5,8 +5,8 @@ from google.auth.transport.requests import Request  # type: ignore
 from google.oauth2.credentials import Credentials as OAuthCredentials  # type: ignore
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials  # type: ignore
 
-from ee.onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
-from ee.onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
+from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_ID
+from onyx.configs.app_configs import OAUTH_GOOGLE_DRIVE_CLIENT_SECRET
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_AUTHENTICATION_METHOD,

@@ -29,7 +29,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.connectors.models import TextSection
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
-from onyx.db.connector_credential_pair import get_last_successful_attempt_time
+from onyx.db.connector_credential_pair import get_last_successful_attempt_poll_range_end
 from onyx.db.connector_credential_pair import update_connector_credential_pair
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
 from onyx.db.engine import get_session_with_current_tenant
@@ -296,20 +296,19 @@ def _run_indexing(
             search_settings_status=index_attempt_start.search_settings.status,
         )
 
-        last_successful_index_time = (
+        last_successful_index_poll_range_end = (
             ctx.earliest_index_time
             if ctx.from_beginning
-            else get_last_successful_attempt_time(
-                connector_id=ctx.connector_id,
-                credential_id=ctx.credential_id,
+            else get_last_successful_attempt_poll_range_end(
+                cc_pair_id=ctx.cc_pair_id,
                 earliest_index=ctx.earliest_index_time,
                 search_settings=index_attempt_start.search_settings,
                 db_session=db_session_temp,
             )
         )
-        if last_successful_index_time > POLL_CONNECTOR_OFFSET:
+        if last_successful_index_poll_range_end > POLL_CONNECTOR_OFFSET:
             window_start = datetime.fromtimestamp(
-                last_successful_index_time, tz=timezone.utc
+                last_successful_index_poll_range_end, tz=timezone.utc
             ) - timedelta(minutes=POLL_CONNECTOR_OFFSET)
         else:
             # don't go into "negative" time if we've never indexed before

@@ -1,7 +1,7 @@
 "use client";
 import { FiLock } from "react-icons/fi";
 import ErrorPageLayout from "./ErrorPageLayout";
-import { fetchCustomerPortal } from "@/app/ee/admin/billing/utils";
+import { fetchCustomerPortal } from "@/lib/billing/utils";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";

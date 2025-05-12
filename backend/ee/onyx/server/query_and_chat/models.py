@@ -6,7 +6,6 @@ from pydantic import BaseModel
 from pydantic import Field
 from pydantic import model_validator
 
-from ee.onyx.server.manage.models import StandardAnswer
 from onyx.chat.models import CitationInfo
 from onyx.chat.models import PersonaOverrideConfig
 from onyx.chat.models import QADocsResponse
@@ -19,6 +18,7 @@ from onyx.context.search.models import ChunkContext
 from onyx.context.search.models import RerankingDetails
 from onyx.context.search.models import RetrievalDetails
 from onyx.context.search.models import SavedSearchDoc
+from onyx.server.manage.models import StandardAnswer
 
 
 class StandardAnswerRequest(BaseModel):
