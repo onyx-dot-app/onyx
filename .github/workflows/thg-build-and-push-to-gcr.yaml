@@ -1,0 +1,89 @@
+name: Build and push to GCR
+on:
+  workflow_call:
+    inputs:
+      image_name:
+        description: name of the image to push
+        required: true
+        type: string
+      tag:
+        description: tag of the image to push
+        required: true
+        type: string
+      container_file:
+        description: location of the dockerfile to build and push
+        required: true
+        type: string
+      context:
+        description: context from where the dockerfile is built
+        required: true
+        type: string
+    secrets:
+      gcp_sa_key:
+        description: GCP service account key
+        required: true
+      gcp_project_id:
+        description: ID of the GCP project
+        required: true
+      build_args:
+        description: Build args to use in the build process - must be in "VAR=$VALUE" format, omitting the `--build-arg` syntax
+        required: false
+
+
+env:
+  registry: gcr.io
+
+jobs:
+  build-and-push-image:
+    name: Build and Push Docker Image to GCR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set environment variables
+        run: |
+          IMAGE=${{ env.registry }}/${{ secrets.gcp_project }}/${{ inputs.image_name }}
+          echo "IMAGE=${IMAGE}" >> $GITHUB_ENV
+          echo "TAGS=${IMAGE}:${{ inputs.tag }},${IMAGE}:latest" >> $GITHUB_ENV
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - id: GCP Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: '${{ secrets.gcp_sa_key }}'
+
+      - name: Set up GCP SDK
+        uses: 'google-github-actions/setup-gcloud@v2'
+        with:
+          project_id: ${{ secrets.gcp_project_id }}
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker gcr.io
+
+      - name: Extract docker metadata
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_NAME }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@v5
+        with:
+          file: ${{ inputs.container_file }}
+          context: ${{ inputs.context }}
+          tags: ${{ env.TAGS }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ secrets.build_args }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha,ref=${{ env.IMAGE }}
+          cache-to: type=gha,mode=max,ref=${{ env.IMAGE }}
+          push: true
+
