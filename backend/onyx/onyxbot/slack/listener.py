@@ -1016,7 +1016,7 @@ def process_shortcut(
                 channel=channel_id,
                 thread_ts=thread_ts,
                 text="Sorry, this shortcut is not configured correctly.",
-                is_ephemeral=True,
+                send_as_ephemeral=True,
                 user_id=user_id,
             )
             return
@@ -1029,7 +1029,7 @@ def process_shortcut(
                 channel=channel_id,
                 thread_ts=thread_ts,
                 text="This shortcut is currently disabled.",
-                is_ephemeral=True,
+                send_as_ephemeral=True,
                 user_id=user_id,
             )
             return
@@ -1102,7 +1102,7 @@ def process_shortcut(
                 channel=channel_id,
                 thread_ts=thread_ts,
                 text="Sorry, there was an error processing your request.",
-                is_ephemeral=True,
+                send_as_ephemeral=True,
                 user_id=user_id,
             )
 
