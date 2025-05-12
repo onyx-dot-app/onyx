@@ -304,12 +304,12 @@ def _convert_thread_to_document(
                             BasicExpertInfo(display_name=message_sender)
                         )
 
+    if not thread_text:
+        return None
+
     # if there are no found post members, grab the members from the parent channel
     if not post_members_list:
         post_members_list = _extract_channel_members(channel)
-
-    if not thread_text:
-        return None
 
     semantic_string = _construct_semantic_identifier(channel, top_message)
 
