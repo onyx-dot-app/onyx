@@ -14,6 +14,7 @@ from office365.runtime.client_request_exception import ClientRequestException  #
 from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
+from office365.teams.team import Team
 from pydantic import BaseModel
 
 from onyx.configs.constants import DocumentSource
@@ -196,6 +197,11 @@ class TeamsConnector(
                     assert isinstance(todo, TodoChannel)
                     tc.append(todo)
 
+                team = _get_team_with_id(
+                    graph_client=self.graph_client,
+                    team_id=todo.team_id,
+                )
+
                 with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
                     futures: list[Future[Document | None]] = []
                     for todo_channel in tc:
@@ -205,7 +211,7 @@ class TeamsConnector(
                                 curr_ctx.run,
                                 _collect_document_for_channel_id,
                                 graph_client=self.graph_client,
-                                team_id=todo_channel.team_id,
+                                team=team,
                                 channel_id=todo_channel.channel_id,
                             )
                         )
@@ -361,10 +367,10 @@ def _collect_all_teams(
     return todo_teams
 
 
-def _collect_all_channels_for_team_id(
+def _get_team_with_id(
     graph_client: GraphClient,
     team_id: str,
-) -> list[TodoTeam | TodoChannel]:
+) -> Team:
     team_collection = (
         graph_client.teams.get().filter(f"id eq '{team_id}'").top(1).execute_query()
     )
@@ -375,7 +381,14 @@ def _collect_all_channels_for_team_id(
         # shouldn't happen, but catching it regardless
         raise RuntimeError(f"Multiple teams with {team_id=} were found")
 
-    team = team_collection[0]
+    return team_collection[0]
+
+
+def _collect_all_channels_for_team_id(
+    graph_client: GraphClient,
+    team_id: str,
+) -> list[TodoTeam | TodoChannel]:
+    team = _get_team_with_id(graph_client=graph_client, team_id=team_id)
 
     todo_channels: list[TodoTeam | TodoChannel] = []
     next_url = None
@@ -405,13 +418,11 @@ def _collect_all_channels_for_team_id(
 
 def _collect_document_for_channel_id(
     graph_client: GraphClient,
-    team_id: str,
+    team: Team,
     channel_id: str,
 ) -> Document | None:
-    team_collection = (
-        graph_client.teams.get().filter(f"id eq '{team_id}'").top(1).execute_query()
-    )
-    team = team_collection[0]
+    if not team.id:
+        raise RuntimeError(f"The {team=} does not have an id associated with it")
 
     channel_collection = (
         team.channels.get().filter(f"id eq '{channel_id}'").execute_query()
