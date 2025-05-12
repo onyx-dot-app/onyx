@@ -8,6 +8,10 @@ from onyx.configs.constants import PUBLIC_DOC_PAT
 
 @dataclass(frozen=True)
 class ExternalAccess:
+
+    # arbitrary limit to prevent excessively large permissions sets
+    MAX_NUM_ENTRIES = 1000
+
     # Emails of external users with access to the doc externally
     external_user_emails: set[str]
     # Names or external IDs of groups with access to the doc
@@ -30,6 +34,10 @@ class ExternalAccess:
             f"external_user_group_ids={truncate_set(self.external_user_group_ids)}, "
             f"is_public={self.is_public})"
         )
+
+    @property
+    def num_entries(self) -> int:
+        return len(self.external_user_emails) + len(self.external_user_group_ids)
 
 
 @dataclass(frozen=True)
