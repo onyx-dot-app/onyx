@@ -230,6 +230,10 @@ class LangflowToolResponse(BaseModel):
     response: ToolResultType
     tool_name: str
 
+class ResumeToolResponse(BaseModel):
+    response: ToolResultType
+    tool_name: str
+
 
 class ToolConfig(BaseModel):
     id: int

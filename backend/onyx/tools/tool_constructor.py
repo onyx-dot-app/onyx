@@ -1,3 +1,5 @@
+import random
+import string
 from typing import cast
 from uuid import UUID
 
@@ -44,6 +46,10 @@ from onyx.tools.utils import compute_all_tool_tokens
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
+
+from onyx.db.models import UserFile
+from onyx.tools.tool_implementations.resume.minio_requests import minio_put_template_bytes
+from onyx.tools.tool_implementations.resume.resume_tool import ResumeTool
 
 logger = setup_logger()
 
@@ -145,6 +151,7 @@ def construct_tools(
     image_generation_tool_config: ImageGenerationToolConfig | None = None,
     custom_tool_config: CustomToolConfig | None = None,
     user_knowledge_present: bool = False,
+    user_file_files: list[UserFile] | None = None,
 ) -> dict[int, list[Tool]]:
     """Constructs tools based on persona configuration and available APIs"""
     tool_dict: dict[int, list[Tool]] = {}
@@ -231,6 +238,21 @@ def construct_tools(
                         pipeline_id=persona.pipeline_id,
                         prompt_config=prompt_config,
                         llm_config=llm.config
+                    )
+                ]
+            elif tool_cls.__name__ == ResumeTool.__name__:
+                random_characters = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+                template_file_name = f'resume_{random_characters}.docx'
+                template_file_name, persona.template_file = minio_put_template_bytes(
+                    template_file_name,
+                    persona.template_file
+                )
+                tool_dict[db_tool_model.id] = [
+                    ResumeTool(
+                        db_session,
+                        pipeline_id=persona.pipeline_id,
+                        docs=user_file_files,
+                        template_file=persona.template_file,
                     )
                 ]
 

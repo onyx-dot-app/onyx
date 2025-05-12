@@ -1746,6 +1746,7 @@ class Persona(Base):
     chunks_above: Mapped[int] = mapped_column(Integer)
     chunks_below: Mapped[int] = mapped_column(Integer)
     pipeline_id: Mapped[str] = mapped_column(String, nullable=True, default=None)
+    template_file: Mapped[bytes] = mapped_column(LargeBinary, nullable=True)
     # Pass every chunk through LLM for evaluation, fairly expensive
     # Can be turned off globally by admin, in which case, this setting is ignored
     llm_relevance_filter: Mapped[bool] = mapped_column(Boolean)
