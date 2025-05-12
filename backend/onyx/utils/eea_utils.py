@@ -57,11 +57,14 @@ def is_pdf_mime_type(url):
         return False
 
 def add_metadata_to_llm(llm, generation, user, user_message, chat_session):
+    user_id = "anon"
+    if user is not None:
+        user_id = user.email
     llm._model_kwargs={
         'metadata':{
             "debug_langfuse": True,
             "generation_name": generation,
-            "user_id":user.email,
+            "user_id":user_id,
             "session_id": str(chat_session.id),
             "trace_name": user_message.message[:200],
             "trace_id": str(user_message.id)

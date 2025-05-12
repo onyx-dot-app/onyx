@@ -412,6 +412,7 @@ class DefaultMultiLLM(LLM):
 
         try:
             return litellm.completion(
+                guardrails=["EEA-pre-guard_noerror"],
                 mock_response=MOCK_LLM_RESPONSE,
                 # model choice
                 # model="openai/gpt-4",

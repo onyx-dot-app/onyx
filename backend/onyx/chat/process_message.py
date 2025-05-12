@@ -531,8 +531,8 @@ def stream_chat_message_objects(
                         f"Final message id: {final_msg.id}, "
                         f"existing assistant message id: {existing_assistant_message_id}"
                     )
-        llm = add_metadata_to_llm(llm, f"{persona.name} (llm)", user, user_message, chat_session)
-        fast_llm = add_metadata_to_llm(fast_llm, f"{persona.name} (fast_llm)", user, user_message, chat_session)
+        llm = add_metadata_to_llm(llm, f"{persona.name} (llm)", user, user_message or final_msg, chat_session)
+        fast_llm = add_metadata_to_llm(fast_llm, f"{persona.name} (fast_llm)", user, user_message or final_msg, chat_session)
 
         # load all files needed for this chat chain in memory
         files = load_all_chat_files(
