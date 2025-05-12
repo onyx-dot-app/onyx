@@ -7,8 +7,10 @@ on:
 
 env:
   REGISTRY_IMAGE: ${{ contains(github.ref_name, 'cloud') && 'onyxdotapp/onyx-backend-cloud' || 'onyxdotapp/onyx-backend' }}
-  LATEST_TAG: ${{ contains(github.ref_name, 'latest') }}
   DEPLOYMENT: ${{ contains(github.ref_name, 'cloud') && 'cloud' || 'standalone' }}
+  
+  # don't tag cloud images with "latest"
+  LATEST_TAG: ${{ contains(github.ref_name, 'latest') && !contains(github.ref_name, 'cloud') }}
 
 jobs:
   build-and-push:
@@ -40,9 +42,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
           tags: |
-            type=raw,value=${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
-            type=raw,value=${{ env.LATEST_TAG == 'true' && format('{0}:latest', env.REGISTRY_IMAGE) || '' }}
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=${{ env.LATEST_TAG == 'true' && 'latest' || '' }}
             
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -111,6 +115,11 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=${{ env.LATEST_TAG == 'true' && 'latest' || '' }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@v3
@@ -138,6 +147,8 @@ jobs:
         env:
           TRIVY_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-db:2"
           TRIVY_JAVA_DB_REPOSITORY: "public.ecr.aws/aquasecurity/trivy-java-db:1"
+          TRIVY_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          TRIVY_PASSWORD: ${{ secrets.DOCKER_TOKEN }}
         with:
           # To run locally: trivy image --severity HIGH,CRITICAL onyxdotapp/onyx-backend
           image-ref: docker.io/${{ env.REGISTRY_IMAGE }}:${{ github.ref_name }}
