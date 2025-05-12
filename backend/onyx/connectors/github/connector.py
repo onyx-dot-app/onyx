@@ -712,11 +712,34 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                 # Try to get organization first
                 try:
                     org = self.github_client.get_organization(self.repo_owner)
-                    org.get_repos().totalCount  # Just check if we can access repos
-                except GithubException:
+                    total_count = org.get_repos().totalCount
+                    if total_count == 0:
+                        raise ConnectorValidationError(
+                            f"Found no repos for organization: {self.repo_owner}"
+                        )
+                except GithubException as e:
+                    # Check for missing SSO
+                    MISSING_SSO_ERROR_MESSAGE = "You must grant your Personal Access token access to this organization".lower()
+                    if MISSING_SSO_ERROR_MESSAGE in str(e).lower():
+                        SSO_GUIDE_LINK = (
+                            "https://docs.github.com/en/enterprise-cloud@latest/authentication/"
+                            "authenticating-with-saml-single-sign-on/"
+                            "authorizing-a-personal-access-token-for-use-with-saml-single-sign-on"
+                        )
+                        raise ConnectorValidationError(
+                            f"Your GitHub token is missing authorization to access the "
+                            f"`{self.repo_owner}` organization. Please follow the guide to "
+                            f"authorize your token: {SSO_GUIDE_LINK}"
+                        )
                     # If not an org, try as a user
                     user = self.github_client.get_user(self.repo_owner)
-                    user.get_repos().totalCount  # Just check if we can access repos
+
+                    # Just check if we can access repos
+                    total_count = user.get_repos().totalCount
+                    if total_count == 0:
+                        raise ConnectorValidationError(
+                            f"Found no repos for user: {self.repo_owner}"
+                        )
 
         except RateLimitExceededException:
             raise UnexpectedValidationError(
@@ -772,7 +795,7 @@ if __name__ == "__main__":
 
     connector = GithubConnector(
         repo_owner=os.environ["REPO_OWNER"],
-        repositories=os.environ["REPOSITORIES"],
+        repositories=os.environ.get("REPOSITORIES"),
     )
     connector.load_credentials(
         {"github_access_token": os.environ["ACCESS_TOKEN_GITHUB"]}
