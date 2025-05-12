@@ -52,9 +52,11 @@ class OnyxRedisCommand(Enum):
     purge_usergroup_taskset = "purge_usergroup_taskset"
     purge_locks_blocking_deletion = "purge_locks_blocking_deletion"
     purge_vespa_syncing = "purge_vespa_syncing"
+    purge_pidbox = "purge_pidbox"
     get_user_token = "get_user_token"
     delete_user_token = "delete_user_token"
     add_invited_user = "add_invited_user"
+    get_list_element = "get_list_element"
 
     def __str__(self) -> str:
         return self.value
@@ -145,6 +147,15 @@ def onyx_redis(
         return purge_by_match_and_type(
             "*connectorsync:vespa_syncing*", "string", batch, dry_run, r
         )
+    elif command == OnyxRedisCommand.purge_pidbox:
+        return purge_by_match_and_type(
+            "*reply.celery.pidbox", "list", batch, dry_run, r
+        )
+    elif command == OnyxRedisCommand.get_list_element:
+        result = r.lrange(
+            "0097a564-d343-3c1f-9fd1-af8cce038115.reply.celery.pidbox", 0, 0
+        )
+        print(f"{result}")
     elif command == OnyxRedisCommand.get_user_token:
         if not user_email:
             logger.error("You must specify --user-email with get_user_token")
