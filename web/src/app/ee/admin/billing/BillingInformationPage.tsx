@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { usePopup } from "@/components/admin/connectors/Popup";
-import { fetchCustomerPortal, useBillingInformation } from "./utils";
+import {
+  fetchCustomerPortal,
+  useBillingInformation,
+} from "@/lib/billing/utils";
 
 import {
   Card,

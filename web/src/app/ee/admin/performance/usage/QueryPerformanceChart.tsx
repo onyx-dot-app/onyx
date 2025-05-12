@@ -1,6 +1,6 @@
 "use client";
 
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { getDatesList, useQueryAnalytics, useUserAnalytics } from "../lib";
 import { ThreeDotsLoader } from "@/components/Loading";
 import { AreaChartDisplay } from "@/components/ui/areaChart";

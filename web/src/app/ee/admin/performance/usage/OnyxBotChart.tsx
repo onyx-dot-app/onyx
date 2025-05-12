@@ -1,6 +1,6 @@
 import { ThreeDotsLoader } from "@/components/Loading";
 import { getDatesList, useOnyxBotAnalytics } from "../lib";
-import { DateRangePickerValue } from "@/app/ee/admin/performance/DateRangeSelector";
+import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import Text from "@/components/ui/text";
 import Title from "@/components/ui/title";
 import CardSection from "@/components/admin/CardSection";

@@ -1,7 +1,7 @@
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { Button } from "@/components/ui/button";
 import { useRef, useState } from "react";
-import { DateRange } from "../DateRangeSelector";
+import { DateRange } from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
 import { FaSpinner, FaRegArrowAltCircleUp } from "react-icons/fa";
 import { withRequestId, withDateRange } from "./utils";
 import {

@@ -23,7 +23,10 @@ import { timestampToReadableDate } from "@/lib/dateUtils";
 import { FiFrown, FiMinus, FiSmile, FiMeh } from "react-icons/fi";
 import { Dispatch, SetStateAction, useCallback, useState } from "react";
 import { Feedback, TaskStatus } from "@/lib/types";
-import { DateRange, DateRangeSelector } from "../DateRangeSelector";
+import {
+  DateRange,
+  AdminDateRangeSelector,
+} from "../../../../../components/dateRangeSelectors/AdminDateRangeSelector";
 import { PageSelector } from "@/components/PageSelector";
 import Link from "next/link";
 import { FeedbackBadge } from "./FeedbackBadge";
@@ -319,7 +322,7 @@ export function QueryHistoryTable() {
               }}
             />
 
-            <DateRangeSelector
+            <AdminDateRangeSelector
               value={dateRange}
               onValueChange={onTimeRangeChange}
             />
