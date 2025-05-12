@@ -369,6 +369,7 @@ auth:
     gen_ai_api_key: ""
     danswer_bot_slack_app_token: ""
     danswer_bot_slack_bot_token: ""
+    opsgenie_api_key: ""
   # will be overridden by the existingSecret if set
   secretName: "danswer-secrets"
   # set values as strings, they will be base64 encoded
@@ -381,6 +382,7 @@ auth:
     gen_ai_api_key: ""
     danswer_bot_slack_app_token: ""
     danswer_bot_slack_bot_token: ""
+    opsgenie_api_key: ""
 
 configMap:
   AUTH_TYPE: "disabled"  # Change this for production uses unless Danswer is only accessible behind VPN

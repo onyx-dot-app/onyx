@@ -35,6 +35,7 @@ from danswer.danswerbot.slack.blocks import get_feedback_reminder_blocks
 from danswer.danswerbot.slack.blocks import get_restate_blocks
 from danswer.danswerbot.slack.constants import SLACK_CHANNEL_ID
 from danswer.danswerbot.slack.models import SlackMessageInfo
+from danswer.danswerbot.slack.tools.opsgenie import get_dri_on_call
 from danswer.danswerbot.slack.utils import ChannelIdAdapter
 from danswer.danswerbot.slack.utils import fetch_userids_from_emails
 from danswer.danswerbot.slack.utils import fetch_userids_from_groups
@@ -777,6 +778,22 @@ def handle_message(
                 remove=False,
                 client=client,
             )
+
+            # Get the DRI on call if opsgenie schedule is configured
+            dri_name = None
+            if channel_conf and channel_conf.get("opsgenie_schedule"):
+                dri_name = get_dri_on_call(channel_conf)
+                if dri_name:
+                    dri_ids, _ = fetch_userids_from_emails([dri_name], client)
+                    if dri_ids:
+                        client.chat_postMessage(
+                            channel=channel,
+                            thread_ts=message_ts_to_respond_to,
+                            text=(
+                                f"<@{dri_ids[0]}> I couldn't find any relevant information "
+                                "to answer this question. Could you help?"
+                            ),
+                        )
 
             return True
 

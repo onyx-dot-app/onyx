@@ -5,6 +5,8 @@
 # For local dev, often user Authentication is not needed
 AUTH_TYPE=disabled
 
+# OpsGenie API key for DRI on-call functionality
+OPSGENIE_API_KEY=<REPLACE THIS>
 
 # Always keep these on for Dev
 # Logs all model prompts to stdout

@@ -110,6 +110,7 @@ class SlackBotConfigCreationRequest(BaseModel):
     follow_up_tags: list[str] | None = None
     # List of source types to prioritize in search results
     prioritized_sources: list[str] | None = None
+    opsgenie_schedule: str | None = None
     response_type: SlackBotResponseType
 
     @validator("answer_filters", pre=True)

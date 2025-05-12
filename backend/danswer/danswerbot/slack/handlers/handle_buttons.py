@@ -21,6 +21,7 @@ from danswer.danswerbot.slack.constants import VIEW_DOC_FEEDBACK_ID
 from danswer.danswerbot.slack.handlers.handle_message import (
     remove_scheduled_feedback_reminder,
 )
+from danswer.danswerbot.slack.tools.opsgenie import get_dri_on_call
 from danswer.danswerbot.slack.utils import build_feedback_id
 from danswer.danswerbot.slack.utils import decompose_action_id
 from danswer.danswerbot.slack.utils import fetch_groupids_from_names
@@ -198,6 +199,13 @@ def handle_followup_button(
                 )
             if remaining:
                 group_ids, _ = fetch_groupids_from_names(remaining, client.web_client)
+
+            # Get the DRI on call for this channel
+            dri_name = get_dri_on_call(slack_bot_config.channel_config)
+            if dri_name:
+                dri_ids, _ = fetch_userids_from_emails([dri_name], client.web_client)
+                if dri_ids:
+                    tag_ids.extend(dri_ids)
 
     blocks = build_follow_up_resolved_blocks(tag_ids=tag_ids, group_ids=group_ids)
 

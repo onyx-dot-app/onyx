@@ -544,6 +544,7 @@ export interface ChannelConfig {
   answer_filters?: AnswerFilterOption[];
   follow_up_tags?: string[];
   prioritized_sources?: string[];
+  opsgenie_schedule?: string;
 }
 
 export type SlackBotResponseType = "quotes" | "citations";
