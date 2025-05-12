@@ -792,7 +792,9 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
 
 if __name__ == "__main__":
     import os
+    from onyx.connectors.connector_runner import ConnectorRunner
 
+    # Initialize the connector
     connector = GithubConnector(
         repo_owner=os.environ["REPO_OWNER"],
         repositories=os.environ.get("REPOSITORIES"),
@@ -800,7 +802,28 @@ if __name__ == "__main__":
     connector.load_credentials(
         {"github_access_token": os.environ["ACCESS_TOKEN_GITHUB"]}
     )
-    document_batches = connector.load_from_checkpoint(
-        0, time.time(), connector.build_dummy_checkpoint()
+
+    # Create a time range from epoch to now
+    end_time = datetime.now(timezone.utc)
+    start_time = datetime.fromtimestamp(0, tz=timezone.utc)
+    time_range = (start_time, end_time)
+
+    # Initialize the runner with a batch size of 10
+    runner: ConnectorRunner[GithubConnectorCheckpoint] = ConnectorRunner(
+        connector, batch_size=10, time_range=time_range
     )
-    print(next(document_batches))
+
+    # Get initial checkpoint
+    checkpoint = connector.build_dummy_checkpoint()
+
+    # Run the connector
+    while checkpoint.has_more:
+        for doc_batch, failure, next_checkpoint in runner.run(checkpoint):
+            if doc_batch:
+                print(f"Retrieved batch of {len(doc_batch)} documents")
+                for doc in doc_batch:
+                    print(f"Document: {doc.semantic_identifier}")
+            if failure:
+                print(f"Failure: {failure.failure_message}")
+            if next_checkpoint:
+                checkpoint = next_checkpoint
