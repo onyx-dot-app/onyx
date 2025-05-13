@@ -541,8 +541,10 @@ ingress:
   className: ""
   api:
     host: onyx.local
+    clientMaxBodySize: "1m"
   webserver:
     host: onyx.local
+    clientMaxBodySize: "1m"
 
 letsencrypt:
   enabled: false
