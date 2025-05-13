@@ -436,6 +436,10 @@ def _convert_drive_item_to_document(
                     )
                     return None
 
+        if file.get("name", "").split(".")[-1] in DRIVE_IGNORE_EXTENSIONS:
+            logger.warning(f"Skipping file {file.get('name')} due to extension.")
+            return None
+
         # If we don't have sections yet, use the basic extraction method
         if not sections:
             sections = _download_and_extract_sections_basic(
