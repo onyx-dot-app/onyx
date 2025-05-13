@@ -423,7 +423,7 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
   today.setHours(0, 0, 0, 0); // Set to start of today for accurate comparison
 
   const groups: Record<string, ChatSession[]> = {
-    Today: [],
+    Сегодня: [],
     "Предыдущие 7 дней": [],
     "Предыдущие 30 дней": [],
     "Более 30 дней": [],
