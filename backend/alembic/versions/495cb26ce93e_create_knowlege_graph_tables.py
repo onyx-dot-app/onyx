@@ -9,11 +9,10 @@ Create Date: 2025-03-19 08:51:14.341989
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-from passlib.pwd import genword
-from passlib.exc import PasswordSizeError
 from sqlalchemy import text
 
-from onyx.kg.configuration import KG_READONLY_DB_USER, KG_READONLY_DB_PASSWORD
+from onyx.configs.app_configs import KG_READONLY_DB_USER
+from onyx.configs.app_configs import KG_READONLY_DB_PASSWORD
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -39,15 +38,6 @@ def upgrade() -> None:
         if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
             raise Exception("KG_READONLY_DB_USER or KG_READONLY_DB_PASSWORD is not set")
 
-        try:
-            # Validate password length and complexity
-            genword(
-                length=13, charset="ascii_72"
-            )  # This will raise PasswordSizeError if too short
-            # Additional checks can be added here if needed
-        except PasswordSizeError:
-            raise Exception("KG_READONLY_DB_PASSWORD is too short or too weak")
-
         op.execute(
             text(
                 f"""
@@ -57,6 +47,8 @@ def upgrade() -> None:
                     EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{KG_READONLY_DB_USER}', '{KG_READONLY_DB_PASSWORD}');
                     -- Explicitly revoke all privileges including CONNECT
                     EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
+                    -- Grant only the CONNECT privilege
+                    EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{KG_READONLY_DB_USER}');
                 END IF;
             END
             $$;
@@ -431,8 +423,10 @@ def downgrade() -> None:
             DO $$
             BEGIN
                 IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
-                    -- First revoke all privileges
+                    -- First revoke all privileges from the database
                     EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
+                    -- Then revoke all privileges from the public schema
+                    EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', '{KG_READONLY_DB_USER}');
                     -- Then drop the user
                     EXECUTE format('DROP USER %I', '{KG_READONLY_DB_USER}');
                 END IF;

@@ -1,7 +1,7 @@
 import os
 
 KG_RESEARCH_NUM_RETRIEVED_DOCS: int = int(
-    os.environ.get("KG_RESEARCH_NUM_RETRIEVED_DOCS", "10")
+    os.environ.get("KG_RESEARCH_NUM_RETRIEVED_DOCS", "25")
 )
 
 

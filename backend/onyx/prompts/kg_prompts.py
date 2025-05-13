@@ -1,7 +1,7 @@
 # Standards
 SEPARATOR_LINE = "-------"
 SEPARATOR_LINE_LONG = "---------------"
-NO_EXTRACTION = "No extraction of knowledge graph objects was feasable."
+NO_EXTRACTION = "No extraction of knowledge graph objects was feasible."
 YES = "yes"
 NO = "no"
 
@@ -23,10 +23,10 @@ EXTRACTION_FORMATTING_PROMPT = r"""
 {{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>:<entity_name>' (please use that capitalization). If allowed options \
 are provided above, you can only extract those types of entities! Again, there should be an 'Other' \
-option. Pick this if non of the others apply.>],
+option. Pick this if none of the others apply.>],
 "relationships": [<a list of IMPORTANT relationships between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
-of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.). \
+of the relationship (if appropriate, include a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.). \
 Common relationships may be: 'likes', 'dislikes', 'uses', 'is interested in', 'mentions', 'addresses', \
 'participates in', etc., but look at the text to find the most appropriate relationship. \
 Use spaces here for word separation. DO NOT INCLUDE RELATIONSHIPS THAT ARE SIMPLY MENTIONED, BUT ONLY \
@@ -46,17 +46,17 @@ question for that entity. Example: 'ACCOUNT:* -- [account_type: customer]' shoul
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
 identify in the text, each formatted simply as '<term>'>],
 "time_filter": <if needed, a SQL-like filter for a field called 'event_date'. Do not select anything here \
-unless you are sure that the questions asks for that filter. Only apply a time_filter if the question explicitly \
+unless you are sure that the question asks for that filter. Only apply a time_filter if the question explicitly \
 mentions a specific date, time period, or event that can be directly translated into a date filter. Do not assume \
-the current date, if given, as the event date or to imply that the should be a filter. Do not make assumptions here \
+the current date, if given, as the event date or to imply that it should be a filter. Do not make assumptions here \
 but only use the information provided to infer whether there should be a time_filter, and if so, what it should be.>
 }}
 """.strip()
 
 QUERY_RELATIONSHIP_EXTRACTION_FORMATTING_PROMPT = r"""
-{{"relationships": [<a list of relationship between the identified entities, formatted as \
+{{"relationships": [<a list of relationships between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>:<source_entity_name>__<a word or two that captures the nature \
-of the relationship (if appropriate, inlude a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
+of the relationship (if appropriate, include a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
 __<TARGET_ENTITY_TYPE_NAME>:<target_entity_name>'>]
 }}
 """.strip()
@@ -139,7 +139,7 @@ Explanation:
 """.strip()
 
 RELATIONSHIP_EXAMPLE_5 = r"""
-'In which emails did Nike discuss their issues with the dahboard?' \
+'In which emails did Nike discuss their issues with the dashboard?' \
 and the extracted entities were found to be:
 
 "ACCOUNT:Nike", "FEATURE:dashboard", "EMAIL:*"
@@ -154,11 +154,11 @@ then a valid relationship extraction could be:
 Explanation:
  - Nike did report unspecified concerns
  - Nike had problems with the dashboard, which is a feature
- - We are interested in emails that Nike excchanged with us
+ - We are interested in emails that Nike exchanged with us
 """.strip()
 
 RELATIONSHIP_EXAMPLE_6 = r"""
-'List the last 5 emails that Lisa exchamged with Nike:' \
+'List the last 5 emails that Lisa exchanged with Nike:' \
 and the extracted entities were found to be:
 
 "ACCOUNT:Nike", "EMAIL:*", "EMPLOYEE:Lisa"
@@ -171,7 +171,7 @@ then a valid relationship extraction could be:
 Explanation:
  - Nike did report unspecified concerns
  - Nike had problems with the dashboard, which is a feature
- - We are interested in emails that Nike excchanged with us
+ - We are interested in emails that Nike exchanged with us
 """.strip()
 
 
@@ -209,7 +209,7 @@ Please format your answer in this format:
 {EXTRACTION_FORMATTING_PROMPT}
 {SEPARATOR_LINE}
 
-The list above here is the exclusive, only list of entities you can chose from!
+The list above here is the exclusive, only list of entities you can choose from!
 
 Here are some important additional instructions. (For the purpose of illustration, assume that ]
  "ACCOUNT", "CONCERN", and "FEATURE" are all in the list of entity types above, and shown actual \
@@ -249,13 +249,13 @@ Note that effectively a three-way relationship (Nike - performance issues - dash
 relationships.
 
 - Again,
-   -  you should only extract entities belinging to the entity types above - but do extract all that you \
+   -  you should only extract entities belonging to the entity types above - but do extract all that you \
 can reliably identify in the text
    - use refer to 'all' entities in an entity type listed above by using '*' as the entity name
    - only extract important relationships that signify something non-trivial, expressing things like \
 needs, wants, likes, dislikes, plans, interests, lack of interests, problems the account is having, etc.
-   - you MUST only use the intiali list of entities provided! Ignore the entities in the examples unless \
-the are also part of the initial list of entities! This is essential!
+   - you MUST only use the initial list of entities provided! Ignore the entities in the examples unless \
+they are also part of the initial list of entities! This is essential!
    - only extract relationships between the entities extracted first!
 
 
@@ -285,7 +285,7 @@ You can ONLY extract entities of these types:
 {ENTITY_TYPE_SETTING_PROMPT}
 {SEPARATOR_LINE}
 
-The list above here is the exclusive, only list of entities you can chose from!
+The list above here is the exclusive, only list of entities you can choose from!
 
 Also, note that there are fixed relationship types between these entities. Please consider those \
 as well so to make sure that you are not missing implicit entities! Implicit entities are often \
@@ -298,7 +298,7 @@ clearly in the question.
 
 Here are some important additional instructions. (For the purpose of illustration, assume that \
  "ACCOUNT", "CONCERN", "EMAIL", and "FEATURE" are all in the list of entity types above, and the \
-attribute options for "CONCERN" include 'degree' with possible values that includes 'severe'. Note that this \
+attribute options for "CONCERN" include 'degree' with possible values that include 'severe'. Note that this \
 is just assumed for these examples, but you MUST use only the entities above for the actual extraction!)
 
 - You can either extract specific entities if a specific entity is referred to, or you can refer to the entity type.
@@ -321,7 +321,7 @@ then a suitable entity and term extraction could be:
 Example 3:
 {ENTITY_EXAMPLE_3}
 
-* Then, if we inquire about a entity with a specific attribute :
+* Then, if we inquire about an entity with a specific attribute :
 'Who reported severe performance issues?'
 then a suitable entity and term extraction could be:
 Example 3:
@@ -333,15 +333,18 @@ can reliably identify in the text
    - if you refer to all/any/an unspecified entity of an entity type listed above, use '*' as the entity name
    - keep the terms high-level
    - similarly, if a specific entity type is referred to in general, you should use '*' as the entity name
-   - you MUST only use the intial list of entities provided! Ignore the entities in the examples unless \
-the are also part of the initial list of entities! This is essential!
+   - you MUST only use the initial list of entities provided! Ignore the entities in the examples unless \
+they are also part of the initial list of entities! This is essential!
    - don't forget to provide answers also to the event filtering and whether documents need to be inspected!
    - 'who' often refers to individuals or accounts.
-   - see whether any of the entities are supposed to be narrowed down by an attribute value. The preciseattribute \
+   - see whether any of the entities are supposed to be narrowed down by an attribute value. The precise attribute \
 and the value would need to be taken from the specification, as the question may use different words and the \
 actual attribute may be implied.
    - don't just look at the entities that are mentioned in the question but also those that the question \
 may be about.
+
+Also, if you think the name or the title of an entity is given but name or title are not mentioned \
+explicitly as an attribute, then you should indeed extract the name/title as the entity name.
 
 {SEPARATOR_LINE}
 
@@ -381,7 +384,8 @@ Here are the options for the relationship types(!) between the entities you have
 ---relationship_type_options---
 {SEPARATOR_LINE}
 
-These types are formated as <SOURCE_ENTITY_TYPE>__<RELATIONSHIP_SHORTHAND>__<TARGET_ENTITY_TYPE>, and they \
+These types are, if any were identified, formated as \
+<SOURCE_ENTITY_TYPE>__<RELATIONSHIP_SHORTHAND>__<TARGET_ENTITY_TYPE>, and they \
 limit the allowed relationships that you can extract. You would then though use the actual full entities as in:
 
 <SOURCE_ENTITY_TYPE>:<SOURCE_ENTITY_NAME>__<RELATIONSHIP_SHORTHAND>__<TARGET_ENTITY_TYPE>:<TARGET_ENTITY_NAME>.
@@ -396,7 +400,7 @@ Please format your answer in this format:
 {QUERY_RELATIONSHIP_EXTRACTION_FORMATTING_PROMPT}
 {SEPARATOR_LINE}
 
-The list above here is the exclusive, only list of entities and relationship types you can chose from!
+The list above here is the exclusive, only list of entities and relationship types you can choose from!
 
 Here are some important additional instructions. (For the purpose of illustration, assume that ]
  "ACCOUNT", "CONCERN", and "FEATURE" are all in the list of entity types above. Note that this \
@@ -432,7 +436,7 @@ relationships.
    - you can only extract the relationships that match the listed relationship types
    - if in doubt and there are multiple relationships between the same two entities, you can extract \
 all of those that may fit with the question.
-   - be really think through the question which type of relationships should be extracted and which should not.
+   - be really thinking through the question which type of relationships should be extracted and which should not.
 
 {SEPARATOR_LINE}
 
@@ -448,13 +452,13 @@ This is a part of a document that you need to extract information (entities, rel
 
 Note: when you extract relationships, please make sure that:
   - if you see a relationship for one of our employees, you should extract the relationship both for the employee AND \
-    VENDOR:{{vendor}}.
+    VENDOR:{vendor}.
   - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
 only for the account ACCOUNT:<account_name>!
 
 --
 And here is the content:
-{{content}}
+{content}
 """.strip()
 
 
@@ -462,27 +466,27 @@ And here is the content:
 
 CALL_CHUNK_PREPROCESSING_PROMPT = """
 This is a call between employees of the VENDOR's company and representatives of one or more ACCOUNTs (usually one). \
-When you exract information based on the instructions, please make sure that you properly attribute the information \
+When you extract information based on the instructions, please make sure that you properly attribute the information \
 to the correct employee and account. \
 
-Here are the participants (name component of email) from us ({{vendor}}):
-{{participant_string}}
+Here are the participants (name component of email) from us ({vendor}):
+{participant_string}
 
 Here are the participants (name component of email) from the other account(s):
-{{account_participant_string}}
+{account_participant_string}
 
 In the text it should be easy to associate a name with the email, and then with the account ('us' vs 'them'). If in doubt, \
 look at the context and try to identify whether the statement comes from the other account. If you are not sure, ignore.
 
 Note: when you extract relationships, please make sure that:
   - if you see a relationship for one of our employees, you should extract the relationship both for the employee AND \
-    VENDOR:{{vendor}}.
+    VENDOR:{vendor}.
   - if you see a relationship for one of the representatives of other accounts, you should extract the relationship \
 only for the account ACCOUNT:<account_name>!
 
 --
 And here is the content:
-{{content}}
+{content}
 """.strip()
 
 
@@ -509,7 +513,7 @@ And here is the beginning of the call, including title and participants:
 STRATEGY_GENERATION_PROMPT = f"""
 Now you need to decide what type of strategy to use to answer a given question, how ultimately \
 the answer should be formatted to match the users expectation, and what an appropriate question \
-to/about 'one object or one set of objects' may be, should the answer logicaly benefit from a divide \
+to/about 'one object or one set of objects' may be, should the answer logically benefit from a divide \
 and conquer strategy, or it naturally relates to one or few individual objects. Also, you are \
 supposed whether a divide and conquer strategy would be appropriate.
 
@@ -574,7 +578,7 @@ calculations would be needed to find the underlying sources ('last 2...', etc.) 
 
 a2) "Search Strategy":
 If a SQL search is chosen, i.e., documents have to be identified first, there are two approaches:
-1. SIMPLE: You think you can awnswer the question using a database that is aware of the entities, relationships \
+1. SIMPLE: You think you can answer the question using a database that is aware of the entities, relationships \
 above, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
 'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', etc.
 2. DEEP: You think you really should ALSO leverage the actual text of sources to answer the question, which sits \
@@ -587,8 +591,8 @@ Your task is to decide which of the two strategies to use.
 
 b) Regarding the format of the answer: there are also two types of formats available to you:
 
-1. LIST: The user would expect an answer should be a bullet point list of objects with text associated with each \
-bullet points (or sub-bullets) likely having some text associated with it. This will be clearer once the data is available.
+1. LIST: The user would expect an answer as a bullet point list of objects, likely with text associated with each \
+bullet point (or sub-bullet). This will be clearer once the data is available.
 2. TEXT: The user would expect the questions to be answered in text form.
 
 Your task is to decide which of the two formats to use.
@@ -600,7 +604,7 @@ Always generate a broken_down_question if the question pertains ultimately to a 
 a singular object.
 
 - If the question is of type 'how many...', or similar, then imagine that the individual objects have been \
-found and you want to ask each object something that illustrates why/in what what that objecft relates to the \
+found and you want to ask each object something that illustrates why/in what what that object relates to the \
 question. (question: 'How many cars are fast?' -> broken_down_question: 'How fast is this car?')
 
 - Assume the answer would either i) best be generated by first analyzing one object at a time, then aggregating \
@@ -720,7 +724,7 @@ id_name and source_document IS UNIQUE!
 
 {SEPARATOR_LINE}
 
-Importantly, here are the entity (node) types that you can use, with a short description what they mean. You may need to \
+Importantly, here are the entity (node) types that you can use, with a short description of what they mean. You may need to \
 identify the proper entity type through its description. Also notice the allowed attributes for each entity type and \
 their values, if provided.
 {SEPARATOR_LINE}
@@ -777,7 +781,7 @@ join on the source_document_id.
 - The id_name of each node/entity has the format <entity_type_id_name>:<name>, where 'entity_type_id_name' \
 and 'name' are columns and \
   the values <entity_type_id_name> and <name> can be used for filtering.
-- The table can be joined on itself on both, source nodes and target nodes if needed.
+- The table can be joined on itself on source nodes and/or target nodes if needed.
 - the SQL statement MUST ultimately only return NODES/ENTITIES (not relationships!), or aggregations of \
 entities/nodes(count, avg, max, min, etc.). \
 Again, DO NOT compose a SQL statement that returns id_name of relationships.
@@ -785,32 +789,32 @@ Again, DO NOT compose a SQL statement that returns id_name of relationships.
 source_date (but only if the question asks for event dates or times). DO NOT return \
 source documents or counts of source documents, or relationships or counts of relationships! \
 Those can only appear in where clauses, ordering etc., but they cannot be returned or ultimately \
-counted here! source_date and date poperations can appear in select statements, particularly if \
+counted here! source_date and date operations can appear in select statements, particularly if \
 there is time ordering or grouping involved.
 - ENTITIES can be target_entity or source_entity. Think about the allowed relationships and the \
 question to decide which one you want!
-- It is ok to generate nested SQL as long as it correct postgres syntax!
+- It is ok to generate nested SQL as long as it is correct postgres syntax!
 - Attributes are stored in the attributes json field. As this is postgres, querying for those must be done as \
 "attributes ->> '<attribute>' = '<attribute value>'".
--  The SELECT clause MUST only contain entities or aggregations/counts of entities, or in cases the \
-question was about dates or times, then it can source_date. But source_document MUST NEVER appear \
+-  The SELECT clause MUST only contain entities or aggregations/counts of entities, or, in cases the \
+question was about dates or times, then it can also include source_date. But source_document MUST NEVER appear \
 in the SELECT clause!
 - Again, NEVER count or retrieve source documents in SELECT CLAUSE, whether it is in combination with \
-entities, with a dictinct, etc. NO source_document in SELECT CLAUSE! So NEVER produce a \
+entities, with a distinct, etc. NO source_document in SELECT CLAUSE! So NEVER produce a \
 'SELECT COUNT(source_entity, source_document)...'
 - Please think about whether you are interested in source entities or target entities! For that purpose, \
 consider the allowed relationship types to make sure you select or count the correct one!
 - Again, ALWAYS make sure that EACH COLUMN in an ORDER-BY clause IS ALSO IN THE SELECT CLAUSE! Remind yourself \
 of that in the reasoning.
 - Be careful with dates! Often a date will refer to the source data, which is the date when \
-a underlying piece of information was updated. However, if the attributes of an entity contain \
+an underlying piece of information was updated. However, if the attributes of an entity contain \
 time information as well (like 'started_at', 'completed_at', etc.), then you should really look at \
-the wording to see whether you should use a date in the attributes or rthge event date.
+the wording to see whether you should use a date in the attributes or the event date.
 - Dates are ALWAYS in string format of the form YYYY-MM-DD, for source date as well as for date-like the attributes! \
 So please use that format, particularly if you use data comparisons (>, <, ...)
 - Again, NO 'relationship' or 'source_document' in the SELECT CLAUSE, be it as direct columns are in aggregations!
 - Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
-want to sort by. If the sorting is a time-based and there is a limitfor example, you do want to have a suitable date \
+want to sort by. If the sorting is time-based and there is a limit for example, then you do want to have a suitable date \
 variable as the first column to sort by.
 - Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to get \
 have entities involved in the SELECT clause.
@@ -898,7 +902,7 @@ You will be given:
   - a SQL statement that was generated to derive those filters
   - the results that were generated using the SQL statement. This can have multiple rows, \
 and those will be the 'local' filters (which will later mean that each retrieved result will \
-needc to match at least one of the conditions that you will generate).
+need to match at least one of the conditions that you will generate).
   - the results of another query that asked for the underlying source documents that resulted \
 in the answers of the SQL statement
 
@@ -958,13 +962,13 @@ id_name and source_document IS UNIQUE!
 ---sql_query---
 {SEPARATOR_LINE}
 
-6) Here are the results to that SQL query. (Consider the schema description and the \
+6) Here are the results of that SQL query. (Consider the schema description and the \
 structure of the entities to interpret the results)
 {SEPARATOR_LINE}
 ---sql_results---
 {SEPARATOR_LINE}
 
-7) Here are the results of the other query that provided the underlying source documnents \
+7) Here are the results of the other query that provided the underlying source documents \
 using the schema:
 {SEPARATOR_LINE}
 ---source_document_results---
@@ -989,7 +993,7 @@ More specifically, think about how (and if) the user would naturally want the an
 in the last 5 calls', the user probably expects to see a bullet point list, one bullet point for each call that \
 then shows the summary. In that case for this part of the task you would just respond with a list of the calls, which \
 should be entities and part of the sql results in 6 above. (The actual 'what was discussed' will be addressed later).
-In otgher words, respond with a list of entities that you think the user would like to have independently analyzed
+In other words, respond with a list of entities that you think the user would like to have independently analyzed
 and the results reported for each of those entities.>
 }}
 
@@ -1035,7 +1039,7 @@ Your Answer:
 
 
 OUTPUT_FORMAT_PROMPT = f"""
-You need to format the answers to a research question that targeted one or more objects. \
+You need to format the answers to a research question that was generated using one or more objects. \
 An overall introductory answer may be provided to you, as well as the research results for each individual object. \
 You will also be provided with the original question as background, and the desired format. \
 
@@ -1093,7 +1097,7 @@ empty, then these should be listed at the end with the text:
 Here are some examples of what I found:
 <bullet point list of examples>
 ...'
- - Again if the list of examples is and empty string then skip this section! Do not use the \
+ - Again if the list of examples is an empty string then skip this section! Do not use the \
 results data for this purpose instead! (They will already be handled in the answer.)
 - Even if the desired output format is 'text', make sure that you keep the individual research results \
 separated by bullet points, and mention the object name first, followed by a new line. The object name \
@@ -1123,8 +1127,8 @@ Your Answer:
 
 KG_OBJECT_SOURCE_RESEARCH_PROMPT = f"""
 You are an expert in extracting relevant structured information from a list of documents that \
-should relate to one object. You are presented with a list of documemnts that have been determined to be \
-relevant the task of interest. Your goal is to extract the information asked around these topics:
+should relate to one object. You are presented with a list of documents that have been determined to be \
+relevant to the task of interest. Your goal is to extract the information asked around these topics:
 You should look at the documents - in no particular order! - and extract the information that relates \
 to a question:
 {SEPARATOR_LINE}
@@ -1142,8 +1146,8 @@ Please now generate the answer to the question given the documents:
 
 KG_SEARCH_PROMPT = f"""
 You are an expert in extracting relevant structured information from a list of documents that \
-should relate to one object. You are presented with a list of documemnts that have been determined to be \
-relevant the task of interest. Your goal is to extract the information asked around these topics:
+should relate to one object. You are presented with a list of documents that have been determined to be \
+relevant to the task of interest. Your goal is to extract the information asked around these topics:
 You should look at the documents - in no particular order! - and extract the information that relates \
 to a question:
 {SEPARATOR_LINE}
@@ -1164,7 +1168,7 @@ Please now generate the answer to the question given the documents:
 ####################
 
 DC_OBJECT_NO_BASE_DATA_EXTRACTION_PROMPT = f"""
-You are an expert in finding relevant objects/objext specifications of the same type in a list of documents. \
+You are an expert in finding relevant objects/object specifications of the same type in a list of documents. \
 In this case you are interested \
 in generating: {{objects_of_interest}}.
 You should look at the documents - in no particular order! - and extract each object you find in the documents.
@@ -1193,7 +1197,7 @@ Please structure your answer as using <reasoning>, </reasoning>, <objects>, </ob
 
 
 DC_OBJECT_WITH_BASE_DATA_EXTRACTION_PROMPT = f"""
-You are an expert in finding relevant objects/objext specifications of the same type in a list of documents. \
+You are an expert in finding relevant objects/object specifications of the same type in a list of documents. \
 In this case you are interested \
 in generating: {{objects_of_interest}}.
 You should look at the provided data - in no particular order! - and extract each object you find in the documents.
@@ -1257,7 +1261,7 @@ and the information is
 {{information}}
 {SEPARATOR_LINE}
 
-Please consolidate the information into a single, concise answer. The consolidated informtation \
+Please consolidate the information into a single, concise answer. The consolidated information \
 for the object should be in the following format:
 {SEPARATOR_LINE}
 {{format}}
