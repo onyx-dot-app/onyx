@@ -423,6 +423,13 @@ def _run_indexing(
                     connector=connector_runner.connector,
                 )
 
+            # save the initial checkpoint
+            save_checkpoint(
+                db_session=db_session_temp,
+                index_attempt_id=index_attempt_id,
+                checkpoint=checkpoint,
+            )
+
             unresolved_errors = get_index_attempt_errors_for_cc_pair(
                 cc_pair_id=ctx.cc_pair_id,
                 unresolved_only=True,
