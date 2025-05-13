@@ -5,6 +5,7 @@ from concurrent.futures import as_completed
 from concurrent.futures import Future
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
+from datetime import timezone
 from typing import Any
 from typing import cast
 
@@ -103,7 +104,8 @@ class TeamsConnector(
                 func=_collect_all_team_ids,
                 graph_client=self.graph_client,
                 start=0.0,
-                end=time.time(),
+                end=datetime.now(tz=timezone.utc).timestamp(),
+                requested=self.requested_team_list,
             )
 
         except ClientRequestException as e:
@@ -170,6 +172,7 @@ class TeamsConnector(
                 graph_client=self.graph_client,
                 start=start,
                 end=end,
+                requested=self.requested_team_list,
             )
             return TeamsCheckpoint(
                 todo_team_ids=root_todos,
@@ -336,6 +339,7 @@ def _collect_all_team_ids(
     graph_client: GraphClient,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    requested: list[str] | None = None,
 ) -> list[str]:
     # The MS Office 365 Graph API does not allow you to filter on start/end datetimes server-side.
     # Instead, we do it ourselves (i.e., client-side).
@@ -343,8 +347,16 @@ def _collect_all_team_ids(
     team_ids: list[str] = []
     next_url = None
 
+    filter = None
+    if requested:
+        filter = " or ".join(f"displayName eq '{team_name}'" for team_name in requested)
+
     while True:
-        query = graph_client.teams.get_all(page_loaded=lambda _: None)
+        if filter:
+            query = graph_client.teams.get().filter(filter)
+        else:
+            query = graph_client.teams.get_all(page_loaded=lambda _: None)
+
         if next_url:
             url = next_url
             query.before_execute(
@@ -356,7 +368,7 @@ def _collect_all_team_ids(
         filtered_team_ids = [
             team_id
             for team_id in [
-                _filter_team_id(team, start, end) for team in team_collection
+                _filter_team_id(team, start, end, requested) for team in team_collection
             ]
             if team_id
         ]
@@ -375,8 +387,12 @@ def _filter_team_id(
     team: Team,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    requested: list[str] | None = None,
 ) -> str | None:
-    if not team.id:
+    if not team.id or not team.display_name:
+        return None
+
+    if requested and team.display_name not in requested:
         return None
 
     props = team.properties
@@ -385,7 +401,7 @@ def _filter_team_id(
         if not isinstance(created_at, datetime):
             return None
 
-        created_at_ts = created_at.timestamp()
+        created_at_ts = created_at.replace(tzinfo=timezone.utc).timestamp()
 
         if created_at_ts < start or created_at_ts >= end:
             return None
@@ -466,7 +482,6 @@ def _collect_document_for_channel_id(
 
 
 if __name__ == "__main__":
-    import time
     from tests.daily.connectors.utils import load_everything_from_checkpoint_connector
 
     app_id = os.environ["TEAMS_APPLICATION_ID"]
@@ -491,6 +506,6 @@ if __name__ == "__main__":
         load_everything_from_checkpoint_connector(
             connector=connector,
             start=0.0,
-            end=time.time(),
+            end=datetime.now(tz=timezone.utc).timestamp(),
         )
     )
