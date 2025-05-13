@@ -188,7 +188,7 @@ class TeamsConnector(
             )
 
         todo_team_id = todos[-1]
-        team = _get_team_with_id(
+        team = _get_team_by_id(
             graph_client=self.graph_client,
             team_id=todo_team_id,
         )
@@ -416,7 +416,7 @@ def _filter_team_id(
     return team.id
 
 
-def _get_team_with_id(
+def _get_team_by_id(
     graph_client: GraphClient,
     team_id: str,
 ) -> Team:
