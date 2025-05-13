@@ -345,7 +345,7 @@ def _collect_all_team_ids(
     # Instead, we do it ourselves (i.e., client-side).
 
     team_ids: list[str] = []
-    next_url = None
+    next_url: str | None = None
 
     filter = None
     if requested:
@@ -376,7 +376,11 @@ def _collect_all_team_ids(
         team_ids.extend(filtered_team_ids)
 
         if team_collection.has_next:
-            next_url = cast(str, team_collection._next_request_url)
+            if not isinstance(team_collection._next_request_url, str):
+                raise ValueError(
+                    f"The next request url field should be a string, instead got {type(team_collection._next_request_url)}"
+                )
+            next_url = team_collection._next_request_url
         else:
             break
 
