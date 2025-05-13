@@ -14,6 +14,7 @@ from ee.onyx.db.usage_export import write_usage_report
 from ee.onyx.server.reporting.usage_export_models import UsageReportMetadata
 from ee.onyx.server.reporting.usage_export_models import UserSkeleton
 from onyx.configs.constants import FileOrigin
+from onyx.db.models import User
 from onyx.db.users import get_all_users
 from onyx.file_store.constants import MAX_IN_MEMORY_SIZE
 from onyx.file_store.file_store import FileStore
@@ -153,11 +154,18 @@ def create_new_usage_report(
     # add report after zip file is written
     new_report = write_usage_report(db_session, report_name, user_id, period)
 
+    # get user email
+    requestor_email = (
+        db_session.query(User.email)
+        .filter(User.id == new_report.requestor_user_id)
+        .scalar()
+        if new_report.requestor_user_id
+        else None
+    )
+
     return UsageReportMetadata(
-        report_name=new_report.report_name,
-        requestor=(
-            str(new_report.requestor_user_id) if new_report.requestor_user_id else None
-        ),
+        report_name=str(new_report.id),
+        requestor=requestor_email,
         time_created=new_report.time_created,
         period_from=new_report.period_from,
         period_to=new_report.period_to,
