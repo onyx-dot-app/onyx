@@ -19,12 +19,7 @@ def explicit_tool_calling_supported(model_provider: str, model_name: str) -> boo
         model_name=model_name,
     )
 
-    if model_obj:
-        # Check if the model_obj from litellm.model_cost indicates support for function calling
-        if model_obj.get("supports_function_calling"):
-            return True
-    
-    return False
+    return model_obj.get("supports_function_calling", False) if model_obj else False
 
 
 def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:
