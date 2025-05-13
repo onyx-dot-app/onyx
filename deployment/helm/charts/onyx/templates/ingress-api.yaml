@@ -4,11 +4,12 @@ kind: Ingress
 metadata:
   name: {{ include "onyx-stack.fullname" . }}-ingress-api
   annotations:
-    kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: {{ .Values.ingress.api.clientMaxBodySize }}
     cert-manager.io/cluster-issuer: {{ include "onyx-stack.fullname" . }}-letsencrypt
 spec:
+  ingressClassName: nginx
   rules:
     - host: {{ .Values.ingress.api.host }}
       http:
