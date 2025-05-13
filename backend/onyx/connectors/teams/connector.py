@@ -425,7 +425,7 @@ def _get_team_by_id(
     )
 
     if not team_collection:
-        raise RuntimeError(f"No team with {team_id=} was found")
+        raise ValueError(f"No team with {team_id=} was found")
     elif team_collection.has_next:
         # shouldn't happen, but catching it regardless
         raise RuntimeError(f"Multiple teams with {team_id=} were found")
