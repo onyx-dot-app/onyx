@@ -200,6 +200,8 @@ class TeamsConnector(
                 graph_client=self.graph_client,
                 team=team,
                 channel=channel,
+                start=start,
+                end=end,
             )
             for channel in channels
         ]
@@ -338,8 +340,9 @@ def _collect_all_team_ids(
     end: SecondsSinceUnixEpoch,
     requested: list[str] | None = None,
 ) -> list[str]:
-    # The MS Office 365 Graph API does not allow you to filter on start/end datetimes server-side.
-    # Instead, we do it ourselves (i.e., client-side).
+    # The geniuses over at Microsoft decided that the Graph API does not
+    # support the ability to filter on start/end datetimes server-side.
+    # Therefore, we must do it ourselves (i.e., client-side).
 
     team_ids: list[str] = []
     next_url: str | None = None
@@ -368,7 +371,8 @@ def _collect_all_team_ids(
         filtered_team_ids = [
             team_id
             for team_id in [
-                _filter_team_id(team, start, end, requested) for team in team_collection
+                _filter_team_id(team=team, requested=requested)
+                for team in team_collection
             ]
             if team_id
         ]
@@ -389,8 +393,6 @@ def _collect_all_team_ids(
 
 def _filter_team_id(
     team: Team,
-    start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
     requested: list[str] | None = None,
 ) -> str | None:
     if not team.id or not team.display_name:
@@ -400,15 +402,6 @@ def _filter_team_id(
         return None
 
     props = team.properties
-
-    if created_at := props.get("createdDateTime"):
-        if not isinstance(created_at, datetime):
-            return None
-
-        created_at_ts = created_at.replace(tzinfo=timezone.utc).timestamp()
-
-        if created_at_ts < start or created_at_ts >= end:
-            return None
 
     if props.get("expirationDateTime") or props.get("deletedDateTime"):
         return None
@@ -467,16 +460,55 @@ def _collect_document_for_channel_id(
     graph_client: GraphClient,
     team: Team,
     channel: Channel,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
 ) -> Iterator[Document | None]:
+    # The geniuses over at Microsoft decided that filtering while fetching messages is *NOT* supported...
+    # Therefore, we have to do this client-side, which is quite a bit more inefficient.
+    #
+    # Not allowed:
+    # message_collection = channel.messages.get().filter(f"createdDateTime gt {start}").execute_query()
+
     message_collection = channel.messages.get_all(
         # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
     ).execute_query()
 
+    thread = [
+        message
+        for message in message_collection
+        if _filter_message(message=message, start=start, end=end)
+    ]
+
     yield _convert_thread_to_document(
         channel=channel,
-        thread=list(message_collection),
+        thread=thread,
     )
+
+
+def _filter_message(
+    message: ChatMessage,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> bool:
+    props = message.properties
+
+    if props.get("deletedDateTime"):
+        return False
+
+    def compare(dt_str: str) -> bool:
+        dt_ts = datetime.fromisoformat(dt_str).replace(tzinfo=timezone.utc).timestamp()
+        return start <= dt_ts and dt_ts < end
+
+    if modified_at := props.get("lastModifiedDateTime"):
+        if isinstance(modified_at, str):
+            return compare(modified_at)
+
+    if created_at := props.get("createdDateTime"):
+        if isinstance(created_at, str):
+            return compare(created_at)
+
+    return False
 
 
 if __name__ == "__main__":
