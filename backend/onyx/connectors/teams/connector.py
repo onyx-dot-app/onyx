@@ -332,7 +332,8 @@ def _collect_all_team_ids(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[str]:
-    # The MS Office 365 Graph API does not allow you to filter on start/end datetimes...
+    # The MS Office 365 Graph API does not allow you to filter on start/end datetimes server-side.
+    # Instead, we do it ourselves (i.e., client-side).
 
     team_ids: list[str] = []
     next_url = None
@@ -347,7 +348,15 @@ def _collect_all_team_ids(
 
         team_collection = query.execute_query()
 
-        team_ids.extend([team.id for team in team_collection if team.id])
+        filtered_team_ids = [
+            team_id
+            for team_id in [
+                _filter_team_id(team, start, end) for team in team_collection
+            ]
+            if team_id
+        ]
+
+        team_ids.extend(filtered_team_ids)
 
         if team_collection.has_next:
             next_url = cast(str, team_collection._next_request_url)
@@ -355,6 +364,31 @@ def _collect_all_team_ids(
             break
 
     return team_ids
+
+
+def _filter_team_id(
+    team: Team,
+    start: SecondsSinceUnixEpoch,
+    end: SecondsSinceUnixEpoch,
+) -> str | None:
+    if not team.id:
+        return None
+
+    props = team.properties
+
+    if created_at := props.get("createdDateTime"):
+        if not isinstance(created_at, datetime):
+            return None
+
+        created_at_ts = created_at.timestamp()
+
+        if created_at_ts < start or created_at_ts >= end:
+            return None
+
+    if props.get("expirationDateTime") or props.get("deletedDateTime"):
+        return None
+
+    return team.id
 
 
 def _get_team_with_id(
