@@ -471,7 +471,9 @@ class OnyxSalesforceSQLite:
             cursor = self._conn.cursor()
             # Get the object data and account data
             if object_type == "Account" or isChild:
-                "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
+                cursor.execute(
+                    "SELECT data FROM salesforce_objects WHERE id = ?", (object_id,)
+                )
             else:
                 cursor.execute(
                     "SELECT pso.data, r.parent_id as parent_id, sso.object_type FROM salesforce_objects pso \
@@ -487,8 +489,13 @@ class OnyxSalesforceSQLite:
 
             data = json.loads(result[0][0])
 
+            print("SF OBF TYPE", object_type)
+            print("SF DATA", data)
+
             # convert any account ids of the relationships back into data fields, with name
             for row in result:
+
+                print("TEST ROW", row)
                 if row[1] and row[2] and row[2] == "Account":
                     data["AccountId"] = row[1]
                     cursor.execute(
