@@ -1,9 +1,6 @@
-import contextvars
 import copy
 import os
-from concurrent.futures import as_completed
-from concurrent.futures import Future
-from concurrent.futures.thread import ThreadPoolExecutor
+from collections.abc import Iterator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
@@ -33,6 +30,7 @@ from onyx.connectors.models import Document
 from onyx.connectors.models import TextSection
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import parallel_yield
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
@@ -197,24 +195,21 @@ class TeamsConnector(
             team=team,
         )
 
-        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures: list[Future[Document | None]] = []
-            for channel in channels:
-                curr_ctx = contextvars.copy_context()
-                futures.append(
-                    executor.submit(
-                        curr_ctx.run,
-                        _collect_document_for_channel_id,
-                        graph_client=self.graph_client,
-                        team=team,
-                        channel=channel,
-                    )
-                )
+        gens = [
+            _collect_document_for_channel_id(
+                graph_client=self.graph_client,
+                team=team,
+                channel=channel,
+            )
+            for channel in channels
+        ]
 
-            for future in as_completed(futures):
-                doc = future.result()
-                if doc:
-                    yield doc
+        for doc in parallel_yield(
+            gens=gens,
+            max_workers=self.max_workers,
+        ):
+            if doc:
+                yield doc
 
         return TeamsCheckpoint(
             todo_team_ids=todos,
@@ -472,13 +467,13 @@ def _collect_document_for_channel_id(
     graph_client: GraphClient,
     team: Team,
     channel: Channel,
-) -> Document | None:
+) -> Iterator[Document | None]:
     message_collection = channel.messages.get_all(
         # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
     ).execute_query()
 
-    return _convert_thread_to_document(
+    yield _convert_thread_to_document(
         channel=channel,
         thread=list(message_collection),
     )
