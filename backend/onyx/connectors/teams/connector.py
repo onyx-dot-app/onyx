@@ -192,14 +192,14 @@ class TeamsConnector(
             graph_client=self.graph_client,
             team_id=todo_team_id,
         )
-        team_and_channel_id_pairs = _collect_all_channels_for_team_id(
+        channels = _collect_all_channels_from_team(
             graph_client=self.graph_client,
             team=team,
         )
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures: list[Future[Document | None]] = []
-            for team_id, channel_id in team_and_channel_id_pairs:
+            for channel in channels:
                 curr_ctx = contextvars.copy_context()
                 futures.append(
                     executor.submit(
@@ -207,7 +207,7 @@ class TeamsConnector(
                         _collect_document_for_channel_id,
                         graph_client=self.graph_client,
                         team=team,
-                        channel_id=channel_id,
+                        channel=channel,
                     )
                 )
 
@@ -438,14 +438,14 @@ def _get_team_by_id(
     return team_collection[0]
 
 
-def _collect_all_channels_for_team_id(
+def _collect_all_channels_from_team(
     graph_client: GraphClient,
     team: Team,
-) -> list[tuple[str, str]]:
+) -> list[Channel]:
     if not team.id:
         raise RuntimeError(f"The {team=} has an empty `id` field")
 
-    team_and_channel_id_pairs: list[tuple[str, str]] = []
+    channels: list[Channel] = []
     next_url = None
 
     while True:
@@ -460,29 +460,19 @@ def _collect_all_channels_for_team_id(
             )
 
         channel_collection = query.execute_query()
-        team_and_channel_id_pairs.extend(
-            [(team.id, channel.id) for channel in channel_collection if channel.id]
-        )
+        channels.extend(channel for channel in channel_collection if channel.id)
 
         if not channel_collection.has_next:
             break
 
-    return team_and_channel_id_pairs
+    return channels
 
 
 def _collect_document_for_channel_id(
     graph_client: GraphClient,
     team: Team,
-    channel_id: str,
+    channel: Channel,
 ) -> Document | None:
-    if not team.id:
-        raise RuntimeError(f"The {team=} does not have an id associated with it")
-
-    channel_collection = (
-        team.channels.get().filter(f"id eq '{channel_id}'").execute_query()
-    )
-    channel = channel_collection[0]
-
     message_collection = channel.messages.get_all(
         # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
