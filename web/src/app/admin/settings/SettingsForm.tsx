@@ -130,6 +130,11 @@ export function SettingsForm() {
 
   const combinedSettings = useContext(SettingsContext);
 
+  const { data, error, mutate } = useSWR<{ token: string }>(
+    "/api/telegram/token",
+    errorHandlingFetcher
+  );
+
   useEffect(() => {
     if (combinedSettings) {
       setSettings(combinedSettings.settings);
@@ -143,11 +148,6 @@ export function SettingsForm() {
   if (!settings) {
     return null;
   }
-
-  const { data, error, mutate } = useSWR<{ token: string }>(
-    "/api/telegram/token",
-    errorHandlingFetcher
-  );
 
   const onChangeTelegramToken = async (value: string) => {
     const response = await fetch("/api/telegram/token", {
