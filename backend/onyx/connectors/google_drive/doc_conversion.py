@@ -436,7 +436,8 @@ def _convert_drive_item_to_document(
                     )
                     return None
 
-        if file.get("name", "").split(".")[-1] in DRIVE_IGNORE_EXTENSIONS:
+        spl_file = file.get("name", "").split(".")
+        if len(spl_file) > 1 and spl_file[-1] in DRIVE_IGNORE_EXTENSIONS:
             logger.warning(f"Skipping file {file.get('name')} due to extension.")
             return None
 
