@@ -14,7 +14,7 @@ from office365.runtime.client_request_exception import ClientRequestException  #
 from office365.runtime.http.request_options import RequestOptions  # type: ignore[import-untyped]
 from office365.teams.channels.channel import Channel  # type: ignore
 from office365.teams.chats.messages.message import ChatMessage  # type: ignore
-from office365.teams.team import Team
+from office365.teams.team import Team  # type: ignore
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
