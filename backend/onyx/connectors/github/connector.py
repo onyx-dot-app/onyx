@@ -715,7 +715,8 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     total_count = org.get_repos().totalCount
                     if total_count == 0:
                         raise ConnectorValidationError(
-                            f"Found no repos for organization: {self.repo_owner}"
+                            f"Found no repos for organization: {self.repo_owner}. "
+                            "Does the credential have the right scopes?"
                         )
                 except GithubException as e:
                     # Check for missing SSO
@@ -734,11 +735,12 @@ class GithubConnector(CheckpointedConnector[GithubConnectorCheckpoint]):
                     # If not an org, try as a user
                     user = self.github_client.get_user(self.repo_owner)
 
-                    # Just check if we can access repos
+                    # Check if we can access any repos
                     total_count = user.get_repos().totalCount
                     if total_count == 0:
                         raise ConnectorValidationError(
-                            f"Found no repos for user: {self.repo_owner}"
+                            f"Found no repos for user: {self.repo_owner}. "
+                            "Does the credential have the right scopes?"
                         )
 
         except RateLimitExceededException:
