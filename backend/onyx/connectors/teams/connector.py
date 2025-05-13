@@ -178,40 +178,45 @@ class TeamsConnector(
 
         todos = checkpoint.todo_team_ids
 
-        while todos:
-            todo_team_id = todos[-1]
-            team = _get_team_with_id(
-                graph_client=self.graph_client,
-                team_id=todo_team_id,
+        if not todos:
+            return TeamsCheckpoint(
+                todo_team_ids=[],
+                has_more=False,
             )
-            team_and_channel_id_pairs = _collect_all_channels_for_team_id(
-                graph_client=self.graph_client,
-                team=team,
-            )
-            todos.pop()
 
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                futures: list[Future[Document | None]] = []
-                for team_id, channel_id in team_and_channel_id_pairs:
-                    curr_ctx = contextvars.copy_context()
-                    futures.append(
-                        executor.submit(
-                            curr_ctx.run,
-                            _collect_document_for_channel_id,
-                            graph_client=self.graph_client,
-                            team=team,
-                            channel_id=channel_id,
-                        )
+        todo_team_id = todos[-1]
+        team = _get_team_with_id(
+            graph_client=self.graph_client,
+            team_id=todo_team_id,
+        )
+        team_and_channel_id_pairs = _collect_all_channels_for_team_id(
+            graph_client=self.graph_client,
+            team=team,
+        )
+        todos.pop()
+
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures: list[Future[Document | None]] = []
+            for team_id, channel_id in team_and_channel_id_pairs:
+                curr_ctx = contextvars.copy_context()
+                futures.append(
+                    executor.submit(
+                        curr_ctx.run,
+                        _collect_document_for_channel_id,
+                        graph_client=self.graph_client,
+                        team=team,
+                        channel_id=channel_id,
                     )
+                )
 
-                for future in as_completed(futures):
-                    doc = future.result()
-                    if doc:
-                        yield doc
+            for future in as_completed(futures):
+                doc = future.result()
+                if doc:
+                    yield doc
 
         return TeamsCheckpoint(
-            todo_team_ids=[],
-            has_more=False,
+            todo_team_ids=todos,
+            has_more=bool(todos),
         )
 
 
