@@ -229,7 +229,10 @@ def _get_created_datetime(chat_message: ChatMessage) -> datetime:
 
 def _extract_channel_members(channel: Channel) -> list[BasicExpertInfo]:
     channel_members_list: list[BasicExpertInfo] = []
-    members = channel.members.get_all(page_loaded=lambda _: None).execute_query_retry()
+    members = channel.members.get_all(
+        # explicitly needed because of incorrect type definitions provided by the `office365` library
+        page_loaded=lambda _: None
+    ).execute_query_retry()
     for member in members:
         channel_members_list.append(BasicExpertInfo(display_name=member.display_name))
     return channel_members_list
@@ -354,7 +357,10 @@ def _collect_all_team_ids(
         if filter:
             query = graph_client.teams.get().filter(filter)
         else:
-            query = graph_client.teams.get_all(page_loaded=lambda _: None)
+            query = graph_client.teams.get_all(
+                # explicitly needed because of incorrect type definitions provided by the `office365` library
+                page_loaded=lambda _: None
+            )
 
         if next_url:
             url = next_url
@@ -443,7 +449,10 @@ def _collect_all_channels_for_team_id(
     next_url = None
 
     while True:
-        query = team.channels.get_all(page_loaded=lambda _: None)
+        query = team.channels.get_all(
+            # explicitly needed because of incorrect type definitions provided by the `office365` library
+            page_loaded=lambda _: None
+        )
         if next_url:
             url = next_url
             query = query.before_execute(
@@ -475,6 +484,7 @@ def _collect_document_for_channel_id(
     channel = channel_collection[0]
 
     message_collection = channel.messages.get_all(
+        # explicitly needed because of incorrect type definitions provided by the `office365` library
         page_loaded=lambda _: None
     ).execute_query()
 
