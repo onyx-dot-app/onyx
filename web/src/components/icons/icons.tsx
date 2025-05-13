@@ -3078,7 +3078,7 @@ export const OnyxIcon = ({
   size = 16,
   className = defaultTailwindCSS,
 }: IconProps) => {
-  return <LogoIcon size={size} className={className} src="/SlabLogo.png" />;
+  return <LogoIcon size={size} className={className} src="/logo.svg" />;
 };
 
 export const QuestionMarkIcon = ({
