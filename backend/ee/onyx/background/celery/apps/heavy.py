@@ -11,7 +11,7 @@ from ee.onyx.server.query_history.api import fetch_and_process_chat_session_hist
 from ee.onyx.server.query_history.api import ONYX_ANONYMIZED_EMAIL
 from ee.onyx.server.query_history.models import ChatSessionSnapshot
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
-from onyx.background.celery.apps.primary import celery_app
+from onyx.background.celery.apps.heavy import celery_app
 from onyx.background.task_utils import construct_query_history_report_name
 from onyx.configs.app_configs import JOB_TIMEOUT
 from onyx.configs.app_configs import ONYX_QUERY_HISTORY_TYPE
