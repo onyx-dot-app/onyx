@@ -187,7 +187,7 @@ class TeamsConnector(
                 has_more=False,
             )
 
-        todo_team_id = todos[-1]
+        todo_team_id = todos.pop()
         team = _get_team_by_id(
             graph_client=self.graph_client,
             team_id=todo_team_id,
@@ -196,7 +196,6 @@ class TeamsConnector(
             graph_client=self.graph_client,
             team=team,
         )
-        todos.pop()
 
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures: list[Future[Document | None]] = []
