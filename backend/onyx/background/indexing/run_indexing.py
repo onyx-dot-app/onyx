@@ -423,7 +423,8 @@ def _run_indexing(
                     connector=connector_runner.connector,
                 )
 
-            # save the initial checkpoint
+            # save the initial checkpoint to have a proper record of the
+            # "last used checkpoint"
             save_checkpoint(
                 db_session=db_session_temp,
                 index_attempt_id=index_attempt_id,
