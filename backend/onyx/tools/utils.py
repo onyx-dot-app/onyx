@@ -6,21 +6,25 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
+from onyx.llm.utils import get_model_map, _find_model_obj
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.tool import Tool
 
 
-OPEN_AI_TOOL_CALLING_MODELS = {
-    "gpt-3.5-turbo",
-    "gpt-4-turbo",
-    "gpt-4",
-    "gpt-4o",
-    "gpt-4o-mini",
-}
-
-
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:
-    return model_provider == "openai" and model_name in OPEN_AI_TOOL_CALLING_MODELS
+    model_map = get_model_map()
+    model_obj = _find_model_obj(
+        model_map=model_map,
+        provider=model_provider,
+        model_name=model_name,
+    )
+
+    if model_obj:
+        # Check if the model_obj from litellm.model_cost indicates support for function calling
+        if model_obj.get("supports_function_calling"):
+            return True
+    
+    return False
 
 
 def compute_tool_tokens(tool: Tool, llm_tokenizer: BaseTokenizer) -> int:
