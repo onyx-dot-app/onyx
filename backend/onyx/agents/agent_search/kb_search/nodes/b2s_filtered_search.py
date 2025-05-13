@@ -28,7 +28,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.chat.models import SubQueryPiece
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.models import InferenceSection
-from onyx.prompts.kg_prompts import KG_OBJECT_SOURCE_RESEARCH_PROMPT
+from onyx.prompts.kg_prompts import KG_SEARCH_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
@@ -116,7 +116,7 @@ def filtered_search(
 
     datetime.now().strftime("%A, %Y-%m-%d")
 
-    kg_object_source_research_prompt = KG_OBJECT_SOURCE_RESEARCH_PROMPT.format(
+    kg_object_source_research_prompt = KG_SEARCH_PROMPT.format(
         question=question,
         document_text=document_texts,
     )

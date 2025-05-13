@@ -487,22 +487,22 @@ And here is the content:
 
 
 CALL_DOCUMENT_CLASSIFICATION_PROMPT = """
-This is the beginning of a call between employees of the VENDOR's company ({{vendor}}) and other participants.
+This is the beginning of a call between employees of the VENDOR's company ({vendor}) and other participants.
 
 Your task is to classify the call into one of the following categories:
-{{category_options}}
+{category_options}
 
 Please also consider the participants when you perform your classification task - they can be important indicators \
 for the category.
 
 Please format your answer as a string in the format:
 
-REASONING: <your reasoning for the classification> - CATEGORY: <the category you have chosen. Only use {{category_list}}>
+REASONING: <your reasoning for the classification> - CATEGORY: <the category you have chosen. Only use {category_list}>
 
 --
 And here is the beginning of the call, including title and participants:
 
-{{beginning_of_call_content}}
+{beginning_of_call_content}
 """.strip()
 
 
@@ -524,20 +524,31 @@ Here are the relationship types that are available in the knowledge graph:
 ---possible_relationships---
 {SEPARATOR_LINE}
 
+Here is the question whose answer is ultimately sought:
+{SEPARATOR_LINE}
+---question---
+{SEPARATOR_LINE}
+
+And dere are the entities and relationships that have been extracted earlier from this question:
+{SEPARATOR_LINE}
+---entities---
+---relationships---
+{SEPARATOR_LINE}
+
 Here are more instructions:
 
 a) Regarding the strategy, there are two aspects to it:
 
 a1) "Search Type":
-Should the question be answered as a 'filtered search', or as a 'SQL query search'?
+Should the question be answered as a SEARCH ('filtered search'), or as a SQL ('SQL query search')?
 
 The options are:
 1. SEARCH: A filtered search simply uses the entities and relationships that you have been extracted earlier and \
 applies those as filters to search the underlying documents, which are indexed with them. Examples  are \
-'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nile about pricing?'. So this \
-is used really when there is *no implicit constraint or requirements* on underlying source documents outside of filters, \
-and there is no ordering, no limiting their number, etc. So use this for a question that tries to get information \
-*across* documents which may be filtered by their related relationships and entities, but without \
+'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nike about pricing?'. So this \
+is used really when there is *no implicit or explicit constraint or requirements* on underlying source documents \
+outside of filters, and there is no ordering, no limiting their number, etc. So use this for a question that \
+tries to get information *across* documents which may be filtered by their related relationships and entities, but without \
 other constraints.
 
 2. 'SQL': Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
@@ -548,6 +559,18 @@ be identified first and then  that call is analyzed),  \
 this is used if there *are implicit constraints* on the underlying source documents beyond filtering, including \
 ordering, limiting, etc. Use this also if the answer expects to analyze each source independently as part \
 of the overall answer.
+
+Note:
+ - here, you should look at the extracted entities and relationships and judge whether using them as filters \
+(using an *and*) would be appropriate to identify the range of underlying sources, or whether more \
+calculations would be needed to find the underlying sources ('last 2...', etc.) .
+ - Likely, if there are questions 'about something', then this only is used in a SQL statement or a filter \
+ if it shows up as an entity or relationship in the extracted entities and relationships. Otherwise, it will \
+ be part of the analysis/search. not the document identification.
+ - note that we can only FILTER (SEARCH) or COMPUTE (SQL) using the extracted entities and relationships. \
+ So do not think that if there is another term in the question, it should be included in the SQL statement. \
+ It cannot.
+
 
 a2) "Search Strategy":
 If a SQL search is chosen, i.e., documents have to be identified first, there are two approaches:
@@ -600,16 +623,7 @@ that in order to answer the question, it would be good to first analyze one obje
 results? Or should the information rather be analyzed as a whole? This would be 'yes' or 'no'.
 
 
-To help you, here are the entities and relationships that you have extracted:
-{SEPARATOR_LINE}
----entities---
----relationships---
-{SEPARATOR_LINE}
 
-Here is the question you are asked to answer:
-{SEPARATOR_LINE}
----question---
-{SEPARATOR_LINE}
 
 Please answer in json format in this form:
 
@@ -1121,7 +1135,27 @@ Here are the documents you are supposed to search through:
 --
 {{document_text}}
 {SEPARATOR_LINE}
-Note: in this case, please do not cite your sources. This is very important!
+Note: in this case, please do NOT cite your sources. This is very important!
+
+Please now generate the answer to the question given the documents:
+""".strip()
+
+KG_SEARCH_PROMPT = f"""
+You are an expert in extracting relevant structured information from a list of documents that \
+should relate to one object. You are presented with a list of documemnts that have been determined to be \
+relevant the task of interest. Your goal is to extract the information asked around these topics:
+You should look at the documents - in no particular order! - and extract the information that relates \
+to a question:
+{SEPARATOR_LINE}
+{{question}}
+{SEPARATOR_LINE}
+
+Here are the documents you are supposed to search through:
+--
+{{document_text}}
+{SEPARATOR_LINE}
+Note: in this case, please DO cite your sources. This is very important! Use the format [<document_number>](). \
+Note the important (), please do not forget.
 
 Please now generate the answer to the question given the documents:
 """.strip()

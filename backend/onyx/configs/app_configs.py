@@ -184,6 +184,13 @@ POSTGRES_API_SERVER_POOL_OVERFLOW = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
 )
 
+POSTGRES_API_SERVER_KG_READ_ONLY_POOL_SIZE = int(
+    os.environ.get("POSTGRES_API_SERVER_KG_READ_ONLY_POOL_SIZE") or 10
+)
+POSTGRES_API_SERVER_KG_READ_ONLY_POOL_OVERFLOW = int(
+    os.environ.get("POSTGRES_API_SERVER_KG_READ_ONLY_POOL_OVERFLOW") or 5
+)
+
 # defaults to False
 # generally should only be used for
 POSTGRES_USE_NULL_POOL = os.environ.get("POSTGRES_USE_NULL_POOL", "").lower() == "true"

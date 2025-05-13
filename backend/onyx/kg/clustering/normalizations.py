@@ -16,6 +16,17 @@ from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
 
 
+def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
+    """
+    Split an entity string into type and name.
+    """
+
+    entity_type = entity.split(":")[0]
+    entity_name = ":".join(entity.split(":")[1:])
+
+    return entity_type, entity_name
+
+
 def _get_existing_normalized_entities(
     raw_entities: List[str],
 ) -> List[tuple[str, str | None]]:
@@ -91,9 +102,11 @@ def normalize_entities(
     for norm_entity_tuple in norm_entities:
         if norm_entity_tuple[1] is None:
             continue
-        entity_type, norm_entity_semantic_name = norm_entity_tuple[1].split(":")
+        entity_type, norm_entity_semantic_name = _split_entity_type_v_name(
+            norm_entity_tuple[1]
+        )
         norm_entity_semantic_to_id_map[entity_type][norm_entity_semantic_name] = (
-            norm_entity_tuple[0].split(":")[1]
+            _split_entity_type_v_name(norm_entity_tuple[0])[1]
         )
 
     normalized_results: List[str] = []
