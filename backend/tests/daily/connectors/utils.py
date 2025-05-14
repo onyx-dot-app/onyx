@@ -83,3 +83,9 @@ def to_sections(
 
         for section in doc.sections:
             yield section
+
+
+def to_text_sections(iterator: Iterator[TextSection | ImageSection]) -> Iterator[str]:
+    for section in iterator:
+        if isinstance(section, TextSection):
+            yield section.text
