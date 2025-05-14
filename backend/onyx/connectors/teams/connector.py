@@ -165,7 +165,9 @@ class TeamsConnector(
 
         checkpoint = cast(TeamsCheckpoint, copy.deepcopy(checkpoint))
 
-        if checkpoint.todo_team_ids is None:
+        todos = checkpoint.todo_team_ids
+
+        if todos is None:
             root_todos = _collect_all_team_ids(
                 graph_client=self.graph_client,
                 start=start,
@@ -177,14 +179,10 @@ class TeamsConnector(
                 has_more=bool(root_todos),
             )
 
-        todos = checkpoint.todo_team_ids
-
-        if not todos:
-            return TeamsCheckpoint(
-                todo_team_ids=[],
-                has_more=False,
-            )
-
+        # `todos.pop()` should always return an element. This is because if
+        # `todos` was the empty list, then we would have set `has_more=False`
+        # during the previous invocation of `TeamsConnector.load_from_checkpoint`,
+        # meaning that this function wouldn't have been called in the first place.
         todo_team_id = todos.pop()
         team = _get_team_by_id(
             graph_client=self.graph_client,
@@ -212,6 +210,8 @@ class TeamsConnector(
         ):
             if doc:
                 yield doc
+
+        logger.info(f"Processed team with id {todo_team_id}")
 
         return TeamsCheckpoint(
             todo_team_ids=todos,
