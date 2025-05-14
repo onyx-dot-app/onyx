@@ -489,21 +489,19 @@ class OnyxSalesforceSQLite:
 
             data = json.loads(result[0][0])
 
-            print("SF OBF TYPE", object_type)
-            print("SF DATA", data)
+            if object_type != "Account":
 
-            # convert any account ids of the relationships back into data fields, with name
-            for row in result:
+                # convert any account ids of the relationships back into data fields, with name
+                for row in result:
 
-                print("TEST ROW", row)
-                if row[1] and row[2] and row[2] == "Account":
-                    data["AccountId"] = row[1]
-                    cursor.execute(
-                        "SELECT data FROM salesforce_objects WHERE id = ?",
-                        (row[1],),
-                    )
-                    account_data = json.loads(cursor.fetchone()[0])
-                    data["Account"] = account_data.get("Name", "")
+                    if row[1] and row[2] and row[2] == "Account":
+                        data["AccountId"] = row[1]
+                        cursor.execute(
+                            "SELECT data FROM salesforce_objects WHERE id = ?",
+                            (row[1],),
+                        )
+                        account_data = json.loads(cursor.fetchone()[0])
+                        data["Account"] = account_data.get("Name", "")
 
             return SalesforceObject(id=object_id, type=object_type, data=data)
 
