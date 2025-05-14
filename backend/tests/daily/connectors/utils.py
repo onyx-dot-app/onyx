@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import cast
 from typing import TypeVar
 
@@ -7,6 +8,8 @@ from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.connectors.models import ConnectorCheckpoint
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
+from onyx.connectors.models import ImageSection
+from onyx.connectors.models import TextSection
 
 _ITERATION_LIMIT = 100_000
 
@@ -68,3 +71,15 @@ def load_everything_from_checkpoint_connector(
             raise RuntimeError("Too many iterations. Infinite loop?")
 
     return outputs
+
+
+def to_sections(
+    iterator: Iterator[Document | ConnectorFailure],
+) -> Iterator[TextSection | ImageSection]:
+    for doc in iterator:
+        if not isinstance(doc, Document):
+            failure = doc
+            raise RuntimeError(failure)
+
+        for section in doc.sections:
+            yield section
