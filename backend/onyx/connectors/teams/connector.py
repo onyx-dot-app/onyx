@@ -44,6 +44,7 @@ class TeamsConnector(
     CheckpointedConnector[TeamsCheckpoint],
 ):
     MAX_WORKERS = 10
+    AUTHORITY_URL_PREFIX = "https://login.microsoftonline.com/"
 
     def __init__(
         self,
@@ -64,7 +65,7 @@ class TeamsConnector(
         teams_client_secret = credentials["teams_client_secret"]
         teams_directory_id = credentials["teams_directory_id"]
 
-        authority_url = f"https://login.microsoftonline.com/{teams_directory_id}"
+        authority_url = f"{TeamsConnector.AUTHORITY_URL_PREFIX}{teams_directory_id}"
         self.msal_app = msal.ConfidentialClientApplication(
             authority=authority_url,
             client_id=teams_client_id,
