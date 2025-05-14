@@ -1731,11 +1731,6 @@ class DocumentByConnectorCredentialPair(Base):
     # the actual indexing is complete
     has_been_indexed: Mapped[bool] = mapped_column(Boolean)
 
-    kg_stage: Mapped[KGStage] = mapped_column(
-        Enum(KGStage, native_enum=False),
-        comment="Status of knowledge graph extraction for this document",
-    )
-
     connector: Mapped[Connector] = relationship(
         "Connector", back_populates="documents_by_connector", passive_deletes=True
     )

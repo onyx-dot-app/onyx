@@ -494,6 +494,10 @@ class OnyxSalesforceSQLite:
                 # convert any account ids of the relationships back into data fields, with name
                 for row in result:
 
+                    # the following skips Account objects.
+                    if len(row) < 3:
+                        continue
+
                     if row[1] and row[2] and row[2] == "Account":
                         data["AccountId"] = row[1]
                         cursor.execute(
