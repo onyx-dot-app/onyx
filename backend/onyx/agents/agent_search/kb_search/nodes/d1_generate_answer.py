@@ -83,7 +83,9 @@ def generate_answer(
                 question=question,
                 kg_entities=[],
                 kg_relationships=[],
-                kg_sources=state.source_document_results,
+                kg_sources=state.source_document_results[
+                    :KG_RESEARCH_NUM_RETRIEVED_DOCS
+                ],
                 search_tool=graph_config.tooling.search_tool,
                 kg_chunk_id_zero_only=True,
                 inference_sections_only=True,

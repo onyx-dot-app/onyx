@@ -1,4 +1,5 @@
 from datetime import datetime
+from datetime import timezone
 from typing import cast
 from typing import List
 from typing import Type
@@ -84,7 +85,7 @@ def add_entity(
     if document_id is not None:
 
         db_session.query(Document).filter(Document.id == document_id).update(
-            {"kg_stage": kg_stage}
+            {"kg_stage": kg_stage, "kg_processing_time": datetime.now(timezone.utc)}
         )
     db_session.flush()
 

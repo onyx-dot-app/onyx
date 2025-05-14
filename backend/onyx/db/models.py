@@ -594,6 +594,10 @@ class Document(Base):
         comment="Status of knowledge graph extraction for this document",
     )
 
+    kg_processing_time: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     retrieval_feedbacks: Mapped[list["DocumentRetrievalFeedback"]] = relationship(
         "DocumentRetrievalFeedback", back_populates="document"
     )
