@@ -296,48 +296,55 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         )
         user: User
 
-        async with get_async_session_context_manager(tenant_id) as db_session:
-            token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
-            verify_email_is_invited(user_create.email)
-            verify_email_domain(user_create.email)
-            if MULTI_TENANT:
-                tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
-                    db_session, User, OAuthAccount
-                )
-                self.user_db = tenant_user_db
-                self.database = tenant_user_db
+        token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant_id)
+        try:
+            async with get_async_session_context_manager(tenant_id) as db_session:
+                verify_email_is_invited(user_create.email)
+                verify_email_domain(user_create.email)
+                if MULTI_TENANT:
+                    tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
+                        db_session, User, OAuthAccount
+                    )
+                    self.user_db = tenant_user_db
+                    self.database = tenant_user_db  # is this even a real var?
 
-            if hasattr(user_create, "role"):
-                user_count = await get_user_count()
-                if (
-                    user_count == 0
-                    or user_create.email in get_default_admin_user_emails()
-                ):
-                    user_create.role = UserRole.ADMIN
-                else:
+                if hasattr(user_create, "role"):
                     user_create.role = UserRole.BASIC
-            try:
-                user = await super().create(user_create, safe=safe, request=request)  # type: ignore
-            except exceptions.UserAlreadyExists:
-                user = await self.get_by_email(user_create.email)
-                # Handle case where user has used product outside of web and is now creating an account through web
 
-                if (
-                    not user.role.is_web_login()
-                    and isinstance(user_create, UserCreate)
-                    and user_create.role.is_web_login()
-                ):
+                    user_count = await get_user_count()
+                    if (
+                        user_count == 0
+                        or user_create.email in get_default_admin_user_emails()
+                    ):
+                        user_create.role = UserRole.ADMIN
+
+                try:
+                    user = await super().create(user_create, safe=safe, request=request)  # type: ignore
+                except exceptions.UserAlreadyExists:
+                    user = await self.get_by_email(user_create.email)
+
+                    # we must use the existing user in the session if it matches
+                    # the user we just got by email
+                    user_by_session = await db_session.get(User, user.id)
+                    if user_by_session:
+                        user = user_by_session
+
+                    # Handle case where user has used product outside of web and is now creating an account through web
+                    if (
+                        user.role.is_web_login()
+                        or not isinstance(user_create, UserCreate)
+                        or not user_create.role.is_web_login()
+                    ):
+                        raise exceptions.UserAlreadyExists()
+
                     user_update = UserUpdateWithRole(
                         password=user_create.password,
                         is_verified=user_create.is_verified,
                         role=user_create.role,
                     )
                     user = await self.update(user_update, user)
-                else:
-                    raise exceptions.UserAlreadyExists()
-
-            finally:
-                CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+        finally:
+            CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
         return user
 
     async def validate_password(self, password: str, _: schemas.UC | models.UP) -> None:
