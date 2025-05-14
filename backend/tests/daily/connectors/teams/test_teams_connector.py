@@ -65,7 +65,7 @@ def teams_connector(
 def test_teams_connector(
     teams_connector: TeamsConnector,
     expected_messages: set[str],
-):
+) -> None:
     docs = load_everything_from_checkpoint_connector(
         connector=teams_connector,
         start=0.0,
