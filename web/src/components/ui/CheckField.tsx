@@ -15,6 +15,7 @@ import {
 interface CheckFieldProps {
   name: string;
   label: string;
+  labelClassName?: string;
   sublabel?: string;
   size?: "sm" | "md" | "lg";
   tooltip?: string;
@@ -28,6 +29,7 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
   sublabel,
   size = "md",
   tooltip,
+  labelClassName,
   ...props
 }) => {
   const [field, , helpers] = useField<boolean>({ name, type: "checkbox" });
@@ -74,7 +76,12 @@ export const CheckFormField: React.FC<CheckFieldProps> = ({
           className="flex flex-col cursor-pointer"
           onClick={handleClick}
         >
-          <span className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+          <span
+            className={cn(
+              "text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70",
+              labelClassName
+            )}
+          >
             {label}
           </span>
           {sublabel && (
