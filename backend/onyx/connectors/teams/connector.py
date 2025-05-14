@@ -193,7 +193,7 @@ class TeamsConnector(
             team=team,
         )
 
-        gens = [
+        docs = [
             _collect_document_for_channel_id(
                 graph_client=self.graph_client,
                 team=team,
@@ -205,13 +205,15 @@ class TeamsConnector(
         ]
 
         for doc in parallel_yield(
-            gens=gens,
+            gens=docs,
             max_workers=self.max_workers,
         ):
             if doc:
                 yield doc
 
-        logger.info(f"Processed team with id {todo_team_id}")
+        logger.info(
+            f"Processed team with id {todo_team_id}; {len(todos)} team(s) left to process"
+        )
 
         return TeamsCheckpoint(
             todo_team_ids=todos,
@@ -395,6 +397,15 @@ def _filter_team_id(
     team: Team,
     requested: list[str] | None = None,
 ) -> str | None:
+    """
+    Returns the Team ID if:
+        - Team is not expired / deleted
+        - Team has a display-name and ID
+        - Team display-name is in the requested teams list
+
+    Otherwise, returns `None`.
+    """
+
     if not team.id or not team.display_name:
         return None
 
@@ -491,6 +502,11 @@ def _filter_message(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> bool:
+    """
+    Returns `True` if the given message was created / modified within the start-to-end datetime range.
+    Returns `False` otherwise.
+    """
+
     props = message.properties
 
     if props.get("deletedDateTime"):
