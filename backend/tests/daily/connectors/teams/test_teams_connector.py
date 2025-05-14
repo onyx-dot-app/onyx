@@ -40,7 +40,7 @@ def teams_connector(
                 f"`request.param` must either be `None` or of type `list[str]`; instead got {type(teams)}"
             )
 
-    teams_connector = TeamsConnector(teams=teams if teams else [])
+    teams_connector = TeamsConnector(teams=teams or [])
     teams_connector.load_credentials(teams_credentials)
     return teams_connector
 

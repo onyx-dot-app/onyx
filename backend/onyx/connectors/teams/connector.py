@@ -515,6 +515,10 @@ def _filter_message(
         if isinstance(created_at, str):
             return compare(created_at)
 
+    logger.warn(
+        "No `lastModifiedDateTime` or `createdDateTime` fields found in `message.properties`"
+    )
+
     return False
 
 
