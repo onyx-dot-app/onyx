@@ -9,3 +9,6 @@ TITLE_CONTENT_RATIO: null
 
 # User email to use for testing, modifies access control list, null means only public files
 USER_EMAIL: null
+
+# Export file, will export a cvs file with the results and a json file with the parameters
+EXPORT_FILE: "search-%Y-%m-%d-%H-%M-%S"
