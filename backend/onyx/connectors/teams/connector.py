@@ -465,6 +465,13 @@ def _collect_document_for_channel_id(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> Iterator[Document | None]:
+    """
+    This function yields just one singular `Document`.
+
+    The reason why this function returns an instance of `Iterator` is because
+    that is what `parallel_yield` expects. We want this to be lazily evaluated.
+    """
+
     # Server-side filter conditions are not supported on the chat-messages API.
     # Therefore, we have to do this client-side, which is quite a bit more inefficient.
     #
