@@ -363,6 +363,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                 if status == DriveIdStatus.AVAILABLE:
                     return drive_id, True
                 elif status == DriveIdStatus.IN_PROGRESS:
+                    logger.debug(f"Drive id in progress: {drive_id}")
                     found_future_work = True
             return None, found_future_work
 
@@ -372,11 +373,12 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             def record_drive_processing(drive_id: str) -> None:
                 with cv:
                     completion.processed_drive_ids.add(drive_id)
-                    drive_id_status[drive_id] = (
-                        DriveIdStatus.FINISHED
-                        if drive_id in self._retrieved_folder_and_drive_ids
-                        else DriveIdStatus.AVAILABLE
-                    )
+                    if drive_id in drive_id_status:
+                        drive_id_status[drive_id] = (
+                            DriveIdStatus.FINISHED
+                            if drive_id in self._retrieved_folder_and_drive_ids
+                            else DriveIdStatus.AVAILABLE
+                        )
                     logger.debug(
                         f"Drive id finished: {drive_id}, user email: {thread_id},"
                         f"processed drive ids: {len(completion.processed_drive_ids)}"

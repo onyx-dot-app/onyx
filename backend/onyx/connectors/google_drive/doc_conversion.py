@@ -24,8 +24,10 @@ from onyx.connectors.models import ImageSection
 from onyx.connectors.models import SlimDocument
 from onyx.connectors.models import TextSection
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.file_processing.extract_file_text import ALL_ACCEPTED_FILE_EXTENSIONS
 from onyx.file_processing.extract_file_text import docx_to_text_and_images
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.extract_file_text import pptx_to_text
 from onyx.file_processing.extract_file_text import read_pdf_file
 from onyx.file_processing.extract_file_text import xlsx_to_text
@@ -57,20 +59,6 @@ GOOGLE_MIME_TYPES = {
     GDriveMimeType.DOC.value: "text/plain",
     GDriveMimeType.SPREADSHEET.value: "text/csv",
     GDriveMimeType.PPT.value: "text/plain",
-}
-
-DRIVE_IGNORE_EXTENSIONS = {
-    "dll",
-    "gz",
-    "zip",
-    "7z",
-    "rar",
-    "tar",
-    "dds",
-    "deb",
-    "dmg",
-    "pkg",
-    "pyc",
 }
 
 
@@ -234,6 +222,12 @@ def _download_and_extract_sections_basic(
             "application/vnd.google-apps.audio",
             "application/zip",
         ]:
+            return []
+
+        # don't download the file at all if it's an unhandled extension
+        file_ext = get_file_ext(file.get("name", ""))
+        if file_ext not in ALL_ACCEPTED_FILE_EXTENSIONS:
+            logger.warning(f"Skipping file {file.get('name')} due to extension.")
             return []
         # For unsupported file types, try to extract text
         try:
@@ -435,11 +429,6 @@ def _convert_drive_item_to_document(
                         f"{file.get('name')} exceeds size threshold of {size_threshold}. Skipping."
                     )
                     return None
-
-        spl_file = file.get("name", "").split(".")
-        if len(spl_file) > 1 and spl_file[-1] in DRIVE_IGNORE_EXTENSIONS:
-            logger.warning(f"Skipping file {file.get('name')} due to extension.")
-            return None
 
         # If we don't have sections yet, use the basic extraction method
         if not sections:
