@@ -12,6 +12,9 @@ from onyx.context.search.models import SavedSearchDoc
 from onyx.context.search.models import SavedSearchDocWithContent
 from onyx.context.search.models import SearchDoc
 from onyx.db.models import SearchDoc as DBSearchDoc
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 T = TypeVar(
@@ -154,5 +157,6 @@ def remove_stop_words_and_punctuation(keywords: list[str]) -> list[str]:
             if (word.casefold() not in stop_words and word not in string.punctuation)
         ]
         return text_trimmed or word_tokens
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Error removing stop words and punctuation: {e}")
         return keywords
