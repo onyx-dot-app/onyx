@@ -102,8 +102,6 @@ class TeamsConnector(
                 timeout=10,
                 func=_collect_all_team_ids,
                 graph_client=self.graph_client,
-                start=0.0,
-                end=datetime.now(tz=timezone.utc).timestamp(),
                 requested=self.requested_team_list,
             )
 
@@ -171,8 +169,6 @@ class TeamsConnector(
         if todos is None:
             root_todos = _collect_all_team_ids(
                 graph_client=self.graph_client,
-                start=start,
-                end=end,
                 requested=self.requested_team_list,
             )
             return TeamsCheckpoint(
@@ -339,14 +335,8 @@ def _update_request_url(request: RequestOptions, next_url: str) -> None:
 
 def _collect_all_team_ids(
     graph_client: GraphClient,
-    start: SecondsSinceUnixEpoch,
-    end: SecondsSinceUnixEpoch,
     requested: list[str] | None = None,
 ) -> list[str]:
-    # The geniuses over at Microsoft decided that the Graph API does not
-    # support the ability to filter on start/end datetimes server-side.
-    # Therefore, we must do it ourselves (i.e., client-side).
-
     team_ids: list[str] = []
     next_url: str | None = None
 
@@ -475,7 +465,7 @@ def _collect_document_for_channel_id(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> Iterator[Document | None]:
-    # The geniuses over at Microsoft decided that filtering while fetching messages is *NOT* supported...
+    # Server-side filter conditions are not supported on the chat-messages API.
     # Therefore, we have to do this client-side, which is quite a bit more inefficient.
     #
     # Not allowed:
