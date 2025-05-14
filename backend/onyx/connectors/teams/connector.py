@@ -108,7 +108,7 @@ class TeamsConnector(
 
         except ClientRequestException as e:
             if not e.response:
-                raise RuntimeError("TODO!")
+                raise RuntimeError(f"No response provided in error; {e=}")
             status_code = e.response.status_code
             if status_code == 401:
                 raise CredentialExpiredError(
