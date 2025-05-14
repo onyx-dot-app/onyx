@@ -81,6 +81,11 @@ env:
   # Slack
   SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
 
+  # Teams
+  TEAMS_APPLICATION_ID: ${{ secrets.TEAMS_APPLICATION_ID }}
+  TEAMS_DIRECTORY_ID: ${{ secrets.TEAMS_DIRECTORY_ID }}
+  TEAMS_SECRET: ${{ secrets.TEAMS_SECRET }}
+
 jobs:
   connectors-check:
     # See https://runs-on.com/runners/linux/
