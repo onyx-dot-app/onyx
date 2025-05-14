@@ -7,6 +7,8 @@ from datetime import timedelta
 from datetime import timezone
 
 from fastapi_users_db_sqlalchemy import UUID_ID
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.usage_export import get_all_empty_chat_message_entries
@@ -155,13 +157,14 @@ def create_new_usage_report(
     new_report = write_usage_report(db_session, report_name, user_id, period)
 
     # get user email
-    requestor_email = (
-        db_session.query(User.email)
-        .filter(User.id == new_report.requestor_user_id)
-        .scalar()
+    requestor_user = (
+        db_session.query(User)
+        .filter(cast(User.id, UUID) == new_report.requestor_user_id)
+        .one_or_none()
         if new_report.requestor_user_id
         else None
     )
+    requestor_email = requestor_user.email if requestor_user else None
 
     return UsageReportMetadata(
         report_name=str(new_report.id),

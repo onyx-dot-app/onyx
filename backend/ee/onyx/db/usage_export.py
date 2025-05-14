@@ -5,6 +5,8 @@ from typing import IO
 from typing import Optional
 
 from fastapi_users_db_sqlalchemy import UUID_ID
+from sqlalchemy import cast
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
@@ -92,8 +94,8 @@ def get_all_usage_reports(db_session: Session) -> list[UsageReportMetadata]:
     user_ids = {r.requestor_user_id for r in usage_reports if r.requestor_user_id}
     user_emails = {
         user.id: user.email
-        for user in db_session.query(User.id, User.email)
-        .filter(User.id.in_(user_ids))
+        for user in db_session.query(User)
+        .filter(cast(User.id, UUID).in_(user_ids))
         .all()
     }
 
