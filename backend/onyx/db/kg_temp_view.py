@@ -53,7 +53,7 @@ def create_views(
            se.attributes as source_entity_attributes,
            te.attributes as target_entity_attributes
     FROM kg_relationship kgr
-    JOIN {allowed_docs_view_name} AD on AD.allowed_doc_id = kgr.source_document
+    INNER JOIN {allowed_docs_view_name} AD on AD.allowed_doc_id = kgr.source_document
     JOIN document d on d.id = kgr.source_document
     JOIN kg_entity se on se.id_name = kgr.source_node
     JOIN kg_entity te on te.id_name = kgr.target_node

@@ -49,7 +49,12 @@ _DEFAULT_ATTRIBUTES_TO_KEEP: dict[str, dict[str, str]] = {
         "Probability": "probability",
         "CreatedDate": "created_date",
         "LastModifiedDate": "last_modified_date",
-    }
+    },
+    "Contact": {
+        "Account": "account",
+        "CreatedDate": "created_date",
+        "LastModifiedDate": "last_modified_date",
+    },
 }
 
 
