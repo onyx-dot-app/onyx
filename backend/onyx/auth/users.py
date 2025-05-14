@@ -1042,9 +1042,6 @@ async def double_check_user(
     include_expired: bool = False,
     allow_anonymous_access: bool = False,
 ) -> User | None:
-    if is_user_admin(user):
-        return None
-
     if optional:
         return user
 
