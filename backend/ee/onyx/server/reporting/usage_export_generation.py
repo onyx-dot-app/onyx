@@ -167,7 +167,7 @@ def create_new_usage_report(
     requestor_email = requestor_user.email if requestor_user else None
 
     return UsageReportMetadata(
-        report_name=str(new_report.id),
+        report_name=new_report.report_name,
         requestor=requestor_email,
         time_created=new_report.time_created,
         period_from=new_report.period_from,
