@@ -35,3 +35,16 @@ python run_search_eval.py
 ```
 
 8. Repeat steps 6 and 7 to test and compare different search parameters
+
+## Metrics
+- Jaccard Similarity: the ratio between the intersect and the union between the topk search and rerank results. Higher is better
+- Average Rank Change: The average absolute rank difference of the topk reranked chunks vs the entire search chunks. Lower is better
+- Average Missing Chunk Ratio: The number of chunks in the topk reranked chunks not in the topk search chunks, over topk. Lower is better
+
+Note that all of these metrics are affected by very narrow search results.
+E.g., if topk is 20 but there is only 1 relevant document, the other 19 documents could be ordered arbitrarily, resulting in a lower score.
+
+
+To address this limitation, there are score adjusted versions of the metrics.
+The score adjusted version does not used a fixed topk, but computes the optimum topk based on the rerank scores.
+This generally works in determining how many documents are relevant, although note that this apporach isn't perfect.

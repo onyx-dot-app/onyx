@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -166,23 +167,58 @@ def _evaluate_one_query(
     search_results: list[InferenceChunk],
     rerank_results: list[InferenceChunk],
     search_parameters: SearchEvalParameters,
-) -> None:
+) -> list[float]:
     search_topk = search_results[: search_parameters.eval_topk]
     rerank_topk = rerank_results[: search_parameters.eval_topk]
 
-    # compute Jaccard similarity of the two chunks
+    # get the score adjusted topk (topk where the score is at least 50% of the top score)
+    # could be more than topk if top scores are similar, may or may not be a good thing
+    # can change by swapping rerank_results with rerank_topk in bisect
+    adj_topk = bisect_left(
+        rerank_results, -0.5 * rerank_results[0].score, key=lambda x: -x.score
+    )
+    search_adj_topk = search_results[:adj_topk]
+    rerank_adj_topk = rerank_results[:adj_topk]
+
+    # compute metrics
+    search_ranks = {chunk.unique_id: rank for rank, chunk in enumerate(search_results)}
+    return [
+        _compute_jaccard_similarity(search_topk, rerank_topk),
+        _compute_average_rank_change(search_ranks, rerank_topk),
+        _compute_average_missing_chunk_ratio(search_topk, rerank_topk),
+        # score adjusted metrics
+        _compute_jaccard_similarity(search_adj_topk, rerank_adj_topk),
+        _compute_average_rank_change(search_ranks, rerank_adj_topk),
+        _compute_average_missing_chunk_ratio(search_adj_topk, rerank_adj_topk),
+    ]
+
+
+def _compute_jaccard_similarity(
+    search_topk: list[InferenceChunk], rerank_topk: list[InferenceChunk]
+) -> float:
     search_chunkids = {chunk.unique_id for chunk in search_topk}
     rerank_chunkids = {chunk.unique_id for chunk in rerank_topk}
-    jaccard_similarity = len(search_chunkids.intersection(rerank_chunkids)) / len(
+    return len(search_chunkids.intersection(rerank_chunkids)) / len(
         search_chunkids.union(rerank_chunkids)
     )
 
-    # FIXME: convert into an actual metric later, print for now
-    logger.info(f"Jaccard similarity for query: {jaccard_similarity}")
 
-    # TODO: compare average rank change
-    # TODO: consider other metrics (acc, prec, recall, etc.)
-    # TODO: warn if a metric value is too low
+def _compute_average_rank_change(
+    search_ranks: dict[str, int], rerank_topk: list[InferenceChunk]
+) -> float:
+    rank_changes = [
+        abs(search_ranks[chunk.unique_id] - rerank_rank)
+        for rerank_rank, chunk in enumerate(rerank_topk)
+    ]
+    return sum(rank_changes) / len(rank_changes)
+
+
+def _compute_average_missing_chunk_ratio(
+    search_topk: list[InferenceChunk], rerank_topk: list[InferenceChunk]
+) -> float:
+    search_chunkids = {chunk.unique_id for chunk in search_topk}
+    rerank_chunkids = {chunk.unique_id for chunk in rerank_topk}
+    return len(rerank_chunkids.difference(search_chunkids)) / len(rerank_chunkids)
 
 
 def run_search_eval() -> None:
@@ -194,34 +230,45 @@ def run_search_eval() -> None:
     search_parameters = _load_search_parameters()
     query_pairs = _load_query_pairs()
 
-    export_path = Path(search_parameters.export_folder)
-
     with get_session_with_current_tenant() as db_session:
         multilingual_expansion = get_multilingual_expansion(db_session)
-
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
         rerank_settings = RerankingDetails.from_db_model(search_settings)
 
-        logger.info(f"Reranking settings: {rerank_settings}")
-
-        if (
-            not search_parameters.skip_rerank
-            and rerank_settings.rerank_model_name is None
-        ):
+        if search_parameters.skip_rerank:
+            logger.warning("Reranking is disabled, evaluation will not run")
+        elif rerank_settings.rerank_model_name is None:
             raise ValueError(
                 "Reranking is enabled but no reranker is configured. "
                 "Please set the reranker in the admin panel search settings."
             )
 
+        export_path = Path(search_parameters.export_folder)
         search_result_file = export_path / "search_results.csv"
-        eval_result_file = export_path / "eval_results.csv"  # TODO:
-        with search_result_file.open("w") as file:
-            csv_writer = csv.writer(file)
-            csv_writer.writerow(
+        eval_result_file = export_path / "eval_results.csv"
+        with (
+            search_result_file.open("w") as search_file,
+            eval_result_file.open("w") as eval_file,
+        ):
+            search_csv_writer = csv.writer(search_file)
+            eval_csv_writer = csv.writer(eval_file)
+            search_csv_writer.writerow(
                 ["source", "query", "rank", "score", "doc_id", "chunk_id"]
             )
+            eval_csv_writer.writerow(
+                [
+                    "query",
+                    "jaccard_similarity",
+                    "average_rank_change",
+                    "missing_chunks_ratio",
+                    "jaccard_similarity_adj",
+                    "average_rank_change_adj",
+                    "missing_chunks_ratio_adj",
+                ]
+            )
 
+            sum_metrics = [0, 0, 0, 0, 0, 0]
             for orig_query, alt_query in query_pairs:
                 search_results = _search_one_query(
                     alt_query,
@@ -231,7 +278,7 @@ def run_search_eval() -> None:
                     search_parameters,
                 )
                 for rank, result in enumerate(search_results):
-                    csv_writer.writerow(
+                    search_csv_writer.writerow(
                         [
                             "search",
                             alt_query,
@@ -244,13 +291,10 @@ def run_search_eval() -> None:
 
                 if not search_parameters.skip_rerank:
                     rerank_results = _rerank_one_query(
-                        orig_query,
-                        search_results,
-                        rerank_settings,
-                        search_parameters,
+                        orig_query, search_results, rerank_settings, search_parameters
                     )
                     for rank, result in enumerate(rerank_results):
-                        csv_writer.writerow(
+                        search_csv_writer.writerow(
                             [
                                 "rerank",
                                 orig_query,
@@ -261,13 +305,41 @@ def run_search_eval() -> None:
                             ]
                         )
 
-                    _evaluate_one_query(
-                        search_results,
-                        rerank_results,
-                        search_parameters,
+                    metrics = _evaluate_one_query(
+                        search_results, rerank_results, search_parameters
                     )
+                    eval_csv_writer.writerow([orig_query, *metrics])
+                    for i, metric in enumerate(metrics):
+                        sum_metrics[i] += metric
 
-    logger.info(f"Exported results to {search_result_file} and {eval_result_file}")
+    logger.info(
+        f"Exported individual results to {search_result_file} and {eval_result_file}"
+    )
+
+    if not search_parameters.skip_rerank:
+        average_metrics = [metric / len(query_pairs) for metric in sum_metrics]
+        logger.info(f"Jaccard similarity: {average_metrics[0]}")
+        logger.info(f"Average rank change: {average_metrics[1]}")
+        logger.info(f"Average missing chunks ratio: {average_metrics[2]}")
+        logger.info(f"Jaccard similarity (adjusted): {average_metrics[3]}")
+        logger.info(f"Average rank change (adjusted): {average_metrics[4]}")
+        logger.info(f"Average missing chunks ratio (adjusted): {average_metrics[5]}")
+
+        aggregate_file = export_path / "aggregate_results.csv"
+        with aggregate_file.open("w") as file:
+            aggregate_csv_writer = csv.writer(file)
+            aggregate_csv_writer.writerow(
+                [
+                    "jaccard_similarity",
+                    "average_rank_change",
+                    "missing_chunks_ratio",
+                    "jaccard_similarity_adj",
+                    "average_rank_change_adj",
+                    "missing_chunks_ratio_adj",
+                ]
+            )
+            aggregate_csv_writer.writerow(average_metrics)
+            logger.info(f"Exported aggregate results to {aggregate_file}")
 
 
 if __name__ == "__main__":
