@@ -2,12 +2,12 @@ import csv
 import json
 import os
 from bisect import bisect_left
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import cast
 
 import yaml
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_search.shared_graph_utils.models import QueryExpansionType
@@ -36,8 +36,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 
-@dataclass
-class SearchEvalParameters:
+class SearchEvalParameters(BaseModel):
     hybrid_alpha: float
     hybrid_alpha_keyword: float
     doc_time_decay: float
@@ -81,7 +80,7 @@ def _load_search_parameters() -> SearchEvalParameters:
 
     config_file = export_path / "search_eval_config.yaml"
     with config_file.open("w") as file:
-        search_parameters_dict = search_parameters.__dict__
+        search_parameters_dict = search_parameters.model_dump(mode="python")
         search_parameters_dict["rank_profile"] = search_parameters.rank_profile.value
         yaml.dump(search_parameters_dict, file, sort_keys=False)
     logger.info(f"Exported config to {config_file}")
@@ -108,6 +107,7 @@ def _search_one_query(
     db_session: Session,
     search_parameters: SearchEvalParameters,
 ) -> list[InferenceChunk]:
+    # the retrieval preprocessing is fairly stripped down so the query doesn't unexpectly change
     query_embedding = get_query_embedding(alt_query, db_session)
 
     all_query_terms = alt_query.split()
@@ -273,7 +273,7 @@ def run_search_eval() -> None:
                 ]
             )
 
-            sum_metrics = [0] * 6
+            sum_metrics = [0.0] * 6
             for orig_query, alt_query in query_pairs:
                 search_results = _search_one_query(
                     alt_query,
@@ -314,8 +314,10 @@ def run_search_eval() -> None:
                         search_results, rerank_results, search_parameters
                     )
                     eval_csv_writer.writerow([orig_query, *metrics])
-                    for i, metric in enumerate(metrics):
-                        sum_metrics[i] += metric  # type: ignore
+                    sum_metrics = [
+                        sum_metric + metric
+                        for sum_metric, metric in zip(sum_metrics, metrics)
+                    ]
 
     logger.info(
         f"Exported individual results to {search_result_file} and {eval_result_file}"

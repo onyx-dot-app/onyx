@@ -17,9 +17,10 @@ from onyx.db.persona import get_persona_by_id
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.interfaces import LLM
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.logger import setup_logger
 
-logger = setup_logger(__name__)
+logger = setup_logger()
 
 
 def _load_queries() -> list[str]:
@@ -89,15 +90,30 @@ def generate_search_queries() -> None:
         prompt_config = PromptConfig.from_model(persona.prompts[0])
         tool_definition = SearchToolOverride().tool_definition()
 
-        modified_queries = [
-            _modify_one_query(
-                query=query,
-                llm=llm,
-                prompt_config=prompt_config,
-                tool_definition=tool_definition,
+        tool_call_supported = explicit_tool_calling_supported(
+            llm.config.model_provider, llm.config.model_name
+        )
+
+        if tool_call_supported:
+            logger.info(
+                "Tool calling is supported for the current model. Modifying queries."
             )
-            for query in queries
-        ]
+            modified_queries = [
+                _modify_one_query(
+                    query=query,
+                    llm=llm,
+                    prompt_config=prompt_config,
+                    tool_definition=tool_definition,
+                )
+                for query in queries
+            ]
+        else:
+            logger.warning(
+                "Tool calling is not supported for the current model. "
+                "Using the original queries."
+            )
+            modified_queries = queries
+
         with open("search_queries_modified.json", "w") as file:
             json.dump(modified_queries, file, indent=4)
 
