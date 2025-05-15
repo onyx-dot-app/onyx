@@ -90,10 +90,12 @@ def _load_search_parameters() -> SearchEvalParameters:
 
 
 def _load_query_pairs() -> list[tuple[str, str]]:
-    with open("search_queries.json", "r") as file:
+    current_dir = Path(__file__).parent
+
+    with open(current_dir / "search_queries.json", "r") as file:
         orig_queries = json.load(file)
 
-    with open("search_queries_modified.json", "r") as file:
+    with open(current_dir / "search_queries_modified.json", "r") as file:
         alt_queries = json.load(file)
 
     return list(zip(orig_queries, alt_queries))

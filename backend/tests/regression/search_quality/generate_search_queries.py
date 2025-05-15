@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from langgraph.types import StreamWriter
 
@@ -22,7 +23,8 @@ logger = setup_logger(__name__)
 
 
 def _load_queries() -> list[str]:
-    with open("search_queries.json", "r") as file:
+    current_dir = Path(__file__).parent
+    with open(current_dir / "search_queries.json", "r") as file:
         return json.load(file)
 
 
@@ -60,7 +62,11 @@ def _modify_one_query(
         should_stream_answer=False,
         writer=writer,
     )
-    return tool_message.tool_calls[0]["args"]["query"]
+    return (
+        tool_message.tool_calls[0]["args"]["query"]
+        if tool_message.tool_calls
+        else query
+    )
 
 
 class SearchToolOverride(SearchTool):

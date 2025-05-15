@@ -46,5 +46,5 @@ E.g., if topk is 20 but there is only 1 relevant document, the other 19 document
 
 
 To address this limitation, there are score adjusted versions of the metrics.
-The score adjusted version does not used a fixed topk, but computes the optimum topk based on the rerank scores.
-This generally works in determining how many documents are relevant, although note that this apporach isn't perfect.
+The score adjusted version does not use a fixed topk, but computes the optimum topk based on the rerank scores.
+This generally works in determining how many documents are relevant, although note that this approach isn't perfect.
