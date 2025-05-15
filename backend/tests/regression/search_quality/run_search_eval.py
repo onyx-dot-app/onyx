@@ -16,7 +16,9 @@ from onyx.configs.chat_configs import HYBRID_ALPHA_KEYWORD
 from onyx.configs.chat_configs import NUM_RETURNED_HITS
 from onyx.configs.chat_configs import TITLE_CONTENT_RATIO
 from onyx.context.search.models import IndexFilters
-from onyx.context.search.models import InferenceChunkUncleaned
+from onyx.context.search.models import InferenceChunk
+from onyx.context.search.models import RerankingDetails
+from onyx.context.search.postprocessing.postprocessing import semantic_reranking
 from onyx.context.search.preprocessing.preprocessing import query_analysis
 from onyx.context.search.retrieval.search_runner import get_query_embedding
 from onyx.context.search.utils import remove_stop_words_and_punctuation
@@ -41,6 +43,8 @@ class SearchEvalParameters:
     offset: int
     title_content_ratio: float
     user_email: str | None
+    skip_rerank: bool
+    eval_topk: int
     export_file: str
 
 
@@ -62,6 +66,8 @@ def _load_search_parameters() -> SearchEvalParameters:
         offset=config.get("OFFSET") or 0,
         title_content_ratio=config.get("TITLE_CONTENT_RATIO") or TITLE_CONTENT_RATIO,
         user_email=config.get("USER_EMAIL"),
+        skip_rerank=config.get("SKIP_RERANK", False),
+        eval_topk=config.get("EVAL_TOPK", 20),
         export_file=export_file + ".csv",
     )
     logger.info(f"Using search parameters: {search_parameters}")
@@ -75,32 +81,35 @@ def _load_search_parameters() -> SearchEvalParameters:
     return search_parameters
 
 
-def _load_queries() -> list[str]:
+def _load_queries() -> list[tuple[str, str]]:
     current_dir = os.path.dirname(os.path.abspath(__file__))
     queries_path = os.path.join(current_dir, "search_questions.json")
     with open(queries_path, "r") as file:
-        return json.load(file)
+        orig_queries = json.load(file)
+
+    # TODO: finish generate_search_queries.py and load the generated queries too
+    return [(orig_query, orig_query) for orig_query in orig_queries]
 
 
 def _search_one_query(
-    query: str,
+    alt_query: str,
     multilingual_expansion: list[str],
     document_index: DocumentIndex,
     db_session: Session,
     search_parameters: SearchEvalParameters,
-) -> list[InferenceChunkUncleaned]:
+) -> list[InferenceChunk]:
     # note that normally query refers to the modified query
     # here, we're sending the original query so the query doesn't randomly change
-    query_embedding = get_query_embedding(query, db_session)
+    query_embedding = get_query_embedding(alt_query, db_session)
 
-    all_query_terms = query.split()
+    all_query_terms = alt_query.split()
     processed_keywords = (
         remove_stop_words_and_punctuation(all_query_terms)
         if not multilingual_expansion
         else all_query_terms
     )
 
-    is_keyword = query_analysis(query)[0]
+    is_keyword = query_analysis(alt_query)[0]
     hybrid_alpha = (
         search_parameters.hybrid_alpha_keyword
         if is_keyword
@@ -118,8 +127,8 @@ def _search_one_query(
         tenant_id=None,
     )
 
-    return document_index.hybrid_retrieval(
-        query=query,
+    results = document_index.hybrid_retrieval(
+        query=alt_query,
         query_embedding=query_embedding,
         final_keywords=processed_keywords,
         filters=filters,
@@ -130,6 +139,46 @@ def _search_one_query(
         offset=search_parameters.offset,
         title_content_ratio=search_parameters.title_content_ratio,
     )
+
+    return [result.to_inference_chunk() for result in results]
+
+
+def _rerank_one_query(
+    orig_query: str,
+    retrieved_chunks: list[InferenceChunk],
+    rerank_settings: RerankingDetails,
+    search_parameters: SearchEvalParameters,
+) -> list[InferenceChunk]:
+    assert not search_parameters.skip_rerank, "Reranking is disabled"
+    return semantic_reranking(
+        query_str=orig_query,
+        rerank_settings=rerank_settings,
+        chunks=retrieved_chunks,
+        rerank_metrics_callback=None,
+    )[0]
+
+
+def _evaluate_one_query(
+    search_results: list[InferenceChunk],
+    rerank_results: list[InferenceChunk],
+    search_parameters: SearchEvalParameters,
+) -> None:
+    search_topk = search_results[: search_parameters.eval_topk]
+    rerank_topk = rerank_results[: search_parameters.eval_topk]
+
+    # compute Jaccard similarity of the two chunks
+    search_chunkids = {chunk.unique_id for chunk in search_topk}
+    rerank_chunkids = {chunk.unique_id for chunk in rerank_topk}
+    jaccard_similarity = len(search_chunkids.intersection(rerank_chunkids)) / len(
+        search_chunkids.union(rerank_chunkids)
+    )
+
+    # FIXME: convert into an actual metric later, print for now
+    logger.info(f"Jaccard similarity for query: {jaccard_similarity}")
+
+    # TODO: compare average rank change
+    # TODO: consider other metrics (acc, prec, recall, etc.)
+    # TODO: warn if a metric value is too low
 
 
 def run_search_eval() -> None:
@@ -142,26 +191,70 @@ def run_search_eval() -> None:
     queries = _load_queries()
 
     with get_session_with_current_tenant() as db_session:
+        multilingual_expansion = get_multilingual_expansion(db_session)
+
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
-        multilingual_expansion = get_multilingual_expansion(db_session)
+        rerank_settings = RerankingDetails.from_db_model(search_settings)
+
+        if (
+            not search_parameters.skip_rerank
+            and rerank_settings.rerank_model_name is None
+        ):
+            raise ValueError(
+                "Reranking is enabled but no reranker is configured. "
+                "Please set the reranker in the admin panel search settings."
+            )
 
         with open(search_parameters.export_file, "w") as file:
             csv_writer = csv.writer(file)
-            csv_writer.writerow(["query", "rank", "score", "doc_id", "chunk_id"])
+            csv_writer.writerow(
+                ["source", "query", "rank", "score", "doc_id", "chunk_id"]
+            )
 
-            for query in queries:
-                results = _search_one_query(
-                    query,
+            for orig_query, alt_query in queries:
+                search_results = _search_one_query(
+                    alt_query,
                     multilingual_expansion,
                     document_index,
                     db_session,
                     search_parameters,
                 )
-
-                for rank, result in enumerate(results):
+                for rank, result in enumerate(search_results):
                     csv_writer.writerow(
-                        [query, rank, result.score, result.document_id, result.chunk_id]
+                        [
+                            "search",
+                            alt_query,
+                            rank,
+                            result.score,
+                            result.document_id,
+                            result.chunk_id,
+                        ]
+                    )
+
+                if not search_parameters.skip_rerank:
+                    rerank_results = _rerank_one_query(
+                        orig_query,
+                        search_results,
+                        rerank_settings,
+                        search_parameters,
+                    )
+                    for rank, result in enumerate(rerank_results):
+                        csv_writer.writerow(
+                            [
+                                "rerank",
+                                orig_query,
+                                rank,
+                                result.score,
+                                result.document_id,
+                                result.chunk_id,
+                            ]
+                        )
+
+                    _evaluate_one_query(
+                        search_results,
+                        rerank_results,
+                        search_parameters,
                     )
 
     logger.info(f"Exported results to {search_parameters.export_file}")
