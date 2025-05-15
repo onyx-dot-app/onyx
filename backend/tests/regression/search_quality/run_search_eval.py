@@ -5,6 +5,7 @@ from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
 import yaml
 from sqlalchemy.orm import Session
@@ -175,7 +176,9 @@ def _evaluate_one_query(
     # could be more than topk if top scores are similar, may or may not be a good thing
     # can change by swapping rerank_results with rerank_topk in bisect
     adj_topk = bisect_left(
-        rerank_results, -0.5 * rerank_results[0].score, key=lambda x: -x.score
+        rerank_results,
+        -0.5 * cast(float, rerank_results[0].score),
+        key=lambda x: -cast(float, x.score),
     )
     search_adj_topk = search_results[:adj_topk]
     rerank_adj_topk = rerank_results[:adj_topk]
@@ -268,7 +271,7 @@ def run_search_eval() -> None:
                 ]
             )
 
-            sum_metrics = [0, 0, 0, 0, 0, 0]
+            sum_metrics = [0] * 6
             for orig_query, alt_query in query_pairs:
                 search_results = _search_one_query(
                     alt_query,
@@ -310,7 +313,7 @@ def run_search_eval() -> None:
                     )
                     eval_csv_writer.writerow([orig_query, *metrics])
                     for i, metric in enumerate(metrics):
-                        sum_metrics[i] += metric
+                        sum_metrics[i] += metric  # type: ignore
 
     logger.info(
         f"Exported individual results to {search_result_file} and {eval_result_file}"
