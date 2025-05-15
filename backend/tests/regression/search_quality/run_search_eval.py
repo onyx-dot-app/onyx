@@ -3,6 +3,7 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 import yaml
 from sqlalchemy.orm import Session
@@ -45,7 +46,7 @@ class SearchEvalParameters:
     user_email: str | None
     skip_rerank: bool
     eval_topk: int
-    export_file: str
+    export_folder: str
 
 
 def _load_search_parameters() -> SearchEvalParameters:
@@ -54,8 +55,12 @@ def _load_search_parameters() -> SearchEvalParameters:
     with open(config_path, "r") as file:
         config = yaml.safe_load(file)
 
-    export_file = config.get("EXPORT_FILE", "search-%Y-%m-%d-%H-%M-%S")
-    export_file = datetime.now().strftime(export_file)
+    export_folder = config.get("EXPORT_FOLDER", "eval-%Y-%m-%d-%H-%M-%S")
+    export_folder = datetime.now().strftime(export_folder)
+
+    export_path = Path(export_folder)
+    export_path.mkdir(parents=True, exist_ok=True)
+    logger.info(f"Created export folder: {export_path}")
 
     search_parameters = SearchEvalParameters(
         hybrid_alpha=config.get("HYBRID_ALPHA") or HYBRID_ALPHA,
@@ -68,27 +73,28 @@ def _load_search_parameters() -> SearchEvalParameters:
         user_email=config.get("USER_EMAIL"),
         skip_rerank=config.get("SKIP_RERANK", False),
         eval_topk=config.get("EVAL_TOPK", 20),
-        export_file=export_file + ".csv",
+        export_folder=export_folder,
     )
     logger.info(f"Using search parameters: {search_parameters}")
 
-    logger.info(f"Exporting config to {export_file + '.json'}")
-    with open(export_file + ".json", "w") as file:
+    config_file = export_path / "search_eval_config.yaml"
+    with config_file.open("w") as file:
         search_parameters_dict = search_parameters.__dict__
         search_parameters_dict["rank_profile"] = search_parameters.rank_profile.value
-        json.dump(search_parameters_dict, file, indent=4)
+        yaml.dump(search_parameters_dict, file, sort_keys=False)
+    logger.info(f"Exported config to {config_file}")
 
     return search_parameters
 
 
-def _load_queries() -> list[tuple[str, str]]:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    queries_path = os.path.join(current_dir, "search_questions.json")
-    with open(queries_path, "r") as file:
+def _load_query_pairs() -> list[tuple[str, str]]:
+    with open("search_queries.json", "r") as file:
         orig_queries = json.load(file)
 
-    # TODO: finish generate_search_queries.py and load the generated queries too
-    return [(orig_query, orig_query) for orig_query in orig_queries]
+    with open("search_queries_modified.json", "r") as file:
+        alt_queries = json.load(file)
+
+    return list(zip(orig_queries, alt_queries))
 
 
 def _search_one_query(
@@ -98,8 +104,6 @@ def _search_one_query(
     db_session: Session,
     search_parameters: SearchEvalParameters,
 ) -> list[InferenceChunk]:
-    # note that normally query refers to the modified query
-    # here, we're sending the original query so the query doesn't randomly change
     query_embedding = get_query_embedding(alt_query, db_session)
 
     all_query_terms = alt_query.split()
@@ -188,7 +192,9 @@ def run_search_eval() -> None:
     )
 
     search_parameters = _load_search_parameters()
-    queries = _load_queries()
+    query_pairs = _load_query_pairs()
+
+    export_path = Path(search_parameters.export_folder)
 
     with get_session_with_current_tenant() as db_session:
         multilingual_expansion = get_multilingual_expansion(db_session)
@@ -196,6 +202,8 @@ def run_search_eval() -> None:
         search_settings = get_current_search_settings(db_session)
         document_index = get_default_document_index(search_settings, None)
         rerank_settings = RerankingDetails.from_db_model(search_settings)
+
+        logger.info(f"Reranking settings: {rerank_settings}")
 
         if (
             not search_parameters.skip_rerank
@@ -206,13 +214,15 @@ def run_search_eval() -> None:
                 "Please set the reranker in the admin panel search settings."
             )
 
-        with open(search_parameters.export_file, "w") as file:
+        search_result_file = export_path / "search_results.csv"
+        eval_result_file = export_path / "eval_results.csv"  # TODO:
+        with search_result_file.open("w") as file:
             csv_writer = csv.writer(file)
             csv_writer.writerow(
                 ["source", "query", "rank", "score", "doc_id", "chunk_id"]
             )
 
-            for orig_query, alt_query in queries:
+            for orig_query, alt_query in query_pairs:
                 search_results = _search_one_query(
                     alt_query,
                     multilingual_expansion,
@@ -257,7 +267,7 @@ def run_search_eval() -> None:
                         search_parameters,
                     )
 
-    logger.info(f"Exported results to {search_parameters.export_file}")
+    logger.info(f"Exported results to {search_result_file} and {eval_result_file}")
 
 
 if __name__ == "__main__":
