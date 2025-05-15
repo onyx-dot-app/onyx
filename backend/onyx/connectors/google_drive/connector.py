@@ -484,6 +484,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     DriveRetrievalStage.MY_DRIVE_FILES,
                 )
             curr_stage.stage = DriveRetrievalStage.SHARED_DRIVE_FILES
+            curr_stage.current_folder_or_drive_id = None
             return  # resume from next stage on the next run
 
         if curr_stage.stage == DriveRetrievalStage.SHARED_DRIVE_FILES:
@@ -532,6 +533,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     return  # resume from this drive on the next run
                 yield from _yield_from_drive(drive_id, start)
             curr_stage.stage = DriveRetrievalStage.FOLDER_FILES
+            curr_stage.current_folder_or_drive_id = None
             return  # resume from next stage on the next run
 
         # In the folder files section of service account retrieval we take extra care
