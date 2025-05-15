@@ -19,21 +19,46 @@ def create_views(
     allowed_docs_view = text(
         f"""
     CREATE OR REPLACE VIEW {allowed_docs_view_name} AS
-    SELECT DISTINCT d.id as allowed_doc_id
-    FROM document_by_connector_credential_pair d
-    JOIN credential c ON d.credential_id = c.id
-    JOIN connector_credential_pair ccp ON
-        d.connector_id = ccp.connector_id AND
-        d.credential_id = ccp.credential_id
-    LEFT JOIN "user" u ON
-        c.user_id = u.id AND
-        ccp.access_type != 'SYNC'
-    WHERE
-        ccp.status != 'DELETING' AND
-        (
-            ccp.access_type = 'PUBLIC' OR
-            u.email = :user_email
-        )
+    WITH public_docs AS (
+        SELECT d.id as allowed_doc_id
+        FROM document_by_connector_credential_pair d
+        JOIN connector_credential_pair ccp ON
+            d.connector_id = ccp.connector_id AND
+            d.credential_id = ccp.credential_id
+        WHERE ccp.status != 'DELETING'
+        AND ccp.access_type = 'PUBLIC'
+    ),
+    user_owned_docs AS (
+        SELECT d.id as allowed_doc_id
+        FROM document_by_connector_credential_pair d
+        JOIN credential c ON d.credential_id = c.id
+        JOIN connector_credential_pair ccp ON
+            d.connector_id = ccp.connector_id AND
+            d.credential_id = ccp.credential_id
+        JOIN "user" u ON c.user_id = u.id
+        WHERE ccp.status != 'DELETING'
+        AND ccp.access_type != 'SYNC'
+        AND u.email = :user_email
+    ),
+    external_user_docs AS (
+        SELECT id as allowed_doc_id
+        FROM document
+        WHERE :user_email = ANY(external_user_emails)
+    ),
+    external_group_docs AS (
+        SELECT d.id as allowed_doc_id
+        FROM document d
+        JOIN user__external_user_group_id ueg ON ueg.external_user_group_id = ANY(d.external_user_group_ids)
+        JOIN "user" u ON ueg.user_id = u.id
+        WHERE u.email = :user_email
+    )
+    SELECT allowed_doc_id FROM public_docs
+    UNION
+    SELECT allowed_doc_id FROM user_owned_docs
+    UNION
+    SELECT allowed_doc_id FROM external_user_docs
+    UNION
+    SELECT allowed_doc_id FROM external_group_docs
     """
     ).bindparams(user_email=user_email)
 

@@ -210,6 +210,7 @@ def upgrade() -> None:
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
         sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
+        sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
     )
     op.create_index("ix_entity_type_acl", "kg_entity", ["entity_type_id_name", "acl"])
     op.create_index(
@@ -254,6 +255,7 @@ def upgrade() -> None:
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
         sa.ForeignKeyConstraint(["entity_type_id_name"], ["kg_entity_type.id_name"]),
+        sa.ForeignKeyConstraint(["document_id"], ["document.id"]),
     )
     op.create_index(
         "ix_entity_extraction_staging_acl",
