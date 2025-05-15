@@ -572,9 +572,10 @@ def stream_chat_message_objects(
 
     llm: LLM
 
-    index_str = "danswer_chunk_text_embedding_3_small"
+    # get Vespa index
 
-    # TODO: INITIAL DEV ONLY!!!
+    search_settings = get_current_search_settings(db_session)
+    index_str = search_settings.index_name
 
     kg_config_settings = get_kg_config_settings(db_session)
 
