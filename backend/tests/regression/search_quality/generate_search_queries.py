@@ -70,7 +70,7 @@ def _modify_one_query(
 
 
 class SearchToolOverride(SearchTool):
-    def __init__(self):
+    def __init__(self) -> None:
         # do nothing, the tool_definition function doesn't require variables to be initialized
         pass
 
