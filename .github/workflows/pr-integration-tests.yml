@@ -148,7 +148,7 @@ jobs:
             -e POSTGRES_USER=postgres \
             -e POSTGRES_PASSWORD=password \
             -e KG_READONLY_DB_USER=kg_readonly_user \
-            -e KG_READONLY_DB_PASSWORD=kg_readonly_password \
+            -e KG_READONLY_DB_PASSWORD=password \
             -e POSTGRES_DB=postgres \
             -e POSTGRES_USE_NULL_POOL=true \
             -e VESPA_HOST=index \

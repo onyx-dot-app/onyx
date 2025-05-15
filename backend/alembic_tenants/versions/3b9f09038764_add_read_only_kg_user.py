@@ -23,8 +23,8 @@ depends_on = None
 
 def upgrade() -> None:
     if MULTI_TENANT:
-        # Create read-only db user here only in single tenant mode. For multi-tenant mode,
-        # the user is created in the alembic_tenants migration.
+        # Create read-only db user here only in multi-tenant mode. For single-tenant mode,
+        # the user is created in the standard migration.
         if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
             raise Exception("KG_READONLY_DB_USER or KG_READONLY_DB_PASSWORD is not set")
 

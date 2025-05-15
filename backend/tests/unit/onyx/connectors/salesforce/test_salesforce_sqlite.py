@@ -746,21 +746,18 @@ def test_salesforce_sqlite() -> None:
         sf_db.connect()
         sf_db.apply_schema()
 
-        print("Creating example data")
-
         _create_csv_with_example_data(sf_db)
 
-        print("Running tests")
         _test_query(sf_db)
-        print("Running upsert tests")
+
         _test_upsert(sf_db)
-        print("Running relationships tests")
+
         _test_relationships(sf_db)
-        print("Running account with children tests")
+
         _test_account_with_children(sf_db)
-        print("Running relationship updates tests")
+
         _test_relationship_updates(sf_db)
-        print("Running get affected parent ids tests")
+
         _test_get_affected_parent_ids(sf_db)
 
         sf_db.close()

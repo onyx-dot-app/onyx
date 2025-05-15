@@ -16,6 +16,7 @@ from onyx.chat.models import StreamStopReason
 from onyx.chat.models import StreamType
 from onyx.chat.models import SubQueryPiece
 from onyx.chat.models import SubQuestionPiece
+from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
 from onyx.db.document import get_kg_doc_info_for_entity_name
 from onyx.db.engine import get_session_with_current_tenant
@@ -401,40 +402,25 @@ def build_document_context(
     document_content: str | None = None
 
     if isinstance(document, InferenceSection):
-        for key, value in document.center_chunk.metadata.items():
-            metadata_list.append(f"   - {key}: {value}")
-
-        if metadata_list:
-            metadata_str = "- Document Metadata:\n" + "\n".join(metadata_list)
-        else:
-            metadata_str = ""
-
-        # Construct document header with number and semantic identifier
-        doc_header = f"Document {str(document_number)}: {document.center_chunk.semantic_identifier}"
-
-        # Combine all parts with proper spacing
-        document_content = (
-            f"{doc_header}\n\n{metadata_str}\n\n{document.combined_content}"
-        )
-
+        info_source: InferenceChunk | LlmDoc = document.center_chunk
+        info_content: str = document.combined_content
     elif isinstance(document, LlmDoc):
+        info_source = document
+        info_content = document.content
 
-        for key, value in document.metadata.items():
-            metadata_list.append(f"   - {key}: {value}")
+    for key, value in info_source.metadata.items():
+        metadata_list.append(f"   - {key}: {value}")
 
-        if metadata_list:
-            metadata_str = "- Document Metadata:\n" + "\n".join(metadata_list)
-        else:
-            metadata_str = ""
+    if metadata_list:
+        metadata_str = "- Document Metadata:\n" + "\n".join(metadata_list)
+    else:
+        metadata_str = ""
 
-        # Construct document header with number and semantic identifier
-        doc_header = f"Document {str(document_number)}: {document.semantic_identifier}"
+    # Construct document header with number and semantic identifier
+    doc_header = f"Document {str(document_number)}: {info_source.semantic_identifier}"
 
-        # Combine all parts with proper spacing
-        document_content = f"{doc_header}\n\n{metadata_str}\n\n{document.content}"
-
-    if document_content is None:
-        raise ValueError("Document content is None")
+    # Combine all parts with proper spacing
+    document_content = f"{doc_header}\n\n{metadata_str}\n\n{info_content}"
 
     return document_content
 

@@ -309,3 +309,21 @@ def get_document_id_for_entity(
 
     result = db_session.execute(stmt).scalars().first()
     return result
+
+
+def delete_from_kg_entities_extraction_staging__no_commit(
+    db_session: Session, document_ids: list[str]
+) -> None:
+    """Delete entities from the extraction staging table."""
+    db_session.query(KGEntityExtractionStaging).filter(
+        KGEntityExtractionStaging.document_id.in_(document_ids)
+    ).delete(synchronize_session=False)
+
+
+def delete_from_kg_entities__no_commit(
+    db_session: Session, document_ids: list[str]
+) -> None:
+    """Delete entities from the normalized table."""
+    db_session.query(KGEntity).filter(KGEntity.document_id.in_(document_ids)).delete(
+        synchronize_session=False
+    )

@@ -28,6 +28,8 @@ from onyx.configs.kg_configs import KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
 from onyx.db.engine import get_session_context_manager
+from onyx.db.entities import delete_from_kg_entities__no_commit
+from onyx.db.entities import delete_from_kg_entities_extraction_staging__no_commit
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.feedback import delete_document_feedback_for_documents__no_commit
@@ -38,6 +40,10 @@ from onyx.db.models import Document
 from onyx.db.models import Document as DbDocument
 from onyx.db.models import DocumentByConnectorCredentialPair
 from onyx.db.models import User
+from onyx.db.relationships import delete_from_kg_relationships__no_commit
+from onyx.db.relationships import (
+    delete_from_kg_relationships_extraction_staging__no_commit,
+)
 from onyx.db.tag import delete_document_tags_for_documents__no_commit
 from onyx.db.utils import model_to_dict
 from onyx.document_index.interfaces import DocumentMetadata
@@ -610,7 +616,29 @@ def delete_documents_complete__no_commit(
 ) -> None:
     """This completely deletes the documents from the db, including all foreign key relationships"""
 
-    # Start by deleting the chunk stats for the documents
+    # Start with the kg references
+
+    delete_from_kg_relationships__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
+    delete_from_kg_entities__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
+    delete_from_kg_relationships_extraction_staging__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
+    delete_from_kg_entities_extraction_staging__no_commit(
+        db_session=db_session,
+        document_ids=document_ids,
+    )
+
+    # Continue with deleting the chunk stats for the documents
     delete_chunk_stats_by_connector_credential_pair__no_commit(
         db_session=db_session,
         document_ids=document_ids,

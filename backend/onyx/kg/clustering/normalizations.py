@@ -21,8 +21,12 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
     Split an entity string into type and name.
     """
 
-    entity_type = entity.split(":")[0]
-    entity_name = ":".join(entity.split(":")[1:])
+    entity_split = entity.split(":")
+    if len(entity_split) < 2:
+        return ValueError(f"Invalid entity: {entity}")
+
+    entity_type = entity_split[0]
+    entity_name = ":".join(entity_split[1:])
 
     return entity_type, entity_name
 
