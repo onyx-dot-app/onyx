@@ -400,10 +400,12 @@ def build_document_context(
 
     metadata_list: list[str] = []
     document_content: str | None = None
+    info_source: InferenceChunk | LlmDoc | None = None
+    info_content: str | None = None
 
     if isinstance(document, InferenceSection):
-        info_source: InferenceChunk | LlmDoc = document.center_chunk
-        info_content: str = document.combined_content
+        info_source = document.center_chunk
+        info_content = document.combined_content
     elif isinstance(document, LlmDoc):
         info_source = document
         info_content = document.content

@@ -23,7 +23,7 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
 
     entity_split = entity.split(":")
     if len(entity_split) < 2:
-        return ValueError(f"Invalid entity: {entity}")
+        raise ValueError(f"Invalid entity: {entity}")
 
     entity_type = entity_split[0]
     entity_name = ":".join(entity_split[1:])
