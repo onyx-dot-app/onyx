@@ -78,6 +78,13 @@ RESTRICTED_ACCESS_FOLDER_URL = (
     "https://drive.google.com/drive/folders/1HK4wZ16ucz8QGywlcS87Y629W7i7KdeN"
 )
 
+PADDING_DRIVE_URLS = [
+    "0AOorXE6AfJRAUk9PVA",
+    "0ANn2MSqGi74JUk9PVA",
+    "0ANI_NFCPzaRwUk9PVA",
+    "0ABu8fYjvA21dUk9PVA",
+]
+
 ADMIN_EMAIL = "admin@onyx-test.com"
 TEST_USER_1_EMAIL = "test_user_1@onyx-test.com"
 TEST_USER_2_EMAIL = "test_user_2@onyx-test.com"
@@ -144,6 +151,19 @@ SPECIAL_FILE_ID_TO_CONTENT_MAP: dict[int, str] = {
     ),
 }
 
+MISC_SHARED_DRIVE_FNAMES = [
+    "asdfasdfsfad",
+    "perm_sync_doc_0ABec4pV29sMuUk9PVA_a5ea8ec4-0440-4926-a43d-3aeef1c10bdd",
+    "perm_sync_doc_0ACOrCU1EMD1hUk9PVA_651821cb-8140-42fe-a876-1a92012375c9",
+    "perm_sync_doc_0ACOrCU1EMD1hUk9PVA_ab63b976-effb-49af-84e7-423d17a17dd7",
+    "super secret thing that test user 1 can't see",
+    "perm_sync_doc_0ABec4pV29sMuUk9PVA_419f2ef0-9815-4c69-8435-98b163c9c156",
+    "Untitled documentfsdfsdfsdf",
+    "bingle_bongle.txt",
+    "bb4.txt",
+    "bb3.txt",
+    "bb2.txt",
+]
 
 file_name_template = "file_{}.txt"
 file_text_template = "This is file {}"
@@ -179,6 +199,10 @@ def _get_expected_file_content(file_id: int) -> str:
     return file_text_template.format(file_id)
 
 
+def id_to_name(file_id: int) -> str:
+    return file_name_template.format(file_id)
+
+
 def assert_expected_docs_in_retrieved_docs(
     retrieved_docs: list[Document],
     expected_file_ids: Sequence[int],
@@ -187,9 +211,7 @@ def assert_expected_docs_in_retrieved_docs(
     it only checks to see if that the expected file id's are IN the retrieved doc list
     """
 
-    expected_file_names = {
-        file_name_template.format(file_id) for file_id in expected_file_ids
-    }
+    expected_file_names = {id_to_name(file_id) for file_id in expected_file_ids}
     expected_file_texts = {
         _get_expected_file_content(file_id) for file_id in expected_file_ids
     }

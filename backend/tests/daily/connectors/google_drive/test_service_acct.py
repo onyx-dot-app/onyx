@@ -32,7 +32,11 @@ from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_FILE_IDS
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_2_URL
 from tests.daily.connectors.google_drive.consts_and_utils import FOLDER_3_URL
+from tests.daily.connectors.google_drive.consts_and_utils import id_to_name
 from tests.daily.connectors.google_drive.consts_and_utils import load_all_docs
+from tests.daily.connectors.google_drive.consts_and_utils import (
+    MISC_SHARED_DRIVE_FNAMES,
+)
 from tests.daily.connectors.google_drive.consts_and_utils import (
     RESTRICTED_ACCESS_FOLDER_URL,
 )
@@ -115,6 +119,26 @@ def test_include_shared_drives_only_with_size_threshold(
 
     retrieved_docs = load_all_docs(connector)
 
+    expected_file_ids = (
+        SHARED_DRIVE_1_FILE_IDS
+        + FOLDER_1_FILE_IDS
+        + FOLDER_1_1_FILE_IDS
+        + FOLDER_1_2_FILE_IDS
+        + SHARED_DRIVE_2_FILE_IDS
+        + FOLDER_2_FILE_IDS
+        + FOLDER_2_1_FILE_IDS
+        + FOLDER_2_2_FILE_IDS
+        + SECTIONS_FILE_IDS
+    )
+
+    expected_file_names = {id_to_name(file_id) for file_id in expected_file_ids}
+    expected_file_names.update(MISC_SHARED_DRIVE_FNAMES)
+    retrieved_file_names = {doc.semantic_identifier for doc in retrieved_docs}
+    for name in expected_file_names - retrieved_file_names:
+        print(f"expected but did not retrieve: {name}")
+    for name in retrieved_file_names - expected_file_names:
+        print(f"retrieved but did not expect: {name}")
+
     # 2 extra files from shared drive owned by non-admin and not shared with admin
     # TODO: added a file in a "restricted" folder, which the connector sometimes succeeds at finding
     # and adding. Specifically, our shared drive retrieval logic currently assumes that
@@ -124,8 +148,8 @@ def test_include_shared_drives_only_with_size_threshold(
     # If instead someone with FULL access to the shared drive retrieves it, the connector will retrieve
     # the folder and all its files. There is currently no consistency to the order of assignment of users
     # to shared drives, so this is a heisenbug. When we guarantee that restricted folders are retrieved,
-    # we can change this to 53
-    assert len(retrieved_docs) == 52 or len(retrieved_docs) == 53
+    # we can change this to 52
+    assert len(retrieved_docs) == 51 or len(retrieved_docs) == 52
 
 
 @patch(

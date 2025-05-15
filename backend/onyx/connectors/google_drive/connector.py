@@ -334,7 +334,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
     def make_drive_id_iterator(
         self, drive_ids: list[str], checkpoint: GoogleDriveCheckpoint
     ) -> Callable[[str], Iterator[str]]:
-        cv = threading.Condition()
+        status_lock = threading.Lock()
 
         in_progress_drive_ids = {
             completion.current_folder_or_drive_id: user_email
@@ -351,8 +351,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             else:
                 drive_id_status[drive_id] = DriveIdStatus.AVAILABLE
 
-        def _get_available_drive_id(processed_ids: set[str]) -> tuple[str | None, bool]:
-            found_future_work = False
+        def _get_available_drive_id(processed_ids: set[str]) -> str | None:
+            future_work = None
             for drive_id, status in drive_id_status.items():
                 if drive_id in self._retrieved_folder_and_drive_ids:
                     drive_id_status[drive_id] = DriveIdStatus.FINISHED
@@ -361,17 +361,17 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     continue
 
                 if status == DriveIdStatus.AVAILABLE:
-                    return drive_id, True
+                    return drive_id
                 elif status == DriveIdStatus.IN_PROGRESS:
                     logger.debug(f"Drive id in progress: {drive_id}")
-                    found_future_work = True
-            return None, found_future_work
+                    future_work = drive_id
+            return future_work
 
         def drive_id_iterator(thread_id: str) -> Iterator[str]:
             completion = checkpoint.completion_map[thread_id]
 
             def record_drive_processing(drive_id: str) -> None:
-                with cv:
+                with status_lock:
                     completion.processed_drive_ids.add(drive_id)
                     if drive_id in drive_id_status:
                         drive_id_status[drive_id] = (
@@ -383,8 +383,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                         f"Drive id finished: {drive_id}, user email: {thread_id},"
                         f"processed drive ids: {len(completion.processed_drive_ids)}"
                     )
-                    # wake up other threads waiting for work
-                    cv.notify_all()
 
             # when entering the iterator with a previous id in the checkpoint, the user
             # has just finished that drive from a previous run.
@@ -396,18 +394,10 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             # continue iterating until this thread has no more work to do
             while True:
                 # this locks operations on _retrieved_ids and drive_id_status
-                with cv:
-                    available_drive_id, found_future_work = _get_available_drive_id(
+                with status_lock:
+                    available_drive_id = _get_available_drive_id(
                         completion.processed_drive_ids
                     )
-
-                    # wait while there is no work currently available but still drives that may need processing
-                    while available_drive_id is None and found_future_work:
-                        cv.wait()
-                        available_drive_id, found_future_work = _get_available_drive_id(
-                            completion.processed_drive_ids
-                        )
-
                     # if there is no work available and no future work, we are done
                     if available_drive_id is None:
                         return
