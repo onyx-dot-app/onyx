@@ -57,7 +57,8 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
                 elif value is not None:
                     filtered_dict[key] = value
         return filtered_dict
-    elif isinstance(data, list):
+
+    if isinstance(data, list):
         filtered_list = []
         for item in data:
             filtered_item: dict | list
@@ -69,8 +70,8 @@ def _clean_salesforce_dict(data: dict | list) -> dict | list:
             elif item is not None:
                 filtered_list.append(filtered_item)
         return filtered_list
-    else:
-        return data
+
+    return data
 
 
 def _json_to_natural_language(data: dict | list, indent: int = 0) -> str:
@@ -163,6 +164,7 @@ def convert_sf_object_to_doc(
     sf_object: SalesforceObject,
     sf_instance: str,
 ) -> Document:
+    """Would be nice if this function was documented"""
     object_dict = sf_object.data
     salesforce_id = object_dict["Id"]
     onyx_salesforce_id = f"{ID_PREFIX}{salesforce_id}"
