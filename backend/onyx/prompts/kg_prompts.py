@@ -557,8 +557,8 @@ other constraints.
 
 2. 'SQL': Choose this option if the question either requires counting of entities (e.g. 'how many calls...'), or \
 if the query refers to specific entities that first need to be identified and then those entities are analyzed/searched/listed. \
-Examples here are 'what did I say about pricing in my call with Nile last week?' (the specific call needs to \
-be identified first and then  that call is analyzed),  \
+Examples here are 'what did I say about pricing in my call with Nike last week?' (the specific call needs to \
+be identified first and then analyzed),  \
 'what are the next steps of our two largest opportunities?', or 'summarize my 3 most recent customer calls'. So \
 this is used if there *are implicit constraints* on the underlying source documents beyond filtering, including \
 ordering, limiting, etc. Use this also if the answer expects to analyze each source independently as part \
@@ -816,7 +816,7 @@ So please use that format, particularly if you use data comparisons (>, <, ...)
 - Careful with SORT! Really think in which order you want to sort if you have multiple columns you \
 want to sort by. If the sorting is time-based and there is a limit for example, then you do want to have a suitable date \
 variable as the first column to sort by.
-- Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to get \
+- Usually, you will want to retrieve or count entities, maybe with attributes. But you almost always want to \
 have entities involved in the SELECT clause.
 - Try to be as efficient as possible.
 
@@ -826,7 +826,7 @@ also in the SELECT DISTINCT clause, \
 if applicable!
 Also, in case it is important, today is ---today_date--- and the user/employee asking is ---user_name---.
 
-Please structure your answer as using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
 
 <reasoning>[go through the logic step by step]</reasoning>
 <sql>[the SQL statement that you generate to satisfy the task]</sql>
@@ -851,7 +851,7 @@ Draft SQL:
 ---draft_sql---
 {SEPARATOR_LINE}
 
-Please structure your answer as using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
 
 <reasoning>[think briefly through the problem step by step]</reasoning>
 <sql>[the corrected (or original one, if correct) SQL statement]</sql>
@@ -879,7 +879,7 @@ Here is the SQL statement you are supposed to remove the aggregate functions fro
 ---sql_statement---
 {SEPARATOR_LINE}
 
-Please structure your answer as using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <sql>, </sql> start and end tags as in:
 
 <reasoning>[your short step-by step thinking]</reasoning>
 <sql>[the SQL statement without the aggregate functions]</sql>
@@ -1188,10 +1188,10 @@ Here is the question that provides critical context for the task:
 {{question}}
 {SEPARATOR_LINE}
 
-Please structure your answer as using <reasoning>, </reasoning>, <objects>, </objects> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <objects>, </objects> start and end tags as in:
 
-</reasoning>[your reasoning for the classification]</reasoning><objects>[the objects \
-- just their names - that you found, separated by ';'<objects>
+<reasoning>[your reasoning for the classification]</reasoning><objects>[the objects \
+- just their names - that you found, separated by ';']<objects>
 
 """.strip()
 
@@ -1217,10 +1217,10 @@ Here is the request that provides critical context for the task:
 {{question}}
 {SEPARATOR_LINE}
 
-Please structure your answer as using <reasoning>, </reasoning>, <objects>, </objects> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <objects>, </objects> start and end tags as in:
 
-</reasoning>[your reasoning for the classification]</reasoning><objects>[the objects \
-- just their names - that you found, separated by ';'<objects>
+<reasoning>[your reasoning for the classification]</reasoning><objects>[the objects \
+- just their names - that you found, separated by ';']<objects>
 
 """.strip()
 
@@ -1241,9 +1241,9 @@ Here are the documents you are supposed to search through:
 Note: please cite your sources inline as you generate the results! Use the format [1], etc. Infer the \
 number from the provided context documents. This is very important!
 
-Please structure your answer as using <reasoning>, </reasoning>, <research>, </research> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <research>, </research> start and end tags as in:
 
-<reasoning>[your reasoning for the classification</reasoning>
+<reasoning>[your reasoning for the classification]</reasoning>
 <research>{{format}}</research>
 
 """.strip()
@@ -1267,10 +1267,10 @@ for the object should be in the following format:
 {{format}}
 {SEPARATOR_LINE}
 
-Please structure your answer as using <reasoning>, </reasoning>, <information>, </information> start and end tags as in:
+Please structure your answer using <reasoning>, </reasoning>, <information>, </information> start and end tags as in:
 
 
-<reasoning>[your reasoning for consolidating the information</reasoning>
+<reasoning>[your reasoning for consolidating the information]</reasoning>
 <information>[consolidated information in the proper format that you have created]</information>
 """
 

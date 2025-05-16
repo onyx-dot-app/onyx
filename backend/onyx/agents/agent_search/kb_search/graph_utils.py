@@ -173,6 +173,7 @@ def stream_write_step_description(
         writer,
     )
 
+    # Give the frontend a brief moment to catch up
     sleep(0.2)
 
 
@@ -195,7 +196,7 @@ def stream_write_step_activities(
 def stream_write_step_activity_explicit(
     writer: StreamWriter, step_nr: int, query_id: int, activity: str, level: int = 0
 ) -> None:
-    for activity_nr, activity in enumerate(STEP_DESCRIPTIONS[step_nr].activities):
+    for activity in STEP_DESCRIPTIONS[step_nr].activities:
         write_custom_event(
             "subqueries",
             SubQueryPiece(
@@ -322,7 +323,11 @@ def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
 
     with get_session_with_current_tenant() as db_session:
         entity_document_id = get_document_id_for_entity(db_session, entity_id_name)
-        if not entity_document_id:
+        if entity_document_id:
+            return get_kg_doc_info_for_entity_name(
+                db_session, entity_document_id, entity_type
+            )
+        else:
             return KGEntityDocInfo(
                 doc_id=None,
                 doc_semantic_id=None,
@@ -330,9 +335,6 @@ def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
                 semantic_entity_name=entity_id_name,
                 semantic_linked_entity_name=entity_id_name,
             )
-        return get_kg_doc_info_for_entity_name(
-            db_session, entity_document_id, entity_type
-        )
 
 
 def rename_entities_in_answer(answer: str) -> str:
@@ -366,7 +368,11 @@ def rename_entities_in_answer(answer: str) -> str:
     processed_refs = {}
 
     for entity_ref in entity_refs:
-        if len(entity_ref.split(":")) != 2:
+        entity_ref_split = entity_ref.split(":")
+        if len(entity_ref_split) != 2:
+            logger.warning(
+                f"Invalid entity reference - number of colons is not 2 but {len(entity_ref_split)}"
+            )
             continue
         entity_type, entity_name = entity_ref.split(":")
         entity_type = entity_type.upper().strip()
