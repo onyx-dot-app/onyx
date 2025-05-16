@@ -1,0 +1,2 @@
+CREATE DATABASE langflow_db;
+GRANT ALL PRIVILEGES ON DATABASE langflow_db TO postgres;
