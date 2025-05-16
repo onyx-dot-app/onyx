@@ -20,10 +20,10 @@ interface Collection {
 
 export function AdminSidebar({ collections }: { collections: Collection[] }) {
   const combinedSettings = useContext(SettingsContext);
+  const pathname = usePathname() ?? "";
   if (!combinedSettings) {
     return null;
   }
-  const pathname = usePathname() ?? "";
   const enterpriseSettings = combinedSettings.enterpriseSettings;
 
   return (
