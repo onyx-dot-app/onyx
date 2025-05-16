@@ -419,7 +419,7 @@ def _strip_colon_from_model_name(model_name: str) -> str:
     return ":".join(model_name.split(":")[:-1]) if ":" in model_name else model_name
 
 
-def _find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
+def find_model_obj(model_map: dict, provider: str, model_name: str) -> dict | None:
     stripped_model_name = _strip_extra_provider_from_model_name(model_name)
 
     model_names = [
@@ -537,7 +537,7 @@ def get_llm_max_tokens(
         return GEN_AI_MAX_TOKENS
 
     try:
-        model_obj = _find_model_obj(
+        model_obj = find_model_obj(
             model_map,
             model_provider,
             model_name,
@@ -646,7 +646,7 @@ def get_max_input_tokens_from_llm_provider(
 def model_supports_image_input(model_name: str, model_provider: str) -> bool:
     model_map = get_model_map()
     try:
-        model_obj = _find_model_obj(
+        model_obj = find_model_obj(
             model_map,
             model_provider,
             model_name,

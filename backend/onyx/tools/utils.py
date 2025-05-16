@@ -6,14 +6,15 @@ from onyx.configs.app_configs import AZURE_DALLE_API_KEY
 from onyx.db.connector import check_connectors_exist
 from onyx.db.document import check_docs_exist
 from onyx.db.models import LLMProvider
-from onyx.llm.utils import get_model_map, _find_model_obj
+from onyx.llm.utils import find_model_obj
+from onyx.llm.utils import get_model_map
 from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.tools.tool import Tool
 
 
 def explicit_tool_calling_supported(model_provider: str, model_name: str) -> bool:
     model_map = get_model_map()
-    model_obj = _find_model_obj(
+    model_obj = find_model_obj(
         model_map=model_map,
         provider=model_provider,
         model_name=model_name,
