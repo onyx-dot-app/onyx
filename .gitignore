@@ -23,4 +23,3 @@ jira_test_env
 /deployment/data/nginx/app.conf
 *.sw?
 /backend/tests/regression/answer_quality/search_test_config.yaml
-/generated
