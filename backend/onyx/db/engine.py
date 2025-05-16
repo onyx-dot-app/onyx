@@ -498,6 +498,7 @@ async def get_async_session(
 
     async with AsyncSession(engine, expire_on_commit=False) as async_session:
         # set the search path on sync session as well to be extra safe
+        async_session.info["tenant_id"] = tenant_id
         event.listen(
             async_session.sync_session,
             "after_begin",

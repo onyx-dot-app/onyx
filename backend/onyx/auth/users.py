@@ -463,15 +463,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     }
 
                     user = await self.user_db.create(user_dict)
-
-                    # Add OAuth account only if user creation was successful
-                    if user is not None:
-                        await self.user_db.add_oauth_account(user, oauth_account_dict)
-                        await self.on_after_register(user, request)
-                    else:
-                        raise HTTPException(
-                            status_code=500, detail="Failed to create user account"
-                        )
+                    await self.user_db.add_oauth_account(user, oauth_account_dict)
+                    await self.on_after_register(user, request)
 
             else:
                 # User exists, update OAuth account if needed
@@ -489,12 +482,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                                 oauth_account_dict,
                             )
 
-            # Ensure user is not None before proceeding
-            if user is None:
-                raise HTTPException(
-                    status_code=500, detail="Failed to authenticate or create user"
-                )
-
             # NOTE: Most IdPs have very short expiry times, and we don't want to force the user to
             # re-authenticate that frequently, so by default this is disabled
             if expires_at and TRACK_EXTERNAL_IDP_EXPIRY:
@@ -505,6 +492,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Handle case where user has used product outside of web and is now creating an account through web
             if not user.role.is_web_login():
+                # We must use the existing user in the session if it matches
+                # the user we just got by email/oauth
+                if user.id:
+                    user_by_session = await db_session.get(User, user.id)
+                    if user_by_session:
+                        user = user_by_session
+
                 await self.user_db.update(
                     user,
                     {
@@ -512,7 +506,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         "role": UserRole.BASIC,
                     },
                 )
-                user.is_verified = is_verified_by_default
 
             # this is needed if an organization goes from `TRACK_EXTERNAL_IDP_EXPIRY=true` to `false`
             # otherwise, the oidc expiry will always be old, and the user will never be able to login
