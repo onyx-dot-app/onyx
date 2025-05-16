@@ -100,12 +100,14 @@ export function getUniqueIcons(docs: OnyxDocument[]): JSX.Element[] {
   while (uniqueIcons.length < 3) {
     // The last icon in the array
     const lastIcon = uniqueIcons[uniqueIcons.length - 1];
-    // Clone it with a new key
-    uniqueIcons.push(
-      React.cloneElement(lastIcon, {
-        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
-      })
-    );
+    if (lastIcon) {
+      // Clone it with a new key
+      uniqueIcons.push(
+        React.cloneElement(lastIcon, {
+          key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+        })
+      );
+    }
   }
 
   // Slice to just the first 3 if there are more than 3
@@ -172,12 +174,14 @@ export function getUniqueFileIcons(files: FileResponse[]): JSX.Element[] {
   while (uniqueIcons.length < 3) {
     // The last icon in the array
     const lastIcon = uniqueIcons[uniqueIcons.length - 1];
-    // Clone it with a new key
-    uniqueIcons.push(
-      React.cloneElement(lastIcon, {
-        key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
-      })
-    );
+    if (lastIcon) {
+      // Clone it with a new key
+      uniqueIcons.push(
+        React.cloneElement(lastIcon, {
+          key: `${lastIcon.key}-dup-${uniqueIcons.length}`,
+        })
+      );
+    }
   }
 
   // Slice to just the first 3 if there are more than 3

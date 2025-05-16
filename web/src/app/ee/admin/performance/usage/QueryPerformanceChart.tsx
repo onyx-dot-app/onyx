@@ -33,6 +33,7 @@ export function QueryPerformanceChart({
     );
   } else if (
     !queryAnalyticsData ||
+    queryAnalyticsData[0] === undefined ||
     !userAnalyticsData ||
     queryAnalyticsError ||
     userAnalyticsError

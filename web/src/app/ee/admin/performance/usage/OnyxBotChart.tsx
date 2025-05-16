@@ -24,7 +24,11 @@ export function OnyxBotChart({
         <ThreeDotsLoader />
       </div>
     );
-  } else if (!onyxBotAnalyticsData || onyxBotAnalyticsError) {
+  } else if (
+    !onyxBotAnalyticsData ||
+    onyxBotAnalyticsData[0] == undefined ||
+    onyxBotAnalyticsError
+  ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
         <p className="m-auto">Failed to fetch feedback data...</p>

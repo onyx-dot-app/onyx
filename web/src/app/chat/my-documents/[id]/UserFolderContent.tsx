@@ -181,21 +181,6 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
     },
   });
   const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
-  if (selectedModel === undefined) {
-    return (
-      <div className="min-h-full w-full min-w-0 flex-1 mx-auto max-w-5xl px-4 pb-20 md:pl-8 mt-6 md:pr-8 2xl:pr-14">
-        <div className="text-left space-y-4">
-          <h2 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
-            No Models defined
-          </h2>
-          <p className="text-neutral-600">
-            This page requires models to be available.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const [uploadingFiles, setUploadingFiles] = useState<string[]>([]);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress[]>([]);
   const [isCleanupModalOpen, setIsCleanupModalOpen] = useState(false);
@@ -246,6 +231,21 @@ export default function UserFolderContent({ folderId }: { folderId: number }) {
           <Button onClick={handleBack} variant="outline" className="mt-2">
             Back to My Documents
           </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (selectedModel === undefined) {
+    return (
+      <div className="min-h-full w-full min-w-0 flex-1 mx-auto max-w-5xl px-4 pb-20 md:pl-8 mt-6 md:pr-8 2xl:pr-14">
+        <div className="text-left space-y-4">
+          <h2 className="flex items-center gap-1.5 text-lg font-medium leading-tight tracking-tight max-md:hidden">
+            No Models defined
+          </h2>
+          <p className="text-neutral-600">
+            This page requires models to be available.
+          </p>
         </div>
       </div>
     );

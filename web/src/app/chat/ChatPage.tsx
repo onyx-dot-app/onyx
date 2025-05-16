@@ -1443,8 +1443,8 @@ export function ChatPage({
           filterManager.selectedDocumentSets,
           filterManager.timeRange,
           filterManager.selectedTags,
-          selectedFiles.map((file) => file.id),
-          selectedFolders.map((folder) => folder.id)
+          selectedFiles.map((file) => file.id)
+          // selectedFolders.map((folder) => folder.id)
         ),
         selectedDocumentIds: selectedDocuments
           .filter(

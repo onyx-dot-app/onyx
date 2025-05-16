@@ -15,6 +15,7 @@ import {
   StreamingPhaseText,
 } from "./message/StreamingMessages";
 import { Badge } from "@/components/ui/badge";
+import next from "next";
 
 export function useOrderedPhases(externalPhase: StreamingPhase) {
   const [phaseQueue, setPhaseQueue] = useState<StreamingPhase[]>([]);
@@ -62,7 +63,9 @@ export function useOrderedPhases(externalPhase: StreamingPhase) {
         setPhaseQueue((prevQueue) => {
           if (prevQueue.length > 0) {
             const [nextPhase, ...rest] = prevQueue;
-            setDisplayedPhases((prev) => [...prev, nextPhase]);
+            if (nextPhase !== undefined) {
+              setDisplayedPhases((prev) => [...prev, nextPhase]);
+            }
             lastDisplayTimeRef.current = Date.now();
             return rest;
           }

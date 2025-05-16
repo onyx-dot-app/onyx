@@ -108,10 +108,17 @@ export function ModelSelector({
   const groupedModelOptions = modelOptions.reduce(
     (acc, model) => {
       const [type] = model.model_name.split("/");
-      if (!acc[type]) {
-        acc[type] = [];
+      if (type !== undefined) {
+        if (!acc[type]) {
+          acc[type] = [];
+        }
+
+        const acc_by_type = acc[type];
+        if (acc_by_type !== undefined) {
+          acc_by_type.push(model);
+        }
       }
-      acc[type].push(model);
+
       return acc;
     },
     {} as Record<string, HostedEmbeddingModel[]>

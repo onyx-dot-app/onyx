@@ -56,7 +56,10 @@ export const ChatProvider: React.FC<{
     setFolders(
       folders.map((folder) => {
         if (folder.folder_id) {
-          folder.display_priority = displayPriorityMap[folder.folder_id];
+          const display_priority = displayPriorityMap[folder.folder_id];
+          if (display_priority !== undefined) {
+            folder.display_priority = display_priority;
+          }
         }
         return folder;
       })
