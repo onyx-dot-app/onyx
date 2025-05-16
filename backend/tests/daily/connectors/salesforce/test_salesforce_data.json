@@ -155,7 +155,7 @@
     "Email: fiannellib46@marriott.com\nIsDeleted: false\nLastName: Iannelli\nIsEmailBounced: false\nFirstName: Felicio\nIsPriorityRecord: false\nCleanStatus: Pending"
   ],
   "semantic_identifier": "Voonder",
-  "metadata": {},
+  "metadata": {"object_type": "Account"},
   "primary_owners": {"email": "hagen@danswer.ai", "first_name": "Hagen", "last_name": "oneill"},
   "secondary_owners": null,
   "title": null

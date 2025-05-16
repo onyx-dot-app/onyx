@@ -572,15 +572,16 @@ def stream_chat_message_objects(
 
     llm: LLM
 
-    # get Vespa index
-
-    search_settings = get_current_search_settings(db_session)
-    index_str = search_settings.index_name
-
     kg_config_settings = get_kg_config_settings(db_session)
 
     if kg_config_settings.KG_ENABLED:
+
         # Temporarily, until we have a draft UI for the KG Operations/Management
+
+        # get Vespa index
+        search_settings = get_current_search_settings(db_session)
+        index_str = search_settings.index_name
+
         if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)
 
