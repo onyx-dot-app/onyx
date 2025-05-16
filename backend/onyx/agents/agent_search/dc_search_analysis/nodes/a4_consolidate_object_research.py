@@ -27,14 +27,14 @@ def consolidate_object_research(
     LangGraph node to start the agentic search process.
     """
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
+    graph_config.inputs.prompt_builder.raw_user_query
     search_tool = graph_config.tooling.search_tool
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
 
-    if search_tool is None or graph_config.inputs.search_request.persona is None:
+    if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
-    instructions = graph_config.inputs.search_request.persona.prompts[0].system_prompt
+    instructions = graph_config.inputs.persona.prompts[0].system_prompt
 
     agent_4_instructions = extract_section(
         instructions, "Agent Step 4:", "Agent Step 5:"

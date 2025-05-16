@@ -47,14 +47,16 @@ def rerank_documents(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     question = (
-        state.question if state.question else graph_config.inputs.search_request.query
+        state.question
+        if state.question
+        else graph_config.inputs.prompt_builder.raw_user_query
     )
     assert (
         graph_config.tooling.search_tool
     ), "search_tool must be provided for agentic search"
 
     # Note that these are passed in values from the API and are overrides which are typically None
-    rerank_settings = graph_config.inputs.search_request.rerank_settings
+    rerank_settings = graph_config.inputs.rerank_settings
     allow_agent_reranking = graph_config.behavior.allow_agent_reranking
 
     if rerank_settings is None:
@@ -95,7 +97,7 @@ def rerank_documents(
 
     return DocRerankingUpdate(
         reranked_documents=[
-            doc for doc in reranked_documents if type(doc) == InferenceSection
+            doc for doc in reranked_documents if isinstance(doc, InferenceSection)
         ][:AGENT_RERANKING_MAX_QUERY_RETRIEVAL_RESULTS],
         sub_question_retrieval_stats=fit_scores,
         log_messages=[

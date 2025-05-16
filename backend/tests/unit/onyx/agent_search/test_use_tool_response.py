@@ -127,9 +127,12 @@ def mock_config() -> RunnableConfig:
     mock_search_request = MagicMock(spec=SearchRequest)
     mock_db_session = MagicMock(spec=Session)
 
+    mock_prompt_builder.raw_user_query = mock_search_request.query
+
     # Create the GraphConfig components
     graph_inputs = GraphInputs(
-        search_request=mock_search_request,
+        persona=mock_search_request.persona,
+        rerank_settings=mock_search_request.rerank_settings,
         prompt_builder=mock_prompt_builder,
         files=None,
         structured_response_format=None,

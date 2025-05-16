@@ -9,9 +9,9 @@ from onyx.agents.agent_search.models import GraphInputs
 from onyx.agents.agent_search.models import GraphPersistence
 from onyx.agents.agent_search.models import GraphSearchConfig
 from onyx.agents.agent_search.models import GraphTooling
+from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
 from onyx.agents.agent_search.run_graph import run_dc_graph
-from onyx.agents.agent_search.run_graph import run_main_graph
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import AnswerPacket
 from onyx.chat.models import AnswerStream
@@ -22,13 +22,15 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
+from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
+from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
 from onyx.configs.constants import BASIC_KEY
-from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import RerankingDetails
+from onyx.db.models import Persona
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.tool import Tool
-from onyx.tools.tool_implementations.search.search_tool import QUERY_FIELD
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.gpu_utils import fast_gpu_status_request
@@ -47,7 +49,8 @@ class Answer:
         llm: LLM,
         fast_llm: LLM,
         force_use_tool: ForceUseTool,
-        search_request: SearchRequest,
+        persona: Persona | None,
+        rerank_settings: RerankingDetails | None,
         chat_session_id: UUID,
         current_agent_message_id: int,
         db_session: Session,
@@ -83,30 +86,17 @@ class Answer:
             and not skip_explicit_tool_calling
         )
 
-        rerank_settings = search_request.rerank_settings
-
         using_cloud_reranking = (
             rerank_settings is not None
             and rerank_settings.rerank_provider_type is not None
         )
-        allow_agent_reranking = (
-            fast_gpu_status_request(indexing=False) or using_cloud_reranking
+        allow_agent_reranking = AGENT_ALLOW_REFINEMENT and (
+            using_cloud_reranking or fast_gpu_status_request(indexing=False)
         )
 
-        # TODO: this is a hack to force the query to be used for the search tool
-        #       this should be removed once we fully unify graph inputs (i.e.
-        #       remove SearchQuery entirely)
-        if (
-            force_use_tool.force_use
-            and search_tool
-            and force_use_tool.args
-            and force_use_tool.tool_name == search_tool.name
-            and QUERY_FIELD in force_use_tool.args
-        ):
-            search_request.query = force_use_tool.args[QUERY_FIELD]
-
         self.graph_inputs = GraphInputs(
-            search_request=search_request,
+            persona=persona,
+            rerank_settings=rerank_settings,
             prompt_builder=prompt_builder,
             files=latest_query_files,
             structured_response_format=answer_style_config.structured_response_format,
@@ -129,6 +119,7 @@ class Answer:
             skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
             allow_refinement=True,
             allow_agent_reranking=allow_agent_reranking,
+            perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
         )
         self.graph_config = GraphConfig(
             inputs=self.graph_inputs,
@@ -144,10 +135,10 @@ class Answer:
             return
 
         if self.graph_config.behavior.use_agentic_search:
-            run_langgraph = run_main_graph
+            run_langgraph = run_agent_search_graph
         elif (
-            self.graph_config.inputs.search_request.persona
-            and self.graph_config.inputs.search_request.persona.description.startswith(
+            self.graph_config.inputs.persona
+            and self.graph_config.inputs.persona.description.startswith(
                 "DivCon Beta Agent"
             )
         ):

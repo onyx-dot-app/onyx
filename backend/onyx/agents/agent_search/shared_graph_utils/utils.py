@@ -214,7 +214,8 @@ def get_test_config(
     )
 
     graph_inputs = GraphInputs(
-        search_request=search_request,
+        persona=search_request.persona,
+        rerank_settings=search_tool_config.rerank_settings,
         prompt_builder=AnswerPromptBuilder(
             user_message=HumanMessage(content=search_request.query),
             message_history=[],
