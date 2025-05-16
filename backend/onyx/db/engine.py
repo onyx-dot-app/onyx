@@ -497,7 +497,8 @@ async def get_async_session(
     engine = get_sqlalchemy_async_engine()
 
     async with AsyncSession(engine, expire_on_commit=False) as async_session:
-        # set the search path on sync session as well to be extra safe
+        # IMPORTANT: do NOT remove. The search_path seems to get reset on every `.commit()`
+        # without this. Do not fully understand why atm
         async_session.info["tenant_id"] = tenant_id
         event.listen(
             async_session.sync_session,
