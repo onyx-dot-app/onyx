@@ -1,4 +1,4 @@
-"""add_read_only_kg_user
+"""add_db_readonly_user
 
 Revision ID: 3b9f09038764
 Revises: 3b45e0018bf1
@@ -9,8 +9,8 @@ Create Date: 2025-05-11 11:05:11.436977
 from sqlalchemy import text
 
 from alembic import op
-from onyx.configs.app_configs import KG_READONLY_DB_PASSWORD
-from onyx.configs.app_configs import KG_READONLY_DB_USER
+from onyx.configs.app_configs import DB_READONLY_PASSWORD
+from onyx.configs.app_configs import DB_READONLY_USER
 from shared_configs.configs import MULTI_TENANT
 
 
@@ -25,20 +25,20 @@ def upgrade() -> None:
     if MULTI_TENANT:
         # Create read-only db user here only in multi-tenant mode. For single-tenant mode,
         # the user is created in the standard migration.
-        if not (KG_READONLY_DB_USER and KG_READONLY_DB_PASSWORD):
-            raise Exception("KG_READONLY_DB_USER or KG_READONLY_DB_PASSWORD is not set")
+        if not (DB_READONLY_USER and DB_READONLY_PASSWORD):
+            raise Exception("DB_READONLY_USER or DB_READONLY_PASSWORD is not set")
 
         op.execute(
             text(
                 f"""
             DO $$
             BEGIN
-                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
-                    EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{KG_READONLY_DB_USER}', '{KG_READONLY_DB_PASSWORD}');
+                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                    EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{DB_READONLY_USER}', '{DB_READONLY_PASSWORD}');
                     -- Explicitly revoke all privileges including CONNECT
-                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
+                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
                     -- Grant only the CONNECT privilege
-                    EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{KG_READONLY_DB_USER}');
+                    EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{DB_READONLY_USER}');
                 END IF;
             END
             $$;
@@ -57,13 +57,13 @@ def downgrade() -> None:
                 f"""
             DO $$
             BEGIN
-                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{KG_READONLY_DB_USER}') THEN
+                IF EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
                     -- First revoke all privileges from the database
-                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{KG_READONLY_DB_USER}');
+                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
                     -- Then revoke all privileges from the public schema
-                    EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', '{KG_READONLY_DB_USER}');
+                    EXECUTE format('REVOKE ALL ON SCHEMA public FROM %I', '{DB_READONLY_USER}');
                     -- Then drop the user
-                    EXECUTE format('DROP USER %I', '{KG_READONLY_DB_USER}');
+                    EXECUTE format('DROP USER %I', '{DB_READONLY_USER}');
                 END IF;
             END
             $$;

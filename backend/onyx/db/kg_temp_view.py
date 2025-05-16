@@ -2,7 +2,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import KG_READONLY_DB_USER
+from onyx.configs.app_configs import DB_READONLY_USER
 
 
 Base = declarative_base()
@@ -90,7 +90,7 @@ def create_views(
     db_session.execute(kg_relationships_view)
 
     grant_kg_relationships = text(
-        f"GRANT SELECT ON {kg_relationships_view_name} TO {KG_READONLY_DB_USER}"
+        f"GRANT SELECT ON {kg_relationships_view_name} TO {DB_READONLY_USER}"
     )
     db_session.execute(grant_kg_relationships)
 
@@ -114,7 +114,7 @@ def drop_views(
     """
     # First revoke access from the readonly user
     revoke_kg_relationships = text(
-        f"REVOKE SELECT ON {kg_relationships_view_name} FROM {KG_READONLY_DB_USER}"
+        f"REVOKE SELECT ON {kg_relationships_view_name} FROM {DB_READONLY_USER}"
     )
 
     db_session.execute(revoke_kg_relationships)

@@ -184,11 +184,11 @@ POSTGRES_API_SERVER_POOL_OVERFLOW = int(
     os.environ.get("POSTGRES_API_SERVER_POOL_OVERFLOW") or 10
 )
 
-POSTGRES_API_SERVER_KG_READ_ONLY_POOL_SIZE = int(
-    os.environ.get("POSTGRES_API_SERVER_KG_READ_ONLY_POOL_SIZE") or 10
+POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_SIZE") or 10
 )
-POSTGRES_API_SERVER_KG_READ_ONLY_POOL_OVERFLOW = int(
-    os.environ.get("POSTGRES_API_SERVER_KG_READ_ONLY_POOL_OVERFLOW") or 5
+POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW = int(
+    os.environ.get("POSTGRES_API_SERVER_READ_ONLY_POOL_OVERFLOW") or 5
 )
 
 # defaults to False
@@ -754,13 +754,8 @@ DISABLE_AUTO_AUTH_REFRESH = (
     os.environ.get("DISABLE_AUTO_AUTH_REFRESH", "").lower() == "true"
 )
 
-# Database User Configuration
-DB_USER_USERNAME = os.getenv("DB_USER_USERNAME", "kg_readonly")
-DB_USER_PASSWORD = os.getenv("DB_USER_PASSWORD", "")
-DB_USER_DATABASE = os.getenv("DB_USER_DATABASE", "postgres")
-
 # Knowledge Graph Read Only User Configuration
-KG_READONLY_DB_USER: str = os.environ.get("KG_READONLY_DB_USER", "kg_readonly_user")
-KG_READONLY_DB_PASSWORD: str = urllib.parse.quote_plus(
-    os.environ.get("KG_READONLY_DB_PASSWORD") or "password"
+DB_READONLY_USER: str = os.environ.get("DB_READONLY_USER", "db_readonly_user")
+DB_READONLY_PASSWORD: str = urllib.parse.quote_plus(
+    os.environ.get("DB_READONLY_PASSWORD") or "password"
 )

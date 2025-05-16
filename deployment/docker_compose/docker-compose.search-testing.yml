@@ -154,8 +154,8 @@ services:
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-password}
-      - KG_READONLY_DB_USER=${KG_READONLY_DB_USER:-}
-      - KG_READONLY_DB_PASSWORD=${KG_READONLY_DB_PASSWORD:-}
+      - DB_READONLY_USER=${DB_READONLY_USER:-}
+      - DB_READONLY_PASSWORD=${DB_READONLY_PASSWORD:-}
     ports:
       - "5432"
     volumes:

@@ -27,8 +27,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm import sessionmaker
 
 from onyx.configs.app_configs import AWS_REGION_NAME
-from onyx.configs.app_configs import KG_READONLY_DB_PASSWORD
-from onyx.configs.app_configs import KG_READONLY_DB_USER
+from onyx.configs.app_configs import DB_READONLY_PASSWORD
+from onyx.configs.app_configs import DB_READONLY_USER
 from onyx.configs.app_configs import LOG_POSTGRES_CONN_COUNTS
 from onyx.configs.app_configs import LOG_POSTGRES_LATENCY
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
@@ -271,15 +271,15 @@ class SqlEngine:
             if cls._readonly_engine:
                 return
 
-            if not KG_READONLY_DB_USER or not KG_READONLY_DB_PASSWORD:
+            if not DB_READONLY_USER or not DB_READONLY_PASSWORD:
                 raise ValueError(
                     "Custom database user credentials not configured in environment variables"
                 )
 
             # Build connection string with custom user
             connection_string = build_connection_string(
-                user=KG_READONLY_DB_USER,
-                password=KG_READONLY_DB_PASSWORD,
+                user=DB_READONLY_USER,
+                password=DB_READONLY_PASSWORD,
                 use_iam_auth=False,  # Custom users typically don't use IAM auth
                 db_api=SYNC_DB_API,  # Explicitly use sync DB API
             )
@@ -640,7 +640,7 @@ def provide_iam_token(dialect: Any, conn_rec: Any, cargs: Any, cparams: Any) -> 
 
 
 @contextmanager
-def get_kg_readonly_user_session_with_current_tenant() -> (
+def get_db_readonly_user_session_with_current_tenant() -> (
     Generator[Session, None, None]
 ):
     """

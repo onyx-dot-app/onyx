@@ -20,7 +20,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
-from onyx.db.engine import get_kg_readonly_user_session_with_current_tenant
+from onyx.db.engine import get_db_readonly_user_session_with_current_tenant
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import drop_views
@@ -308,7 +308,7 @@ def generate_simple_sql(
         scalar_result = None
         query_results = None
 
-        with get_kg_readonly_user_session_with_current_tenant() as db_session:
+        with get_db_readonly_user_session_with_current_tenant() as db_session:
             try:
                 result = db_session.execute(text(sql_statement))
                 # Handle scalar results (like COUNT)
@@ -330,7 +330,7 @@ def generate_simple_sql(
 
         source_document_results = None
         if source_documents_sql is not None and source_documents_sql != sql_statement:
-            with get_kg_readonly_user_session_with_current_tenant() as db_session:
+            with get_db_readonly_user_session_with_current_tenant() as db_session:
                 try:
                     result = db_session.execute(text(source_documents_sql))
                     rows = result.fetchall()
