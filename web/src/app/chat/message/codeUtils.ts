@@ -18,7 +18,10 @@ export function extractCodeText(
     // Match code block with optional language declaration
     const codeBlockMatch = codeText.match(/^```[^\n]*\n([\s\S]*?)\n?```$/);
     if (codeBlockMatch) {
-      codeText = codeBlockMatch[1];
+      const codeTextMatch = codeBlockMatch[1];
+      if (codeTextMatch !== undefined) {
+        codeText = codeTextMatch;
+      }
     }
 
     // Normalize indentation
@@ -133,7 +136,7 @@ export const preprocessLaTeX = (content: string) => {
   // Restore code blocks
   const restoredCodeBlocks = restoredDollars.replace(
     /___CODE_BLOCK_(\d+)___/g,
-    (_, index) => codeBlocks[parseInt(index)]
+    (_, index) => codeBlocks[parseInt(index)] ?? ""
   );
 
   return restoredCodeBlocks;

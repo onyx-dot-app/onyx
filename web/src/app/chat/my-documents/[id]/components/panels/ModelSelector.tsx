@@ -24,7 +24,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   <Select
     value={selectedModel.modelName}
     onValueChange={(value) =>
-      onSelectModel(models.find((m) => m.modelName === value) || models[0])
+      onSelectModel(
+        models.find((m) => m.modelName === value) || models[0] || selectedModel
+      )
     }
   >
     <SelectTrigger className="w-full">

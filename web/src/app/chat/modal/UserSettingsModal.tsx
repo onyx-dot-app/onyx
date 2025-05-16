@@ -125,14 +125,17 @@ export function UserSettingsModal({
     llmProvider.model_configurations.forEach((modelConfiguration) => {
       if (!uniqueModelNames.has(modelConfiguration.name)) {
         uniqueModelNames.add(modelConfiguration.name);
-        llmOptionsByProvider[llmProvider.provider].push({
-          name: modelConfiguration.name,
-          value: structureValue(
-            llmProvider.name,
-            llmProvider.provider,
-            modelConfiguration.name
-          ),
-        });
+        const llmOptions = llmOptionsByProvider[llmProvider.provider];
+        if (llmOptions) {
+          llmOptions.push({
+            name: modelConfiguration.name,
+            value: structureValue(
+              llmProvider.name,
+              llmProvider.provider,
+              modelConfiguration.name
+            ),
+          });
+        }
       }
     });
   });

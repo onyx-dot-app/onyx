@@ -377,14 +377,18 @@ export function getHumanAndAIMessageFromMessageNumber(
   if (messageInd !== -1) {
     const matchingMessage = messageHistory[messageInd];
     const pairedMessage =
-      matchingMessage.type === "user"
+      matchingMessage && matchingMessage.type === "user"
         ? messageHistory[messageInd + 1]
         : messageHistory[messageInd - 1];
 
     const humanMessage =
-      matchingMessage.type === "user" ? matchingMessage : pairedMessage;
+      matchingMessage && matchingMessage.type === "user"
+        ? matchingMessage
+        : pairedMessage;
     const aiMessage =
-      matchingMessage.type === "user" ? pairedMessage : matchingMessage;
+      matchingMessage && matchingMessage.type === "user"
+        ? pairedMessage
+        : matchingMessage;
 
     return {
       humanMessage,
@@ -433,13 +437,25 @@ export function groupSessionsByDateRange(chatSessions: ChatSession[]) {
     const diffDays = diffTime / (1000 * 3600 * 24); // Convert time difference to days
 
     if (diffDays < 1) {
-      groups["Today"].push(chatSession);
+      const groups_today = groups["Today"];
+      if (groups_today) {
+        groups_today.push(chatSession);
+      }
     } else if (diffDays <= 7) {
-      groups["Previous 7 Days"].push(chatSession);
+      const groups_7 = groups["Previous 7 Days"];
+      if (groups_7) {
+        groups_7.push(chatSession);
+      }
     } else if (diffDays <= 30) {
-      groups["Previous 30 days"].push(chatSession);
+      const groups_30 = groups["Previous 30 Days"];
+      if (groups_30) {
+        groups_30.push(chatSession);
+      }
     } else {
-      groups["Over 30 days"].push(chatSession);
+      const groups_over_30 = groups["Over 30 days"];
+      if (groups_over_30) {
+        groups_over_30.push(chatSession);
+      }
     }
   });
 
@@ -560,7 +576,11 @@ export function buildLatestMessageChain(
 
   //
   // remove system message
-  if (finalMessageList.length > 0 && finalMessageList[0].type === "system") {
+  if (
+    finalMessageList.length > 0 &&
+    finalMessageList[0] &&
+    finalMessageList[0].type === "system"
+  ) {
     finalMessageList = finalMessageList.slice(1);
   }
   return finalMessageList.concat(additionalMessagesOnMainline);
