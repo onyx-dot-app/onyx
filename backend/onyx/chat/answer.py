@@ -90,8 +90,8 @@ class Answer:
             rerank_settings is not None
             and rerank_settings.rerank_provider_type is not None
         )
-        allow_agent_reranking = AGENT_ALLOW_REFINEMENT and (
-            using_cloud_reranking or fast_gpu_status_request(indexing=False)
+        allow_agent_reranking = using_cloud_reranking or fast_gpu_status_request(
+            indexing=False
         )
 
         self.graph_inputs = GraphInputs(
@@ -117,7 +117,7 @@ class Answer:
         self.search_behavior_config = GraphSearchConfig(
             use_agentic_search=use_agentic_search,
             skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-            allow_refinement=True,
+            allow_refinement=AGENT_ALLOW_REFINEMENT,
             allow_agent_reranking=allow_agent_reranking,
             perform_initial_search_decomposition=INITIAL_SEARCH_DECOMPOSITION_ENABLED,
         )
