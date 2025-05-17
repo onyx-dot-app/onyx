@@ -216,6 +216,14 @@ class Document(DocumentBase):
         """Used when logging the identity of a document"""
         return f"ID: '{self.id}'; Semantic ID: '{self.semantic_identifier}'"
 
+    @property
+    def total_section_length(self) -> int:
+        length = 0
+        for section in self.sections:
+            length += len(section.text)
+
+        return length
+
     @classmethod
     def from_base(cls, base: DocumentBase) -> "Document":
         return cls(
