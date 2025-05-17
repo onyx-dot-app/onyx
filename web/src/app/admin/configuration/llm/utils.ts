@@ -9,6 +9,7 @@ import {
   IconProps,
   DeepseekIcon,
   OpenAISVG,
+  QwenIcon,
 } from "@/components/icons/icons";
 
 export const getProviderIcon = (providerName: string, modelName?: string) => {
@@ -29,6 +30,8 @@ export const getProviderIcon = (providerName: string, modelName?: string) => {
     microsoft: MicrosoftIconSVG,
     meta: MetaIcon,
     google: GeminiIcon,
+    qwen: QwenIcon,
+    qwq: QwenIcon,
   };
 
   // First check if provider name directly matches an icon
