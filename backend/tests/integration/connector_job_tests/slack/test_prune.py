@@ -21,7 +21,7 @@ from tests.integration.common_utils.test_models import DATestConnector
 from tests.integration.common_utils.test_models import DATestCredential
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.common_utils.vespa import vespa_fixture
-from tests.integration.connector_job_tests.slack.slack_api_utils import SlackManager
+from tests.integration.common_utils.managers.slack import SlackManager
 
 
 @pytest.mark.xfail(reason="flaky - see DAN-986 for details", strict=False)
