@@ -85,7 +85,7 @@ def create_refined_sub_questions(
         ToolCallKickoff(
             tool_name="agent_search_1",
             tool_args={
-                "query": graph_config.inputs.search_request.query,
+                "query": graph_config.inputs.prompt_builder.raw_user_query,
                 "answer": state.initial_answer,
             },
         ),
@@ -96,7 +96,7 @@ def create_refined_sub_questions(
 
     agent_refined_start_time = datetime.now()
 
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     base_answer = state.initial_answer
     history = build_history_prompt(graph_config, question)
     # get the entity term extraction dict and properly format it

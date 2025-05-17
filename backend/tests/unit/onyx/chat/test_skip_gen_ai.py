@@ -11,7 +11,6 @@ from onyx.chat.answer import Answer
 from onyx.chat.models import AnswerStyleConfig
 from onyx.chat.models import PromptConfig
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.context.search.models import SearchRequest
 from onyx.llm.interfaces import LLM
 from onyx.llm.utils import get_max_input_tokens
 from onyx.tools.force import ForceUseTool
@@ -72,7 +71,8 @@ def test_skip_gen_ai_answer_generation_flag(
         ),
         skip_explicit_tool_calling=True,
         skip_gen_ai_answer_generation=skip_gen_ai_answer_generation,
-        search_request=SearchRequest(query=question),
+        persona=None,
+        rerank_settings=None,
         prompt_builder=AnswerPromptBuilder(
             user_message=HumanMessage(content=question),
             message_history=[],

@@ -28,7 +28,7 @@ def structure_research_by_object(
     datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
+    graph_config.inputs.prompt_builder.raw_user_query
 
     write_custom_event(
         "initial_agent_answer",

@@ -82,7 +82,7 @@ def trim_prompt_piece(config: LLMConfig, prompt_piece: str, reserved_str: str) -
 def build_history_prompt(config: GraphConfig, question: str) -> str:
     prompt_builder = config.inputs.prompt_builder
     persona_base = get_persona_agent_prompt_expressions(
-        config.inputs.search_request.persona
+        config.inputs.persona
     ).base_prompt
 
     if prompt_builder is None:
@@ -126,11 +126,9 @@ def build_history_prompt(config: GraphConfig, question: str) -> str:
 def get_prompt_enrichment_components(
     config: GraphConfig,
 ) -> AgentPromptEnrichmentComponents:
-    persona_prompts = get_persona_agent_prompt_expressions(
-        config.inputs.search_request.persona
-    )
+    persona_prompts = get_persona_agent_prompt_expressions(config.inputs.persona)
 
-    history = build_history_prompt(config, config.inputs.search_request.query)
+    history = build_history_prompt(config, config.inputs.prompt_builder.raw_user_query)
 
     date_str = build_date_time_string()
 

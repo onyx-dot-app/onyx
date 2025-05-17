@@ -75,7 +75,7 @@ def decompose_orig_question(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     perform_initial_search_decomposition = (
         graph_config.behavior.perform_initial_search_decomposition
     )

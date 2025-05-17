@@ -26,7 +26,6 @@ from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_system_message
 from onyx.chat.prompt_builder.answer_prompt_builder import default_build_user_message
 from onyx.context.search.models import RerankingDetails
-from onyx.context.search.models import SearchRequest
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.models import ToolCallFinalResult
@@ -79,7 +78,8 @@ def _answer_fixture_impl(
         llm=mock_llm,
         fast_llm=mock_llm,
         force_use_tool=ForceUseTool(force_use=False, tool_name="", args=None),
-        search_request=SearchRequest(query=QUERY, rerank_settings=rerank_settings),
+        persona=None,
+        rerank_settings=rerank_settings,
         chat_session_id=UUID("123e4567-e89b-12d3-a456-426614174000"),
         current_agent_message_id=0,
     )
@@ -407,10 +407,7 @@ def test_no_slow_reranking(
         mock_llm, answer_style_config, prompt_config, rerank_settings=rerank_settings
     )
 
-    assert (
-        answer_instance.graph_config.inputs.search_request.rerank_settings
-        == rerank_settings
-    )
+    assert answer_instance.graph_config.inputs.rerank_settings == rerank_settings
     assert (
         answer_instance.graph_config.behavior.allow_agent_reranking == gpu_enabled
         or not is_local_model

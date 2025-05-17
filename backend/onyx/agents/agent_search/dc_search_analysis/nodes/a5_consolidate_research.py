@@ -31,7 +31,7 @@ def consolidate_research(
     datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
+    graph_config.inputs.prompt_builder.raw_user_query
 
     search_tool = graph_config.tooling.search_tool
 
@@ -46,11 +46,11 @@ def consolidate_research(
         writer,
     )
 
-    if search_tool is None or graph_config.inputs.search_request.persona is None:
+    if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     # Populate prompt
-    instructions = graph_config.inputs.search_request.persona.prompts[0].system_prompt
+    instructions = graph_config.inputs.persona.prompts[0].system_prompt
 
     try:
         agent_5_instructions = extract_section(

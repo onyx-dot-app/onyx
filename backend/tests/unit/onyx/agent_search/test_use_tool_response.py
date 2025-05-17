@@ -30,7 +30,8 @@ from onyx.context.search.enums import SearchType
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
 from onyx.context.search.models import InferenceSection
-from onyx.context.search.models import SearchRequest
+from onyx.context.search.models import RerankingDetails
+from onyx.db.models import Persona
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
 from onyx.tools.message import ToolCallSummary
@@ -43,6 +44,8 @@ from onyx.tools.tool_implementations.search.search_utils import section_to_llm_d
 from onyx.tools.tool_implementations.search_like_tool_utils import (
     FINAL_CONTEXT_DOCUMENTS_ID,
 )
+
+TEST_PROMPT = "test prompt"
 
 
 def create_test_inference_chunk(
@@ -86,9 +89,7 @@ def mock_state() -> BasicState:
     mock_tool.build_next_prompt = MagicMock(
         return_value=MagicMock(spec=AnswerPromptBuilder)
     )
-    mock_tool.build_next_prompt.return_value.build = MagicMock(
-        return_value="test prompt"
-    )
+    mock_tool.build_next_prompt.return_value.build = MagicMock(return_value=TEST_PROMPT)
 
     mock_tool_choice = MagicMock(spec=ToolChoice)
     mock_tool_choice.tool = mock_tool
@@ -124,12 +125,16 @@ def mock_config() -> RunnableConfig:
     mock_search_tool = MagicMock(spec=SearchTool)
     mock_force_use_tool = MagicMock(spec=ForceUseTool)
     mock_prompt_builder = MagicMock(spec=AnswerPromptBuilder)
-    mock_search_request = MagicMock(spec=SearchRequest)
+    mock_persona = MagicMock(spec=Persona)
+    mock_rerank_settings = MagicMock(spec=RerankingDetails)
     mock_db_session = MagicMock(spec=Session)
+
+    mock_prompt_builder.raw_user_query = TEST_PROMPT
 
     # Create the GraphConfig components
     graph_inputs = GraphInputs(
-        search_request=mock_search_request,
+        persona=mock_persona,
+        rerank_settings=mock_rerank_settings,
         prompt_builder=mock_prompt_builder,
         files=None,
         structured_response_format=None,
@@ -333,7 +338,7 @@ def test_basic_use_tool_response_with_search_results(
     mock_config["metadata"][
         "config"
     ].tooling.primary_llm.stream.assert_called_once_with(
-        prompt="test prompt",
+        prompt=TEST_PROMPT,
         structured_response_format=None,
     )
 

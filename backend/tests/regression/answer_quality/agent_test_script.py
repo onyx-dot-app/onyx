@@ -9,16 +9,13 @@ from typing import Any
 import yaml
 
 from onyx.agents.agent_search.deep_search.main.graph_builder import (
-    main_graph_builder,
-)
-from onyx.agents.agent_search.deep_search.main.graph_builder import (
-    main_graph_builder as main_graph_builder_a,
+    agent_search_graph_builder,
 )
 from onyx.agents.agent_search.deep_search.main.states import (
     MainInput as MainInput_a,
 )
+from onyx.agents.agent_search.run_graph import run_agent_search_graph
 from onyx.agents.agent_search.run_graph import run_basic_graph
-from onyx.agents.agent_search.run_graph import run_main_graph
 from onyx.agents.agent_search.shared_graph_utils.utils import get_test_config
 from onyx.chat.models import AgentAnswerPiece
 from onyx.chat.models import OnyxAnswerPiece
@@ -44,7 +41,7 @@ INPUT_DIR = CONFIG["agent_test_input_folder"]
 OUTPUT_DIR = CONFIG["agent_test_output_folder"]
 
 
-graph = main_graph_builder(test_mode=True)
+graph = agent_search_graph_builder()
 compiled_graph = graph.compile()
 primary_llm, fast_llm = get_default_llms()
 
@@ -92,7 +89,7 @@ with get_session_context_manager() as db_session:
 
             logger.debug("\n\nTEST QUERY START\n\n")
 
-            graph = main_graph_builder_a()
+            graph = agent_search_graph_builder()
             compiled_graph = graph.compile()
             query_end_time = datetime.now()
 
@@ -152,7 +149,7 @@ with get_session_context_manager() as db_session:
                     lambda: defaultdict(str)
                 )
 
-                for output in run_main_graph(config):
+                for output in run_agent_search_graph(config):
                     if isinstance(output, AgentAnswerPiece):
                         if output.level == 0 and output.level_question_num == 0:
                             answer_tokens["initial"].append(output.answer_piece)

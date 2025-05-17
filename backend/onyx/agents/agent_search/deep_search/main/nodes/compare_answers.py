@@ -69,7 +69,7 @@ def compare_answers(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     initial_answer = state.initial_answer
     refined_answer = state.refined_answer
 

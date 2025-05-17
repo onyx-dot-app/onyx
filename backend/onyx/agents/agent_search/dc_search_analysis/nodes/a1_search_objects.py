@@ -34,16 +34,14 @@ def search_objects(
     """
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     search_tool = graph_config.tooling.search_tool
 
-    if search_tool is None or graph_config.inputs.search_request.persona is None:
+    if search_tool is None or graph_config.inputs.persona is None:
         raise ValueError("Search tool and persona must be provided for DivCon search")
 
     try:
-        instructions = graph_config.inputs.search_request.persona.prompts[
-            0
-        ].system_prompt
+        instructions = graph_config.inputs.persona.prompts[0].system_prompt
 
         agent_1_instructions = extract_section(
             instructions, "Agent Step 1:", "Agent Step 2:"

@@ -66,7 +66,7 @@ def extract_entities_terms(
         )
 
     # first four lines duplicates from generate_initial_answer
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     initial_search_docs = state.exploratory_search_results[:NUM_EXPLORATORY_DOCS]
 
     # start with the entity/term/extraction
