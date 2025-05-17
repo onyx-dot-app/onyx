@@ -154,6 +154,8 @@ def process_jira_issue(
     if issuetype := best_effort_get_field_from_issue(issue, _FIELD_ISSUETYPE):
         metadata_dict[_FIELD_ISSUETYPE] = issuetype.name
 
+    metadata_dict[_FIELD_KEY] = issue.key
+
     return Document(
         id=page_url,
         sections=[TextSection(link=page_url, text=ticket_content)],
