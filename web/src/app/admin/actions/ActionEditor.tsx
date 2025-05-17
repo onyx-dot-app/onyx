@@ -89,7 +89,7 @@ function ActionForm({
             setMethodSpecs(response.data);
             setDefinitionError(null);
           }
-        } catch (error) {
+        } catch {
           setMethodSpecs(null);
           setDefinitionError("Invalid JSON format");
         }
@@ -143,7 +143,7 @@ function ActionForm({
                   parseJsonWithTrailingCommas(definition)
                 );
                 setFieldValue("definition", formatted);
-              } catch (error) {
+              } catch {
                 alert("Invalid JSON format");
               }
             }
@@ -414,7 +414,7 @@ export function ActionEditor({ tool }: { tool?: ToolSnapshot }) {
           let definition: any;
           try {
             definition = parseJsonWithTrailingCommas(values.definition);
-          } catch (error) {
+          } catch {
             setDefinitionError("Invalid JSON in action definition");
             return;
           }

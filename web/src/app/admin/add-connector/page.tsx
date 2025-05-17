@@ -88,6 +88,7 @@ export default function Page() {
       );
       if (
         filteredCategories.length > 0 &&
+        filteredCategories[0] !== undefined &&
         filteredCategories[0][1].length > 0
       ) {
         const firstSource = filteredCategories[0][1][0];

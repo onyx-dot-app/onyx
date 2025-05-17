@@ -92,7 +92,7 @@ export const filterUploadedCredentials = <
         credential.credential_json.authentication_method !== "oauth_interactive"
     );
 
-    if (uploadedCredentials.length > 0) {
+    if (uploadedCredentials.length > 0 && uploadedCredentials[0]) {
       credential_id = uploadedCredentials[0].id;
     }
   }

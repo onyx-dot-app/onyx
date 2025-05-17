@@ -34,77 +34,83 @@ export const MemoizedAnchor = memo(
     if (value?.startsWith("[") && value?.endsWith("]")) {
       const match = value.match(/\[(D|Q)?(\d+)\]/);
       if (match) {
-        const isUserFileCitation = userFiles?.length && userFiles.length > 0;
-        if (isUserFileCitation) {
-          const index = Math.min(
-            parseInt(match[2], 10) - 1,
-            userFiles?.length - 1
-          );
-          const associatedUserFile = userFiles?.[index];
-          if (!associatedUserFile) {
-            return <a href={children as string}>{children}</a>;
-          }
-        } else if (!isUserFileCitation) {
-          const index = parseInt(match[2], 10) - 1;
-          const associatedDoc = docs?.[index];
-          if (!associatedDoc) {
-            return <a href={children as string}>{children}</a>;
-          }
-        } else {
-          const index = parseInt(match[2], 10) - 1;
-          const associatedSubQuestion = subQuestions?.[index];
-          if (!associatedSubQuestion) {
-            return <a href={href || (children as string)}>{children}</a>;
+        const match_item = match[2];
+        if (match_item !== undefined) {
+          const isUserFileCitation = userFiles?.length && userFiles.length > 0;
+          if (isUserFileCitation) {
+            const index = Math.min(
+              parseInt(match_item, 10) - 1,
+              userFiles?.length - 1
+            );
+            const associatedUserFile = userFiles?.[index];
+            if (!associatedUserFile) {
+              return <a href={children as string}>{children}</a>;
+            }
+          } else if (!isUserFileCitation) {
+            const index = parseInt(match_item, 10) - 1;
+            const associatedDoc = docs?.[index];
+            if (!associatedDoc) {
+              return <a href={children as string}>{children}</a>;
+            }
+          } else {
+            const index = parseInt(match_item, 10) - 1;
+            const associatedSubQuestion = subQuestions?.[index];
+            if (!associatedSubQuestion) {
+              return <a href={href || (children as string)}>{children}</a>;
+            }
           }
         }
       }
 
       if (match) {
-        const isSubQuestion = match[1] === "Q";
-        const isDocument = !isSubQuestion;
+        const match_item = match[2];
+        if (match_item !== undefined) {
+          const isSubQuestion = match[1] === "Q";
+          const isDocument = !isSubQuestion;
 
-        // Fix: parseInt now uses match[2], which is the numeric part
-        const index = parseInt(match[2], 10) - 1;
+          // Fix: parseInt now uses match[2], which is the numeric part
+          const index = parseInt(match_item, 10) - 1;
 
-        const associatedDoc = isDocument ? docs?.[index] : null;
-        const associatedSubQuestion = isSubQuestion
-          ? subQuestions?.[index]
-          : undefined;
+          const associatedDoc = isDocument ? docs?.[index] : null;
+          const associatedSubQuestion = isSubQuestion
+            ? subQuestions?.[index]
+            : undefined;
 
-        if (!associatedDoc && !associatedSubQuestion) {
-          return <>{children}</>;
-        }
+          if (!associatedDoc && !associatedSubQuestion) {
+            return <>{children}</>;
+          }
 
-        let icon: React.ReactNode = null;
-        if (associatedDoc?.source_type === "web") {
-          icon = <WebResultIcon url={associatedDoc.link} />;
-        } else {
-          icon = (
-            <SourceIcon
-              sourceType={associatedDoc?.source_type as ValidSources}
-              iconSize={18}
-            />
+          let icon: React.ReactNode = null;
+          if (associatedDoc?.source_type === "web") {
+            icon = <WebResultIcon url={associatedDoc.link} />;
+          } else {
+            icon = (
+              <SourceIcon
+                sourceType={associatedDoc?.source_type as ValidSources}
+                iconSize={18}
+              />
+            );
+          }
+          const associatedDocInfo = associatedDoc
+            ? {
+                ...associatedDoc,
+                icon: icon as any,
+                link: associatedDoc.link,
+              }
+            : undefined;
+
+          return (
+            <MemoizedLink
+              updatePresentingDocument={updatePresentingDocument}
+              href={href}
+              document={associatedDocInfo}
+              question={associatedSubQuestion}
+              openQuestion={openQuestion}
+            >
+              {children}
+            </MemoizedLink>
           );
         }
-        const associatedDocInfo = associatedDoc
-          ? {
-              ...associatedDoc,
-              icon: icon as any,
-              link: associatedDoc.link,
-            }
-          : undefined;
-
-        return (
-          <MemoizedLink
-            updatePresentingDocument={updatePresentingDocument}
-            href={href}
-            document={associatedDocInfo}
-            question={associatedSubQuestion}
-            openQuestion={openQuestion}
-          >
-            {children}
-          </MemoizedLink>
-        );
       }
     }
     return (

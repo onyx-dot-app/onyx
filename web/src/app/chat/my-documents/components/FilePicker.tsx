@@ -343,6 +343,14 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isHoveringRight, setIsHoveringRight] = useState(false);
 
+  let activeSplit = "";
+  if (activeId !== undefined && activeId !== null) {
+    const active_part_1 = activeId.split("-")[1];
+    if (active_part_1) {
+      activeSplit = active_part_1;
+    }
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -364,13 +372,16 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const { setPopup } = usePopup();
 
   // Create model descriptors and selectedModel state
+  // why is this hardcoded here?
   const modelDescriptors: LLMModelDescriptor[] = [
     { modelName: "Claude 3 Opus", maxTokens: 200000 },
     { modelName: "Claude 3 Sonnet", maxTokens: 180000 },
     { modelName: "GPT-4", maxTokens: 128000 },
   ];
 
-  const [selectedModel, setSelectedModel] = useState(modelDescriptors[0]);
+  const firstModelDescriptor = modelDescriptors[0]!;
+
+  const [selectedModel, setSelectedModel] = useState(firstModelDescriptor);
 
   // Add a new state for tracking uploads
   const [uploadStartTime, setUploadStartTime] = useState<number | null>(null);
@@ -811,6 +822,9 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
   const addUploadedFileToContext = async (files: FileList) => {
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
+      if (file === undefined) {
+        continue;
+      }
       // Add file to uploading files state
       setUploadingFiles((prev) => [...prev, { name: file.name, progress: 0 }]);
       const formData = new FormData();
@@ -819,7 +833,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
 
       if (response.length > 0) {
         const uploadedFile = response[0];
-        addSelectedFile(uploadedFile);
+        if (uploadedFile !== undefined) {
+          addSelectedFile(uploadedFile);
+        }
+
         markFileComplete(file.name);
       }
     }
@@ -1214,29 +1231,23 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                   </SortableContext>
 
                   <DragOverlay>
-                    {activeId ? (
+                    {activeId && activeSplit ? (
                       <DraggableItem
                         id={activeId}
                         type={activeId.startsWith("folder") ? "folder" : "file"}
                         item={
                           activeId.startsWith("folder")
                             ? folders.find(
-                                (f) =>
-                                  f.id === parseInt(activeId.split("-")[1], 10)
+                                (f) => f.id === parseInt(activeSplit, 10)
                               )!
                             : currentFolderFiles.find(
-                                (f) =>
-                                  f.id === parseInt(activeId.split("-")[1], 10)
+                                (f) => f.id === parseInt(activeSplit, 10)
                               )!
                         }
                         isSelected={
                           activeId.startsWith("folder")
-                            ? selectedFolderIds.has(
-                                parseInt(activeId.split("-")[1], 10)
-                              )
-                            : selectedFileIds.has(
-                                parseInt(activeId.split("-")[1], 10)
-                              )
+                            ? selectedFolderIds.has(parseInt(activeSplit, 10))
+                            : selectedFileIds.has(parseInt(activeSplit, 10))
                         }
                       />
                     ) : null}
@@ -1334,8 +1345,10 @@ export const FilePickerModal: React.FC<FilePickerModalProps> = ({
                         // Extract domain from URL to help with detection
                         const urlObj = new URL(url);
 
-                        const createdFile: FileResponse = response[0];
-                        addSelectedFile(createdFile);
+                        const createdFile = response[0];
+                        if (createdFile !== undefined) {
+                          addSelectedFile(createdFile);
+                        }
                         // Make sure to remove the uploading file indicator when done
                         markFileComplete(url);
                       }

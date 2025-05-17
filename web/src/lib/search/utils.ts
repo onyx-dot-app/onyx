@@ -7,8 +7,8 @@ export const buildFilters = (
   documentSets: string[],
   timeRange: DateRangePickerValue | null,
   tags: Tag[],
-  userFileIds?: number[] | null,
-  userFolderIds?: number[] | null
+  userFileIds?: number[] | null
+  // userFolderIds?: number[] | null
 ): Filters => {
   const filters = {
     source_type:

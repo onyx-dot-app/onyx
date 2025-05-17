@@ -36,7 +36,9 @@ export const TokenRateLimitTable = ({
   isAdmin,
 }: TokenRateLimitTableArgs) => {
   const shouldRenderGroupName = () =>
-    tokenRateLimits.length > 0 && tokenRateLimits[0].group_name !== undefined;
+    tokenRateLimits.length > 0 &&
+    tokenRateLimits[0] !== undefined &&
+    tokenRateLimits[0].group_name !== undefined;
 
   const handleEnabledChange = (id: number) => {
     const tokenRateLimit = tokenRateLimits.find(

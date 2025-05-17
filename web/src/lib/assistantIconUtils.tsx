@@ -21,7 +21,7 @@ export function generateRandomIconShape(): GridShape {
     .fill(null)
     .map(() => Array(4).fill(false));
 
-  const centerSquares = [
+  const centerSquares: number[][] = [
     [1, 1],
     [1, 2],
     [2, 1],
@@ -31,14 +31,33 @@ export function generateRandomIconShape(): GridShape {
   shuffleArray(centerSquares);
   const centerFillCount = Math.floor(Math.random() * 2) + 3; // 3 or 4
   for (let i = 0; i < centerFillCount; i++) {
-    const [row, col] = centerSquares[i];
-    grid[row][col] = true;
+    const centerSquare: number[] | undefined = centerSquares[i];
+    if (centerSquare === undefined) {
+      continue;
+    }
+
+    const [row, col] = centerSquare;
+    if (row === undefined || col === undefined) {
+      continue;
+    }
+
+    const grid_row = grid[row];
+    if (grid_row === undefined) {
+      continue;
+    }
+
+    grid_row[col] = true;
   }
   // Randomly fill remaining squares up to 10 total
   const remainingSquares = [];
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
-      if (!grid[row][col]) {
+      const grid_row = grid[row];
+      if (grid_row === undefined) {
+        continue;
+      }
+
+      if (!grid_row[col]) {
         remainingSquares.push([row, col]);
       }
     }
@@ -47,15 +66,29 @@ export function generateRandomIconShape(): GridShape {
 
   let filledSquares = centerFillCount;
   for (const [row, col] of remainingSquares) {
+    if (row === undefined || col == undefined) {
+      continue;
+    }
+
     if (filledSquares >= 10) break;
-    grid[row][col] = true;
+
+    const grid_row = grid[row];
+    if (grid_row === undefined) {
+      continue;
+    }
+    grid_row[col] = true;
     filledSquares++;
   }
 
   let path = "";
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
-      if (grid[row][col]) {
+      const grid_row = grid[row];
+      if (grid_row === undefined) {
+        continue;
+      }
+
+      if (grid_row[col]) {
         const x = col * 12;
         const y = row * 12;
         path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${
@@ -72,7 +105,12 @@ function encodeGrid(grid: boolean[][]): number {
   let encoded = 0;
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
-      if (grid[row][col]) {
+      const grid_row = grid[row];
+      if (grid_row === undefined) {
+        continue;
+      }
+
+      if (grid_row[col]) {
         encoded |= 1 << (row * 4 + col);
       }
     }
@@ -86,8 +124,13 @@ function decodeGrid(encoded: number): boolean[][] {
     .map(() => Array(4).fill(false));
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
+      const grid_row = grid[row];
+      if (grid_row === undefined) {
+        continue;
+      }
+
       if (encoded & (1 << (row * 4 + col))) {
-        grid[row][col] = true;
+        grid_row[col] = true;
       }
     }
   }
@@ -106,7 +149,12 @@ export function createSVG(
   let path = "";
   for (let row = 0; row < 4; row++) {
     for (let col = 0; col < 4; col++) {
-      if (grid[row][col]) {
+      const grid_row = grid[row];
+      if (grid_row === undefined) {
+        continue;
+      }
+
+      if (grid_row[col]) {
         const x = col * 12;
         const y = row * 12;
         path += `M ${x} ${y} L ${x + 12} ${y} L ${x + 12} ${y + 12} L ${x} ${

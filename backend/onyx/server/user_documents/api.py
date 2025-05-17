@@ -86,7 +86,7 @@ def create_folder(
 @router.get(
     "/user/folder",
 )
-def get_folders(
+def user_get_folders(
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> list[UserFolderSnapshot]:

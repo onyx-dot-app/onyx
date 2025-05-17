@@ -65,7 +65,9 @@ export function getDatesList(startDate: Date): string[] {
 
   for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
     const dateStr = d.toISOString().split("T")[0]; // convert date object to 'YYYY-MM-DD' format
-    datesList.push(dateStr);
+    if (dateStr !== undefined) {
+      datesList.push(dateStr);
+    }
   }
 
   return datesList;

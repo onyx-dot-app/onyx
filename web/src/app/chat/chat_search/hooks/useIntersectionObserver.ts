@@ -29,7 +29,7 @@ export function useIntersectionObserver({
 
     const observer = new IntersectionObserver((entries) => {
       const [entry] = entries;
-      if (entry.isIntersecting) {
+      if (entry !== undefined && entry.isIntersecting) {
         onIntersect();
       }
     }, options);

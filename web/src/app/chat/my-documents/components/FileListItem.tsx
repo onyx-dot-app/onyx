@@ -72,8 +72,13 @@ export const FileListItem: React.FC<FileListItemProps> = ({
 
   useEffect(() => {
     const checkStatus = async () => {
-      const status = await getFilesIndexingStatus([file.id]);
-      setIndexingStatus(status[file.id]);
+      const status_by_file_id = await getFilesIndexingStatus([file.id]);
+      if (status_by_file_id) {
+        const status = status_by_file_id[file.id];
+        if (status !== undefined) {
+          setIndexingStatus(status);
+        }
+      }
     };
 
     checkStatus();

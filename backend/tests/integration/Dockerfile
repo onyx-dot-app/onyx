@@ -71,6 +71,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Set up application files
 COPY ./onyx /app/onyx
+COPY ./generated /app/generated
 COPY ./shared_configs /app/shared_configs
 COPY ./alembic_tenants /app/alembic_tenants
 COPY ./alembic /app/alembic

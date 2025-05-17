@@ -77,6 +77,14 @@ export const structureValue = (
 
 export const destructureValue = (value: string): LlmDescriptor => {
   const [displayName, provider, modelName] = value.split("__");
+  if (
+    displayName === undefined ||
+    provider === undefined ||
+    modelName === undefined
+  ) {
+    return { name: "Unknown", provider: "Unknown", modelName: "Unknown" };
+  }
+
   return {
     name: displayName,
     provider,

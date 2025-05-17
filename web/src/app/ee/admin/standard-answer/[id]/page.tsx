@@ -14,6 +14,16 @@ async function Page(props: { params: Promise<{ id: string }> }) {
   ];
   const [standardAnswersResponse, standardAnswerCategoriesResponse] =
     await Promise.all(tasks);
+
+  if (standardAnswersResponse === undefined) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={`Failed to fetch standard answers.`}
+      />
+    );
+  }
+
   if (!standardAnswersResponse.ok) {
     return (
       <ErrorCallout
@@ -33,6 +43,15 @@ async function Page(props: { params: Promise<{ id: string }> }) {
       <ErrorCallout
         errorTitle="Something went wrong :("
         errorMsg={`Did not find standard answer with ID: ${params.id}`}
+      />
+    );
+  }
+
+  if (standardAnswerCategoriesResponse === undefined) {
+    return (
+      <ErrorCallout
+        errorTitle="Something went wrong :("
+        errorMsg={`Failed to fetch standard answer categories.`}
       />
     );
   }

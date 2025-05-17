@@ -131,26 +131,50 @@ export const useStreamingMessages = (
 
       for (let i = 0; i < actualSubQs.length; i++) {
         const sq = actualSubQs[i];
+        if (sq === undefined) {
+          continue;
+        }
+
         const p = progressRef.current[i];
+        if (p === undefined) {
+          continue;
+        }
+
         const dynSQ = dynamicSubQuestionsRef.current[i];
+        if (dynSQ === undefined) {
+          continue;
+        }
+
+        if (i < 0) {
+          continue;
+        }
+
+        if (i > 0) {
+          const p2 = progressRef.current[i - 1];
+          if (p2 === undefined) {
+            continue;
+          }
+
+          if (!p2.questionDone) {
+            continue;
+          }
+        }
 
         // Always stream the first subquestion (index 0)
         // For others, only stream if the previous question is complete
-        if (i === 0 || (i > 0 && progressRef.current[i - 1].questionDone)) {
-          if (sq.question) {
-            const nextIndex = p.questionCharIndex + 1;
-            if (nextIndex <= sq.question.length) {
-              dynSQ.question = sq.question.slice(0, nextIndex);
-              p.questionCharIndex = nextIndex;
-              if (nextIndex >= sq.question.length && sq.is_stopped) {
-                p.questionDone = true;
-              }
-              didStreamQuestion = true;
-              allQuestionsComplete = false;
-
-              // Break after streaming one question to ensure sequential behavior
-              break;
+        if (sq.question) {
+          const nextIndex = p.questionCharIndex + 1;
+          if (nextIndex <= sq.question.length) {
+            dynSQ.question = sq.question.slice(0, nextIndex);
+            p.questionCharIndex = nextIndex;
+            if (nextIndex >= sq.question.length && sq.is_stopped) {
+              p.questionDone = true;
             }
+            didStreamQuestion = true;
+            allQuestionsComplete = false;
+
+            // Break after streaming one question to ensure sequential behavior
+            break;
           }
         }
 
@@ -176,10 +200,21 @@ export const useStreamingMessages = (
       // 2) Handle SUB_QUERIES → CONTEXT_DOCS → ANSWER → COMPLETE
       for (let i = 0; i < actualSubQs.length; i++) {
         const sq = actualSubQs[i];
+        if (sq === undefined) {
+          continue;
+        }
+
         const dynSQ = dynamicSubQuestionsRef.current[i];
+        if (dynSQ === undefined) {
+          continue;
+        }
+
         dynSQ.answer_streaming = sq.answer_streaming;
 
         const p = progressRef.current[i];
+        if (p === undefined) {
+          continue;
+        }
 
         // Wait for subquestion #0 or the previous subquestion's progress
         if (p.currentPhase === StreamingPhase.WAITING) {
@@ -192,8 +227,9 @@ export const useStreamingMessages = (
           } else {
             const prevP = progressRef.current[i - 1];
             if (
-              prevP.currentPhase === StreamingPhase.ANSWER ||
-              prevP.currentPhase === StreamingPhase.COMPLETE
+              prevP !== undefined &&
+              (prevP.currentPhase === StreamingPhase.ANSWER ||
+                prevP.currentPhase === StreamingPhase.COMPLETE)
             ) {
               // Can only proceed if we've spent enough time in WAITING
               if (canTransition(p) && !p.waitingTimeoutSet) {
@@ -216,18 +252,35 @@ export const useStreamingMessages = (
 
             // "Stream" the subqueries (in this code, it just sets them all at once)
             while (dynSQ.sub_queries!.length < subQueries.length) {
+              const subquery_detail = subQueries[0];
+              if (subquery_detail === undefined) {
+                continue;
+              }
+
+              const subquery_id = subquery_detail.query_id;
               dynSQ.sub_queries!.push({
                 query: "",
-                query_id: subQueries[0].query_id,
+                query_id: subquery_id,
               });
             }
+
             for (let j = 0; j < subQueries.length; j++) {
+              const dyn_subquery_detail = dynSQ.sub_queries![j];
+              if (dyn_subquery_detail === undefined) {
+                continue;
+              }
+
+              const subquery_detail = subQueries[j];
+              if (subquery_detail === undefined) {
+                continue;
+              }
+
               if (
-                dynSQ.sub_queries![j].query.length < subQueries[j].query.length
+                dyn_subquery_detail.query.length < subquery_detail.query.length
               ) {
-                dynSQ.sub_queries![j].query = subQueries[j].query;
+                dyn_subquery_detail.query = subquery_detail.query;
               } else {
-                // console.log("NOT STEAMING");
+                // console.log("NOT STREAMING");
               }
             }
             // console.log(subQueries);

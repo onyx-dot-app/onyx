@@ -36,12 +36,12 @@ export default function StarterMessagesList({
 
     if (value && index === values.length - 1 && values.length < 4) {
       arrayHelpers.push({ message: "" });
-    } else if (
-      !value &&
-      index === values.length - 2 &&
-      !values[values.length - 1].message
-    ) {
-      arrayHelpers.pop();
+    } else if (!value && index === values.length - 2) {
+      const lastItem = values[values.length - 1];
+      if (lastItem !== undefined && !lastItem.message) {
+        // Check if lastItem's message is also empty
+        arrayHelpers.pop();
+      }
     }
   };
 

@@ -124,8 +124,12 @@ export function ModelConfigurationField({
                       for (const key in newErrors) {
                         const numKey = Number(key);
                         if (numKey > index) {
-                          newErrors[numKey - 1] = newErrors[key];
-                          delete newErrors[numKey];
+                          const errorValue = newErrors[key];
+                          if (errorValue !== undefined) {
+                            // Ensure the value is not undefined
+                            newErrors[numKey - 1] = errorValue;
+                            delete newErrors[numKey];
+                          }
                         }
                       }
                     }

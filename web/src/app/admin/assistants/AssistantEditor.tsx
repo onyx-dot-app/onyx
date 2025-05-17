@@ -548,6 +548,7 @@ export function AssistantEditor({
 
           const submissionData: PersonaUpsertParameters = {
             ...values,
+            icon_color: values.icon_color ?? null,
             existing_prompt_id: existingPrompt?.id ?? null,
             starter_messages: starterMessages,
             groups: groups,

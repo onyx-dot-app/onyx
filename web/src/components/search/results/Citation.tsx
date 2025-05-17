@@ -33,9 +33,21 @@ export function Citation({
   children?: JSX.Element | string | null | ReactNode;
   index?: number;
 }) {
-  const innerText = children
-    ? children?.toString().split("[")[1].split("]")[0]
-    : index;
+  let innerText = "";
+  if (index !== undefined) {
+    innerText = index.toString();
+  }
+
+  if (children) {
+    const childrenString = children.toString();
+    const childrenSegment1 = childrenString.split("[")[1];
+    if (childrenSegment1 !== undefined) {
+      const childrenSegment1_0 = childrenSegment1.split("]")[0];
+      if (childrenSegment1_0 !== undefined) {
+        innerText = childrenSegment1_0;
+      }
+    }
+  }
 
   if (!document_info && !question_info) {
     return <>{children}</>;

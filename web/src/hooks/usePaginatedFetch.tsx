@@ -199,9 +199,13 @@ function usePaginatedFetch<T extends PaginatedType>({
   useEffect(() => {
     const { batchNum, batchPageNum } = batchAndPageIndices;
 
-    if (cachedBatches[batchNum] && cachedBatches[batchNum][batchPageNum]) {
-      setCurrentPageData(cachedBatches[batchNum][batchPageNum]);
-      setIsLoading(false);
+    const cachedBatch = cachedBatches[batchNum];
+    if (cachedBatch !== undefined) {
+      const cachedBatchPage = cachedBatch[batchPageNum];
+      if (cachedBatchPage !== undefined) {
+        setCurrentPageData(cachedBatchPage);
+        setIsLoading(false);
+      }
     }
   }, [currentPage, cachedBatches, pagesPerBatch]);
 

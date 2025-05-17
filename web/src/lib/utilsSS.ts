@@ -21,7 +21,7 @@ export class UrlBuilder {
   constructor(baseUrl: string) {
     try {
       this.url = new URL(baseUrl);
-    } catch (e) {
+    } catch {
       // Handle relative URLs by prepending a base
       this.url = new URL(baseUrl, "http://placeholder.com");
     }

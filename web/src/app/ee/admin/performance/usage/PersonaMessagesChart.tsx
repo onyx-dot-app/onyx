@@ -73,9 +73,12 @@ export function PersonaMessagesChart({
           highlightedIndex >= 0 &&
           highlightedIndex < filteredPersonaList.length
         ) {
-          setSelectedPersonaId(filteredPersonaList[highlightedIndex].id);
-          setSearchQuery("");
-          setHighlightedIndex(-1);
+          const filteredPersona = filteredPersonaList[highlightedIndex];
+          if (filteredPersona !== undefined) {
+            setSelectedPersonaId(filteredPersona.id);
+            setSearchQuery("");
+            setHighlightedIndex(-1);
+          }
         }
         break;
       case "Escape":

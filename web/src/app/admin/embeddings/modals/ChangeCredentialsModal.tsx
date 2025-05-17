@@ -114,6 +114,11 @@ export function ChangeCredentialsModal({
       .toLowerCase()
       .split(" ")[0];
 
+    if (!normalizedProviderType) {
+      setTestError("Provider type is invalid or missing.");
+      return;
+    }
+
     try {
       const testResponse = await testEmbedding({
         provider_type: normalizedProviderType,

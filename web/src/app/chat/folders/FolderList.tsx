@@ -347,12 +347,14 @@ export const FolderList = ({
           showDeleteModal={showDeleteModal}
         />
       ))}
-      {folders.length == 1 && folders[0].chat_sessions.length == 0 && (
-        <p className="text-sm font-normal text-subtle mt-2">
-          {" "}
-          Drag a chat into a folder to save for later{" "}
-        </p>
-      )}
+      {folders.length == 1 &&
+        folders[0] &&
+        folders[0].chat_sessions.length == 0 && (
+          <p className="text-sm font-normal text-subtle mt-2">
+            {" "}
+            Drag a chat into a folder to save for later{" "}
+          </p>
+        )}
     </div>
   );
 };

@@ -262,8 +262,9 @@ export function ChatInputBar({
     if (items) {
       const pastedFiles = [];
       for (let i = 0; i < items.length; i++) {
-        if (items[i].kind === "file") {
-          const file = items[i].getAsFile();
+        const item = items[i];
+        if (item && item.kind === "file") {
+          const file = item.getAsFile();
           if (file) pastedFiles.push(file);
         }
       }
@@ -360,26 +361,35 @@ export function ChatInputBar({
     handlePromptInput(text);
   };
 
+  let startFilterAt = "";
+  if (message !== undefined) {
+    const message_segments = message
+      .slice(message.lastIndexOf("@") + 1)
+      .split(/\s/);
+    if (message_segments[0]) {
+      startFilterAt = message_segments[0].toLowerCase();
+    }
+  }
+
   const assistantTagOptions = assistantOptions.filter((assistant) =>
-    assistant.name.toLowerCase().startsWith(
-      message
-        .slice(message.lastIndexOf("@") + 1)
-        .split(/\s/)[0]
-        .toLowerCase()
-    )
+    assistant.name.toLowerCase().startsWith(startFilterAt)
   );
+
+  let startFilterSlash = "";
+  if (message !== undefined) {
+    const message_segments = message
+      .slice(message.lastIndexOf("/") + 1)
+      .split(/\s/);
+    if (message_segments[0]) {
+      startFilterSlash = message_segments[0].toLowerCase();
+    }
+  }
 
   const [tabbingIconIndex, setTabbingIconIndex] = useState(0);
 
   const filteredPrompts = inputPrompts.filter(
     (prompt) =>
-      prompt.active &&
-      prompt.prompt.toLowerCase().startsWith(
-        message
-          .slice(message.lastIndexOf("/") + 1)
-          .split(/\s/)[0]
-          .toLowerCase()
-      )
+      prompt.active && prompt.prompt.toLowerCase().startsWith(startFilterSlash)
   );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -402,11 +412,15 @@ export function ChatInputBar({
         if (showPrompts) {
           const selectedPrompt =
             filteredPrompts[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
-          updateInputPrompt(selectedPrompt);
+          if (selectedPrompt) {
+            updateInputPrompt(selectedPrompt);
+          }
         } else {
           const option =
             assistantTagOptions[tabbingIconIndex >= 0 ? tabbingIconIndex : 0];
-          updatedTaggedAssistant(option);
+          if (option) {
+            updatedTaggedAssistant(option);
+          }
         }
       }
     }

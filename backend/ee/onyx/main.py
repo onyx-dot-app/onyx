@@ -51,6 +51,7 @@ from onyx.main import get_application as get_application_base
 from onyx.main import include_auth_router_with_prefix
 from onyx.main import include_router_with_global_prefix_prepended
 from onyx.main import lifespan as lifespan_base
+from onyx.main import use_route_function_names_as_operation_ids
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
@@ -191,5 +192,7 @@ def get_application() -> FastAPI:
     # for debugging discovered routes
     # for route in application.router.routes:
     #     print(f"Path: {route.path}, Methods: {route.methods}")
+
+    use_route_function_names_as_operation_ids(application)
 
     return application

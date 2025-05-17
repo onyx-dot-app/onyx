@@ -11,4 +11,4 @@ dynamic_config_storage/
 celerybeat-schedule*
 onyx/connectors/salesforce/data/
 .test.env
-
+/generated

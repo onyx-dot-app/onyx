@@ -25,7 +25,11 @@ export function FeedbackChart({
         <ThreeDotsLoader />
       </div>
     );
-  } else if (!queryAnalyticsData || queryAnalyticsError) {
+  } else if (
+    !queryAnalyticsData ||
+    queryAnalyticsData[0] === undefined ||
+    queryAnalyticsError
+  ) {
     chart = (
       <div className="h-80 text-red-600 text-bold flex flex-col">
         <p className="m-auto">Failed to fetch feedback data...</p>

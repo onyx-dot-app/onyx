@@ -166,7 +166,10 @@ const GmailCredentialUpload = ({
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      if (file.type === "application/json" || file.name.endsWith(".json")) {
+      if (
+        file !== undefined &&
+        (file.type === "application/json" || file.name.endsWith(".json"))
+      ) {
         handleFileUpload(file);
       } else {
         setPopup({
@@ -222,6 +225,9 @@ const GmailCredentialUpload = ({
                   return;
                 }
                 const file = event.target.files[0];
+                if (file === undefined) {
+                  return;
+                }
                 handleFileUpload(file);
               }}
             />

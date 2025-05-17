@@ -137,7 +137,7 @@ const SubQuestionDisplay: React.FC<{
       }, content);
 
       const lastMatch = matches[matches.length - 1];
-      if (!lastMatch.endsWith("```")) {
+      if (lastMatch && !lastMatch.endsWith("```")) {
         return preprocessLaTeX(content);
       }
     }

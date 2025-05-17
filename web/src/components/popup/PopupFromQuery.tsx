@@ -22,7 +22,9 @@ export const usePopupFromQuery = (messages: PopupMessages) => {
     if (messageValue && messageValue in messages) {
       const popupMessage = messages[messageValue];
       router.replace(window.location.pathname);
-      setPopup(popupMessage);
+      if (popupMessage !== undefined) {
+        setPopup(popupMessage);
+      }
     }
   }, []);
 

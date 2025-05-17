@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import requests
 
+import generated.onyx_openapi_client.onyx_openapi_client as api
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType
 from onyx.db.enums import ConnectorCredentialPairStatus
@@ -13,6 +14,7 @@ from onyx.server.documents.models import ConnectorCredentialPairIdentifier
 from onyx.server.documents.models import ConnectorIndexingStatus
 from onyx.server.documents.models import DocumentSource
 from onyx.server.documents.models import DocumentSyncStatus
+from tests.integration.common_utils.config import api_config
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.constants import GENERAL_HEADERS
 from tests.integration.common_utils.constants import MAX_DELAY
@@ -32,24 +34,27 @@ def _cc_pair_creator(
 ) -> DATestCCPair:
     name = f"{name}-cc-pair" if name else f"test-cc-pair-{uuid4()}"
 
-    request = {
-        "name": name,
-        "access_type": access_type,
-        "groups": groups or [],
-    }
-
-    response = requests.put(
-        url=f"{API_SERVER_URL}/manage/connector/{connector_id}/credential/{credential_id}",
-        json=request,
-        headers=(
+    with api.ApiClient(api_config) as api_client:
+        api_instance = api.DefaultApi(api_client)
+        connector_credential_pair_metadata = api.ConnectorCredentialPairMetadata(
+            name=name, access_type=access_type, groups=groups or []
+        )
+        headers = (
             user_performing_action.headers
             if user_performing_action
             else GENERAL_HEADERS
-        ),
-    )
-    response.raise_for_status()
+        )
+        api_response: api.StatusResponseInt = (
+            api_instance.associate_credential_to_connector(
+                connector_id,
+                credential_id,
+                connector_credential_pair_metadata,
+                _headers=headers,
+            )
+        )
+
     return DATestCCPair(
-        id=response.json()["data"],
+        id=int(api_response.data),
         name=name,
         connector_id=connector_id,
         credential_id=credential_id,

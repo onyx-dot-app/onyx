@@ -27,8 +27,20 @@ export const FileUpload: FC<FileUploadProps> = ({
     <div>
       <Dropzone
         onDrop={(acceptedFiles) => {
-          const filesToSet = multiple ? acceptedFiles : [acceptedFiles[0]];
-          setSelectedFiles(filesToSet);
+          let filesToSet: File[] = [];
+          if (multiple) {
+            filesToSet = acceptedFiles;
+          } else {
+            const acceptedFile = acceptedFiles[0];
+            if (acceptedFile !== undefined) {
+              filesToSet = [acceptedFile];
+            }
+          }
+
+          if (filesToSet !== undefined) {
+            setSelectedFiles(filesToSet);
+          }
+
           setDragActive(false);
           if (name) {
             setFieldValue(name, multiple ? filesToSet : filesToSet[0]);

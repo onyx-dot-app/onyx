@@ -132,7 +132,7 @@ def snapshot_from_chat_session(
 
 
 @router.get("/admin/chat-sessions")
-def get_user_chat_sessions(
+def admin_get_chat_sessions(
     user_id: UUID,
     _: User | None = Depends(current_admin_user),
     db_session: Session = Depends(get_session),
