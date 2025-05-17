@@ -52,13 +52,15 @@ def create_views(
         JOIN "user" u ON ueg.user_id = u.id
         WHERE u.email = :user_email
     )
-    SELECT allowed_doc_id FROM public_docs
-    UNION
-    SELECT allowed_doc_id FROM user_owned_docs
-    UNION
-    SELECT allowed_doc_id FROM external_user_docs
-    UNION
-    SELECT allowed_doc_id FROM external_group_docs
+    SELECT DISTINCT allowed_doc_id FROM (
+        SELECT allowed_doc_id FROM public_docs
+        UNION
+        SELECT allowed_doc_id FROM user_owned_docs
+        UNION
+        SELECT allowed_doc_id FROM external_user_docs
+        UNION
+        SELECT allowed_doc_id FROM external_group_docs
+    ) combined_docs
     """
     ).bindparams(user_email=user_email)
 
