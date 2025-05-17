@@ -81,6 +81,7 @@ from onyx.db.chat import translate_db_message_to_chat_message_detail
 from onyx.db.chat import translate_db_search_doc_to_server_search_doc
 from onyx.db.chat import update_chat_session_updated_at_timestamp
 from onyx.db.engine import get_session_context_manager
+from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.milestone import check_multi_assistant_milestone
 from onyx.db.milestone import create_milestone_if_not_exists
 from onyx.db.milestone import update_user_assistant_milestone
@@ -100,6 +101,16 @@ from onyx.file_store.utils import get_user_files
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import load_in_memory_chat_files
 from onyx.file_store.utils import save_files
+from onyx.kg.clustering.incremental_cluster_updates import (
+    kg_incremental_cluster_updates,
+)
+from onyx.kg.clustering.initial_clustering import kg_clustering
+from onyx.kg.configuration import populate_default_account_employee_definitions
+from onyx.kg.configuration import populate_default_grounded_entity_types
+from onyx.kg.extractions.extraction_processing import kg_extraction
+from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
+from onyx.kg.resets.reset_index import reset_full_kg_index
+from onyx.kg.resets.reset_normalizations import reset_normalization_kg_index
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -663,6 +674,46 @@ def stream_chat_message_objects(
     new_msg_req.chunks_below = 0
 
     llm: LLM
+
+    kg_config_settings = get_kg_config_settings(db_session)
+
+    if kg_config_settings.KG_ENABLED:
+
+        # Temporarily, until we have a draft UI for the KG Operations/Management
+
+        # get Vespa index
+        search_settings = get_current_search_settings(db_session)
+        index_str = search_settings.index_name
+
+        if new_msg_req.message == "kg_e":
+            kg_extraction(tenant_id, index_str)
+
+            raise Exception("Extractions done")
+
+        elif new_msg_req.message == "kg_c":
+            kg_clustering(tenant_id, index_str)
+            raise Exception("Clustering done")
+
+        elif new_msg_req.message == "kg_i":
+            kg_incremental_cluster_updates(tenant_id, index_str)
+            raise Exception("Incremental clustering done")
+
+        elif new_msg_req.message == "kg_rs_full":
+            reset_full_kg_index()
+            raise Exception("Full KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_extraction":
+            reset_extraction_kg_index()
+            raise Exception("Extraction KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_normalization":
+            reset_normalization_kg_index()
+            raise Exception("Normalization KG index reset done")
+
+        elif new_msg_req.message == "kg_setup":
+            populate_default_grounded_entity_types()
+            populate_default_account_employee_definitions()
+            raise Exception("KG setup done")
 
     try:
         # Move these variables inside the try block

@@ -1,0 +1,10 @@
+import os
+
+KG_RESEARCH_NUM_RETRIEVED_DOCS: int = int(
+    os.environ.get("KG_RESEARCH_NUM_RETRIEVED_DOCS", "25")
+)
+
+
+KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES: int = int(
+    os.environ.get("KG_SIMPLE_ANSWER_MAX_DISPLAYED_SOURCES", "10")
+)
