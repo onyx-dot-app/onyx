@@ -1,6 +1,5 @@
 import csv
 import json
-import os
 from bisect import bisect_left
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +31,7 @@ from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.factory import get_default_document_index
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger(__name__)
 
@@ -51,9 +51,11 @@ class SearchEvalParameters(BaseModel):
 
 
 def _load_search_parameters() -> SearchEvalParameters:
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    config_path = os.path.join(current_dir, "search_eval_config.yaml")
-    with open(config_path, "r") as file:
+    current_dir = Path(__file__).parent
+    config_path = current_dir / "search_eval_config.yaml"
+    if not config_path.exists():
+        raise FileNotFoundError(f"Search eval config file not found at {config_path}")
+    with config_path.open("r") as file:
         config = yaml.safe_load(file)
 
     export_folder = config.get("EXPORT_FOLDER", "eval-%Y-%m-%d-%H-%M-%S")
@@ -90,12 +92,28 @@ def _load_search_parameters() -> SearchEvalParameters:
 
 def _load_query_pairs() -> list[tuple[str, str]]:
     current_dir = Path(__file__).parent
-
-    with open(current_dir / "search_queries.json", "r") as file:
+    search_queries_path = current_dir / "search_queries.json"
+    if not search_queries_path.exists():
+        raise FileNotFoundError(
+            f"Search queries file not found at {search_queries_path}"
+        )
+    with search_queries_path.open("r") as file:
         orig_queries = json.load(file)
 
-    with open(current_dir / "search_queries_modified.json", "r") as file:
+    alt_queries_path = current_dir / "search_queries_modified.json"
+    if not alt_queries_path.exists():
+        raise FileNotFoundError(
+            f"Modified search queries file not found at {alt_queries_path}. "
+            "Try running generate_search_queries.py."
+        )
+    with alt_queries_path.open("r") as file:
         alt_queries = json.load(file)
+
+    if len(orig_queries) != len(alt_queries):
+        raise ValueError(
+            "Number of original and modified queries must be the same. "
+            "Try running generate_search_queries.py again."
+        )
 
     return list(zip(orig_queries, alt_queries))
 
@@ -188,24 +206,24 @@ def _evaluate_one_query(
     # compute metrics
     search_ranks = {chunk.unique_id: rank for rank, chunk in enumerate(search_results)}
     return [
-        _compute_jaccard_similarity(search_topk, rerank_topk),
+        *_compute_jaccard_and_missing_chunks_ratio(search_topk, rerank_topk),
         _compute_average_rank_change(search_ranks, rerank_topk),
-        _compute_average_missing_chunk_ratio(search_topk, rerank_topk),
         # score adjusted metrics
-        _compute_jaccard_similarity(search_adj_topk, rerank_adj_topk),
+        *_compute_jaccard_and_missing_chunks_ratio(search_adj_topk, rerank_adj_topk),
         _compute_average_rank_change(search_ranks, rerank_adj_topk),
-        _compute_average_missing_chunk_ratio(search_adj_topk, rerank_adj_topk),
     ]
 
 
-def _compute_jaccard_similarity(
+def _compute_jaccard_and_missing_chunks_ratio(
     search_topk: list[InferenceChunk], rerank_topk: list[InferenceChunk]
-) -> float:
+) -> tuple[float, float]:
     search_chunkids = {chunk.unique_id for chunk in search_topk}
     rerank_chunkids = {chunk.unique_id for chunk in rerank_topk}
-    return len(search_chunkids.intersection(rerank_chunkids)) / len(
-        search_chunkids.union(rerank_chunkids)
+    jaccard_similarity = len(search_chunkids & rerank_chunkids) / len(
+        search_chunkids | rerank_chunkids
     )
+    missing_chunks_ratio = len(rerank_chunkids - search_chunkids) / len(rerank_chunkids)
+    return jaccard_similarity, missing_chunks_ratio
 
 
 def _compute_average_rank_change(
@@ -218,22 +236,17 @@ def _compute_average_rank_change(
     return sum(rank_changes) / len(rank_changes)
 
 
-def _compute_average_missing_chunk_ratio(
-    search_topk: list[InferenceChunk], rerank_topk: list[InferenceChunk]
-) -> float:
-    search_chunkids = {chunk.unique_id for chunk in search_topk}
-    rerank_chunkids = {chunk.unique_id for chunk in rerank_topk}
-    return len(rerank_chunkids.difference(search_chunkids)) / len(rerank_chunkids)
-
-
 def run_search_eval() -> None:
+    if MULTI_TENANT:
+        raise ValueError("Multi-tenant is not supported currently")
+
     SqlEngine.init_engine(
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
     )
 
-    search_parameters = _load_search_parameters()
     query_pairs = _load_query_pairs()
+    search_parameters = _load_search_parameters()
 
     with get_session_with_current_tenant() as db_session:
         multilingual_expansion = get_multilingual_expansion(db_session)
@@ -265,11 +278,11 @@ def run_search_eval() -> None:
                 [
                     "query",
                     "jaccard_similarity",
-                    "average_rank_change",
                     "missing_chunks_ratio",
+                    "average_rank_change",
                     "jaccard_similarity_adj",
-                    "average_rank_change_adj",
                     "missing_chunks_ratio_adj",
+                    "average_rank_change_adj",
                 ]
             )
 
@@ -326,11 +339,11 @@ def run_search_eval() -> None:
     if not search_parameters.skip_rerank:
         average_metrics = [metric / len(query_pairs) for metric in sum_metrics]
         logger.info(f"Jaccard similarity: {average_metrics[0]}")
-        logger.info(f"Average rank change: {average_metrics[1]}")
-        logger.info(f"Average missing chunks ratio: {average_metrics[2]}")
+        logger.info(f"Average missing chunks ratio: {average_metrics[1]}")
+        logger.info(f"Average rank change: {average_metrics[2]}")
         logger.info(f"Jaccard similarity (adjusted): {average_metrics[3]}")
-        logger.info(f"Average rank change (adjusted): {average_metrics[4]}")
-        logger.info(f"Average missing chunks ratio (adjusted): {average_metrics[5]}")
+        logger.info(f"Average missing chunks ratio (adjusted): {average_metrics[4]}")
+        logger.info(f"Average rank change (adjusted): {average_metrics[5]}")
 
         aggregate_file = export_path / "aggregate_results.csv"
         with aggregate_file.open("w") as file:
@@ -338,11 +351,11 @@ def run_search_eval() -> None:
             aggregate_csv_writer.writerow(
                 [
                     "jaccard_similarity",
-                    "average_rank_change",
                     "missing_chunks_ratio",
+                    "average_rank_change",
                     "jaccard_similarity_adj",
-                    "average_rank_change_adj",
                     "missing_chunks_ratio_adj",
+                    "average_rank_change_adj",
                 ]
             )
             aggregate_csv_writer.writerow(average_metrics)

@@ -14,6 +14,9 @@
 /web/test-results/
 backend/onyx/agent_search/main/test_data.json
 backend/tests/regression/answer_quality/test_data.json
+backend/tests/regression/search_quality/eval-*
+backend/tests/regression/search_quality/search_eval_config.yaml
+backend/tests/regression/search_quality/*.json
 
 # secret files
 .env

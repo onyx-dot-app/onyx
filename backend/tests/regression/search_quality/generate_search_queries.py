@@ -19,13 +19,19 @@ from onyx.llm.interfaces import LLM
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.utils import explicit_tool_calling_supported
 from onyx.utils.logger import setup_logger
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 
 def _load_queries() -> list[str]:
     current_dir = Path(__file__).parent
-    with open(current_dir / "search_queries.json", "r") as file:
+    search_queries_path = current_dir / "search_queries.json"
+    if not search_queries_path.exists():
+        raise FileNotFoundError(
+            f"Search queries file not found at {search_queries_path}"
+        )
+    with search_queries_path.open("r") as file:
         return json.load(file)
 
 
@@ -77,6 +83,9 @@ class SearchToolOverride(SearchTool):
 
 
 def generate_search_queries() -> None:
+    if MULTI_TENANT:
+        raise ValueError("Multi-tenant is not supported currently")
+
     SqlEngine.init_engine(
         pool_size=POSTGRES_API_SERVER_POOL_SIZE,
         max_overflow=POSTGRES_API_SERVER_POOL_OVERFLOW,
