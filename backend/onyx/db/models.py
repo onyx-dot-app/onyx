@@ -62,6 +62,7 @@ from onyx.db.enums import ConnectorCredentialPairStatus
 from onyx.db.enums import IndexingStatus
 from onyx.db.enums import IndexModelStatus
 from onyx.db.enums import TaskStatus
+from onyx.db.enums import NativeOrCustom
 from onyx.db.pydantic_type import PydanticType
 from onyx.utils.logger import setup_logger
 from onyx.utils.special_types import JSON_ro
@@ -1564,6 +1565,10 @@ class LLMProvider(Base):
         "UserGroup",
         secondary="llm_provider__user_group",
         viewonly=True,
+    )
+    native_or_custom: Mapped[NativeOrCustom] = mapped_column(
+        Enum(NativeOrCustom, native_enum=False),
+        nullable=False,
     )
     model_configurations: Mapped[list["ModelConfiguration"]] = relationship(
         "ModelConfiguration",

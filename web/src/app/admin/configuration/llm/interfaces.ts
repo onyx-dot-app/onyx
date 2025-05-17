@@ -62,7 +62,10 @@ export interface LLMProviderView extends LLMProvider {
   id: number;
   is_default_provider: boolean | null;
   icon?: React.FC<{ size?: number; className?: string }>;
+  native_or_custom: NativeOrCustom;
 }
+
+export type NativeOrCustom = "NATIVE" | "CUSTOM";
 
 export interface VisionProvider extends LLMProviderView {
   vision_models: string[];
