@@ -1,3 +1,4 @@
+from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from http import HTTPStatus
@@ -10,7 +11,6 @@ from fastapi import Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.query_history import fetch_chat_sessions_eagerly_by_time
 from ee.onyx.db.query_history import get_all_query_history_export_tasks
 from ee.onyx.db.query_history import get_page_of_chat_sessions
 from ee.onyx.db.query_history import get_total_filtered_chat_sessions_count
@@ -45,6 +45,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.query_and_chat.models import ChatSessionDetails
 from onyx.server.query_and_chat.models import ChatSessionsResponse
+from onyx.utils.threadpool_concurrency import parallel_yield
 
 router = APIRouter()
 
@@ -61,41 +62,52 @@ def ensure_query_history_is_enabled(
         )
 
 
+def yield_snapshot_from_chat_session(
+    chat_session: ChatSession,
+    db_session: Session,
+):
+    yield snapshot_from_chat_session(chat_session=chat_session, db_session=db_session)
+
+
 def fetch_and_process_chat_session_history(
     db_session: Session,
     start: datetime,
     end: datetime,
-    feedback_type: QAFeedbackType | None,
     limit: int | None = 500,
-) -> list[ChatSessionSnapshot]:
-    # observed to be slow a scale of 8192 sessions and 4 messages per session
+) -> Generator[ChatSessionSnapshot]:
+    PAGE_SIZE = 100
 
-    # this is a little slow (5 seconds)
-    chat_sessions = fetch_chat_sessions_eagerly_by_time(
-        start=start, end=end, db_session=db_session, limit=limit
-    )
+    page = 0
+    while True:
+        paged_chat_sessions = get_page_of_chat_sessions(
+            start_time=start,
+            end_time=end,
+            db_session=db_session,
+            page_num=page,
+            page_size=PAGE_SIZE,
+        )
 
-    # this is VERY slow (80 seconds) due to create_chat_chain being called
-    # for each session. Needs optimizing.
-    chat_session_snapshots = [
-        snapshot_from_chat_session(chat_session=chat_session, db_session=db_session)
-        for chat_session in chat_sessions
-    ]
+        paged_snapshots = parallel_yield(
+            [
+                yield_snapshot_from_chat_session(
+                    db_session=db_session,
+                    chat_session=chat_session,
+                )
+                for chat_session in paged_chat_sessions
+            ]
+        )
 
-    valid_snapshots = [
-        snapshot for snapshot in chat_session_snapshots if snapshot is not None
-    ]
+        for snapshot in paged_snapshots:
+            if snapshot:
+                yield snapshot
 
-    if feedback_type:
-        valid_snapshots = [
-            snapshot
-            for snapshot in valid_snapshots
-            if any(
-                message.feedback_type == feedback_type for message in snapshot.messages
-            )
-        ]
+        # If we've fetched *less* than a `PAGE_SIZE` worth
+        # of data, we have reached the end of the
+        # pagination sequence; break.
+        if len(paged_chat_sessions) == PAGE_SIZE:
+            break
 
-    return valid_snapshots
+        page += 1
 
 
 def snapshot_from_chat_session(
