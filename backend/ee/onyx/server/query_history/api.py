@@ -65,7 +65,7 @@ def ensure_query_history_is_enabled(
 def yield_snapshot_from_chat_session(
     chat_session: ChatSession,
     db_session: Session,
-):
+) -> Generator[ChatSessionSnapshot | None]:
     yield snapshot_from_chat_session(chat_session=chat_session, db_session=db_session)
 
 
