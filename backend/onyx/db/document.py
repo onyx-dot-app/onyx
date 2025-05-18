@@ -1053,9 +1053,9 @@ def get_document_updated_at(
     Returns:
         Optional[datetime]: The doc_updated_at timestamp if found, None if document doesn't exist
     """
-    if len(document_id.split(":")) == 2:
-        document_id = document_id.split(":")[1]
-    elif len(document_id.split(":")) > 2:
+    if len(document_id.split("::")) == 2:
+        document_id = document_id.split("::")[1]
+    elif len(document_id.split("::")) > 2:
         raise ValueError(f"Invalid document ID: {document_id}")
     else:
         pass

@@ -32,7 +32,7 @@ def _general_format(result: dict[str, Any]) -> str:
     result.get("id_name")
 
     assert entity_type_id_name is str
-    return f"{entity_type_id_name.capitalize()}: {name}"
+    return f"{entity_type_id_name.capitalize()}:: {name}"
 
 
 def _get_formated_source_reference_results(
@@ -96,7 +96,9 @@ def process_kg_only_answers(
 
     if query_results:
         for query_result in query_results:
-            query_results_list.append(str(query_result).replace(":", ": ").capitalize())
+            query_results_list.append(
+                str(query_result).replace("::", ":: ").capitalize()
+            )
     else:
         raise ValueError("No query results were found")
 

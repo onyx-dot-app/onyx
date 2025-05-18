@@ -50,9 +50,9 @@ def add_relationship(
     ) = relationship_id_name.split("__")
 
     source_entity_id_name = format_entity(source_entity_id_name)
-    source_entity_type = source_entity_id_name.split(":")[0]
+    source_entity_type = source_entity_id_name.split("::")[0]
     target_entity_id_name = format_entity(target_entity_id_name)
-    target_entity_type = target_entity_id_name.split(":")[0]
+    target_entity_type = target_entity_id_name.split("::")[0]
     relationship_id_name = format_relationship(relationship_id_name)
     relationship_type = generate_relationship_type(relationship_id_name)
 
@@ -411,7 +411,7 @@ def get_allowed_relationship_type_pairs(
         List of id_names from KGRelationshipType where both source and target entity types
         are in the provided entities list
     """
-    entity_types = list(set([entity.split(":")[0] for entity in entities]))
+    entity_types = list(set([entity.split("::")[0] for entity in entities]))
 
     return [
         row[0]

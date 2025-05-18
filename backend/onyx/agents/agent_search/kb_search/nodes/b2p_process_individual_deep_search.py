@@ -50,9 +50,9 @@ def process_individual_deep_search(
     source_division = state.source_division
     source_filters = state.source_entity_filters
 
-    object = state.entity.replace(":", ": ").lower()
+    object = state.entity.replace("::", ":: ").lower()
 
-    object_id = object.split(":")[1].strip()
+    object_id = object.split("::")[1].strip()
 
     if not search_tool:
         raise ValueError("search_tool is not provided")
@@ -69,8 +69,8 @@ def process_individual_deep_search(
 
     kg_entity_filters = []
     for raw_kg_entity_filter in raw_kg_entity_filters:
-        if ":" not in raw_kg_entity_filter:
-            raw_kg_entity_filter += ":*"
+        if "::" not in raw_kg_entity_filter:
+            raw_kg_entity_filter += "::*"
         kg_entity_filters.append(raw_kg_entity_filter)
 
     kg_relationship_filters = copy.deepcopy(
@@ -165,7 +165,7 @@ def process_individual_deep_search(
     return ResearchObjectUpdate(
         research_object_results=[
             {
-                "object": object.replace(":", ": ").capitalize(),
+                "object": object.replace("::", ":: ").capitalize(),
                 "results": object_research_results,
             }
         ],

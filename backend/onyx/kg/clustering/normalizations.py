@@ -21,12 +21,12 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
     Split an entity string into type and name.
     """
 
-    entity_split = entity.split(":")
+    entity_split = entity.split("::")
     if len(entity_split) < 2:
         raise ValueError(f"Invalid entity: {entity}")
 
     entity_type = entity_split[0]
-    entity_name = ":".join(entity_split[1:])
+    entity_name = "::".join(entity_split[1:])
 
     return entity_type, entity_name
 
@@ -38,7 +38,7 @@ def _get_existing_normalized_entities(
     Get existing normalized entities from the database.
     """
 
-    entity_types = list(set([entity.split(":")[0] for entity in raw_entities]))
+    entity_types = list(set([entity.split("::")[0] for entity in raw_entities]))
 
     with get_session_with_current_tenant() as db_session:
         entities = get_entity_names_for_types(db_session, entity_types)
@@ -60,8 +60,8 @@ def _get_existing_normalized_relationships(
         set(
             [
                 (
-                    relationship.split("__")[0].split(":")[0],
-                    relationship.split("__")[2].split(":")[0],
+                    relationship.split("__")[0].split("::")[0],
+                    relationship.split("__")[2].split("::")[0],
                 )
                 for relationship in raw_relationships
             ]
@@ -120,7 +120,7 @@ def normalize_entities(
     base_norm_entities = [norm_entity[0] for norm_entity in norm_entities]
 
     for entity in raw_entities_no_attributes:
-        entity_type, entity_name = entity.split(":")
+        entity_type, entity_name = entity.split("::")
         if entity_name == "*":
             normalized_results.append(entity)
             normalized_map[entity] = entity
@@ -142,8 +142,8 @@ def normalize_entities(
             best_match_id = best_match
 
         if score >= threshold:
-            normalized_results.append(f"{entity_type}:{best_match_id}")
-            normalized_map[entity] = f"{entity_type}:{best_match_id}"
+            normalized_results.append(f"{entity_type}::{best_match_id}")
+            normalized_map[entity] = f"{entity_type}::{best_match_id}"
         else:
             # If no good match found, keep original
             normalized_map[entity] = entity
@@ -215,8 +215,8 @@ def normalize_relationships(
 
         # 2. Find candidate normalized relationships
         candidate_rels = []
-        norm_source_type = norm_source.split(":")[0]
-        norm_target_type = norm_target.split(":")[0]
+        norm_source_type = norm_source.split("::")[0]
+        norm_target_type = norm_target.split("::")[0]
         if (
             norm_source_type in nor_relationships
             and norm_target_type in nor_relationships[norm_source_type]

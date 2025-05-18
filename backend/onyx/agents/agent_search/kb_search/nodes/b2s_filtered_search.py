@@ -61,8 +61,8 @@ def filtered_search(
 
     kg_entity_filters = []
     for raw_kg_entity_filter in raw_kg_entity_filters:
-        if ":" not in raw_kg_entity_filter:
-            raw_kg_entity_filter += ":*"
+        if "::" not in raw_kg_entity_filter:
+            raw_kg_entity_filter += "::*"
         kg_entity_filters.append(raw_kg_entity_filter)
 
     kg_relationship_filters = state.vespa_filter_results.global_relationship_filters

@@ -310,7 +310,7 @@ def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
     """
     Get document information for an entity, including its semantic name and document details.
     """
-    if ":" not in entity_id_name:
+    if "::" not in entity_id_name:
         return KGEntityDocInfo(
             doc_id=None,
             doc_semantic_id=None,
@@ -319,7 +319,7 @@ def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
             semantic_linked_entity_name=entity_id_name,
         )
 
-    entity_type, entity_name = map(str.strip, entity_id_name.split(":", 1))
+    entity_type, entity_name = map(str.strip, entity_id_name.split("::", 1))
 
     with get_session_with_current_tenant() as db_session:
         entity_document_id = get_document_id_for_entity(db_session, entity_id_name)
@@ -362,24 +362,24 @@ def rename_entities_in_answer(answer: str) -> str:
         ]
 
     # Collect extracted references
-    entity_refs = [match.group(0).strip(":") for match in matches]
+    entity_refs = [match.group(0).strip("::") for match in matches]
 
     # Create dictionary for processed references
     processed_refs = {}
 
     for entity_ref in entity_refs:
-        entity_ref_split = entity_ref.split(":")
+        entity_ref_split = entity_ref.split("::")
         if len(entity_ref_split) != 2:
             logger.warning(
                 f"Invalid entity reference - number of colons is not 2 but {len(entity_ref_split)}"
             )
             continue
-        entity_type, entity_name = entity_ref.split(":")
+        entity_type, entity_name = entity_ref.split("::")
         entity_type = entity_type.upper().strip()
         if entity_type not in active_entity_types:
             continue
         entity_name = entity_name.capitalize().strip()
-        potential_entity_id_name = f"{entity_type}:{entity_name}"
+        potential_entity_id_name = f"{entity_type}::{entity_name}"
 
         replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)
 
