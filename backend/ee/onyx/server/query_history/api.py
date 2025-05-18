@@ -104,7 +104,7 @@ def fetch_and_process_chat_session_history(
         # If we've fetched *less* than a `PAGE_SIZE` worth
         # of data, we have reached the end of the
         # pagination sequence; break.
-        if len(paged_chat_sessions) == PAGE_SIZE:
+        if len(paged_chat_sessions) < PAGE_SIZE:
             break
 
         page += 1
