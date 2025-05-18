@@ -234,8 +234,8 @@ def _create_entity_mapping(
                 if entity_name == "*":
                     continue
 
-                original_id = f"{entity_type}:{entity_name}"
-                clustered_id = f"{entity_type}:{cluster_name.title()}"
+                original_id = f"{entity_type}::{entity_name}"
+                clustered_id = f"{entity_type}::{cluster_name.title()}"
                 entity_replacements[original_id] = clustered_id
                 reverse_entity_replacements_count[clustered_id] += len(
                     cluster_info["entities"]
@@ -277,8 +277,8 @@ def _create_relationship_mapping(
         rel.source_document
 
         # Create the relationship type ID
-        source_type = rel.source_node.split(":")[0]
-        target_type = rel.target_node.split(":")[0]
+        source_type = rel.source_node.split("::")[0]
+        target_type = rel.target_node.split("::")[0]
         rel_type_id = f"{source_type}__{rel.type.lower()}__{target_type}"
 
         # Get the clustered relationship type (if it exists)

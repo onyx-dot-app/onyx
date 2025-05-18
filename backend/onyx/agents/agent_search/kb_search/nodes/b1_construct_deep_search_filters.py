@@ -161,7 +161,7 @@ def construct_deep_search_filters(
         div_con_entities=div_con_structure,
         source_division=source_division,
         global_entity_filters=[
-            f"{global_filter}:*"
+            f"{global_filter}::*"
             for global_filter in filter_results.global_entity_filters
         ],
         global_relationship_filters=filter_results.global_relationship_filters,

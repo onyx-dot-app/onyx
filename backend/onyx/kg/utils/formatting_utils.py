@@ -6,9 +6,9 @@ from onyx.kg.models import KGPerson
 
 
 def format_entity(entity: str) -> str:
-    if len(entity.split(":")) == 2:
-        entity_type, entity_name = entity.split(":")
-        return f"{entity_type.upper()}:{entity_name.title()}"
+    if len(entity.split("::")) == 2:
+        entity_type, entity_name = entity.split("::")
+        return f"{entity_type.upper()}::{entity_name.title()}"
     else:
         return entity
 
@@ -36,9 +36,9 @@ def format_relationship_type(relationship_type: str) -> str:
 def generate_relationship_type(relationship: str) -> str:
     source_node, relationship_type, target_node = relationship.split("__")
     return (
-        f"{source_node.split(':')[0].upper()}__"
+        f"{source_node.split('::')[0].upper()}__"
         f"{relationship_type.lower()}__"
-        f"{target_node.split(':')[0].upper()}"
+        f"{target_node.split('::')[0].upper()}"
     )
 
 
@@ -111,7 +111,7 @@ def generalize_entities(entities: list[str]) -> set[str]:
     """
     Generalize entities to their superclass.
     """
-    return set([f"{entity.split(':')[0]}:*" for entity in entities])
+    return set([f"{entity.split('::')[0]}:*" for entity in entities])
 
 
 def generalize_relationships(relationships: list[str]) -> set[str]:

@@ -810,13 +810,13 @@ def kg_extraction(
                 entity,
                 extraction_count,
             ) in aggregated_kg_extractions.entities.items():
-                if len(entity.split(":")) != 2:
+                if len(entity.split("::")) != 2:
                     logger.error(
                         f"Invalid entity {entity} in aggregated_kg_extractions.entities"
                     )
                     continue
 
-                entity_type, entity_name = entity.split(":")
+                entity_type, entity_name = entity.split("::")
                 entity_type = entity_type.upper()
                 entity_name = entity_name.capitalize()
 
@@ -920,8 +920,8 @@ def kg_extraction(
                     )
                     target_entity = relationship_split[-1]
 
-                    source_entity_type = source_entity.split(":")[0]
-                    target_entity_type = target_entity.split(":")[0]
+                    source_entity_type = source_entity.split("::")[0]
+                    target_entity_type = target_entity.split("::")[0]
 
                     if (
                         source_entity_type not in tracked_entity_types
@@ -996,8 +996,8 @@ def kg_extraction(
                     )
                     target_entity = relationship_split[-1]
 
-                    source_entity_type = source_entity.split(":")[0]
-                    target_entity_type = target_entity.split(":")[0]
+                    source_entity_type = source_entity.split("::")[0]
+                    target_entity_type = target_entity.split("::")[0]
 
                     try:
                         with get_session_with_current_tenant() as db_session:
@@ -1280,7 +1280,7 @@ def _kg_chunk_batch_extraction(
 
         if not all_relationships:
             all_relationships.append(
-                f"VENDOR:{kg_config_settings.KG_VENDOR}"
+                f"VENDOR::{kg_config_settings.KG_VENDOR}"
                 + "__"
                 + "relates_to"
                 + "__"

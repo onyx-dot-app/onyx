@@ -41,7 +41,7 @@ def add_entity(
     """
     entity_type = entity_type.upper()
     name = name.title()
-    id_name = f"{entity_type}:{name}"
+    id_name = f"{entity_type}::{name}"
 
     _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
     if kg_stage == KGStage.EXTRACTED:
@@ -241,13 +241,13 @@ def get_entity_names_for_types(
             continue
 
         # Extract entity type from the full type ID
-        entity_type = entity.entity_type_id_name.split(":")[0].upper()
+        entity_type = entity.entity_type_id_name.split("::")[0].upper()
 
         # Get document info, defaulting to None if not found
         doc_semantic_id = doc_info.get(entity.document_id.capitalize(), (None, None))[0]
 
         # Construct the final string
-        names.append((entity.id_name, f"{entity_type}:{doc_semantic_id}"))
+        names.append((entity.id_name, f"{entity_type}::{doc_semantic_id}"))
 
     return names
 
