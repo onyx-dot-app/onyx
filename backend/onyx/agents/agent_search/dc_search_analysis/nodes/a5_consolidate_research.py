@@ -28,10 +28,8 @@ def consolidate_research(
     """
     LangGraph node to start the agentic search process.
     """
-    datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.prompt_builder.raw_user_query
 
     search_tool = graph_config.tooling.search_tool
 

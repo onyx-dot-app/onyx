@@ -108,7 +108,9 @@ def choose_tool(
     expanded_keyword_thread: TimeoutThread[str] | None = None
     expanded_semantic_thread: TimeoutThread[str] | None = None
     # If we have override_kwargs, add them to the tool_args
-    override_kwargs: SearchToolOverrideKwargs | None = force_use_tool.override_kwargs
+    override_kwargs: SearchToolOverrideKwargs = (
+        force_use_tool.override_kwargs or SearchToolOverrideKwargs()
+    )
 
     using_tool_calling_llm = agent_config.tooling.using_tool_calling_llm
     prompt_builder = state.prompt_snapshot or agent_config.inputs.prompt_builder
@@ -123,7 +125,6 @@ def choose_tool(
             not force_use_tool.force_use or force_use_tool.tool_name == SearchTool._NAME
         )
     ):
-        override_kwargs = SearchToolOverrideKwargs()
         # Run in a background thread to avoid blocking the main thread
         embedding_thread = run_in_background(
             get_query_embedding,
@@ -180,11 +181,9 @@ def choose_tool(
         if embedding_thread and tool.name == SearchTool._NAME:
             # Wait for the embedding thread to finish
             embedding = wait_on_background(embedding_thread)
-            assert override_kwargs is not None, "must have override kwargs"
             override_kwargs.precomputed_query_embedding = embedding
         if keyword_thread and tool.name == SearchTool._NAME:
             is_keyword, keywords = wait_on_background(keyword_thread)
-            assert override_kwargs is not None, "must have override kwargs"
             override_kwargs.precomputed_is_keyword = is_keyword
             override_kwargs.precomputed_keywords = keywords
         return ToolChoiceUpdate(
@@ -273,11 +272,9 @@ def choose_tool(
     if embedding_thread and selected_tool.name == SearchTool._NAME:
         # Wait for the embedding thread to finish
         embedding = wait_on_background(embedding_thread)
-        assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.precomputed_query_embedding = embedding
     if keyword_thread and selected_tool.name == SearchTool._NAME:
         is_keyword, keywords = wait_on_background(keyword_thread)
-        assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.precomputed_is_keyword = is_keyword
         override_kwargs.precomputed_keywords = keywords
 
@@ -288,7 +285,6 @@ def choose_tool(
     ):
         keyword_expansion = wait_on_background(expanded_keyword_thread)
         semantic_expansion = wait_on_background(expanded_semantic_thread)
-        assert override_kwargs is not None, "must have override kwargs"
         override_kwargs.expanded_queries = QueryExpansions(
             keywords_expansions=[keyword_expansion],
             semantic_expansions=[semantic_expansion],
