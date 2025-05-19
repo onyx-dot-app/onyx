@@ -21,12 +21,8 @@ def create_views(
     CREATE OR REPLACE VIEW {allowed_docs_view_name} AS
     WITH public_docs AS (
         SELECT d.id as allowed_doc_id
-        FROM document_by_connector_credential_pair d
-        JOIN connector_credential_pair ccp ON
-            d.connector_id = ccp.connector_id AND
-            d.credential_id = ccp.credential_id
-        WHERE ccp.status != 'DELETING'
-        AND ccp.access_type = 'PUBLIC'
+        FROM document d
+        WHERE d.is_public
     ),
     user_owned_docs AS (
         SELECT d.id as allowed_doc_id
