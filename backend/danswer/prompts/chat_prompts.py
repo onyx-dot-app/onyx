@@ -198,3 +198,26 @@ Chat History:
 
 Based on the above, what is a short name to convey the topic of the conversation?
 """.strip()
+
+THREAD_SUMMARY_BASE = (
+    "You are a helpful assistant summarising a Slack thread for a manager who only wants key updates, "
+    "decisions, open questions, and to-dos.\n"
+    "Be concise. Focus only on key decisions, questions, action items, and critical updates. "
+    "Ignore fluff, greetings, and tangents. Do not repeat the same ideas.\n"
+    "Mention the user names when relevant.\n"
+    "For each bullet point, include a SINGLE reference to the Slack message timestamp in square brackets, "
+    "like this: '• Key point [timestamp]'. The timestamp should be from the message that best supports that point.\n"
+    "IMPORTANT: Only use timestamps that are present in the messages you are summarising.\n"
+    "Each message starts with a timestamp in square brackets. Use only those exact timestamps.\n"
+    "Do not make up timestamps or use timestamps from other conversations.\n"
+).strip()
+
+THREAD_SUMMARY_CHUNK_PROMPT = f"""
+{THREAD_SUMMARY_BASE}
+Provide a brief summary (3-5 bullet points max).
+""".strip()
+
+THREAD_SUMMARY_FINAL_PROMPT = f"""
+{THREAD_SUMMARY_BASE}
+Keep it short and digestible, no more than 5-6 bullet points or a 3-sentence paragraph.
+""".strip()

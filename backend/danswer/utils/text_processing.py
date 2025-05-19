@@ -2,7 +2,10 @@ import codecs
 import json
 import re
 import string
+from typing import Any
 from urllib.parse import quote
+
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
 
 ESCAPE_SEQUENCE_RE = re.compile(
@@ -107,3 +110,36 @@ def is_valid_email(text: str) -> bool:
 
 def count_punctuation(text: str) -> int:
     return sum(1 for char in text if char in string.punctuation)
+
+
+def chunk_text(
+    text: str,
+    chunk_size: int,
+    tokenizer: Any,
+    overlap: int = 200,
+) -> list[str]:
+    """Split text into chunks of approximately equal token count.
+
+    Args:
+        text: The text to split into chunks
+        chunk_size: Maximum number of tokens per chunk
+        tokenizer: A tokenizer that has a encode method returning token IDs
+        overlap: Number of tokens to overlap between chunks
+
+    Returns:
+        List of text chunks
+    """
+
+    # A length function that uses the tokenizer
+    def length_function(text: str) -> int:
+        return len(tokenizer.encode(text))
+
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=overlap,
+        length_function=length_function,
+        separators=["\n\n", "\n", " ", ""],
+        is_separator_regex=False,
+    )
+
+    return text_splitter.split_text(text)

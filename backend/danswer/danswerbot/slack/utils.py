@@ -6,6 +6,8 @@ import time
 from collections.abc import MutableMapping
 from typing import Any
 from typing import cast
+from typing import Dict
+from typing import List
 from typing import Optional
 
 from retry import retry
@@ -518,3 +520,22 @@ def get_feedback_visibility() -> FeedbackVisibility:
         return FeedbackVisibility(DANSWER_BOT_FEEDBACK_VISIBILITY.lower())
     except ValueError:
         return FeedbackVisibility.PRIVATE
+
+
+def format_messages_for_summary(
+    messages: List[Dict[str, Any]], client: WebClient
+) -> str:
+    """Format messages for summarization."""
+    formatted_messages = []
+    text_cleaner = SlackTextCleaner(client)
+    for msg in messages:
+        timestamp = msg.get("ts", "")
+        user_id = msg.get("user", "")
+        text = msg.get("text", "")
+        try:
+            user_name = text_cleaner._get_slack_name(user_id)
+        except Exception:
+            user_name = user_id
+        formatted_msg = f"[{timestamp}] {user_name}: {text}"
+        formatted_messages.append(formatted_msg)
+    return "\n\n".join(formatted_messages)

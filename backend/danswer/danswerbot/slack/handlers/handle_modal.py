@@ -4,6 +4,9 @@ from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import NoResultFound
 
+from danswer.danswerbot.slack.handlers.handle_thread_summary import (
+    handle_thread_summary,
+)
 from danswer.db.engine import get_sqlalchemy_engine
 from danswer.db.persona import fetch_persona_by_id
 from danswer.db.users import add_slack_persona_for_user
@@ -75,3 +78,29 @@ def handle_modal_submission(client: WebClient, body: dict[str, Any]) -> None:
                 "persona_selection": "Sorry, there was an error updating your persona. Please try again."
             },
         }
+
+
+def handle_summarize_thread_modal(client: WebClient, payload: dict) -> None:
+    """Handle the thread summarization modal submission."""
+    try:
+        parts = payload["view"]["private_metadata"].split(":")
+        channel_id, thread_ts, user_id, is_parent_message = parts
+
+        # Generate and send the summary
+        handle_thread_summary(
+            channel_id=channel_id,
+            thread_ts=thread_ts,
+            client=client,
+            user_id=user_id,
+            is_parent_message=is_parent_message == "1",
+        )
+    except Exception as e:
+        logger.exception("Error handling thread summary modal")
+        try:
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text=f"Error generating thread summary: {str(e)}",
+            )
+        except Exception as notify_error:
+            logger.error(f"Failed to send error notification: {notify_error}")

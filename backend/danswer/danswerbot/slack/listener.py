@@ -35,6 +35,7 @@ from danswer.danswerbot.slack.handlers.handle_message import (
 )
 from danswer.danswerbot.slack.handlers.handle_message import schedule_feedback_reminder
 from danswer.danswerbot.slack.handlers.handle_modal import handle_modal_submission
+from danswer.danswerbot.slack.handlers.handle_modal import handle_summarize_thread_modal
 from danswer.danswerbot.slack.models import SlackMessageInfo
 from danswer.danswerbot.slack.tokens import fetch_tokens
 from danswer.danswerbot.slack.utils import ChannelIdAdapter
@@ -429,6 +430,8 @@ def view_routing(req: SocketModeRequest, client: SocketModeClient) -> None:
     if view := req.payload.get("view"):
         if view["callback_id"] == VIEW_DOC_FEEDBACK_ID:
             return process_feedback(req, client)
+        elif view["callback_id"] == "summarize_thread_modal":
+            return handle_summarize_thread_modal(client.web_client, req.payload)
 
 
 def process_slack_event(client: SocketModeClient, req: SocketModeRequest) -> None:
@@ -445,6 +448,50 @@ def process_slack_event(client: SocketModeClient, req: SocketModeRequest) -> Non
                 if req.payload["view"]["callback_id"] == "persona_selection_modal":
                     handle_modal_submission(client.web_client, req.payload)
                 return view_routing(req, client)
+            elif req.payload.get("type") == "message_action":
+                # Handle shortcuts
+                if req.payload.get("callback_id") == "summarise_thread":
+                    channel_id = req.payload["channel"]["id"]
+                    message = req.payload["message"]
+                    message_ts = message["ts"]
+                    thread_ts = message.get("thread_ts")
+                    user_id = req.payload["user"]["id"]
+                    # Determine if shortcut was clicked on parent message
+                    is_parent_message = not thread_ts or thread_ts == message_ts
+                    # Acknowledge the shortcut immediately
+                    client.web_client.views_open(
+                        trigger_id=req.payload["trigger_id"],
+                        view={
+                            "type": "modal",
+                            "callback_id": "summarize_thread_modal",
+                            "title": {
+                                "type": "plain_text",
+                                "text": "Thread Summary",
+                            },
+                            "submit": {
+                                "type": "plain_text",
+                                "text": "Generate Summary",
+                            },
+                            "close": {
+                                "type": "plain_text",
+                                "text": "Cancel",
+                            },
+                            "blocks": [
+                                {
+                                    "type": "section",
+                                    "text": {
+                                        "type": "mrkdwn",
+                                        "text": (
+                                            "Click the 'Generate Summary' button below to create a summary of this thread. "
+                                            "The summary will be visible to you shortly after generation."
+                                        ),
+                                    },
+                                }
+                            ],
+                            "private_metadata": f"{channel_id}:{thread_ts}:{user_id}:{int(is_parent_message)}",
+                        },
+                    )
+                    return
         elif req.type == "events_api" or req.type == "slash_commands":
             return process_message(req, client)
     except Exception:
