@@ -815,11 +815,7 @@ export function getDisplayNameForModel(modelName: string): string {
     }
 
     const displayName = MODEL_DISPLAY_NAMES[lastPart];
-    if (displayName === undefined) {
-      return "";
-    }
-
-    return displayName;
+    return displayName || lastPart;
   }
 
   return MODEL_DISPLAY_NAMES[modelName] || modelName;
