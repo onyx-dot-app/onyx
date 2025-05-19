@@ -105,6 +105,10 @@ function findSearchTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID);
 }
 
+function findLangflowTool(tools: ToolSnapshot[]) {
+  return tools.find((tool) => tool.in_code_tool_id === "Langflow");
+}
+
 function findImageGenerationTool(tools: ToolSnapshot[]) {
   return tools.find((tool) => tool.in_code_tool_id === "ImageGenerationTool");
 }
@@ -218,6 +222,7 @@ export function AssistantEditor({
     existingPersona?.tools.map((tool) => tool.id) || [];
 
   const searchTool = findSearchTool(tools);
+  const langflowTool = findLangflowTool(tools);
   const imageGenerationTool = findImageGenerationTool(tools);
   const internetSearchTool = findInternetSearchTool(tools);
 
@@ -225,12 +230,14 @@ export function AssistantEditor({
     (tool) =>
       tool.in_code_tool_id !== searchTool?.in_code_tool_id &&
       tool.in_code_tool_id !== imageGenerationTool?.in_code_tool_id &&
+      tool.in_code_tool_id !== langflowTool?.in_code_tool_id &&
       tool.in_code_tool_id !== internetSearchTool?.in_code_tool_id
   );
 
   const availableTools = [
     ...customTools,
     ...(searchTool ? [searchTool] : []),
+    ...(langflowTool ? [langflowTool] : []),
     ...(imageGenerationTool ? [imageGenerationTool] : []),
     ...(internetSearchTool ? [internetSearchTool] : []),
   ];
@@ -545,6 +552,9 @@ export function AssistantEditor({
             .map((toolId) => Number(toolId))
             .filter((toolId) => values.enabled_tools_map[toolId]);
 
+          const langflowToolEnabled = langflowTool
+            ? enabledTools.includes(langflowTool.id)
+            : false;
           const searchToolEnabled = searchTool
             ? enabledTools.includes(searchTool.id)
             : false;
@@ -655,6 +665,12 @@ export function AssistantEditor({
               [toolId]: !values.enabled_tools_map[toolId],
             };
             setFieldValue("enabled_tools_map", updatedEnabledToolsMap);
+          }
+
+          function langflowToolEnabled() {
+            return langflowTool && values.enabled_tools_map[langflowTool.id]
+              ? true
+              : false;
           }
 
           // model must support image input for image generation
@@ -1055,6 +1071,36 @@ export function AssistantEditor({
                             )}
                           </div>
                         )}
+                      {langflowTool && (
+                        <>
+                          <BooleanFormField
+                            name={`enabled_tools_map.${langflowTool.id}`}
+                            label="Инструмент Langflow"
+                            subtext="Инструмент Langflow."
+                            onChange={() => {
+                              toggleToolInValues(langflowTool.id);
+                            }}
+                          />
+
+                          {langflowToolEnabled() && (
+                            <div className="pl-4 border-l-2 ml-4 border-border">
+                              {ccPairs.length > 0 && (
+                                <>
+                                  <TextFormField
+                                    name="pipeline_id"
+                                    label="Id пайплайна"
+                                  />
+
+                                  <BooleanFormField
+                                    name="use_default"
+                                    label="Использовать по умолчанию"
+                                  />
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
 

@@ -25,7 +25,7 @@ import {
   DocumentIcon2,
 } from "@/components/icons/icons";
 import { UserRole } from "@/lib/types";
-import { FiActivity, FiBarChart2 } from "react-icons/fi";
+import { FiActivity, FiBarChart2, FiSettings } from "react-icons/fi";
 import { UserDropdown } from "../UserDropdown";
 import { User } from "@/lib/types";
 import { usePathname } from "next/navigation";
@@ -60,6 +60,13 @@ export function ClientLayout({
   };
   const { llmProviders } = useChatContext();
   const { popup, setPopup } = usePopup();
+
+  const isLangflowEditorEnable =
+    process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR === "true";
+
+  const isLangfuseEditorEnable =
+    process.env.NEXT_PUBLIC_ENABLE_LANGFUSE_EDITOR === "true";
+
   if (
     (pathname && pathname.startsWith("/admin/connectors")) ||
     (pathname && pathname.startsWith("/admin/embeddings"))
@@ -513,6 +520,45 @@ export function ClientLayout({
                           : []),
                       ],
                     },
+                    ...(isLangflowEditorEnable || isLangfuseEditorEnable
+                      ? [
+                          {
+                            name: "Инструменты пользователя",
+                            items: [
+                              ...(isLangflowEditorEnable
+                                ? [
+                                    {
+                                      name: (
+                                        <div className="flex">
+                                          <FiSettings size={18} />
+                                          <div className="ml-1">
+                                            Редактор Langflow
+                                          </div>
+                                        </div>
+                                      ),
+                                      link: "/admin/usertools/langflow",
+                                    },
+                                  ]
+                                : []),
+                              ...(isLangfuseEditorEnable
+                                ? [
+                                    {
+                                      name: (
+                                        <div className="flex">
+                                          <FiSettings size={18} />
+                                          <div className="ml-1">
+                                            Мониторинг Langfuse
+                                          </div>
+                                        </div>
+                                      ),
+                                      link: "/admin/usertools/langfuse",
+                                    },
+                                  ]
+                                : []),
+                            ],
+                          },
+                        ]
+                      : []),
                   ]
                 : []),
             ]}

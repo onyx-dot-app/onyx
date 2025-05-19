@@ -5,27 +5,27 @@ import { Button } from "@/components/ui/button";
 import { redirect } from "next/navigation";
 
 export default async function Page() {
-  const isFlowiseEditorEnable =
-    process.env.NEXT_PUBLIC_ENABLE_FLOWISE_EDITOR === "true";
+  const isLangflowEditorEnable =
+    process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR === "true";
   console.log(
-    { isFlowiseEditorEnable },
-    process.env.NEXT_PUBLIC_ENABLE_FLOWISE_EDITOR
+    { isLangflowEditorEnable },
+    process.env.NEXT_PUBLIC_ENABLE_LANGFLOW_EDITOR
   );
-  if (!isFlowiseEditorEnable) {
+  if (!isLangflowEditorEnable) {
     return redirect("/chat");
   }
 
   return (
     <div className="mx-auto container">
       <AdminPageTitle
-        title="Редактор Flowise"
+        title="Редактор Langflow"
         icon={<FiTool size={32} className="my-auto" />}
       />
 
       <Text className="mb-8">
-        Flowise — это инструмент с открытым исходным кодом для создания и
+        Langflow — это инструмент с открытым исходным кодом для создания и
         управления чат-ботами, использующими большие языковые модели (LLM),
-        такие как GPT и другие. Flowise предназначен для упрощения разработки
+        такие как GPT и другие. Langflow предназначен для упрощения разработки
         приложений на основе ИИ с минимальным количеством кода или вовсе без
         него. Инструмент предоставляет визуальный интерфейс, который позволяет
         пользователям конструировать сложные цепочки взаимодействий между
@@ -35,20 +35,20 @@ export default async function Page() {
       <Text className="mb-8">
         <a
           className="text-link"
-          href="https://docs.flowiseai.com/"
+          href="https://docs.langflow.org/"
           target="_blank"
         >
-          Документация Flowise
+          Документация Langflow
         </a>{" "}
       </Text>
 
       <a
-        href={process.env.REACT_APP_FLOWISE_URL}
+        href={process.env.REACT_APP_LANFLOW_URL}
         target="_blank"
         rel="noopener noreferrer"
       >
         <Button className="mx-auto" color="green" type="button">
-          {"Открыть редактор Flowise"}
+          {"Открыть редактор Langflow"}
         </Button>
       </a>
     </div>
