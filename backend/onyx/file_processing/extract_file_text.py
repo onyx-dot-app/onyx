@@ -519,7 +519,9 @@ def extract_text_and_images(
         if extension == ".pptx":
             file.seek(0)
             return ExtractionResult(
-                text_content=pptx_to_text(file), embedded_images=[], metadata={}
+                text_content=pptx_to_text(file, file_name=file_name),
+                embedded_images=[],
+                metadata={},
             )
 
         if extension == ".xlsx":

@@ -171,7 +171,7 @@ def _download_and_extract_sections_basic(
         mime_type
         == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
-        text = pptx_to_text(io.BytesIO(response_call()))
+        text = pptx_to_text(io.BytesIO(response_call()), file_name=file_name)
         return [TextSection(link=link, text=text)] if text else []
 
     elif is_gdrive_image_mime_type(mime_type):
