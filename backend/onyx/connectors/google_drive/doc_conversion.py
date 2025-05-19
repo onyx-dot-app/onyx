@@ -165,16 +165,8 @@ def _download_and_extract_sections_basic(
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ):
-        try:
-            text = xlsx_to_text(io.BytesIO(response_call()))
-            return [TextSection(link=link, text=text)]
-        except BadZipFile as e:
-            error_str = f"Failed to extract text from {file_name}: {e}"
-            if file_name.startswith("~"):
-                logger.debug(error_str + " (this is expected for files with ~)")
-            else:
-                logger.warning(error_str)
-            return []
+        text = xlsx_to_text(io.BytesIO(response_call()), file_name=file_name)
+        return [TextSection(link=link, text=text)] if text else []
 
     elif (
         mime_type
@@ -182,7 +174,7 @@ def _download_and_extract_sections_basic(
     ):
         try:
             text = pptx_to_text(io.BytesIO(response_call()))
-            return [TextSection(link=link, text=text)]
+            return [TextSection(link=link, text=text)] if text else []
         except BadZipFile as e:
             error_str = f"Failed to extract text from {file_name}: {e}"
             logger.warning(error_str)
