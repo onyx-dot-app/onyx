@@ -14,7 +14,7 @@ import { useContext, useEffect, useMemo, useState } from "react";
 import { DateRangePickerValue } from "@/components/dateRangeSelectors/AdminDateRangeSelector";
 import { SourceMetadata } from "./search/interfaces";
 import {
-  destructureValue,
+  parseLlmDescriptor,
   findProviderForModel,
   structureValue,
 } from "./llm/utils";
@@ -480,7 +480,7 @@ export function useLlmManager(
     modelName: string | null | undefined
   ): LlmDescriptor => {
     if (modelName) {
-      const model = destructureValue(modelName);
+      const model = parseLlmDescriptor(modelName);
       if (!(model.modelName && model.modelName.length > 0)) {
         const provider = llmProviders.find((p) =>
           p.model_configurations

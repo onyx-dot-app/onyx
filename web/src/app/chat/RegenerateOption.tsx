@@ -6,7 +6,7 @@ import {
 } from "@/lib/hooks";
 
 import { Persona } from "@/app/admin/assistants/interfaces";
-import { destructureValue } from "@/lib/llm/utils";
+import { parseLlmDescriptor } from "@/lib/llm/utils";
 import { useState } from "react";
 import { Hoverable } from "@/components/Hoverable";
 import { IconType } from "react-icons";
@@ -53,7 +53,9 @@ export default function RegenerateOption({
         </div>
       }
       onSelect={(value) => {
-        const { name, provider, modelName } = destructureValue(value as string);
+        const { name, provider, modelName } = parseLlmDescriptor(
+          value as string
+        );
         regenerate({
           name: name,
           provider: provider,

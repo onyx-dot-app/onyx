@@ -25,7 +25,7 @@ import { getDisplayNameForModel, useLabels } from "@/lib/hooks";
 import { DocumentSetSelectable } from "@/components/documentSet/DocumentSetSelectable";
 import { addAssistantToList } from "@/lib/assistants/updateAssistantPreferences";
 import {
-  destructureValue,
+  parseLlmDescriptor,
   modelSupportsImageInput,
   structureValue,
 } from "@/lib/llm/utils";
@@ -1164,7 +1164,7 @@ export function AssistantEditor({
                         setFieldValue("llm_model_provider_override", null);
                       } else {
                         const { modelName, provider, name } =
-                          destructureValue(selected);
+                          parseLlmDescriptor(selected);
                         if (modelName && name) {
                           setFieldValue(
                             "llm_model_version_override",

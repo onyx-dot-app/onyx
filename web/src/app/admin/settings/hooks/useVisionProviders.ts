@@ -4,7 +4,7 @@ import {
   fetchVisionProviders,
   setDefaultVisionProvider,
 } from "@/lib/llm/visionLLM";
-import { destructureValue, structureValue } from "@/lib/llm/utils";
+import { parseLlmDescriptor, structureValue } from "@/lib/llm/utils";
 
 // Define a type for the popup setter function
 type SetPopup = (popup: {
@@ -73,7 +73,7 @@ export function useVisionProviders(setPopup: SetPopup) {
       }
 
       try {
-        const { name, modelName } = destructureValue(llmValue);
+        const { name, modelName } = parseLlmDescriptor(llmValue);
 
         // Find the provider ID
         const providerObj = visionProviders.find((p) => p.name === name);

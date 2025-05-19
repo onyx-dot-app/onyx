@@ -7,7 +7,7 @@ import {
 import { getDisplayNameForModel } from "@/lib/hooks";
 import {
   modelSupportsImageInput,
-  destructureValue,
+  parseLlmDescriptor,
   structureValue,
 } from "@/lib/llm/utils";
 import { LLMProviderDescriptor } from "@/app/admin/configuration/llm/interfaces";
@@ -196,7 +196,7 @@ export default function LLMPopover({
                       : "text-text-darker"
                   }`}
                   onClick={() => {
-                    llmManager.updateCurrentLlm(destructureValue(value));
+                    llmManager.updateCurrentLlm(parseLlmDescriptor(value));
                     onSelect?.(value);
                     setIsOpen(false);
                   }}
