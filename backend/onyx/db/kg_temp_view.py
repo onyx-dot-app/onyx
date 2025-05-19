@@ -55,19 +55,6 @@ def create_views(
         AND ccp.access_type != 'SYNC'
         AND u.email = :user_email
     ),
-    user_external_group_accessible_docs AS (
-        SELECT d.id as allowed_doc_id
-        FROM document_by_connector_credential_pair d
-        JOIN connector_credential_pair ccp ON
-            d.connector_id = ccp.connector_id AND
-            d.credential_id = ccp.credential_id
-        JOIN user__external_user_group_id ueug ON
-            ccp.id = ueug.cc_pair_id
-        JOIN "user" u ON ueug.user_id = u.id
-        WHERE ccp.status != 'DELETING'
-        AND ccp.access_type = 'SYNC'
-        AND u.email = :user_email
-    ),
     external_user_docs AS (
         SELECT id as allowed_doc_id
         FROM document
@@ -86,8 +73,6 @@ def create_views(
         SELECT allowed_doc_id FROM user_owned_docs
         UNION
         SELECT allowed_doc_id FROM user_group_accessible_docs
-        UNION
-        SELECT allowed_doc_id FROM user_external_group_accessible_docs
         UNION
         SELECT allowed_doc_id FROM external_user_docs
         UNION
