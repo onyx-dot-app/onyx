@@ -87,6 +87,9 @@ def fetch_and_process_chat_session_history(
             page_size=PAGE_SIZE,
         )
 
+        if not paged_chat_sessions:
+            break
+
         paged_snapshots = parallel_yield(
             [
                 yield_snapshot_from_chat_session(
