@@ -2,6 +2,7 @@ import io
 from datetime import datetime
 from typing import Any
 from typing import cast
+from zipfile import BadZipFile
 
 from googleapiclient.errors import HttpError  # type: ignore
 from googleapiclient.http import MediaIoBaseDownload  # type: ignore
@@ -164,15 +165,28 @@ def _download_and_extract_sections_basic(
     elif (
         mime_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     ):
-        text = xlsx_to_text(io.BytesIO(response_call()))
-        return [TextSection(link=link, text=text)]
+        try:
+            text = xlsx_to_text(io.BytesIO(response_call()))
+            return [TextSection(link=link, text=text)]
+        except BadZipFile as e:
+            error_str = f"Failed to extract text from {file_name}: {e}"
+            if file_name.startswith("~"):
+                logger.debug(error_str + " (this is expected for files with ~)")
+            else:
+                logger.warning(error_str)
+            return []
 
     elif (
         mime_type
         == "application/vnd.openxmlformats-officedocument.presentationml.presentation"
     ):
-        text = pptx_to_text(io.BytesIO(response_call()))
-        return [TextSection(link=link, text=text)]
+        try:
+            text = pptx_to_text(io.BytesIO(response_call()))
+            return [TextSection(link=link, text=text)]
+        except BadZipFile as e:
+            error_str = f"Failed to extract text from {file_name}: {e}"
+            logger.warning(error_str)
+            return []
 
     elif is_gdrive_image_mime_type(mime_type):
         # For images, store them for later processing
