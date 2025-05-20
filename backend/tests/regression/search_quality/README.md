@@ -2,7 +2,9 @@
 
 This Python script evaluates the search results for a list of queries.
 
-Unlike the script in answer_quality, this script is much less customizable and runs using currently ingested documents, though it allows for quick testing of search parameters on a bunch of test queries that don't have well-defined answers.
+This script will likely get refactored in the future as an API endpoint.
+In the meanwhile, it is used to evaluate the search quality using locally ingested documents.
+The key differentating factor with `answer_quality` is that it can evaluate results without explicit "ground truth" using the reranker as a reference.
 
 ## Usage
 
@@ -25,24 +27,29 @@ This can be checked/modified by opening the admin panel, going to search setting
 cd path/to/onyx/backend/tests/regression/search_quality
 ```
 
-5. Copy `search_queries.json.template` to `search_queries.json` and add/remove test queries in it
+5. Copy `test_queries.json.template` to `test_queries.json` and add/remove test queries in it. The possible fields are:
 
-6. Run `generate_search_queries.py` to generate the modified queries for the search pipeline
+   - `question: str` the query
+   - `question_keyword: Optional[str]` modified query specifically for the retriever
+   - `ground_truth: Optional[list[GroundTruth]]` a ranked list of expected search results with fields:
+      - `doc_source: str` document source (e.g., Web, Drive, Linear), currently unused
+      - `doc_link: str` link associated with document, used to find corresponding document in local index
+   - `categories: Optional[list[str]]` list of categories, used to aggregate evaluation results
 
-```
-python generate_search_queries.py
-```
+6. Copy `search_eval_config.yaml.template` to `search_eval_config.yaml` and specify the search and eval parameters
 
-7. Copy `search_eval_config.yaml.template` to `search_eval_config.yaml` and specify the search and eval parameters
-8. Run `run_search_eval.py` to evaluate the search results against the reranked results
+7. Run `run_search_eval.py` to run the search and evaluate the search results
 
 ```
 python run_search_eval.py
 ```
 
-9. Repeat steps 7 and 8 to test and compare different search parameters
+8. Optionally, save the generated `test_queries.json` in the export folder to reuse the generated `question_keyword`, and rerun the search with alternative search parameters.
 
 ## Metrics
+TODO:
+Talk about how eval is handled without grounded docs
+
 - Jaccard Similarity: the ratio between the intersect and the union between the topk search and rerank results. Higher is better
 - Average Rank Change: The average absolute rank difference of the topk reranked chunks vs the entire search chunks. Lower is better
 - Average Missing Chunk Ratio: The number of chunks in the topk reranked chunks not in the topk search chunks, over topk. Lower is better

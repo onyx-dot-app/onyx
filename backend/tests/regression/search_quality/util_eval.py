@@ -31,7 +31,7 @@ def evaluate_one_query(
     topk: int,
 ) -> Metrics:
     """Computes metrics for the search results, relative to the ground truth and reranked results."""
-    # FIXME:
+    # TODO:
     search_topk = search_chunks[:topk]
     true_topk = true_chunks[:topk]
 
@@ -49,7 +49,7 @@ def evaluate_one_query(
     # compute metrics
     search_ranks = {chunk.unique_id: rank for rank, chunk in enumerate(search_chunks)}
     return Metrics(
-        # FIXME:
+        # TODO:
         *_compute_jaccard_and_missing_chunks_ratio(search_adj_topk, true_adj_topk),
         _compute_average_rank_change(search_ranks, true_adj_topk),
         *_compute_jaccard_and_missing_chunks_ratio(search_topk, true_topk),
