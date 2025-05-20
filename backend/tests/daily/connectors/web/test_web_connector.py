@@ -53,6 +53,12 @@ def test_web_connector_no_scroll(quotes_to_scroll_web_connector: WebConnector) -
 MERCURY_EXPECTED_QUOTE = "How can we help?"
 
 
+@pytest.mark.xfail(
+    reason=(
+        "flaky. maybe we can improve how we avoid triggering bot protection or"
+        "maybe this is just how it has to be."
+    ),
+)
 def test_web_connector_bot_protection() -> None:
     connector = WebConnector(
         base_url="https://support.mercury.com/hc",
