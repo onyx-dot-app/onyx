@@ -483,19 +483,24 @@ def _collect_document_for_channel_id(
         page_loaded=lambda _: None
     ).execute_query()
 
-    thread = [
-        message
-        for message in message_collection
-        if _filter_message(message=message, start=start, end=end)
-    ]
+    for message in message_collection:
+        if not _should_process_message(message=message, start=start, end=end):
+            continue
 
-    yield _convert_thread_to_document(
-        channel=channel,
-        thread=thread,
-    )
+        replies = list(message.replies.get_all().execute_query())
+        thread = [message]
+        thread.extend(replies[::-1])
+
+        # Note:
+        # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
+        # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
+        yield _convert_thread_to_document(
+            channel=channel,
+            thread=thread,
+        )
 
 
-def _filter_message(
+def _should_process_message(
     message: ChatMessage,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
