@@ -619,8 +619,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
         if checkpoint.completion_stage == DriveRetrievalStage.USER_EMAILS:
             all_org_emails: list[str] = self._get_all_user_emails()
-            if not is_slim:
-                checkpoint.user_emails = all_org_emails
+            checkpoint.user_emails = all_org_emails
             checkpoint.completion_stage = DriveRetrievalStage.DRIVE_IDS
         else:
             if checkpoint.user_emails is None:
@@ -730,9 +729,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             elif self.include_shared_drives:
                 sorted_drive_ids = sorted(all_drive_ids)
 
-            if not is_slim:
-                checkpoint.drive_ids_to_retrieve = sorted_drive_ids
-                checkpoint.folder_ids_to_retrieve = sorted_folder_ids
+            checkpoint.drive_ids_to_retrieve = sorted_drive_ids
+            checkpoint.folder_ids_to_retrieve = sorted_folder_ids
             checkpoint.completion_stage = next_stage
         else:
             if checkpoint.drive_ids_to_retrieve is None:
@@ -908,9 +906,6 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             start=start,
             end=end,
         )
-        if is_slim:
-            yield from drive_files
-            return
 
         for file in drive_files:
             logger.debug(
@@ -1146,13 +1141,14 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
 
     def _extract_slim_docs_from_google_drive(
         self,
+        checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         slim_batch = []
         for file in self._fetch_drive_items(
-            checkpoint=self.build_dummy_checkpoint(),
+            checkpoint=checkpoint,
             is_slim=True,
             start=start,
             end=end,
@@ -1179,9 +1175,15 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         try:
-            yield from self._extract_slim_docs_from_google_drive(
-                start, end, callback=callback
-            )
+            checkpoint = self.build_dummy_checkpoint()
+            while checkpoint.completion_stage != DriveRetrievalStage.DONE:
+                yield from self._extract_slim_docs_from_google_drive(
+                    checkpoint=checkpoint,
+                    start=start,
+                    end=end,
+                    callback=callback,
+                )
+
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e

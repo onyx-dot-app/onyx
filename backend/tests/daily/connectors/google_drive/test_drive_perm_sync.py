@@ -154,4 +154,21 @@ def test_gdrive_perm_sync_with_real_data(
                 f"but is accessible to {emails_with_access}. Raw result: {doc_to_raw_result_mapping[doc_id]} "
             )
 
+    # Verify that we checked every file in ACCESS_MAPPING
+    all_expected_files = set()
+    for file_ids in ACCESS_MAPPING.values():
+        all_expected_files.update(file_ids)
+
+    checked_file_ids = {
+        url_to_id_mapping[doc_id]
+        for doc_id in doc_to_email_mapping
+        if doc_id in url_to_id_mapping
+    }
+
+    assert all_expected_files == checked_file_ids, (
+        f"Not all expected files were checked. "
+        f"Missing files: {all_expected_files - checked_file_ids}, "
+        f"Extra files checked: {checked_file_ids - all_expected_files}"
+    )
+
     print(f"Checked permissions for {checked_files} files from drive_id_mapping.json")
