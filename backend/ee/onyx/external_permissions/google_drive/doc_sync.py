@@ -201,6 +201,7 @@ def gdrive_doc_sync(
     slim_doc_generator = _get_slim_doc_generator(cc_pair, google_drive_connector)
 
     for slim_doc_batch in slim_doc_generator:
+        logger.info(f"Drive perm sync: Processing {len(slim_doc_batch)} documents")
         for slim_doc in slim_doc_batch:
             if callback:
                 if callback.should_stop():

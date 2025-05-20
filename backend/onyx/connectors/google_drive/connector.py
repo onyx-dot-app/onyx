@@ -1186,6 +1186,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
                     end=end,
                     callback=callback,
                 )
+            logger.info("Drive perm sync: Slim doc retrieval complete")
 
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
