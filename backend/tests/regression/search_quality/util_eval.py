@@ -3,10 +3,10 @@ from typing import cast
 from typing import Optional
 
 from pydantic import BaseModel
-from util_data import GroundTruth
 
 from onyx.context.search.models import InferenceChunk
 from onyx.utils.logger import setup_logger
+from tests.regression.search_quality.util_data import GroundTruth
 
 logger = setup_logger(__name__)
 

@@ -1,5 +1,4 @@
 from sqlalchemy.orm import Session
-from util_config import SearchEvalConfig
 
 from onyx.context.search.models import IndexFilters
 from onyx.context.search.models import InferenceChunk
@@ -10,6 +9,7 @@ from onyx.context.search.retrieval.search_runner import get_query_embedding
 from onyx.context.search.utils import remove_stop_words_and_punctuation
 from onyx.document_index.interfaces import DocumentIndex
 from onyx.utils.logger import setup_logger
+from tests.regression.search_quality.util_config import SearchEvalConfig
 
 logger = setup_logger(__name__)
 

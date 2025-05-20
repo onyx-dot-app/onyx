@@ -2,13 +2,6 @@ import csv
 from collections import defaultdict
 from pathlib import Path
 
-from util_config import load_config
-from util_data import export_test_queries
-from util_data import load_test_queries
-from util_eval import metric_names
-from util_retrieve import rerank_one_query
-from util_retrieve import search_one_query
-
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_OVERFLOW
 from onyx.configs.app_configs import POSTGRES_API_SERVER_POOL_SIZE
 from onyx.context.search.models import RerankingDetails
@@ -19,6 +12,12 @@ from onyx.db.search_settings import get_multilingual_expansion
 from onyx.document_index.factory import get_default_document_index
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
+from tests.regression.search_quality.util_config import load_config
+from tests.regression.search_quality.util_data import export_test_queries
+from tests.regression.search_quality.util_data import load_test_queries
+from tests.regression.search_quality.util_eval import metric_names
+from tests.regression.search_quality.util_retrieve import rerank_one_query
+from tests.regression.search_quality.util_retrieve import search_one_query
 
 logger = setup_logger(__name__)
 
@@ -69,6 +68,7 @@ def run_search_eval() -> None:
 
             for query in test_queries:
                 # search and write results
+                assert query.question_keyword is not None
                 search_chunks = search_one_query(
                     query.question_keyword,
                     multilingual_expansion,
