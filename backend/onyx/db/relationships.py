@@ -71,33 +71,27 @@ def add_relationship(
     relationship: KGRelationship | KGRelationshipExtractionStaging
     if kg_stage == KGStage.EXTRACTED:
         relationship = KGRelationshipExtractionStaging(**relationship_data)
+        # Delete existing relationship if it exists
+        db_session.query(KGRelationshipExtractionStaging).filter(
+            KGRelationshipExtractionStaging.id_name == relationship_id_name,
+            KGRelationshipExtractionStaging.source_document == source_document_id,
+        ).delete(synchronize_session=False)
     elif kg_stage == KGStage.NORMALIZED:
         relationship = KGRelationship(**relationship_data)
+        # Delete existing relationship if it exists
+        db_session.query(KGRelationship).filter(
+            KGRelationship.id_name == relationship_id_name,
+            KGRelationship.source_document == source_document_id,
+        ).delete(synchronize_session=False)
     else:
         raise ValueError(f"Invalid kg_stage: {kg_stage}")
 
-    # Use on_conflict_do_update to handle conflicts
-    stmt = (
-        postgresql.insert(type(relationship))
-        .values(**relationship_data)
-        .on_conflict_do_update(
-            constraint=(
-                "kg_relationship_pkey"
-                if kg_stage == KGStage.NORMALIZED
-                else "kg_relationship_extraction_staging_pkey"
-            ),
-            set_={
-                "occurrences": int(str(relationship_data["occurrences"] or 0))
-                + (occurrences or 1),
-                "time_updated": func.now(),
-            },
-        )
-    )
-
+    # Insert the new relationship
+    stmt = postgresql.insert(type(relationship)).values(**relationship_data)
     db_session.execute(stmt)
     db_session.flush()  # Flush to get any DB errors early
 
-    # Fetch the updated/inserted record
+    # Fetch the inserted record
     result: Union[KGRelationship, KGRelationshipExtractionStaging, None] = None
     if kg_stage == KGStage.EXTRACTED:
         result = (
@@ -114,7 +108,7 @@ def add_relationship(
 
     if result is None:
         raise ValueError(
-            f"Failed to create or update relationship with id_name: {relationship_id_name}"
+            f"Failed to create relationship with id_name: {relationship_id_name}"
         )
 
     return result
