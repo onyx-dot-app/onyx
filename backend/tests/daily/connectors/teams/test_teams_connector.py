@@ -65,7 +65,7 @@ def teams_connector(
                     "but not least",
                     "Hello, world!",
                     "My favorite color is red.\n\xa0\nPablos favorite color is bluePika's favorite color is greenbut"
-                    "it might also be yellow",
+                    " it might also be yellow",
                 ]
             ),
         ],
