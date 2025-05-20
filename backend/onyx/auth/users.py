@@ -306,7 +306,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         db_session, User, OAuthAccount
                     )
                     self.user_db = tenant_user_db
-                    self.database = tenant_user_db  # is this even a real var?
 
                 if hasattr(user_create, "role"):
                     user_create.role = UserRole.BASIC
@@ -415,12 +414,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             verify_email_in_whitelist(account_email, tenant_id)
             verify_email_domain(account_email)
 
+            # NOTE(rkuo): If this UserManager is instantiated per connection
+            # should we even be doing this here?
             if MULTI_TENANT:
                 tenant_user_db = SQLAlchemyUserAdminDB[User, uuid.UUID](
                     db_session, User, OAuthAccount
                 )
                 self.user_db = tenant_user_db
-                self.database = tenant_user_db
 
             oauth_account_dict = {
                 "oauth_name": oauth_name,
