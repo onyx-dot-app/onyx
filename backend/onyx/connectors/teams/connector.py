@@ -485,6 +485,9 @@ def _collect_documents_for_channel(
     ).execute_query()
 
     for message in message_collection:
+        if not message.id:
+            continue
+
         if not _should_process_message(message=message, start=start, end=end):
             continue
 
@@ -504,7 +507,7 @@ def _collect_documents_for_channel(
         except Exception as e:
             yield ConnectorFailure(
                 failed_entity=EntityFailure(
-                    entity_id="messages",
+                    entity_id=message.id,
                 ),
                 failure_message=f"Retrieval of message and its replies failed; {channel.id=} {message.id}",
                 exception=e,
