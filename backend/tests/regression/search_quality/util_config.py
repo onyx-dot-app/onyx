@@ -49,7 +49,9 @@ def load_config() -> SearchEvalConfig:
     # create the config
     config = SearchEvalConfig(
         hybrid_alpha=config_raw.get("HYBRID_ALPHA", HYBRID_ALPHA),
-        hybrid_alpha_keyword=config_raw.get("HYBRID_ALPHA_KEYWORD", HYBRID_ALPHA_KEYWORD),
+        hybrid_alpha_keyword=config_raw.get(
+            "HYBRID_ALPHA_KEYWORD", HYBRID_ALPHA_KEYWORD
+        ),
         doc_time_decay=config_raw.get("DOC_TIME_DECAY", DOC_TIME_DECAY),
         num_returned_hits=config_raw.get("NUM_RETURNED_HITS", NUM_RETURNED_HITS),
         rank_profile=config_raw.get("RANK_PROFILE", QueryExpansionType.SEMANTIC),
