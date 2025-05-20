@@ -34,10 +34,6 @@ class TestQuery(BaseModel):
     ground_truth: list[GroundTruth] = []
     categories: list[str] = []
 
-    def to_values_list(self) -> list:
-        """Convert the model to a list of values in the order of the parameters."""
-        return [getattr(self, field) for field in self.model_fields.keys()]
-
 
 def load_test_queries() -> list[TestQuery]:
     """

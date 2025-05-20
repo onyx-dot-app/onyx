@@ -4,7 +4,7 @@ This Python script evaluates the search results for a list of queries.
 
 This script will likely get refactored in the future as an API endpoint.
 In the meanwhile, it is used to evaluate the search quality using locally ingested documents.
-The key differentating factor with `answer_quality` is that it can evaluate results without explicit "ground truth" using the reranker as a reference.
+The key differentiating factor with `answer_quality` is that it can evaluate results without explicit "ground truth" using the reranker as a reference.
 
 ## Usage
 
@@ -48,12 +48,12 @@ python run_search_eval.py
 
 ## Metrics
 There are two main metrics currently implemented:
-- ratio_topk: the ratio of documents in the comparison set that are in the topk search results (higher is better, 0~1)
-- avg_rank_delta: the average rank difference between the comparison set and search results (lower is better, 0~inf)
+- ratio_topk: the ratio of documents in the comparison set that are in the topk search results (higher is better, 0-1)
+- avg_rank_delta: the average rank difference between the comparison set and search results (lower is better, 0-inf)
 
 Ratio topk gives a general idea on whether the most relevant documents are appearing first in the search results. Decreasing `eval_topk` will make this metric stricter, requiring relevant documents to appear in a narrow window.
 
-Avg rank delta is another metric which can give insight on the performance of documents not in the topk search results. If none of the comparison documents are in the topk, `ratio topk` will only show a 0, whereas `avg rank delta` will show a higher value the worse the search results gets.
+Avg rank delta is another metric which can give insight on the performance of documents not in the topk search results. If none of the comparison documents are in the topk, `ratio_topk` will only show a 0, whereas `avg_rank_delta` will show a higher value the worse the search results gets.
 
 Furthermore, there are two versions of the metrics: ground truth, and soft truth.
 

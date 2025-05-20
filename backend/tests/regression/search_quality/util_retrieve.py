@@ -22,7 +22,7 @@ def search_one_query(
     config: SearchEvalConfig,
 ) -> list[InferenceChunk]:
     """Uses the search pipeline to retrieve relevant chunks for the given query."""
-    # the retrieval preprocessing is fairly stripped down so the query doesn't unexpectly change
+    # the retrieval preprocessing is fairly stripped down so the query doesn't unexpectedly change
     query_embedding = get_query_embedding(question_keyword, db_session)
 
     all_query_terms = question_keyword.split()
