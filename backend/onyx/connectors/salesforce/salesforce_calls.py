@@ -139,12 +139,14 @@ def _bulk_retrieve_from_salesforce(
 
     query = _build_bulk_query(sf_client, sf_type, time_filter)
 
-    bulk_2_handler = SFBulk2Handler(
+    bulk_2_handler: SFBulk2Handler | None = SFBulk2Handler(
         session_id=sf_client.session_id,
         bulk2_url=sf_client.bulk2_url,
         proxies=sf_client.proxies,
         session=sf_client.session,
     )
+    if not bulk_2_handler:
+        return sf_type, None
 
     # NOTE(rkuo): there are signs this download is allocating large
     # amounts of memory instead of streaming the results to disk.
@@ -152,12 +154,14 @@ def _bulk_retrieve_from_salesforce(
 
     # see https://github.com/simple-salesforce/simple-salesforce/issues/428 for a
     # possible solution
-    bulk_2_type = SFBulk2Type(
+    bulk_2_type: SFBulk2Type | None = SFBulk2Type(
         object_name=sf_type,
         bulk2_url=bulk_2_handler.bulk2_url,
         headers=bulk_2_handler.headers,
         session=bulk_2_handler.session,
     )
+    if not bulk_2_type:
+        return sf_type, None
 
     logger.info(f"Downloading {sf_type}")
 
@@ -168,7 +172,7 @@ def _bulk_retrieve_from_salesforce(
         results = bulk_2_type.download(
             query=query,
             path=target_dir,
-            max_records=1000000,
+            max_records=500000,
         )
 
         # prepend each downloaded csv with the object type (delimiter = '.')
@@ -187,6 +191,8 @@ def _bulk_retrieve_from_salesforce(
         logger.warning(f"Exceptioning query for object type {sf_type}: {query}")
         return sf_type, None
     finally:
+        bulk_2_handler = None
+        bulk_2_type = None
         gc.collect()
 
     logger.info(f"Downloaded {sf_type} to {all_download_paths}")
