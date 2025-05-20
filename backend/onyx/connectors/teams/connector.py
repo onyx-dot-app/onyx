@@ -494,10 +494,11 @@ def _collect_document_for_channel_id(
         # Note:
         # We convert an entire *thread* (including the root message and its replies) into one, singular `Document`.
         # I.e., we don't convert each individual message and each individual reply into their own individual `Document`s.
-        yield _convert_thread_to_document(
+        if doc := _convert_thread_to_document(
             channel=channel,
             thread=thread,
-        )
+        ):
+            yield doc
 
 
 def _should_process_message(

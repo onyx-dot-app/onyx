@@ -48,14 +48,24 @@ def teams_connector(
 @pytest.mark.parametrize(
     "teams_connector,expected_messages",
     [
-        [["Onyx-Testing"], set(["This is the first message in Onyx-Testing ..."])],
+        [
+            ["Onyx-Testing"],
+            set(
+                [
+                    "This is the first message in Onyx-Testing ...This is a reply!This is a second reply.Third.4th.5",
+                    "Testing body.",
+                ]
+            ),
+        ],
         [
             ["Onyx"],
             set(
                 [
+                    "yeah!",
+                    "but not least",
                     "Hello, world!",
-                    "My favorite color is red.\n\xa0\nPablos favorite color is blue",
-                    "but not leastyeah!",
+                    "My favorite color is red.\n\xa0\nPablos favorite color is bluePika's favorite color is greenbut"
+                    "it might also be yellow",
                 ]
             ),
         ],
