@@ -997,6 +997,12 @@ def kg_extraction(
                 for source_document_id, extraction_count in relationship_data.items():
                     relationship_split = relationship.split("__")
 
+                    if len(relationship_split) != 3:
+                        logger.error(
+                            f"Invalid relationship {relationship} in aggregated_kg_extractions.relationships"
+                        )
+                        continue
+
                     source_entity, relationship_type_, target_entity = (
                         relationship.split("__")
                     )
