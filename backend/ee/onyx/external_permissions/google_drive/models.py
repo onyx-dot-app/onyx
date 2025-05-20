@@ -57,3 +57,7 @@ class GoogleDrivePermission(BaseModel):
                 else None
             ),
         )
+
+    @property
+    def inherited_from(self) -> str | None:
+        return self.permission_details and self.permission_details.inherited_from
