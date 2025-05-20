@@ -44,20 +44,19 @@ cd path/to/onyx/backend/tests/regression/search_quality
 python run_search_eval.py
 ```
 
-8. Optionally, save the generated `test_queries.json` in the export folder to reuse the generated `question_keyword`, and rerun the search with alternative search parameters.
+8. Optionally, save the generated `test_queries.json` in the export folder to reuse the generated `question_keyword`, and rerun the search evaluation with alternative search parameters.
 
 ## Metrics
-TODO:
-Talk about how eval is handled without grounded docs
+There are two main metrics currently implemented:
+- ratio_topk: the ratio of documents in the comparison set that are in the topk search results (higher is better, 0~1)
+- avg_rank_delta: the average rank difference between the comparison set and search results (lower is better, 0~inf)
 
-- Jaccard Similarity: the ratio between the intersect and the union between the topk search and rerank results. Higher is better
-- Average Rank Change: The average absolute rank difference of the topk reranked chunks vs the entire search chunks. Lower is better
-- Average Missing Chunk Ratio: The number of chunks in the topk reranked chunks not in the topk search chunks, over topk. Lower is better
+Ratio topk gives a general idea on whether the most relevant documents are appearing first in the search results. Decreasing `eval_topk` will make this metric stricter, requiring relevant documents to appear in a narrow window.
 
-Note that all of these metrics are affected by very narrow search results.
-E.g., if topk is 20 but there is only 1 relevant document, the other 19 documents could be ordered arbitrarily, resulting in a lower score.
+Avg rank delta is another metric which can give insight on the performance of documents not in the topk search results. If none of the comparison documents are in the topk, `ratio topk` will only show a 0, whereas `avg rank delta` will show a higher value the worse the search results gets.
 
+Furthermore, there are two versions of the metrics: ground truth, and soft truth.
 
-To address this limitation, there are score adjusted versions of the metrics.
-The score adjusted version does not use a fixed topk, but computes the optimum topk based on the rerank scores.
-This generally works in determining how many documents are relevant, although note that this approach isn't perfect.
+The ground truth includes documents explicitly listed as relevant in the test dataset. The ground truth metrics will only be computed if a ground truth set is provided for the question and exists in the index.
+
+The soft truth is built on top of the ground truth (if provided), filling the remaining entries with results from the reranker. The soft truth metrics will only be computed if `skip_rerank` is false. Computing the soft truth metric can be extremely slow, especially for large `num_returned_hits`. However, it can provide a good basis when there are many relevant documents in no particular order, or for running quick tests without explicitly having to mention which documents are relevant.
