@@ -450,14 +450,19 @@ def kg_extraction(
 
             # mark docs in unprocessed_document_batch as EXTRACTING
             for unprocessed_document in unprocessed_document_batch:
-                if batch_metadata[unprocessed_document.id].entity_type is not None:
-                    kg_stage = KGStage.EXTRACTING
-                else:
-                    # after the connector has been processed,
+                if batch_metadata[unprocessed_document.id].entity_type is None:
+                    # info for after the connector has been processed
                     kg_stage = KGStage.SKIPPED
                     logger.debug(
                         f"Document {unprocessed_document.id} is not of any entity type"
                     )
+                elif batch_metadata[unprocessed_document.id].skip:
+                    # info for after the connector has been processed. But no message as there may be many
+                    # purposefully skipped documents
+                    kg_stage = KGStage.SKIPPED
+                else:
+                    kg_stage = KGStage.EXTRACTING
+
                 with get_session_with_current_tenant() as db_session:
                     update_document_kg_stage(
                         db_session,
@@ -557,6 +562,7 @@ def kg_extraction(
                 if (
                     unprocessed_document.id not in documents_to_process
                     or batch_metadata[unprocessed_document.id].entity_type is None
+                    or batch_metadata[unprocessed_document.id].skip
                 ):
                     with get_session_with_current_tenant() as db_session:
                         update_document_kg_stage(

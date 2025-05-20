@@ -9,6 +9,9 @@ from onyx.document_index.vespa.index import IndexFilters
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGClassificationContent
 from onyx.kg.utils.formatting_utils import kg_email_processing
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def get_document_classification_content_for_kg_processing(
@@ -51,6 +54,9 @@ def get_document_classification_content_for_kg_processing(
                 ],
                 get_large_chunks=False,
             )
+
+            if len(first_num_classification_chunks) == 0:
+                continue
 
             first_num_classification_chunks = sorted(
                 first_num_classification_chunks, key=lambda x: x["fields"]["chunk_id"]
