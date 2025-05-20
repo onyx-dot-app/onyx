@@ -145,9 +145,7 @@ def slack_doc_sync(
         SlackConnector.MAX_RETRIES,
         r,
     )
-    slack_client = WebClient(
-        token=cc_pair.credential.credential_json["slack_bot_token"]
-    )
+
     user_id_to_email_map = fetch_user_id_to_email_map(slack_client)
     if not user_id_to_email_map:
         raise ValueError(
