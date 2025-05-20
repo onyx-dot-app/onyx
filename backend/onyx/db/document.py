@@ -918,8 +918,11 @@ def get_unprocessed_kg_document_batch_for_connector(
             and_(
                 DocumentByConnectorCredentialPair.connector_id == connector_id,
                 or_(
-                    DbDocument.kg_stage.is_(None),
-                    DbDocument.kg_stage == KGStage.NOT_STARTED,
+                    or_(
+                        DbDocument.kg_stage.is_(None),
+                        DbDocument.kg_stage == KGStage.NOT_STARTED,
+                    ),
+                    DbDocument.doc_updated_at > DbDocument.kg_processing_time,
                 ),
             )
         )

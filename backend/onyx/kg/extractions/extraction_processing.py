@@ -15,6 +15,7 @@ from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
+from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.db.kg_config import KGConfigSettings
@@ -25,6 +26,7 @@ from onyx.db.models import KGStage
 from onyx.db.relationships import add_or_increment_relationship
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
+from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
 from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.configuration import execute_kg_setting_tests
@@ -469,6 +471,14 @@ def kg_extraction(
                         unprocessed_document.id,
                         kg_stage,
                     )
+
+                    if kg_stage == KGStage.EXTRACTING:
+                        delete_from_kg_relationships__no_commit(
+                            db_session, [unprocessed_document.id]
+                        )
+                        delete_from_kg_entities__no_commit(
+                            db_session, [unprocessed_document.id]
+                        )
                     db_session.commit()
 
             # Iterate over batches of unprocessed files
