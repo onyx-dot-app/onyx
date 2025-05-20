@@ -15,6 +15,8 @@ from shared_configs.configs import MULTI_TENANT
 from tests.regression.search_quality.util_config import load_config
 from tests.regression.search_quality.util_data import export_test_queries
 from tests.regression.search_quality.util_data import load_test_queries
+from tests.regression.search_quality.util_eval import evaluate_one_query
+from tests.regression.search_quality.util_eval import get_corresponding_document
 from tests.regression.search_quality.util_eval import metric_names
 from tests.regression.search_quality.util_retrieve import rerank_one_query
 from tests.regression.search_quality.util_retrieve import search_one_query
@@ -88,41 +90,57 @@ def run_search_eval() -> None:
                         ]
                     )
 
-                if config.skip_rerank:
-                    continue
-
-                # rerank and write results
-                rerank_chunks = rerank_one_query(
-                    query.question, search_chunks, rerank_settings
-                )
-                for rank, result in enumerate(rerank_chunks):
-                    search_csv_writer.writerow(
-                        [
-                            "rerank",
-                            query.question,
-                            rank,
-                            result.score,
-                            result.document_id,
-                            result.chunk_id,
-                        ]
+                rerank_chunks = []
+                if not config.skip_rerank:
+                    # rerank and write results
+                    rerank_chunks = rerank_one_query(
+                        query.question, search_chunks, rerank_settings
                     )
+                    for rank, result in enumerate(rerank_chunks):
+                        search_csv_writer.writerow(
+                            [
+                                "rerank",
+                                query.question,
+                                rank,
+                                result.score,
+                                result.document_id,
+                                result.chunk_id,
+                            ]
+                        )
 
                 # evaluate and write results
-                query.ground_truth
-                # TODO: get actual docid from true chunks
-                # TODO: evaluate and write results
+                truth_documents = [
+                    doc
+                    for truth in query.ground_truth
+                    if (doc := get_corresponding_document(truth.doc_link, db_session))
+                ]
+                metrics = evaluate_one_query(
+                    search_chunks, rerank_chunks, truth_documents, config.eval_topk
+                )
+                metric_vals = [getattr(metrics, field) for field in metric_names]
+                eval_csv_writer.writerow([query.question, *metric_vals])
+
+                # add to aggregation
+                for category in ["all"] + query.categories:
+                    for i, val in enumerate(metric_vals):
+                        if val is not None:
+                            aggregate_results[category][i].append(val)
 
         # aggregate and write results
-        if not config.skip_rerank:
-            with aggregate_eval_path.open("w") as file:
-                aggregate_csv_writer = csv.writer(file)
-                aggregate_csv_writer.writerow(["category", *metric_names])
+        with aggregate_eval_path.open("w") as file:
+            aggregate_csv_writer = csv.writer(file)
+            aggregate_csv_writer.writerow(["category", *metric_names])
 
-                for category, metrics in aggregate_results.items():
-                    avg_metrics = [
-                        sum(metric) / len(metric) if metric else 0 for metric in metrics
+            for category, agg_metrics in aggregate_results.items():
+                aggregate_csv_writer.writerow(
+                    [
+                        category,
+                        *(
+                            sum(metric) / len(metric) if metric else None
+                            for metric in agg_metrics
+                        ),
                     ]
-                    aggregate_csv_writer.writerow([category, *avg_metrics])
+                )
 
 
 if __name__ == "__main__":

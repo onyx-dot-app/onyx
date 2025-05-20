@@ -68,9 +68,21 @@ def rerank_one_query(
     rerank_settings: RerankingDetails,
 ) -> list[InferenceChunk]:
     """Uses the reranker to rerank the retrieved chunks for the given query."""
+    rerank_settings.num_rerank = len(retrieved_chunks)
     return semantic_reranking(
         query_str=question,
         rerank_settings=rerank_settings,
         chunks=retrieved_chunks,
         rerank_metrics_callback=None,
     )[0]
+
+
+def group_by_documents(chunks: list[InferenceChunk]) -> list[str]:
+    """Groups chunks into documents, ranked by the score of the highest scoring chunk."""
+    seen_docids: set[str] = set()
+    retrieved_docids: list[str] = []
+    for chunk in chunks:
+        if chunk.document_id not in seen_docids:
+            seen_docids.add(chunk.document_id)
+            retrieved_docids.append(chunk.document_id)
+    return retrieved_docids
