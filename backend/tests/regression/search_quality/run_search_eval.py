@@ -70,9 +70,9 @@ def run_search_eval() -> None:
 
             for query in test_queries:
                 # search and write results
-                assert query.question_keyword is not None
+                assert query.question_search is not None
                 search_chunks = search_one_query(
-                    query.question_keyword,
+                    query.question_search,
                     multilingual_expansion,
                     document_index,
                     db_session,
@@ -82,7 +82,7 @@ def run_search_eval() -> None:
                     search_csv_writer.writerow(
                         [
                             "search",
-                            query.question_keyword,
+                            query.question_search,
                             rank,
                             result.score,
                             result.document_id,

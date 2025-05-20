@@ -30,7 +30,7 @@ cd path/to/onyx/backend/tests/regression/search_quality
 5. Copy `test_queries.json.template` to `test_queries.json` and add/remove test queries in it. The possible fields are:
 
    - `question: str` the query
-   - `question_keyword: Optional[str]` modified query specifically for the retriever
+   - `question_search: Optional[str]` modified query specifically for the search step
    - `ground_truth: Optional[list[GroundTruth]]` a ranked list of expected search results with fields:
       - `doc_source: str` document source (e.g., Web, Drive, Linear), currently unused
       - `doc_link: str` link associated with document, used to find corresponding document in local index
@@ -44,7 +44,7 @@ cd path/to/onyx/backend/tests/regression/search_quality
 python run_search_eval.py
 ```
 
-8. Optionally, save the generated `test_queries.json` in the export folder to reuse the generated `question_keyword`, and rerun the search evaluation with alternative search parameters.
+8. Optionally, save the generated `test_queries.json` in the export folder to reuse the generated `question_search`, and rerun the search evaluation with alternative search parameters.
 
 ## Metrics
 There are two main metrics currently implemented:

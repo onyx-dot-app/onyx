@@ -12,7 +12,8 @@
             }
         ],
         "categories": [
-            "natural_language"
+            "keyword",
+            "broad"
         ]
     },
     {

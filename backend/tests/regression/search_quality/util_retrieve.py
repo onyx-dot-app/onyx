@@ -15,7 +15,7 @@ logger = setup_logger(__name__)
 
 
 def search_one_query(
-    question_keyword: str,
+    question_search: str,
     multilingual_expansion: list[str],
     document_index: DocumentIndex,
     db_session: Session,
@@ -23,16 +23,16 @@ def search_one_query(
 ) -> list[InferenceChunk]:
     """Uses the search pipeline to retrieve relevant chunks for the given query."""
     # the retrieval preprocessing is fairly stripped down so the query doesn't unexpectedly change
-    query_embedding = get_query_embedding(question_keyword, db_session)
+    query_embedding = get_query_embedding(question_search, db_session)
 
-    all_query_terms = question_keyword.split()
+    all_query_terms = question_search.split()
     processed_keywords = (
         remove_stop_words_and_punctuation(all_query_terms)
         if not multilingual_expansion
         else all_query_terms
     )
 
-    is_keyword = query_analysis(question_keyword)[0]
+    is_keyword = query_analysis(question_search)[0]
     hybrid_alpha = config.hybrid_alpha_keyword if is_keyword else config.hybrid_alpha
 
     access_control_list = ["PUBLIC"]
@@ -47,7 +47,7 @@ def search_one_query(
     )
 
     results = document_index.hybrid_retrieval(
-        query=question_keyword,
+        query=question_search,
         query_embedding=query_embedding,
         final_keywords=processed_keywords,
         filters=filters,

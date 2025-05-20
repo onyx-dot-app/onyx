@@ -30,7 +30,7 @@ class GroundTruth(BaseModel):
 
 class TestQuery(BaseModel):
     question: str
-    question_keyword: Optional[str] = None
+    question_search: Optional[str] = None
     ground_truth: list[GroundTruth] = []
     categories: list[str] = []
 
@@ -38,7 +38,7 @@ class TestQuery(BaseModel):
 def load_test_queries() -> list[TestQuery]:
     """
     Loads the test queries from the test_queries.json file.
-    If `question_keyword` is missing, it will use the tool-calling LLM to generate it.
+    If `question_search` is missing, it will use the tool-calling LLM to generate it.
     """
     # open test queries file
     current_dir = Path(__file__).parent
@@ -49,7 +49,7 @@ def load_test_queries() -> list[TestQuery]:
     with test_queries_path.open("r") as f:
         test_queries_raw: list[dict] = json.load(f)
 
-    # setup llm for question_keyword generation
+    # setup llm for question_search generation
     with get_session_with_current_tenant() as db_session:
         persona = get_persona_by_id(DEFAULT_PERSONA_ID, None, db_session)
         llm, _ = get_llms_for_persona(persona)
@@ -62,10 +62,10 @@ def load_test_queries() -> list[TestQuery]:
         if not tool_call_supported:
             logger.warning(
                 "Tool calling is not supported for the current LLM. "
-                "The original question will be used as the question_keyword."
+                "The original question will be used as the question_search."
             )
 
-    # validate keys and generate question_keyword if missing
+    # validate keys and generate question_search if missing
     test_queries: list[TestQuery] = []
     for query_raw in test_queries_raw:
         try:
@@ -74,16 +74,16 @@ def load_test_queries() -> list[TestQuery]:
             logger.error(f"Incorrectly formatted query: {e}")
             continue
 
-        if test_query.question_keyword is None:
+        if test_query.question_search is None:
             if tool_call_supported:
-                test_query.question_keyword = _modify_one_query(
+                test_query.question_search = _modify_one_query(
                     query=test_query.question,
                     llm=llm,
                     prompt_config=prompt_config,
                     tool_definition=tool_definition,
                 )
             else:
-                test_query.question_keyword = test_query.question
+                test_query.question_search = test_query.question
         test_queries.append(test_query)
 
     return test_queries
@@ -119,7 +119,7 @@ def _modify_one_query(
     global warned
     if not warned:
         logger.warning(
-            "Generating question_keyword. If you do not save the question_keyword, "
+            "Generating question_search. If you do not save the question_search, "
             "it will be generated again on the next run, potentially altering the search results."
         )
         warned = True
