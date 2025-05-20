@@ -1,3 +1,4 @@
+import gc
 import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -144,6 +145,13 @@ def _bulk_retrieve_from_salesforce(
         proxies=sf_client.proxies,
         session=sf_client.session,
     )
+
+    # NOTE(rkuo): there are signs this download is allocating large
+    # amounts of memory instead of streaming the results to disk.
+    # we're doing a gc.collect to try and mitigate this.
+
+    # see https://github.com/simple-salesforce/simple-salesforce/issues/428 for a
+    # possible solution
     bulk_2_type = SFBulk2Type(
         object_name=sf_type,
         bulk2_url=bulk_2_handler.bulk2_url,
@@ -172,14 +180,17 @@ def _bulk_retrieve_from_salesforce(
             new_file_path = os.path.join(directory, new_filename)
             os.rename(original_file_path, new_file_path)
             all_download_paths.append(new_file_path)
-        logger.info(f"Downloaded {sf_type} to {all_download_paths}")
-        return sf_type, all_download_paths
     except Exception as e:
         logger.error(
             f"Failed to download salesforce csv for object type {sf_type}: {e}"
         )
         logger.warning(f"Exceptioning query for object type {sf_type}: {query}")
         return sf_type, None
+    finally:
+        gc.collect()
+
+    logger.info(f"Downloaded {sf_type} to {all_download_paths}")
+    return sf_type, all_download_paths
 
 
 def fetch_all_csvs_in_parallel(
@@ -229,7 +240,8 @@ def fetch_all_csvs_in_parallel(
             time_filter_for_each_object_type[sf_type] = last_modified_time_filter
 
     # Run the bulk retrieve in parallel
-    with ThreadPoolExecutor() as executor:
+    # limit to 4 to help with memory usage
+    with ThreadPoolExecutor(max_workers=4) as executor:
         results = executor.map(
             lambda object_type: _bulk_retrieve_from_salesforce(
                 sf_client=sf_client,
