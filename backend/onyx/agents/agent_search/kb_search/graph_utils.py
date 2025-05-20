@@ -352,7 +352,7 @@ def rename_entities_in_answer(answer: str) -> str:
     """
     # Extract all entity references using regex
     # Pattern matches both <str>:<str> and <str>: <str> formats
-    pattern = r"([^:\s]+):\s*([^\s,;.]+)"
+    pattern = r"([^:\s]+)::\s*([^:\s]+)"
     matches = re.finditer(pattern, answer)
 
     # get active entity types
