@@ -28,7 +28,7 @@ def start_agent_search(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
 
     history = build_history_prompt(graph_config, question)
 

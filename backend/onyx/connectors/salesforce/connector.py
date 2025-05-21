@@ -145,10 +145,12 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                 num_csvs += 1
                 num_bytes += file_size
                 logger.info(
-                    f"CSV info: object_type={object_type} path={csv_path} bytes={file_size}"
+                    f"CSV download: object_type={object_type} path={csv_path} bytes={file_size}"
                 )
 
-        logger.info(f"CSV info total: total_csvs={num_csvs} total_bytes={num_bytes}")
+        logger.info(
+            f"CSV download total: total_csvs={num_csvs} total_bytes={num_bytes}"
+        )
 
     @staticmethod
     def _get_all_types(parent_types: list[str], sf_client: Salesforce) -> set[str]:
@@ -253,6 +255,7 @@ class SalesforceConnector(LoadConnector, PollConnector, SlimConnector):
                     )
 
                     os.remove(csv_path)
+                    gc.collect()
 
             gc.collect()
 

@@ -124,7 +124,7 @@ def generate_validate_refined_answer(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
     prompt_enrichment_components = get_prompt_enrichment_components(graph_config)
 
     persona_contextualized_prompt = (

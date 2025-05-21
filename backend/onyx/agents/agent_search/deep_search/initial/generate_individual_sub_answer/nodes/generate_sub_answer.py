@@ -85,7 +85,7 @@ def generate_sub_answer(
     context_docs = dedup_sort_inference_section_list(context_docs)
 
     persona_contextualized_prompt = get_persona_agent_prompt_expressions(
-        graph_config.inputs.search_request.persona
+        graph_config.inputs.persona
     ).contextualized_prompt
 
     if len(context_docs) == 0:
@@ -106,7 +106,7 @@ def generate_sub_answer(
         fast_llm = graph_config.tooling.fast_llm
         msg = build_sub_question_answer_prompt(
             question=question,
-            original_question=graph_config.inputs.search_request.query,
+            original_question=graph_config.inputs.prompt_builder.raw_user_query,
             docs=context_docs,
             persona_specification=persona_contextualized_prompt,
             config=fast_llm.config,

@@ -1,6 +1,4 @@
 from collections import defaultdict
-from datetime import datetime
-from typing import cast
 from typing import Dict
 from typing import List
 
@@ -11,7 +9,6 @@ from onyx.agents.agent_search.dc_search_analysis.states import MainState
 from onyx.agents.agent_search.dc_search_analysis.states import (
     ObjectResearchInformationUpdate,
 )
-from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import AgentAnswerPiece
 from onyx.utils.logger import setup_logger
@@ -25,10 +22,6 @@ def structure_research_by_object(
     """
     LangGraph node to start the agentic search process.
     """
-    datetime.now()
-
-    graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
 
     write_custom_event(
         "initial_agent_answer",
