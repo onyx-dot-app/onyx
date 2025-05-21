@@ -110,7 +110,9 @@ class SQLAlchemyDebugging:
         csv_filename = "tenants_by_num_docs.csv"
         with open(csv_filename, "w") as csvfile:
             writer = csv.writer(csvfile)
-            writer.writerow(["tenant_id", "num_docs", "num_chunks"])  # Write header
+            writer.writerow(
+                ["tenant_id", "first_user_email", "num_user", "num_docs", "num_chunks"]
+            )  # Write header
             # Write data rows (using the sorted list)
             for tenant_id, metadata in sorted_tenants:
                 writer.writerow(
