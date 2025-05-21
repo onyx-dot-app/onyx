@@ -468,3 +468,8 @@ if platform.system() == "Darwin":
     REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPALIVE] = 60  # type: ignore
 else:
     REDIS_SOCKET_KEEPALIVE_OPTIONS[socket.TCP_KEEPIDLE] = 60  # type: ignore
+
+
+class OnyxCallTypes(str, Enum):
+    FIREFLIES = "fireflies"
+    GONG = "gong"

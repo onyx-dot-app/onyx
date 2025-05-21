@@ -35,9 +35,8 @@ def research_object_source(
     datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
-    search_tool = graph_config.tooling.search_tool
     question = graph_config.inputs.search_request.query
+    search_tool = graph_config.tooling.search_tool
     object, document_source = state.object_source_combination
 
     if search_tool is None or graph_config.inputs.search_request.persona is None:
@@ -153,7 +152,6 @@ def research_object_source(
             ),
         )
     ]
-    # fast_llm = graph_config.tooling.fast_llm
     primary_llm = graph_config.tooling.primary_llm
     llm = primary_llm
     # Grader

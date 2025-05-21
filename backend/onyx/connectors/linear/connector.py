@@ -193,12 +193,19 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                             team {
                                 name
                             }
+                            assignee {
+                                email
+                            }
                             previousIdentifiers
                             subIssueSortOrder
                             priorityLabel
                             identifier
                             url
                             branchName
+                            state {
+                                id
+                                name
+                            }
                             customerTicketCount
                             description
                             comments {
@@ -267,7 +274,19 @@ class LinearConnector(LoadConnector, PollConnector, OAuthConnector):
                         title=node["title"],
                         doc_updated_at=time_str_to_utc(node["updatedAt"]),
                         metadata={
-                            "team": node["team"]["name"],
+                            k: str(v)
+                            for k, v in {
+                                "team": (node.get("team") or {}).get("name"),
+                                "assignee": (node.get("assignee") or {}).get("email"),
+                                "state": (node.get("state") or {}).get("name"),
+                                "priority": node.get("priority"),
+                                "estimate": node.get("estimate"),
+                                "started_at": node.get("startedAt"),
+                                "completed_at": node.get("completedAt"),
+                                "created_at": node.get("createdAt"),
+                                "due_date": node.get("dueDate"),
+                            }.items()
+                            if v is not None
                         },
                     )
                 )
