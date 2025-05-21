@@ -36,7 +36,7 @@ MAX_OR_CONDITIONS = 10
 # up from 500ms for now, since we've seen quite a few timeouts
 # in the long term, we are looking to improve the performance of Vespa
 # so that we can bring this back to default
-VESPA_TIMEOUT = "3s"
+VESPA_TIMEOUT = "10s"
 BATCH_SIZE = 128  # Specific to Vespa
 
 TENANT_ID = "tenant_id"
