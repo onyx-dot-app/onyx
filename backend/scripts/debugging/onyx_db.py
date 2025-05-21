@@ -42,7 +42,7 @@ class SQLAlchemyDebugging:
     def __init__(self) -> None:
         pass
 
-    def top_chunks(self, k: int = 10) -> None:
+    def top_chunks(self, filename: str, k: int = 10) -> None:
         tenants_to_total_chunks: dict[str, TenantMetadata] = {}
 
         logger.info("Fetching all tenant id's.")
@@ -107,8 +107,7 @@ class SQLAlchemyDebugging:
             reverse=True,
         )
 
-        csv_filename = "tenants_by_num_docs.csv"
-        with open(csv_filename, "w") as csvfile:
+        with open(filename, "w") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(
                 ["tenant_id", "first_user_email", "num_user", "num_docs", "num_chunks"]
@@ -124,7 +123,7 @@ class SQLAlchemyDebugging:
                         metadata.num_chunks,
                     ]
                 )
-            logger.info(f"Successfully wrote statistics to {csv_filename}")
+            logger.info(f"Successfully wrote statistics to {filename}")
 
         # output top k by chunks
         top_k_tenants = heapq.nlargest(
@@ -143,6 +142,14 @@ def main() -> None:
     parser.add_argument("--db", help="Database default db name", default="danswer")
 
     parser.add_argument("--report", help="Generate the given report")
+
+    parser.add_argument(
+        "--filename",
+        type=str,
+        default="tenants_by_num_docs.csv",
+        help="Generate the given report",
+        required=False,
+    )
 
     args = parser.parse_args()
 
@@ -166,7 +173,7 @@ def main() -> None:
     debugger = SQLAlchemyDebugging()
 
     if args.report == "top-chunks":
-        debugger.top_chunks(10)
+        debugger.top_chunks(args.filename, 10)
     else:
         logger.info("No action.")
 
