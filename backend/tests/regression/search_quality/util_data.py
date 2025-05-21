@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import cast
 from typing import Optional
 
 from langgraph.types import StreamWriter
@@ -54,16 +55,11 @@ def load_test_queries() -> list[TestQuery]:
         persona = get_persona_by_id(DEFAULT_PERSONA_ID, None, db_session)
         llm, _ = get_llms_for_persona(persona)
         prompt_config = PromptConfig.from_model(persona.prompts[0])
-        tool_definition = SearchToolOverride().tool_definition()
+        search_tool = SearchToolOverride()
 
         tool_call_supported = explicit_tool_calling_supported(
             llm.config.model_provider, llm.config.model_name
         )
-        if not tool_call_supported:
-            logger.warning(
-                "Tool calling is not supported for the current LLM. "
-                "The original question will be used as the question_search."
-            )
 
     # validate keys and generate question_search if missing
     test_queries: list[TestQuery] = []
@@ -75,15 +71,13 @@ def load_test_queries() -> list[TestQuery]:
             continue
 
         if test_query.question_search is None:
-            if tool_call_supported:
-                test_query.question_search = _modify_one_query(
-                    query=test_query.question,
-                    llm=llm,
-                    prompt_config=prompt_config,
-                    tool_definition=tool_definition,
-                )
-            else:
-                test_query.question_search = test_query.question
+            test_query.question_search = _modify_one_query(
+                query=test_query.question,
+                llm=llm,
+                prompt_config=prompt_config,
+                tool=search_tool,
+                tool_call_supported=tool_call_supported,
+            )
         test_queries.append(test_query)
 
     return test_queries
@@ -102,7 +96,7 @@ def export_test_queries(test_queries: list[TestQuery], export_path: Path) -> Non
 
 class SearchToolOverride(SearchTool):
     def __init__(self) -> None:
-        # do nothing, the tool_definition function doesn't require variables to be initialized
+        # do nothing, only class variables are required for the functions we call
         pass
 
 
@@ -113,7 +107,8 @@ def _modify_one_query(
     query: str,
     llm: LLM,
     prompt_config: PromptConfig,
-    tool_definition: dict,
+    tool: SearchTool,
+    tool_call_supported: bool,
     writer: StreamWriter = lambda _: None,
 ) -> str:
     global warned
@@ -138,21 +133,34 @@ def _modify_one_query(
         raw_user_uploaded_files=[],
         single_message_history=None,
     )
-    prompt = prompt_builder.build()
 
-    stream = llm.stream(
-        prompt=prompt,
-        tools=[tool_definition],
-        tool_choice="required",
-        structured_response_format=None,
-    )
-    tool_message = process_llm_stream(
-        messages=stream,
-        should_stream_answer=False,
-        writer=writer,
-    )
-    return (
-        tool_message.tool_calls[0]["args"]["query"]
-        if tool_message.tool_calls
-        else query
-    )
+    if tool_call_supported:
+        prompt = prompt_builder.build()
+        tool_definition = tool.tool_definition()
+        stream = llm.stream(
+            prompt=prompt,
+            tools=[tool_definition],
+            tool_choice="required",
+            structured_response_format=None,
+        )
+        tool_message = process_llm_stream(
+            messages=stream,
+            should_stream_answer=False,
+            writer=writer,
+        )
+        return (
+            tool_message.tool_calls[0]["args"]["query"]
+            if tool_message.tool_calls
+            else query
+        )
+
+    history = prompt_builder.get_message_history()
+    return cast(
+        dict[str, str],
+        tool.get_args_for_non_tool_calling_llm(
+            query=query,
+            history=history,
+            llm=llm,
+            force_run=True,
+        ),
+    )["query"]

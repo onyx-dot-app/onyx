@@ -78,7 +78,7 @@ def rerank_one_query(
 
 
 def group_by_documents(chunks: list[InferenceChunk]) -> list[str]:
-    """Groups chunks into documents, ranked by the score of the highest scoring chunk."""
+    """Groups a sorted list of chunks into a sorted list of document ids."""
     seen_docids: set[str] = set()
     retrieved_docids: list[str] = []
     for chunk in chunks:
