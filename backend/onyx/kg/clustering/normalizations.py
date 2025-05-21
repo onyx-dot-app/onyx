@@ -66,11 +66,11 @@ def _normalize_one_entity(entity: str) -> str | None:
         candidates = (
             db_session.query(
                 KGEntity.id_name,
-                KGEntity.semantic_id,
+                KGEntity.clustering_name,
                 (
                     func.cardinality(
                         func.array(
-                            select(func.unnest(KGEntity.semantic_id_trigrams))
+                            select(func.unnest(KGEntity.clustering_trigrams))
                             .correlate(KGEntity)
                             .intersect(
                                 select(
@@ -81,14 +81,14 @@ def _normalize_one_entity(entity: str) -> str | None:
                     ).cast(Float)
                     / func.least(
                         func.cardinality(query_trigrams.c.trigrams),
-                        func.cardinality(KGEntity.semantic_id_trigrams),
+                        func.cardinality(KGEntity.clustering_trigrams),
                     )
                 ).label("score"),
             )
             .select_from(KGEntity, query_trigrams)
             .filter(
                 KGEntity.entity_type_id_name == entity_type,
-                KGEntity.semantic_id_trigrams.overlap(query_trigrams.c.trigrams),
+                KGEntity.clustering_trigrams.overlap(query_trigrams.c.trigrams),
             )
             .order_by(desc("score"))
             .limit(100)
