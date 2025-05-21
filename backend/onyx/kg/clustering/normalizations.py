@@ -11,7 +11,6 @@ from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
 from sqlalchemy import text
 
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import get_entity_names_for_types
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
@@ -44,21 +43,6 @@ def _clean_entity_name(entity_name: str) -> str:
     """
     cleaned_name = entity_name.casefold()
     return alphanum_regex.sub("", rem_email_regex.sub("", cleaned_name)) or cleaned_name
-
-
-def _get_existing_normalized_entities(
-    raw_entities: List[str],
-) -> List[tuple[str, str | None]]:
-    """
-    Get existing normalized entities from the database.
-    """
-
-    entity_types = list(set([entity.split("::")[0] for entity in raw_entities]))
-
-    with get_session_with_current_tenant() as db_session:
-        entities = get_entity_names_for_types(db_session, entity_types)
-
-    return entities
 
 
 def _get_existing_normalized_relationships(
@@ -109,14 +93,17 @@ def normalize_entities(
     Returns:
         List of normalized entity strings
     """
-
     normalized_results: list[str] = []
-    normalized_map: dict[str, str | None] = {}
+    normalized_map: dict[str, str] = {}
 
     with get_session_with_current_tenant() as db_session:
         for entity in raw_entities_no_attributes:
             entity_type, entity_name = _split_entity_type_v_name(entity)
             cleaned_entity_name = _clean_entity_name(entity_name)
+            if entity_name == "*":
+                normalized_results.append(entity)
+                normalized_map[entity] = entity
+                continue
 
             # TODO: make parallel, convert to orm (PAINFUL process)
             # step 1: query entities containing the name or something similar as a substring
@@ -153,7 +140,7 @@ def normalize_entities(
             if (
                 not candidates or candidates[0][2] < 0.2
             ):  # skip if all candidates are bad
-                normalized_map[entity] = None
+                normalized_map[entity] = entity
                 continue
 
             # TODO: retrieval needs to return the semantic id too, and rerank should compare on that
@@ -182,12 +169,12 @@ def normalize_entities(
             candidates = list(
                 sorted(
                     filter(lambda x: x[2] > 0.3, candidates),
-                    key=lambda x: x[1],
+                    key=lambda x: x[2],
                     reverse=True,
                 )
             )
             if not candidates:
-                normalized_map[entity] = None
+                normalized_map[entity] = entity
                 continue
 
             normalized_results.append(candidates[0][0])

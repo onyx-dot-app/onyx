@@ -204,54 +204,6 @@ def delete_entities_by_id_names(
     return deleted_count
 
 
-def get_entity_names_for_types(
-    db_session: Session, entity_types: List[str]
-) -> List[tuple[str, str | None]]:
-    """Get all entities that belong to the specified entity types.
-
-    Args:
-        db_session: SQLAlchemy session
-        entity_types: List of entity type id_names to filter by
-
-    Returns:
-        List of entity id_names belonging to the specified entity types
-    """
-    entity_query = db_session.query(KGEntity).filter(
-        KGEntity.entity_type_id_name.in_(entity_types)
-    )
-
-    # Get document IDs from the filtered entities
-    doc_ids = [e.document_id for e in entity_query.all() if e.document_id is not None]
-
-    # Get document info for those IDs
-    doc_info: dict[str, tuple[str | None, str | None]] = {
-        row[0].capitalize(): (row[1], row[2])
-        for row in db_session.query(Document.id, Document.semantic_id, Document.link)
-        .filter(Document.id.in_(doc_ids))
-        .all()
-    }
-
-    # Return entities with their document info
-
-    names: list[tuple[str, str | None]] = []
-    for entity in entity_query.all():
-
-        if entity.document_id is None:
-            names.append((entity.id_name, entity.id_name))
-            continue
-
-        # Extract entity type from the full type ID
-        entity_type = entity.entity_type_id_name.split("::")[0].upper()
-
-        # Get document info, defaulting to None if not found
-        doc_semantic_id = doc_info.get(entity.document_id.capitalize(), (None, None))[0]
-
-        # Construct the final string
-        names.append((entity.id_name, f"{entity_type}::{doc_semantic_id}"))
-
-    return names
-
-
 def get_entities_by_document_ids(
     db_session: Session, document_ids: list[str], kg_stage: KGStage
 ) -> List[str]:

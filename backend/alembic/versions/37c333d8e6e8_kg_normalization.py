@@ -44,34 +44,30 @@ def upgrade() -> None:
 
     # Define regex patterns in Python
     alphanum_pattern = r"[^a-z0-9]+"
-    email_pattern = r"(?<=\S)@([a-z0-9-]+)\.([a-z]{2,6})$"
 
-    # Create trigger to update semantic_id and trigrams if document_id or semantic_id changes
+    # Create trigger to update semantic_id and its trigrams if document_id changes
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION update_kg_entity_semantic_id()
         RETURNS TRIGGER AS $$
         DECLARE
             doc_semantic_id text;
+            cleaned_semantic_id text;
         BEGIN
-            -- Get semantic_id from document if document_id exists
-            IF NEW.document_id IS NOT NULL THEN
-                SELECT semantic_id INTO doc_semantic_id
-                FROM document
-                WHERE id = NEW.document_id;
-            END IF;
+            -- Get semantic_id from document
+            SELECT semantic_id INTO doc_semantic_id
+            FROM document
+            WHERE id = NEW.document_id;
 
-            -- Set semantic_id and trigrams
-            NEW.semantic_id = COALESCE(doc_semantic_id, '');
-            NEW.semantic_id_trigrams = show_trgm(
-                regexp_replace(
-                    regexp_replace(
-                        lower(NEW.semantic_id),
-                        '{alphanum_pattern}', '', 'g'
-                    ),
-                    '{email_pattern}', '', 'g'
-                )
+            -- Clean the semantic_id with regex patterns
+            cleaned_semantic_id = regexp_replace(
+                lower(COALESCE(doc_semantic_id, '')),
+                '{alphanum_pattern}', '', 'g'
             );
+
+            -- Set semantic_id to cleaned version and generate trigrams
+            NEW.semantic_id = cleaned_semantic_id;
+            NEW.semantic_id_trigrams = show_trgm(cleaned_semantic_id);
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
@@ -88,26 +84,25 @@ def upgrade() -> None:
         """
     )
 
-    # Create trigger to update kg_entity semantic_id and trigrams when document.semantic_id changes
-    # Can only manually override semantic_id if document_id is NULL, perhaps useful for ungrounded entities
+    # Create trigger to update kg_entity semantic_id and its trigrams when document.semantic_id changes
     op.execute(
         f"""
         CREATE OR REPLACE FUNCTION update_kg_entity_semantic_id_from_doc()
         RETURNS TRIGGER AS $$
+        DECLARE
+            cleaned_semantic_id text;
         BEGIN
+            -- Clean the semantic_id with regex patterns
+            cleaned_semantic_id = regexp_replace(
+                lower(COALESCE(NEW.semantic_id, '')),
+                '{alphanum_pattern}', '', 'g'
+            );
+
             -- Update semantic_id and trigrams for all entities referencing this document
             UPDATE kg_entity
             SET
-                semantic_id = COALESCE(NEW.semantic_id, ''),
-                semantic_id_trigrams = show_trgm(
-                    regexp_replace(
-                        regexp_replace(
-                            lower(COALESCE(NEW.semantic_id, '')),
-                            '{alphanum_pattern}', '', 'g'
-                        ),
-                        '{email_pattern}', '', 'g'
-                    )
-                )
+                semantic_id = cleaned_semantic_id,
+                semantic_id_trigrams = show_trgm(cleaned_semantic_id)
             WHERE document_id = NEW.id;
             RETURN NEW;
         END;
