@@ -25,6 +25,7 @@ from onyx.agents.agent_search.kb_search.nodes.c1_process_kg_only_answers import 
     process_kg_only_answers,
 )
 from onyx.agents.agent_search.kb_search.nodes.d1_generate_answer import generate_answer
+from onyx.agents.agent_search.kb_search.nodes.d2_logging_node import log_data
 from onyx.agents.agent_search.kb_search.states import MainInput
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.utils.logger import setup_logger
@@ -67,6 +68,11 @@ def kb_graph_builder() -> StateGraph:
     graph.add_node(
         "generate_answer",
         generate_answer,
+    )
+
+    graph.add_node(
+        "log_data",
+        log_data,
     )
 
     graph.add_node(
@@ -126,6 +132,11 @@ def kb_graph_builder() -> StateGraph:
 
     graph.add_edge(
         start_key="generate_answer",
+        end_key="log_data",
+    )
+
+    graph.add_edge(
+        start_key="log_data",
         end_key=END,
     )
 

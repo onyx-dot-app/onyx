@@ -29,8 +29,6 @@ from onyx.chat.models import ExtendedToolResponse
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
-from onyx.db.chat import log_agent_sub_question_results
-from onyx.db.engine import get_session_with_current_tenant
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
@@ -258,20 +256,7 @@ def generate_answer(
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")
 
-    stream_write_close_main_answer(writer)
-
-    # Persist the sub-answer in the database
-    with get_session_with_current_tenant() as db_session:
-        chat_session_id = graph_config.persistence.chat_session_id
-        primary_message_id = graph_config.persistence.message_id
-        sub_question_answer_results = state.step_results
-
-        log_agent_sub_question_results(
-            db_session=db_session,
-            chat_session_id=chat_session_id,
-            primary_message_id=primary_message_id,
-            sub_question_answer_results=sub_question_answer_results,
-        )
+        stream_write_close_main_answer(writer)
 
     return MainOutput(
         log_messages=[
