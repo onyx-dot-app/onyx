@@ -61,7 +61,7 @@ def upgrade() -> None:
 
             -- Clean the semantic_id with regex patterns
             cleaned_semantic_id = regexp_replace(
-                lower(COALESCE(doc_semantic_id, '')),
+                lower(COALESCE(doc_semantic_id, NEW.id_name)),
                 '{alphanum_pattern}', '', 'g'
             );
 
