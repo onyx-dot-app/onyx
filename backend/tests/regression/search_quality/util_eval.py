@@ -47,13 +47,16 @@ def evaluate_one_query(
     """Computes metrics for the search results, relative to the ground truth and reranked results."""
     metrics_dict: dict[str, float] = {}
 
-    search_topk = group_by_documents(search_chunks)[:topk]
-    search_ranks = {docid: rank for rank, docid in enumerate(search_topk)}
+    search_documents = group_by_documents(search_chunks)
+    search_ranks = {docid: rank for rank, docid in enumerate(search_documents)}
+    search_ranks_topk = {
+        docid: rank for rank, docid in enumerate(search_documents[:topk])
+    }
     true_ranks = {doc.id: rank for rank, doc in enumerate(true_documents)}
 
     if true_documents:
         metrics_dict["ground_truth_ratio_topk"] = _compute_ratio(
-            search_ranks, true_ranks
+            search_ranks_topk, true_ranks
         )
         metrics_dict["ground_truth_avg_rank_delta"] = _compute_avg_rank_delta(
             search_ranks, true_ranks
@@ -68,7 +71,9 @@ def evaluate_one_query(
             if docid not in soft_ranks:
                 soft_ranks[docid] = len(soft_ranks)
 
-        metrics_dict["soft_truth_ratio_topk"] = _compute_ratio(search_ranks, soft_ranks)
+        metrics_dict["soft_truth_ratio_topk"] = _compute_ratio(
+            search_ranks_topk, soft_ranks
+        )
         metrics_dict["soft_truth_avg_rank_delta"] = _compute_avg_rank_delta(
             search_ranks, soft_ranks
         )
@@ -85,6 +90,5 @@ def _compute_avg_rank_delta(
 ) -> float:
     out = len(search_ranks)
     return sum(
-        (abs(search_ranks[docid] - rank) if docid in search_ranks else abs(out - rank))
-        for docid, rank in true_ranks.items()
+        abs(search_ranks.get(docid, out) - rank) for docid, rank in true_ranks.items()
     ) / len(true_ranks)

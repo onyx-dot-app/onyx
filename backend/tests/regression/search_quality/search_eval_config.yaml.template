@@ -3,7 +3,7 @@ HYBRID_ALPHA: 0.5
 HYBRID_ALPHA_KEYWORD: 0.4
 DOC_TIME_DECAY: 0.5
 NUM_RETURNED_HITS: 50       # Setting to a higher value will improve evaluation quality but increase reranking time
-RANK_PROFILE: null
+RANK_PROFILE: 'semantic'
 OFFSET: 0
 TITLE_CONTENT_RATIO: 0.1
 USER_EMAIL: null            # User email to use for testing, modifies access control list, null means only public files
