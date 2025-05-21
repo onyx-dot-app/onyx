@@ -854,8 +854,12 @@ class KGEntity(Base):
         NullFilteredString, nullable=True, index=True
     )
 
-    # Trigrams of document.semantic_id for fuzzy matching
-    trigrams: Mapped[list[str]] = mapped_column(
+    # Semantic "name" of entity for fuzzy matching
+    semantic_id: Mapped[str] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
+    semantic_id_trigrams: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String(3)),
         nullable=True,
     )

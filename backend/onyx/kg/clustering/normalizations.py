@@ -1,11 +1,14 @@
+import re
 from collections import defaultdict
+from typing import cast
 from typing import Dict
 from typing import List
 from typing import Optional
 
 import numpy as np
-from thefuzz import fuzz  # type: ignore
-from thefuzz import process  # type: ignore
+from nltk import ngrams  # type: ignore
+from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
+from sqlalchemy import text
 
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_entity_names_for_types
@@ -14,6 +17,10 @@ from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
+
+
+alphanum_regex = re.compile(r"[^a-z0-9]+")
+rem_email_regex = re.compile(r"(?<=\S)@([a-z0-9-]+)\.([a-z]{2,6})$")
 
 
 def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
@@ -29,6 +36,14 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
     entity_name = "::".join(entity_split[1:])
 
     return entity_type, entity_name
+
+
+def _clean_entity_name(entity_name: str) -> str:
+    """
+    Clean an entity name by removing email addresses and other non-alphanumeric characters.
+    """
+    cleaned_name = entity_name.casefold()
+    return alphanum_regex.sub("", rem_email_regex.sub("", cleaned_name)) or cleaned_name
 
 
 def _get_existing_normalized_entities(
@@ -94,59 +109,89 @@ def normalize_entities(
     Returns:
         List of normalized entity strings
     """
-    # TODO: this probably should move to a new Vespa schema for entity normalization
-    # TODO: as is, this should be converted to a generator going through the entities
-    # in large batches, to avoid memory issues
 
-    # Assume this is your predefined list of normalized entities
-    norm_entities = _get_existing_normalized_entities(raw_entities_no_attributes)
+    normalized_results: list[str] = []
+    normalized_map: dict[str, str | None] = {}
 
-    norm_entity_semantic_to_id_map: dict[str, dict[str, str]] = defaultdict(dict)
+    with get_session_with_current_tenant() as db_session:
+        for entity in raw_entities_no_attributes:
+            entity_type, entity_name = _split_entity_type_v_name(entity)
+            cleaned_entity_name = _clean_entity_name(entity_name)
 
-    for norm_entity_tuple in norm_entities:
-        if norm_entity_tuple[1] is None:
-            continue
-        entity_type, norm_entity_semantic_name = _split_entity_type_v_name(
-            norm_entity_tuple[1]
-        )
-        norm_entity_semantic_to_id_map[entity_type][norm_entity_semantic_name] = (
-            _split_entity_type_v_name(norm_entity_tuple[0])[1]
-        )
+            # TODO: make parallel, convert to orm (PAINFUL process)
+            # step 1: query entities containing the name or something similar as a substring
+            candidates = cast(
+                list[tuple[str, str, float]],
+                db_session.execute(
+                    text(
+                        """
+                        WITH query AS (
+                            SELECT show_trgm(:query)::varchar(3)[] AS trigrams
+                        ),
+                        matched AS (
+                            SELECT id_name, semantic_id, cardinality(ARRAY(
+                                    SELECT UNNEST(kg_entity.semantic_id_trigrams)
+                                    INTERSECT
+                                    SELECT UNNEST(query.trigrams)
+                                ))::float / LEAST(
+                                    cardinality(query.trigrams),
+                                    cardinality(kg_entity.semantic_id_trigrams)
+                                ) AS score
+                            FROM kg_entity, query
+                            WHERE kg_entity.semantic_id_trigrams && query.trigrams
+                            AND kg_entity.entity_type_id_name = :entity_type
+                        )
+                        SELECT id_name, semantic_id, score
+                        FROM matched
+                        ORDER BY score DESC
+                        LIMIT 100;
+                        """
+                    ),
+                    {"query": cleaned_entity_name, "entity_type": entity_type},
+                ).fetchall(),
+            )
+            if (
+                not candidates or candidates[0][2] < 0.2
+            ):  # skip if all candidates are bad
+                normalized_map[entity] = None
+                continue
 
-    normalized_results: List[str] = []
-    normalized_map: Dict[str, str | None] = {}
-    threshold = 80  # Adjust threshold as needed
+            # TODO: retrieval needs to return the semantic id too, and rerank should compare on that
+            # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
+            n1, n2, n3 = (
+                set(ngrams(cleaned_entity_name, 1)),
+                set(ngrams(cleaned_entity_name, 2)),
+                set(ngrams(cleaned_entity_name, 3)),
+            )
+            for i, (id_name, semantic_id, _) in enumerate(candidates):
+                h_n1, h_n2, h_n3 = (
+                    set(ngrams(semantic_id, 1)),
+                    set(ngrams(semantic_id, 2)),
+                    set(ngrams(semantic_id, 3)),
+                )
+                i1, i2, i3 = (len(n1 & h_n1), len(n2 & h_n2), len(n3 & h_n3))
+                grams_used = min(2, len(cleaned_entity_name) - 1, len(semantic_id) - 1)
+                ngram_score = (
+                    0.2500 * i1 / max(1, len(n1) + len(h_n1) - i1)
+                    + 0.25 * i2 / max(1, len(n2) + len(h_n2) - i2)
+                    + 0.50 * i3 / max(1, min(len(n3), len(h_n3)))
+                ) / (0.25, 0.5, 1.0)[grams_used]
+                leven_score = normalized_similarity(cleaned_entity_name, semantic_id)
+                score = 0.75 * ngram_score + 0.25 * leven_score
+                candidates[i] = (id_name, semantic_id, score)
+            candidates = list(
+                sorted(
+                    filter(lambda x: x[2] > 0.3, candidates),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+            )
+            if not candidates:
+                normalized_map[entity] = None
+                continue
 
-    base_norm_entities = [norm_entity[0] for norm_entity in norm_entities]
-
-    for entity in raw_entities_no_attributes:
-        entity_type, entity_name = entity.split("::")
-        if entity_name == "*":
-            normalized_results.append(entity)
-            normalized_map[entity] = entity
-            continue
-
-        # Find the best match and its score from norm_entities
-        all_entity_match_possibilities = norm_entity_semantic_to_id_map[
-            entity_type
-        ].keys()
-        best_match, score = process.extractOne(
-            entity_name, all_entity_match_possibilities, scorer=fuzz.partial_ratio
-        )
-
-        if best_match not in base_norm_entities:
-            best_match_id = norm_entity_semantic_to_id_map[entity_type][
-                best_match
-            ]  # replace semantic_id with the actual id
-        else:
-            best_match_id = best_match
-
-        if score >= threshold:
-            normalized_results.append(f"{entity_type}::{best_match_id}")
-            normalized_map[entity] = f"{entity_type}::{best_match_id}"
-        else:
-            # If no good match found, keep original
-            normalized_map[entity] = entity
+            normalized_results.append(candidates[0][0])
+            normalized_map[entity] = candidates[0][0]
 
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map
