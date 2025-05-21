@@ -21,6 +21,7 @@ from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 
 alphanum_regex = re.compile(r"[^a-z0-9]+")
@@ -42,12 +43,93 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
     return entity_type, entity_name
 
 
-def _clean_entity_name(entity_name: str) -> str:
+def _normalize_one_entity(entity: str) -> str | None:
     """
-    Clean an entity name by removing email addresses and other non-alphanumeric characters.
+    Matches a single entity to the best matching entity of the same type.
     """
-    cleaned_name = entity_name.casefold()
-    return alphanum_regex.sub("", rem_email_regex.sub("", cleaned_name)) or cleaned_name
+    entity_type, entity_name = _split_entity_type_v_name(entity)
+    if entity_name == "*":
+        return entity
+
+    cleaned_entity = entity_name.casefold()
+    cleaned_entity = (
+        alphanum_regex.sub("", rem_email_regex.sub("", cleaned_entity))
+        or cleaned_entity
+    )
+
+    # step 1: find entities containing the entity_name or something similar
+    with get_session_with_current_tenant() as db_session:
+        query_trigrams = db_session.query(
+            func.show_trgm(cleaned_entity).cast(ARRAY(String(3))).label("trigrams")
+        ).cte("query")
+
+        candidates = (
+            db_session.query(
+                KGEntity.id_name,
+                KGEntity.semantic_id,
+                (
+                    func.cardinality(
+                        func.array(
+                            select(func.unnest(KGEntity.semantic_id_trigrams))
+                            .correlate(KGEntity)
+                            .intersect(
+                                select(
+                                    func.unnest(query_trigrams.c.trigrams)
+                                ).correlate(query_trigrams)
+                            )
+                        )
+                    ).cast(Float)
+                    / func.least(
+                        func.cardinality(query_trigrams.c.trigrams),
+                        func.cardinality(KGEntity.semantic_id_trigrams),
+                    )
+                ).label("score"),
+            )
+            .select_from(KGEntity, query_trigrams)
+            .filter(
+                KGEntity.entity_type_id_name == entity_type,
+                KGEntity.semantic_id_trigrams.overlap(query_trigrams.c.trigrams),
+            )
+            .order_by(desc("score"))
+            .limit(100)
+            .all()
+        )
+    if not candidates or candidates[0][2] < 0.25:
+        return None
+
+    # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
+    n1, n2, n3 = (
+        set(ngrams(cleaned_entity, 1)),
+        set(ngrams(cleaned_entity, 2)),
+        set(ngrams(cleaned_entity, 3)),
+    )
+    for i, (id_name, semantic_id, _) in enumerate(candidates):
+        h_n1, h_n2, h_n3 = (
+            set(ngrams(semantic_id, 1)),
+            set(ngrams(semantic_id, 2)),
+            set(ngrams(semantic_id, 3)),
+        )
+        i1, i2, i3 = (len(n1 & h_n1), len(n2 & h_n2), len(n3 & h_n3))
+        grams_used = min(2, len(cleaned_entity) - 1, len(semantic_id) - 1)
+        ngram_score = (
+            0.2500 * i1 / max(1, len(n1) + len(h_n1) - i1)
+            + 0.25 * i2 / max(1, len(n2) + len(h_n2) - i2)
+            + 0.50 * i3 / max(1, min(len(n3), len(h_n3)))
+        ) / (0.25, 0.5, 1.0)[grams_used]
+        leven_score = normalized_similarity(cleaned_entity, semantic_id)
+        score = 0.75 * ngram_score + 0.25 * leven_score
+        candidates[i] = (id_name, semantic_id, score)
+    candidates = list(
+        sorted(
+            filter(lambda x: x[2] > 0.3, candidates),
+            key=lambda x: x[2],
+            reverse=True,
+        )
+    )
+    if not candidates:
+        return None
+
+    return candidates[0][0]
 
 
 def _get_existing_normalized_relationships(
@@ -101,97 +183,15 @@ def normalize_entities(
     normalized_results: list[str] = []
     normalized_map: dict[str, str] = {}
 
-    with get_session_with_current_tenant() as db_session:
-        # TODO make parallel
-        for entity in raw_entities_no_attributes:
-            entity_type, entity_name = _split_entity_type_v_name(entity)
-            cleaned_entity_name = _clean_entity_name(entity_name)
-            if entity_name == "*":
-                normalized_results.append(entity)
-                normalized_map[entity] = entity
-                continue
-
-            # step 1: find entities containing the entity_name or something similar
-            query_trigrams = db_session.query(
-                func.show_trgm(cleaned_entity_name)
-                .cast(ARRAY(String(3)))
-                .label("trigrams")
-            ).cte("query")
-
-            candidates = (
-                db_session.query(
-                    KGEntity.id_name,
-                    KGEntity.semantic_id,
-                    (
-                        func.cardinality(
-                            func.array(
-                                select(func.unnest(KGEntity.semantic_id_trigrams))
-                                .correlate(KGEntity)
-                                .intersect(
-                                    select(
-                                        func.unnest(query_trigrams.c.trigrams)
-                                    ).correlate(query_trigrams)
-                                )
-                            )
-                        ).cast(Float)
-                        / func.least(
-                            func.cardinality(query_trigrams.c.trigrams),
-                            func.cardinality(KGEntity.semantic_id_trigrams),
-                        )
-                    ).label("score"),
-                )
-                .select_from(KGEntity, query_trigrams)
-                .filter(
-                    KGEntity.entity_type_id_name == entity_type,
-                    KGEntity.semantic_id_trigrams.overlap(query_trigrams.c.trigrams),
-                )
-                .order_by(desc("score"))
-                .limit(100)
-                .all()
-            )
-
-            if (
-                not candidates or candidates[0][2] < 0.2
-            ):  # skip if all candidates are bad
-                normalized_map[entity] = entity
-                continue
-
-            # TODO: retrieval needs to return the semantic id too, and rerank should compare on that
-            # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
-            n1, n2, n3 = (
-                set(ngrams(cleaned_entity_name, 1)),
-                set(ngrams(cleaned_entity_name, 2)),
-                set(ngrams(cleaned_entity_name, 3)),
-            )
-            for i, (id_name, semantic_id, _) in enumerate(candidates):
-                h_n1, h_n2, h_n3 = (
-                    set(ngrams(semantic_id, 1)),
-                    set(ngrams(semantic_id, 2)),
-                    set(ngrams(semantic_id, 3)),
-                )
-                i1, i2, i3 = (len(n1 & h_n1), len(n2 & h_n2), len(n3 & h_n3))
-                grams_used = min(2, len(cleaned_entity_name) - 1, len(semantic_id) - 1)
-                ngram_score = (
-                    0.2500 * i1 / max(1, len(n1) + len(h_n1) - i1)
-                    + 0.25 * i2 / max(1, len(n2) + len(h_n2) - i2)
-                    + 0.50 * i3 / max(1, min(len(n3), len(h_n3)))
-                ) / (0.25, 0.5, 1.0)[grams_used]
-                leven_score = normalized_similarity(cleaned_entity_name, semantic_id)
-                score = 0.75 * ngram_score + 0.25 * leven_score
-                candidates[i] = (id_name, semantic_id, score)
-            candidates = list(
-                sorted(
-                    filter(lambda x: x[2] > 0.3, candidates),
-                    key=lambda x: x[2],
-                    reverse=True,
-                )
-            )
-            if not candidates:
-                normalized_map[entity] = entity
-                continue
-
-            normalized_results.append(candidates[0][0])
-            normalized_map[entity] = candidates[0][0]
+    mapping: list[str | None] = run_functions_tuples_in_parallel(
+        [(_normalize_one_entity, (entity,)) for entity in raw_entities_no_attributes]
+    )
+    for entity, normalized_entity in zip(raw_entities_no_attributes, mapping):
+        if normalized_entity is not None:
+            normalized_results.append(normalized_entity)
+            normalized_map[entity] = normalized_entity
+        else:
+            normalized_map[entity] = entity
 
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map
