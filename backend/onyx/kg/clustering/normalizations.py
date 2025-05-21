@@ -1,6 +1,5 @@
 import re
 from collections import defaultdict
-from typing import cast
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -8,9 +7,15 @@ from typing import Optional
 import numpy as np
 from nltk import ngrams  # type: ignore
 from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
-from sqlalchemy import text
+from sqlalchemy import desc
+from sqlalchemy import Float
+from sqlalchemy import func
+from sqlalchemy import select
+from sqlalchemy import String
+from sqlalchemy.dialects.postgresql import ARRAY
 
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.models import KGEntity
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
 from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
@@ -97,6 +102,7 @@ def normalize_entities(
     normalized_map: dict[str, str] = {}
 
     with get_session_with_current_tenant() as db_session:
+        # TODO make parallel
         for entity in raw_entities_no_attributes:
             entity_type, entity_name = _split_entity_type_v_name(entity)
             cleaned_entity_name = _clean_entity_name(entity_name)
@@ -105,38 +111,45 @@ def normalize_entities(
                 normalized_map[entity] = entity
                 continue
 
-            # TODO: make parallel, convert to orm (PAINFUL process)
-            # step 1: query entities containing the name or something similar as a substring
-            candidates = cast(
-                list[tuple[str, str, float]],
-                db_session.execute(
-                    text(
-                        """
-                        WITH query AS (
-                            SELECT show_trgm(:query)::varchar(3)[] AS trigrams
-                        ),
-                        matched AS (
-                            SELECT id_name, semantic_id, cardinality(ARRAY(
-                                    SELECT UNNEST(kg_entity.semantic_id_trigrams)
-                                    INTERSECT
-                                    SELECT UNNEST(query.trigrams)
-                                ))::float / LEAST(
-                                    cardinality(query.trigrams),
-                                    cardinality(kg_entity.semantic_id_trigrams)
-                                ) AS score
-                            FROM kg_entity, query
-                            WHERE kg_entity.semantic_id_trigrams && query.trigrams
-                            AND kg_entity.entity_type_id_name = :entity_type
+            # step 1: find entities containing the entity_name or something similar
+            query_trigrams = db_session.query(
+                func.show_trgm(cleaned_entity_name)
+                .cast(ARRAY(String(3)))
+                .label("trigrams")
+            ).cte("query")
+
+            candidates = (
+                db_session.query(
+                    KGEntity.id_name,
+                    KGEntity.semantic_id,
+                    (
+                        func.cardinality(
+                            func.array(
+                                select(func.unnest(KGEntity.semantic_id_trigrams))
+                                .correlate(KGEntity)
+                                .intersect(
+                                    select(
+                                        func.unnest(query_trigrams.c.trigrams)
+                                    ).correlate(query_trigrams)
+                                )
+                            )
+                        ).cast(Float)
+                        / func.least(
+                            func.cardinality(query_trigrams.c.trigrams),
+                            func.cardinality(KGEntity.semantic_id_trigrams),
                         )
-                        SELECT id_name, semantic_id, score
-                        FROM matched
-                        ORDER BY score DESC
-                        LIMIT 100;
-                        """
-                    ),
-                    {"query": cleaned_entity_name, "entity_type": entity_type},
-                ).fetchall(),
+                    ).label("score"),
+                )
+                .select_from(KGEntity, query_trigrams)
+                .filter(
+                    KGEntity.entity_type_id_name == entity_type,
+                    KGEntity.semantic_id_trigrams.overlap(query_trigrams.c.trigrams),
+                )
+                .order_by(desc("score"))
+                .limit(100)
+                .all()
             )
+
             if (
                 not candidates or candidates[0][2] < 0.2
             ):  # skip if all candidates are bad
