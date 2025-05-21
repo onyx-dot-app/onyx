@@ -57,7 +57,7 @@ def _get_formated_source_reference_results(
         return ""
 
     return (
-        f"\n \n Here are {len(llm_doc_information_results)} examples: \n \n "
+        f"\n \n Here are {len(llm_doc_information_results)} supporting documents or examples: \n \n "
         + " \n \n ".join(llm_doc_information_results)
     )
 
