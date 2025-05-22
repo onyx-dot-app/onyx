@@ -99,23 +99,14 @@ def _normalize_one_entity(entity: str) -> str | None:
         return None
 
     # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
-    n1, n2, n3 = (
-        set(ngrams(cleaned_entity, 1)),
-        set(ngrams(cleaned_entity, 2)),
-        set(ngrams(cleaned_entity, 3)),
-    )
-    for i, (id_name, semantic_id, _) in enumerate(candidates):
-        h_n1, h_n2, h_n3 = (
-            set(ngrams(semantic_id, 1)),
-            set(ngrams(semantic_id, 2)),
-            set(ngrams(semantic_id, 3)),
-        )
-        i1, i2, i3 = (len(n1 & h_n1), len(n2 & h_n2), len(n3 & h_n3))
+    n1, n2 = (set(ngrams(cleaned_entity, 1)), set(ngrams(cleaned_entity, 2)))
+    for i, (id_name, semantic_id, score_n3) in enumerate(candidates):
+        h_n1, h_n2 = (set(ngrams(semantic_id, 1)), set(ngrams(semantic_id, 2)))
         grams_used = min(2, len(cleaned_entity) - 1, len(semantic_id) - 1)
         ngram_score = (
-            0.2500 * i1 / max(1, len(n1) + len(h_n1) - i1)
-            + 0.25 * i2 / max(1, len(n2) + len(h_n2) - i2)
-            + 0.50 * i3 / max(1, min(len(n3), len(h_n3)))
+            0.2500 * len(n1 & h_n1) / max(1, min(len(n1), len(h_n1)))
+            + 0.25 * len(n2 & h_n2) / max(1, min(len(n2), len(h_n2)))
+            + 0.50 * score_n3
         ) / (0.25, 0.5, 1.0)[grams_used]
         leven_score = normalized_similarity(cleaned_entity, semantic_id)
         score = 0.75 * ngram_score + 0.25 * leven_score
