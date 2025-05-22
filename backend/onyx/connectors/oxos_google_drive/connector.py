@@ -180,67 +180,9 @@ class OxosGoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
         start: SecondsSinceUnixEpoch, 
         end: SecondsSinceUnixEpoch
     ) -> GenerateDocumentsOutput:
-        """Poll for new or updated documents within the time range.
-        
-        Args:
-            start: Start time in seconds since Unix epoch
-            end: End time in seconds since Unix epoch
-            
-        Returns:
-            Generator yielding batches of documents
-        """
-        if self._creds is None:
-            raise ConnectorMissingCredentialError("Google Drive credentials not loaded.")
-            
-        drive_service = get_drive_service(self._creds, self._primary_admin_email)
-        
-        # Collect files from Google Drive based on configured options
-        files_batch = []
-        
-        try:
-            # Get files from shared drives if enabled
-            if self._include_shared_drives and self._shared_drive_ids:
-                for drive_id in self._shared_drive_ids:
-                    for file in get_files_in_shared_drive(
-                        service=drive_service,
-                        drive_id=drive_id,
-                        is_slim=False,
-                        start=start,
-                        end=end
-                    ):
-                        doc = convert_drive_item_to_document(self._creds, self._allow_images, self._size_threshold, [self._primary_admin_email], file)
-                        if doc:
-                            files_batch.append(doc)
-                            if len(files_batch) >= INDEX_BATCH_SIZE:
-                                yield files_batch
-                                files_batch = []
-            
-            # Get files from user's drives and shared with them
-            for file in get_all_files_for_oauth(
-                service=drive_service,
-                include_files_shared_with_me=self._include_files_shared_with_me,
-                include_my_drives=self._include_my_drives,
-                include_shared_drives=self._include_shared_drives,
-                is_slim=False,
-                start=start,
-                end=end
-            ):
-                doc = convert_drive_item_to_document(self._creds, self._allow_images, self._size_threshold, [self._primary_admin_email], file)
-                if doc:
-                    files_batch.append(doc)
-                    if len(files_batch) >= INDEX_BATCH_SIZE:
-                        yield files_batch
-                        files_batch = []
-                        
-            # Yield any remaining files
-            if files_batch:
-                yield files_batch
-                
-        except Exception as e:
-            if MISSING_SCOPES_ERROR_STR in str(e):
-                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
-            raise e
-            
+        """Poll justs loads for now."""
+        yield from self.load_from_state()
+
     def retrieve_all_slim_documents(
         self,
         start: SecondsSinceUnixEpoch | None = None,
