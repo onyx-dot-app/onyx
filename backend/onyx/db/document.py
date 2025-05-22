@@ -1153,3 +1153,99 @@ def get_kg_doc_info_for_entity_name(
         semantic_entity_name=f"{entity_type.upper()}:{result.semantic_id}",
         semantic_linked_entity_name=f"[{entity_type.upper()}:{result.semantic_id}]({result[1]})",
     )
+
+
+def check_for_documents_needing_kg_processing(db_session: Session) -> bool:
+    """Check if there are any documents that need KG processing.
+
+    A document needs KG processing if:
+    1. It is associated with a connector that has kg_processing_enabled = true
+    2. AND either:
+       - Its kg_stage is NOT_STARTED or NULL
+       - OR its last_updated timestamp is greater than its kg_processing_time
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        bool: True if there are any documents needing KG processing, False otherwise
+    """
+    stmt = (
+        select(1)
+        .select_from(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            Connector,
+            DocumentByConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(
+            and_(
+                Connector.kg_processing_enabled.is_(True),
+                or_(
+                    or_(
+                        DbDocument.kg_stage.is_(None),
+                        DbDocument.kg_stage == KGStage.NOT_STARTED,
+                    ),
+                    DbDocument.last_modified > DbDocument.kg_processing_time,
+                ),
+            )
+        )
+        .exists()
+    )
+
+    return db_session.execute(select(stmt)).scalar() or False
+
+
+def check_for_documents_needing_kg_clustering(db_session: Session) -> bool:
+    """Check if there are any documents that need KG clustering.
+
+    A document needs KG clustering if:
+    1. It is associated with a connector that has kg_processing_enabled = true
+    2. AND either:
+       - Its kg_stage is EXTRACTED
+       - OR its last_updated timestamp is greater than its kg_processing_time
+
+    Args:
+        db_session (Session): The database session to use
+
+    Returns:
+        bool: True if there are any documents needing KG clustering, False otherwise
+    """
+    stmt = (
+        select(1)
+        .select_from(DbDocument)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DbDocument.id == DocumentByConnectorCredentialPair.id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .join(
+            Connector,
+            ConnectorCredentialPair.connector_id == Connector.id,
+        )
+        .where(
+            and_(
+                Connector.kg_processing_enabled.is_(True),
+                ConnectorCredentialPair.status
+                != ConnectorCredentialPairStatus.DELETING,
+                or_(
+                    DbDocument.kg_stage == KGStage.EXTRACTED,
+                    DbDocument.last_modified > DbDocument.kg_processing_time,
+                ),
+            )
+        )
+        .exists()
+    )
+
+    return db_session.execute(select(stmt)).scalar() or False

@@ -592,6 +592,7 @@ class Document(Base):
     kg_stage: Mapped[KGStage] = mapped_column(
         Enum(KGStage, native_enum=False),
         comment="Status of knowledge graph extraction for this document",
+        index=True,
     )
 
     kg_processing_time: Mapped[datetime.datetime | None] = mapped_column(
@@ -624,6 +625,10 @@ class KGConfig(Base):
     kg_variable_name: Mapped[str] = mapped_column(NullFilteredString, nullable=False)
     kg_variable_values: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
+    )
+
+    __table_args__ = (
+        UniqueConstraint("kg_variable_name", name="uq_kg_config_variable_name"),
     )
 
 

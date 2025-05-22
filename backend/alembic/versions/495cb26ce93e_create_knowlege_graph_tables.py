@@ -61,6 +61,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True, nullable=False, index=True),
         sa.Column("kg_variable_name", sa.String(), nullable=False, index=True),
         sa.Column("kg_variable_values", postgresql.ARRAY(sa.String()), nullable=False),
+        sa.UniqueConstraint("kg_variable_name", name="uq_kg_config_variable_name"),
     )
 
     op.create_table(
