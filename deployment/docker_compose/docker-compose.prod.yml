@@ -196,6 +196,8 @@ services:
   index:
     image: vespaengine/vespa:8.524.25
     restart: always
+    environment:
+      - VESPA_SKIP_UPGRADE_CHECK=true
     ports:
       - "19071:19071"
       - "8081:8081"
