@@ -2,10 +2,12 @@ import logging
 import multiprocessing
 import os
 import time
+from pathlib import Path
 from typing import Any
 from typing import cast
 
 import sentry_sdk
+from celery import bootsteps  # type: ignore
 from celery import Task
 from celery.app import trace
 from celery.exceptions import WorkerShutdown
@@ -79,6 +81,19 @@ class TenantAwareTask(Task):
             # Clear or reset after the task runs
             # so it does not leak into any subsequent tasks on the same worker process
             CURRENT_TENANT_ID_CONTEXTVAR.set(None)
+
+
+def _make_probe_path(probe: str, hostname: str) -> Path:
+    hostname_parts = hostname.split("@")
+    if len(hostname_parts) != 2:
+        raise ValueError(f"hostname could not be split! {hostname=}")
+
+    name = hostname_parts[0]
+    if not name:
+        raise ValueError(f"name cannot be empty! {name=}")
+
+    safe_name = "".join(c for c in name if c.isalnum()).rstrip()
+    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")
 
 
 @task_prerun.connect
@@ -340,9 +355,22 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
     task_logger.info("worker_ready signal received.")
 
+    #
+    # https://medium.com/ambient-innovation/health-checks-for-celery-in-kubernetes-cf3274a3e106
+    # https://github.com/celery/celery/issues/4079#issuecomment-1270085680
+
+    hostname: str = cast(str, sender.hostname)
+    path = _make_probe_path("readiness", hostname)
+    path.touch()
+    logger.info(f"Readiness signal touched at {path}.")
+
 
 def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     HttpxPool.close_all()
+
+    hostname: str = cast(str, sender.hostname)
+    path = _make_probe_path("readiness", hostname)
+    path.unlink(missing_ok=True)
 
     if not celery_is_worker_primary(sender):
         return
@@ -483,3 +511,32 @@ def wait_for_vespa_or_shutdown(sender: Any, **kwargs: Any) -> None:
         msg = "Vespa: Readiness probe did not succeed within the timeout. Exiting..."
         logger.error(msg)
         raise WorkerShutdown(msg)
+
+
+# File for validating worker liveness
+class LivenessProbe(bootsteps.StartStopStep):
+    requires = {"celery.worker.components:Timer"}
+
+    def __init__(self, worker: Any, **kwargs: Any) -> None:
+        super().__init__(worker, **kwargs)
+        self.requests: list[Any] = []
+        self.tref = None
+        self.path = _make_probe_path("liveness", worker.hostname)
+
+    def start(self, worker: Any) -> None:
+        self.tref = worker.timer.call_repeatedly(
+            1.0,
+            self.update_liveness_file,
+            (worker,),
+            priority=10,
+        )
+
+    def stop(self, worker: Any) -> None:
+        self.path.unlink(missing_ok=True)
+
+    def update_liveness_file(self, worker: Any) -> None:
+        self.path.touch()
+
+
+def get_bootsteps() -> list[type]:
+    return [LivenessProbe]
