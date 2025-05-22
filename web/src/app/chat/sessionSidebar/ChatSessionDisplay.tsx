@@ -19,14 +19,19 @@ import {
   FiX,
 } from "react-icons/fi";
 import { DefaultDropdownElement } from "@/components/Dropdown";
-import { Popover } from "@/components/popover/Popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { ShareChatSessionModal } from "../modal/ShareChatSessionModal";
 import { CHAT_SESSION_ID_KEY, FOLDER_ID_KEY } from "@/lib/drag/constants";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
-import { DragHandle } from "@/components/table/DragHandle";
 import { WarningCircle } from "@phosphor-icons/react";
 import { CustomTooltip } from "@/components/tooltip/CustomTooltip";
 import { useChatContext } from "@/components/context/ChatContext";
+import Text from "@/components/ui/text";
+import { Button } from "@/components/ui/button";
 
 export function ChatSessionDisplay({
   chatSession,
@@ -53,22 +58,13 @@ export function ChatSessionDisplay({
   const settings = useContext(SettingsContext);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const chatSessionRef = useRef<HTMLDivElement>(null);
-  const [popoverOpen, setPopoverOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const renamingRef = useRef<HTMLDivElement>(null);
+  const [popoverOpen, setPopoverOpen] = useState(false);
 
   const { refreshChatSessions, refreshFolders } = useChatContext();
 
   const isMobile = settings?.isMobile;
-  const handlePopoverOpenChange = useCallback(
-    (open: boolean) => {
-      setPopoverOpen(open);
-      if (!open) {
-        setIsDeleteModalOpen(false);
-      }
-    },
-    [isDeleteModalOpen]
-  );
 
   const handleDeleteClick = useCallback(() => {
     setIsDeleteModalOpen(true);
@@ -77,8 +73,8 @@ export function ChatSessionDisplay({
   const handleCancelDelete = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDeleteModalOpen(false);
     setPopoverOpen(false);
+    setIsDeleteModalOpen(false);
   }, []);
 
   const handleConfirmDelete = useCallback(
@@ -110,6 +106,7 @@ export function ChatSessionDisplay({
       } else {
         alert("Failed to rename chat session");
       }
+      setPopoverOpen(false);
     },
     [chatSession.id, chatName, router]
   );
@@ -148,33 +145,16 @@ export function ChatSessionDisplay({
     );
   };
 
-  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
-    // Prevent default touch behavior
-    event.preventDefault();
-
-    // Create a custom event to mimic drag start
-    const customEvent = new Event("dragstart", { bubbles: true });
-    (customEvent as any).dataTransfer = new DataTransfer();
-    (customEvent as any).dataTransfer.setData(
-      CHAT_SESSION_ID_KEY,
-      chatSession.id.toString()
-    );
-    (customEvent as any).dataTransfer.setData(
-      FOLDER_ID_KEY,
-      chatSession.folder_id?.toString() || ""
-    );
-
-    // Dispatch the custom event
-    event.currentTarget.dispatchEvent(customEvent);
-  };
-
   return (
     <>
       {isShareModalVisible && (
         <ShareChatSessionModal
           chatSessionId={chatSession.id}
           existingSharedStatus={chatSession.shared_status}
-          onClose={() => setIsShareModalVisible(false)}
+          onClose={() => {
+            setIsShareModalVisible(false);
+            setPopoverOpen(false);
+          }}
         />
       )}
 
@@ -185,6 +165,8 @@ export function ChatSessionDisplay({
           }}
           onMouseLeave={() => {
             setIsHovered(false);
+            setIsDeleteModalOpen(false);
+            setPopoverOpen(false);
           }}
           className="flex group items-center w-full relative"
           key={chatSession.id}
@@ -202,14 +184,6 @@ export function ChatSessionDisplay({
           draggable={!isMobile}
           onDragStart={!isMobile ? handleDragStart : undefined}
         >
-          <div
-            className={`${
-              isMobile ? "visible" : "invisible group-hover:visible"
-            } flex-none`}
-            onTouchStart={isMobile ? handleTouchStart : undefined}
-          >
-            <DragHandle size={16} className="w-3 ml-[4px] mr-[2px]" />
-          </div>
           <BasicSelectable
             padding="extra"
             isHovered={isHovered}
@@ -218,59 +192,59 @@ export function ChatSessionDisplay({
             selected={isSelected}
             removeColors={isRenamingChat}
           >
-            <>
-              <div
-                className={`flex  ${
-                  isRenamingChat ? "-mr-2" : ""
-                } text-text-dark text-sm leading-normal relative gap-x-2`}
-              >
-                {isRenamingChat ? (
-                  <div className="flex items-center w-full" ref={renamingRef}>
-                    <div className="flex-grow mr-2">
-                      <input
-                        ref={inputRef}
-                        value={chatName}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                        }}
-                        onChange={(e) => {
-                          setChatName(e.target.value);
-                        }}
-                        onKeyDown={(event) => {
-                          event.stopPropagation();
-
-                          if (event.key === "Enter") {
-                            onRename();
-                            event.preventDefault();
-                          }
-                        }}
-                        className="w-full text-sm bg-transparent border-b border-text-darker outline-none"
-                      />
-                    </div>
-                    <div className="flex text-text-500 flex-none">
-                      <button onClick={onRename} className="p-1">
-                        <FiCheck size={14} />
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setChatName(chatSession.name);
+            <div
+              className={`flex  ${
+                isRenamingChat ? "-mr-2" : ""
+              } text-text-dark text-sm leading-normal relative gap-x-2`}
+            >
+              {isRenamingChat ? (
+                <div className="flex items-center w-full" ref={renamingRef}>
+                  <div className="flex-grow mr-2">
+                    <input
+                      ref={inputRef}
+                      value={chatName}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      onChange={(e) => {
+                        setChatName(e.target.value);
+                      }}
+                      onKeyDown={(event) => {
+                        event.stopPropagation();
+                        if (event.key === "Enter") {
+                          onRename();
+                          event.preventDefault();
+                        } else if (event.key === "Escape") {
                           setIsRenamingChat(false);
                           setPopoverOpen(false);
-                        }}
-                        className="p-1"
-                      >
-                        <FiX size={14} />
-                      </button>
-                    </div>
+                        }
+                      }}
+                      className="w-full text-sm bg-transparent border-b border-text-darker outline-none"
+                    />
                   </div>
-                ) : (
-                  <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
-                    {chatName || `Unnamed Chat`}
-                    <span
-                      className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent 
+                  <div className="flex text-text-500 flex-none">
+                    <button onClick={onRename} className="p-1">
+                      <FiCheck size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setChatName(chatSession.name);
+                        setIsRenamingChat(false);
+                      }}
+                      className="p-1"
+                    >
+                      <FiX size={14} />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <p className="break-all font-normal overflow-hidden dark:text-[#D4D4D4] whitespace-nowrap w-full mr-3 relative">
+                  {chatName || `Unnamed Chat`}
+                  <span
+                    className={`absolute right-0 top-0 h-full w-2 bg-gradient-to-r from-transparent
                       ${
                         isSelected
                           ? "to-background-chat-selected"
@@ -278,115 +252,95 @@ export function ChatSessionDisplay({
                             ? "to-background-chat-hover"
                             : "to-background-sidebar"
                       } `}
-                    />
-                  </p>
-                )}
+                  />
+                </p>
+              )}
 
-                {!isRenamingChat && (
-                  <div className="ml-auto my-auto justify-end flex z-30">
-                    {!showShareModal && showRetentionWarning && (
-                      <CustomTooltip
-                        line
-                        content={
-                          <p>
-                            This chat will expire{" "}
-                            {daysUntilExpiration < 1
-                              ? "today"
-                              : `in ${daysUntilExpiration} day${
-                                  daysUntilExpiration !== 1 ? "s" : ""
-                                }`}
-                          </p>
-                        }
-                      >
-                        <div className="mr-1 hover:bg-black/10 p-1 -m-1 rounded z-50">
-                          <WarningCircle className="text-warning" />
-                        </div>
-                      </CustomTooltip>
-                    )}
-                    {(isHovered || popoverOpen) && (
-                      <div>
-                        <div
-                          onClick={(e) => {
-                            e.preventDefault();
-                            setPopoverOpen(!popoverOpen);
-                          }}
-                          className="-my-1"
-                        >
-                          <Popover
-                            open={popoverOpen}
-                            onOpenChange={handlePopoverOpenChange}
-                            content={
-                              <div className="p-1 rounded">
-                                <FiMoreHorizontal
-                                  onClick={() => setPopoverOpen(true)}
-                                  size={16}
-                                />
-                              </div>
-                            }
-                            popover={
-                              <div
-                                className={`border border-border text-text-dark rounded-lg bg-background z-50 ${
-                                  isDeleteModalOpen ? "w-64" : "w-32"
-                                }`}
-                              >
-                                {!isDeleteModalOpen ? (
-                                  <>
-                                    {showShareModal && (
-                                      <DefaultDropdownElement
-                                        name="Share"
-                                        icon={FiShare2}
-                                        onSelect={() =>
-                                          showShareModal(chatSession)
-                                        }
-                                      />
-                                    )}
-                                    {!search && (
-                                      <DefaultDropdownElement
-                                        name="Rename"
-                                        icon={FiEdit2}
-                                        onSelect={() => setIsRenamingChat(true)}
-                                      />
-                                    )}
-                                    <DefaultDropdownElement
-                                      name="Delete"
-                                      icon={FiTrash}
-                                      onSelect={handleDeleteClick}
-                                    />
-                                  </>
-                                ) : (
-                                  <div className="p-3">
-                                    <p className="text-sm mb-3">
-                                      Are you sure you want to delete this chat?
-                                    </p>
-                                    <div className="flex justify-center gap-2">
-                                      <button
-                                        className="px-3 py-1 text-sm bg-background-200 rounded"
-                                        onClick={handleCancelDelete}
-                                      >
-                                        Cancel
-                                      </button>
-                                      <button
-                                        className="px-3 py-1 text-sm bg-red-500 text-white rounded"
-                                        onClick={handleConfirmDelete}
-                                      >
-                                        Delete
-                                      </button>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            }
-                            requiresContentPadding
-                            sideOffset={6}
-                            triggerMaxWidth
-                          />
-                        </div>
+              {!isRenamingChat && (
+                <div className="ml-auto my-auto justify-end flex z-30">
+                  {!showShareModal && showRetentionWarning && (
+                    <CustomTooltip
+                      line
+                      content={
+                        <p>
+                          This chat will expire{" "}
+                          {daysUntilExpiration < 1
+                            ? "today"
+                            : `in ${daysUntilExpiration} day${
+                                daysUntilExpiration !== 1 ? "s" : ""
+                              }`}
+                        </p>
+                      }
+                    >
+                      <div className="mr-1 hover:bg-black/10 p-1 -m-1 rounded z-50">
+                        <WarningCircle className="text-warning" />
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </>
+                    </CustomTooltip>
+                  )}
+                  {isHovered && (
+                    <Popover open={popoverOpen}>
+                      <PopoverTrigger
+                        asChild
+                        onClick={() => setPopoverOpen(!popoverOpen)}
+                      >
+                        <FiMoreHorizontal size={16} />
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className={`p-0 ${
+                          isDeleteModalOpen ? "w-[250px]" : "w-[150px]"
+                        }`}
+                      >
+                        {isDeleteModalOpen ? (
+                          <div className="p-4 flex flex-col gap-y-4">
+                            <Text>
+                              Are you sure you want to delete this chat?
+                            </Text>
+                            <div className="px-2 flex flex-1 flex-row justify-center gap-x-2">
+                              <Button
+                                variant="destructive"
+                                onClick={handleConfirmDelete}
+                              >
+                                Delete
+                              </Button>
+                              <Button onClick={handleCancelDelete}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            {showShareModal && (
+                              <DefaultDropdownElement
+                                name="Share"
+                                icon={FiShare2}
+                                onSelect={() => showShareModal(chatSession)}
+                              />
+                            )}
+                            {!search && (
+                              <DefaultDropdownElement
+                                name="Rename"
+                                icon={FiEdit2}
+                                onSelect={() => {
+                                  setIsRenamingChat(true);
+                                  setTimeout(() => {
+                                    inputRef.current?.focus();
+                                  }, 0);
+                                }}
+                              />
+                            )}
+                            <DefaultDropdownElement
+                              name="Delete"
+                              icon={FiTrash}
+                              onSelect={handleDeleteClick}
+                            />
+                          </>
+                        )}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+              )}
+            </div>
           </BasicSelectable>
         </Link>
       </div>

@@ -10,10 +10,8 @@ import { Folder } from "../folders/interfaces";
 import { usePopup } from "@/components/admin/connectors/Popup";
 import { useRouter } from "next/navigation";
 import { FiPlus, FiCheck, FiX } from "react-icons/fi";
-import { FolderDropdown } from "../folders/FolderDropdown";
 import { ChatSessionDisplay } from "./ChatSessionDisplay";
 import { useState, useCallback, useRef, useContext, useEffect } from "react";
-import { Caret } from "@/components/icons/icons";
 import { groupSessionsByDateRange } from "../lib";
 import React from "react";
 import {
@@ -22,7 +20,7 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { Search } from "lucide-react";
+import { Expand, ListTree, Search } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -43,21 +41,45 @@ import { CSS } from "@dnd-kit/utilities";
 import { useChatContext } from "@/components/context/ChatContext";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { Separator } from "@/components/ui/separator";
+import ChatGroup, { ChatGroupProps } from "./ChatGroup";
+import {
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarProvider,
+} from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-interface SortableFolderProps {
-  folder: Folder;
-  children: React.ReactNode;
-  currentChatId?: string;
-  showShareModal?: (chatSession: ChatSession) => void;
-  showDeleteModal?: (chatSession: ChatSession) => void;
-  closeSidebar?: () => void;
-  onEdit: (folderId: number, newName: string) => void;
-  onDelete: (folderId: number) => void;
-  onDrop: (folderId: number, chatSessionId: string) => void;
-  index: number;
+function ToolTipHelper({
+  icon,
+  toolTipContent,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  toolTipContent: string;
+  onClick?: () => void;
+}) {
+  return (
+    <TooltipProvider delayDuration={1000}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            className="border-0 border-red-50 px-2"
+            onClick={onClick}
+          >
+            {icon}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{toolTipContent}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
-const SortableFolder: React.FC<SortableFolderProps> = (props) => {
+function SortableChatGroup(props: ChatGroupProps) {
   const settings = useContext(SettingsContext);
   const mobile = settings?.isMobile;
   const [isDragging, setIsDragging] = useState(false);
@@ -69,35 +91,28 @@ const SortableFolder: React.FC<SortableFolderProps> = (props) => {
     transition,
     isDragging: isDraggingDndKit,
   } = useSortable({
-    id: props.folder.folder_id?.toString() ?? "",
+    id: props.folderId?.toString() ?? "",
     disabled: mobile,
   });
-  const ref = useRef<HTMLDivElement>(null);
-
-  const style: React.CSSProperties = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    zIndex: isDragging ? 1000 : "auto",
-    position: isDragging ? "relative" : "static",
-    opacity: isDragging ? 0.6 : 1,
-  };
 
   useEffect(() => {
     setIsDragging(isDraggingDndKit);
   }, [isDraggingDndKit]);
 
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  // const ref = useRef<HTMLDivElement>(null);
+
   return (
-    <div
-      ref={setNodeRef}
-      className="pr-3 ml-4 overflow-visible flex items-start"
-      style={style}
-      {...attributes}
-      {...listeners}
-    >
-      <FolderDropdown ref={ref} {...props} />
+    <div style={style} {...listeners} ref={setNodeRef} {...attributes}>
+      <ChatGroup {...props} />
     </div>
   );
-};
+}
 
 export function PagesTab({
   existingChats,
@@ -140,34 +155,27 @@ export function PagesTab({
         });
       }
     },
-    [router, setPopup, refreshChatSessions, refreshFolders]
+    [router, setPopup, refreshFolders]
   );
 
   const handleDeleteFolder = useCallback(
-    (folderId: number) => {
-      if (
-        confirm(
-          "Are you sure you want to delete this folder? This action cannot be undone."
-        )
-      ) {
-        deleteFolder(folderId)
-          .then(() => {
-            router.refresh();
-            setPopup({
-              message: "Folder deleted successfully",
-              type: "success",
-            });
-          })
-          .catch((error: Error) => {
-            console.error("Failed to delete folder:", error);
-            setPopup({
-              message: `Failed to delete folder: ${error.message}`,
-              type: "error",
-            });
-          });
+    async (folderId: number) => {
+      try {
+        await deleteFolder(folderId);
+        setPopup({
+          message: "Folder deleted successfully",
+          type: "success",
+        });
+        await refreshFolders();
+      } catch (error: any) {
+        console.error("Failed to delete folder:", error);
+        setPopup({
+          message: `Failed to delete folder: ${(error as Error).message}`,
+          type: "error",
+        });
       }
     },
-    [router, setPopup]
+    [router, setPopup, refreshFolders]
   );
 
   const handleCreateFolder = useCallback(() => {
@@ -216,8 +224,6 @@ export function PagesTab({
   const groupedChatSesssions = groupSessionsByDateRange(
     existingChatsNotinFolders || []
   );
-
-  const isHistoryEmpty = !existingChats || existingChats.length === 0;
 
   const handleDrop = useCallback(
     async (folderId: number, chatSessionId: string) => {
@@ -320,158 +326,135 @@ export function PagesTab({
     [folders]
   );
 
+  const numberOfGroups = Object.entries(groupedChatSesssions).length;
+  const numberOfFolders = (folders ?? []).length;
+  const numberOfGroupsAndFolders = numberOfGroups + numberOfFolders;
+  const [expands, setExpands] = useState<boolean[]>(
+    Array(numberOfGroupsAndFolders).fill(false)
+  );
+  const toggleExpanded = (index: number) => {
+    const newExpands = Array.from(expands);
+    newExpands[index] = !newExpands[index];
+    setExpands(newExpands);
+  };
+  const expandAll = () => {
+    setExpands(Array(numberOfGroupsAndFolders).fill(true));
+  };
+  const collapseAll = () => {
+    setExpands(Array(numberOfGroupsAndFolders).fill(false));
+  };
+
   return (
     <div className="flex flex-col gap-y-2 flex-grow">
       {popup}
-      <div className="px-4 mt-2 group mr-2 bg-background-sidebar dark:bg-transparent z-20">
-        <div className="flex  group justify-between text-sm gap-x-2 text-text-300/80 items-center font-normal leading-normal">
-          <p>Chats</p>
 
-          <TooltipProvider delayDuration={1000}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  className="my-auto mr-auto  group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal mobile:hidden"
-                  onClick={() => {
-                    toggleChatSessionSearchModal?.();
-                  }}
-                >
-                  <Search
-                    className="flex-none text-text-mobile-sidebar"
-                    size={12}
-                  />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>Search Chats</TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+      <Separator className="mb-0" />
 
-          <button
-            onClick={handleCreateFolder}
-            className="flex group-hover:opacity-100 opacity-0 transition duration-200 cursor-pointer gap-x-1 items-center text-black text-xs font-medium leading-normal"
-          >
-            <FiPlus size={12} className="flex-none" />
-            Create Group
-          </button>
-        </div>
-      </div>
-
-      {isCreatingFolder ? (
-        <div className="px-4">
-          <div className="flex  overflow-visible items-center w-full text-text-500 rounded-md p-1 relative">
-            <Caret size={16} className="flex-none mr-1" />
-            <input
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleNewFolderSubmit(e);
-                }
-              }}
-              ref={newFolderInputRef}
-              type="text"
-              placeholder="Enter group name"
-              className="text-sm font-medium bg-transparent outline-none w-full pb-1 border-b border-background-500 transition-colors duration-200"
-            />
-            <div className="flex -my-1">
-              <div
-                onClick={handleNewFolderSubmit}
-                className="cursor-pointer px-1"
-              >
-                <FiCheck size={14} />
-              </div>
-              <div
-                onClick={() => setIsCreatingFolder(false)}
-                className="cursor-pointer px-1"
-              >
-                <FiX size={14} />
-              </div>
+      <SidebarProvider>
+        <SidebarContent>
+          <SidebarGroup className="gap-y-2">
+            <div className="flex flex-row items-center">
+              <SidebarGroupLabel className="opacity-50 flex flex-1 border-0 border-red-50">
+                Chats
+              </SidebarGroupLabel>
+              <ToolTipHelper
+                icon={<Search className="opacity-50" />}
+                toolTipContent="Search through chats"
+                onClick={toggleChatSessionSearchModal}
+              />
+              <ToolTipHelper
+                icon={<FiPlus className="opacity-50" />}
+                toolTipContent="Create new chat group"
+                onClick={handleCreateFolder}
+              />
+              <ToolTipHelper
+                icon={<ListTree className="opacity-50" />}
+                toolTipContent="Collapse all folds"
+                onClick={collapseAll}
+              />
+              <ToolTipHelper
+                icon={<Expand className="opacity-50" />}
+                toolTipContent="Expand all folds"
+                onClick={expandAll}
+              />
             </div>
-          </div>
-        </div>
-      ) : (
-        <></>
-      )}
-
-      {folders && folders.length > 0 && (
-        <DndContext
-          modifiers={[restrictToVerticalAxis]}
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={folders.map((f) => f.folder_id?.toString() ?? "")}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="space-y-2">
-              {folders
-                .sort(
-                  (a, b) =>
-                    (a.display_priority ?? 0) - (b.display_priority ?? 0)
-                )
-                .map((folder, index) => (
-                  <SortableFolder
-                    key={folder.folder_id}
-                    folder={folder}
-                    currentChatId={currentChatId}
-                    showShareModal={showShareModal}
-                    showDeleteModal={showDeleteModal}
-                    closeSidebar={closeSidebar}
-                    onEdit={handleEditFolder}
-                    onDelete={handleDeleteFolder}
-                    onDrop={handleDrop}
-                    index={index}
-                  >
-                    {folder.chat_sessions &&
-                      folder.chat_sessions.map((chat) =>
-                        renderChatSession(
-                          chat,
-                          folders != undefined && folders.length > 0
-                        )
-                      )}
-                  </SortableFolder>
-                ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      )}
-
-      <div className="pl-4 pr-3">
-        {!isHistoryEmpty && (
-          <>
-            {Object.entries(groupedChatSesssions)
-              .filter(([groupName, chats]) => chats.length > 0)
-              .map(([groupName, chats], index) => (
-                <FolderDropdown
-                  key={groupName}
-                  folder={{
-                    folder_name: groupName,
-                    chat_sessions: chats,
-                    display_priority: 0,
+            {isCreatingFolder && (
+              <div className="py-2 px-2 flex flex-row justify-center items-center gap-x-4">
+                <Input
+                  placeholder="New Chat Group..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleNewFolderSubmit(e);
+                    } else if (e.key === "Escape") {
+                      setIsCreatingFolder(false);
+                    }
                   }}
-                  currentChatId={currentChatId}
-                  showShareModal={showShareModal}
-                  closeSidebar={closeSidebar}
-                  onEdit={handleEditFolder}
-                  onDrop={handleDrop}
-                  index={folders ? folders.length + index : index}
-                >
-                  {chats.map((chat) =>
-                    renderChatSession(
-                      chat,
-                      folders != undefined && folders.length > 0
+                  ref={newFolderInputRef}
+                  type="text"
+                  className="focus-visible:ring-1"
+                />
+                <div className="flex flex-row justify-center items-center gap-x-2">
+                  <div onClick={handleNewFolderSubmit}>
+                    <FiCheck size={14} />
+                  </div>
+                  <FiX size={14} onClick={() => setIsCreatingFolder(false)} />
+                </div>
+              </div>
+            )}
+            <DndContext
+              modifiers={[restrictToVerticalAxis]}
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={(folders ?? []).map(
+                  (folder) => folder.folder_id?.toString() ?? ""
+                )}
+                strategy={verticalListSortingStrategy}
+              >
+                {folders &&
+                  folders
+                    .sort(
+                      (a, b) =>
+                        (a.display_priority ?? 0) - (b.display_priority ?? 0)
                     )
-                  )}
-                </FolderDropdown>
-              ))}
-          </>
-        )}
-
-        {isHistoryEmpty && (!folders || folders.length === 0) && (
-          <p className="text-sm max-w-full mt-2 w-[250px]">
-            Try sending a message! Your chat history will appear here.
-          </p>
-        )}
-      </div>
+                    .map((folder, index) => (
+                      <SortableChatGroup
+                        key={folder.folder_name}
+                        name={folder.folder_name}
+                        chatSessions={folder.chat_sessions}
+                        expanded={expands[index]!}
+                        toggleExpanded={() => toggleExpanded(index)}
+                        selectedId={currentChatId}
+                        editable
+                        folderId={folder.folder_id!}
+                        onEditFolder={handleEditFolder}
+                        onDeleteFolder={handleDeleteFolder}
+                      />
+                    ))}
+              </SortableContext>
+            </DndContext>
+            <div className="pt-2">
+              <SidebarGroupLabel className="opacity-50 flex flex-1 border-0 border-red-50">
+                History
+              </SidebarGroupLabel>
+            </div>
+            {Object.entries(groupedChatSesssions).map(
+              ([name, chats], index) => (
+                <ChatGroup
+                  key={name}
+                  name={name}
+                  chatSessions={chats}
+                  expanded={expands[numberOfFolders + index]!}
+                  toggleExpanded={() => toggleExpanded(numberOfFolders + index)}
+                  selectedId={currentChatId}
+                />
+              )
+            )}
+          </SidebarGroup>
+        </SidebarContent>
+      </SidebarProvider>
     </div>
   );
 }
