@@ -14,8 +14,10 @@ from onyx.connectors.google_drive.models import GDriveMimeType
 from onyx.connectors.google_drive.models import GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import get_document_sections
 from onyx.connectors.google_drive.section_extraction import HEADING_DELIMITER
+from onyx.connectors.google_drive.google_sheets import read_spreadsheet, get_sheet_metadata
 from onyx.connectors.google_utils.resources import get_drive_service
 from onyx.connectors.google_utils.resources import get_google_docs_service
+from onyx.connectors.google_utils.resources import get_sheets_service
 from onyx.connectors.google_utils.resources import GoogleDriveService
 from onyx.connectors.models import ConnectorFailure
 from onyx.connectors.models import Document
@@ -390,6 +392,10 @@ def _convert_drive_item_to_document(
         lambda: get_google_docs_service(creds, user_email=retriever_email)
     )
 
+    sheets_service = lazy_eval(
+        lambda: get_sheets_service(creds, retriever_email)
+    )
+
     try:
         # skip shortcuts or folders
         if file.get("mimeType") in [DRIVE_SHORTCUT_TYPE, DRIVE_FOLDER_TYPE]:
@@ -412,6 +418,55 @@ def _convert_drive_item_to_document(
                         )
                         sections = align_basic_advanced(basic_sections, doc_sections)
 
+            except Exception as e:
+                logger.warning(
+                    f"Error in advanced parsing: {e}. Falling back to basic extraction."
+                )
+        
+        if file.get("mimeType") == GDriveMimeType.SPREADSHEET.value:
+            # Handle Google Spreadsheets more gracefully and extract everything we can
+            try:    
+                sheet_metadata = get_sheet_metadata(sheets_service(), file.get("id", ""))
+                if not sheet_metadata.get('sheets'):
+                    raise ValueError(f"No sheets found in spreadsheet {file.get('id', '')}")
+
+                spread_sheet_sections = []
+                for sheet in sheet_metadata['sheets']:
+                    # Skip hidden sheets
+                    if sheet['properties'].get('hidden', False):
+                        continue
+                        
+                    sheet_name = sheet['properties']['title']
+                    sheet_values = read_spreadsheet(
+                        creds,
+                        retriever_email,
+                        file.get("id", ""),
+                        sheet_name
+                    )
+                    # Process sheet values to create a comma-separated string
+                    text_sheet_values = ""
+                    if 'values' in sheet_values:
+                        rows = []
+                        for row in sheet_values['values']:
+                            row_items = []
+                            for cell in row:
+                                if isinstance(cell, dict) and 'value' in cell:
+                                    if 'hyperlink' in cell:
+                                        row_items.append(f"{cell['value']} ({cell['hyperlink']})")
+                                    else:
+                                        row_items.append(cell['value'])
+                                elif cell is not None:
+                                    row_items.append(str(cell))
+                                else:
+                                    row_items.append("")
+                            rows.append(",".join(row_items))
+                        text_sheet_values = "\n".join(rows)
+                    section = TextSection(
+                        link=f"https://docs.google.com/spreadsheets/d/{file.get('id', '')}/edit#gid={sheet['properties']['sheetId']}",
+                        text=text_sheet_values
+                    )
+                    spread_sheet_sections.append(section)
+                sections = spread_sheet_sections
             except Exception as e:
                 logger.warning(
                     f"Error in advanced parsing: {e}. Falling back to basic extraction."

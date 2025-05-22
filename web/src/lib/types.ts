@@ -392,6 +392,7 @@ export enum ValidSources {
   Airtable = "airtable",
   Gitbook = "gitbook",
   Highspot = "highspot",
+  OxosGoogleDrive = "oxos_google_drive",
 }
 
 export const validAutoSyncSources = [

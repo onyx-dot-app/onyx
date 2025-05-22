@@ -99,6 +99,11 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     docs: "https://docs.onyx.app/connectors/google_drive/overview",
     oauthSupported: true,
   },
+  oxos_google_drive: {
+    icon: GoogleDriveIcon,
+    displayName: "Oxos Google Drive",
+    category: SourceCategory.Other,
+  },
   github: {
     icon: GithubIcon,
     displayName: "Github",

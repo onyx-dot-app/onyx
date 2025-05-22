@@ -183,6 +183,7 @@ class DocumentSource(str, Enum):
     EGNYTE = "egnyte"
     AIRTABLE = "airtable"
     HIGHSPOT = "highspot"
+    OXOS_GOOGLE_DRIVE = "oxos_google_drive"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"

@@ -11,6 +11,8 @@ class GoogleDriveService(Resource):
 class GoogleDocsService(Resource):
     pass
 
+class GoogleSheetsService(Resource):
+    pass
 
 class AdminService(Resource):
     pass
@@ -26,13 +28,15 @@ def _get_google_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
-    service: Resource
     if isinstance(creds, ServiceAccountCredentials):
         # NOTE: https://developers.google.com/identity/protocols/oauth2/service-account#error-codes
         creds = creds.with_subject(user_email)
         service = build(service_name, service_version, credentials=creds)
     elif isinstance(creds, OAuthCredentials):
         service = build(service_name, service_version, credentials=creds)
+    else:
+        # Handle unexpected credential type
+        raise ValueError(f"Unsupported credential type: {type(creds)}")
 
     return service
 
@@ -42,6 +46,12 @@ def get_google_docs_service(
     user_email: str | None = None,
 ) -> GoogleDocsService:
     return _get_google_service("docs", "v1", creds, user_email)
+
+def get_sheets_service(
+    creds: ServiceAccountCredentials | OAuthCredentials,
+    user_email: str | None = None,
+) -> GoogleSheetsService:
+    return _get_google_service("sheets", "v4", creds, user_email)
 
 
 def get_drive_service(

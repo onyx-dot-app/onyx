@@ -291,6 +291,11 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  oxos_google_drive: {
+    description: "Configure Oxos Google Drive connector",
+    values: [],
+    advanced_values: [],
+  },
   google_drive: {
     description: "Configure Google Drive connector",
     values: [
