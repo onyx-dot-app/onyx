@@ -77,6 +77,7 @@ def _normalize_one_entity(entity: str) -> str | None:
                                     func.unnest(query_trigrams.c.trigrams)
                                 ).correlate(query_trigrams)
                             )
+                            .scalar_subquery()
                         )
                     ).cast(Float)
                     / func.least(
