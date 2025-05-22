@@ -41,11 +41,6 @@ export const LogoComponent = memo(function LogoComponent({
             <HeaderTitle backgroundToggled={backgroundToggled}>
               {enterpriseSettings.application_name}
             </HeaderTitle>
-            {!NEXT_PUBLIC_DO_NOT_USE_TOGGLE_OFF_DANSWER_POWERED && (
-              <p className="text-xs text-left text-subtle whitespace-nowrap overflow-hidden text-ellipsis">
-                Powered by Onyx
-              </p>
-            )}
           </div>
         </>
       ) : (
