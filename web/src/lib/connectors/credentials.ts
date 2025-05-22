@@ -215,8 +215,8 @@ export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
 
-export interface MediaWikiCredentialJson {}
-export interface WikipediaCredentialJson extends MediaWikiCredentialJson {}
+export interface MediaWikiCredentialJson { }
+export interface WikipediaCredentialJson extends MediaWikiCredentialJson { }
 
 export interface EgnyteCredentialJson {
   domain: string;
@@ -346,6 +346,7 @@ export const credentialTemplates: Record<ValidSources, any> = {
   } as AirtableCredentialJson,
   xenforo: null,
   google_sites: null,
+  oxos_google_drive: null,
   file: null,
   wikipedia: null,
   mediawiki: null,
