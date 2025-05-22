@@ -520,11 +520,11 @@ class LivenessProbe(bootsteps.StartStopStep):
     def __init__(self, worker: Any, **kwargs: Any) -> None:
         super().__init__(worker, **kwargs)
         self.requests: list[Any] = []
-        self.tref = None
+        self.task_tref = None
         self.path = _make_probe_path("liveness", worker.hostname)
 
     def start(self, worker: Any) -> None:
-        self.tref = worker.timer.call_repeatedly(
+        self.task_tref = worker.timer.call_repeatedly(
             15.0,
             self.update_liveness_file,
             (worker,),
@@ -533,6 +533,8 @@ class LivenessProbe(bootsteps.StartStopStep):
 
     def stop(self, worker: Any) -> None:
         self.path.unlink(missing_ok=True)
+        if self.task_tref:
+            self.task_tref.cancel()
 
     def update_liveness_file(self, worker: Any) -> None:
         self.path.touch()
