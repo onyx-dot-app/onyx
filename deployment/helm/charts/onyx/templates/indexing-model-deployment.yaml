@@ -51,6 +51,7 @@ spec:
         persistentVolumeClaim:
           claimName: {{ .persistentVolumeClaim.claimName }}
       {{- end }}
+
       {{- with .Values.indexCapability.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

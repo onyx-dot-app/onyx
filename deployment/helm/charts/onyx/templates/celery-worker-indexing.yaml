@@ -59,6 +59,7 @@ spec:
             - name: ENABLE_MULTIPASS_INDEXING
               value: "{{ .Values.celery_worker_indexing.enableMiniChunk }}"
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
+
       {{- with .Values.celery_worker_indexing.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

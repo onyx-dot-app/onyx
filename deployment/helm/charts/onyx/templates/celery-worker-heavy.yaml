@@ -57,6 +57,7 @@ spec:
                 name: {{ .Values.config.envConfigMapName }}
           env:
             {{- include "onyx-stack.envSecrets" . | nindent 12}}
+
       {{- with .Values.celery_worker_heavy.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
