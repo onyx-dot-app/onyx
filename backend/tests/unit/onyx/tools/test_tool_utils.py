@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from onyx.llm.llm_provider_options import ANTHROPIC_PROVIDER_NAME
+from onyx.llm.llm_provider_options import BEDROCK_PROVIDER_NAME
 from onyx.tools.utils import explicit_tool_calling_supported
 
 
@@ -32,6 +33,40 @@ from onyx.tools.utils import explicit_tool_calling_supported
         # === Anthropic Scenarios (expected False due to base support being False) ===
         # Provider is Anthropic, base model does NOT claim FC support
         (ANTHROPIC_PROVIDER_NAME, "claude-2.1", False, [], False),
+        # === Bedrock Scenarios ===
+        # Bedrock provider with model name containing anthropic model name as substring -> False
+        (
+            BEDROCK_PROVIDER_NAME,
+            "anthropic.claude-3-opus-20240229-v1:0",
+            True,
+            ["claude-3-opus-20240229"],
+            False,
+        ),
+        # Bedrock provider with model name containing different anthropic model name as substring -> False
+        (
+            BEDROCK_PROVIDER_NAME,
+            "aws-anthropic-claude-3-haiku",
+            True,
+            ["claude-3-haiku-20240307"],
+            False,
+        ),
+        # Bedrock provider with model name NOT containing any anthropic model name as substring -> True
+        (
+            BEDROCK_PROVIDER_NAME,
+            "amazon.titan-text-express-v1",
+            True,
+            ["claude-3-opus-20240229", "claude-3-haiku-20240307"],
+            True,
+        ),
+        # Bedrock provider with model name NOT containing any anthropic model
+        # name as substring, but base model doesn't support FC -> False
+        (
+            BEDROCK_PROVIDER_NAME,
+            "amazon.titan-text-express-v1",
+            False,
+            ["claude-3-opus-20240229", "claude-3-haiku-20240307"],
+            False,
+        ),
         # === Non-Anthropic Scenarios ===
         # Non-Anthropic provider, base model claims FC support -> True
         ("openai", "gpt-4o", True, [], True),
@@ -73,6 +108,9 @@ def test_explicit_tool_calling_supported(
     We don't want to provide that list of tools because our UI doesn't support sequential
     tool calling yet for (a) and just looks bad for (b), so for now we just treat anthropic
     models as non-tool-calling.
+
+    Additionally, for Bedrock provider, any model containing an anthropic model name as a
+    substring should also return False for the same reasons.
     """
     mock_find_model_obj.return_value = {
         "supports_function_calling": mock_model_supports_fc
