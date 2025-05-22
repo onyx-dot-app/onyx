@@ -36,7 +36,7 @@ def upgrade() -> None:
     # Create GIN index on clustering_trigrams
     op.execute("COMMIT")
     op.execute(
-        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_custering_trigrams "
+        "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
         "ON kg_entity USING GIN (clustering_trigrams)"
     )
 
@@ -142,7 +142,7 @@ def downgrade() -> None:
 
     # Drop index
     op.execute("COMMIT")  # Commit to allow CONCURRENTLY
-    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_custering_trigrams")
+    op.execute("DROP INDEX CONCURRENTLY IF EXISTS idx_kg_entity_clustering_trigrams")
 
     # Drop column
     op.drop_column("kg_entity", "clustering_trigrams")
