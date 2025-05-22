@@ -95,7 +95,7 @@ def _normalize_one_entity(entity: str) -> str | None:
             .limit(100)
             .all()
         )
-    if not candidates or candidates[0][2] < 0.25:
+    if not candidates:
         return None
 
     # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
