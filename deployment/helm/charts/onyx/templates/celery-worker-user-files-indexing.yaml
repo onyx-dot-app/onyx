@@ -56,4 +56,16 @@ spec:
             - configMapRef:
                 name: {{ .Values.config.envConfigMapName }}
           env:
+      {{- with .Values.celery_worker_user-files-indexing.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_user-files-indexing.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_user-files-indexing.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
             {{- include "onyx-stack.envSecrets" . | nindent 12}}

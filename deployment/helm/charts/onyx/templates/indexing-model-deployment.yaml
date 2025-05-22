@@ -50,4 +50,16 @@ spec:
       - name: {{ .name }}
         persistentVolumeClaim:
           claimName: {{ .persistentVolumeClaim.claimName }}
+      {{- with .Values.indexCapability.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexCapability.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.indexCapability.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- end }}
