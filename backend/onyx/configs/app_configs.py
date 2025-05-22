@@ -626,9 +626,7 @@ LLM_MODEL_UPDATE_API_URL = os.environ.get("LLM_MODEL_UPDATE_API_URL")
 # if you're interested in an enterprise license, please reach out to us at
 # founders@onyx.app OR message Chris Weaver or Yuhong Sun in the Onyx
 # Slack community (https://join.slack.com/t/danswer/shared_invite/zt-1w76msxmd-HJHLe3KNFIAIzk_0dSOKaQ)
-ENTERPRISE_EDITION_ENABLED = (
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() == "true"
-)
+ENTERPRISE_EDITION_ENABLED = True
 
 # Azure DALL-E Configurations
 AZURE_DALLE_API_VERSION = os.environ.get("AZURE_DALLE_API_VERSION")
