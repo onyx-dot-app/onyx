@@ -525,7 +525,7 @@ class LivenessProbe(bootsteps.StartStopStep):
 
     def start(self, worker: Any) -> None:
         self.tref = worker.timer.call_repeatedly(
-            1.0,
+            15.0,
             self.update_liveness_file,
             (worker,),
             priority=10,
