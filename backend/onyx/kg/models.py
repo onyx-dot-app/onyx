@@ -10,6 +10,8 @@ class KGConfigSettings(BaseModel):
     KG_VENDOR: str | None = None
     KG_VENDOR_DOMAINS: list[str] | None = None
     KG_IGNORE_EMAIL_DOMAINS: list[str] | None = None
+    KG_EXTRACTION_IN_PROGRESS: bool = False
+    KG_CLUSTERING_IN_PROGRESS: bool = False
 
 
 class KGConfigVars(str, Enum):
@@ -17,6 +19,8 @@ class KGConfigVars(str, Enum):
     KG_VENDOR = "KG_VENDOR"
     KG_VENDOR_DOMAINS = "KG_VENDOR_DOMAINS"
     KG_IGNORE_EMAIL_DOMAINS = "KG_IGNORE_EMAIL_DOMAINS"
+    KG_EXTRACTION_IN_PROGRESS = "KG_EXTRACTION_IN_PROGRESS"
+    KG_CLUSTERING_IN_PROGRESS = "KG_CLUSTERING_IN_PROGRESS"
 
 
 class KGChunkFormat(BaseModel):
