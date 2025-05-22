@@ -218,7 +218,10 @@ class CloudEmbedding:
             model = DEFAULT_VERTEX_MODEL
 
         creds_info = json.loads(self.api_key)
-        credentials = service_account.Credentials.from_service_account_info(creds_info)
+        credentials = service_account.Credentials.from_service_account_info(
+            creds_info,
+            scopes=['https://www.googleapis.com/auth/cloud-platform']
+        ) 
         project_id = creds_info["project_id"]
         client = genai.Client(
             vertexai=True,
