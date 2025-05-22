@@ -46,7 +46,7 @@ def upgrade() -> None:
     # Create trigger to update clustering_name and its trigrams if document_id changes
     op.execute(
         f"""
-        CREATE OR REPLACE FUNCTION update_kg_entity_clustering_data()
+        CREATE OR REPLACE FUNCTION update_kg_entity_clustering()
         RETURNS TRIGGER AS $$
         DECLARE
             doc_semantic_id text;
@@ -78,14 +78,14 @@ def upgrade() -> None:
             BEFORE INSERT OR UPDATE OF document_id
             ON kg_entity
             FOR EACH ROW
-            EXECUTE FUNCTION update_kg_entity_clustering_data();
+            EXECUTE FUNCTION update_kg_entity_clustering();
         """
     )
 
     # Create trigger to update kg_entity clustering_name and its trigrams when document.clustering_name changes
     op.execute(
         f"""
-        CREATE OR REPLACE FUNCTION update_kg_entity_clustering_data_from_doc()
+        CREATE OR REPLACE FUNCTION update_kg_entity_clustering_from_doc()
         RETURNS TRIGGER AS $$
         DECLARE
             cleaned_semantic_id text;
@@ -108,15 +108,15 @@ def upgrade() -> None:
         """
     )
     op.execute(
-        "DROP TRIGGER IF EXISTS update_kg_entity_clustering_data_from_doc_trigger ON document"
+        "DROP TRIGGER IF EXISTS update_kg_entity_clustering_from_doc_trigger ON document"
     )
     op.execute(
         """
-        CREATE TRIGGER update_kg_entity_clustering_data_from_doc_trigger
+        CREATE TRIGGER update_kg_entity_clustering_from_doc_trigger
             AFTER UPDATE OF semantic_id
             ON document
             FOR EACH ROW
-            EXECUTE FUNCTION update_kg_entity_clustering_data_from_doc();
+            EXECUTE FUNCTION update_kg_entity_clustering_from_doc();
         """
     )
 
@@ -133,12 +133,12 @@ def downgrade() -> None:
     # Drop triggers
     op.execute("DROP TRIGGER IF EXISTS kg_entity_clustering_data_trigger ON kg_entity")
     op.execute(
-        "DROP TRIGGER IF EXISTS update_kg_entity_clustering_data_from_doc_trigger ON document"
+        "DROP TRIGGER IF EXISTS update_kg_entity_clustering_from_doc_trigger ON document"
     )
 
     # Drop functions
-    op.execute("DROP FUNCTION IF EXISTS update_kg_entity_clustering_data()")
-    op.execute("DROP FUNCTION IF EXISTS update_kg_entity_clustering_data_from_doc()")
+    op.execute("DROP FUNCTION IF EXISTS update_kg_entity_clustering()")
+    op.execute("DROP FUNCTION IF EXISTS update_kg_entity_clustering_from_doc()")
 
     # Drop index
     op.execute("COMMIT")  # Commit to allow CONCURRENTLY
