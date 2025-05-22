@@ -8,7 +8,7 @@ from typing import Optional
 import aioboto3  # type: ignore
 import httpx
 import openai
-import vertexai  # type: ignore
+from google import genai  # type: ignore
 import voyageai  # type: ignore
 from cohere import AsyncClient as CohereAsyncClient
 from fastapi import APIRouter
@@ -20,9 +20,7 @@ from litellm.exceptions import RateLimitError
 from retry import retry
 from sentence_transformers import CrossEncoder  # type: ignore
 from sentence_transformers import SentenceTransformer  # type: ignore
-from vertexai.language_models import TextEmbeddingInput  # type: ignore
-from vertexai.language_models import TextEmbeddingModel  # type: ignore
-
+from google.genai.types import EmbedContentConfig  # type: ignore
 from model_server.constants import DEFAULT_COHERE_MODEL
 from model_server.constants import DEFAULT_OPENAI_MODEL
 from model_server.constants import DEFAULT_VERTEX_MODEL
@@ -36,6 +34,8 @@ from shared_configs.configs import API_BASED_EMBEDDING_TIMEOUT
 from shared_configs.configs import INDEXING_ONLY
 from shared_configs.configs import OPENAI_EMBEDDING_TIMEOUT
 from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
+from shared_configs.configs import VERTEXAI_EMBEDDING_MODEL_LOCATION
+from shared_configs.configs import VERTEXAI_EMBEDDING_MODEL_DIMENSION
 from shared_configs.enums import EmbedTextType
 from shared_configs.enums import RerankerProvider
 from shared_configs.model_server_models import Embedding
@@ -210,37 +210,46 @@ class CloudEmbedding:
         )
         embeddings = [embedding["embedding"] for embedding in response.data]
         return embeddings
-
+    
     async def _embed_vertex(
         self, texts: list[str], model: str | None, embedding_type: str
     ) -> list[Embedding]:
         if not model:
             model = DEFAULT_VERTEX_MODEL
 
-        credentials = service_account.Credentials.from_service_account_info(
-            json.loads(self.api_key)
+        creds_info = json.loads(self.api_key)
+        credentials = service_account.Credentials.from_service_account_info(creds_info)
+        project_id = creds_info["project_id"]
+        client = genai.Client(
+            vertexai=True,
+            project=project_id,
+            location=VERTEXAI_EMBEDDING_MODEL_LOCATION,
+            credentials=credentials
         )
-        project_id = json.loads(self.api_key)["project_id"]
-        vertexai.init(project=project_id, credentials=credentials)
-        client = TextEmbeddingModel.from_pretrained(model)
 
-        inputs = [TextEmbeddingInput(text, embedding_type) for text in texts]
 
-        # Split into batches of 25 texts
-        max_texts_per_batch = VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
-        batches = [
-            inputs[i : i + max_texts_per_batch]
-            for i in range(0, len(inputs), max_texts_per_batch)
-        ]
+        is_gemini = "gemini" in model.lower()
+        batch_size = 1 if is_gemini else VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE # This batch size is now fixed by the function
 
-        # Dispatch all embedding calls asynchronously at once
-        tasks = [
-            client.get_embeddings_async(batch, auto_truncate=True) for batch in batches
-        ]
+        def make_batches(lst, size):
+            return [lst[i:i + size] for i in range(0, len(lst), size)]
 
-        # Wait for all tasks to complete in parallel
+        async def embed_batch(batch: list[str]) -> list[list[float]]:
+            embeddings = await client.aio.models.embed_content(
+                model=model,
+                contents=batch,
+                config=EmbedContentConfig(
+                    task_type=embedding_type,
+                    output_dimensionality=VERTEXAI_EMBEDDING_MODEL_DIMENSION
+                )
+            )
+            return embeddings.embeddings
+
+        batches = make_batches(texts, batch_size)
+        tasks = [embed_batch(batch) for batch in batches]
         results = await asyncio.gather(*tasks)
 
+        # Flatten list of lists
         return [embedding.values for batch in results for embedding in batch]
 
     async def _embed_litellm_proxy(
