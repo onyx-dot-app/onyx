@@ -2,27 +2,27 @@ from onyx.prompts.constants import GENERAL_SEP_PAT
 from onyx.prompts.constants import QUESTION_PAT
 
 REQUIRE_CITATION_STATEMENT = """
-Cite relevant statements INLINE using the format [1], [2], [3], etc. to reference the document number. \
-DO NOT provide any links following the citations. In other words, avoid using the format [1](https://example.com). \
-Avoid using double brackets like [[1]]. To cite multiple documents, use [1], [2] format instead of [1, 2]. \
-Try to cite inline as opposed to leaving all citations until the very end of the response.
+Приводи соответствующие утверждения, используя формат [1], [2], [3], и т.д. для указания номера документа. \
+Не указывай раздел с ссылками в конце и не приводи никаких ссылок после цитат, избегай использования формата [1](https://example.com). \
+Избегай использования двойных скобок, таких как [[1]]. Чтобы цитировать несколько документов, используй формат [1], [2] вместо [1, 2]. \
+Старайся цитировать построчно, а не оставлять все цитаты до самого конца ответа.
 """.rstrip()
 
 NO_CITATION_STATEMENT = """
-Do not provide any citations even if there are examples in the chat history.
+Не приводи никаких цитат, даже если в истории чата есть примеры.
 """.rstrip()
 
 CITATION_REMINDER = """
-Remember to provide inline citations in the format [1], [2], [3], etc.
+Не забудь привести встроенные цитаты в формате [1], [2], [3], и т.д.
 """
 
-ADDITIONAL_INFO = "\n\nAdditional Information:\n\t- {datetime_info}."
+ADDITIONAL_INFO = "\n\nДополнительная информация:\n\t- {datetime_info}."
 
-CODE_BLOCK_MARKDOWN = "Formatting re-enabled. "
+CODE_BLOCK_MARKDOWN = "Форматирование включено повторно. "
 
 CHAT_USER_PROMPT = f"""
-Refer to the following context documents when responding to me.{{optional_ignore_statement}}
-CONTEXT:
+Отвечая мне, обращайся к следующим контекстным документам.{{optional_ignore_statement}}
+Контекст:
 {GENERAL_SEP_PAT}
 {{context_docs_str}}
 {GENERAL_SEP_PAT}
@@ -50,175 +50,175 @@ CHAT_USER_CONTEXT_FREE_PROMPT = f"""
 #   or end so the middle history section is relatively less paid attention to than the main task
 # - Works worse with just a simple yes/no, seems asking it to produce "search" helps a bit, can
 #   consider doing COT for this and keep it brief, but likely only small gains.
-SKIP_SEARCH = "Skip Search"
-YES_SEARCH = "Yes Search"
+SKIP_SEARCH = "Пропустить поиск"
+YES_SEARCH = "Выполнить поиск"
 
 AGGRESSIVE_SEARCH_TEMPLATE = f"""
-Given the conversation history and a follow up query, determine if the system should call \
-an external search tool to better answer the latest user input.
-Your default response is {YES_SEARCH}.
+Учитывая историю чата и последующий запрос, определи, следует ли системе обращаться к \
+внешнему поисковому инструменту, чтобы лучше ответить на последние запросы пользователя.
+По умолчанию используется следующий ответ {YES_SEARCH}.
 
-Respond "{SKIP_SEARCH}" if either:
-- There is sufficient information in chat history to FULLY and ACCURATELY answer the query AND \
-additional information or details would provide little or no value.
-- The query is some form of request that does not require additional information to handle.
+Ответь "{SKIP_SEARCH}" если:
+-  В истории чата достаточно информации, чтобы полностью и точно ответить на запрос, а \
+дополнительная информация или подробности не будут иметь большого значения.
+- Запрос - это некоторая форма запроса, для обработки которой не требуется дополнительная информация.
 
-Conversation History:
+История чата:
 {GENERAL_SEP_PAT}
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-If you are at all unsure, respond with {YES_SEARCH}.
-Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
+Если в чем-то не уверен, ответь {YES_SEARCH}.
+Отвечай точно и только "{YES_SEARCH}" или "{SKIP_SEARCH}"
 
-Follow Up Input:
+Последующий ввод данных:
 {{final_query}}
 """.strip()
 
 
 # TODO, templatize this so users don't need to make code changes to use this
 AGGRESSIVE_SEARCH_TEMPLATE_LLAMA2 = f"""
-You are an expert of a critical system. Given the conversation history and a follow up query, \
-determine if the system should call an external search tool to better answer the latest user input.
+Ты являешься экспертом в критически важной системе. Учитывая историю чата и последующий запрос, \
+определи, следует ли системе вызывать внешний поисковый инструмент, чтобы лучше ответить на последний запрос, введенный пользователем.
 
-Your default response is {YES_SEARCH}.
-If you are even slightly unsure, respond with {YES_SEARCH}.
+Твой ответ по умолчанию {YES_SEARCH}.
+Если ты хотя бы немного не уверен, ответь {YES_SEARCH}.
 
-Respond "{SKIP_SEARCH}" if any of these are true:
-- There is sufficient information in chat history to FULLY and ACCURATELY answer the query.
-- The query is some form of request that does not require additional information to handle.
-- You are absolutely sure about the question and there is no ambiguity in the answer or question.
+Ответь "{SKIP_SEARCH}" если что-либо из этого верно:
+- В истории чата достаточно информации, чтобы полностью и точно ответить на запрос.
+- Запрос - это некоторая форма запроса, для обработки которой не требуется дополнительная информация.
+- Ты абсолютно уверен в вопросе, и в ответе или вопросе нет двусмысленности.
 
-Conversation History:
+История чата:
 {GENERAL_SEP_PAT}
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
+Отвечай точно и только "{YES_SEARCH}" или "{SKIP_SEARCH}"
 
-Follow Up Input:
+Последующий ввод данных:
 {{final_query}}
 """.strip()
 
 REQUIRE_SEARCH_SINGLE_MSG = f"""
-Given the conversation history and a follow up query, determine if the system should call \
-an external search tool to better answer the latest user input.
+Учитывая историю чата и последующий запрос, определи, следует ли системе вызывать \
+внешний поисковый инструмент, чтобы лучше реагировать на последние вводимые пользователем данные.
 
-Respond "{YES_SEARCH}" if:
-- Specific details or additional knowledge could lead to a better answer.
-- There are new or unknown terms, or there is uncertainty what the user is referring to.
-- If reading a document cited or mentioned previously may be useful.
+Ответь "{YES_SEARCH}" если:
+- Конкретные детали или дополнительные знания могут помочь найти лучший ответ.
+- Имеются новые или неизвестные термины, или нет уверенности в том, что пользователь имеет в виду.
+- Если чтение документа, на который ссылаются или о котором упоминалось ранее, может оказаться полезным.
 
-Respond "{SKIP_SEARCH}" if:
-- There is sufficient information in chat history to FULLY and ACCURATELY answer the query
-and additional information or details would provide little or no value.
-- The query is some task that does not require additional information to handle.
+Ответь "{SKIP_SEARCH}" если:
+- В истории чата достаточно информации, чтобы полностью и точно ответить на запрос \
+, а дополнительная информация или подробности не будут иметь большого значения.
+- Запрос - это некоторая задача, для выполнения которой не требуется дополнительная информация.
 
-Conversation History:
+История чата:
 {GENERAL_SEP_PAT}
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-Even if the topic has been addressed, if more specific details could be useful, \
-respond with "{YES_SEARCH}".
-If you are unsure, respond with "{YES_SEARCH}".
+Даже если тема уже была затронута, если может оказаться полезной более конкретная информация, \
+ответь "{YES_SEARCH}".
+Если ты не уверен, ответь "{YES_SEARCH}".
 
-Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{SKIP_SEARCH}"
+Отвечай точно и только "{YES_SEARCH}" или "{SKIP_SEARCH}"
 
-Follow Up Input:
+Последующий ввод данных:
 {{final_query}}
 """.strip()
 
 
 HISTORY_QUERY_REPHRASE = f"""
-Given the following conversation and a follow up input, rephrase the follow up into a SHORT, \
-standalone query (which captures any relevant context from previous messages) for a vectorstore.
-IMPORTANT: EDIT THE QUERY TO BE AS CONCISE AS POSSIBLE. Respond with a short, compressed phrase \
-with mainly keywords instead of a complete sentence.
-If there is a clear change in topic, disregard the previous messages.
-Strip out any information that is not relevant for the retrieval task.
-If the follow up message is an error or code snippet, repeat the same input back EXACTLY.
+Учитывая приведенный ниже историю чата и дополнительные данные, перефразируй их в КОРОТКИЙ, \
+автономный запрос (который отражает любой соответствующий контекст из предыдущих сообщений) для векторного хранилища.
+Важно: отредактируй запрос, чтобы он был ка можно более кратким. Отвечай короткой, сжатой фразой, \
+используя в основном ключевые слова, а не целое предложение.
+Если тема явно изменилась, не обращай внимания на предыдущие сообщения.
+Удали всю информацию, которая не имеет отношения к задаче поиска.
+Если последующее сообщение является ошибкой или фрагментом кода, повтори тот же ввод в точности.
 
-Chat History:
+История чата:
 {GENERAL_SEP_PAT}
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-Follow Up Input: {{question}}
-Standalone question (Respond with only the short combined query):
+Последующий ввод данных: {{question}}
+Отдельный вопрос (ответь только коротким комбинированным запросом) :
 """.strip()
 
 INTERNET_SEARCH_QUERY_REPHRASE = f"""
-Given the following conversation and a follow up input, rephrase the follow up into a SHORT, \
-standalone query suitable for an internet search engine.
-IMPORTANT: If a specific query might limit results, keep it broad. \
-If a broad query might yield too many results, make it detailed.
-If there is a clear change in topic, ensure the query reflects the new topic accurately.
-Strip out any information that is not relevant for the internet search.
+Учитывая приведенный ниже разговор и последующие данные, перефразируй их в КОРОТКИЙ \
+самостоятельный запрос, подходящий для поисковой системы в Интернете.
+ВАЖНО: Если конкретный запрос может привести к ограничению результатов, используй его в широком контексте. \
+Если общий запрос может дать слишком много результатов, сделай его подробным.
+Если тема явно изменилась, убедись, что запрос точно отражает новую тему.
+Удали всю информацию, которая не имеет отношения к поиску в Интернете.
 
-Chat History:
+История чата:
 {GENERAL_SEP_PAT}
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-Follow Up Input: {{question}}
-Internet Search Query (Respond with a detailed and specific query):
+Последующий ввод данных: {{question}}
+Поисковый запрос в Интернете (ответь подробным и конкретным запросом):
 """.strip()
 
 
 # The below prompts are retired
-NO_SEARCH = "No Search"
+NO_SEARCH = "Никакого поиска"
 REQUIRE_SEARCH_SYSTEM_MSG = f"""
-You are a large language model whose only job is to determine if the system should call an \
-external search tool to be able to answer the user's last message.
+Ты - большая языковая модель, единственная задача которой состоит в том, чтобы определить, должна ли система вызывать \
+внешний поисковый инструмент, чтобы иметь возможность ответить на последнее сообщение пользователя.
 
-Respond with "{NO_SEARCH}" if:
-- there is sufficient information in chat history to fully answer the user query
-- there is enough knowledge in the LLM to fully answer the user query
-- the user query does not rely on any specific knowledge
+Ответь "{NO_SEARCH}" если:
+- в истории чата достаточно информации, чтобы полностью ответить на запрос пользователя.
+- в большой языковой модели достаточно знаний, чтобы полностью ответить на запрос пользователя.
+- запрос пользователя не основывается на каких-либо конкретных знаниях.
 
-Respond with "{YES_SEARCH}" if:
-- additional knowledge about entities, processes, problems, or anything else could lead to a better answer.
-- there is some uncertainty what the user is referring to
+Ответь "{YES_SEARCH}" если:
+- дополнительные знания об объектах, процессах, проблемах или о чем-либо еще могут помочь найти лучший ответ.
+- существует некоторая неопределенность в отношении того, что пользователь имеет в виду.
 
-Respond with EXACTLY and ONLY "{YES_SEARCH}" or "{NO_SEARCH}"
+Отвечай точно и только "{YES_SEARCH}" или "{NO_SEARCH}"
 """
 
 
 REQUIRE_SEARCH_HINT = f"""
-Hint: respond with EXACTLY {YES_SEARCH} or {NO_SEARCH}"
+Подсказка: отвечай точно {YES_SEARCH} или {NO_SEARCH}"
 """.strip()
 
 
 QUERY_REPHRASE_SYSTEM_MSG = """
-Given a conversation (between Human and Assistant) and a final message from Human, \
-rewrite the last message to be a concise standalone query which captures required/relevant \
-context from previous messages. This question must be useful for a semantic (natural language) \
-search engine.
+Учитывая диалог (между человеком и цифровым помощником) и последнее сообщение от пользователя, \
+перепиши последнее сообщение в виде краткого отдельного запроса, который отражает необходимый/релевантный \
+контекст предыдущих сообщений. Этот вопрос должен быть полезен для семантической (на естественном языке) \
+поисковой системы.
 """.strip()
 
 QUERY_REPHRASE_USER_MSG = """
-Help me rewrite this final message into a standalone query that takes into consideration the \
-past messages of the conversation IF relevant. This query is used with a semantic search engine to \
-retrieve documents. You must ONLY return the rewritten query and NOTHING ELSE. \
-IMPORTANT, the search engine does not have access to the conversation history!
+Помоги мне переписать это последнее сообщение в отдельный запрос, который, если это уместно, учитывает \
+предыдущие сообщения в переписке. Этот запрос используется в системе семантического поиска для  \
+извлечения документов. Ты должна возвращать только переписанный запрос и ничего больше. \
+Важно, поисковая система не имеет доступа к истории диалога!
 
-Query:
+Запрос:
 {final_query}
 """.strip()
 
 
 CHAT_NAMING = f"""
-Given the following conversation, provide a SHORT name for the conversation.{{language_hint_or_empty}}
-IMPORTANT: TRY NOT TO USE MORE THAN 5 WORDS, MAKE IT AS CONCISE AS POSSIBLE.
-Focus the name on the important keywords to convey the topic of the conversation.
+Учитывая следующий диалог, укажи его краткое название.{{language_hint_or_empty}}
+Важно: старайся использовать не более 5 слов, делай его как можно более кратким.
+Выдели в названии важные ключевые слова, чтобы передать тему разговора.
 
-Chat History:
+История чата:
 {GENERAL_SEP_PAT}
 {{chat_history}}
 {GENERAL_SEP_PAT}
 
-Based on the above, what is a short name to convey the topic of the conversation?
+Исходя из вышеизложенного, какое краткое название может передать тему разговора?
 """.strip()
 
 # NOTE: the prompt separation is partially done for efficiency; previously I tried
@@ -228,21 +228,21 @@ Based on the above, what is a short name to convey the topic of the conversation
 CONTEXTUAL_RAG_PROMPT1 = """<document>
 {document}
 </document>
-Here is the chunk we want to situate within the whole document"""
+Вот фрагмент, который мы хотим разместить во всем документе"""
 
 CONTEXTUAL_RAG_PROMPT2 = """<chunk>
 {chunk}
 </chunk>
-Please give a short succinct context to situate this chunk within the overall document
-for the purposes of improving search retrieval of the chunk. Answer only with the succinct
-context and nothing else. """
+Пожалуйста, дай краткий, сжатый контекст, чтобы поместить этот фрагмент в общий документ,
+чтобы улучшить поиск по нему. Отвечай только с учетом краткого
+контекста и ничего больше. """
 
 CONTEXTUAL_RAG_TOKEN_ESTIMATE = 64  # 19 + 45
 
 DOCUMENT_SUMMARY_PROMPT = """<document>
 {document}
 </document>
-Please give a short succinct summary of the entire document. Answer only with the succinct
-summary and nothing else. """
+Пожалуйста, дай краткое изложение всего документа. Отвечай только на основе
+краткого изложения и ничего больше. """
 
 DOCUMENT_SUMMARY_TOKEN_ESTIMATE = 29
