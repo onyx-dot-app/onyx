@@ -211,6 +211,13 @@ export interface FreshdeskCredentialJson {
   freshdesk_api_key: string;
 }
 
+export interface FreshdeskKBCredentialJson {
+  freshdesk_domain: string;
+  freshdesk_api_key: string;
+  freshdesk_portal_url: string;
+  freshdesk_portal_id: string;
+}
+
 export interface FirefliesCredentialJson {
   fireflies_api_key: string;
 }
@@ -334,6 +341,12 @@ export const credentialTemplates: Record<ValidSources, any> = {
     freshdesk_password: "",
     freshdesk_api_key: "",
   } as FreshdeskCredentialJson,
+  freshdesk_kb: {
+    freshdesk_domain: "",
+    freshdesk_api_key: "",
+    freshdesk_portal_url: "",
+    freshdesk_portal_id: ""
+  } as FreshdeskKBCredentialJson,
   fireflies: {
     fireflies_api_key: "",
   } as FirefliesCredentialJson,
@@ -493,6 +506,8 @@ export const credentialDisplayNames: Record<string, string> = {
   freshdesk_domain: "Freshdesk Domain",
   freshdesk_password: "Freshdesk Password",
   freshdesk_api_key: "Freshdesk API Key",
+  freshdesk_portal_url: "Freshdesk Portal URL",
+  freshdesk_portal_id: "Freshdesk Portal ID",
 
   // Fireflies
   fireflies_api_key: "Fireflies API Key",
