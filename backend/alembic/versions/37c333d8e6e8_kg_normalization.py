@@ -36,10 +36,6 @@ def upgrade() -> None:
         "kg_entity_extraction_staging",
         sa.Column("clustering_name", NullFilteredString, nullable=True),
     )
-    op.add_column(
-        "kg_entity_extraction_staging",
-        sa.Column("clustered", sa.Boolean, nullable=False, server_default="false"),
-    )
 
     # Create GIN index on clustering columns
     op.execute("COMMIT")
@@ -208,4 +204,3 @@ def downgrade() -> None:
     op.drop_column("kg_entity", "clustering_trigrams")
     op.drop_column("kg_entity", "clustering_name")
     op.drop_column("kg_entity_extraction_staging", "clustering_name")
-    op.drop_column("kg_entity_extraction_staging", "clustered")
