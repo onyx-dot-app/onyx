@@ -6,12 +6,12 @@ from onyx.prompts.constants import QUESTION_PAT
 
 ANSWER_VALIDITY_CONDITIONS = (
     """
-1. Query is asking for information that varies by person or is subjective. If there is not a \
-globally true answer, the language model should not respond, therefore any answer is invalid.
-2. Answer addresses a related but different query. To be helpful, the model may provide \
-related information about a query but it won't match what the user is asking, this is invalid.
-3. Answer is just some form of "I don\'t know" or "not enough information" without significant \
-additional useful information. Explaining why it does not know or cannot answer is invalid.
+1. В запросе запрашивается информация, которая зависит от конкретного человека или носит субъективный характер. Если нет \
+глобально верного ответа, языковая модель не должна отвечать, поэтому любой ответ недействителен.
+2. Ответ относится к связанному, но отличающемуся запросу. Чтобы быть полезной, модель может предоставлять \
+соответствующую информацию о запросе, но она не будет соответствовать тому, что запрашивает пользователь, это недопустимо.
+3. Ответ - это просто какая-то форма "Я не знаю" или "недостаточно информации" без существенной \
+дополнительной полезной информации. Объяснение того, почему он не знает или не может ответить, неверно.
 """
     if not CUSTOM_ANSWER_VALIDITY_CONDITIONS
     else "\n".join(
@@ -38,21 +38,21 @@ ANSWER_FORMAT = (
 )
 
 ANSWER_VALIDITY_PROMPT = f"""
-You are an assistant to identify invalid query/answer pairs coming from a large language model.
-The query/answer pair is invalid if any of the following are True:
+Вы являетесь помощником в выявлении недопустимых пар запрос-ответ, поступающих из большой языковой модели.
+Пара запрос-ответ является недопустимой, если верно любое из следующих условий:
 {ANSWER_VALIDITY_CONDITIONS}
 
 {QUESTION_PAT} {{user_query}}
 {ANSWER_PAT} {{llm_answer}}
 
 ------------------------
-You MUST answer in EXACTLY the following format:
+Вы ДОЛЖНЫ ответить ТОЧНО в следующем формате:
 ```
 {ANSWER_FORMAT}
-Final Answer: Valid or Invalid
+Окончательный ответ: Valid или Invalid
 ```
 
-Hint: Remember, if ANY of the conditions are True, it is Invalid.
+Подсказка: Помните, что если какое-либо из условий True, то оно Invalid.
 """.strip()
 
 
