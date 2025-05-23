@@ -2,7 +2,6 @@ import logging
 import multiprocessing
 import os
 import time
-from pathlib import Path
 from typing import Any
 from typing import cast
 
@@ -24,6 +23,7 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.apps.task_formatters import CeleryTaskColoredFormatter
 from onyx.background.celery.apps.task_formatters import CeleryTaskPlainFormatter
 from onyx.background.celery.celery_utils import celery_is_worker_primary
+from onyx.background.celery.celery_utils import make_probe_path
 from onyx.configs.constants import ONYX_CLOUD_CELERY_TASK_PREFIX
 from onyx.configs.constants import OnyxRedisLocks
 from onyx.db.engine import get_sqlalchemy_engine
@@ -81,19 +81,6 @@ class TenantAwareTask(Task):
             # Clear or reset after the task runs
             # so it does not leak into any subsequent tasks on the same worker process
             CURRENT_TENANT_ID_CONTEXTVAR.set(None)
-
-
-def _make_probe_path(probe: str, hostname: str) -> Path:
-    hostname_parts = hostname.split("@")
-    if len(hostname_parts) != 2:
-        raise ValueError(f"hostname could not be split! {hostname=}")
-
-    name = hostname_parts[0]
-    if not name:
-        raise ValueError(f"name cannot be empty! {name=}")
-
-    safe_name = "".join(c for c in name if c.isalnum()).rstrip()
-    return Path(f"/tmp/onyx_k8s_{safe_name}_{probe}.txt")
 
 
 @task_prerun.connect
@@ -355,12 +342,12 @@ def on_secondary_worker_init(sender: Any, **kwargs: Any) -> None:
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
     task_logger.info("worker_ready signal received.")
 
-    #
+    # file based way to do readiness/liveness probes
     # https://medium.com/ambient-innovation/health-checks-for-celery-in-kubernetes-cf3274a3e106
     # https://github.com/celery/celery/issues/4079#issuecomment-1270085680
 
     hostname: str = cast(str, sender.hostname)
-    path = _make_probe_path("readiness", hostname)
+    path = make_probe_path("readiness", hostname)
     path.touch()
     logger.info(f"Readiness signal touched at {path}.")
 
@@ -369,7 +356,7 @@ def on_worker_shutdown(sender: Any, **kwargs: Any) -> None:
     HttpxPool.close_all()
 
     hostname: str = cast(str, sender.hostname)
-    path = _make_probe_path("readiness", hostname)
+    path = make_probe_path("readiness", hostname)
     path.unlink(missing_ok=True)
 
     if not celery_is_worker_primary(sender):
@@ -521,7 +508,7 @@ class LivenessProbe(bootsteps.StartStopStep):
         super().__init__(worker, **kwargs)
         self.requests: list[Any] = []
         self.task_tref = None
-        self.path = _make_probe_path("liveness", worker.hostname)
+        self.path = make_probe_path("liveness", worker.hostname)
 
     def start(self, worker: Any) -> None:
         self.task_tref = worker.timer.call_repeatedly(
