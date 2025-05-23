@@ -793,7 +793,7 @@ export function ChatInputBar({
                   tooltipContent={"Upload files and attach user files"}
                 />
 
-                <LLMPopover
+                {/* <LLMPopover
                   llmProviders={llmProviders}
                   llmManager={llmManager}
                   requiresImageGeneration={false}
@@ -819,7 +819,7 @@ export function ChatInputBar({
                       />
                     </button>
                   }
-                />
+                /> */}
 
                 {retrievalEnabled && (
                   <FilterPopup
