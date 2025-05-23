@@ -579,7 +579,8 @@ a2) "Search Strategy":
 If a SQL search is chosen, i.e., documents have to be identified first, there are two approaches:
 1. SIMPLE: You think you can answer the question using a database that is aware of the entities, relationships \
 above, and is generally suitable if it is enough to either list or count entities, return dates, etc. Usually, \
-'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', etc.
+'SIMPLE' is chosen for questions of the form 'how many...' (always), or 'list the...' (often), 'when was...', \
+'what did (someone) work on...'etc.
 2. DEEP: You think you really should ALSO leverage the actual text of sources to answer the question, which sits \
 in a vector database. Examples are 'what is discussed in...', 'summarize', 'what is the discussion about...',\
 'how does... relate to...', 'are there any mentions of... in..', 'what are the main points in...', \
