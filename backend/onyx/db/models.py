@@ -941,13 +941,6 @@ class KGEntityExtractionStaging(Base):
         NullFilteredString, nullable=True, index=True
     )
 
-    # Data for normalization and clustering
-    clustering_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-
-    clustered: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-
     alternative_names: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String), nullable=False, default=list
     )
