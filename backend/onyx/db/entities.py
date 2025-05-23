@@ -26,6 +26,7 @@ def add_entity(
     occurrences: int = 0,
     event_time: datetime | None = None,
     attributes: dict[str, str] | None = None,
+    alternative_names: list[str] | None = None,
 ) -> "KGEntity | KGEntityExtractionStaging | None":
     """Add a new entity to the database.
 
@@ -42,6 +43,7 @@ def add_entity(
     entity_type = entity_type.upper()
     name = name.title()
     id_name = f"{entity_type}::{name}"
+    alternative_names = alternative_names or []
 
     _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
     if kg_stage == KGStage.EXTRACTED:
@@ -62,6 +64,7 @@ def add_entity(
             occurrences=occurrences,
             event_time=event_time,
             attributes=attributes,
+            alternative_names=alternative_names,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
@@ -74,6 +77,7 @@ def add_entity(
                 name=name,
                 event_time=event_time,
                 attributes=attributes,
+                alternative_names=alternative_names,
             ),
         )
         .returning(_KGEntityObject)

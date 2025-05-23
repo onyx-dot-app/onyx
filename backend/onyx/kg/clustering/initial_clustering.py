@@ -5,14 +5,16 @@ from typing import List
 from typing import Set
 
 import numpy as np
+from rapidfuzz.fuzz import ratio
 from sklearn.cluster import SpectralClustering  # type: ignore
+from sqlalchemy import text
 from thefuzz import fuzz  # type: ignore
 
 from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import add_entity
-from onyx.db.entities import delete_entities_by_id_names
 from onyx.db.entities import get_entities_by_grounding
+from onyx.db.entities import KGEntityExtractionStaging
 from onyx.db.entity_type import get_determined_grounded_entity_types
 from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
@@ -502,42 +504,86 @@ def kg_clustering(
 
         relationships = get_all_relationships(db_session, kg_stage=KGStage.EXTRACTED)
 
-        grounded_entities = get_entities_by_grounding(
-            db_session, KGStage.EXTRACTED, KGGroundingType.GROUNDED
+        grounded_entities: set[KGEntityExtractionStaging] = set(
+            get_entities_by_grounding(
+                db_session, KGStage.EXTRACTED, KGGroundingType.GROUNDED
+            )
         )
 
     ## Clustering
 
     # TODO: re-implement clustering of ungrounded entities as well as
-    # grounded entities that do not have a source document with deep extraction
-    # enabled!
-    # For now we would just create a trivial entity mapping from the
-    # 'unclustered' entities to the 'clustered' entities. So we can simply
-    # transfer the entity information from the Staging to the Normalized
-    # tables.
+    # grounded entities that do not have a source document with deep extraction enabled!
+    # For now we would just dedupe grounded entities that have very similar names
     # This will be reimplemented when deep extraction is enabled.
 
-    ## Database operations
+    THRESHOLD = 96
+    while grounded_entities:
+        clustered: list[str] = []
 
-    # create the clustered objects - entities
+        entity = grounded_entities.pop()
+        clustered.append(entity.id_name)
 
-    transferred_entities: list[str] = []
-    for grounded_entity in grounded_entities:
+        primary_entity = entity
+        occurrences = entity.occurrences or 1
+        names: set[str] = {entity.name}
+
+        # find a list of entities with very similar names
         with get_session_with_current_tenant() as db_session:
+            # uses GIN index, very efficient
+            db_session.execute(text("SET pg_trgm.similarity_threshold = 0.6"))
+            similar_entities = (
+                db_session.query(KGEntityExtractionStaging)
+                .filter(
+                    KGEntityExtractionStaging.entity_type_id_name
+                    == entity.entity_type_id_name,
+                    ~KGEntityExtractionStaging.clustered,
+                    KGEntityExtractionStaging.id_name != entity.id_name,
+                    KGEntityExtractionStaging.clustering_name.op("%")(
+                        entity.clustering_name
+                    ),
+                )
+                .all()
+            )
+            for similar in similar_entities:
+                # skip those with number so we don't cluster version1 and version2
+                if any(char.isdigit() for char in similar.clustering_name):
+                    continue
+                if ratio(similar.clustering_name, entity.clustering_name) > THRESHOLD:
+                    if similar in grounded_entities:
+                        grounded_entities.remove(similar)
+                    clustered.append(similar.id_name)
+                    names.add(similar.name)
+                    occurrences += similar.occurrences or 1
+
+                    if (
+                        primary_entity.document_id is None
+                        and similar.document_id is not None
+                    ):
+                        primary_entity = similar
+
+            # only keep the primary entity
+            names.remove(entity.name)
             added_entity = add_entity(
                 db_session,
                 KGStage.NORMALIZED,
-                entity_type=grounded_entity.entity_type_id_name,
-                name=grounded_entity.name,
-                occurrences=grounded_entity.occurrences or 1,
-                document_id=grounded_entity.document_id or None,
-                attributes=grounded_entity.attributes or None,
+                entity_type=primary_entity.entity_type_id_name,
+                name=primary_entity.name,
+                occurrences=occurrences,
+                document_id=primary_entity.document_id,
+                attributes=primary_entity.attributes or None,
+                alternative_names=list(names),
             )
-
+            if added_entity:
+                db_session.query(KGEntityExtractionStaging).filter(
+                    KGEntityExtractionStaging.id_name.in_(clustered)
+                ).update({"clustered": True})
             db_session.commit()
 
-            if added_entity:
-                transferred_entities.append(added_entity.id_name)
+    0 / 0
+    # TODO: delete all the clustered ones
+
+    ## Database operations
 
     transferred_relationship_types: list[str] = []
     for relationship_type in relationship_types:
@@ -610,14 +656,14 @@ def kg_clustering(
     except Exception as e:
         logger.error(f"Error deleting relationship types: {e}")
 
-    try:
-        with get_session_with_current_tenant() as db_session:
-            delete_entities_by_id_names(
-                db_session, transferred_entities, kg_stage=KGStage.EXTRACTED
-            )
-            db_session.commit()
-    except Exception as e:
-        logger.error(f"Error deleting entities: {e}")
+    # try:
+    #     with get_session_with_current_tenant() as db_session:
+    #         delete_entities_by_id_names(
+    #             db_session, transferred_entities, kg_stage=KGStage.EXTRACTED
+    #         )
+    #         db_session.commit()
+    # except Exception as e:
+    #     logger.error(f"Error deleting entities: {e}")
 
     # Update document kg info
 
