@@ -1986,8 +1986,18 @@ export function ChatPage({
 
       if (response.length > 0 && response[0] !== undefined) {
         const uploadedFile = response[0];
+        console.log(uploadedFile);
 
-        addSelectedFile(uploadedFile);
+        setCurrentMessageFiles((prev) => [
+          ...prev,
+          {
+            id: uploadedFile.id.toString(),
+            type: uploadedFile.chat_file_type,
+            name: uploadedFile.name,
+            size: uploadedFile.size,
+            lastModified: uploadedFile.lastModified,
+          },
+        ]);
       } else {
         setPopup({
           type: "error",
