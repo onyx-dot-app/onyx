@@ -188,7 +188,7 @@ interface ChatInputBarProps {
   setAlternativeAssistant: (alternativeAssistant: Persona | null) => void;
   toggleDocumentSidebar: () => void;
   setFiles: (files: FileDescriptor[]) => void;
-  handleFileUpload: (files: File[], intent: UploadIntent) => void;
+  handleFileUpload: (files: File[]) => void;
   textAreaRef: React.RefObject<HTMLTextAreaElement>;
   filterManager: FilterManager;
   availableSources: SourceMetadata[];
@@ -270,7 +270,7 @@ export function ChatInputBar({
       }
       if (pastedFiles.length > 0) {
         event.preventDefault();
-        handleFileUpload(pastedFiles, UploadIntent.ATTACH_TO_MESSAGE);
+        handleFileUpload(pastedFiles);
       }
     }
   };

@@ -1956,10 +1956,7 @@ export function ChatPage({
     }
   };
 
-  const handleImageUpload = async (
-    acceptedFiles: File[],
-    intent: UploadIntent
-  ) => {
+  const handleFileUpload = async (acceptedFiles: File[]) => {
     const [_, llmModel] = getFinalLLM(
       llmProviders,
       liveAssistant ?? null,
@@ -1982,8 +1979,6 @@ export function ChatPage({
 
     updateChatState("uploading", currentSessionId());
 
-    const newlyUploadedFileDescriptors: FileDescriptor[] = [];
-
     for (let file of acceptedFiles) {
       const formData = new FormData();
       formData.append("files", file);
@@ -1992,24 +1987,7 @@ export function ChatPage({
       if (response.length > 0 && response[0] !== undefined) {
         const uploadedFile = response[0];
 
-        if (intent == UploadIntent.ADD_TO_DOCUMENTS) {
-          addSelectedFile(uploadedFile);
-        } else {
-          const newFileDescriptor: FileDescriptor = {
-            // Use file_id (storage ID) if available, otherwise fallback to DB id
-            // Ensure it's a string as FileDescriptor expects
-            id: uploadedFile.file_id
-              ? String(uploadedFile.file_id)
-              : String(uploadedFile.id),
-            type: uploadedFile.chat_file_type
-              ? uploadedFile.chat_file_type
-              : ChatFileType.PLAIN_TEXT,
-            name: uploadedFile.name,
-            isUploading: false, // Mark as successfully uploaded
-          };
-
-          setCurrentMessageFiles((prev) => [...prev, newFileDescriptor]);
-        }
+        addSelectedFile(uploadedFile);
       } else {
         setPopup({
           type: "error",
@@ -2615,12 +2593,7 @@ export function ChatPage({
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone
                   key={currentSessionId()}
-                  onDrop={(acceptedFiles) =>
-                    handleImageUpload(
-                      acceptedFiles,
-                      UploadIntent.ATTACH_TO_MESSAGE
-                    )
-                  }
+                  onDrop={(acceptedFiles) => handleFileUpload(acceptedFiles)}
                   noClick
                 >
                   {({ getRootProps }) => (
@@ -3354,7 +3327,7 @@ export function ChatPage({
                               }
                               setAlternativeAssistant={setAlternativeAssistant}
                               setFiles={setCurrentMessageFiles}
-                              handleFileUpload={handleImageUpload}
+                              handleFileUpload={handleFileUpload}
                               textAreaRef={textAreaRef}
                             />
                             {enterpriseSettings &&
