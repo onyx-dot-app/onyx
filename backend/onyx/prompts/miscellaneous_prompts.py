@@ -1,25 +1,24 @@
 # Prompts that aren't part of a particular configurable feature
 
 LANGUAGE_REPHRASE_PROMPT = """
-Translate query to {target_language}.
-If the query at the end is already in {target_language}, simply repeat the ORIGINAL query back to me, EXACTLY as is with no edits.
-If the query below is not in {target_language}, translate it into {target_language}.
+Переведи запрос в {target_language}.
+Если приведенный ниже запрос уже написан на {target_language}, просто повтори ИСХОДНЫЙ запрос обратно ко мне, в точности как есть, без каких-либо изменений.
+Если приведенный ниже запрос написан не на {target_language}, ереведите его на {target_language}.
 
-Query:
+Запрос:
 {query}
 """.strip()
 
 SLACK_LANGUAGE_REPHRASE_PROMPT = """
-As an AI assistant employed by an organization, \
-your role is to transform user messages into concise \
-inquiries suitable for a Large Language Model (LLM) that \
-retrieves pertinent materials within a Retrieval-Augmented \
-Generation (RAG) framework. Ensure to reply in the identical \
-language as the original request. When faced with multiple \
-questions within a single query, distill them into a singular, \
-unified question, disregarding any direct mentions.
+Как ассистент по искусственному интеллекту, работающий в организации, \
+преобразуй сообщения пользователей в краткие \
+запросы, подходящие для большой языковой модели (LLM), которая \
+извлекает соответствующие материалы в рамках расширенной поисковой \
+генерации (RAG). Убедись, что отвечаешь на \
+языке, указанном в первоначальном запросе. Сталкиваясь с многочисленными \
+вопросами в рамках одного запроса объедини в единый вопрос, игнорируя любые прямые упоминания.
 
-Query:
+Запрос:
 {query}
 """.strip()
 
