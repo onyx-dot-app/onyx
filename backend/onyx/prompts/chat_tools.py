@@ -1,43 +1,43 @@
 # These prompts are to support tool calling. Currently not used in the main flow or via any configs
 # The current generation of LLM is too unreliable for this task.
 # Onyx retrieval call as a tool option
-DANSWER_TOOL_NAME = "Current Search"
+DANSWER_TOOL_NAME = "Текущий поиск"
 DANSWER_TOOL_DESCRIPTION = (
-    "A search tool that can find information on any topic "
-    "including up to date and proprietary knowledge."
+    "Инструмент поиска, с помощью которого можно найти информацию по любой теме "
+    "включая актуальные и защищенные авторскими правами сведения."
 )
 
 
 # Tool calling format inspired from LangChain
 TOOL_TEMPLATE = """
-TOOLS
+ИНСТРУМЕНТЫ
 ------
-You can use tools to look up information that may be helpful in answering the user's \
-original question. The available tools are:
+Можешь использовать инструменты для поиска информации, которая может быть полезна при ответе на \
+исходный вопрос пользователя. Доступны следующие инструменты:
 
 {tool_overviews}
 
-RESPONSE FORMAT INSTRUCTIONS
+ИНСТРУКЦИИ ПО ФОРМАТУ ОТВЕТА
 ----------------------------
-When responding to me, please output a response in one of two formats:
+Отвечая мне, пожалуйста, выводи ответ в одном из двух форматов:
 
-**Option 1:**
-Use this if you want to use a tool. Markdown code snippet formatted in the following schema:
+**Вариант #1:**
+Используй этот вариант, если хочешь использовать инструмент. Фрагмент кода Markdown, отформатированный по следующей схеме:
 
 ```json
 {{
-    "action": string, \\ The action to take. {tool_names}
-    "action_input": string \\ The input to the action
+    "action": string, \\ Какие действия необходимо предпринять. {tool_names}
+    "action_input": string \\ Входные данные для выполнения действия
 }}
 ```
 
-**Option #2:**
-Use this if you want to respond directly to the user. Markdown code snippet formatted in the following schema:
+**Вариант #2:**
+Используйте его, если вы хочешь напрямую ответить пользователю. Фрагмент кода Markdown, отформатированный по следующей схеме:
 
 ```json
 {{
-    "action": "Final Answer",
-    "action_input": string \\ You should put what you want to return to use here
+    "action": "Окончательный ответ",
+    "action_input": string \\ Тебе следует поместить сюда то, что ты хочешь вернуть для использования
 }}
 ```
 """
@@ -45,12 +45,12 @@ Use this if you want to respond directly to the user. Markdown code snippet form
 # For the case where the user has not configured any tools to call, but still using the tool-flow
 # expected format
 TOOL_LESS_PROMPT = """
-Respond with a markdown code snippet in the following schema:
+Ответь фрагментом кода markdown по следующей схеме:
 
 ```json
 {{
-    "action": "Final Answer",
-    "action_input": string \\ You should put what you want to return to use here
+    "action": "Окончательный ответ",
+    "action_input": string \\ Тебе следует поместить сюда то, что ты хочешь вернуть для использования
 }}
 ```
 """
@@ -58,10 +58,10 @@ Respond with a markdown code snippet in the following schema:
 
 # Second part of the prompt to include the user query
 USER_INPUT = """
-USER'S INPUT
+ВВОД ДАННЫХ ПОЛЬЗОВАТЕЛЕМ
 --------------------
-Here is the user's input \
-(remember to respond with a markdown code snippet of a json blob with a single action, and NOTHING else):
+Вот вводимые пользователем данные \
+(не забудьте ответить фрагментом кода markdown в виде большого двоичного объекта в формате json одним действием и ничем больше):
 
 {user_input}
 """
@@ -70,29 +70,29 @@ Here is the user's input \
 # After the tool call, this is the following message to get a final answer
 # Tools are not chained currently, the system must provide an answer after calling a tool
 TOOL_FOLLOWUP = """
-TOOL RESPONSE:
+ИНСТРУМЕНТ ДЛЯ ОТВЕТА:
 ---------------------
 {tool_output}
 
-USER'S INPUT
+ВВОД ДАННЫХ ПОЛЬЗОВАТЕЛЕМ
 --------------------
-Okay, so what is the response to my last comment? If using information obtained from the tools you must \
-mention it explicitly without mentioning the tool names - I have forgotten all TOOL RESPONSES!
-If the tool response is not useful, ignore it completely.
+Итак, каков ответ на мой последний комментарий? Если ты используешь информацию, полученную из инструментов,\
+укажи ее явно, не упоминая названия инструментов - я забыл все ОТВЕТЫ ИНСТРУМЕНТОВ!
+Если ответ инструмента бесполезен, полностью игнорируй его.
 {optional_reminder}{hint}
-IMPORTANT! You MUST respond with a markdown code snippet of a json blob with a single action, and NOTHING else.
+ВАЖНО! Тебе НЕОБХОДИМО ответить фрагментом кода markdown большого двоичного объекта json одним действием, и ничем больше.
 """
 
 
 # If no tools were used, but retrieval is enabled, then follow up with this message to get the final answer
 TOOL_LESS_FOLLOWUP = """
-Refer to the following documents when responding to my final query. Ignore any documents that are not relevant.
+При ответе на мой последний запрос обратись к следующим контекстным документам. Игнорируй все документы, которые не имеют отношения к делу.
 
-CONTEXT DOCUMENTS:
+КОНТЕКСТНЫЕ ДОКУМЕНТЫ:
 ---------------------
 {context_str}
 
-FINAL QUERY:
+ОКОНЧАТЕЛЬНЫЙ ЗАПРОС:
 --------------------
 {user_query}
 
