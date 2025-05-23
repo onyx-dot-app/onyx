@@ -10,45 +10,45 @@ from onyx.prompts.constants import THOUGHT_PAT
 
 
 ONE_SHOT_SYSTEM_PROMPT = """
-You are a question answering system that is constantly learning and improving.
-You can process and comprehend vast amounts of text and utilize this knowledge to provide \
-accurate and detailed answers to diverse queries.
+Ты - система ответов на вопросы, которая постоянно обучается и совершенствуется.
+Ты можешь обрабатывать и понимать огромное количество текста и использовать эти знания для предоставления \
+точных и подробных ответов на различные запросы.
 """.strip()
 
 ONE_SHOT_TASK_PROMPT = """
-Answer the final query below taking into account the context above where relevant. \
-Ignore any provided context that is not relevant to the query.
+Ответь на последний запрос, приведенный ниже, с учетом приведенного выше контекста, если это уместно. \
+Игнорируй любой предоставленный контекст, который не имеет отношения к запросу.
 """.strip()
 
 
 WEAK_MODEL_SYSTEM_PROMPT = """
-Respond to the user query using the following reference document.
+Ответь на запрос пользователя, используя следующий справочный документ.
 """.lstrip()
 
 WEAK_MODEL_TASK_PROMPT = """
-Answer the user query below based on the reference document above.
+Ответь на приведенный ниже запрос пользователя, основываясь на приведенном выше справочном документе.
 """
 
 
 REQUIRE_JSON = """
-You ALWAYS responds with ONLY a JSON containing an answer and quotes that support the answer.
+ВСЕГДА отвечай ТОЛЬКО JSON-файлом, содержащим ответ и кавычки, подтверждающие этот ответ.
 """.strip()
 
 
 JSON_HELPFUL_HINT = """
-Hint: Make the answer as DETAILED as possible and respond in JSON format! \
-Quotes MUST be EXACT substrings from provided documents!
+Подсказка: ответь как можно подробнее и в формате JSON! \
+Кавычки ДОЛЖНЫ быть ТОЧНЫМИ подстроками из предоставленных документов!
 """.strip()
 
 CONTEXT_BLOCK = f"""
-REFERENCE DOCUMENTS:
+СПРАВОЧНЫЕ ДОКУМЕНТЫ:
 {GENERAL_SEP_PAT}
 {{context_docs_str}}
 {GENERAL_SEP_PAT}
 """
 
 HISTORY_BLOCK = f"""
-CONVERSATION HISTORY:
+ИСТОРИЯ ЧАТА:
 {GENERAL_SEP_PAT}
 {{history_str}}
 {GENERAL_SEP_PAT}
@@ -57,10 +57,10 @@ CONVERSATION HISTORY:
 
 # This has to be doubly escaped due to json containing { } which are also used for format strings
 EMPTY_SAMPLE_JSON = {
-    "answer": "Place your final answer here. It should be as DETAILED and INFORMATIVE as possible.",
+    "answer": "Размести свой окончательный ответ здесь. Он должен быть максимально ПОДРОБНЫМ и ИНФОРМАТИВНЫМ.",
     "quotes": [
-        "each quote must be UNEDITED and EXACTLY as shown in the context documents!",
-        "HINT, quotes are not shown to the user!",
+        "каждая цитата должна быть НЕОТРЕДАКТИРОВАННОЙ и точно такой, как указано в контекстных документах!",
+        "ПОДСКАЗКА, кавычки не показываются пользователю!",
     ],
 }
 
@@ -75,7 +75,7 @@ JSON_PROMPT = f"""
 {{context_block}}{{history_block}}
 {{task_prompt}}
 
-SAMPLE RESPONSE:
+ПРИМЕРНЫЙ ОТВЕТ:
 ```
 {{{json.dumps(EMPTY_SAMPLE_JSON)}}}
 ```
@@ -91,9 +91,9 @@ SAMPLE RESPONSE:
 # similar to the chat flow, but with the option of including a
 # "conversation history" block
 CITATIONS_PROMPT = f"""
-Refer to the following {{context_type}} when responding to me.{DEFAULT_IGNORE_STATEMENT}
+Отвечая мне, обращайся к {{context_type}} следующим контекстным документам.{DEFAULT_IGNORE_STATEMENT}
 
-CONTEXT:
+КОНТЕКСТ:
 {GENERAL_SEP_PAT}
 {{context_docs_str}}
 {GENERAL_SEP_PAT}
@@ -108,8 +108,8 @@ CONTEXT:
 # NOTE: need to add the extra line about "getting right to the point" since the
 # tool calling models from OpenAI tend to be more verbose
 CITATIONS_PROMPT_FOR_TOOL_CALLING = f"""
-Refer to the provided {{context_type}} when responding to me.{DEFAULT_IGNORE_STATEMENT} \
-You should always get right to the point, and never use extraneous language.
+При ответе мне обращайся к {{context_type}} предоставленным контекстным документам.{DEFAULT_IGNORE_STATEMENT} \
+Ты всегда должнен переходить прямо к делу и никогда не использовать посторонних выражений.
 
 {{history_block}}{{task_prompt}}
 
@@ -125,14 +125,14 @@ You should always get right to the point, and never use extraneous language.
 COT_PROMPT = f"""
 {ONE_SHOT_SYSTEM_PROMPT}
 
-CONTEXT:
+КОНТЕКСТ:
 {GENERAL_SEP_PAT}
 {{context_docs_str}}
 {GENERAL_SEP_PAT}
 
-You MUST respond in the following format:
+Отвечай в следующем формате:
 ```
-{THOUGHT_PAT} Use this section as a scratchpad to reason through the answer.
+{THOUGHT_PAT} Используй этот раздел как блокнот для размышлений над ответом.
 
 {{{json.dumps(EMPTY_SAMPLE_JSON)}}}
 ```
