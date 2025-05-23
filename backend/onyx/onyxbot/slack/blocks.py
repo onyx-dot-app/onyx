@@ -503,7 +503,7 @@ def _build_continue_in_web_ui_block(
             elements=[
                 ButtonElement(
                     action_id=CONTINUE_IN_WEB_UI_ACTION_ID,
-                    text="Continue Chat in Onyx!",
+                    text="Continue Chat in Valkai!",
                     style="primary",
                     url=f"{WEB_DOMAIN}/chat?slackChatId={chat_session.id}",
                 ),
