@@ -1,7 +1,11 @@
+from collections.abc import Callable
 from collections.abc import Generator
 from datetime import datetime
 from datetime import timezone
 from typing import Any
+
+from google.oauth2.credentials import Credentials as OAuthCredentials
+from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 
 from ee.onyx.external_permissions.google_drive.models import GoogleDrivePermission
 from ee.onyx.external_permissions.google_drive.models import PermissionType
@@ -13,6 +17,7 @@ from onyx.access.models import DocExternalAccess
 from onyx.access.models import ExternalAccess
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_utils.resources import get_drive_service
+from onyx.connectors.google_utils.resources import RefreshableDriveObject
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import SlimDocument
 from onyx.db.models import ConnectorCredentialPair
@@ -41,6 +46,20 @@ def _get_slim_doc_generator(
     )
 
 
+def _drive_connector_creds_getter(
+    google_drive_connector: GoogleDriveConnector,
+) -> Callable[[], ServiceAccountCredentials | OAuthCredentials]:
+    def inner() -> ServiceAccountCredentials | OAuthCredentials:
+        if not google_drive_connector._creds_dict:
+            raise ValueError(
+                "Creds dict not found, load_credentials must be called first"
+            )
+        google_drive_connector.load_credentials(google_drive_connector._creds_dict)
+        return google_drive_connector.creds
+
+    return inner
+
+
 def _fetch_permissions_for_permission_ids(
     google_drive_connector: GoogleDriveConnector,
     permission_info: dict[str, Any],
@@ -54,13 +73,22 @@ def _fetch_permissions_for_permission_ids(
     if not permission_ids:
         return []
 
-    drive_service = get_drive_service(
+    if not owner_email:
+        logger.warning(
+            f"No owner email found for document {doc_id}. Permission info: {permission_info}"
+        )
+
+    refreshable_drive_service = RefreshableDriveObject(
+        call_stack=lambda creds: get_drive_service(
+            creds=creds,
+            user_email=(owner_email or google_drive_connector.primary_admin_email),
+        ),
         creds=google_drive_connector.creds,
-        user_email=(owner_email or google_drive_connector.primary_admin_email),
+        creds_getter=_drive_connector_creds_getter(google_drive_connector),
     )
 
     return get_permissions_by_ids(
-        drive_service=drive_service,
+        drive_service=refreshable_drive_service,
         doc_id=doc_id,
         permission_ids=permission_ids,
     )

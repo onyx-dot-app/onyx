@@ -220,6 +220,7 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
         self._primary_admin_email: str | None = None
 
         self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
+        self._creds_dict: dict[str, Any] | None = None
 
         # ids of folders and shared drives that have been traversed
         self._retrieved_folder_and_drive_ids: set[str] = set()
@@ -272,6 +273,8 @@ class GoogleDriveConnector(SlimConnector, CheckpointedConnector[GoogleDriveCheck
             credentials=credentials,
             source=DocumentSource.GOOGLE_DRIVE,
         )
+
+        self._creds_dict = new_creds_dict
 
         return new_creds_dict
 
