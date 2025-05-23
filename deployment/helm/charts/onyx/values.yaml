@@ -359,6 +359,26 @@ celery_shared:
     repository: onyxdotapp/onyx-backend
     pullPolicy: IfNotPresent
     tag: ""  # Overrides the image tag whose default is the chart appVersion.
+  startupProbe:
+    # startupProbe fails after 2m
+    exec:
+      command: ["test", "-f", "/app/onyx/main.py"]
+    failureThreshold: 24
+    periodSeconds: 5
+    timeoutSeconds: 3
+  readinessProbe:
+    # readinessProbe fails after 15s + 2m of inactivity
+    # it's ok to see the readinessProbe fail transiently while the container starts
+    initialDelaySeconds: 15
+    periodSeconds: 5
+    failureThreshold: 24
+    timeoutSeconds: 3
+  livenessProbe:
+    # livenessProbe fails after 5m of inactivity
+    initialDelaySeconds: 60
+    periodSeconds: 60
+    failureThreshold: 5
+    timeoutSeconds: 3
 
 celery_beat:
   replicaCount: 1
