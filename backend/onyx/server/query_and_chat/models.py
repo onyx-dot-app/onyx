@@ -137,8 +137,6 @@ class CreateChatMessageRequest(ChunkContext):
     # https://platform.openai.com/docs/guides/structured-outputs/introduction
     structured_response_format: dict | None = None
 
-    force_user_file_search: bool = False
-
     # If true, ignores most of the search options and uses pro search instead.
     # TODO: decide how many of the above options we want to pass through to pro search
     use_agentic_search: bool = False

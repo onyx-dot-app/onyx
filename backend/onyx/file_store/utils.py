@@ -12,11 +12,11 @@ from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import ChatMessage
 from onyx.db.models import UserFile
 from onyx.db.models import UserFolder
-from onyx.file_processing.extract_file_text import IMAGE_MEDIA_TYPES
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType
 from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
+from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -119,17 +119,29 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
     if not user_file:
         raise ValueError(f"User file with id {file_id} not found")
 
-    # Try to load plaintext version first
+    # Get the file record to determine the appropriate chat file type
     file_store = get_default_file_store(db_session)
+    file_record = file_store.read_file_record(user_file.file_id)
+
+    # Determine appropriate chat file type based on the original file's MIME type
+    chat_file_type = mime_type_to_chat_file_type(file_record.file_type)
+
+    # Try to load plaintext version first
     plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
 
     # check for plain text normalized version first, then use original file otherwise
     try:
         file_io = file_store.read_file(plaintext_file_name, mode="b")
+        # For plaintext versions, use PLAIN_TEXT type (unless it's an image which doesn't have plaintext)
+        plaintext_chat_file_type = (
+            ChatFileType.PLAIN_TEXT
+            if chat_file_type != ChatFileType.IMAGE
+            else chat_file_type
+        )
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),
             content=file_io.read(),
-            file_type=ChatFileType.USER_KNOWLEDGE,
+            file_type=plaintext_chat_file_type,
             filename=user_file.name,
         )
         status = "plaintext"
@@ -137,9 +149,6 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
     except Exception:
         # Fall back to original file if plaintext not available
         file_io = file_store.read_file(user_file.file_id, mode="b")
-        file_record = file_store.read_file_record(user_file.file_id)
-        if file_record.file_type in IMAGE_MEDIA_TYPES:
-            chat_file_type = ChatFileType.IMAGE
 
         chat_file = InMemoryChatFile(
             file_id=str(user_file.file_id),

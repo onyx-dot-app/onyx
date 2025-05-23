@@ -179,7 +179,6 @@ export interface SendMessageParams {
   signal?: AbortSignal;
   userFileIds?: number[];
   userFolderIds?: number[];
-  forceUserFileSearch?: boolean;
   useLanggraph?: boolean;
 }
 
@@ -202,7 +201,6 @@ export async function* sendMessage({
   useExistingUserMessage,
   alternateAssistantId,
   signal,
-  forceUserFileSearch,
   useLanggraph,
 }: SendMessageParams): AsyncGenerator<PacketType, void, unknown> {
   const documentsAreSelected =
@@ -217,7 +215,6 @@ export async function* sendMessage({
     // single assistant anyways
     prompt_id: null,
     search_doc_ids: documentsAreSelected ? selectedDocumentIds : null,
-    force_user_file_search: forceUserFileSearch,
     file_descriptors: fileDescriptors,
     user_file_ids: userFileIds,
     user_folder_ids: userFolderIds,
