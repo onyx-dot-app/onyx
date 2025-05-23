@@ -1,7 +1,6 @@
 import re
 from collections import defaultdict
-from typing import Dict
-from typing import List
+from typing import cast
 from typing import Optional
 
 import numpy as np
@@ -68,7 +67,8 @@ def _normalize_one_entity(entity: str) -> str | None:
             func.show_trgm(cleaned_entity).cast(ARRAY(String(3))).label("trigrams")
         ).cte("query")
 
-        candidates = (
+        candidates = cast(
+            list[tuple[str, str, float]],
             db_session.query(
                 KGEntity.id_name,
                 KGEntity.clustering_name,
@@ -99,7 +99,7 @@ def _normalize_one_entity(entity: str) -> str | None:
             )
             .order_by(desc("score"))
             .limit(KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT)
-            .all()
+            .all(),
         )
     if not candidates:
         return None
@@ -136,13 +136,13 @@ def _normalize_one_entity(entity: str) -> str | None:
 
 
 def _get_existing_normalized_relationships(
-    raw_relationships: List[str],
-) -> Dict[str, Dict[str, List[str]]]:
+    raw_relationships: list[str],
+) -> dict[str, dict[str, list[str]]]:
     """
     Get existing normalized relationships from the database.
     """
 
-    relationship_type_map: Dict[str, Dict[str, List[str]]] = defaultdict(
+    relationship_type_map: dict[str, dict[str, list[str]]] = defaultdict(
         lambda: defaultdict(list)
     )
     relationship_pairs = list(
@@ -171,20 +171,20 @@ def _get_existing_normalized_relationships(
 
 
 def normalize_entities(
-    raw_entities_no_attributes: List[str],
+    raw_entities_no_attributes: list[str],
 ) -> NormalizedEntities:
     """
     Match each entity against a list of normalized entities using fuzzy matching.
     Returns the best matching normalized entity for each input entity.
 
     Args:
-        raw_entities_no_attributes: List of entity strings to normalize, w/o attributes
+        raw_entities_no_attributes: list of entity strings to normalize, w/o attributes
 
     Returns:
-        List of normalized entity strings
+        list of normalized entity strings
     """
     normalized_results: list[str] = []
-    normalized_map: dict[str, str] = {}
+    normalized_map: dict[str, str | None] = {}
 
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [(_normalize_one_entity, (entity,)) for entity in raw_entities_no_attributes]
@@ -202,14 +202,14 @@ def normalize_entities(
 
 
 def normalize_entities_w_attributes_from_map(
-    raw_entities_w_attributes: List[str],
-    entity_normalization_map: Dict[str, Optional[str]],
-) -> List[str]:
+    raw_entities_w_attributes: list[str],
+    entity_normalization_map: dict[str, Optional[str]],
+) -> list[str]:
     """
     Normalize entities with attributes using the entity normalization map.
     """
 
-    normalized_entities_w_attributes: List[str] = []
+    normalized_entities_w_attributes: list[str] = []
 
     for raw_entities_w_attribute in raw_entities_w_attributes:
         assert (
@@ -228,13 +228,13 @@ def normalize_entities_w_attributes_from_map(
 
 
 def normalize_relationships(
-    raw_relationships: List[str], entity_normalization_map: Dict[str, Optional[str]]
+    raw_relationships: list[str], entity_normalization_map: dict[str, Optional[str]]
 ) -> NormalizedRelationships:
     """
     Normalize relationships using entity mappings and relationship string matching.
 
     Args:
-        relationships: List of relationships in format "source__relation__target"
+        relationships: list of relationships in format "source__relation__target"
         entity_normalization_map: Mapping of raw entities to normalized ones (or None)
 
     Returns:
@@ -243,8 +243,8 @@ def normalize_relationships(
     # Placeholder for normalized relationship structure
     nor_relationships = _get_existing_normalized_relationships(raw_relationships)
 
-    normalized_rels: List[str] = []
-    normalization_map: Dict[str, str | None] = {}
+    normalized_rels: list[str] = []
+    normalization_map: dict[str, str | None] = {}
 
     for raw_rel in raw_relationships:
         # 1. Split and normalize entities
@@ -300,12 +300,12 @@ def normalize_relationships(
     )
 
 
-def normalize_terms(raw_terms: List[str]) -> NormalizedTerms:
+def normalize_terms(raw_terms: list[str]) -> NormalizedTerms:
     """
     Normalize terms using semantic similarity matching.
 
     Args:
-        terms: List of terms to normalize
+        terms: list of terms to normalize
 
     Returns:
         NormalizedTerms containing normalized terms and mapping
@@ -319,8 +319,8 @@ def normalize_terms(raw_terms: List[str]) -> NormalizedTerms:
     #     # ... other normalized terms ...
     # ]
 
-    # normalized_terms: List[str] = []
-    # normalization_map: Dict[str, str | None] = {}
+    # normalized_terms: list[str] = []
+    # normalization_map: dict[str, str | None] = {}
 
     # if not raw_terms:
     #     return NormalizedTerms(terms=[], term_normalization_map={})
