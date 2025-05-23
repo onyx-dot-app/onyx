@@ -64,6 +64,29 @@ def upgrade() -> None:
         sa.UniqueConstraint("kg_variable_name", name="uq_kg_config_variable_name"),
     )
 
+    # Insert initial data into kg_config table
+    op.bulk_insert(
+        sa.table(
+            "kg_config",
+            sa.column("kg_variable_name", sa.String),
+            sa.column("kg_variable_values", postgresql.ARRAY(sa.String)),
+        ),
+        [
+            {"kg_variable_name": "KG_ENABLED", "kg_variable_values": ["false"]},
+            {"kg_variable_name": "KG_VENDOR", "kg_variable_values": []},
+            {"kg_variable_name": "KG_VENDOR_DOMAINS", "kg_variable_values": []},
+            {"kg_variable_name": "KG_IGNORE_EMAIL_DOMAINS", "kg_variable_values": []},
+            {
+                "kg_variable_name": "KG_EXTRACTION_IN_PROGRESS",
+                "kg_variable_values": ["false"],
+            },
+            {
+                "kg_variable_name": "KG_CLUSTERING_IN_PROGRESS",
+                "kg_variable_values": ["false"],
+            },
+        ],
+    )
+
     op.create_table(
         "kg_entity_type",
         sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
