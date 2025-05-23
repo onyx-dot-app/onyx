@@ -243,7 +243,11 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
                 "assignee": (
                     pull_request.assignee.login if pull_request.assignee else None
                 ),
-                "created_at": pull_request.created_at.replace(tzinfo=timezone.utc),
+                "created_at": (
+                    pull_request.created_at.replace(tzinfo=timezone.utc)
+                    if pull_request.created_at
+                    else None
+                ),
                 "updated_at": (
                     pull_request.updated_at.replace(tzinfo=timezone.utc)
                     if pull_request.updated_at
@@ -282,7 +286,11 @@ def _convert_issue_to_document(issue: Issue) -> Document:
             for k, v in {
                 "state": issue.state,
                 "assignee": issue.assignee.login if issue.assignee else None,
-                "created_at": issue.created_at.replace(tzinfo=timezone.utc),
+                "created_at": (
+                    issue.created_at.replace(tzinfo=timezone.utc)
+                    if issue.created_at
+                    else None
+                ),
                 "updated_at": (
                     issue.updated_at.replace(tzinfo=timezone.utc)
                     if issue.updated_at
