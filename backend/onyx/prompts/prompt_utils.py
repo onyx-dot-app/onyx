@@ -20,7 +20,7 @@ logger = setup_logger()
 
 
 _DANSWER_DATETIME_REPLACEMENT_PAT = "[[CURRENT_DATETIME]]"
-_BASIC_TIME_STR = "The current date is {datetime_info}."
+_BASIC_TIME_STR = "Текущая дата - {datetime_info}."
 
 
 def get_current_llm_day_time(
@@ -31,7 +31,7 @@ def get_current_llm_day_time(
     formatted_datetime = current_datetime.strftime("%B %d, %Y %H:%M")
     day_of_week = current_datetime.strftime("%A")
     if full_sentence:
-        return f"The current day and time is {day_of_week} {formatted_datetime}"
+        return f"Текущий день и время - {day_of_week} {formatted_datetime}"
     if include_day_of_week:
         return f"{day_of_week} {formatted_datetime}"
     return f"{formatted_datetime}"
@@ -49,10 +49,10 @@ def handle_onyx_date_awareness(
     add_additional_info_if_no_tag: bool = False,
 ) -> str:
     """
-    If there is a [[CURRENT_DATETIME]] tag, replace it with the current date and time no matter what.
-    If the prompt is datetime aware, and there are no [[CURRENT_DATETIME]] tags, add it to the prompt.
-    do nothing otherwise.
-    This can later be expanded to support other tags.
+    Если есть тег [[CURRENT_DATETIME]], замените его на текущие дату и время, несмотря ни на что.
+    Если в приглашении отображается дата и время, но нет тегов [[CURRENT_DATETIME]], добавьте его в приглашение.
+    ничего не предпринимайте в противном случае.
+    Позже это может быть расширено для поддержки других тегов.
     """
 
     if _DANSWER_DATETIME_REPLACEMENT_PAT in prompt_str:
@@ -84,10 +84,10 @@ def build_task_prompt_reminders(
 # Maps connector enum string to a more natural language representation for the LLM
 # If not on the list, uses the original but slightly cleaned up, see below
 CONNECTOR_NAME_MAP = {
-    "web": "Website",
-    "requesttracker": "Request Tracker",
+    "web": "Вебсайт",
+    "requesttracker": "Отслеживатель запросов",
     "github": "GitHub",
-    "file": "File Upload",
+    "file": "Загрузка файла",
 }
 
 
@@ -108,8 +108,8 @@ def build_doc_context_str(
 ) -> str:
     context_str = ""
     if include_metadata:
-        context_str += f"DOCUMENT {ind}: {semantic_identifier}\n"
-        context_str += f"Source: {clean_up_source(source_type)}\n"
+        context_str += f"ДОКУМЕНТ {ind}: {semantic_identifier}\n"
+        context_str += f"Источник: {clean_up_source(source_type)}\n"
 
         for k, v in metadata_dict.items():
             if isinstance(v, list):
@@ -120,7 +120,7 @@ def build_doc_context_str(
 
         if updated_at:
             update_str = updated_at.strftime("%B %d, %Y %H:%M")
-            context_str += f"Updated: {update_str}\n"
+            context_str += f"Обновленный: {update_str}\n"
     context_str += f"{CODE_BLOCK_PAT.format(content.strip())}\n\n\n"
     return context_str
 
@@ -153,7 +153,7 @@ def find_last_index(lst: list[int], max_prompt_tokens: int) -> int:
     running_sum = 0
 
     if not lst:
-        logger.warning("Empty message history passed to find_last_index")
+        logger.warning("Пустая история сообщений, переданная в find_last_index")
         return 0
 
     last_ind = 0
@@ -165,9 +165,9 @@ def find_last_index(lst: list[int], max_prompt_tokens: int) -> int:
 
     if last_ind >= len(lst):
         logger.error(
-            f"Last message alone is too large! max_prompt_tokens: {max_prompt_tokens}, message_token_counts: {lst}"
+            f"Последнее сообщение слишком велико! max_prompt_tokens: {max_prompt_tokens}, message_token_counts: {lst}"
         )
-        raise ValueError("Last message alone is too large!")
+        raise ValueError("Последнее сообщение слишком велико!")
 
     return last_ind
 
