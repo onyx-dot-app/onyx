@@ -45,7 +45,7 @@ from onyx.tools.utils import explicit_tool_calling_supported
         # Bedrock provider with model name containing different anthropic model name as substring -> False
         (
             BEDROCK_PROVIDER_NAME,
-            "aws-anthropic-claude-3-haiku",
+            "aws-anthropic-claude-3-haiku-20240307",
             True,
             ["claude-3-haiku-20240307"],
             False,
