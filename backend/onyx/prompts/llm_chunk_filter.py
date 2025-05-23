@@ -2,29 +2,29 @@
 # to determine if the chunk is useful towards the user query. This is used as part
 # of the reranking flow
 
-USEFUL_PAT = "Yes useful"
-NONUSEFUL_PAT = "Not useful"
+USEFUL_PAT = "Да, полезен"
+NONUSEFUL_PAT = "Бесполезен"
 SECTION_FILTER_PROMPT = f"""
-Determine if the following section is USEFUL for answering the user query.
-It is NOT enough for the section to be related to the query, \
-it must contain information that is USEFUL for answering the query.
-If the section contains ANY useful information, that is good enough, \
-it does not need to fully answer the every part of the user query.
+Определи, полезен ли справочный раздел для ответа на запрос пользователя.
+Недостаточно, чтобы справочный раздел был связан с запросом, \
+он должен содержать информацию, полезную для ответа на запрос.
+Если справочный раздел содержит какую-либо полезную информацию, этого достаточно, и \
+не обязательно полностью отвечать на каждую часть запроса пользователя.
 
 
 Title: {{title}}
 {{optional_metadata}}
-Reference Section:
+Справочный раздел:
 ```
 {{chunk_text}}
 ```
 
-User Query:
+Запрос пользователя:
 ```
 {{user_query}}
 ```
 
-Respond with EXACTLY AND ONLY: "{USEFUL_PAT}" or "{NONUSEFUL_PAT}"
+Отвечай ТОЧНО И ТОЛЬКО: "{USEFUL_PAT}" or "{NONUSEFUL_PAT}"
 """.strip()
 
 
