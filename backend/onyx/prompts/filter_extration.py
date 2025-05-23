@@ -6,19 +6,19 @@ from onyx.prompts.constants import SOURCES_KEY
 
 # Smaller followup prompts in time_filter.py
 TIME_FILTER_PROMPT = """
-You are a tool to identify time filters to apply to a user query for a downstream search \
-application. The downstream application is able to use a recency bias or apply a hard cutoff to \
-remove all documents before the cutoff. Identify the correct filters to apply for the user query.
+Ты являешься инструментом для определения временных фильтров, которые будут применяться к пользовательскому запросу для последующего поиска в \
+приложении. Последующее приложение может использовать смещение по времени или применить жесткое ограничение, чтобы \
+удалить все документы до окончания срока действия. Определи правильные фильтры для применения к пользовательскому запросу.
 
-The current day and time is {current_day_time_str}.
+Текущий день и время - {current_day_time_str}.
 
-Always answer with ONLY a json which contains the keys "filter_type", "filter_value", \
-"value_multiple" and "date".
+Всегда отвечай только с помощью json, который содержит ключи "filter_type", "filter_value", \
+"value_multiple" и "date".
 
-The valid values for "filter_type" are "hard cutoff", "favors recent", or "not time sensitive".
-The valid values for "filter_value" are "day", "week", "month", "quarter", "half", or "year".
-The valid values for "value_multiple" is any number.
-The valid values for "date" is a date in format MM/DD/YYYY, ALWAYS follow this format.
+Допустимыми значениями для "filter_type" являются "hard cutoff", "favors recent", или "not time sensitive".
+Допустимыми значениями для "filter_value" являются "day", "week", "month", "quarter", "half", или "year".
+Допустимыми значениями для "value_multiple" это некоторое число.
+Допустимыми значениями для "date" это дата в формате MM/DD/YYYY, всегда следуйте этому формату.
 """.strip()
 
 
@@ -30,32 +30,32 @@ The valid values for "date" is a date in format MM/DD/YYYY, ALWAYS follow this f
 # This is generally not a big issue though as if the company has confluence, hopefully they add
 # a connector for it or the user is aware that confluence has not been added.
 SOURCE_FILTER_PROMPT = f"""
-Given a user query, extract relevant source filters for use in a downstream search tool.
-Respond with a json containing the source filters or null if no specific sources are referenced.
-ONLY extract sources when the user is explicitly limiting the scope of where information is \
-coming from.
-The user may provide invalid source filters, ignore those.
+По запросу пользователя извлеки соответствующие исходные фильтры для использования в последующем поисковом инструменте.
+В ответ укажи json-файл, содержащий исходные фильтры, или значение null, если ссылки на конкретные источники отсутствуют.
+Извлекай источники только в том случае, если пользователь явно ограничивает область получения информации.
 
-The valid sources are:
+Пользователь может указать недопустимые исходные фильтры, игнорируй их.
+
+Действительными источниками являются:
 {{valid_sources}}
 {{web_source_warning}}
 {{file_source_warning}}
 
 
-ALWAYS answer with ONLY a json with the key "{SOURCES_KEY}". \
-The value for "{SOURCES_KEY}" must be null or a list of valid sources.
+ВСЕГДА отвечай, используя ТОЛЬКО json с ключом "{SOURCES_KEY}". \
+Значение для "{SOURCES_KEY}" должно быть нулевым или содержать список допустимых источников.
 
-Sample Response:
+Примерный ответ:
 {{sample_response}}
 """.strip()
 
 WEB_SOURCE_WARNING = """
-Note: The "web" source only applies to when the user specifies "website" in the query. \
-It does not apply to tools such as Confluence, GitHub, etc. that have a website.
+Примечание: "веб-источник" применяется только в том случае, если пользователь указывает "вебсайт" в запросе. \
+Это не относится к таким инструментам, как Confluence, GitHub и т.д., у которых есть веб-сайт.
 """.strip()
 
 FILE_SOURCE_WARNING = """
-Note: The "file" source only applies to when the user refers to uploaded files in the query.
+Примечание: Источник "файл" применяется только в том случае, когда пользователь ссылается в запросе на загруженные файлы.
 """.strip()
 
 
