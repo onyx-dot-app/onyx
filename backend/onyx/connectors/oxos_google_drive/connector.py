@@ -296,8 +296,7 @@ class OxosGoogleDriveConnector(LoadConnector, PollConnector, SlimConnector):
                 fields="id,name,mimeType,owners,modifiedTime,createdTime,webViewLink,size",
                 supportsAllDrives=True
             )            
-            docs_to_process = [convert_drive_item_to_document(self._creds, self._allow_images, self._size_threshold, [self._primary_admin_email], file)]
-
+            docs_to_process = [convert_drive_item_to_document(self._creds, self._allow_images, self._size_threshold, [self._primary_admin_email], file, sheet_extract_hyperlinks=False)]
             # Process rows in the spreadsheet
             for row in values:
                 if len(row) >= 3:

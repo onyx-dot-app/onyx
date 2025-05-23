@@ -315,6 +315,7 @@ def convert_drive_item_to_document(
     size_threshold: int,
     retriever_emails: list[str],
     file: GoogleDriveFileType,
+    sheet_extract_hyperlinks: bool = True,
 ) -> Document | ConnectorFailure | None:
     """
     Attempt to convert a drive item to a document with each retriever email
@@ -335,7 +336,7 @@ def convert_drive_item_to_document(
             continue
         seen.add(retriever_email)
         doc_or_failure = _convert_drive_item_to_document(
-            creds, allow_images, size_threshold, retriever_email, file
+            creds, allow_images, size_threshold, retriever_email, file, sheet_extract_hyperlinks
         )
 
         # There are a variety of permissions-based errors that occasionally occur
@@ -378,6 +379,7 @@ def _convert_drive_item_to_document(
     size_threshold: int,
     retriever_email: str,
     file: GoogleDriveFileType,
+    sheet_extract_hyperlinks: bool,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
@@ -451,7 +453,7 @@ def _convert_drive_item_to_document(
                             row_items = []
                             for cell in row:
                                 if isinstance(cell, dict) and 'value' in cell:
-                                    if 'hyperlink' in cell:
+                                    if 'hyperlink' in cell and sheet_extract_hyperlinks:
                                         row_items.append(f"{cell['value']} ({cell['hyperlink']})")
                                     else:
                                         row_items.append(cell['value'])
