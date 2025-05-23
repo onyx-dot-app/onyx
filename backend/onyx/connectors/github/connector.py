@@ -236,8 +236,30 @@ def _convert_pr_to_document(pull_request: PullRequest) -> Document:
             else None
         ),
         metadata={
-            "merged": str(pull_request.merged),
-            "state": pull_request.state,
+            k: str(v)
+            for k, v in {
+                "merged": pull_request.merged,
+                "state": pull_request.state,
+                "assignee": (
+                    pull_request.assignee.login if pull_request.assignee else None
+                ),
+                "created_at": pull_request.created_at.replace(tzinfo=timezone.utc),
+                "updated_at": (
+                    pull_request.updated_at.replace(tzinfo=timezone.utc)
+                    if pull_request.updated_at
+                    else None
+                ),
+                "merged_at": (
+                    pull_request.merged_at.replace(tzinfo=timezone.utc)
+                    if pull_request.merged_at
+                    else None
+                ),
+                "merged_by": (
+                    pull_request.merged_by.login if pull_request.merged_by else None
+                ),
+                "url": pull_request.url,
+            }.items()
+            if v is not None
         },
     )
 
@@ -256,7 +278,28 @@ def _convert_issue_to_document(issue: Issue) -> Document:
         # updated_at is UTC time but is timezone unaware
         doc_updated_at=issue.updated_at.replace(tzinfo=timezone.utc),
         metadata={
-            "state": issue.state,
+            k: str(v)
+            for k, v in {
+                "state": issue.state,
+                "assignee": issue.assignee.login if issue.assignee else None,
+                "created_at": issue.created_at.replace(tzinfo=timezone.utc),
+                "updated_at": (
+                    issue.updated_at.replace(tzinfo=timezone.utc)
+                    if issue.updated_at
+                    else None
+                ),
+                "closed_at": (
+                    issue.closed_at.replace(tzinfo=timezone.utc)
+                    if issue.closed_at
+                    else None
+                ),
+                "closed_by": issue.closed_by.login if issue.closed_by else None,
+                "labels": (
+                    [label.name for label in issue.labels] if issue.labels else []
+                ),
+                "url": issue.url,
+            }.items()
+            if v is not None
         },
     )
 
