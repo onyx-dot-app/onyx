@@ -9,12 +9,12 @@ from onyx.context.search.models import InferenceChunk
 from onyx.db.models import Persona
 from onyx.db.prompts import get_default_prompt
 from onyx.db.search_settings import get_multilingual_expansion
+from onyx.file_store.models import InMemoryChatFile
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.utils import build_content_with_imgs
 from onyx.llm.utils import check_number_of_tokens
-from onyx.llm.utils import message_to_prompt_and_imgs
 from onyx.prompts.chat_prompts import REQUIRE_CITATION_STATEMENT
 from onyx.prompts.constants import DEFAULT_IGNORE_STATEMENT
 from onyx.prompts.direct_qa_prompts import CITATIONS_PROMPT
@@ -120,7 +120,8 @@ def build_citations_system_message(
 
 
 def build_citations_user_message(
-    message: HumanMessage,
+    user_query: str,
+    files: list[InMemoryChatFile],
     prompt_config: PromptConfig,
     context_docs: list[LlmDoc] | list[InferenceChunk],
     all_doc_useful: bool,
@@ -135,7 +136,6 @@ def build_citations_user_message(
     history_block = (
         HISTORY_BLOCK.format(history_str=history_message) if history_message else ""
     )
-    query, img_urls = message_to_prompt_and_imgs(message)
 
     if context_docs:
         context_docs_str = build_complete_context_str(context_docs)
@@ -146,7 +146,7 @@ def build_citations_user_message(
             optional_ignore_statement=optional_ignore,
             context_docs_str=context_docs_str,
             task_prompt=task_prompt_with_reminder,
-            user_query=query,
+            user_query=user_query,
             history_block=history_block,
         )
     else:
@@ -154,16 +154,17 @@ def build_citations_user_message(
         user_prompt = CITATIONS_PROMPT_FOR_TOOL_CALLING.format(
             context_type=context_type,
             task_prompt=task_prompt_with_reminder,
-            user_query=query,
+            user_query=user_query,
             history_block=history_block,
         )
 
     user_prompt = user_prompt.strip()
+    tag_handled_prompt = handle_onyx_date_awareness(user_prompt, prompt_config)
     user_msg = HumanMessage(
         content=(
-            build_content_with_imgs(user_prompt, img_urls=img_urls)
-            if img_urls
-            else user_prompt
+            build_content_with_imgs(tag_handled_prompt, files)
+            if files
+            else tag_handled_prompt
         )
     )
 

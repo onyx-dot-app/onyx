@@ -146,7 +146,8 @@ def load_user_file(file_id: int, db_session: Session) -> InMemoryChatFile:
         )
         status = "plaintext"
         return chat_file
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to load plaintext for user file {user_file.id}: {e}")
         # Fall back to original file if plaintext not available
         file_io = file_store.read_file(user_file.file_id, mode="b")
 

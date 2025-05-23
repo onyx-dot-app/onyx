@@ -182,6 +182,7 @@ export function ChatPage({
     addSelectedFile,
     addSelectedFolder,
     clearSelectedItems,
+    setSelectedFiles,
     folders: userFolders,
     files: allUserFiles,
     uploadFile,
@@ -1110,6 +1111,14 @@ export function ChatPage({
   const resetInputBar = () => {
     setMessage("");
     setCurrentMessageFiles([]);
+
+    // Reset selectedFiles if they're under the context limit, but preserve selectedFolders.
+    // If under the context limit, the files will be included in the chat history
+    // so we don't need to keep them around.
+    if (selectedDocumentTokens < maxTokens) {
+      setSelectedFiles([]);
+    }
+
     if (endPaddingRef.current) {
       endPaddingRef.current.style.height = `95px`;
     }
@@ -1956,7 +1965,7 @@ export function ChatPage({
     }
   };
 
-  const handleFileUpload = async (acceptedFiles: File[]) => {
+  const handleMessageSpecificFileUpload = async (acceptedFiles: File[]) => {
     const [_, llmModel] = getFinalLLM(
       llmProviders,
       liveAssistant ?? null,
@@ -1986,7 +1995,6 @@ export function ChatPage({
 
       if (response.length > 0 && response[0] !== undefined) {
         const uploadedFile = response[0];
-        console.log(uploadedFile);
 
         const newFileDescriptor: FileDescriptor = {
           // Use file_id (storage ID) if available, otherwise fallback to DB id
@@ -2607,7 +2615,9 @@ export function ChatPage({
               {documentSidebarInitialWidth !== undefined && isReady ? (
                 <Dropzone
                   key={currentSessionId()}
-                  onDrop={(acceptedFiles) => handleFileUpload(acceptedFiles)}
+                  onDrop={(acceptedFiles) =>
+                    handleMessageSpecificFileUpload(acceptedFiles)
+                  }
                   noClick
                 >
                   {({ getRootProps }) => (
@@ -3341,7 +3351,7 @@ export function ChatPage({
                               }
                               setAlternativeAssistant={setAlternativeAssistant}
                               setFiles={setCurrentMessageFiles}
-                              handleFileUpload={handleFileUpload}
+                              handleFileUpload={handleMessageSpecificFileUpload}
                               textAreaRef={textAreaRef}
                             />
                             {enterpriseSettings &&
