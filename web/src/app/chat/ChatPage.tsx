@@ -1988,16 +1988,20 @@ export function ChatPage({
         const uploadedFile = response[0];
         console.log(uploadedFile);
 
-        setCurrentMessageFiles((prev) => [
-          ...prev,
-          {
-            id: uploadedFile.id.toString(),
-            type: uploadedFile.chat_file_type,
-            name: uploadedFile.name,
-            size: uploadedFile.size,
-            lastModified: uploadedFile.lastModified,
-          },
-        ]);
+        const newFileDescriptor: FileDescriptor = {
+          // Use file_id (storage ID) if available, otherwise fallback to DB id
+          // Ensure it's a string as FileDescriptor expects
+          id: uploadedFile.file_id
+            ? String(uploadedFile.file_id)
+            : String(uploadedFile.id),
+          type: uploadedFile.chat_file_type
+            ? uploadedFile.chat_file_type
+            : ChatFileType.PLAIN_TEXT,
+          name: uploadedFile.name,
+          isUploading: false, // Mark as successfully uploaded
+        };
+
+        setCurrentMessageFiles((prev) => [...prev, newFileDescriptor]);
       } else {
         setPopup({
           type: "error",
