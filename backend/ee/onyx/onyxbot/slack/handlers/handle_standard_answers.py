@@ -220,7 +220,7 @@ def _handle_standard_answers(
                 client=client,
                 channel=message_info.channel_to_respond,
                 receiver_ids=receiver_ids,
-                text="Hello! Onyx has some results for you!",
+                text="Hello! Valkai has some results for you!",
                 blocks=all_blocks,
                 thread_ts=message_info.msg_to_respond,
                 unfurl=False,

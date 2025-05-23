@@ -297,7 +297,7 @@ def handle_publish_ephemeral_message_button(
                 client=client.web_client,
                 channel=channel_id,
                 receiver_ids=None,  # If respond_member_group_list is set, send to them. TODO: check!
-                text="Hello! Onyx has some results for you!",
+                text="Hello! Valkai has some results for you!",
                 blocks=all_blocks,
                 thread_ts=original_question_ts,
                 # don't unfurl, since otherwise we will have 5+ previews which makes the message very long
