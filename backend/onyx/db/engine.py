@@ -423,12 +423,11 @@ def get_session_with_tenant(*, tenant_id: str) -> Generator[Session, None, None]
         dbapi_connection = connection.connection
         cursor = dbapi_connection.cursor()
         try:
+            # NOTE: don't use `text()` here since we're using the cursor directly
             cursor.execute(f'SET search_path = "{tenant_id}"')
             if POSTGRES_IDLE_SESSIONS_TIMEOUT:
                 cursor.execute(
-                    text(
-                        f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
-                    )
+                    f"SET SESSION idle_in_transaction_session_timeout = {POSTGRES_IDLE_SESSIONS_TIMEOUT}"
                 )
         except Exception:
             raise RuntimeError(f"search_path not set for {tenant_id}")
