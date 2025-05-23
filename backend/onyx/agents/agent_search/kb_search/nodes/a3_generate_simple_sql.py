@@ -60,7 +60,7 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
 
     try:
         llm_response = run_with_timeout(
-            15,
+            25,
             llm.invoke,
             prompt=msg,
             timeout_override=25,
@@ -98,7 +98,7 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
     cleaned_response: str | None = None
     try:
         llm_response = run_with_timeout(
-            15,
+            25,
             llm.invoke,
             prompt=msg,
             timeout_override=25,
@@ -233,7 +233,7 @@ def generate_simple_sql(
         # Grader
         try:
             llm_response = run_with_timeout(
-                15,
+                25,
                 primary_llm.invoke,
                 prompt=msg,
                 timeout_override=25,
@@ -262,6 +262,8 @@ def generate_simple_sql(
             logger.error(f"Error in strategy generation: {e}")
             raise e
 
+        logger.debug(f"A3 - sql_statement: {sql_statement}")
+
         # Correction if needed:
 
         correction_prompt = SIMPLE_SQL_CORRECTION_PROMPT.replace(
@@ -276,7 +278,7 @@ def generate_simple_sql(
 
         try:
             llm_response = run_with_timeout(
-                15,
+                25,
                 primary_llm.invoke,
                 prompt=msg,
                 timeout_override=25,
@@ -299,11 +301,13 @@ def generate_simple_sql(
             )
             raise e
 
+        logger.debug(f"A3 - sql_statement after correction: {sql_statement}")
+
         # Get SQL for source documents
 
         source_documents_sql = _get_source_documents(sql_statement, llm=primary_llm)
 
-        logger.debug(f"source_documents_sql: {source_documents_sql}")
+        logger.info(f"A3 source_documents_sql: {source_documents_sql}")
 
         scalar_result = None
         query_results = None
@@ -354,8 +358,7 @@ def generate_simple_sql(
                 kg_relationships_view_name=kg_relationships_view_name,
             )
 
-        logger.info(f"query_results: {query_results}")
-        logger.debug(f"sql_statement: {sql_statement}")
+        logger.info(f"A3 - Number of query_results: {len(query_results)}")
 
         # Stream out reasoning and SQL query
 
