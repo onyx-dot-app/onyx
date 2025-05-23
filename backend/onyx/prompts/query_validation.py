@@ -9,43 +9,43 @@ from onyx.prompts.constants import THOUGHT_PAT
 
 
 ANSWERABLE_PROMPT = f"""
-You are a helper tool to determine if a query is answerable using retrieval augmented generation.
-The main system will try to answer the user query based on ONLY the top 5 most relevant \
-documents found from search.
-Sources contain both up to date and proprietary information for the specific team.
-For named or unknown entities, assume the search will find relevant and consistent knowledge \
-about the entity.
-The system is not tuned for writing code.
-The system is not tuned for interfacing with structured data via query languages like SQL.
-If the question might not require code or query language, then assume it can be answered without \
-code or query language.
-Determine if that system should attempt to answer.
-"ANSWERABLE" must be exactly "True" or "False"
+ТЫ являешься вспомогательным инструментом для определения соответствия запроса с помощью расширенной генерации результатов поиска.
+Основная система попытается ответить на запрос пользователя, основываясь только на 5 наиболее релевантных \
+документах, найденных в результате поиска.
+Источники содержат как актуальную, так и конфиденциальную информацию для конкретной команды.
+Что касается именованных или неизвестных объектов, предположи, что поиск приведет к определению соответствующих и непротиворечивых сведений \
+об объекте.
+Система не настроена для написания кода.
+Система не настроена для взаимодействия со структурированными данными с помощью языков запросов, таких как SQL.
+Если вопрос может не требовать использования кода или языка запроса, то предположи, что на него можно ответить без использования \
+кода или языка запроса.
+Определи, должна ли система пытаться ответить.
+"ANSWERABLE" должен быть точно равен "True" или "False".
 
 {GENERAL_SEP_PAT}
 
-{QUESTION_PAT.upper()} What is this Slack channel about?
+{QUESTION_PAT.upper()} О чем этот Slack канал?
 ```
-{THOUGHT_PAT.upper()} First the system must determine which Slack channel is being referred to. \
-By fetching 5 documents related to Slack channel contents, it is not possible to determine which \
-Slack channel the user is referring to.
+{THOUGHT_PAT.upper()} Сначала система должна определить, к какому каналу Slack относится сообщение. \
+Выбрав 5 документов, относящихся к содержимому канала Slack, невозможно определить, какой это \
+канал Slack, на который ссылается пользователь.
 {ANSWERABLE_PAT.upper()} False
 ```
 
-{QUESTION_PAT.upper()} Onyx is unreachable.
+{QUESTION_PAT.upper()} Onyx недоступен.
 ```
-{THOUGHT_PAT.upper()} The system searches documents related to Onyx being unreachable. \
-Assuming the documents from search contains situations where Onyx is not reachable and \
-contains a fix, the query may be answerable.
+{THOUGHT_PAT.upper()} Система выполняет поиск документов, связанных с недоступностью Onyx. \
+Предполагая, что документы из поиска содержат ситуации, в которых Onyx недоступен, и \
+содержат исправление, запрос может быть удовлетворительным.
 {ANSWERABLE_PAT.upper()} True
 ```
 
-{QUESTION_PAT.upper()} How many customers do we have
+{QUESTION_PAT.upper()} Сколько у нас клиентов
 ```
-{THOUGHT_PAT.upper()} Assuming the retrieved documents contain up to date customer acquisition \
-information including a list of customers, the query can be answered. It is important to note \
-that if the information only exists in a SQL database, the system is unable to execute SQL and \
-won't find an answer.
+{THOUGHT_PAT.upper()}  Предполагая, что полученные документы содержат актуальную \
+информацию о привлечении клиентов, включая список клиентов, на запрос можно ответить. Важно отметить, \
+что если информация существует только в базе данных SQL, система не сможет выполнить SQL и \
+не найдет ответа.
 {ANSWERABLE_PAT.upper()} True
 ```
 
