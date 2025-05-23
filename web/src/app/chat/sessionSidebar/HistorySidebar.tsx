@@ -400,7 +400,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
                 </div>
               )}
 
-            <div className="w-full px-4">
+            {/* <div className="w-full px-4">
               <button
                 aria-label="Explore Assistants"
                 onClick={() => setShowAssistantsModal(true)}
@@ -408,7 +408,7 @@ export const HistorySidebar = forwardRef<HTMLDivElement, HistorySidebarProps>(
               >
                 Explore Assistants
               </button>
-            </div>
+            </div> */}
 
             <PagesTab
               toggleChatSessionSearchModal={toggleChatSessionSearchModal}
