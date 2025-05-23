@@ -14,6 +14,10 @@ from sqlalchemy import select
 from sqlalchemy import String
 from sqlalchemy.dialects.postgresql import ARRAY
 
+from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
+from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS
+from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_THRESHOLD
+from onyx.configs.kg_configs import KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.models import KGEntity
 from onyx.db.relationships import get_relationships_for_entity_type_pairs
@@ -51,7 +55,7 @@ def _normalize_one_entity(entity: str) -> str | None:
     if entity_name == "*":
         return entity
 
-    cleaned_entity = entity_name.casefold()
+    cleaned_entity = entity_name.casefold()  # lower() but better language support
     cleaned_entity = (
         alphanum_regex.sub("", rem_email_regex.sub("", cleaned_entity))
         or cleaned_entity
@@ -59,6 +63,7 @@ def _normalize_one_entity(entity: str) -> str | None:
 
     # step 1: find entities containing the entity_name or something similar
     with get_session_with_current_tenant() as db_session:
+        # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
             func.show_trgm(cleaned_entity).cast(ARRAY(String(3))).label("trigrams")
         ).cte("query")
@@ -68,6 +73,7 @@ def _normalize_one_entity(entity: str) -> str | None:
                 KGEntity.id_name,
                 KGEntity.clustering_name,
                 (
+                    # for each entity E, compute score = | Q ∩ E | / min(|Q|, |E|)
                     func.cardinality(
                         func.array(
                             select(func.unnest(KGEntity.clustering_trigrams))
@@ -92,7 +98,7 @@ def _normalize_one_entity(entity: str) -> str | None:
                 KGEntity.clustering_trigrams.overlap(query_trigrams.c.trigrams),
             )
             .order_by(desc("score"))
-            .limit(100)
+            .limit(KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT)
             .all()
         )
     if not candidates:
@@ -102,18 +108,23 @@ def _normalize_one_entity(entity: str) -> str | None:
     n1, n2 = (set(ngrams(cleaned_entity, 1)), set(ngrams(cleaned_entity, 2)))
     for i, (id_name, semantic_id, score_n3) in enumerate(candidates):
         h_n1, h_n2 = (set(ngrams(semantic_id, 1)), set(ngrams(semantic_id, 2)))
+        # renormalize scores if the names are too short for larger ngrams
         grams_used = min(2, len(cleaned_entity) - 1, len(semantic_id) - 1)
+        W_n1, W_n2, W_n3 = KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS
         ngram_score = (
-            0.2500 * len(n1 & h_n1) / max(1, min(len(n1), len(h_n1)))
-            + 0.25 * len(n2 & h_n2) / max(1, min(len(n2), len(h_n2)))
-            + 0.50 * score_n3
-        ) / (0.25, 0.5, 1.0)[grams_used]
+            # compute | Q ∩ E | / min(|Q|, |E|) for unigrams and bigrams (trigrams already computed)
+            W_n1 * len(n1 & h_n1) / max(1, min(len(n1), len(h_n1)))
+            + W_n2 * len(n2 & h_n2) / max(1, min(len(n2), len(h_n2)))
+            + W_n3 * score_n3
+        ) / (W_n1, W_n1 + W_n2, 1.0)[grams_used]
+        # compute damerau levenshtein distance to fuzzy match against typos
+        W_leven = KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
         leven_score = normalized_similarity(cleaned_entity, semantic_id)
-        score = 0.75 * ngram_score + 0.25 * leven_score
+        score = (1.0 - W_leven) * ngram_score + W_leven * leven_score
         candidates[i] = (id_name, semantic_id, score)
     candidates = list(
         sorted(
-            filter(lambda x: x[2] > 0.3, candidates),
+            filter(lambda x: x[2] > KG_NORMALIZATION_RERANK_THRESHOLD, candidates),
             key=lambda x: x[2],
             reverse=True,
         )
