@@ -379,7 +379,7 @@ celery_shared:
     periodSeconds: 60
     failureThreshold: 5
     timeoutSeconds: 3
-                
+
 celery_beat:
   replicaCount: 1
   podAnnotations: {}
