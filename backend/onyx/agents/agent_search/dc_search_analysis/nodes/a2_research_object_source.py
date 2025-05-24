@@ -151,12 +151,11 @@ def research_object_source(
         )
     ]
     primary_llm = graph_config.tooling.primary_llm
-    llm = primary_llm
     # Grader
     try:
         llm_response = run_with_timeout(
             30,
-            llm.invoke,
+            primary_llm.invoke,
             prompt=msg,
             timeout_override=30,
             max_tokens=300,

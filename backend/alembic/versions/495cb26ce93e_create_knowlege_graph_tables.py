@@ -1,4 +1,4 @@
-"""create knowlege graph tables
+"""create knowledge graph tables
 
 Revision ID: 495cb26ce93e
 Revises: a7688ab35c45

@@ -86,7 +86,7 @@ def kb_graph_builder() -> StateGraph:
     )
 
     graph.add_node(
-        "consoldidate_individual_deep_search",
+        "consolidate_individual_deep_search",
         consolidate_individual_deep_search,
     )
 
@@ -118,11 +118,11 @@ def kb_graph_builder() -> StateGraph:
 
     graph.add_edge(
         start_key="process_individual_deep_search",
-        end_key="consoldidate_individual_deep_search",
+        end_key="consolidate_individual_deep_search",
     )
 
     graph.add_edge(
-        start_key="consoldidate_individual_deep_search", end_key="generate_answer"
+        start_key="consolidate_individual_deep_search", end_key="generate_answer"
     )
 
     graph.add_edge(

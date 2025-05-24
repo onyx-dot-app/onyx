@@ -173,12 +173,12 @@ def extract_ert(
             content=query_relationship_extraction_prompt,
         )
     ]
-    fast_llm = graph_config.tooling.primary_llm
+    primary_llm = graph_config.tooling.primary_llm
     # Grader
     try:
         llm_response = run_with_timeout(
             15,
-            fast_llm.invoke,
+            primary_llm.invoke,
             prompt=msg,
             timeout_override=15,
             max_tokens=300,

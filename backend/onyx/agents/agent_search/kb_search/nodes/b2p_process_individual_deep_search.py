@@ -125,8 +125,6 @@ def process_individual_deep_search(
 
     # Built prompt
 
-    datetime.now().strftime("%A, %Y-%m-%d")
-
     kg_object_source_research_prompt = KG_OBJECT_SOURCE_RESEARCH_PROMPT.format(
         question=extended_question,
         document_text=document_texts,
@@ -144,12 +142,11 @@ def process_individual_deep_search(
         )
     ]
     primary_llm = graph_config.tooling.primary_llm
-    llm = primary_llm
     # Grader
     try:
         llm_response = run_with_timeout(
             30,
-            llm.invoke,
+            primary_llm.invoke,
             prompt=msg,
             timeout_override=30,
             max_tokens=300,

@@ -136,7 +136,7 @@ def construct_deep_search_filters(
 
             logger.info(f"B1 - filter_results: {filter_results}")
     except Exception as e:
-        logger.error(f"Error in extract_ert: {e}")
+        logger.error(f"Error in construct_deep_search_filters: {e}")
         filter_results = KGFilterConstructionResults(
             global_entity_filters=[],
             global_relationship_filters=[],
