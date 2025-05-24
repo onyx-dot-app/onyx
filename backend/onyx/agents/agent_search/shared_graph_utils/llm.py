@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from langchain_core.messages import BaseMessage
+from langchain.schema.language_model import LanguageModelInput
 from langgraph.types import StreamWriter
 
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
@@ -11,7 +11,7 @@ from onyx.llm.interfaces import LLM
 
 def stream_llm_answer(
     llm: LLM,
-    prompt: list[BaseMessage],
+    prompt: LanguageModelInput,
     event_name: str,
     writer: StreamWriter,
     agent_answer_level: int,
@@ -27,6 +27,9 @@ def stream_llm_answer(
         prompt: The prompt to use.
         event_name: The name of the event to write.
         writer: The writer to write to.
+        agent_answer_level: The level of the agent answer.
+        agent_answer_question_num: The question number within the level.
+        agent_answer_type: The type of answer ("agent_level_answer" or "agent_sub_answer").
         timeout_override: The LLM timeout to use.
         max_tokens: The LLM max tokens to use.
 
