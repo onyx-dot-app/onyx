@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 from typing import Any
 from typing import Dict
@@ -12,6 +13,8 @@ class KGConfigSettings(BaseModel):
     KG_IGNORE_EMAIL_DOMAINS: list[str] | None = None
     KG_EXTRACTION_IN_PROGRESS: bool = False
     KG_CLUSTERING_IN_PROGRESS: bool = False
+    KG_COVERAGE_START: datetime = datetime(1970, 1, 1)
+    KG_MAX_COVERAGE_DAYS: int = 1000000
 
 
 class KGConfigVars(str, Enum):
@@ -21,6 +24,8 @@ class KGConfigVars(str, Enum):
     KG_IGNORE_EMAIL_DOMAINS = "KG_IGNORE_EMAIL_DOMAINS"
     KG_EXTRACTION_IN_PROGRESS = "KG_EXTRACTION_IN_PROGRESS"
     KG_CLUSTERING_IN_PROGRESS = "KG_CLUSTERING_IN_PROGRESS"
+    KG_COVERAGE_START = "KG_COVERAGE_START"
+    KG_MAX_COVERAGE_DAYS = "KG_MAX_COVERAGE_DAYS"
 
 
 class KGChunkFormat(BaseModel):

@@ -4,6 +4,7 @@ from collections.abc import Generator
 from collections.abc import Iterable
 from collections.abc import Sequence
 from datetime import datetime
+from datetime import timedelta
 from datetime import timezone
 
 from sqlalchemy import and_
@@ -896,6 +897,8 @@ def fetch_chunk_count_for_document(
 def get_unprocessed_kg_document_batch_for_connector(
     db_session: Session,
     connector_id: int,
+    kg_coverage_start: datetime,
+    kg_max_coverage_days: int,
     batch_size: int = 100,
 ) -> list[DbDocument]:
     """
@@ -917,6 +920,9 @@ def get_unprocessed_kg_document_batch_for_connector(
         .where(
             and_(
                 DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DbDocument.doc_updated_at >= kg_coverage_start,
+                DbDocument.doc_updated_at
+                >= datetime.now() - timedelta(days=kg_max_coverage_days),
                 or_(
                     or_(
                         DbDocument.kg_stage.is_(None),
@@ -1155,7 +1161,9 @@ def get_kg_doc_info_for_entity_name(
     )
 
 
-def check_for_documents_needing_kg_processing(db_session: Session) -> bool:
+def check_for_documents_needing_kg_processing(
+    db_session: Session, kg_coverage_start: datetime, kg_max_coverage_days: int
+) -> bool:
     """Check if there are any documents that need KG processing.
 
     A document needs KG processing if:
@@ -1170,6 +1178,7 @@ def check_for_documents_needing_kg_processing(db_session: Session) -> bool:
     Returns:
         bool: True if there are any documents needing KG processing, False otherwise
     """
+
     stmt = (
         select(1)
         .select_from(DbDocument)
@@ -1184,12 +1193,15 @@ def check_for_documents_needing_kg_processing(db_session: Session) -> bool:
         .where(
             and_(
                 Connector.kg_processing_enabled.is_(True),
+                DbDocument.doc_updated_at >= kg_coverage_start,
+                DbDocument.doc_updated_at
+                >= datetime.now() - timedelta(days=kg_max_coverage_days),
                 or_(
                     or_(
                         DbDocument.kg_stage.is_(None),
                         DbDocument.kg_stage == KGStage.NOT_STARTED,
                     ),
-                    DbDocument.last_modified > DbDocument.kg_processing_time,
+                    DbDocument.doc_updated_at > DbDocument.kg_processing_time,
                 ),
             )
         )

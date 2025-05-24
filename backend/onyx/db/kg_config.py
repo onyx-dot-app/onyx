@@ -1,3 +1,4 @@
+from datetime import datetime
 from enum import Enum
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -39,6 +40,22 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
             kg_config_settings.KG_VENDOR_DOMAINS = result.kg_variable_values
         elif result.kg_variable_name == KGConfigVars.KG_IGNORE_EMAIL_DOMAINS:
             kg_config_settings.KG_IGNORE_EMAIL_DOMAINS = result.kg_variable_values
+        elif result.kg_variable_name == KGConfigVars.KG_COVERAGE_START:
+            kg_coverage_start_str = result.kg_variable_values[0]
+            if not kg_coverage_start_str:
+                kg_config_settings.KG_COVERAGE_START = datetime.strptime(
+                    "1970-01-01", "%Y-%m-%d"
+                )
+            else:
+                kg_config_settings.KG_COVERAGE_START = datetime.strptime(
+                    kg_coverage_start_str, "%Y-%m-%d"
+                )
+        elif result.kg_variable_name == KGConfigVars.KG_MAX_COVERAGE_DAYS:
+            kg_max_coverage_days_str = result.kg_variable_values[0]
+            if not kg_max_coverage_days_str:
+                kg_config_settings.KG_MAX_COVERAGE_DAYS = 1000000
+            else:
+                kg_config_settings.KG_MAX_COVERAGE_DAYS = int(kg_max_coverage_days_str)
 
     return kg_config_settings
 

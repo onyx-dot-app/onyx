@@ -411,6 +411,8 @@ def kg_extraction(
                     get_unprocessed_kg_document_batch_for_connector(
                         db_session,
                         connector_id,
+                        kg_coverage_start=kg_config_settings.KG_COVERAGE_START,
+                        kg_max_coverage_days=kg_config_settings.KG_MAX_COVERAGE_DAYS,
                         batch_size=8,
                     )
                 )
