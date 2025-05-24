@@ -304,7 +304,7 @@ def generate_validate_refined_answer(
     try:
         streamed_tokens, dispatch_timings = run_with_timeout(
             AGENT_TIMEOUT_LLM_REFINED_ANSWER_GENERATION,
-            stream_llm_answer(
+            lambda: stream_llm_answer(
                 llm=model,
                 prompt=msg,
                 event_name="refined_agent_answer",

@@ -116,7 +116,7 @@ def consolidate_research(
     try:
         _ = run_with_timeout(
             60,
-            stream_llm_answer(
+            lambda: stream_llm_answer(
                 llm=graph_config.tooling.primary_llm,
                 prompt=msg,
                 event_name="initial_agent_answer",

@@ -119,7 +119,7 @@ def generate_sub_answer(
         try:
             response, _ = run_with_timeout(
                 AGENT_TIMEOUT_LLM_SUBANSWER_GENERATION,
-                stream_llm_answer(
+                lambda: stream_llm_answer(
                     llm=fast_llm,
                     prompt=msg,
                     event_name="sub_answers",

@@ -279,7 +279,7 @@ def generate_initial_answer(
         try:
             streamed_tokens, dispatch_timings = run_with_timeout(
                 AGENT_TIMEOUT_LLM_INITIAL_ANSWER_GENERATION,
-                stream_llm_answer(
+                lambda: stream_llm_answer(
                     llm=model,
                     prompt=msg,
                     event_name="initial_agent_answer",
