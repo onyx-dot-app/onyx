@@ -389,9 +389,11 @@ def generate_simple_sql(
     if reasoning:
         stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
 
-    if sql_statement:
+    if main_sql_statement:
         stream_write_step_answer_explicit(
-            writer, step_nr=_KG_STEP_NR, answer=f" \n Generated SQL: {sql_statement}"
+            writer,
+            step_nr=_KG_STEP_NR,
+            answer=f" \n Generated SQL: {main_sql_statement}",
         )
 
     stream_close_step_answer(writer, _KG_STEP_NR)
