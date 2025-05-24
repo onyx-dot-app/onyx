@@ -156,7 +156,13 @@ border border-border dark:border-neutral-700
       </TableCell>
       <TableCell>
         <CCPairStatus
-          ccPairStatus={ccPairsIndexingStatus.cc_pair_status}
+          ccPairStatus={
+            ccPairsIndexingStatus.last_finished_status !== null
+              ? ccPairsIndexingStatus.cc_pair_status
+              : ccPairsIndexingStatus.last_status == "not_started"
+                ? ConnectorCredentialPairStatus.SCHEDULED
+                : ConnectorCredentialPairStatus.INITIAL_INDEXING
+          }
           inRepeatedErrorState={ccPairsIndexingStatus.in_repeated_error_state}
           lastIndexAttemptStatus={
             ccPairsIndexingStatus.latest_index_attempt?.status
@@ -322,11 +328,7 @@ export function CCPairIndexingStatusTable({
 
         // Filter by last status
         if (filterOptions.lastStatus && filterOptions.lastStatus.length > 0) {
-          if (
-            !filterOptions.lastStatus.includes(
-              status.last_finished_status as any
-            )
-          ) {
+          if (!filterOptions.lastStatus.includes(status.last_status as any)) {
             return false;
           }
         }
