@@ -262,6 +262,8 @@ def kg_processing(self: Task, *, tenant_id: str) -> int | None:
 
         task_logger.debug("Completed kg clustering task!")
 
+    task_logger.debug("Completed kg clustering task!")
+
     return None
 
 

@@ -32,6 +32,7 @@ class StepResults(BaseModel):
 class LoggerUpdate(BaseModel):
     log_messages: Annotated[list[str], add] = []
     step_results: Annotated[list[SubQuestionAnswerResults], add]
+    remarks: Annotated[list[str], add] = []
 
 
 class KGFilterConstructionResults(BaseModel):
@@ -65,6 +66,8 @@ class YesNoEnum(str, Enum):
 class AnalysisUpdate(LoggerUpdate):
     normalized_core_entities: list[str] = []
     normalized_core_relationships: list[str] = []
+    entity_normalization_map: dict[str, str] = {}
+    relationship_normalization_map: dict[str, str] = {}
     query_graph_entities_no_attributes: list[str] = []
     query_graph_entities_w_attributes: list[str] = []
     query_graph_relationships: list[str] = []
@@ -85,6 +88,7 @@ class SQLSimpleGenerationUpdate(LoggerUpdate):
     individualized_query_results: list[Dict[Any, Any]] | None = None
     source_documents_sql: str | None = None
     source_document_results: list[str] | None = None
+    updated_strategy: KGAnswerStrategy | None = None
 
 
 class ConsolidatedResearchUpdate(LoggerUpdate):

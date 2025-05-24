@@ -195,7 +195,6 @@ def extract_ert(
         first_bracket = cleaned_response.find("{")
         last_bracket = cleaned_response.rfind("}")
         cleaned_response = cleaned_response[first_bracket : last_bracket + 1]
-        cleaned_response = cleaned_response.replace(" ", "")
         cleaned_response = cleaned_response.replace("{{", '{"')
         cleaned_response = cleaned_response.replace("}}", '"}')
 

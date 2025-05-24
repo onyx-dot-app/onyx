@@ -91,12 +91,12 @@ class KGPerson(BaseModel):
 
 class NormalizedEntities(BaseModel):
     entities: list[str]
-    entity_normalization_map: dict[str, str | None]
+    entity_normalization_map: dict[str, str]
 
 
 class NormalizedRelationships(BaseModel):
     relationships: list[str]
-    relationship_normalization_map: dict[str, str | None]
+    relationship_normalization_map: dict[str, str]
 
 
 class NormalizedTerms(BaseModel):

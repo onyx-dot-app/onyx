@@ -29,6 +29,7 @@ from onyx.chat.models import ExtendedToolResponse
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
+from onyx.natural_language_processing.utils import BaseTokenizer
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_EXAMPLES_PROMPT
 from onyx.prompts.kg_prompts import OUTPUT_FORMAT_NO_OVERALL_ANSWER_PROMPT
@@ -39,6 +40,17 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 logger = setup_logger()
+
+
+def _stream_augmentations(
+    llm_tokenizer: BaseTokenizer, streaming_text: str, writer: StreamWriter
+) -> None:
+
+    # Tokenize and stream the reference results
+    tokens = llm_tokenizer.tokenize(streaming_text)
+    for token in tokens:
+
+        stream_write_main_answer_token(writer, token)
 
 
 def generate_answer(
@@ -238,20 +250,18 @@ def generate_answer(
             stream_answer,
         )
 
+        llm_tokenizer = get_tokenizer(
+            model_name=fast_llm.config.model_name,
+            provider_type=fast_llm.config.model_provider,
+        )
+
         if reference_results_str:
             # Get the LLM's tokenizer
-            llm_tokenizer = get_tokenizer(
-                model_name=fast_llm.config.model_name,
-                provider_type=fast_llm.config.model_provider,
-            )
 
-            # Tokenize and stream the reference results
-            tokens = llm_tokenizer.tokenize(reference_results_str)
-            for token in tokens:
-                # Replace newlines with HTML line breaks
-                # if token == ' \n':
-                #    token = ' <br>'
-                stream_write_main_answer_token(writer, token)
+            _stream_augmentations(llm_tokenizer, reference_results_str, writer)
+
+        # if state.remarks:
+        #     _stream_augmentations(llm_tokenizer, "Comments: \n " + "\n".join(state.remarks), writer)
 
     except Exception as e:
         raise ValueError(f"Could not generate the answer. Error {e}")

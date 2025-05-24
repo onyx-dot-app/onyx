@@ -752,11 +752,22 @@ Identified entities with attributes in query:
 
 ---query_entities_with_attributes---
 
+These are the entities that should be used in the SQL statement. However, \
+ote that these are the entities (with potential attributes) that were *matches* of Knowledge Graph identified with the \
+entities originally identified in the original question. A such, they may have id names that may not mean much by themselves, \
+eg ACCOUNT::SF_8254Hs. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
+the entities that were matched to them in the Knowledge Graph:
+
+---entity_explanation_string---
+
 --
 
 Identified relationships in query:
 
 ---query_relationships---
+
+(Again, if applicable, the entities contained in the relationships are the same as the entities in the \
+query_entities_with_attributes, and those are the correct ones to use in the SQL statement.)
 
 {SEPARATOR_LINE}
 
@@ -1163,155 +1174,3 @@ Note the important (), please do not forget.
 
 Please now generate the answer to the question given the documents:
 """.strip()
-
-
-####################
-
-DC_OBJECT_NO_BASE_DATA_EXTRACTION_PROMPT = f"""
-You are an expert in finding relevant objects/object specifications of the same type in a list of documents. \
-In this case you are interested \
-in generating: {{objects_of_interest}}.
-You should look at the documents - in no particular order! - and extract each object you find in the documents.
-{SEPARATOR_LINE}
-Here are the documents you are supposed to search through:
---
-{{document_text}}
-{SEPARATOR_LINE}
-
-Here is the task you are asked to find the objects of type for, which should
-{SEPARATOR_LINE}
-{{task}}
-{SEPARATOR_LINE}
-
-Here is the question that provides critical context for the task:
-{SEPARATOR_LINE}
-{{question}}
-{SEPARATOR_LINE}
-
-Please structure your answer using <reasoning>, </reasoning>, <objects>, </objects> start and end tags as in:
-
-<reasoning>[your reasoning for the classification]</reasoning><objects>[the objects \
-- just their names - that you found, separated by ';']<objects>
-
-""".strip()
-
-
-DC_OBJECT_WITH_BASE_DATA_EXTRACTION_PROMPT = f"""
-You are an expert in finding relevant objects/object specifications of the same type in a list of documents. \
-In this case you are interested \
-in generating: {{objects_of_interest}}.
-You should look at the provided data - in no particular order! - and extract each object you find in the documents.
-{SEPARATOR_LINE}
-Here are the data provided by the user:
---
-{{base_data}}
-{SEPARATOR_LINE}
-
-Here is the task you are asked to find the objects of type for, which should
-{SEPARATOR_LINE}
-{{task}}
-{SEPARATOR_LINE}
-
-Here is the request that provides critical context for the task:
-{SEPARATOR_LINE}
-{{question}}
-{SEPARATOR_LINE}
-
-Please structure your answer using <reasoning>, </reasoning>, <objects>, </objects> start and end tags as in:
-
-<reasoning>[your reasoning for the classification]</reasoning><objects>[the objects \
-- just their names - that you found, separated by ';']<objects>
-
-""".strip()
-
-
-DC_OBJECT_SOURCE_RESEARCH_PROMPT = f"""
-You are an expert in extracting relevant structured information for in a list of documents that should relate to one \
-object.
-You should look at the documents - in no particular order! - and extract the information asked for this task:
-{SEPARATOR_LINE}
-{{task}}
-{SEPARATOR_LINE}
-
-Here are the documents you are supposed to search through:
---
-{{document_text}}
-{SEPARATOR_LINE}
-
-Note: please cite your sources inline as you generate the results! Use the format [1], etc. Infer the \
-number from the provided context documents. This is very important!
-
-Please structure your answer using <reasoning>, </reasoning>, <research>, </research> start and end tags as in:
-
-<reasoning>[your reasoning for the classification]</reasoning>
-<research>{{format}}</research>
-
-""".strip()
-
-
-DC_OBJECT_CONSOLIDATION_PROMPT = f"""
-You are a helpful assistant that consolidates information about a specific object \
-from multiple sources.
-The object is:
-{SEPARATOR_LINE}
-{{object}}
-{SEPARATOR_LINE}
-and the information is
-{SEPARATOR_LINE}
-{{information}}
-{SEPARATOR_LINE}
-
-Please consolidate the information into a single, concise answer. The consolidated information \
-for the object should be in the following format:
-{SEPARATOR_LINE}
-{{format}}
-{SEPARATOR_LINE}
-
-Please structure your answer using <reasoning>, </reasoning>, <information>, </information> start and end tags as in:
-
-
-<reasoning>[your reasoning for consolidating the information]</reasoning>
-<information>[consolidated information in the proper format that you have created]</information>
-"""
-
-
-DC_FORMATTING_WITH_BASE_DATA_PROMPT = f"""
-You are an expert in text formatting. Your task is to take a given text and convert it 100 percent accurately \
-in a new format.
-Here is the text you are supposed to format:
-{SEPARATOR_LINE}
-{{text}}
-{SEPARATOR_LINE}
-
-Here is the format you are supposed to use:
-{SEPARATOR_LINE}
-{{format}}
-{SEPARATOR_LINE}
-
-Please start the generation directly with the formatted text.
-"""
-
-DC_FORMATTING_NO_BASE_DATA_PROMPT = f"""
-You are an expert in text formatting. Your task is to take a given text and the initial \
-data provided by the user, and convert it 100 percent accurately \
-in a new format. The base data may also contain important relationships that are critical \
-for the formatting.
-
-Here is the initial data provided by the user:
-{SEPARATOR_LINE}
-{{base_data}}
-{SEPARATOR_LINE}
-
-Here is the text you are supposed combine (and format) with the initial data, adhering to the \
-format instructions provided by later in the prompt:
-{SEPARATOR_LINE}
-{{text}}
-{SEPARATOR_LINE}
-
-And here are the format instructions you are supposed to use:
-{SEPARATOR_LINE}
-{{format}}
-{SEPARATOR_LINE}
-
-Please start the generation directly with the formatted text.
-"""

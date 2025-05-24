@@ -26,6 +26,7 @@ def add_entity(
     occurrences: int = 0,
     event_time: datetime | None = None,
     attributes: dict[str, str] | None = None,
+    alternative_names: list[str] | None = None,
 ) -> "KGEntity | KGEntityExtractionStaging | None":
     """Add a new entity to the database.
 
@@ -42,6 +43,7 @@ def add_entity(
     entity_type = entity_type.upper()
     name = name.title()
     id_name = f"{entity_type}::{name}"
+    alternative_names = alternative_names or []
 
     _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
     if kg_stage == KGStage.EXTRACTED:
@@ -62,6 +64,7 @@ def add_entity(
             occurrences=occurrences,
             event_time=event_time,
             attributes=attributes,
+            alternative_names=alternative_names,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
@@ -74,6 +77,7 @@ def add_entity(
                 name=name,
                 event_time=event_time,
                 attributes=attributes,
+                alternative_names=alternative_names,
             ),
         )
         .returning(_KGEntityObject)
@@ -204,54 +208,6 @@ def delete_entities_by_id_names(
     return deleted_count
 
 
-def get_entity_names_for_types(
-    db_session: Session, entity_types: List[str]
-) -> List[tuple[str, str | None]]:
-    """Get all entities that belong to the specified entity types.
-
-    Args:
-        db_session: SQLAlchemy session
-        entity_types: List of entity type id_names to filter by
-
-    Returns:
-        List of entity id_names belonging to the specified entity types
-    """
-    entity_query = db_session.query(KGEntity).filter(
-        KGEntity.entity_type_id_name.in_(entity_types)
-    )
-
-    # Get document IDs from the filtered entities
-    doc_ids = [e.document_id for e in entity_query.all() if e.document_id is not None]
-
-    # Get document info for those IDs
-    doc_info: dict[str, tuple[str | None, str | None]] = {
-        row[0].capitalize(): (row[1], row[2])
-        for row in db_session.query(Document.id, Document.semantic_id, Document.link)
-        .filter(Document.id.in_(doc_ids))
-        .all()
-    }
-
-    # Return entities with their document info
-
-    names: list[tuple[str, str | None]] = []
-    for entity in entity_query.all():
-
-        if entity.document_id is None:
-            names.append((entity.id_name, entity.id_name))
-            continue
-
-        # Extract entity type from the full type ID
-        entity_type = entity.entity_type_id_name.split("::")[0].upper()
-
-        # Get document info, defaulting to None if not found
-        doc_semantic_id = doc_info.get(entity.document_id.capitalize(), (None, None))[0]
-
-        # Construct the final string
-        names.append((entity.id_name, f"{entity_type}::{doc_semantic_id}"))
-
-    return names
-
-
 def get_entities_by_document_ids(
     db_session: Session, document_ids: list[str], kg_stage: KGStage
 ) -> List[str]:
@@ -327,3 +283,27 @@ def delete_from_kg_entities__no_commit(
     db_session.query(KGEntity).filter(KGEntity.document_id.in_(document_ids)).delete(
         synchronize_session=False
     )
+
+
+def get_semantic_ids_for_entities(
+    db_session: Session, entity_ids: list[str]
+) -> dict[str, str]:
+    """Get the semantic IDs for a list of entities.
+
+    Args:
+        db_session: SQLAlchemy database session
+        entities: List of entity id_names to look up
+
+    Returns:
+        Dictionary mapping entity id_names to their corresponding document semantic IDs
+    """
+    stmt = (
+        select(KGEntity.id_name, Document.semantic_id)
+        .join(Document, KGEntity.document_id == Document.id)
+        .where(KGEntity.id_name.in_(entity_ids))
+    )
+    results = db_session.execute(stmt).all()
+
+    forward_map = {entity_id: semantic_id for entity_id, semantic_id in results}
+
+    return forward_map
