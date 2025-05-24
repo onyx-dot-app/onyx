@@ -35,7 +35,7 @@ data:
   VESPA_HOST: "document-index-service"
   REDIS_HOST: "redis-service"
   # Internet Search Tool
-  BING_API_KEY: ""
+  EXA_API_KEY: ""
   # Don't change the NLP models unless you know what you're doing
   EMBEDDING_BATCH_SIZE: ""
   DOCUMENT_ENCODER_MODEL: ""
