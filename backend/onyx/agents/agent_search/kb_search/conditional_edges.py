@@ -19,8 +19,13 @@ def simple_vs_search(
     state: MainState,
 ) -> str:
 
+    if state.updated_strategy:
+        identified_strategy: KGAnswerStrategy | None = state.updated_strategy
+    else:
+        identified_strategy = state.strategy
+
     if (
-        state.strategy == KGAnswerStrategy.DEEP
+        identified_strategy == KGAnswerStrategy.DEEP
         or state.search_type == KGSearchType.SEARCH
     ):
         return KGAnalysisPath.CONSTRUCT_DEEP_SEARCH_FILTERS.value

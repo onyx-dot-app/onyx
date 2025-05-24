@@ -283,3 +283,27 @@ def delete_from_kg_entities__no_commit(
     db_session.query(KGEntity).filter(KGEntity.document_id.in_(document_ids)).delete(
         synchronize_session=False
     )
+
+
+def get_semantic_ids_for_entities(
+    db_session: Session, entity_ids: list[str]
+) -> dict[str, str]:
+    """Get the semantic IDs for a list of entities.
+
+    Args:
+        db_session: SQLAlchemy database session
+        entities: List of entity id_names to look up
+
+    Returns:
+        Dictionary mapping entity id_names to their corresponding document semantic IDs
+    """
+    stmt = (
+        select(KGEntity.id_name, Document.semantic_id)
+        .join(Document, KGEntity.document_id == Document.id)
+        .where(KGEntity.id_name.in_(entity_ids))
+    )
+    results = db_session.execute(stmt).all()
+
+    forward_map = {entity_id: semantic_id for entity_id, semantic_id in results}
+
+    return forward_map

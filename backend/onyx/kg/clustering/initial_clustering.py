@@ -1,4 +1,5 @@
 from typing import cast
+from typing import Set
 
 from rapidfuzz.fuzz import ratio
 from sqlalchemy import text
@@ -21,6 +22,8 @@ from onyx.db.relationships import get_all_relationships
 from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
 from onyx.utils.logger import setup_logger
+
+# from sklearn.cluster import SpectralClustering  # type: ignore
 
 logger = setup_logger()
 
@@ -56,7 +59,7 @@ def kg_clustering(
 
         relationships = get_all_relationships(db_session, kg_stage=KGStage.EXTRACTED)
 
-        grounded_entities = cast(
+        grounded_entities: list[KGEntityExtractionStaging] = cast(
             list[KGEntityExtractionStaging],
             get_entities_by_grounding(
                 db_session, KGStage.EXTRACTED, KGGroundingType.GROUNDED

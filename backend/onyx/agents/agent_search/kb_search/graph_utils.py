@@ -352,7 +352,10 @@ def rename_entities_in_answer(answer: str) -> str:
     """
     # Extract all entity references using regex
     # Pattern matches both <str>:<str> and <str>: <str> formats
-    pattern = r"([^:\s]+)::\s*([^:\s]+)"
+    answer = re.sub(r"::\s+", "::", answer)
+
+    # Pattern now handles optional quotes and braces around entity references
+    pattern = r"(?:['{])?([^:\s]+::[^:\s]+)(?:['}])?"
     matches = re.finditer(pattern, answer)
 
     # get active entity types
@@ -375,10 +378,14 @@ def rename_entities_in_answer(answer: str) -> str:
             )
             continue
         entity_type, entity_name = entity_ref.split("::")
-        entity_type = entity_type.upper().strip()
+        entity_type = (
+            entity_type.upper().strip().strip("'").strip("{").strip("}").strip("'")
+        )
         if entity_type not in active_entity_types:
             continue
-        entity_name = entity_name.capitalize().strip()
+        entity_name = (
+            entity_name.capitalize().strip().strip("'").strip("{").strip("}").strip("'")
+        )
         potential_entity_id_name = f"{entity_type}::{entity_name}"
 
         replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)

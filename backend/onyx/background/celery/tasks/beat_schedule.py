@@ -31,7 +31,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-kg-processing",
             "task": OnyxCeleryTask.CHECK_KG_PROCESSING,
-            "schedule": timedelta(seconds=600),
+            "schedule": timedelta(seconds=60),
             "options": {
                 "priority": OnyxCeleryPriority.MEDIUM,
                 "expires": BEAT_EXPIRES_DEFAULT,
@@ -40,7 +40,7 @@ beat_task_templates.extend(
         {
             "name": "check-for-kg-processing-clustering-only",
             "task": OnyxCeleryTask.CHECK_KG_PROCESSING_CLUSTERING_ONLY,
-            "schedule": timedelta(seconds=6000),
+            "schedule": timedelta(seconds=600),
             "options": {
                 "priority": OnyxCeleryPriority.LOW,
                 "expires": BEAT_EXPIRES_DEFAULT,

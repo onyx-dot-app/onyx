@@ -1,7 +1,6 @@
 import re
 from collections import defaultdict
 from typing import cast
-from typing import Optional
 
 import numpy as np
 from nltk import ngrams  # type: ignore
@@ -24,7 +23,11 @@ from onyx.kg.models import NormalizedEntities
 from onyx.kg.models import NormalizedRelationships
 from onyx.kg.models import NormalizedTerms
 from onyx.kg.utils.embeddings import encode_string_batch
+from onyx.kg.utils.formatting_utils import format_entity_for_models
+from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+
+logger = setup_logger()
 
 
 alphanum_regex = re.compile(r"[^a-z0-9]+")
@@ -192,9 +195,9 @@ def normalize_entities(
     for entity, normalized_entity in zip(raw_entities_no_attributes, mapping):
         if normalized_entity is not None:
             normalized_results.append(normalized_entity)
-            normalized_map[entity] = normalized_entity
+            normalized_map[format_entity_for_models(entity)] = normalized_entity
         else:
-            normalized_map[entity] = entity
+            normalized_map[format_entity_for_models(entity)] = entity
 
     return NormalizedEntities(
         entities=normalized_results, entity_normalization_map=normalized_map
@@ -216,8 +219,10 @@ def normalize_entities_w_attributes_from_map(
             len(raw_entities_w_attribute.split("--")) == 2
         ), f"Invalid entity with attributes: {raw_entities_w_attribute}"
         raw_entity, attributes = raw_entities_w_attribute.split("--")
-        normalized_entity = entity_normalization_map.get(raw_entity.strip())
+        formatted_raw_entity = format_entity_for_models(raw_entity)
+        normalized_entity = entity_normalization_map.get(formatted_raw_entity)
         if normalized_entity is None:
+            logger.warning(f"No normalized entity found for {raw_entity}")
             continue
         else:
             normalized_entities_w_attributes.append(

@@ -13,6 +13,25 @@ def format_entity(entity: str) -> str:
         return entity
 
 
+def format_entity_for_models(entity: str) -> str:
+    entity_split = entity.split("::")
+    if len(entity_split) == 2:
+        entity_type, entity_name = entity_split
+        separator = "::"
+    elif len(entity_split) > 2:
+        raise ValueError(f"Entity {entity} is not in the correct format")
+    else:
+        entity_name = entity
+        separator = entity_type = ""
+
+    formatted_entity_type = entity_type.strip().upper()
+    formatted_entity_name = (
+        entity_name.strip().replace('"', "").replace("'", "").title()
+    )
+
+    return f"{formatted_entity_type}{separator}{formatted_entity_name}"
+
+
 def format_relationship(relationship: str) -> str:
     source_node, relationship_type, target_node = relationship.split("__")
     return (

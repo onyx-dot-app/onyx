@@ -38,6 +38,31 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 
+def _articulate_normailizations(
+    entity_normalization_map: dict[str, str],
+    relationship_normalization_map: dict[str, str],
+) -> str:
+
+    remark_list: list[str] = []
+
+    if entity_normalization_map:
+        remark_list.append("\n Entities:")
+        for extracted_entity, normalized_entity in entity_normalization_map.items():
+            remark_list.append(f"  - {extracted_entity} -> {normalized_entity}")
+
+    if relationship_normalization_map:
+        remark_list.append(" \n Relationships:")
+        for (
+            extracted_relationship,
+            normalized_relationship,
+        ) in relationship_normalization_map.items():
+            remark_list.append(
+                f"  - {extracted_relationship} -> {normalized_relationship}"
+            )
+
+    return " \n ".join(remark_list)
+
+
 def _get_fully_connected_entities(
     entities: list[str], relationships: list[str]
 ) -> list[str]:
@@ -79,7 +104,7 @@ def _get_fully_connected_entities(
 def _check_for_single_doc(
     normalized_entities: list[str],
     raw_entities: list[str],
-    normalized_relationships: list[str],
+    normalized_relationship_strings: list[str],
     raw_relationships: list[str],
     normalized_time_filter: str | None,
 ) -> str | None:
@@ -90,7 +115,7 @@ def _check_for_single_doc(
     if (
         len(normalized_entities) == 1
         and len(raw_entities) == 1
-        and len(normalized_relationships) == 0
+        and len(normalized_relationship_strings) == 0
         and len(raw_relationships) == 0
         and normalized_time_filter is None
     ):
@@ -147,7 +172,7 @@ def analyze(
     single_doc_id = _check_for_single_doc(
         normalized_entities=normalized_entities.entities,
         raw_entities=entities,
-        normalized_relationships=normalized_relationships.relationships,
+        normalized_relationship_strings=normalized_relationships.relationships,
         raw_relationships=relationships,
         normalized_time_filter=normalized_time_filter,
     )
@@ -246,6 +271,8 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
     return AnalysisUpdate(
         normalized_core_entities=normalized_entities.entities,
         normalized_core_relationships=normalized_relationships.relationships,
+        entity_normalization_map=normalized_entities.entity_normalization_map,
+        relationship_normalization_map=normalized_relationships.relationship_normalization_map,
         query_graph_entities_no_attributes=query_graph_entities,
         query_graph_entities_w_attributes=query_graph_entities_w_attributes,
         query_graph_relationships=query_graph_relationships,
@@ -269,6 +296,12 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
                 step_number=_KG_STEP_NR,
                 step_answer=step_answer,
                 verified_reranked_documents=[],
+            )
+        ],
+        remarks=[
+            _articulate_normailizations(
+                entity_normalization_map=normalized_entities.entity_normalization_map,
+                relationship_normalization_map=normalized_relationships.relationship_normalization_map,
             )
         ],
     )

@@ -13,6 +13,7 @@ from onyx.agents.agent_search.kb_search.graph_utils import stream_write_step_act
 from onyx.agents.agent_search.kb_search.graph_utils import (
     stream_write_step_answer_explicit,
 )
+from onyx.agents.agent_search.kb_search.states import KGAnswerStrategy
 from onyx.agents.agent_search.kb_search.states import KGSearchType
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import SQLSimpleGenerationUpdate
@@ -34,6 +35,17 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 
 
 logger = setup_logger()
+
+
+def _build_entity_explanation_str(entity_normalization_map: dict[str, str]) -> str:
+    """
+    Build a string of contextualized entities to avoid the model not being aware of
+    what eg ACCOUNT::SF_8254Hs means as a normalized entity
+    """
+    entity_explanation_components = []
+    for entity, normalized_entity in entity_normalization_map.items():
+        entity_explanation_components.append(f"  - {entity} -> {normalized_entity}")
+    return "\n".join(entity_explanation_components)
 
 
 def _sql_is_aggregate_query(sql_statement: str) -> bool:
@@ -187,10 +199,18 @@ def generate_simple_sql(
 
         # Build prompt
 
+        # First, create string of contextualized entities to avoid the model not
+        # being aware of what eg ACCOUNT::SF_8254Hs means as a normalized entity
+
+        entity_explanation_str = _build_entity_explanation_str(
+            state.entity_normalization_map
+        )
+
         simple_sql_prompt = (
             SIMPLE_SQL_PROMPT.replace("---entity_types---", entities_types_str)
             .replace("---relationship_types---", relationship_types_str)
             .replace("---question---", question)
+            .replace("---entity_explanation_string---", entity_explanation_str)
             .replace(
                 "---query_entities_with_attributes---",
                 "\n".join(state.query_graph_entities_w_attributes),
@@ -369,7 +389,19 @@ def generate_simple_sql(
     if reasoning:
         stream_write_step_answer_explicit(writer, step_nr=_KG_STEP_NR, answer=reasoning)
 
+    if sql_statement:
+        stream_write_step_answer_explicit(
+            writer, step_nr=_KG_STEP_NR, answer=f" \n Generated SQL: {sql_statement}"
+        )
+
     stream_close_step_answer(writer, _KG_STEP_NR)
+
+    # Update path if too many results are retrieved
+
+    if query_results and len(query_results) > 30:
+        updated_strategy = KGAnswerStrategy.SIMPLE
+    else:
+        updated_strategy = None
 
     return SQLSimpleGenerationUpdate(
         sql_query=main_sql_statement,
@@ -378,6 +410,7 @@ def generate_simple_sql(
         individualized_query_results=None,
         source_documents_sql=source_documents_sql,
         source_document_results=source_document_results or [],
+        updated_strategy=updated_strategy,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
