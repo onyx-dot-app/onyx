@@ -187,7 +187,7 @@ def normalize_entities(
         list of normalized entity strings
     """
     normalized_results: list[str] = []
-    normalized_map: dict[str, str | None] = {}
+    normalized_map: dict[str, str] = {}
 
     mapping: list[str | None] = run_functions_tuples_in_parallel(
         [(_normalize_one_entity, (entity,)) for entity in raw_entities_no_attributes]
@@ -206,7 +206,7 @@ def normalize_entities(
 
 def normalize_entities_w_attributes_from_map(
     raw_entities_w_attributes: list[str],
-    entity_normalization_map: dict[str, Optional[str]],
+    entity_normalization_map: dict[str, str],
 ) -> list[str]:
     """
     Normalize entities with attributes using the entity normalization map.
@@ -233,7 +233,7 @@ def normalize_entities_w_attributes_from_map(
 
 
 def normalize_relationships(
-    raw_relationships: list[str], entity_normalization_map: dict[str, Optional[str]]
+    raw_relationships: list[str], entity_normalization_map: dict[str, str]
 ) -> NormalizedRelationships:
     """
     Normalize relationships using entity mappings and relationship string matching.
@@ -249,7 +249,7 @@ def normalize_relationships(
     nor_relationships = _get_existing_normalized_relationships(raw_relationships)
 
     normalized_rels: list[str] = []
-    normalization_map: dict[str, str | None] = {}
+    normalization_map: dict[str, str] = {}
 
     for raw_rel in raw_relationships:
         # 1. Split and normalize entities
@@ -263,7 +263,7 @@ def normalize_relationships(
         norm_target = entity_normalization_map.get(target)
 
         if norm_source is None or norm_target is None:
-            normalization_map[raw_rel] = None
+            logger.warning(f"No normalized entities found for {raw_rel}")
             continue
 
         # 2. Find candidate normalized relationships
@@ -280,7 +280,7 @@ def normalize_relationships(
             ]
 
         if not candidate_rels:
-            normalization_map[raw_rel] = None
+            logger.warning(f"No candidate relationships found for {raw_rel}")
             continue
 
         # 3. Encode and find best match
