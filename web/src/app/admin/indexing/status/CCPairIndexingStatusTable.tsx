@@ -16,6 +16,7 @@ import {
   ConnectorSummary,
   GroupedConnectorSummaries,
   ValidSources,
+  ValidStatuses,
 } from "@/lib/types";
 import { useRouter } from "next/navigation";
 import {
@@ -328,7 +329,11 @@ export function CCPairIndexingStatusTable({
 
         // Filter by last status
         if (filterOptions.lastStatus && filterOptions.lastStatus.length > 0) {
-          if (!filterOptions.lastStatus.includes(status.last_status as any)) {
+          if (
+            !filterOptions.lastStatus.includes(
+              status.last_status as ValidStatuses
+            )
+          ) {
             return false;
           }
         }
