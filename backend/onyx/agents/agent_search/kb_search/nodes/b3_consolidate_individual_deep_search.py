@@ -32,7 +32,7 @@ def consolidate_individual_deep_search(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
+    graph_config.inputs.prompt_builder.raw_user_query
     state.entities_types_str
 
     research_object_results = state.research_object_results

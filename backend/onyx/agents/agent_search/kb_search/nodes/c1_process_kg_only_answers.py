@@ -74,7 +74,7 @@ def process_kg_only_answers(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.search_request.query
+    graph_config.inputs.prompt_builder.raw_user_query
     query_results = state.sql_query_results
     state.individualized_query_results
     source_document_results = state.source_document_results

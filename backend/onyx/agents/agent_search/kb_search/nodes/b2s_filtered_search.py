@@ -48,7 +48,7 @@ def filtered_search(
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
     search_tool = graph_config.tooling.search_tool
-    question = graph_config.inputs.search_request.query
+    question = graph_config.inputs.prompt_builder.raw_user_query
 
     if not search_tool:
         raise ValueError("search_tool is not provided")
