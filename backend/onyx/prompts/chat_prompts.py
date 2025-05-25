@@ -255,6 +255,10 @@ search engine.
 Note:
  - do not change the meaning of the question! Specifically, if the query is a an instruction, keep it \
 as an instruction!
+ - if the query references an image, carefully examine the image and include any relevant text or visual context \
+from the image in your query. For example, if the image shows an error message, include the error code or message text \
+in your rephrased query.
+ - if the query asks "what is this?" and there is an image, describe the key elements from the image in the query.
 
 Here is the user question/query:
 {question}
@@ -275,6 +279,10 @@ meaning that the rephrased search query should be a suitable stand-alone search 
 Note:
  - do not change the meaning of the question! Specifically, if the query is a an instruction, keep it \
 as an instruction!
+ - if the query references an image, carefully examine the image and include any relevant text or visual context \
+from the image in your query. For example, if the image shows an error message, include the error code or message text \
+in your rephrased query.
+ - if the query asks "what is this?" and there is an image, describe the key elements from the image in the query.
 
 Here is the relevant previous message history:
 {history}
@@ -298,6 +306,10 @@ convert the verb to a noun. \
 This will be rare though. Verbs like 'find, summarize, describe, etc. would NOT fall into this category, \
 for example, and should be omitted from the rephrased keyword query.
 
+Note:
+ - if the query references an image, extract important text or key identifying elements visible in the image \
+and include them as keywords. For example, error codes, product names, or distinctive visual elements.
+
 Here is the user question:
 {question}
 
@@ -313,6 +325,10 @@ Please rephrase that question/query as a keyword query \
 that would be appropriate for a SEARCH ENGINE. Only use the information provided \
 from the history that is relevant to provide the relevant context for the search query, \
 meaning that the rephrased search query should be a suitable stand-alone search query.
+
+Note:
+ - if the query references an image, extract important text or key identifying elements visible in the image \
+and include them as keywords. For example, error codes, product names, or distinctive visual elements.
 
 Here is the relevant previous message history:
 {history}

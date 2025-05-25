@@ -56,6 +56,7 @@ class Tool(abc.ABC, Generic[OVERRIDE_T]):
         history: list[PreviousMessage],
         llm: LLM,
         force_run: bool = False,
+        current_files: list = None,
     ) -> dict[str, Any] | None:
         raise NotImplementedError
 

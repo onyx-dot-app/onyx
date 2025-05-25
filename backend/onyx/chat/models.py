@@ -206,6 +206,7 @@ class ThreadMessage(BaseModel):
     message: str
     sender: str | None = None
     role: MessageType = MessageType.USER
+    image_urls: list[str] | None = None
 
 
 class ChatOnyxBotResponse(BaseModel):
