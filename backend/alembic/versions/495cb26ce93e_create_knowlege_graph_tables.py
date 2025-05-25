@@ -570,6 +570,22 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Drop temporary views
+    conn = op.get_bind()
+    kg_temp_views = [
+        row[0]
+        for row in conn.execute(
+            text(
+                """
+            SELECT table_name
+            FROM INFORMATION_SCHEMA.views
+            WHERE table_name like 'allowed_docs%';
+            """
+            )
+        ).fetchall()
+    ]
+    for view in kg_temp_views:
+        op.execute(f"DROP VIEW IF EXISTS {view}")
 
     # Drop triggers and functions
     for table, function in (
