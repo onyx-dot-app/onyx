@@ -79,3 +79,16 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_monitoring_liveness.txt
+
+      {{- with .Values.celery_worker_monitoring.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_monitoring.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celery_worker_monitoring.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
