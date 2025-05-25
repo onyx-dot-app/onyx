@@ -77,6 +77,13 @@ VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
     os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "25")
 )
 
+VERTEXAI_EMBEDDING_MODEL_LOCATION = os.environ.get("VERTEXAI_EMBEDDING_MODEL_LOCATION", "europe-west1")
+
+# Dimension of the VertexAI embedding model (768 is the default) but for Gemini can be up to 3072.
+VERTEXAI_EMBEDDING_MODEL_DIMENSION = int(
+    os.environ.get("VERTEXAI_EMBEDDING_MODEL_DIMENSION", "768")
+)
+
 # Only used for OpenAI
 OPENAI_EMBEDDING_TIMEOUT = int(
     os.environ.get("OPENAI_EMBEDDING_TIMEOUT", API_BASED_EMBEDDING_TIMEOUT)
@@ -221,6 +228,26 @@ SUPPORTED_EMBEDDING_MODELS = [
         name="google/text-embedding-005",
         dim=768,
         index_name="danswer_chunk_text_embedding_004",
+    ),
+    SupportedEmbeddingModel(
+        name="google/gemini-embedding-001",
+        dim=768,
+        index_name="danswer_chunk_google_gemini_embedding_001",
+    ),
+    SupportedEmbeddingModel(
+        name="google/gemini-embedding-001",
+        dim=768,
+        index_name="danswer_chunk_gemini_embedding_001",
+    ),
+    SupportedEmbeddingModel(
+        name="google/text-multilingual-embedding-002",
+        dim=768,
+        index_name="danswer_chunk_google_multilingual_embedding_002",
+    ),
+    SupportedEmbeddingModel(
+        name="google/text-multilingual-embedding-002",
+        dim=768,
+        index_name="danswer_chunk_multilingual_embedding_002",
     ),
     SupportedEmbeddingModel(
         name="google/textembedding-gecko@003",
