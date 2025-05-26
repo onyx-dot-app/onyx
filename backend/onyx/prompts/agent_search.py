@@ -5,13 +5,13 @@ from onyx.agents.agent_search.shared_graph_utils.constants import (
 # Standards
 SEPARATOR_LINE = "-------"
 SEPARATOR_LINE_LONG = "---------------"
-UNKNOWN_ANSWER = "I do not have enough information to answer this question."
-NO_RECOVERED_DOCS = "No relevant information recovered"
-YES = "yes"
-NO = "no"
+UNKNOWN_ANSWER = "У меня недостаточно информации, чтобы ответить на этот вопрос."
+NO_RECOVERED_DOCS = "Соответствующая информация не была восстановлена"
+YES = "Да"
+NO = "Нет"
 # Framing/Support/Template Prompts
 HISTORY_FRAMING_PROMPT = f"""
-For more context, here is the history of the conversation so far that preceded this question:
+Для получения более подробной информации, вот история разговора, который предшествовал этому вопросу:
 {SEPARATOR_LINE}
 {{history}}
 {SEPARATOR_LINE}
@@ -19,46 +19,47 @@ For more context, here is the history of the conversation so far that preceded t
 
 
 COMMON_RAG_RULES = f"""
-IMPORTANT RULES:
- - If you cannot reliably answer the question solely using the provided information, say that you cannot reliably answer. \
-You may give some additional facts you learned, but do not try to invent an answer.
+ВАЖНЫЕ ПРАВИЛА:
+ - Если ты не можещь достоверно ответить на вопрос, используя только предоставленную информацию, скажи, что ты не можешь достоверно ответить.\
+ТЫ можешь привести какие-то дополнительные факты, которые ты узнал, но не пытайся выдумать ответ.
 
- - If the information is empty or irrelevant, just say "{UNKNOWN_ANSWER}".
+ - Если информация пустая или не относящаяся к делу, просто скажи "{UNKNOWN_ANSWER}".
 
- - If the information is relevant but not fully conclusive, provide an answer to the extent you can but also specify that \
-the information is not conclusive and why.
+ - Если информация актуальна, но не является полностью убедительной, предоставь ответ в той мере, в какой это возможно, но также укажи, что \
+информация не является окончательной и почему.
 
-- When constructing/considering categories, focus less on the question and more on the context actually provided! \
-Example: if the question is about the products of company A, and the content provided lists a number of products, \
-do automatically NOT ASSUME that those belong to company A!  So you cannot list those as products of company A, despite \
-the fact that the question is about company A's products. What you should say instead is maybe something like \
-"Here are a number of products, but I cannot say whether some or all of them belong to company A: \
-<proceed with listing the products>". It is ABSOLUTELY ESSENTIAL that the answer constructed reflects \
-actual knowledge. For that matter, also consider the title of the document and other information that may be \
-provided. If that does not make it clear that - in the example above - the products belong to company A, \
-then do not list them as products of company A, just maybe as "A list products that may not necessarily \
-belong to company A". THIS IS IMPORTANT!
+- При построении/рассмотрении категорий уделяй меньше внимания вопросу и больше контексту, который фактически представлен! \
+Пример: если вопрос касается продуктов компании А, а в предоставленном контенте перечислено несколько продуктов, \
+не СЛЕДУЕТ автоматически ПРЕДПОЛАГАТЬ, что они принадлежат компании А! Таким образом, ты не можешь указать их как продукты компании А, несмотря \
+на то, что речь идет о продуктах компании А. Вместо этого, возможно, вам следует сказать что-то вроде \
+"Вот несколько продуктов, но я не могу сказать, принадлежат ли некоторые или все из них компании А: \
+<продолжай перечислять продукты>". АБСОЛЮТНО НЕОБХОДИМО, чтобы составленный ответ отражал \
+реальные знания. В этом отношении также учитывай название документа и другую информацию, которая может быть \
+предоставлена. Если из этого не ясно, что - в приведенном выше примере - продукты принадлежат компании А,\
+тогда не указывай их как продукты компании А, просто, возможно, как "Список продуктов, которые не обязательно могут \
+принадлежать компании А". ЭТО ВАЖНО!
 
-- Related, if the context provides a list of items with associated data or other information that seems \
-to align with the categories in the question, but does not specify whether the items or the information is \
-specific to the exact requested category, then present the information with a disclaimer. Use a title such as \
-"I am not sure whether these items (or the information provided) is specific to [relevant category] or whether \
-these are all [specific group], but I found this information may be helpful:" \
-followed by the list of items and associated data/or information discovered.
+- В связи с этим, если контекст предоставляет список элементов с соответствующими данными или другой информацией, которые, по-видимому, \
+соответствуют категориям в вопросе, но не указывает, относятся ли элементы или информация \
+конкретно к запрашиваемой категории, тогда предоставь информацию с оговоркой. Используйте такой заголовок, как \
+"Я не уверен, относятся ли эти предметы (или предоставленная информация) конкретно к \
+[соответствующей категории] или все они относятся к [определенной группе], но я обнаружил, \
+что эта информация может быть полезной: \
+далее следует список обнаруженных предметов и связанных с ними данных/или информации.
 
- - Do not group together items amongst one headline where not all items belong to the category of the headline! \
-(Example: "Products used by Company A" where some products listed are not built by Company A, but other companies,
-or it is not clear that the products are built by Company A). Only state what you know for sure!
+ - Не группируй элементы в одном заголовке, если не все элементы относятся к категории, указанной в заголовке! \
+(Пример: "Продукты, используемые компанией А", где некоторые перечисленные продукты созданы не компанией А, а другими компаниями,
+или неясно, что эти продукты созданы компанией А). Указывай только то, что ты знаешь наверняка!
 
- - Do NOT perform any calculations in the answer! Just report on facts.
+ - НЕ проводи никаких вычислений в ответе! Просто сообщай факты.
 
- - If appropriate, organizing your answer in bullet points is often useful.
+ - При необходимости часто бывает полезно оформить свой ответ в виде маркеров.
 """.strip()
 
-ASSISTANT_SYSTEM_PROMPT_DEFAULT = "You are an assistant for question-answering tasks."
+ASSISTANT_SYSTEM_PROMPT_DEFAULT = "Ты являешься помощником в выполнении заданий по ответу на вопросы."
 
 ASSISTANT_SYSTEM_PROMPT_PERSONA = f"""
-You are an assistant for question-answering tasks. Here is more information about you:
+Ты являешься помощником в решении задач, связанных с ответами на вопросы. Вот более подробная информация о тебе:
 {SEPARATOR_LINE}
 {{persona_prompt}}
 {SEPARATOR_LINE}
@@ -66,23 +67,23 @@ You are an assistant for question-answering tasks. Here is more information abou
 
 
 SUB_QUESTION_ANSWER_TEMPLATE = f"""
-Sub-Question: Q{{sub_question_num}}
-Question:
+Дополнительный вопрос: Q{{sub_question_num}}
+Вопрос:
 {{sub_question}}
 {SEPARATOR_LINE}
-Answer:
+Ответ:
 {{sub_answer}}
 """.strip()
 
 
 SUB_QUESTION_ANSWER_TEMPLATE_REFINED = f"""
-Sub-Question: Q{{sub_question_num}}
-Type: {{sub_question_type}}
-Sub-Question:
+Дополнительный вопрос: Q{{sub_question_num}}
+Тип: {{sub_question_type}}
+Дополнительный вопрос:
 {SEPARATOR_LINE}
 {{sub_question}}
 {SEPARATOR_LINE}
-Answer:
+Ответ:
 {SEPARATOR_LINE}
 {{sub_answer}}
 {SEPARATOR_LINE}
@@ -92,21 +93,21 @@ Answer:
 # Step/Utility Prompts
 # Note this one should always be used with the ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE
 ENTITY_TERM_EXTRACTION_PROMPT = f"""
-Based on the original question and some context retrieved from a dataset, please generate a list of \
-entities (e.g. companies, organizations, industries, products, locations, etc.), terms and concepts \
-(e.g. sales, revenue, etc.) that are relevant for the question, plus their relations to each other.
+На основе исходного вопроса и некоторого контекста, извлеченного из набора данных, пожалуйста, составьте список \
+объектов (например, компаний, организаций, отраслей, продуктов, местоположений и т.д.), терминов и концепций \
+(например, продажи, выручка и т.д.), которые имеют отношение к вопросу, а также их связь с друг с другом.
 
-Here is the original question:
+Вот первоначальный вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-And here is the context retrieved:
+И вот извлеченный контекст:
 {SEPARATOR_LINE}
 {{context}}
 {SEPARATOR_LINE}
 
-Please format your answer as a json object in the following format:
+Пожалуйста, отформатируйте свой ответ в виде объекта json в следующем формате:
 """.lstrip()
 
 ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE = """
@@ -140,27 +141,27 @@ ENTITY_TERM_EXTRACTION_PROMPT_JSON_EXAMPLE = """
 HISTORY_CONTEXT_SUMMARY_PROMPT = f"""
 {{persona_specification}}
 
-Your task now is to summarize the key parts of the history of a conversation between a user and an agent. \
-The summary has two purposes:
-  1) providing the suitable context for a new question, and
-  2) To capture the key information that was discussed and that the user may have a follow-up question about.
+Теперь твоя задача - обобщить ключевые моменты истории разговора между пользователем и агентом \
+Краткое изложение преследует две цели:
+  1) создать подходящий контекст для нового вопроса и
+  2) Собрать ключевую информацию, которая обсуждалась и по поводу которой у пользователя могут возникнуть дополнительные вопросы.
 
-Here is the question:
+Вот в чем вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-And here is the history:
+И вот вся история
 {SEPARATOR_LINE}
 {{history}}
 {SEPARATOR_LINE}
 
-Please provide a summarized context from the history so that the question makes sense and can \
-- with suitable extra information - be answered.
+Пожалуйста, предоставь обобщенный контекст из истории, \
+чтобы вопрос имел смысл и мог быть дополнен подходящей дополнительной информацией для ответа.
 
-Do not use more than three or four sentences.
+Не используй более трех-четырех предложений.
 
-History summary:
+Краткое изложение истории:
 """.strip()
 
 
@@ -168,60 +169,61 @@ History summary:
 # Sub-question
 # Intentionally left a copy in case we want to modify this one differently
 INITIAL_QUESTION_DECOMPOSITION_PROMPT = f"""
-Please create a list of no more than 3 sub-questions whose answers would help to inform the answer \
-to the initial question.
+Пожалуйста, составь список не более чем из 3 подвопросов, ответы на которые помогли бы сформулировать ответ \
+на первоначальный вопрос.
 
-The purpose for these sub-questions could be:
-  1) decomposition to isolate individual entities (i.e., 'compare sales of company A and company B' -> \
-['what are sales for company A', 'what are sales for company B'])
+Целью этих подвопросов может быть:
+  1) декомпозиция для выделения отдельных объектов (например, "сравните продажи компании A и компании B" -> \
+ ["каковы продажи компании A", "каковы продажи компании B"])
 
-  2) clarification and/or disambiguation of ambiguous terms (i.e., 'what is our success with company A' -> \
-['what are our sales with company A','what is our market share with company A', \
-'is company A a reference customer for us', etc.])
+  2)разъяснение и/или устранение двусмысленности в терминах (например, "в чем заключается наш успех в компании А" -> \
+ ["каковы наши продажи в компании А", "какова наша доля рынка в компании А", \
+"является ли компания А для нас эталонным клиентом" и т.д.])
 
-  3) if a term or a metric is essentially clear, but it could relate to various aspects of an entity and you \
-are generally familiar with the entity, then you can create sub-questions that are more \
-specific (i.e.,  'what do we do to improve product X' -> 'what do we do to improve scalability of product X', \
-'what do we do to improve performance of product X', 'what do we do to improve stability of product X', ...)
+  3) если термин или показатель в целом понятны, но могут относиться к различным аспектам сущности, и ты \
+ целом знаком с этой сущностью, ты можешь создать более конкретные подзадачи \
+ (например, "что мы делаем для улучшения продукта X" -> "что мы делаем для улучшения продукта X") \
+ мы делаем все, чтобы улучшить масштабируемость продукта X", \
+"что мы делаем, чтобы улучшить производительность продукта X", "что мы делаем, чтобы улучшить стабильность продукта X", ...)
 
-  4) research individual questions and areas that should really help to ultimately answer the question.
+  4) исследуй отдельные вопросы и области, которые действительно должны помочь в конечном счете найти ответ на этот вопрос.
 
-Important:
+Важно:
 
- - Each sub-question should lend itself to be answered by a RAG system. Correspondingly, phrase the question \
-in a way that is amenable to that. An example set of sub-questions based on an initial question could look like this:
-'what can I do to improve the performance of workflow X' -> \
-'what are the settings affecting performance for workflow X', 'are there complaints and bugs related to \
-workflow X performance', 'what are performance benchmarks for workflow X', ...
+ - Система RAG должна отвечать на каждый подвопрос. Соответственно, сформулируйте вопрос  \
+таким образом, чтобы это было приемлемо. Примерный набор подвопросов, основанный на исходном вопросе, может выглядеть следующим образом:
+"что я могу сделать, чтобы повысить производительность workflow X" -> \
+"какие настройки влияют на производительность workflow X", "есть ли жалобы и ошибки, связанные с производительностью \
+workflow X", "каковы критерии производительности для workflow X", ...
 
- - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
- 'I', etc.
+ - Следовательно, опять же, не просто разбирай, но и следи за тем, чтобы подзадачи имели правильную форму. т.е. никаких \
+ "Я" и т.д.
 
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
+ - Не следует (!) задавать дополнительные вопросы, которые являются уточняющими для человека, задавшего вопрос, \
+например, вносить предложения или запрашивать у пользователя дополнительную информацию! Это не полезно для реального процесса \
+ответов на вопросы! Вы должны принимать информацию от пользователя в том виде, в каком она вам предоставлена! \
+Например, если вопрос должен быть типа "почему продукт X плохо работает для клиента A", НЕ создавайте
+дополнительный вопрос типа "какие настройки клиент A использует для продукта X?"! Допустимый дополнительный вопрос \
+лучше было бы спросить: "какие настройки для продукта X, как было показано, приводят к снижению производительности для клиентов?"
 
 
-And here is the initial question to create sub-questions for, so that you have the full context:
+А вот начальный вопрос, для которого нужно создать дополнительные вопросы, чтобы у вас был полный контекст:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
 {{history}}
 
-Do NOT include any text in your answer outside of the list of sub-questions!
-Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
+НЕ включайте в свой ответ какой-либо текст, кроме списка дополнительных вопросов!
+Пожалуйста, сформулируйте свой ответ в виде списка вопросов, разделенного новой строкой, следующим образом (и, пожалуйста, ОТВЕЧАЙТЕ ТОЛЬКО НА ОСНОВЕ ЭТОГО СПИСКА! \
+Не добавляйте никаких пояснений или другого текста!):
 
  <sub-question>
  <sub-question>
  <sub-question>
  ...
 
-Answer:
+Ответ:
 """.strip()
 
 # INITIAL PHASE - AWARE OF REFINEMENT
@@ -230,333 +232,333 @@ Answer:
 # to generate new questions
 # Intentionally left a copy in case we want to modify this one differently
 INITIAL_QUESTION_DECOMPOSITION_PROMPT_ASSUMING_REFINEMENT = f"""
-Please create a list of no more than 3 sub-questions whose answers would help to inform the answer \
-to the initial question.
+Пожалуйста, составьте список не более чем из 3 подвопросов, ответы на которые помогли бы сформулировать ответ \
+на первоначальный вопрос.
 
-The purpose for these sub-questions could be:
-  1) decomposition to isolate individual entities (i.e., 'compare sales of company A and company B' -> \
-['what are sales for company A', 'what are sales for company B'])
+Целью этих подвопросов могло бы быть:
+  1) декомпозиция для выделения отдельных объектов (например, "сравните продажи компании A и компании B" -> \
+["каковы продажи компании A", "каковы продажи компании B"])
 
-  2) clarification and/or disambiguation of ambiguous terms (i.e., 'what is our success with company A' -> \
-['what are our sales with company A','what is our market share with company A', \
-'is company A a reference customer for us', etc.])
+  2) разъяснение и/или устранение двусмысленности в терминах (например, "в чем заключается наш успех в компании А" -> \
+["каковы наши продажи в компании А", "какова наша доля рынка в компании А", \
+"является ли компания А для нас эталонным клиентом" и т.д.])
 
-  3) if a term or a metric is essentially clear, but it could relate to various aspects of an entity and you \
-are generally familiar with the entity, then you can create sub-questions that are more \
-specific (i.e.,  'what do we do to improve product X' -> 'what do we do to improve scalability of product X', \
-'what do we do to improve performance of product X', 'what do we do to improve stability of product X', ...)
+  3) если термин или показатель в целом понятны, но могут относиться к различным аспектам сущности, и ты в \
+целом знаком с этой сущностью, ты можешь создать более конкретные подзадачи \
+(например, "что мы делаем для улучшения продукта X" -> "что мы делаем для улучшения продукта X"). мы делаем все, чтобы улучшить масштабируемость продукта X", \
+"что мы делаем, чтобы улучшить производительность продукта X", "что мы делаем, чтобы улучшить стабильность продукта X", ...)
 
-  4) research individual questions and areas that should really help to ultimately answer the question.
+  4) исследуй отдельные вопросы и области, которые действительно должны помочь в конечном счете найти ответ на этот вопрос.
 
-  5) if meaningful, find relevant facts that may inform another set of sub-questions generate after the set you \
-create now are answered. Example: 'which products have we implemented at company A, and is this different to \
-its competitors?'  could potentially create sub-questions 'what products have we implemented at company A', \
-and 'who are the competitors of company A'. The additional round of sub-question generation which sees the \
-answers for this initial round of sub-question creation could then use the answer to the second sub-question \
-(which could be 'company B and C are competitors of company A') to then ask 'which products have we implemented \
-at company B', 'which products have we implemented at company C'...
+  5) если это имеет значение, найди соответствующие факты, которые могут послужить основой для другого набора подзадач, сгенерированных после \
+получения ответов на набор, который ты создаешь сейчас. Пример: "какие продукты мы внедрили в компании А и отличается ли это \
+от продуктов ее конкурентов?" потенциально может вызвать дополнительные вопросы "какие продукты мы внедрили в компании А" \
+и "кто является конкурентами компании А". Дополнительный раунд генерации подвопросов, в котором отображаются \
+ответы для этого начального раунда создания подвопросов, может затем использовать ответ на второй подвопрос \
+(это может быть "компании B и C являются конкурентами компании A"), чтобы затем спросить: "какие продукты мы внедрили \
+в компании B", "какие продукты мы внедрили в компании C"...
 
-Important:
+Важно:
 
- - Each sub-question should lend itself to be answered by a RAG system. Correspondingly, phrase the question \
-in a way that is amenable to that. An example set of sub-questions based on an initial question could look like this:
-'what can I do to improve the performance of workflow X' -> \
-'what are the settings affecting performance for workflow X', 'are there complaints and bugs related to \
-workflow X performance', 'what are performance benchmarks for workflow X', ...
+ - Система RAG должна отвечать на каждый подвопрос. Соответственно, сформулируй вопрос таким \
+образом, чтобы это было приемлемо. Примерный набор подвопросов, основанный на исходном вопросе, может выглядеть следующим образом: \
+"что я могу сделать, чтобы повысить производительность workflow X" -> \
+"какие настройки влияют на производительность workflow X", "есть ли жалобы и ошибки, связанные с производительностью \
+workflow X", "каковы критерии производительности workflow X", ... 
 
- - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
- 'I', etc.
+ - Следовательно, опять же, не просто разбирай, но и следи за тем, чтобы подзадачи имели правильную форму. т.е. никаких \
+ "Я" и т.д.
 
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
+ - Не следует (!) задавать дополнительные вопросы, которые являются уточняющими для человека, задавшего вопрос, \
+например, вносить предложения или запрашивать у пользователя дополнительную информацию! Это не полезно для реального процесса \
+ответов на вопросы! Вы должны принимать информацию от пользователя в том виде, в каком она вам предоставлена! \
+Например, если вопрос должен быть типа "почему продукт X плохо работает для клиента A", НЕ создавайте
+дополнительный вопрос типа "какие настройки клиент A использует для продукта X?"! Допустимый дополнительный вопрос \
+лучше было бы спросить: "какие настройки для продукта X, как было показано, приводят к снижению производительности для клиентов?"
 
 
-And here is the initial question to create sub-questions for:
+И вот начальный вопрос, для которого нужно создать подвопросы:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
 {{history}}
 
-Do NOT include any text in your answer outside of the list of sub-questions!
-Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
+НЕ включай в свой ответ какой-либо текст, кроме списка дополнительных вопросов! \
+Пожалуйста, сформулируй свой ответ в виде списка вопросов, разделенного новой строкой, следующим образом (и, пожалуйста, ОТВЕЧАЙТЕ ТОЛЬКО НА ОСНОВЕ ЭТОГО СПИСКА! \
+Не добавляйте никаких пояснений или другого текста!):
 
  <sub-question>
  <sub-question>
  <sub-question>
  ...
 
-Answer:
+Ответ:
 """.strip()
 
 
 # TODO: combine shared pieces with INITIAL_QUESTION_DECOMPOSITION_PROMPT
 INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH = f"""
-Please create a list of no more than 3 sub-questions whose answers would help to inform the answer \
-to the initial question.
+Пожалуйста, составь список не более чем из 3 подвопросов, ответы на которые помогли бы сформулировать ответ \
+на первоначальный вопрос.
 
-The purpose for these sub-questions could be:
-  1) decomposition to isolate individual entities (i.e., 'compare sales of company A and company B' -> \
-['what are sales for company A', 'what are sales for company B'])
+Целью этих подвопросов могло бы быть:
+  1) декомпозиция для выделения отдельных объектов (например, "сравните продажи компании A и компании B" -> \
+["каковы продажи компании A", "каковы продажи компании B"])
 
-  2) clarification and/or disambiguation of ambiguous terms (i.e., 'what is our success with company A' -> \
-['what are our sales with company A','what is our market share with company A', \
-'is company A a reference customer for us', etc.])
+  2) разъяснение и/или устранение двусмысленности в терминах (например, "в чем заключается наш успех в компании А" -> \
+["каковы наши продажи в компании А", "какова наша доля рынка в компании А", \
+"является ли компания А для нас эталонным клиентом" и т.д.])
 
-  3) if a term or a metric is essentially clear, but it could relate to various aspects of an entity and you \
-are generally familiar with the entity, then you can create sub-questions that are more \
-specific (i.e.,  'what do we do to improve product X' -> 'what do we do to improve scalability of product X', \
-'what do we do to improve performance of product X', 'what do we do to improve stability of product X', ...)
+  3) если термин или показатель в целом понятны, но могут относиться к различным аспектам сущности, и вы в \
+целом знакомы с этой сущностью, вы можете создать более конкретные подзадачи (например, \
+"что мы делаем для улучшения продукта X" -> "что мы делаем для улучшения продукта X"). мы делаем все, чтобы улучшить масштабируемость продукта X", \
+"что мы делаем, чтобы улучшить производительность продукта X", "что мы делаем, чтобы улучшить стабильность продукта X", ...)
 
-  4) research individual questions and areas that should really help to ultimately answer the question.
+  4) исследуйте отдельные вопросы и области, которые действительно должны помочь в конечном счете найти ответ на этот вопрос.
 
-Important:
+Важно:
 
- - Each sub-question should lend itself to be answered by a RAG system. Correspondingly, phrase the question \
-in a way that is amenable to that. An example set of sub-questions based on an initial question could look like this:
-'what can I do to improve the performance of workflow X' -> \
-'what are the settings affecting performance for workflow X', 'are there complaints and bugs related to \
-workflow X performance', 'what are performance benchmarks for workflow X', ...
+ - Система RAG должна отвечать на каждый подвопрос. Соответственно, сформулируй вопрос таким образом, чтобы это было приемлемо. \
+Примерный набор подвопросов, основанный на исходном вопросе, может выглядеть следующим образом: \
+"что я могу сделать, чтобы повысить производительность workflow X" -> \
+"какие настройки влияют на производительность workflow X", "есть ли жалобы и ошибки, связанные с производительностью \
+workflow X", "каковы критерии производительности workflow X", ...
 
- - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
- 'I', etc.
+ - Следовательно, опять же, не просто разбирай, но и следи за тем, чтобы подзадачи имели правильную форму. т.е. никаких \
+ "Я" и т.д.
 
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
+ - Не следует (!) задавать дополнительные вопросы, которые являются уточняющими для человека, задавшего вопрос, \
+например, вносить предложения или запрашивать у пользователя дополнительную информацию! Это не полезно для реального процесса \
+ответов на вопросы! Ты должен принимать информацию от пользователя в том виде, в каком она вам предоставлена! \
+Например, если вопрос должен быть типа "почему продукт X плохо работает для клиента A", НЕ создавай \
+дополнительный вопрос типа "какие настройки клиент A использует для продукта X?"! Допустимый дополнительный вопрос \
+скорее, это могло бы быть так: "какие настройки для продукта X, как было показано, приводят к снижению производительности для клиентов?"
 
 
-To give you some context, you will see below also some documents that may relate to the question. Please only \
-use this information to learn what the question is approximately asking about, but do not focus on the details \
-to construct the sub-questions! Also, some of the entities, relationships and terms that are in the dataset may \
-not be in these few documents, so DO NOT focus too much on the documents when constructing the sub-questions! \
-Decomposition and disambiguations are most important!
+Чтобы дать тебе некоторое представление, ниже ты также увидишь некоторые документы, которые могут иметь отношение к вопросу. Пожалуйста, \
+используй эту информацию только для того, чтобы приблизительно понять, о чем идет речь в вопросе, но не зацикливайся на деталях, \
+чтобы составить дополнительные вопросы! Кроме того, некоторые сущности, отношения и термины, которые есть в наборе данных, могут \
+отсутствовать в этих нескольких документах, поэтому не уделяй слишком много внимания документам при составлении подзадач! \
+Декомпозиция и устранение неоднозначностей являются наиболее важными!
 
-Here are the sample docs to give you some context:
+Вот примеры документов, которые дадут тебе некоторый контекст:
 {SEPARATOR_LINE}
 {{sample_doc_str}}
 {SEPARATOR_LINE}
 
-And here is the initial question to create sub-questions for, so that you have the full context:
+А вот начальный вопрос, для которого нужно создать дополнительные вопросы, чтобы у тебя был полный контекст:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
 {{history}}
 
-Do NOT include any text in your answer outside of the list of sub-questions!\
-Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
+НЕ включай в свой ответ какой-либо текст, кроме списка дополнительных вопросов! \
+Пожалуйста, сформулируй свой ответ в виде списка вопросов, разделенного новой строкой, следующим образом \
+(и, пожалуйста, ОТВЕЧАЙ ТОЛЬКО НА ОСНОВЕ ЭТОГО СПИСКА! Не добавляйте никаких пояснений или другого текста!):
 
  <sub-question>
  <sub-question>
  <sub-question>
  ...
 
-Answer:
+Ответ:
 """.strip()
 
 INITIAL_DECOMPOSITION_PROMPT_QUESTIONS_AFTER_SEARCH_ASSUMING_REFINEMENT = f"""
-Please create a list of no more than 3 sub-questions whose answers would help to inform the answer \
-to the initial question.
+Пожалуйста, составь список не более чем из 3 подвопросов, ответы на которые помогли бы сформулировать ответ
+на первоначальный вопрос.
 
-The purpose for these sub-questions could be:
-  1) decomposition to isolate individual entities (i.e., 'compare sales of company A and company B' -> \
-['what are sales for company A', 'what are sales for company B'])
+Целью этих подвопросов могло бы быть:
+  1) декомпозиция для выделения отдельных объектов (например, "сравните продажи компании A и компании B" -> \
+["каковы продажи компании A", "каковы продажи компании B"])
 
-  2) clarification and/or disambiguation of ambiguous terms (i.e., 'what is our success with company A' -> \
-['what are our sales with company A','what is our market share with company A', \
-'is company A a reference customer for us', etc.])
+  2) разъяснение и/или устранение двусмысленности в терминах (например, "в чем заключается наш успех в компании А" -> \
+["каковы наши продажи в компании А", "какова наша доля рынка в компании А", \
+"является ли компания А для нас эталонным клиентом" и т.д.])
 
-  3) if a term or a metric is essentially clear, but it could relate to various aspects of an entity and you \
-are generally familiar with the entity, then you can create sub-questions that are more \
-specific (i.e.,  'what do we do to improve product X' -> 'what do we do to improve scalability of product X', \
-'what do we do to improve performance of product X', 'what do we do to improve stability of product X', ...)
+  3) если термин или показатель в целом понятны, но могут относиться к различным аспектам сущности, и ты в \
+целом знаком с этой сущностью, ты можешь создать более конкретные подзадачи \
+(например, "что мы делаем для улучшения продукта X" -> "что мы делаем для улучшения продукта X"). мы делаем все, чтобы улучшить масштабируемость продукта X", \
+"что мы делаем, чтобы улучшить производительность продукта X", "что мы делаем, чтобы улучшить стабильность продукта X", ...)
 
-  4) research individual questions and areas that should really help to ultimately answer the question.
+  4) исследуй отдельные вопросы и области, которые действительно должны помочь в конечном счете найти ответ на этот вопрос.
 
-  5) if applicable and useful, consider using sub-questions to gather relevant information that can inform a \
-subsequent set of sub-questions. The answers to your initial sub-questions will be available when generating \
-the next set.
-For example, if you start with the question, "Which products have we implemented at Company A, and how does \
-this compare to its competitors?" you might first create sub-questions like "What products have we implemented \
-at Company A?" and "Who are the competitors of Company A?"
-The answer to the second sub-question, such as "Company B and C are competitors of Company A," can then be used \
-to generate more specific sub-questions in the next round, like "Which products have we implemented at Company B?" \
-and "Which products have we implemented at Company C?"
+  5) если это применимо и полезно, рассмотри возможность использования подзапросов для сбора соответствующей информации, которая \
+может послужить основой для последующего набора подзапросов. Ответы на твои первоначальные подзапросы будут доступны при создании \
+следующего набора. \
+Например, если ты начнешь с вопроса: "Какие продукты мы внедрили в компании А и как \
+это соотносится с ее конкурентами?" сначала ты мог бы задать дополнительные вопросы типа "Какие продукты мы внедрили \
+в компании А?" и "Кто является конкурентами компании А?". \
+Ответ на второй подвопрос, такой как "Компании B и C являются конкурентами компании A", затем может быть использован \
+для генерации более конкретных подвопросов в следующем раунде, таких как "Какие продукты мы внедрили в компании B?" \
+и "Какие продукты мы внедрили в компании "С"?
 
-You'll be the judge!
+Ты будешь судьей!
 
-Important:
+Важно:
 
- - Each sub-question should lend itself to be answered by a RAG system. Correspondingly, phrase the question \
-in a way that is amenable to that. An example set of sub-questions based on an initial question could look like this:
-'what can I do to improve the performance of workflow X' -> \
-'what are the settings affecting performance for workflow X', 'are there complaints and bugs related to \
-workflow X performance', 'what are performance benchmarks for workflow X', ...
+ - Система RAG должна отвечать на каждый подвопрос. Соответственно, сформулируй вопрос таким \
+образом, чтобы это было приемлемо. Примерный набор подвопросов, основанный на исходном вопросе, может выглядеть следующим образом: \
+"что я могу сделать, чтобы повысить производительность workflow X" -> \
+"какие настройки влияют на производительность workflow X", "есть ли жалобы и ошибки, связанные с производительностью \
+workflow X", "каковы критерии производительности workflow X", ...
 
- - Consequently, again, don't just decompose, but make sure that the sub-questions have the proper form. I.e., no \
- 'I', etc.
+ - Следовательно, опять же, не просто разбирай, но и следи за тем, чтобы подзадачи имели правильную форму. т.е. никаких \
+ "Я" и т.д.
 
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
+ - Не следует (!) задавать дополнительные вопросы, которые являются уточняющими для человека, задавшего вопрос, \
+например, вносить предложения или запрашивать у пользователя дополнительную информацию! Это не полезно для реального процесса \
+ответов на вопросы! ТЫ должен принимать информацию от пользователя в том виде, в каком она вам предоставлена! \
+Например, если вопрос должен быть типа "почему продукт X плохо работает для клиента A", НЕ создавай \
+дополнительный вопрос типа "какие настройки клиент A использует для продукта X?"! Допустимый дополнительный вопрос \
+лучше было бы спросить: "какие настройки для продукта X, как было показано, приводят к снижению производительности для клиентов?"
 
-To give you some context, you will see below also some documents that may relate to the question. Please only \
-use this information to learn what the question is approximately asking about, but do not focus on the details \
-to construct the sub-questions! Also, some of the entities, relationships and terms that are in the dataset may \
-not be in these few documents, so DO NOT focus too much on the documents when constructing the sub-questions! \
-Decomposition and disambiguations are most important!
+Чтобы дать тебе некоторое представление, ниже ты также увидишь некоторые документы, которые могут иметь отношение к вопросу. Пожалуйста, \
+используй эту информацию только для того, чтобы приблизительно понять, о чем идет речь в вопросе, но не зацикливайся на деталях, \
+чтобы составить дополнительные вопросы! Кроме того, некоторые сущности, отношения и термины, которые есть в наборе данных, могут \
+отсутствовать в этих нескольких документах, поэтому не уделяй слишком много внимания документам при составлении подзадач! \
+Декомпозиция и устранение неоднозначностей являются наиболее важными!
 
-Here are the sample docs to give you some context:
+Вот примеры документов, которые дадут вам некоторый контекст:
 {SEPARATOR_LINE}
 {{sample_doc_str}}
 {SEPARATOR_LINE}
 
-And here is the initial question to create sub-questions for, so that you have the full context:
+А вот начальный вопрос, для которого нужно создать дополнительные вопросы, чтобы у тебя был полный контекст:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
 {{history}}
 
-Do NOT include any text in your answer outside of the list of sub-questions!\
-Please formulate your answer as a newline-separated list of questions like so (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
+НЕ включай в свой ответ какой-либо текст, кроме списка дополнительных вопросов! \
+Пожалуйста, сформулируй свой ответ в виде списка вопросов, разделенного новой строкой, следующим образом (и, \
+пожалуйста, ОТВЕЧАЙ ТОЛЬКО НА ОСНОВЕ ЭТОГО СПИСКА! Не добавляй никаких пояснений или другого текста!):
 
  <sub-question>
  <sub-question>
  <sub-question>
  ...
 
-Answer:
+Ответ:
 """.strip()
 
 # Retrieval
 QUERY_REWRITING_PROMPT = f"""
-Please convert the initial user question into a 2-3 more appropriate short and pointed search queries for \
-retrieval from a document store. Particularly, try to think about resolving ambiguities and make the search \
-queries more specific, enabling the system to search more broadly.
+Пожалуйста, преобразуй первоначальный вопрос пользователя в 2-3 более подходящих коротких и четких поисковых запроса для \
+поиска в хранилище документов. В частности, постарайся подумать об устранении неясностей и провести поиск \
+запросы становятся более конкретными, что позволяет системе выполнять более широкий поиск.
 
-Also, try to make the search queries not redundant, i.e. not too similar!
+Кроме того, постарайтесь, чтобы поисковые запросы не были избыточными, то есть не были слишком похожими!
 
-Here is the initial question:
+Вот первоначальный вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Do NOT include any text in your answer outside of the list of queries!\
-Formulate the queries separated by newlines (Do not say 'Query 1: ...', just write the querytext) as follows:
+НЕ включай в свой ответ какой-либо текст, кроме списка запросов!\
+Формулируй запросы, разделяя их символами новой строки (не говори "Запрос 1: ...", просто напиши текст запроса) следующим образом:
 <query 1>
 <query 2>
 ...
 
-Queries:
+Запросы:
 """.strip()
 
 
 DOCUMENT_VERIFICATION_PROMPT = f"""
-Determine whether the following document text contains data or information that is potentially relevant \
-for a question. It does not have to be fully relevant, but check whether it has some information that \
-would help - possibly in conjunction with other documents - to address the question.
+Определи, содержит ли следующий текст документа данные или информацию, которые потенциально могут иметь отношение \
+к вопросу. Он не обязательно должен быть полностью релевантным, но проверь, есть ли в нем информация, которая \
+может помочь - возможно, в сочетании с другими документами - ответить на вопрос.
 
-Be careful that you do not use a document where you are not sure whether the text applies to the objects \
-or entities that are relevant for the question. For example, a book about chess could have long passage \
-discussing the psychology of chess without - within the passage - mentioning chess. If now a question \
-is asked about the psychology of football, one could be tempted to use the document as it does discuss \
-psychology in sports. However, it is NOT about football and should not be deemed relevant. Please \
-consider this logic.
+Будь осторожен, не используй документ, в котором ты не уверен, относится ли текст к объектам \
+или сущностям, имеющим отношение к вопросу. Например, в книге о шахматах может быть длинный отрывок, \
+посвященный психологии шахмат, без упоминания шахмат в отрывке. Если сейчас \
+будет задан вопрос о психологии футбола, может возникнуть соблазн воспользоваться этим документом, поскольку \
+в нем действительно обсуждается психология в спорте. Однако он не о футболе и не должен считаться актуальным. Пожалуйста,\
+прими во внимание эту логику.
 
-DOCUMENT TEXT:
+ТЕКСТ ДОКУМЕНТА:
 {SEPARATOR_LINE}
 {{document_content}}
 {SEPARATOR_LINE}
 
-Do you think that this document text is useful and relevant to answer the following question?
+Считаешь ли ты, что текст этого документа полезен и уместен для ответа на следующий вопрос?
 
-QUESTION:
+ВОПРОС:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please answer with exactly and only a '{YES}' or '{NO}'. Do NOT include any other text in your response:
+Пожалуйста, отвечай точно и только '{YES}' или '{NO}'. НЕ включай в свой ответ никакой другой текст:
 
-Answer:
+Ответ:
 """.strip()
 
 
 # Sub-Question Answer Generation
 SUB_QUESTION_RAG_PROMPT = f"""
-Use the context provided below - and only the provided context - to answer the given question. \
-(Note that the answer is in service of answering a broader question, given below as 'motivation').
+Используй приведенный ниже контекст - и только приведенный контекст - для ответа на данный вопрос. \
+(Обрати внимание, что этот ответ служит ответом на более широкий вопрос, который приведен ниже в разделе "мотивация").
 
-Make sure that you keep all relevant information, specifically as it concerns the ultimate goal. \
-(But keep other details as well.)
+Убедись, что ты сохранил всю необходимую информацию, особенно ту, которая касается конечной цели. \
+(Но сохрани и другие детали).
 
 {COMMON_RAG_RULES}
 
- - Make sure that you only state what you actually can positively learn from the provided context! Particularly \
-don't make assumptions!  Example: if i) a question you should answer is asking for products of companies that \
-are competitors of company A, and ii) the context mentions products of companies A, B, C, D, E, etc., do NOT assume \
-that B, C, D, E, etc. are competitors of A! All you know is that these are products of a number of companies, and you \
-would have to rely on another question - that you do not have access to - to learn which companies are competitors of A.
-Correspondingly, you should not say that these are the products of competitors of A, but rather something like \
-"Here are some products of various companies".
+ - Убедись, что  указываешь только то, что ты действительно можешь извлечь из предоставленного контекста! Особенно \
+не делай предположений!  Пример: если i) вопрос, на который ты должен ответить, касается продуктов компаний, которые
+являются конкурентами компании A, и ii) в контексте упоминаются продукты компаний A, B, C, D, E и т.д., НЕ предполагай,
+что B, C, D, E и т.д.. являются конктурентами A! Все, что тебе известно, это то, что это продукты нескольких компаний, и тебе пришлось
+бы обратиться к другому вопросу, к которому у тебя нет доступа, чтобы узнать, какие компании являются конкурентами A.
+Соответственно, ты не должен говорить, что это продукция конкурентов A, а скорее что-то вроде \
+"Здесь представлены некоторые продукты различных компаний".
 
-It is critical that you provide inline citations in the format [D1], [D2], [D3], etc! Please use format [D1][D2] and NOT \
-[D1, D2] format if you cite two or more documents together! \
-It is important that the citation is close to the information it supports. \
-Proper citations are very important to the user!
+Очень важно, чтобы ты приводил ссылки в формате [D1], [D2], [D3] и т.д.! Пожалуйста, используй формат [D1][D2], а не формат \
+[D1, D2], если ты цитируешь два или более документа вместе! \
+Важно, чтобы цитата была близка к той информации, которую она содержит. \
+Правильное цитирование очень важно для пользователя!
 
-Here is the document context for you to consider:
+Вот контекст документа, который тебе следует рассмотреть:
 {SEPARATOR_LINE}
 {{context}}
 {SEPARATOR_LINE}
 
-For your general information, here is the ultimate motivation for the question you need to answer:
+Для вашего общего сведения, вот основная мотивация для вопроса, на который тебе нужно ответить:
 {SEPARATOR_LINE}
 {{original_question}}
 {SEPARATOR_LINE}
 
-And here is the actual question I want you to answer based on the context above (with the motivation in mind):
+И вот собственно вопрос, на который я хочу, чтобы ты ответил, основываясь на приведенном выше контексте (с учетом мотивации).:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please keep your answer brief and concise, and focus on facts and data. (Again, only state what you see in the documents \
-for sure and communicate if/in what way this may or may not relate to the question you need to answer!)
+Пожалуйста, отвечай кратко и емко, сосредоточься на фактах и данных. (Повторяю, обязательно указывай только то, что ты видишь в документах, \
+и сообщай, может ли это иметь отношение к вопросу, на который тебе нужно ответить, или нет!)
 
-Answer:
+Ответ:
 """.strip()
 
 
 SUB_ANSWER_CHECK_PROMPT = f"""
-Determine whether the given answer addresses the given question. \
-Please do not use any internal knowledge you may have - just focus on whether the answer \
-as given seems to largely address the question as given, or at least addresses part of the question.
+Определи, отвечает ли данный ответ на заданный вопрос. \
+Пожалуйста, не используй какие-либо внутренние знания, которые у вас могут быть, - просто сосредоточьтесь на том, соответствует ли данный ответ в \
+целом заданному вопросу или, по крайней мере, его части.
 
-Here is the question:
+Вот вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Here is the suggested answer:
+Вот предложенный ответ:
 {SEPARATOR_LINE}
 {{base_answer}}
 {SEPARATOR_LINE}
 
-Does the suggested answer address the question? Please answer with "{YES}" or "{NO}".
+Соответствует ли предложенный ответ поставленному вопросу? Пожалуйста, ответь "{YES}" или "{NO}".
 """.strip()
 
 
@@ -564,51 +566,51 @@ Does the suggested answer address the question? Please answer with "{YES}" or "{
 INITIAL_ANSWER_PROMPT_W_SUB_QUESTIONS = f"""
 {{persona_specification}}
 
-Use the information provided below - and only the provided information - to answer the provided main question.
+Используй приведенную ниже информацию - и только предоставленную информацию - для ответа на основной вопрос.
 
-The information provided below consists of:
-  1) a number of answered sub-questions - these are very important to help you organize your thoughts and your answer
-  2) a number of documents that are deemed relevant for the question.
+Представленная ниже информация состоит из:
+  1) нескольких дополнительных вопросов, на которые даны ответы - они очень важны, чтобы помочь тебе упорядочить свои мысли и твой ответ
+  2) нескольких документов, которые, по вашему мнению, имеют отношение к данному вопросу.
 
 {{history}}
 
-It is critical that you provide proper inline citations to documents in the format [D1], [D2], [D3], etc.! \
-It is important that the citation is close to the information it supports. If you have multiple citations that support \
-a fact, please cite for example as [D1][D3], or [D2][D4], etc. \
-Feel free to also cite sub-questions in addition to documents, but make sure that you have documents cited with the \
-sub-question citation. If you want to cite both a document and a sub-question, please use [D1][Q3], or [D2][D7][Q4], etc. \
-Again, please NEVER cite sub-questions without a document citation! Proper citations are very important for the user!
+Очень важно, чтобы ты приводил правильные ссылки на документы в формате [D1], [D2], [D3] и т.д.! \
+Важно, чтобы цитата была близка к информации, которую она содержит. Если у тебя есть несколько ссылок, подтверждающих какой - либо \
+факт, пожалуйста, укажи, например, [D1][D3] или [D2][D4] и т.д. \
+Не стесняйся также ссылаться на подзадачи в дополнение к документам, но убедись, что у тебя есть документы, на которые ты ссылаешься с помощью ссылки на \
+подзадачу. Если ты хочешь сослаться как на документ, так и на дополнительный вопрос, пожалуйста, используй [D1][Q3] или [D2][D7][Q4] и т.д. \
+Еще раз, пожалуйста, НИКОГДА не приводи подзадачи без ссылки на документ! Правильное цитирование очень важно для пользователя!
 
 {COMMON_RAG_RULES}
 
-Again, you should be sure that the answer is supported by the information provided!
+Опять же, ты должен быть уверен, что ответ подтверждается предоставленной информацией!
 
-Try to keep your answer concise. But also highlight uncertainties you may have should there be substantial ones, \
-or assumptions you made.
+Постарайся, чтобы твой ответ был кратким. Но также подчеркни возможные неопределенности, если они будут существенными,
+или сделанные тобой предположения.
 
-Here is the contextual information:
+Вот контекстуальная информация:
 {SEPARATOR_LINE_LONG}
 
-*Answered Sub-questions (these should really matter!):
+*Ответы на дополнительные вопросы (это действительно должно иметь значение!):
 {SEPARATOR_LINE}
 {{answered_sub_questions}}
 {SEPARATOR_LINE}
 
-And here are relevant document information that support the sub-question answers, or that are relevant for the actual question:
+И вот соответствующая информация о документе, которая подтверждает ответы на дополнительные вопросы или имеет отношение к самому вопросу:
 {SEPARATOR_LINE}
 {{relevant_docs}}
 {SEPARATOR_LINE}
 
-And here is the question I want you to answer based on the information above:
+И вот вопрос, на который я хочу, чтобы ты ответил, основываясь на приведенной выше информации:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please keep your answer brief and concise, and focus on facts and data. (Again, only state what you see in the documents for \
-sure and communicate if/in what way this may or may not relate to the question you need to answer! Use the answered \
-sub-questions as well, but be cautious and reconsider the docments again for validation.)
+Пожалуйста, отвечай кратко и сжато, сосредоточься на фактах и данных. (Еще раз, указывай только то, что ты видишь в документах, \
+и сообщай, может ли это иметь отношение к вопросу, на который тебе нужно ответить, или нет! Используй также ответы на \
+дополнительные вопросы, но будь осторожен и еще раз просмотри документы для проверки.)
 
-Answer:
+Ответ:
 """.strip()
 
 
@@ -616,114 +618,114 @@ Answer:
 INITIAL_ANSWER_PROMPT_WO_SUB_QUESTIONS = f"""
 {{answered_sub_questions}}{{persona_specification}}
 
-Use the information provided below - and only the provided information - to answer the provided question. \
-The information provided below consists of a number of documents that were deemed relevant for the question.
+Используй приведенную ниже информацию - и только предоставленную информацию - для ответа на поставленный вопрос. \
+Приведенная ниже информация состоит из ряда документов, которые были сочтены относящимися к данному вопросу.
 
 {{history}}
 
 {COMMON_RAG_RULES}
 
-Again, you should be sure that the answer is supported by the information provided!
+Опять же, ты должен быть уверен, что ответ подтверждается предоставленной информацией!
 
-It is critical that you provide proper inline citations to documents in the format [D1], [D2], [D3], etc! \
-It is important that the citation is close to the information it supports. \
-If you have multiple citations, please cite for example as [D1][D3], or [D2][D4], etc. \
-Citations are very important for the user!
+Очень важно, чтобы ты приводил правильные ссылки на документы в формате [D1], [D2], [D3] и т.д.! \
+Важно, чтобы цитата была близка к информации, которую она содержит. \
+Если у тебя есть несколько ссылок, пожалуйста, укажи, например, [D1][D3] или [D2][D4] и т.д. \
+Ссылки очень важны для пользователя!
 
-Here is the relevant context information:
+Вот соответствующая контекстная информация:
 {SEPARATOR_LINE}
 {{relevant_docs}}
 {SEPARATOR_LINE}
 
-And here is the question I want you to answer based on the context above:
+И вот вопрос, на который я хочу, чтобы ты ответил, основываясь на приведенном выше контексте:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please keep your answer brief and concise, and focus on facts and data. (Again, only state what you see in the documents \
-for sure and communicate if/in what way this may or may not relate to the question you need to answer!)
+Пожалуйста, отвечай кратко и емко, сосредоточься на фактах и данных. (Повторяю, обязательно указывай только то, что ты видишь в документах, \
+и сообщай, может ли это иметь отношение к вопросу, на который тебе нужно ответить, или нет!)
 
-Answer:
+Ответ:
 """.strip()
 
 
 # REFINEMENT PHASE
 REFINEMENT_QUESTION_DECOMPOSITION_PROMPT = f"""
-An initial user question needs to be answered. An initial answer has been provided but it wasn't quite good enough. \
-Also, some sub-questions had been answered and this information has been used to provide the initial answer. \
-Some other subquestions may have been suggested based on little knowledge, but they were not directly answerable. \
-Also, some entities, relationships and terms are given to you so that you have an idea of how the available data looks like.
+Необходимо ответить на первоначальный вопрос пользователя. Первоначальный ответ был предоставлен, но он был недостаточно хорош. \
+Кроме того, были даны ответы на некоторые дополнительные вопросы, и эта информация была использована для получения первоначального ответа. \
+Возможно, были предложены некоторые другие дополнительные вопросы, основанные на недостаточных знаниях, но на них не было прямого ответа. \
+Кроме того, тебе даны некоторые сущности, взаимосвязи и термины, чтобы ты имел представление о том, как выглядят доступные данные.
 
-Your role is to generate 2-4 new sub-questions that would help to answer the initial question, considering:
+Твоя роль заключается в том, чтобы сгенерировать 2-4 новых подвопроса, которые помогли бы ответить на первоначальный вопрос, учитывая:
 
-1) The initial question
-2) The initial answer that was found to be unsatisfactory
-3) The sub-questions that were answered
-4) The sub-questions that were suggested but not answered
-5) The entities, relationships and terms that were extracted from the context
+1) Первоначальный вопрос
+2) Первоначальный ответ, который был признан неудовлетворительным
+3) Дополнительные вопросы, на которые были даны ответы
+4) Дополнительные вопросы, которые были предложены, но на которые не были даны ответы
+5) Сущности, отношения и термины, которые были извлечены из контекста
 
-The individual questions should be answerable by a good RAG system. So a good idea would be to use the sub-questions to \
-resolve ambiguities and/or to separate the question for different entities that may be involved in the original question, \
-but in a way that does not duplicate questions that were already tried.
+На отдельные вопросы должна отвечать хорошая система RAG. Таким образом, хорошей идеей было бы использовать подзадачи для
+устранения неясностей и/или разделения вопроса для разных объектов, которые могут быть задействованы в исходном вопросе,
+но таким образом, чтобы не дублировать вопросы, которые уже были опробованы.
 
-Additional Guidelines:
-- The sub-questions should be specific to the question and provide richer context for the question, resolve ambiguities, \
-or address shortcoming of the initial answer
-- Each sub-question - when answered - should be relevant for the answer to the original question
-- The sub-questions should be free from comparisons, ambiguities,judgements, aggregations, or any other complications that \
-may require extra context
-- The sub-questions MUST have the full context of the original question so that it can be executed by a RAG system \
-independently without the original question available
-    Example:
-    - initial question: "What is the capital of France?"
-    - bad sub-question: "What is the name of the river there?"
-    - good sub-question: "What is the name of the river that flows through Paris?"
-- For each sub-question, please also provide a search term that can be used to retrieve relevant documents from a document store.
-- Consider specifically the sub-questions that were suggested but not answered. This is a sign that they are not answerable \
-with the available context, and you should not ask similar questions.
- - Do not(!) create sub-questions that are clarifying question to the person who asked the question, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
+Дополнительные рекомендации:
+- Подвопросы должны быть конкретными по отношению к вопросу и обеспечивать более широкий контекст для него, устранять неясности
+или устранять недостатки первоначального ответа
+- Каждый подвопрос, на который был дан ответ, должен соответствовать ответу на первоначальный вопрос
+- В подзадачах не должно быть сравнений, двусмысленностей, суждений, обобщений или любых других сложностей, которые
+могут потребовать дополнительного контекста
+- Подзадачи ДОЛЖНЫ содержать полный контекст исходного вопроса, чтобы они могли быть выполнены системой RAG
+независимо без доступа к исходному вопросу
+    Пример:
+    - начальный вопрос: "Как называется столица Франции?"
+    - плохой дополнительный вопрос: "Как называется река, протекающая там?"
+    - хороший дополнительный вопрос: "Как называется река, протекающая через Париж?"
+- Для каждого дополнительного вопроса, пожалуйста, укажи поисковый запрос, который может быть использован для поиска соответствующих документов в хранилище документов. \
+- Обрати особое внимание на дополнительные вопросы, которые были предложены, но на которые не были даны ответы. Это признак того, что на них нельзя ответить \
+с учетом имеющегося контекста и тебе не следует задавать подобных вопросов.
+ - Не следует (!) задавать дополнительные вопросы, которые являются уточняющими для человека, задавшего вопрос, \
+например, вносить предложения или запрашивать у пользователя дополнительную информацию! Это не полезно для реального процесса \
+ответов на вопросы! Ты должен принимать информацию от пользователя в том виде, в каком она вам предоставлена! \
+Например, если вопрос должен быть типа "почему продукт X плохо работает для клиента A", НЕ создавай
+дополнительный вопрос типа "какие настройки клиент A использует для продукта X?"! Допустимый дополнительный вопрос \
+лучше было бы спросить: "какие настройки для продукта X, как было показано, приводят к снижению производительности для клиентов?"
 
-Here is the initial question:
+Вот первоначальный вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 {{history}}
 
-Here is the initial sub-optimal answer:
+Вот первоначальный неоптимальный ответ:
 {SEPARATOR_LINE}
 {{base_answer}}
 {SEPARATOR_LINE}
 
-Here are the sub-questions that were answered:
+Вот ответы на дополнительные вопросы, на которые были даны ответы:
 {SEPARATOR_LINE}
 {{answered_sub_questions}}
 {SEPARATOR_LINE}
 
-Here are the sub-questions that were suggested but not answered:
+Вот дополнительные вопросы, которые были предложены, но на которые не было ответов:
 {SEPARATOR_LINE}
 {{failed_sub_questions}}
 {SEPARATOR_LINE}
 
-And here are the entities, relationships and terms extracted from the context:
+А вот сущности, отношения и термины, извлеченные из контекста:
 {SEPARATOR_LINE}
 {{entity_term_extraction_str}}
 {SEPARATOR_LINE}
 
-Please generate the list of good, fully contextualized sub-questions that would help to address the main question. \
-Specifically pay attention also to the entities, relationships and terms extracted, as these indicate what type of \
-objects/relationships/terms you can ask about! Do not ask about entities, terms or relationships that are not mentioned in the \
-'entities, relationships and terms' section.
+Пожалуйста, составь список хороших, полностью контекстуализированных дополнительных вопросов, которые помогли бы ответить на основной вопрос. \
+Обрати особое внимание на выделенные сущности, отношения и термины, поскольку они указывают, о каком типе \
+объектов/отношений/терминов ты можешь задавать вопросы! Не спрашивай о сущности, условия или отношения, которые не указаны в \
+'сущностей, отношений и раздел условиях.
 
-Again, please find questions that are NOT overlapping too much with the already answered sub-questions or those that \
-already were suggested and failed. In other words - what can we try in addition to what has been tried so far?
+И снова, пожалуйста, найди вопросы, которые не слишком сильно пересекаются с уже полученными ответами на подзадачи или с теми, которые \
+уже предлагались и не были выполнены. Другими словами, что мы можем попробовать в дополнение к тому, что уже было испробовано?
 
-Generate the list of questions separated by one new line like this (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
+Сформируй список вопросов, разделенных новой строкой, вот так (и, пожалуйста, ОТВЕЧАЙ ТОЛЬКО ПО ЭТОМУ СПИСКУ! Не \
+добавляй никаких пояснений или другого текста!):
 
 <sub-question 1>
 <sub-question 2>
@@ -731,101 +733,101 @@ add any explanations or other text!):
 ...""".strip()
 
 REFINEMENT_QUESTION_DECOMPOSITION_PROMPT_W_INITIAL_SUBQUESTION_ANSWERS = f"""
-An initial user question needs to be answered. An initial answer has been provided but it wasn't quite good enough. \
-Also, some sub-questions had been answered and this information has been used to provide the initial answer. \
-Some other subquestions may have been suggested based on little knowledge, but they were not directly answerable. \
-Also, some entities, relationships and terms are given to you so that you have an idea of how the available data looks like.
+Необходимо ответить на первоначальный вопрос пользователя. Первоначальный ответ был предоставлен, но он был недостаточно хорош. \
+Кроме того, были даны ответы на некоторые дополнительные вопросы, и эта информация была использована для получения первоначального ответа. \
+Возможно, были предложены некоторые другие дополнительные вопросы, основанные на недостаточных знаниях, но на них не было прямого ответа. \
+Кроме того, вам даны некоторые сущности, взаимосвязи и термины, чтобы ты имел представление о том, как выглядят доступные данные.
 
-Your role is to generate 2-4 new sub-questions that would help to answer the initial question, considering:
+Твоя задача состоит в том, чтобы сгенерировать 2-4 новых подвопроса, которые помогли бы ответить на первоначальный вопрос, учитывая:
 
-1) The initial question
-2) The initial answer that was found to be unsatisfactory
-3) The sub-questions that were answered AND their answers
-4) The sub-questions that were suggested but not answered (and that you should not repeat!)
-5) The entities, relationships and terms that were extracted from the context
+1) Исходный вопрос
+2) Первоначальный ответ, который был признан неудовлетворительным
+3) Подвопросы, на которые были даны ответы, И ответы на них
+4) Дополнительные вопросы, на которые были предложены ответы, но на которые не было ответов (и которые не следует повторять!)
+5) Сущности, отношения и термины, которые были извлечены из контекста
 
-The individual questions should be answerable by a good RAG system. So a good idea would be to use the sub-questions to \
-resolve ambiguities and/or to separate the question for different entities that may be involved in the original question, \
-but in a way that does not duplicate questions that were already tried.
+На отдельные вопросы должна отвечать хорошая система RAG. Таким образом, хорошей идеей было бы использовать подзадачи для \
+устранения неясностей и/или разделения вопроса для разных объектов, которые могут быть задействованы в исходном вопросе, \
+но таким образом, чтобы не дублировать вопросы, которые уже были опробованы.
 
-Additional Guidelines:
+Дополнительные рекомендации:
 
-- The new sub-questions should be specific to the question and provide richer context for the question, resolve ambiguities, \
-or address shortcoming of the initial answer
+- Новые подвопросы должны быть конкретными по отношению к вопросу и предоставлять более широкий контекст для него, устранять неясности
+или устранять недостатки первоначального ответа
 
-- Each new sub-question - when answered - should be relevant for the answer to the original question
+- Каждый новый подвопрос - после получения ответа - должен соответствовать ответу на первоначальный вопрос
 
-- The new sub-questions should be free from comparisons, ambiguities,judgements, aggregations, or any other complications that \
-may require extra context
+- Новые подзадачи не должны содержать сравнений, двусмысленностей, суждений, обобщений или любых других сложностей, которые
+могут потребовать дополнительного контекста
 
-- The new sub-questions MUST have the full context of the original question so that it can be executed by a RAG system \
-independently without the original question available
-    Example:
-    - initial question: "What is the capital of France?"
-    - bad sub-question: "What is the name of the river there?"
-    - good sub-question: "What is the name of the river that flows through Paris?"
+- Новые подзадачи ДОЛЖНЫ содержать полный контекст исходного вопроса, чтобы их можно было выполнить с помощью системы RAG \
+независимо, без наличия оригинального вопроса
+    Пример:
+    - начальный вопрос: "Как называется столица Франции?"
+    - плохой дополнительный вопрос: "Как называется река, протекающая там?"
+    - хороший дополнительный вопрос: "Как называется река, протекающая через Париж?"
 
-    - For each new sub-question, please also provide a search term that can be used to retrieve relevant documents \
-from a document store.
+   - Для каждого нового дополнительного вопроса, пожалуйста, также указывай поисковый запрос, который может быть использован для извлечения соответствующих документов
+из хранилища документов.
 
-- Consider specifically the sub-questions that were suggested but not answered. This is a sign that they are not answerable \
-with the available context, and you should not ask similar questions.
+- Рассмотри конкретно те дополнительные вопросы, которые были предложены, но на которые не были даны ответы. Это признак того, что на них нельзя ответить \
+учитывая имеющийся контекст, вам не следует задавать подобные вопросы.
 
-- Pay attention to the answers of previous sub-question to make your sub-questions more specific! \
-Often the initial sub-questions were set up to give you critical information that you should use to generate new sub-questions.\
-For example, if the answer to a an earlier sub-question is \
-'Company B and C are competitors of Company A', you should not ask now a new sub-question involving the term 'competitors', \
-as you already have the information to create a more precise question - you should instead explicitly reference \
-'Company B' and 'Company C' in your new sub-questions, as these are the competitors based on the previously answered question.
+-Обрати внимание на ответы на предыдущие подзапросы, чтобы сделать ваши подзапросы более конкретными! \
+Часто первоначальные подзапросы были заданы для того, чтобы предоставить вам важную информацию, которую вы должны использовать для создания новых подзапросов.\
+Например, если ответом на предыдущий подвопрос является \
+"Компании B и C являются конкурентами компании A", тебе не следует задавать новый подвопрос, содержащий термин "конкуренты", \
+поскольку у вас уже есть информация для формулировки более точного вопроса - тебе следует вместо этого явно ссылайся \
+Укажи "Компания В" и "Компания С" в ваших новых подзапросах, поскольку это конкуренты, на которые ты ответил на предыдущий вопрос.
 
-- Be precise(!) and don't make inferences you cannot be sure about! For example, in the previous example \
-where Company B and Company C were identified as competitors of Company A, and then you also get information on \
-companies D and E, do not make the inference that these are also competitors of Company A! Stick to the information you have!
-(Also, don't assume that companies B and C arethe only competitors of A, unless stated!)
+- Будь точен(!) и не делай выводов, в которых ты не можешь быть уверены! Например, в предыдущем примере \
+если компания B и компания C были идентифицированы как конкуренты компании A, а затем ты также получил информацию о \
+компаниях D и E, не делай вывод, что они также являются конкурентами компании A! Придерживайся имеющейся у вас информации! \
+(Кроме того, не думай, что компании B и C являются единственными конкурентами A, если не указано иное!)
 
-- Do not(!) create sub-questions that are clarifying question *to the person who asked the question*, \
-like making suggestions or asking the user for more information! This is not useful for the actual \
-question-answering process! You need to take the information from the user as it is given to you! \
-For example, should the question be of the type 'why does product X perform poorly for customer A', DO NOT create a \
-sub-question of the type 'what are the settings that customer A uses for product X?'! A valid sub-question \
-could rather be 'which settings for product X have been shown to lead to poor performance for customers?'
+- Не создавай (!) подзапросы, которые являются уточняющими вопросами * к лицу, задавшему вопрос*, \
+например, вносят предложения или просят пользователя предоставить дополнительную информацию! Это не полезно для реального процесса \
+ответов на вопросы! Ты должны принимать информацию от пользователя в том виде, в каком она вам предоставлена! \
+Например, если вопрос должен быть типа "почему продукт X плохо работает для клиента A", НЕ создавай
+дополнительный вопрос типа "какие настройки клиент A использует для продукта X?"! Допустимый дополнительный вопрос \
+скорее, это могло бы быть так: "какие настройки продукта X, как было показано, приводят к снижению производительности для клиентов?"
 
-Here is the initial question:
+Вот первоначальный вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 {{history}}
 
-Here is the initial sub-optimal answer:
+Вот первоначальный неоптимальный ответ:
 {SEPARATOR_LINE}
 {{base_answer}}
 {SEPARATOR_LINE}
 
-Here are the sub-questions that were answered:
+Вот ответы на дополнительные вопросы, на которые были даны ответы:
 {SEPARATOR_LINE}
 {{answered_subquestions_with_answers}}
 {SEPARATOR_LINE}
 
-Here are the sub-questions that were suggested but not answered:
+Вот дополнительные вопросы, которые были предложены, но на которые не было ответов:
 {SEPARATOR_LINE}
 {{failed_sub_questions}}
 {SEPARATOR_LINE}
 
-And here are the entities, relationships and terms extracted from the context:
+А вот сущности, отношения и термины, извлеченные из контекста:
 {SEPARATOR_LINE}
 {{entity_term_extraction_str}}
 {SEPARATOR_LINE}
 
-Please generate the list of good, fully contextualized sub-questions that would help to address the main question. \
-Specifically pay attention also to the entities, relationships and terms extracted, as these indicate what type of \
-objects/relationships/terms you can ask about! Do not ask about entities, terms or relationships that are not mentioned \
-in the 'entities, relationships and terms' section.
+Пожалуйста, составь список хороших, полностью контекстуализированных дополнительных вопросов, которые помогли бы ответить на основной вопрос. \
+Обрати особое внимание на выделенные сущности, отношения и термины, поскольку они указывают, о каком типе \
+объектов/отношений/терминов вы можете задавать вопросы! Не спрашивай о сущностях, терминах или взаимосвязях, которые не упоминаются \
+в разделе "сущности, взаимосвязи и термины".
 
-Again, please find questions that are NOT overlapping too much with the already answered sub-questions or those that \
-already were suggested and failed. In other words - what can we try in addition to what has been tried so far?
+Еще раз, пожалуйста, найди вопросы, которые не слишком сильно пересекаются с уже полученными ответами на подвопросы или с теми, которые \
+уже были предложены и потерпели неудачу. Другими словами, что мы можем попробовать в дополнение к тому, что уже было опробовано?
 
-Generate the list of questions separated by one new line like this (and please ONLY ANSWER WITH THIS LIST! Do not \
-add any explanations or other text!):
+Сформируй список вопросов, разделенных новой строкой, как показано ниже (и, пожалуйста, ОТВЕЧАЙТЕ ТОЛЬКО НА ОСНОВЕ ЭТОГО СПИСКА! Не \
+добавляй никаких пояснений или другого текста!):
 
 <sub-question 1>
 <sub-question 2>
@@ -836,198 +838,197 @@ add any explanations or other text!):
 REFINED_ANSWER_PROMPT_W_SUB_QUESTIONS = f"""
 {{persona_specification}}
 
-Your task is to improve on a given answer to a question, as the initial answer was found to be lacking in some way.
+Твоя задача - улучшить данный ответ на вопрос, поскольку в первоначальном ответе, как оказалось, чего-то не хватало.
 
-Use the information provided below - and only the provided information - to write your new and improved answer.
+Используй приведенную ниже информацию - и только предоставленную информацию - для написания вашего нового и улучшенного ответа.
 
-The information provided below consists of:
-  1) an initial answer that was given but likely found to be lacking in some way.
-  2) a number of answered sub-questions - these are very important(!) and definitely should help you to answer the main \
-question. Note that the sub-questions have a type, 'initial' and 'refined'. The 'initial' ones were available for the \
-creation of the initial answer, but the 'refined' were not, they are new. So please use the 'refined' sub-questions in \
-particular to update/extend/correct/enrich the initial answer and to add more details/new facts!
-  3) a number of documents that were deemed relevant for the question. This is the context that you use largely for citations \
-(see below). So consider the answers to the sub-questions as guidelines to construct your new answer, but make sure you cite \
-the relevant document for a fact!
+Представленная ниже информация состоит из:
+  1) первоначального ответа, который был дан, но, вероятно, в нем чего-то не хватало.
+  2) ответов на ряд дополнительных вопросов - они очень важны(!) и определенно должны помочь вам ответить на основные \
+вопрос. Обрати внимание, что подвопросы имеют тип "начальный" и "уточненный". "Начальные" были доступны для \
+создания первоначального ответа, а "уточненные" - нет, они новые. Поэтому, пожалуйста, используй "уточненные" подзадачи, в \
+частности, чтобы обновить / расширить / исправить / обогатить первоначальный ответ и добавить больше деталей / новых фактов!
+  3) ряд документов, которые были сочтены относящимися к данному вопросу. Это контекст, который ты в основном используешь для цитирования \
+(см. ниже). Так что рассматривай ответы на подзадачи как руководство к построению твоего нового ответа, но убедитесь, что ты ссылаетешься на \
+соответствующий документ для подтверждения факта!
 
-It is critical that you provide proper inline citations to documents in the format [D1], [D2], [D3], etc! \
-Please use format [D1][D2] and NOT [D1, D2] format if you cite two or more documents together! \
-It is important that the citation is close to the information it supports. \
-DO NOT just list all of the citations at the very end. \
-Feel free to also cite sub-questions in addition to documents, \
-but make sure that you have documents cited with the sub-question citation. \
-If you want to cite both a document and a sub-question, please use [D1][Q3], or [D2][D7][Q4], etc. and always place the \
-document citation before the sub-question citation. Again, please NEVER cite sub-questions without a document citation! \
-Proper citations are very important for the user!
+Очень важно, чтобы ты правильно ссылался на документы в формате [D1], [D2], [D3] и т.д.! \
+Пожалуйста, используй формат [D1][D2], а не [D1, D2], если ты цитируешь два или более документа вместе! \
+Важно, чтобы цитата была близка к информации, которую она содержит. \
+НЕ приводи все ссылки в самом конце. \
+Не стесняйся также ссылаться на подзадачи в дополнение к документам, \
+но убедись, что у тебя есть документы, на которые ты ссылаешься вместе с подзадачей. \
+Если ты хочешь процитировать как документ, так и подзапрос, пожалуйста, используй [D1][Q3] или [D2][D7][Q4] и т.д. И всегда помещай ссылку на
+документ перед ссылкой на подзапрос. Еще раз, пожалуйста, НИКОГДА не приводи подзадачи без ссылки на документ! \
+Правильное цитирование очень важно для пользователя!
 
 {{history}}
 
 {COMMON_RAG_RULES}
 
-Again, you should be sure that the answer is supported by the information provided!
+Опять же, ты должен быть уверен, что ответ подтверждается предоставленной информацией!
 
-Try to keep your answer concise. But also highlight uncertainties you may have should there be substantial ones, \
-or assumptions you made.
+Постарайся, чтобы ваш ответ был кратким. Но также подчеркни возможные неопределенности, если они будут существенными,
+или сделанные тобой предположения.
 
-Here is the contextual information:
+Вот контекстная информация:
 {SEPARATOR_LINE_LONG}
 
-*Initial Answer that was found to be lacking:
+*Первоначальный ответ, который, как было установлено, отсутствовал:
 {SEPARATOR_LINE}
 {{initial_answer}}
 {SEPARATOR_LINE}
 
-*Answered Sub-questions (these should really help you to research your answer! They also contain questions/answers that \
-were not available when the original answer was constructed):
+* Ответы на дополнительные вопросы (они действительно должны помочь тебе в поиске ответа! Они также содержат вопросы/ ответы, которые \
+были недоступны при составлении первоначального ответа).:
 {{answered_sub_questions}}
 
-And here are the relevant documents that support the sub-question answers, and that are relevant for the actual question:
+И вот соответствующие документы, которые подтверждают ответы на дополнительные вопросы и которые имеют отношение к самому вопросу:
 {SEPARATOR_LINE}
 {{relevant_docs}}
 {SEPARATOR_LINE}
 
-Lastly, here is the main question I want you to answer based on the information above:
+Наконец, вот главный вопрос, на который я хочу, чтобы ты ответил, основываясь на приведенной выше информации:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please keep your answer brief and concise, and focus on facts and data. (Again, only state what you see in the documents for \
-sure and communicate if/in what way this may or may not relate to the question you need to answer! Use the answered \
-sub-questions as well, but be cautious and reconsider the docments again for validation.)
+Пожалуйста, отвечай кратко и сжато, сосредоточься на фактах и данных. (Еще раз, указывай только то, что ты видишь в документах, \
+и сообщай, может ли это иметь отношение к вопросу, на который тебе нужно ответить, или нет! Используй также ответы на \
+дополнительные вопросы, но будь осторожен и еще раз просмотри документы для проверки.)
 
-Answer:
+Ответ:
 """.strip()
 
 # sub_question_answer_str is empty
 REFINED_ANSWER_PROMPT_WO_SUB_QUESTIONS = f"""
 {{answered_sub_questions}}{{persona_specification}}
 
-Use the information provided below - and only the provided information - to answer the provided question.
+Используй приведенную ниже информацию - и только предоставленную информацию - для ответа на поставленный вопрос.
 
-The information provided below consists of:
-  1) an initial answer that was given but found to be lacking in some way.
-  2) a number of documents that were also deemed relevant for the question.
+Приведенная ниже информация состоит из:
+  1) первоначального ответа, который был дан, но в котором, как оказалось, чего-то не хватало.
+  2) ряда документов, которые также были сочтены относящимися к данному вопросу.
 
-It is critical that you provide proper inline citations to documents in the format [D1], [D2], [D3], etc! \
-Please use format [D1][D2] and NOT [D1, D2] format if you cite two or more documents together! \
-It is important that the citation is close to the information it supports. \
-DO NOT just list all of the citations at the very end of your response. Citations are very important for the user!
+Очень важно, чтобы ты правильно ссылались на документы в формате [D1], [D2], [D3] и т.д.! \
+Пожалуйста, используй формат [D1][D2], а не [D1, D2], если ты цитируешь два или более документа вместе! \
+Важно, чтобы цитата была близка к информации, которую она содержит. \
+НЕ стоит просто приводить все цитаты в самом конце вашего ответа. Цитаты очень важны для пользователя!
 
 {{history}}
 
 {COMMON_RAG_RULES}
-Again, you should be sure that the answer is supported by the information provided!
+Опять же, ты должен быть уверен, что ответ подтверждается предоставленной информацией!
 
-Try to keep your answer concise. But also highlight uncertainties you may have should there be substantial ones, \
-or assumptions you made.
+Постарайся, чтобы твой ответ был кратким. Но также подчеркни возможные неопределенности, если они будут существенными,
+или сделанные тобой предположения.
 
-Here is the contextual information:
+Вот контекстная информация:
 {SEPARATOR_LINE_LONG}
 
-*Initial Answer that was found to be lacking:
+*Первоначальный ответ, который, как было установлено, отсутствовал:
 {SEPARATOR_LINE}
 {{initial_answer}}
 {SEPARATOR_LINE}
 
-And here are relevant document information that support the sub-question answers, \
-or that are relevant for the actual question:
+А вот релевантная информация о документе, которая подтверждает ответы на дополнительные вопросы
+или имеет отношение к самому вопросу:
 {SEPARATOR_LINE}
 {{relevant_docs}}
 {SEPARATOR_LINE}
 
-Lastly, here is the question I want you to answer based on the information above:
+Наконец, вот вопрос, на который я хочу, чтобы ты ответил, основываясь на приведенной выше информации:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please keep your answer brief and concise, and focus on facts and data. (Again, only state what you see in the documents for \
-sure and communicate if/in what way this may or may not relate to the question you need to answer!)
+Пожалуйста, отвечай кратко и емко, сосредоточьтесь на фактах и данных. (Опять же, указывай только то, что ты видишь в документах, \
+и сообщай, может ли это иметь отношение к вопросу, на который тебе нужно ответить, или нет!)
 
-Answer:
+Ответ:
 """.strip()
 
 REFINED_ANSWER_VALIDATION_PROMPT = f"""
 {{persona_specification}}
 
-Your task is to verify whether a given answer is truthful and accurate, and supported by the facts that you \
-will be provided with.
+Твоя задача - проверить, является ли данный ответ правдивым и точным и подтверждается ли он фактами, которые тебе
+будут предоставлены.
 
-The information provided below consists of:
+Приведенная ниже информация состоит из:
 
-  1) a question that needed to be answered
+  1) вопрос, на который необходимо ответить
 
-  2) a proposed answer to the question, whose accuracy you should assess
+  2) предложенный ответ на вопрос, точность которого ты должен оценить
 
-  3) potentially, a brief summary of the history of the conversation thus far, as it may give more context \
-to the question. Note that the statements in the history are NOT considered as facts, ONLY but serve to to \
-give context to the question.
+  3) возможно, краткое изложение истории разговора на данный момент, поскольку это может дать больше информации о контексте
+вопроса. Обрати внимание, что утверждения в истории не рассматриваются как факты, а только служат для того, чтобы \
+придать контекст вопросу.
 
-  4) a number of answered sub-questions - you can take the answers as facts for these purposes.
+  4) несколько дополнительных вопросов с ответами - для этих целей ты можешь использовать ответы как факты.
 
-  5) a number of relevant documents that should support the answer and that you should use as fact, \
-i.e., if a statement in the document backs up a statement in the answer, then that statement in the answer \
-should be considered as true.
+  5) ряд соответствующих документов, которые должны подкреплять ответ и которые ты должен использовать как факт, \
+то есть, если утверждение в документе подтверждает утверждение в ответе, то это утверждение в ответе \
+следует считать истинным.
+
+ВАЖНЫЕ ПРАВИЛА И СООБРАЖЕНИЯ:
+
+ - Пожалуйста, рассмотри утверждения, сделанные в предложенном ответе, и оцени, являются ли они правдивыми и точными, основываясь \
+на предоставленных дополнительных ответах и документах. (Опять же, история НЕ рассматривается как факты!)
+
+ - Обратите особое внимание на:
+    * существенные утверждения, которые не подтверждаются дополнительными ответами или документами
+    * назначения и группировки, которые не подтверждаются, например, компания A является конкурентом компании B, но это не так \
+явно подтверждаются документами или дополнительными ответами, предположениями или интерпретациями, если только об этом прямо не просят
+
+ - Посмотри также на цитаты в предложенном ответе и оцени, соответствуют ли они заявлениям, \
+сделанным в предложенном ответе, в котором цитируется документ.
+
+ - Сгруппированы ли элементы в одном заголовке, если не все элементы относятся к категории заголовка? \
+(Пример: "Продукты, используемые компанией А", где некоторые перечисленные продукты не используются компанией А)
+
+ - Полностью ли предложенный ответ отвечает на вопрос?
+
+ - Является ли ответ конкретным для данного вопроса? Пример: если в вопросе запрашиваются цены на продукты компании А, \
+но в ответе указаны цены на товары компаний А и В, или на товары, в которых нельзя быть уверенным, что они принадлежат \
+Компания А, то это недостаточно конкретно для данного вопроса, и ответ следует отклонить.
+
+- Аналогично, если в вопросе запрашиваются свойства определенного класса, но предлагаемый ответ перечисляет или включает объекты, \
+которые не относятся к этому классу, без явного указания на это, то ответ следует считать неточным.
+
+ - Если в предложенном ответе содержатся какие-либо расчеты, которые не подтверждаются документами, их необходимо проверить. \
+Если какие-либо расчеты неверны, предложенный ответ следует считать недостоверным.
 
 
-IMPORTANT RULES AND CONSIDERATIONS:
-
- - Please consider the statements made in the proposed answer and assess whether they are truthful and accurate, based \
-on the provided sub-answered and the documents. (Again, the history is NOT considered as facts!)
-
- - Look in particular for:
-    * material statements that are not supported by the sub-answered or the documents
-    * assignments and groupings that are not supported, like company A is competitor of company B, but this is not \
-explicitly supported by documents or sub-answers, guesses or interpretations unless explicitly asked for
-
- - look also at the citations in the proposed answer and assess whether they are appropriate given the statements \
-made in the proposed answer that cites the document.
-
- - Are items grouped together amongst one headline where not all items belong to the category of the headline? \
-(Example: "Products used by Company A" where some products listed are not used by Company A)
-
- - Does the proposed answer address the question in full?
-
- - Is the answer specific to the question? Example: if the question asks for the prices for products by Company A, \
-but the answer lists the prices for products by Company A and Company B, or products it cannot be sure are by \
-Company A, then this is not quite specific enough to the question and the answer should be rejected.
-
-- Similarly, if the question asks for properties of a certain class but the proposed answer lists or includes entities \
-that are not of that class without very explicitly saying so, then the answer should be considered inaccurate.
-
- - If there are any calculations in the proposed answer that are not supported by the documents, they need to be tested. \
-If any calculation is wrong, the proposed answer should be considered as not trustworthy.
-
-
-Here is the information:
+Вот эта информация:
 {SEPARATOR_LINE_LONG}
 
-QUESTION:
+ВОПРОС:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-PROPOSED ANSWER:
+ПРЕДЛАГАЕМЫЙ ОТВЕТ:
 {SEPARATOR_LINE}
 {{proposed_answer}}
 {SEPARATOR_LINE}
 
-Here is the additional contextual information:
+Вот дополнительная контекстуальная информация:
 {SEPARATOR_LINE_LONG}
 
 {{history}}
 
-Sub-questions and their answers (to be considered as facts):
+Подвопросы и ответы на них (должны рассматриваться как факты):
 {SEPARATOR_LINE}
 {{answered_sub_questions}}
 {SEPARATOR_LINE}
 
-And here are the relevant documents that support the sub-question answers, and that are relevant for the actual question:
+И вот соответствующие документы, которые подтверждают ответы на дополнительные вопросы и которые имеют отношение к самому вопросу:
 {SEPARATOR_LINE}
 {{relevant_docs}}
 {SEPARATOR_LINE}
 
 
-Please think through this step by step. Format your response just as a string in the following format:
+Пожалуйста, продумайте это шаг за шагом. Отформатируйте свой ответ в виде строки в следующем формате:
 
 Analysis: <think through your reasoning as outlined in the 'IMPORTANT RULES AND CONSIDERATIONS' section above, \
 but keep it short. Come to a conclusion whether the proposed answer can be trusted>
@@ -1039,35 +1040,35 @@ analysis, but only say 'yes' (trustworthy) or 'no' (not trustworthy)>
 
 
 INITIAL_REFINED_ANSWER_COMPARISON_PROMPT = f"""
-For the given question, please compare the initial answer and the refined answer and determine if the refined answer is \
-substantially better than the initial answer, not just a bit better. Better could mean:
- - additional information
- - more comprehensive information
- - more concise information
- - more structured information
- - more details
- - new bullet points
- - substantially more document citations ([D1], [D2], [D3], etc.)
+Что касается данного вопроса, пожалуйста, сравни первоначальный ответ и уточненный вариант ответа и определи, является ли уточненный
+вариант ответа существенно лучше первоначального, а не просто немного лучше. Лучше может означать:
+ - дополнительная информация
+ - более полная информация
+ - более краткая информация
+ - более структурированная информация
+ - более подробная информация
+ - новые маркеры
+ - значительно больше ссылок на документы ([D1], [D2], [D3] и т.д.)
 
-Put yourself in the shoes of the user and think about whether the refined answer is really substantially better and \
-delivers really new insights than the initial answer.
+Поставь себя на место пользователя и подумай о том, действительно ли уточненный ответ значительно лучше и
+дает действительно новые идеи, чем первоначальный ответ.
 
-Here is the question:
+Вот вопрос:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Here is the initial answer:
+Вот первоначальный ответ:
 {SEPARATOR_LINE}
 {{initial_answer}}
 {SEPARATOR_LINE}
 
-Here is the refined answer:
+Вот точный ответ:
 {SEPARATOR_LINE}
 {{refined_answer}}
 {SEPARATOR_LINE}
 
-With these criteria in mind, is the refined answer substantially better than the initial answer?
+Принимая во внимание эти критерии, является ли уточненный ответ существенно лучше первоначального?
 
-Please answer with a simple "{YES}" or "{NO}"
+Пожалуйста, ответь простым "{YES}" или "{NO}"
 """.strip()
