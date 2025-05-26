@@ -23,13 +23,13 @@ from onyx.chat.models import StreamStopInfo
 from onyx.chat.models import StreamStopReason
 from onyx.chat.models import SubQuestionKey
 from onyx.chat.prompt_builder.answer_prompt_builder import AnswerPromptBuilder
-from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.agent_configs import AGENT_ALLOW_REFINEMENT
 from onyx.configs.agent_configs import INITIAL_SEARCH_DECOMPOSITION_ENABLED
+from onyx.configs.chat_configs import USE_DIV_CON_AGENT
 from onyx.configs.constants import BASIC_KEY
 from onyx.context.search.models import RerankingDetails
-from onyx.db.models import Persona
 from onyx.db.kg_config import get_kg_config_settings
+from onyx.db.models import Persona
 from onyx.file_store.utils import InMemoryChatFile
 from onyx.llm.interfaces import LLM
 from onyx.tools.force import ForceUseTool
@@ -141,9 +141,7 @@ class Answer:
         if self.graph_config.behavior.use_agentic_search and (
             self.graph_config.inputs.persona
             and self.graph_config.behavior.kg_config_settings.KG_ENABLED
-            and self.graph_config.inputs.persona.name.startswith(
-                "KG Dev"
-            )
+            and self.graph_config.inputs.persona.name.startswith("KG Dev")
         ):
             run_langgraph = run_kb_graph
         elif self.graph_config.behavior.use_agentic_search:
