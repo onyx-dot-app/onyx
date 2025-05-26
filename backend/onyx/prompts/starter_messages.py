@@ -1,37 +1,37 @@
 PERSONA_CATEGORY_GENERATION_PROMPT = """
-Based on the assistant's name, description, and instructions, generate {num_categories}
- **unique and diverse** categories that represent different types of starter messages a user
- might send to initiate a conversation with this chatbot assistant.
+На основе имени, описания и инструкций помощника сгенерируй {num_categories}
+  **уникальные и разнообразные категории**, которые представляют различные типы начальных сообщений, которые пользователь
+может отправить, чтобы начать разговор с этим чат-ботом-помощником.
 
-**Ensure that the categories are relevant and cover
-topics related to the assistant's capabilities.**
+**Убедись, что категории являются актуальными и охватывают
+темы, связанные с возможностями ассистента.**
 
-Provide the categories as a JSON array of strings **without any code fences or additional text**.
+Предоставьте категории в виде массива строк в формате JSON ** без каких-либо ограничений кода или дополнительного текста **.
 
-**Context about the assistant:**
-- **Name**: {name}
-- **Description**: {description}
-- **Instructions**: {instructions}
+**Информация о ассистенте:**
+- **Имя**: {name}
+- **Описание**: {description}
+- **Инструкция**: {instructions}
 """
 
 PERSONA_STARTER_MESSAGE_CREATION_PROMPT = """
-Create a starter message that a **user** might send to initiate a conversation with a chatbot assistant.
+Создай начальное сообщение, которое пользователь может отправить, чтобы начать разговор с чат-ботом-ассистентом.
 
 {category_prompt}
 
-Your response should only include the actual message that the user would send to the assistant.
-This should be natural, engaging, and encourage a helpful response from the assistant.
-**Avoid overly specific details; keep the message general and broadly applicable.**
+В вашем ответе должно содержаться только то сообщение, которое пользователь отправил бы ассистенту.
+Оно должно быть естественным, увлекательным и способствовать получению полезного ответа от ассистента.
+** Избегай излишне специфичных деталей; оставь сообщение общим и широко применимым.**
 
-For example:
-- Instead of "I've just adopted a 6-month-old Labrador puppy who's pulling on the leash,"
-write "I'm having trouble training my new puppy to walk nicely on a leash."
-Do not provide any additional text or explanation and be extremely concise
+Например:
+- Вместо "Я только что усыновил 6-месячного щенка лабрадора, который тянет за поводок"
+напиши "У меня возникли проблемы с обучением моего нового щенка хорошо ходить на поводке".
+Не приводи никаких дополнительных текстов или объяснений и будь предельно лаконичным.
 
-**Context about the assistant:**
-- **Name**: {name}
-- **Description**: {description}
-- **Instructions**: {instructions}
+**Информация о ассистенте:**
+- **Имя**: {name}
+- **Описание**: {description}
+- **Инструкция**: {instructions}
 """.strip()
 
 
