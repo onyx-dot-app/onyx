@@ -31,12 +31,18 @@ GIGACHAT_TOKEN_DELTA = 5
 GIGACHAT_MAX_OUTPUT_TOKENS = 1200
 GIGACHAT_TIMEOUT = 120
 
+_token: str | None = None
+_expires_at: datetime = datetime.min
+
 
 class GigachatModelServer(LLM):
 
     def get_token(self) -> str:
-        if self._token and (datetime.fromtimestamp(self._expires_at) - datetime.now()) > timedelta(minutes=GIGACHAT_TOKEN_DELTA):
-            return self._token
+        global _token, _expires_at
+
+        now = datetime.now()
+        if _token and _expires_at > now + timedelta(minutes=GIGACHAT_TOKEN_DELTA):
+            return _token
 
         rq_uid = str(uuid.uuid4())
         headers = {
@@ -49,19 +55,19 @@ class GigachatModelServer(LLM):
         payload = {
             "scope": self._scope
         }
-        logger.info(payload)
+
         try:
             response = requests.post(GIGACHAT_AUTH_URL, headers=headers, data=payload, verify=False)
             if not response.ok:
-                raise Exception(f"Cant't get oauth token respone: {response.text}")
+                raise Exception(f"Can't get oauth token: {response.text}")
+
             res_body = response.json()
-            token = res_body["access_token"]
-            expires_at = res_body["expires_at"]
-            self._token = token
-            self._expires_at = expires_at / 1000
-            return token
+            _token = res_body["access_token"]
+            _expires_at = datetime.fromtimestamp(res_body["expires_at"] / 1000)
+
+            return _token
         except requests.RequestException as e:
-            print(f"Ошибка: {str(e)}")
+            logger.error(f"Token request failed: {str(e)}")
             raise e
 
     @property
@@ -98,7 +104,8 @@ class GigachatModelServer(LLM):
         self._scope = custom_config['scope']
 
     @observe(as_type="generation")
-    def _execute(self, input: LanguageModelInput) -> AIMessage:
+    def _execute(self, input: LanguageModelInput, tools: list[dict] | None = None,
+                 tool_choice: ToolChoiceOptions | None = None) -> AIMessage:
         token = self.get_token()
         langfuse_context.update_current_observation(
             input=input,
@@ -106,7 +113,7 @@ class GigachatModelServer(LLM):
             model_parameters={
                 "stream": False,
                 "repetition_penalty": 1
-            }
+            },
         )
 
         headers = {
@@ -123,13 +130,17 @@ class GigachatModelServer(LLM):
                     "content": convert_lm_input_to_basic_string(input)
                 }
             ],
+            "function_call": tool_choice,
+            "functions": tools,
             "stream": False,
             "repetition_penalty": 1
         })
-
+        logger.info(data)
         try:
             response = requests.request("POST", self._endpoint, headers=headers, data=data, verify=False)
-            response_content = json.loads(response.text)["choices"][0]["message"]["content"]
+            response_content = json.loads(response.text)
+            logger.info(response_content)
+            response_content = response_content["choices"][0]["message"]["content"]
             langfuse_context.update_current_observation(
                 output=response_content
             )

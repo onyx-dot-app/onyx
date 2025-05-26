@@ -7,6 +7,7 @@ from typing import Any
 from typing import cast
 
 import litellm  # type: ignore
+from litellm.integrations.langfuse import LangFuseLogger
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -24,6 +25,7 @@ from langchain_core.messages import SystemMessageChunk
 from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
+from langfuse import Langfuse
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
@@ -33,6 +35,9 @@ from onyx.configs.model_configs import (
 )
 from onyx.configs.model_configs import GEN_AI_TEMPERATURE
 from onyx.configs.model_configs import LITELLM_EXTRA_BODY
+from onyx.configs.model_configs import LANGFUSE_PUBLIC_KEY
+from onyx.configs.model_configs import LANGFUSE_SECRET_KEY
+from onyx.configs.model_configs import LANGFUSE_HOST
 from onyx.llm.interfaces import LLM
 from onyx.llm.interfaces import LLMConfig
 from onyx.llm.interfaces import ToolChoiceOptions
@@ -42,6 +47,10 @@ from onyx.server.utils import mask_string
 from onyx.utils.logger import setup_logger
 from onyx.utils.long_term_log import LongTermLogger
 
+
+os.environ["LANGFUSE_PUBLIC_KEY"] = LANGFUSE_PUBLIC_KEY
+os.environ["LANGFUSE_SECRET_KEY"] = LANGFUSE_SECRET_KEY
+os.environ["LANGFUSE_HOST"] = LANGFUSE_HOST
 
 logger = setup_logger()
 
@@ -278,6 +287,13 @@ class DefaultMultiLLM(LLM):
         self._api_version = api_version
         self._custom_llm_provider = custom_llm_provider
         self._long_term_logger = long_term_logger
+        self.langfuse = Langfuse(
+            public_key=LANGFUSE_PUBLIC_KEY,
+            secret_key=LANGFUSE_SECRET_KEY,
+            host=LANGFUSE_HOST
+        )
+        self.langfuse_logger = LangFuseLogger()
+        litellm.callbacks = ["langfuse"]
 
         # This can be used to store the maximum output tokens for this model.
         # self._max_output_tokens = (

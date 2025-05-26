@@ -22,6 +22,7 @@ class OnyxVersion:
 
 
 global_version = OnyxVersion()
+global_version.set_ee()
 
 
 def set_is_ee_based_on_env_variable() -> None:
@@ -56,6 +57,7 @@ def fetch_versioned_implementation(module: str, attribute: str) -> Any:
     """
     logger.debug("Fetching versioned implementation for %s.%s", module, attribute)
     is_ee = global_version.is_ee_version()
+    logger.info(is_ee)
 
     module_full = f"ee.{module}" if is_ee else module
     try:
