@@ -31,12 +31,22 @@ from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import SIMPLE_SQL_CORRECTION_PROMPT
 from onyx.prompts.kg_prompts import SIMPLE_SQL_PROMPT
 from onyx.prompts.kg_prompts import SOURCE_DETECTION_PROMPT
-from onyx.prompts.kg_prompts import SQL_AGGREGATION_REMOVAL_PROMPT
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_with_timeout
 
 
 logger = setup_logger()
+
+
+def _drop_temp_views(
+    allowed_docs_view_name: str, kg_relationships_view_name: str
+) -> None:
+    with get_session_with_current_tenant() as db_session:
+        drop_views(
+            db_session,
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
 
 
 def _build_entity_explanation_str(entity_normalization_map: dict[str, str]) -> str:
@@ -57,44 +67,12 @@ def _sql_is_aggregate_query(sql_statement: str) -> bool:
     )
 
 
-def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
-    """
-    Remove aggregate functions from the SQL statement.
-    """
-
-    sql_aggregation_removal_prompt = SQL_AGGREGATION_REMOVAL_PROMPT.replace(
-        "---sql_statement---", sql_statement
-    )
-
-    msg = [
-        HumanMessage(
-            content=sql_aggregation_removal_prompt,
-        )
-    ]
-
-    try:
-        llm_response = run_with_timeout(
-            KG_SQL_GENERATION_TIMEOUT,
-            llm.invoke,
-            prompt=msg,
-            timeout_override=25,
-            max_tokens=800,
-        )
-
-        cleaned_response = (
-            str(llm_response.content).replace("```json\n", "").replace("\n```", "")
-        )
-        sql_statement = cleaned_response.split("<sql>")[1].split("</sql>")[0].strip()
-        sql_statement = sql_statement.replace("sql", "").strip()
-
-    except Exception as e:
-        logger.error(f"Error in strategy generation: {e}")
-        raise e
-
-    return sql_statement
-
-
-def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
+def _get_source_documents(
+    sql_statement: str,
+    llm: LLM,
+    allowed_docs_view_name: str,
+    kg_relationships_view_name: str,
+) -> str | None:
     """
     Generate SQL to retrieve source documents based on the input sql statement.
     """
@@ -132,6 +110,11 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
             )
         else:
             logger.error(f"Could not generate source documents SQL: {e}")
+
+        _drop_temp_views(
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
         return None
 
     return sql_statement
@@ -282,6 +265,11 @@ def generate_simple_sql(
 
         except Exception as e:
             logger.error(f"Error in strategy generation: {e}")
+
+            _drop_temp_views(
+                allowed_docs_view_name=allowed_docs_view_name,
+                kg_relationships_view_name=kg_relationships_view_name,
+            )
             raise e
 
         logger.debug(f"A3 - sql_statement: {sql_statement}")
@@ -321,13 +309,24 @@ def generate_simple_sql(
             logger.error(
                 f"Error in generating the sql correction: {e}. Original model response: {cleaned_response}"
             )
+
+            _drop_temp_views(
+                allowed_docs_view_name=allowed_docs_view_name,
+                kg_relationships_view_name=kg_relationships_view_name,
+            )
+
             raise e
 
         logger.debug(f"A3 - sql_statement after correction: {sql_statement}")
 
         # Get SQL for source documents
 
-        source_documents_sql = _get_source_documents(sql_statement, llm=primary_llm)
+        source_documents_sql = _get_source_documents(
+            sql_statement,
+            llm=primary_llm,
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
 
         logger.info(f"A3 source_documents_sql: {source_documents_sql}")
 
@@ -373,12 +372,10 @@ def generate_simple_sql(
         else:
             source_document_results = None
 
-        with get_session_with_current_tenant() as db_session:
-            drop_views(
-                db_session,
-                allowed_docs_view_name=allowed_docs_view_name,
-                kg_relationships_view_name=kg_relationships_view_name,
-            )
+        _drop_temp_views(
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
 
         logger.info(f"A3 - Number of query_results: {len(query_results)}")
 

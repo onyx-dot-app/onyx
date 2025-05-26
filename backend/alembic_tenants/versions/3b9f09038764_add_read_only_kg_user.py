@@ -31,18 +31,21 @@ def upgrade() -> None:
         op.execute(
             text(
                 f"""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
-                    EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{DB_READONLY_USER}', '{DB_READONLY_PASSWORD}');
-                    -- Explicitly revoke all privileges including CONNECT
-                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
-                    -- Grant only the CONNECT privilege
-                    EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{DB_READONLY_USER}');
-                END IF;
-            END
-            $$;
-        """
+                DO $$
+                BEGIN
+                    -- Check if the read-only user already exists
+                    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                        -- Create the read-only user with the specified password
+                        EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{DB_READONLY_USER}', '{DB_READONLY_PASSWORD}');
+                        -- First revoke all privileges to ensure a clean slate
+                        EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
+                        -- Grant only the CONNECT privilege to allow the user to connect to the database
+                        -- but not perform any operations without additional specific grants
+                        EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{DB_READONLY_USER}');
+                    END IF;
+                END
+                $$;
+                """
             )
         )
 

@@ -46,18 +46,21 @@ def upgrade() -> None:
         op.execute(
             text(
                 f"""
-            DO $$
-            BEGIN
-                IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
-                    EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{DB_READONLY_USER}', '{DB_READONLY_PASSWORD}');
-                    -- Explicitly revoke all privileges including CONNECT
-                    EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
-                    -- Grant only the CONNECT privilege
-                    EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{DB_READONLY_USER}');
-                END IF;
-            END
-            $$;
-        """
+                DO $$
+                BEGIN
+                    -- Check if the read-only user already exists
+                    IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '{DB_READONLY_USER}') THEN
+                        -- Create the read-only user with the specified password
+                        EXECUTE format('CREATE USER %I WITH PASSWORD %L', '{DB_READONLY_USER}', '{DB_READONLY_PASSWORD}');
+                        -- First revoke all privileges to ensure a clean slate
+                        EXECUTE format('REVOKE ALL ON DATABASE %I FROM %I', current_database(), '{DB_READONLY_USER}');
+                        -- Grant only the CONNECT privilege to allow the user to connect to the database
+                        -- but not perform any operations without additional specific grants
+                        EXECUTE format('GRANT CONNECT ON DATABASE %I TO %I', current_database(), '{DB_READONLY_USER}');
+                    END IF;
+                END
+                $$;
+                """
             )
         )
 
@@ -448,27 +451,33 @@ def upgrade() -> None:
         "ON kg_entity_extraction_staging USING GIN (clustering_name gin_trgm_ops)"
     )
 
-    if not MULTI_TENANT:
-        # Create trigger to update clustering columns if entity w/ doc_id is created
-        alphanum_pattern = r"[^a-z0-9]+"
-        op.execute(
+    # Create trigger to update clustering columns if entity w/ doc_id is created
+    alphanum_pattern = r"[^a-z0-9]+"
+    op.execute(
+        text(
             f"""
             CREATE OR REPLACE FUNCTION update_kg_entity_clustering()
             RETURNS TRIGGER AS $$
             DECLARE
                 doc_semantic_id text;
                 cleaned_semantic_id text;
+                max_length integer := 1000; -- Limit length for performance
             BEGIN
                 -- Get semantic_id from document
                 SELECT semantic_id INTO doc_semantic_id
                 FROM document
                 WHERE id = NEW.document_id;
 
-                -- Clean the semantic_id with regex patterns
+                -- Clean the semantic_id with regex patterns and handle NULLs
                 cleaned_semantic_id = regexp_replace(
-                    lower(COALESCE(doc_semantic_id, NEW.name)),
+                    lower(COALESCE(doc_semantic_id, NEW.name, '')),
                     '{alphanum_pattern}', '', 'g'
                 );
+
+                -- Truncate if too long for performance
+                IF length(cleaned_semantic_id) > max_length THEN
+                    cleaned_semantic_id = left(cleaned_semantic_id, max_length);
+                END IF;
 
                 -- Set clustering_name to cleaned version and generate trigrams
                 NEW.clustering_name = cleaned_semantic_id;
@@ -478,7 +487,9 @@ def upgrade() -> None:
             $$ LANGUAGE plpgsql;
             """
         )
-        op.execute(
+    )
+    op.execute(
+        text(
             """
             CREATE OR REPLACE FUNCTION update_kg_entity_extraction_clustering()
             RETURNS TRIGGER AS $$
@@ -486,35 +497,38 @@ def upgrade() -> None:
                 doc_semantic_id text;
             BEGIN
                 -- Get semantic_id from document
+                -- If no document is found, doc_semantic_id will be NULL and COALESCE will use NEW.name
                 SELECT semantic_id INTO doc_semantic_id
                 FROM document
                 WHERE id = NEW.document_id;
 
                 -- Set clustering_name to semantic_id
-                NEW.clustering_name = lower(COALESCE(doc_semantic_id, NEW.name));
+                NEW.clustering_name = lower(COALESCE(doc_semantic_id, NEW.name, ''));
                 RETURN NEW;
             END;
             $$ LANGUAGE plpgsql;
             """
         )
-        for table, function in (
-            ("kg_entity", "update_kg_entity_clustering"),
-            ("kg_entity_extraction_staging", "update_kg_entity_extraction_clustering"),
-        ):
-            trigger = f"{function}_trigger"
-            op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON {table}")
-            op.execute(
-                f"""
-                CREATE TRIGGER {trigger}
-                    BEFORE INSERT
-                    ON {table}
-                    FOR EACH ROW
-                    EXECUTE FUNCTION {function}();
-                """
-            )
-
-        # Create trigger to update kg_entity clustering_name and its trigrams when document.clustering_name changes
+    )
+    for table, function in (
+        ("kg_entity", "update_kg_entity_clustering"),
+        ("kg_entity_extraction_staging", "update_kg_entity_extraction_clustering"),
+    ):
+        trigger = f"{function}_trigger"
+        op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON {table}")
         op.execute(
+            f"""
+            CREATE TRIGGER {trigger}
+                BEFORE INSERT
+                ON {table}
+                FOR EACH ROW
+                EXECUTE FUNCTION {function}();
+            """
+        )
+
+    # Create trigger to update kg_entity clustering_name and its trigrams when document.clustering_name changes
+    op.execute(
+        text(
             f"""
             CREATE OR REPLACE FUNCTION update_kg_entity_clustering_from_doc()
             RETURNS TRIGGER AS $$
@@ -522,6 +536,7 @@ def upgrade() -> None:
                 cleaned_semantic_id text;
             BEGIN
                 -- Clean the semantic_id with regex patterns
+                -- If semantic_id is NULL, COALESCE will use empty string
                 cleaned_semantic_id = regexp_replace(
                     lower(COALESCE(NEW.semantic_id, '')),
                     '{alphanum_pattern}', '', 'g'
@@ -538,11 +553,15 @@ def upgrade() -> None:
             $$ LANGUAGE plpgsql;
             """
         )
-        op.execute(
+    )
+    op.execute(
+        text(
             """
             CREATE OR REPLACE FUNCTION update_kg_entity_extraction_clustering_from_doc()
             RETURNS TRIGGER AS $$
             BEGIN
+                -- Update clustering name for all entities in staging referencing this document
+                -- If semantic_id is NULL, COALESCE will use empty string
                 UPDATE kg_entity_extraction_staging
                 SET
                     clustering_name = lower(COALESCE(NEW.semantic_id, ''))
@@ -552,21 +571,22 @@ def upgrade() -> None:
             $$ LANGUAGE plpgsql;
             """
         )
-        for function in (
-            "update_kg_entity_clustering_from_doc",
-            "update_kg_entity_extraction_clustering_from_doc",
-        ):
-            trigger = f"{function}_trigger"
-            op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON document")
-            op.execute(
-                f"""
-                CREATE TRIGGER {trigger}
-                    AFTER UPDATE OF semantic_id
-                    ON document
-                    FOR EACH ROW
-                    EXECUTE FUNCTION {function}();
-                """
-            )
+    )
+    for function in (
+        "update_kg_entity_clustering_from_doc",
+        "update_kg_entity_extraction_clustering_from_doc",
+    ):
+        trigger = f"{function}_trigger"
+        op.execute(f"DROP TRIGGER IF EXISTS {trigger} ON document")
+        op.execute(
+            f"""
+            CREATE TRIGGER {trigger}
+                AFTER UPDATE OF semantic_id
+                ON document
+                FOR EACH ROW
+                EXECUTE FUNCTION {function}();
+            """
+        )
 
 
 def downgrade() -> None:

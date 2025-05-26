@@ -77,19 +77,16 @@ def set_kg_processing_in_progress_status(
         in_progress: Whether KG processing is in progress (True) or not (False)
     """
     # Convert boolean to string and wrap in list as required by the model
-
     value = [str(in_progress).lower()]
+    kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"  # Default value
 
-    kg_variable_name = ""
-    if processing_type == KGProcessingType.EXTRACTION:
-        kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"
-    elif processing_type == KGProcessingType.CLUSTERING:
+    if processing_type == KGProcessingType.CLUSTERING:
         kg_variable_name = "KG_CLUSTERING_IN_PROGRESS"
 
     # Use PostgreSQL's upsert functionality
     stmt = (
         pg_insert(KGConfig)
-        .values(kg_variable_name=kg_variable_name, kg_variable_values=value)
+        .values(kg_variable_name=str(kg_variable_name), kg_variable_values=value)
         .on_conflict_do_update(
             index_elements=["kg_variable_name"], set_=dict(kg_variable_values=value)
         )
@@ -110,10 +107,9 @@ def get_kg_processing_in_progress_status(
     Returns:
         bool: True if KG processing is in progress, False otherwise
     """
-    kg_variable_name = ""
-    if processing_type == KGProcessingType.EXTRACTION:
-        kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"
-    elif processing_type == KGProcessingType.CLUSTERING:
+
+    kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"  # Default value
+    if processing_type == KGProcessingType.CLUSTERING:
         kg_variable_name = "KG_CLUSTERING_IN_PROGRESS"
 
     config = (
