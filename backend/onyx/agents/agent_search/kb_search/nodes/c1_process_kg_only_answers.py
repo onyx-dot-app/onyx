@@ -1,6 +1,4 @@
 from datetime import datetime
-from typing import Any
-from typing import cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
@@ -12,7 +10,6 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
 )
 from onyx.agents.agent_search.kb_search.states import MainState
 from onyx.agents.agent_search.kb_search.states import ResultsDataUpdate
-from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -24,15 +21,6 @@ from onyx.utils.logger import setup_logger
 
 
 logger = setup_logger()
-
-
-def _general_format(result: dict[str, Any]) -> str:
-    name = result.get("name")
-    entity_type_id_name: Any = result.get("entity_type_id_name")
-    result.get("id_name")
-
-    assert entity_type_id_name is str
-    return f"{entity_type_id_name.capitalize()}:: {name}"
 
 
 def _get_formated_source_reference_results(
@@ -73,10 +61,7 @@ def process_kg_only_answers(
 
     node_start_time = datetime.now()
 
-    graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.prompt_builder.raw_user_query
     query_results = state.sql_query_results
-    state.individualized_query_results
     source_document_results = state.source_document_results
 
     # we use this stream write explicitly

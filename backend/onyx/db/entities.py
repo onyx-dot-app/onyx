@@ -192,11 +192,8 @@ def delete_entities_by_id_names(
         _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging] = (
             KGEntityExtractionStaging
         )
-
-    elif kg_stage == KGStage.NORMALIZED:
-        _KGEntityObject = KGEntity
     else:
-        raise ValueError(f"Invalid KGStage: {kg_stage}")
+        _KGEntityObject = KGEntity
 
     deleted_count = (
         db_session.query(_KGEntityObject)

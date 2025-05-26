@@ -148,7 +148,7 @@ def filtered_search(
         filtered_search_answer = str(llm_response.content).replace("```json\n", "")
 
     except Exception as e:
-        raise ValueError(f"Error in research_object_source: {e}")
+        raise ValueError(f"Error in filtered_search: {e}")
 
     step_answer = "Filtered search is complete."
 
@@ -163,7 +163,7 @@ def filtered_search(
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
-                node_name="generate simple sql",
+                node_name="filtered search",
                 node_start_time=node_start_time,
             )
         ],

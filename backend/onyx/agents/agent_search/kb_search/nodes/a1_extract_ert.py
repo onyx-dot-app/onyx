@@ -54,7 +54,6 @@ def extract_ert(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    question = graph_config.inputs.prompt_builder.raw_user_query
 
     if graph_config.tooling.search_tool is None:
         raise ValueError("Search tool is not set")
@@ -145,8 +144,7 @@ def extract_ert(
     entities_no_attributes = [
         entity.split("--")[0] for entity in entity_extraction_result.entities
     ]
-    entities_string_for_relationships = f"Entities: {entities_no_attributes}\n"
-    ert_entities_string = f"Entities: {entities_string_for_relationships}\n"
+    ert_entities_string = f"Entities: {entities_no_attributes}\n"
 
     ### get the relationships
 

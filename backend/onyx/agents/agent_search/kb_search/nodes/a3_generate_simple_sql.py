@@ -96,7 +96,7 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
 
 def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
     """
-    Remove aggregate functions from the SQL statement.
+    Generate SQL to retrieve source documents based on the input sql statement.
     """
 
     source_detection_prompt = SOURCE_DETECTION_PROMPT.replace(

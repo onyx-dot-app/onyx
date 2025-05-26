@@ -80,6 +80,7 @@ def set_kg_processing_in_progress_status(
 
     value = [str(in_progress).lower()]
 
+    kg_variable_name = ""
     if processing_type == KGProcessingType.EXTRACTION:
         kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"
     elif processing_type == KGProcessingType.CLUSTERING:
@@ -109,6 +110,7 @@ def get_kg_processing_in_progress_status(
     Returns:
         bool: True if KG processing is in progress, False otherwise
     """
+    kg_variable_name = ""
     if processing_type == KGProcessingType.EXTRACTION:
         kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"
     elif processing_type == KGProcessingType.CLUSTERING:

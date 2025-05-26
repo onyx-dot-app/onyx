@@ -26,7 +26,7 @@ are provided above, you can only extract those types of entities! Again, there s
 option. Pick this if none of the others apply.>],
 "relationships": [<a list of IMPORTANT relationships between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>::<source_entity_name>__<a word or two that captures the nature \
-of the relationship (if appropriate, include a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.). \
+of the relationship (if appropriate, include a judgment, as in 'likes' or 'dislikes' vs. 'uses', etc.). \
 Common relationships may be: 'likes', 'dislikes', 'uses', 'is interested in', 'mentions', 'addresses', \
 'participates in', etc., but look at the text to find the most appropriate relationship. \
 Use spaces here for word separation. DO NOT INCLUDE RELATIONSHIPS THAT ARE SIMPLY MENTIONED, BUT ONLY \
@@ -40,7 +40,7 @@ identify in the text, each formatted simply as '<term>'>]
 QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization)>. Each entity \
-also should be followed by a list of attribute filters for for the entity, if referred to in the \
+also should be followed by a list of attribute filters for the entity, if referred to in the \
 question for that entity. Example: 'ACCOUNT::* -- [account_type: customer]' should the question be \
 'list all customer accounts', and ACCOUNT was an entity type with this attribute key/value allowed.] \
 "terms": [<a comma-separated list of high-level terms (each one one or two words) that you can reliably \
@@ -56,7 +56,7 @@ but only use the information provided to infer whether there should be a time_fi
 QUERY_RELATIONSHIP_EXTRACTION_FORMATTING_PROMPT = r"""
 {{"relationships": [<a list of relationships between the identified entities, formatted as \
 '<SOURCE_ENTITY_TYPE_NAME>::<source_entity_name>__<a word or two that captures the nature \
-of the relationship (if appropriate, include a judgement, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
+of the relationship (if appropriate, include a judgment, as in 'likes' or 'dislikes' vs. 'uses', etc.)>\
 __<TARGET_ENTITY_TYPE_NAME>::<target_entity_name>'>]
 }}
 """.strip()
@@ -383,7 +383,7 @@ Here are the options for the relationship types(!) between the entities you have
 ---relationship_type_options---
 {SEPARATOR_LINE}
 
-These types are, if any were identified, formated as \
+These types are, if any were identified, formatted as \
 <SOURCE_ENTITY_TYPE>__<RELATIONSHIP_SHORTHAND>__<TARGET_ENTITY_TYPE>, and they \
 limit the allowed relationships that you can extract. You would then though use the actual full entities as in:
 
@@ -511,10 +511,10 @@ And here is the beginning of the call, including title and participants:
 
 STRATEGY_GENERATION_PROMPT = f"""
 Now you need to decide what type of strategy to use to answer a given question, how ultimately \
-the answer should be formatted to match the users expectation, and what an appropriate question \
+the answer should be formatted to match the user's expectation, and what an appropriate question \
 to/about 'one object or one set of objects' may be, should the answer logically benefit from a divide \
 and conquer strategy, or it naturally relates to one or few individual objects. Also, you are \
-supposed whether a divide and conquer strategy would be appropriate.
+supposed to determine whether a divide and conquer strategy would be appropriate.
 
 
 Here are the entity types that are available in the knowledge graph:
@@ -547,7 +547,7 @@ Should the question be answered as a SEARCH ('filtered search'), or as a SQL ('S
 
 The options are:
 1. SEARCH: A filtered search simply uses the entities and relationships that you have been extracted earlier and \
-applies those as filters to search the underlying documents, which are indexed with them. Examples  are \
+applies those as filters to search the underlying documents, which are indexed with them. Examples are \
 'what did Nike say about the Analyzer product?', or 'what did I say in my calls with Nike about pricing?'. So this \
 is used really when there is *no implicit or explicit constraint or requirements* on underlying source documents \
 outside of filters, and there is no ordering, no limiting their number, etc. So use this for a question that \

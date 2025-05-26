@@ -1,5 +1,4 @@
 from datetime import datetime
-from typing import cast
 
 from langchain_core.runnables import RunnableConfig
 from langgraph.types import StreamWriter
@@ -12,7 +11,6 @@ from onyx.agents.agent_search.kb_search.graph_utils import (
 )
 from onyx.agents.agent_search.kb_search.states import ConsolidatedResearchUpdate
 from onyx.agents.agent_search.kb_search.states import MainState
-from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
@@ -30,10 +28,6 @@ def consolidate_individual_deep_search(
 
     _KG_STEP_NR = 4
     node_start_time = datetime.now()
-
-    graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.prompt_builder.raw_user_query
-    state.entities_types_str
 
     research_object_results = state.research_object_results
 
@@ -58,7 +52,7 @@ def consolidate_individual_deep_search(
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",
-                node_name="generate simple sql",
+                node_name="consolidate individual deep search",
                 node_start_time=node_start_time,
             )
         ],

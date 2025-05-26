@@ -343,7 +343,7 @@ def get_kg_enabled_connectors(db_session: Session) -> list[KGConnectorData]:
     Args:
         db_session (Session): The database session to use
     Returns:
-        list[int]: List of connector IDs that have enabled KG extraction but have unprocessed documents
+        list[KGConnectorData]: List of connector IDs with KG extraction enabled but have unprocessed documents
     """
     try:
         stmt = select(Connector.id, Connector.source).where(

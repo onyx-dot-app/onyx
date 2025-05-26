@@ -104,9 +104,10 @@ def get_document_chunks_for_kg_processing(
     Retrieves chunks from Vespa for the given document IDs and converts them to KGChunks.
 
     Args:
-        document_ids (list[str]): List of document IDs to fetch chunks for
+        document_id (str): ID of the document to fetch chunks for
+        deep_extraction (bool): Whether to perform deep extraction
         index_name (str): Name of the Vespa index
-        tenant_id (str): ID of the tenant
+        batch_size (int): Number of chunks to fetch per batch
 
     Yields:
         list[KGChunk]: Batches of chunks ready for KG processing

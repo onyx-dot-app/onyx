@@ -1,5 +1,4 @@
 from typing import cast
-from typing import Set
 
 from rapidfuzz.fuzz import ratio
 from sqlalchemy import text
@@ -133,7 +132,7 @@ def kg_clustering(
             if any(char.isdigit() for char in similar.clustering_name):
                 continue
             score = ratio(similar.clustering_name, entity.clustering_name)
-            if score >= KG_CLUSTERING_THRESHOLD and score > best_score:
+            if score >= KG_CLUSTERING_THRESHOLD * 100 and score > best_score:
                 best_score = score
                 best_entity = similar
 

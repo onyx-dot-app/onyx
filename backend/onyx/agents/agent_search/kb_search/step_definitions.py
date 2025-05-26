@@ -15,7 +15,7 @@ STEP_DESCRIPTIONS: dict[int, KGSteps] = {
         activities=["Query Execution Strategy", "Answer Format"],
     ),
     3: KGSteps(
-        description="Querying the Knowledge Graph..",
+        description="Querying the Knowledge Graph...",
         activities=[
             "Knowledge Graph Query",
             "Knowledge Graph Query Results",

@@ -1156,8 +1156,8 @@ def get_kg_doc_info_for_entity_name(
         doc_id=document_id,
         doc_semantic_id=result[0],
         doc_link=result[1],
-        semantic_entity_name=f"{entity_type.upper()}:{result.semantic_id}",
-        semantic_linked_entity_name=f"[{entity_type.upper()}:{result.semantic_id}]({result[1]})",
+        semantic_entity_name=f"{entity_type.upper()}:{result[0]}",
+        semantic_linked_entity_name=f"[{entity_type.upper()}:{result[0]}]({result[1]})",
     )
 
 
