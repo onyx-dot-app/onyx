@@ -104,7 +104,8 @@ class GigachatModelServer(LLM):
         self._scope = custom_config['scope']
 
     @observe(as_type="generation")
-    def _execute(self, input: LanguageModelInput) -> AIMessage:
+    def _execute(self, input: LanguageModelInput, tools: list[dict] | None = None,
+                 tool_choice: ToolChoiceOptions | None = None) -> AIMessage:
         token = self.get_token()
         langfuse_context.update_current_observation(
             input=input,
@@ -112,7 +113,7 @@ class GigachatModelServer(LLM):
             model_parameters={
                 "stream": False,
                 "repetition_penalty": 1
-            }
+            },
         )
 
         headers = {
@@ -129,13 +130,17 @@ class GigachatModelServer(LLM):
                     "content": convert_lm_input_to_basic_string(input)
                 }
             ],
+            "function_call": tool_choice,
+            "functions": tools,
             "stream": False,
             "repetition_penalty": 1
         })
-
+        logger.info(data)
         try:
             response = requests.request("POST", self._endpoint, headers=headers, data=data, verify=False)
-            response_content = json.loads(response.text)["choices"][0]["message"]["content"]
+            response_content = json.loads(response.text)
+            logger.info(response_content)
+            response_content = response_content["choices"][0]["message"]["content"]
             langfuse_context.update_current_observation(
                 output=response_content
             )
