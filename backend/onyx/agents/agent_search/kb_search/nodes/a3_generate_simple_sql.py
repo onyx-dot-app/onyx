@@ -111,10 +111,6 @@ def _get_source_documents(
         else:
             logger.error(f"Could not generate source documents SQL: {e}")
 
-        _drop_temp_views(
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
-        )
         return None
 
     return sql_statement
