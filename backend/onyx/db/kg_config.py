@@ -35,7 +35,10 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
         if result.kg_variable_name == "KG_ENABLED":
             kg_config_settings.KG_ENABLED = result.kg_variable_values[0] == "true"
         elif result.kg_variable_name == KGConfigVars.KG_VENDOR:
-            kg_config_settings.KG_VENDOR = result.kg_variable_values[0]
+            if len(result.kg_variable_values) > 0:
+                kg_config_settings.KG_VENDOR = result.kg_variable_values[0]
+            else:
+                kg_config_settings.KG_VENDOR = None
         elif result.kg_variable_name == KGConfigVars.KG_VENDOR_DOMAINS:
             kg_config_settings.KG_VENDOR_DOMAINS = result.kg_variable_values
         elif result.kg_variable_name == KGConfigVars.KG_IGNORE_EMAIL_DOMAINS:

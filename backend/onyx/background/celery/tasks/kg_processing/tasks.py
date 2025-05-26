@@ -78,9 +78,10 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
             )
             return None
 
-        documents_needing_kg_processing = check_for_documents_needing_kg_processing(
-            db_session, kg_coverage_start, kg_max_coverage_days
-        )
+        with get_session_with_current_tenant() as db_session:
+            documents_needing_kg_processing = check_for_documents_needing_kg_processing(
+                db_session, kg_coverage_start, kg_max_coverage_days
+            )
 
         if not documents_needing_kg_processing:
             task_logger.info(
