@@ -31,12 +31,18 @@ GIGACHAT_TOKEN_DELTA = 5
 GIGACHAT_MAX_OUTPUT_TOKENS = 1200
 GIGACHAT_TIMEOUT = 120
 
+_token: str | None = None
+_expires_at: datetime = datetime.min
+
 
 class GigachatModelServer(LLM):
 
     def get_token(self) -> str:
-        if self._token and (datetime.fromtimestamp(self._expires_at) - datetime.now()) > timedelta(minutes=GIGACHAT_TOKEN_DELTA):
-            return self._token
+        global _token, _expires_at
+
+        now = datetime.now()
+        if _token and _expires_at > now + timedelta(minutes=GIGACHAT_TOKEN_DELTA):
+            return _token
 
         rq_uid = str(uuid.uuid4())
         headers = {
@@ -49,19 +55,19 @@ class GigachatModelServer(LLM):
         payload = {
             "scope": self._scope
         }
-        logger.info(payload)
+
         try:
             response = requests.post(GIGACHAT_AUTH_URL, headers=headers, data=payload, verify=False)
             if not response.ok:
-                raise Exception(f"Cant't get oauth token respone: {response.text}")
+                raise Exception(f"Can't get oauth token: {response.text}")
+
             res_body = response.json()
-            token = res_body["access_token"]
-            expires_at = res_body["expires_at"]
-            self._token = token
-            self._expires_at = expires_at / 1000
-            return token
+            _token = res_body["access_token"]
+            _expires_at = datetime.fromtimestamp(res_body["expires_at"] / 1000)
+
+            return _token
         except requests.RequestException as e:
-            print(f"Ошибка: {str(e)}")
+            logger.error(f"Token request failed: {str(e)}")
             raise e
 
     @property
