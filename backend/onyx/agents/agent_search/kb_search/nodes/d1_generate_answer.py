@@ -27,6 +27,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.agents.agent_search.shared_graph_utils.utils import relevance_from_docs
 from onyx.agents.agent_search.shared_graph_utils.utils import write_custom_event
 from onyx.chat.models import ExtendedToolResponse
+from onyx.configs.kg_configs import KG_ANSWER_GENERATION_TIMEOUT
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.enums import SearchType
 from onyx.context.search.models import InferenceSection
@@ -247,7 +248,7 @@ def generate_answer(
 
     try:
         response = run_with_timeout(
-            30,
+            KG_ANSWER_GENERATION_TIMEOUT,
             stream_answer,
         )
 
@@ -256,6 +257,8 @@ def generate_answer(
             provider_type=fast_llm.config.model_provider,
         )
 
+        # TODO: the fake streaming should happen in friont-end. Revisit and then
+        # simply stream out here the full text in one.
         if reference_results_str:
             # Get the LLM's tokenizer
             hundred_days_ago = (datetime.now() - timedelta(days=100)).strftime(

@@ -22,6 +22,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.kg_configs import KG_ENTITY_EXTRACTION_TIMEOUT
+from onyx.configs.kg_configs import KG_RELATIONSHIP_EXTRACTION_TIMEOUT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.relationships import get_allowed_relationship_type_pairs
 from onyx.kg.extractions.extraction_processing import get_entity_types_str
@@ -99,7 +101,7 @@ def extract_ert(
     # Grader
     try:
         llm_response = run_with_timeout(
-            15,
+            KG_ENTITY_EXTRACTION_TIMEOUT,
             primary_llm.invoke,
             prompt=msg,
             timeout_override=15,
@@ -177,7 +179,7 @@ def extract_ert(
     # Grader
     try:
         llm_response = run_with_timeout(
-            15,
+            KG_RELATIONSHIP_EXTRACTION_TIMEOUT,
             primary_llm.invoke,
             prompt=msg,
             timeout_override=15,

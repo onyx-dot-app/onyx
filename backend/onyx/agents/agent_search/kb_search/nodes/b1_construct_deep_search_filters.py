@@ -12,6 +12,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.kg_configs import KG_FILTER_CONSTRUCTION_TIMEOUT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entity_type import get_entity_types_with_grounded_source_name
 from onyx.prompts.kg_prompts import SEARCH_FILTER_CONSTRUCTION_PROMPT
@@ -95,7 +96,7 @@ def construct_deep_search_filters(
     # Grader
     try:
         llm_response = run_with_timeout(
-            15,
+            KG_FILTER_CONSTRUCTION_TIMEOUT,
             llm.invoke,
             prompt=msg,
             timeout_override=15,

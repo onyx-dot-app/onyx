@@ -439,7 +439,6 @@ def upgrade() -> None:
     )
 
     # Create GIN index on clustering columns
-    op.execute("COMMIT")
     op.execute(
         "CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_kg_entity_clustering_trigrams "
         "ON kg_entity USING GIN (clustering_trigrams)"

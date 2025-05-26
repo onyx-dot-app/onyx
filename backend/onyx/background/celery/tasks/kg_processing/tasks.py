@@ -72,16 +72,17 @@ def check_for_kg_processing(self: Task, *, tenant_id: str) -> int | None:
             kg_extraction_in_progress = kg_config.KG_EXTRACTION_IN_PROGRESS
             kg_clustering_in_progress = kg_config.KG_CLUSTERING_IN_PROGRESS
 
-            documents_needing_kg_processing = check_for_documents_needing_kg_processing(
-                db_session, kg_coverage_start, kg_max_coverage_days
-            )
-
         if kg_extraction_in_progress or kg_clustering_in_progress:
             task_logger.info(
                 f"KG processing already in progress for tenant {tenant_id}, skipping"
             )
             return None
-        elif not documents_needing_kg_processing:
+
+        documents_needing_kg_processing = check_for_documents_needing_kg_processing(
+            db_session, kg_coverage_start, kg_max_coverage_days
+        )
+
+        if not documents_needing_kg_processing:
             task_logger.info(
                 f"No documents needing KG processing for tenant {tenant_id}, skipping"
             )

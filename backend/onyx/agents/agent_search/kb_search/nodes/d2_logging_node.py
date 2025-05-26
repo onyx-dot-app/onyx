@@ -26,7 +26,6 @@ def log_data(
     node_start_time = datetime.now()
 
     graph_config = cast(GraphConfig, config["metadata"]["config"])
-    graph_config.inputs.prompt_builder.raw_user_query
 
     search_tool = graph_config.tooling.search_tool
     if search_tool is None:

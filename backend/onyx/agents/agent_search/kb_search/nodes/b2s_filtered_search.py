@@ -26,6 +26,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
 from onyx.chat.models import SubQueryPiece
+from onyx.configs.kg_configs import KG_FILTERED_SEARCH_TIMEOUT
 from onyx.configs.kg_configs import KG_RESEARCH_NUM_RETRIEVED_DOCS
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.kg_prompts import KG_SEARCH_PROMPT
@@ -137,7 +138,7 @@ def filtered_search(
     # Grader
     try:
         llm_response = run_with_timeout(
-            30,
+            KG_FILTERED_SEARCH_TIMEOUT,
             llm.invoke,
             prompt=msg,
             timeout_override=30,

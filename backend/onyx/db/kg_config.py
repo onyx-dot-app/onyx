@@ -41,21 +41,24 @@ def get_kg_config_settings(db_session: Session) -> KGConfigSettings:
         elif result.kg_variable_name == KGConfigVars.KG_IGNORE_EMAIL_DOMAINS:
             kg_config_settings.KG_IGNORE_EMAIL_DOMAINS = result.kg_variable_values
         elif result.kg_variable_name == KGConfigVars.KG_COVERAGE_START:
-            kg_coverage_start_str = result.kg_variable_values[0]
-            if not kg_coverage_start_str:
-                kg_config_settings.KG_COVERAGE_START = datetime.strptime(
-                    "1970-01-01", "%Y-%m-%d"
-                )
-            else:
-                kg_config_settings.KG_COVERAGE_START = datetime.strptime(
-                    kg_coverage_start_str, "%Y-%m-%d"
-                )
+            kg_coverage_start_str = result.kg_variable_values[0] or "1970-01-01"
+
+            kg_config_settings.KG_COVERAGE_START = datetime.strptime(
+                kg_coverage_start_str, "%Y-%m-%d"
+            )
+
         elif result.kg_variable_name == KGConfigVars.KG_MAX_COVERAGE_DAYS:
-            kg_max_coverage_days_str = result.kg_variable_values[0]
-            if not kg_max_coverage_days_str:
-                kg_config_settings.KG_MAX_COVERAGE_DAYS = 1000000
+            if not result.kg_variable_values:
+                kg_max_coverage_days_str: str | int = 1000000
+
             else:
-                kg_config_settings.KG_MAX_COVERAGE_DAYS = int(kg_max_coverage_days_str)
+                kg_max_coverage_days_str = result.kg_variable_values[0] or "1000000"
+                if not kg_max_coverage_days_str.isdigit():
+                    raise ValueError(
+                        f"KG_MAX_COVERAGE_DAYS is not a number: {kg_max_coverage_days_str}"
+                    )
+
+            kg_config_settings.KG_MAX_COVERAGE_DAYS = int(kg_max_coverage_days_str)
 
     return kg_config_settings
 
@@ -71,14 +74,13 @@ def set_kg_processing_in_progress_status(
         in_progress: Whether KG processing is in progress (True) or not (False)
     """
     # Convert boolean to string and wrap in list as required by the model
-    value = ["true"] if in_progress else ["false"]
+
+    value = [str(in_progress).lower()]
 
     if processing_type == KGProcessingType.EXTRACTION:
         kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"
     elif processing_type == KGProcessingType.CLUSTERING:
         kg_variable_name = "KG_CLUSTERING_IN_PROGRESS"
-    else:
-        raise ValueError(f"Invalid processing type: {processing_type}")
 
     # Use PostgreSQL's upsert functionality
     stmt = (
@@ -108,8 +110,6 @@ def get_kg_processing_in_progress_status(
         kg_variable_name = "KG_EXTRACTION_IN_PROGRESS"
     elif processing_type == KGProcessingType.CLUSTERING:
         kg_variable_name = "KG_CLUSTERING_IN_PROGRESS"
-    else:
-        raise ValueError(f"Invalid processing type: {processing_type}")
 
     config = (
         db_session.query(KGConfig)

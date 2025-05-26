@@ -25,6 +25,7 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.kg_configs import KG_STRATEGY_GENERATION_TIMEOUT
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.entities import get_document_id_for_entity
 from onyx.kg.clustering.normalizations import normalize_entities
@@ -38,7 +39,7 @@ from onyx.utils.threadpool_concurrency import run_with_timeout
 logger = setup_logger()
 
 
-def _articulate_normailizations(
+def _articulate_normalizations(
     entity_normalization_map: dict[str, str],
     relationship_normalization_map: dict[str, str],
 ) -> str:
@@ -209,7 +210,7 @@ def analyze(
     # Grader
     try:
         llm_response = run_with_timeout(
-            20,
+            KG_STRATEGY_GENERATION_TIMEOUT,
             # fast_llm.invoke,
             primary_llm.invoke,
             prompt=msg,
@@ -299,7 +300,7 @@ Format: {output_format.value}, Broken down question: {broken_down_question}"
             )
         ],
         remarks=[
-            _articulate_normailizations(
+            _articulate_normalizations(
                 entity_normalization_map=normalized_entities.entity_normalization_map,
                 relationship_normalization_map=normalized_relationships.relationship_normalization_map,
             )

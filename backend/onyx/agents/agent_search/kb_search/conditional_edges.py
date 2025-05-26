@@ -19,10 +19,7 @@ def simple_vs_search(
     state: MainState,
 ) -> str:
 
-    if state.updated_strategy:
-        identified_strategy: KGAnswerStrategy | None = state.updated_strategy
-    else:
-        identified_strategy = state.strategy
+    identified_strategy = state.updated_strategy or state.strategy
 
     if (
         identified_strategy == KGAnswerStrategy.DEEP

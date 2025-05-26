@@ -23,6 +23,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 )
 from onyx.chat.models import LlmDoc
 from onyx.chat.models import SubQueryPiece
+from onyx.configs.kg_configs import KG_OBJECT_SOURCE_RESEARCH_TIMEOUT
 from onyx.context.search.models import InferenceSection
 from onyx.prompts.kg_prompts import KG_OBJECT_SOURCE_RESEARCH_PROMPT
 from onyx.utils.logger import setup_logger
@@ -145,10 +146,10 @@ def process_individual_deep_search(
     # Grader
     try:
         llm_response = run_with_timeout(
-            30,
+            KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
             primary_llm.invoke,
             prompt=msg,
-            timeout_override=30,
+            timeout_override=KG_OBJECT_SOURCE_RESEARCH_TIMEOUT,
             max_tokens=300,
         )
 

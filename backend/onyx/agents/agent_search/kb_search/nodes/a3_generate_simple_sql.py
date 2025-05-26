@@ -21,6 +21,8 @@ from onyx.agents.agent_search.models import GraphConfig
 from onyx.agents.agent_search.shared_graph_utils.utils import (
     get_langgraph_node_log_string,
 )
+from onyx.configs.kg_configs import KG_MAX_DEEP_SEARCH_RESULTS
+from onyx.configs.kg_configs import KG_SQL_GENERATION_TIMEOUT
 from onyx.db.engine import get_db_readonly_user_session_with_current_tenant
 from onyx.db.engine import get_session_with_current_tenant
 from onyx.db.kg_temp_view import create_views
@@ -72,7 +74,7 @@ def _remove_aggregation(sql_statement: str, llm: LLM) -> str:
 
     try:
         llm_response = run_with_timeout(
-            25,
+            KG_SQL_GENERATION_TIMEOUT,
             llm.invoke,
             prompt=msg,
             timeout_override=25,
@@ -110,7 +112,7 @@ def _get_source_documents(sql_statement: str, llm: LLM) -> str | None:
     cleaned_response: str | None = None
     try:
         llm_response = run_with_timeout(
-            25,
+            KG_SQL_GENERATION_TIMEOUT,
             llm.invoke,
             prompt=msg,
             timeout_override=25,
@@ -253,7 +255,7 @@ def generate_simple_sql(
         # Grader
         try:
             llm_response = run_with_timeout(
-                25,
+                KG_SQL_GENERATION_TIMEOUT,
                 primary_llm.invoke,
                 prompt=msg,
                 timeout_override=25,
@@ -298,7 +300,7 @@ def generate_simple_sql(
 
         try:
             llm_response = run_with_timeout(
-                25,
+                KG_SQL_GENERATION_TIMEOUT,
                 primary_llm.invoke,
                 prompt=msg,
                 timeout_override=25,
@@ -400,7 +402,7 @@ def generate_simple_sql(
 
     # Update path if too many results are retrieved
 
-    if query_results and len(query_results) > 30:
+    if query_results and len(query_results) > KG_MAX_DEEP_SEARCH_RESULTS:
         updated_strategy = KGAnswerStrategy.SIMPLE
     else:
         updated_strategy = None
