@@ -20,7 +20,7 @@ Here are the types of relationships:
 """.strip()
 
 EXTRACTION_FORMATTING_PROMPT = r"""
-{{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
+{{"entities": [<a list of entities of the prescribed entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization). If allowed options \
 are provided above, you can only extract those types of entities! Again, there should be an 'Other' \
 option. Pick this if none of the others apply.>],
@@ -38,7 +38,7 @@ identify in the text, each formatted simply as '<term>'>]
 """.strip()
 
 QUERY_ENTITY_EXTRACTION_FORMATTING_PROMPT = r"""
-{{"entities": [<a list of entities of the prescripted entity types that you can reliably identify in the text, \
+{{"entities": [<a list of entities of the prescribed entity types that you can reliably identify in the text, \
 formatted as '<ENTITY_TYPE_NAME>::<entity_name>' (please use that capitalization)>. Each entity \
 also should be followed by a list of attribute filters for the entity, if referred to in the \
 question for that entity. Example: 'ACCOUNT::* -- [account_type: customer]' should the question be \
@@ -532,7 +532,7 @@ Here is the question whose answer is ultimately sought:
 ---question---
 {SEPARATOR_LINE}
 
-And dere are the entities and relationships that have been extracted earlier from this question:
+And here are the entities and relationships that have been extracted earlier from this question:
 {SEPARATOR_LINE}
 ---entities---
 ---relationships---
@@ -753,7 +753,7 @@ Identified entities with attributes in query:
 ---query_entities_with_attributes---
 
 These are the entities that should be used in the SQL statement. However, \
-ote that these are the entities (with potential attributes) that were *matches* of Knowledge Graph identified with the \
+note that these are the entities (with potential attributes) that were *matches* of Knowledge Graph identified with the \
 entities originally identified in the original question. A such, they may have id names that may not mean much by themselves, \
 eg ACCOUNT::SF_8254Hs. Here is the mapping of entities originally identified (whose role in the query should be obvious) with \
 the entities that were matched to them in the Knowledge Graph:
@@ -783,7 +783,7 @@ IMPORTANT NOTES:
 - The id_name of each relationship has the format \
 <source_entity_id_name>__<relationship_type>__<target_entity_id_name>.
 - The relationship id_names are NOT UNIQUE, only the combinations of relationship id_name and source_document_id are unique. \
-That is because each relationship is extracted from a document. So make sure you use the proper 'distincts'!
+That is because each relationship is extracted from a document. So make sure you use the proper 'distinct's!
 - If the SQL contains a 'SELECT DISTINCT' clause and an ORDER BY clause, then you MUST include the columns from the ORDER BY \
 clause ALSO IN THE SELECT DISTINCT CLAUSE! This is very important! (This is a postgres db., so this is a MUST!). \
 You MUST NOT have a column in the ORDER BY clause that is not ALSO in the SELECT DISTINCT clause!

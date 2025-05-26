@@ -133,7 +133,6 @@ def generate_simple_sql(
     relationship_types_str = state.relationship_types_str
 
     single_doc_id = state.single_doc_id
-    state.search_type
 
     ## STEP 3 - articulate goals
 
