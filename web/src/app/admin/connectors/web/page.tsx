@@ -70,7 +70,7 @@ export default function Web() {
           // associated with it.
           shouldCreateEmptyCredentialForConnector={true}
           source="web"
-          inputType="load_state"
+          inputType="poll"
           formBody={
             <>
               <TextFormField

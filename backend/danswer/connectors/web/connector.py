@@ -1,6 +1,8 @@
 import io
 import ipaddress
 import socket
+from datetime import datetime
+from datetime import timezone
 from enum import Enum
 from typing import Any
 from typing import cast
@@ -24,6 +26,8 @@ from danswer.configs.app_configs import WEB_CONNECTOR_VALIDATE_URLS
 from danswer.configs.constants import DocumentSource
 from danswer.connectors.interfaces import GenerateDocumentsOutput
 from danswer.connectors.interfaces import LoadConnector
+from danswer.connectors.interfaces import PollConnector
+from danswer.connectors.interfaces import SecondsSinceUnixEpoch
 from danswer.connectors.models import Document
 from danswer.connectors.models import Section
 from danswer.file_processing.extract_file_text import pdf_to_text
@@ -175,7 +179,79 @@ def _read_urls_file(location: str) -> list[str]:
     return urls
 
 
-class WebConnector(LoadConnector):
+def extract_urls_from_sitemap_for_polling(
+    sitemap_url: str, base_url: str
+) -> list[tuple[str, datetime | None]]:
+    """Extract URLs from sitemap specifically for polling updates."""
+    response = requests.get(sitemap_url)
+    response.raise_for_status()
+
+    soup = BeautifulSoup(response.content, "html.parser")
+    result = []
+
+    # Process URLs from the sitemap
+    for url_tag in soup.find_all("url"):
+        loc_tag = url_tag.find("loc")
+        lastmod_tag = url_tag.find("lastmod")
+
+        if not loc_tag:
+            continue
+
+        url = _ensure_absolute_url(sitemap_url, loc_tag.text)
+        # Only include URLs that match our base_url
+        if base_url not in url:
+            continue
+
+        lastmod = None
+        if lastmod_tag:
+            try:
+                lastmod = datetime.strptime(lastmod_tag.text, "%Y-%m-%dT%H:%M:%SZ")
+                lastmod = lastmod.replace(tzinfo=timezone.utc)
+            except ValueError:
+                logger.warning(f"Could not parse lastmod date: {lastmod_tag.text}")
+
+        result.append((url, lastmod))
+
+    if not result:
+        raise ValueError(
+            f"No URLs found in sitemap {sitemap_url} matching base URL {base_url}."
+        )
+
+    return result
+
+
+def get_sitemap_url_from_base_url(base_url: str) -> str:
+    """Extract the product name from the base URL and construct the sitemap URL.
+
+    Args:
+        base_url: The base URL containing the product name (e.g. https://docs.uipath.com/ai-center/...)
+
+    Returns:
+        The constructed sitemap URL
+
+    Raises:
+        ValueError: If the base URL is not a valid UiPath docs URL
+    """
+    if "docs.uipath.com" not in base_url:
+        raise ValueError("Base URL must be a UiPath docs URL")
+
+    # Parse the URL to get the path
+    parsed_url = urlparse(base_url)
+    path_parts = parsed_url.path.strip("/").split("/")
+
+    if not path_parts:
+        raise ValueError("Could not extract product name from URL")
+
+    # The product name is typically the first part after docs.uipath.com
+    product_name = path_parts[0]
+
+    sitemap_url = (
+        f"https://docs.uipath.com/products/{product_name}/sitemaps/en/sitemap.xml"
+    )
+    return sitemap_url
+
+
+class WebConnector(LoadConnector, PollConnector):
     def __init__(
         self,
         base_url: str,  # Can't change this without disrupting existing users
@@ -183,9 +259,11 @@ class WebConnector(LoadConnector):
         mintlify_cleanup: bool = True,  # Mostly ok to apply to other websites as well
         batch_size: int = INDEX_BATCH_SIZE,
     ) -> None:
+        self.base_url = base_url
         self.mintlify_cleanup = mintlify_cleanup
         self.batch_size = batch_size
         self.recursive = False
+        self.web_connector_type = web_connector_type
 
         if web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value:
             self.recursive = True
@@ -215,7 +293,7 @@ class WebConnector(LoadConnector):
             logger.warning("Unexpected credentials provided for Web Connector")
         return None
 
-    def load_from_state(self) -> GenerateDocumentsOutput:
+    def load_from_state(self, is_polling: bool = False) -> GenerateDocumentsOutput:
         """Traverses through all pages found on the website
         and converts them into documents"""
         visited_links: set[str] = set()
@@ -285,7 +363,8 @@ class WebConnector(LoadConnector):
                 content = page.content()
                 soup = BeautifulSoup(content, "html.parser")
 
-                if self.recursive:
+                # Only get internal links if we're not in polling mode and recursive is enabled
+                if self.recursive and not is_polling:
                     internal_links = get_internal_links(base_url, current_url, soup)
                     for link in internal_links:
                         if link not in visited_links:
@@ -334,6 +413,77 @@ class WebConnector(LoadConnector):
             if last_error:
                 raise RuntimeError(last_error)
             raise RuntimeError("No valid pages found.")
+
+    def poll_source(
+        self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
+    ) -> GenerateDocumentsOutput:
+        start_datetime = datetime.fromtimestamp(start, tz=timezone.utc)
+        end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
+
+        try:
+            # Only handle SINGLE and RECURSIVE cases for polling
+            if self.web_connector_type not in [
+                WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value,
+                WEB_CONNECTOR_VALID_SETTINGS.RECURSIVE.value,
+            ]:
+                logger.info(
+                    f"Polling not supported for connector type {self.web_connector_type}"
+                )
+                return self.load_from_state(is_polling=False)
+
+            # Only do polling for UiPath docs
+            if "docs.uipath.com" not in self.base_url:
+                logger.info(
+                    "Polling only supported for UiPath docs, falling back to regular indexing"
+                )
+                return self.load_from_state(is_polling=False)
+
+            urls_to_index = []
+
+            # Use the product-specific sitemap for UiPath docs
+            try:
+                sitemap_url = get_sitemap_url_from_base_url(self.base_url)
+            except ValueError as e:
+                logger.warning(f"Failed to construct sitemap URL: {e}")
+                return self.load_from_state(is_polling=False)
+
+            # Extract URLs with their lastmod dates, filtering by base_url
+            urls_with_dates = extract_urls_from_sitemap_for_polling(
+                sitemap_url, self.base_url
+            )
+
+            # For single page, only check if the base URL has been modified
+            if self.web_connector_type == WEB_CONNECTOR_VALID_SETTINGS.SINGLE.value:
+                for url, lastmod in urls_with_dates:
+                    if url == self.base_url:
+                        if lastmod and start_datetime <= lastmod <= end_datetime:
+                            urls_to_index.append(url)
+                        elif not lastmod:
+                            urls_to_index.append(url)
+                        break
+            else:  # RECURSIVE case
+                for url, lastmod in urls_with_dates:
+                    if lastmod and start_datetime <= lastmod <= end_datetime:
+                        urls_to_index.append(url)
+                    # If we don't have a lastmod date, we should check the page
+                    elif not lastmod:
+                        urls_to_index.append(url)
+
+            if urls_to_index:
+                logger.info(
+                    f"Found {len(urls_to_index)} pages modified between {start_datetime} and {end_datetime}"
+                )
+                self.to_visit_list = urls_to_index
+                return self.load_from_state(is_polling=True)
+            else:
+                logger.info("No pages modified in the specified time window")
+                # Return empty result instead of doing full load_from_state
+                return iter([])
+
+        except Exception as e:
+            logger.warning(f"Failed to use sitemap for polling: {e}")
+            # Fall back to regular indexing if sitemap fails
+            return self.load_from_state(is_polling=True)
 
 
 if __name__ == "__main__":
