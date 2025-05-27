@@ -8,49 +8,50 @@ USE_TOOL = "Use tool"
 
 
 SHOULD_USE_CUSTOM_TOOL_SYSTEM_PROMPT = (
-    "Вы — большая языковая модель, чья единственная задача — определить, следует ли системе "
-    "вызвать внешний инструмент, чтобы ответить на последнее сообщение пользователя."
+    "You are a large language model whose only job is to determine if the system should call an "
+    "external tool to be able to answer the user's last message."
 ).strip()
 
 SHOULD_USE_CUSTOM_TOOL_USER_PROMPT = f"""
-Учитывая историю разговора и последующий запрос, определите, следует ли системе использовать \
-инструмент '{{tool_name}}', чтобы ответить на запрос пользователя. Инструмент '{{tool_name}}' \
-определяется следующим образом: '{{tool_description}}'.
+Given the conversation history and a follow up query, determine if the system should use the \
+'{{tool_name}}' tool to answer the user's query. The '{{tool_name}}' tool is a tool defined as: '{{tool_description}}'.
 
-Ответьте "{USE_TOOL}", если считаете, что инструмент будет полезен для ответа на запрос пользователя.
-Ответьте "{DONT_USE_TOOL}" в противном случае.
+Respond with "{USE_TOOL}" if you think the tool would be helpful in respnding to the users query.
+Respond with "{DONT_USE_TOOL}" otherwise.
 
-История разговора:
+Conversation History:
 {GENERAL_SEP_PAT}
 {{history}}
 {GENERAL_SEP_PAT}
 
-Если вы хоть немного не уверены, ответьте {DONT_USE_TOOL}.
-Ответьте ТОЧНО и ТОЛЬКО "{DONT_USE_TOOL}" или "{USE_TOOL}"
+If you are at all unsure, respond with {DONT_USE_TOOL}.
+Respond with EXACTLY and ONLY "{DONT_USE_TOOL}" or "{USE_TOOL}"
 
-Последующий запрос:
+Follow up input:
 {{query}}
 """.strip()
 
 
-"""Промпты для определения аргументов, которые нужно передать пользовательскому инструменту."""
+"""Prompts to figure out the arguments to pass to a custom tool."""
+
 
 TOOL_ARG_SYSTEM_PROMPT = (
-    "Вы — большая языковая модель, чья единственная задача — определить аргументы, которые нужно "
-    "передать внешнему инструменту."
+    "You are a large language model whose only job is to determine the arguments to pass to an "
+    "external tool."
 ).strip()
 
-TOOL_ARG_USER_PROMPT = f"""
-Учитывая следующий разговор и последующий ввод, сгенерируйте \
-словарь аргументов, которые нужно передать инструменту '{{tool_name}}'. \
-Инструмент '{{tool_name}}' определяется следующим образом: '{{tool_description}}'. \
-Ожидаемые аргументы: {{tool_args}}.
 
-Разговор:
+TOOL_ARG_USER_PROMPT = f"""
+Given the following conversation and a follow up input, generate a \
+dictionary of arguments to pass to the '{{tool_name}}' tool. \
+The '{{tool_name}}' tool is a tool defined as: '{{tool_description}}'. \
+The expected arguments are: {{tool_args}}.
+
+Conversation:
 {{history}}
 
-Последующий ввод:
+Follow up input:
 {{query}}
 
-Ответьте ТОЛЬКО и ИМЕННО JSON-объектом, указывающим значения аргументов для передачи инструменту.
+Respond with ONLY and EXACTLY a JSON object specifying the values of the arguments to pass to the tool.
 """.strip()  # noqa: F541
