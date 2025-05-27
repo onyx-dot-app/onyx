@@ -1,147 +1,147 @@
 # Standards
 SEPARATOR_LINE = "-------"
 SEPARATOR_LINE_LONG = "---------------"
-NO_EXTRACTION = "No extraction of knowledge graph objects was feasable."
-YES = "yes"
-NO = "no"
+NO_EXTRACTION = "Извлечение объектов графа знаний не представлялось возможным."
+YES = "Да"
+NO = "Нет"
 DC_OBJECT_SEPARATOR = ";"
 
 
 DC_OBJECT_NO_BASE_DATA_EXTRACTION_PROMPT = f"""
-You are an expert in finding relevant objects/objext specifications of the same type in a list of documents. \
-In this case you are interested \
-in generating: {{objects_of_interest}}.
-You should look at the documents - in no particular order! - and extract each object you find in the documents.
+Ты эксперт в поиске релевантных объектов/соответствующих спецификаций одного типа среди списка документов. \
+В данном случае тебя интересует  \
+формирование: {{objects_of_interest}}.
+Тебе следует просмотреть документы — порядок неважен! — и извлечь каждый объект, обнаруженный тобой в документах.
 {SEPARATOR_LINE}
-Here are the documents you are supposed to search through:
+Вот документы, которые тебе предстоит исследовать:
 --
 {{document_text}}
 {SEPARATOR_LINE}
-Here are the task instructions you should use to help you find the desired objects:
+Вот инструкция по выполнению задания, которую следует использовать для поиска нужных объектов:
 {SEPARATOR_LINE}
 {{task}}
 {SEPARATOR_LINE}
-Here is the question that may provide critical additional context for the task:
+Вот вопрос, который может предоставить критически важный дополнительный контекст для выполнения задачи:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
-Please answer the question in the following format:
-REASONING: <your reasoning for the classification> - OBJECTS: <the objects - just their names - that you found, \
+Пожалуйста, ответь на вопрос в следующем формате:
+ОБОСНОВАНИЕ: <your reasoning for the classification> - ОБЪЕКТЫ: <the objects - just their names - that you found, \
 separated by ';'>
 """.strip()
 
 
 DC_OBJECT_WITH_BASE_DATA_EXTRACTION_PROMPT = f"""
-You are an expert in finding relevant objects/object specifications of the same type in a list of documents. \
-In this case you are interested \
-in generating: {{objects_of_interest}}.
-You should look at the provided data - in no particular order! - and extract each object you find in the documents.
+Ты эксперт в области поиска релевантных объектов или спецификаций объектов одного типа в списке документов. \
+В данном случае тебя интересует  \
+формирование: {{objects_of_interest}}.
+Тебе следует просмотреть документы — порядок неважен! — и извлечь каждый объект, обнаруженный тобой в документах.
 {SEPARATOR_LINE}
-Here are the data provided by the user:
+Пользователь предоставил следующие данные:
 --
 {{base_data}}
 {SEPARATOR_LINE}
-Here are the task instructions you should use to help you find the desired objects:
+Вот инструкции по заданию, которые помогут вам найти нужные объекты:
 {SEPARATOR_LINE}
 {{task}}
 {SEPARATOR_LINE}
-Here is the request that may provide critical additional context for the task:
+Вот запрос, который может предоставить критически важную дополнительную информацию для выполнения задачи:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
-Please address the request in the following format:
-REASONING: <your reasoning for the classification> - OBJECTS: <the objects - just their names - that you found, \
+Пожалуйста, обработайте запрос в следующем формате:
+ОБОСНОВАНИЕ: <your reasoning for the classification> - ОБЪЕКТЫ: <the objects - just their names - that you found, \
 separated by ';'>
 """.strip()
 
 
 DC_OBJECT_SOURCE_RESEARCH_PROMPT = f"""
-Today is {{today}}. You are an expert in extracting relevant structured information from a list of documents that \
-should relate to one object. (Try to make sure that you know it relates to that one object!).
-You should look at the documents - in no particular order! - and extract the information asked for this task:
+Сегодня - это {{today}}. Ты являешься экспертом в извлечении соответствующей структурированной информации из списка документов, которые \
+должны относиться к одному объекту. (Постарайся убедиться, что ты знаещь, что это относится именно к этому объекту!).
+Тебе следует просмотреть документы - в произвольном порядке! - и извлечь информацию, необходимую для выполнения этой задачи:
 {SEPARATOR_LINE}
 {{task}}
 {SEPARATOR_LINE}
 
-Here is the user question that may provide critical additional context for the task:
+Вот вопрос пользователя, который может предоставить важный дополнительный контекст для выполнения задачи:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Here are the documents you are supposed to search through:
+Вот документы, которые ты должен просмотреть:
 --
 {{document_text}}
 {SEPARATOR_LINE}
-Note: please cite your sources inline as you generate the results! Use the format [1], etc. Infer the \
-number from the provided context documents. This is very important!
-Please address the task in the following format:
-REASONING:
+Примечание: при получении результатов, пожалуйста, указывай свои источники в Интернете! Используйте формат [1] и т.д. Укажи \
+число из предоставленных контекстных документов. Это очень важно! \
+Пожалуйста, сформулируйте задачу в следующем формате:
+РАССУЖДЕНИЯ:
  -- <your reasoning for the classification>
-RESEARCH RESULTS:
+РЕЗУЛЬТАТЫ ИССЛЕДОВАНИЯ:
 {{format}}
 """.strip()
 
 
 DC_OBJECT_CONSOLIDATION_PROMPT = f"""
-You are a helpful assistant that consolidates information about a specific object \
-from multiple sources.
-The object is:
+Ты - полезный помощник, который объединяет информацию о конкретном объекте \
+из нескольких источников.
+Объектом является:
 {SEPARATOR_LINE}
 {{object}}
 {SEPARATOR_LINE}
-and the information is
+и информацией является
 {SEPARATOR_LINE}
 {{information}}
 {SEPARATOR_LINE}
-Here is the user question that may provide critical additional context for the task:
+Вот вопрос пользователя, который может предоставить важный дополнительный контекст для выполнения задачи:
 {SEPARATOR_LINE}
 {{question}}
 {SEPARATOR_LINE}
 
-Please consolidate the information into a single, concise answer. The consolidated informtation \
-for the object should be in the following format:
+Пожалуйста, сведи информацию в единый краткий ответ. Сводная информация \
+по объекту должна быть в следующем формате:
 {SEPARATOR_LINE}
 {{format}}
 {SEPARATOR_LINE}
-Overall, please use this structure to communicate the consolidated information:
+В целом, пожалуйста, используй эту структуру для передачи сводной информации:
 {SEPARATOR_LINE}
-REASONING: <your reasoning for consolidating the information>
-INFORMATION:
+РАССУЖДЕНИЯ: <your reasoning for consolidating the information>
+ИНФОРМАЦИЯ:
 <consolidated information in the proper format that you have created>
 """
 
 
 DC_FORMATTING_NO_BASE_DATA_PROMPT = f"""
-You are an expert in text formatting. Your task is to take a given text and convert it 100 percent accurately \
-in a new format.
-Here is the text you are supposed to format:
+Ты эксперт в области форматирования текста. Твоя задача - взять заданный текст и преобразовать его со 100-процентной точностью
+в новый формат.
+Вот текст, который ты должен отформатировать:
 {SEPARATOR_LINE}
 {{text}}
 {SEPARATOR_LINE}
-Here is the format you are supposed to use:
+Вот формат, который ты должен использовать:
 {SEPARATOR_LINE}
 {{format}}
 {SEPARATOR_LINE}
-Please start the generation directly with the formatted text. (Note that the output should not be code, but text.)
+Пожалуйста, начни генерацию непосредственно с форматированного текста. (Обрати внимание, что на выходе должен быть не код, а текст.)
 """
 
 DC_FORMATTING_WITH_BASE_DATA_PROMPT = f"""
-You are an expert in text formatting. Your task is to take a given text and the initial \
-base data provided by the user, and convert it 100 percent accurately \
-in a new format. The base data may also contain important relationships that are critical \
-for the formatting.
-Here is the initial data provided by the user:
+Ты эксперт в области форматирования текста. Твоя задача - взять заданный текст и исходные \
+базовые данные, предоставленные пользователем, и преобразовать их со 100-процентной точностью \
+в новый формат. Базовые данные также могут содержать важные взаимосвязи, которые имеют решающее значение \
+для форматирования.
+Вот исходные данные, предоставленные пользователем:
 {SEPARATOR_LINE}
 {{base_data}}
 {SEPARATOR_LINE}
-Here is the text you are supposed combine (and format) with the initial data, adhering to the \
-format instructions provided by later in the prompt:
+Вот текст, который ты должен объединить (и отформатировать) с исходными данными, придерживаясь
+инструкций \ формата, приведенных далее в приглашении:
 {SEPARATOR_LINE}
 {{text}}
 {SEPARATOR_LINE}
-And here are the format instructions you are supposed to use:
+И вот инструкции по форматированию, которые ты должен использовать:
 {SEPARATOR_LINE}
 {{format}}
 {SEPARATOR_LINE}
-Please start the generation directly with the formatted text. (Note that the output should not be code, but text.)
+Пожалуйста, начни генерацию непосредственно с форматированного текста. (Обрати внимание, что на выходе должен быть не код, а текст.)
 """

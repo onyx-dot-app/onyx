@@ -45,19 +45,19 @@ personas:
     is_visible: true
     is_default_persona: true
     starter_messages:
-      - name: "Give me an overview of what's here"
-        message: "Sample some documents and tell me what you find."
-      - name: "Use AI to solve a work related problem"
-        message: "Ask me what problem I would like to solve, then search the knowledge base to help me find a solution."
-      - name: "Find updates on a topic of interest"
-        message: "Once I provide a topic, retrieve related documents and tell me when there was last activity on the topic if available."
-      - name: "Surface contradictions"
-        message: "Have me choose a subject. Once I have provided it, check against the knowledge base and point out any inconsistencies. For all your following responses, focus on identifying contradictions."
+      - name: "Дайте мне общее представление о том, что здесь находится"
+        message: "Ознакомься с некоторыми документами и расскажи мне, что вы нашли."
+      - name: "Используйте искусственный интеллект для решения проблем, связанных с работой."
+        message: "Спроси меня, какую проблему я хотел бы решить, а затем поищи в базе знаний, чтобы помочь мне найти решение."
+      - name: "Находи обновления по интересующей вас теме"
+        message: "Как только я укажу тему, извлеки соответствующие документы и сообщи мне, когда в последний раз проводилась работа по этой теме, если таковая имеется."
+      - name: "Поверхностные противоречия"
+        message: "Попроси меня выбрать тему. Как только я задам ее, сверься с базой знаний и укажи на любые несоответствия. Во всех следующих ответах сосредоточься на выявлении противоречий."
 
   - id: 1
     name: "General"
     description: >
-      Assistant with no search functionalities. Chat directly with the Large Language Model.
+      Помощник без функций поиска. Общайтесь напрямую с Large Language Model.
     prompts:
       - "OnlyLLM"
     num_chunks: 0
@@ -71,19 +71,19 @@ personas:
     is_visible: true
     is_default_persona: true
     starter_messages:
-      - name: "Summarize a document"
-        message: "If I have provided a document please summarize it for me. If not, please ask me to upload a document either by dragging it into the input bar or clicking the +file icon."
-      - name: "Help me with coding"
-        message: 'Write me a "Hello World" script in 5 random languages to show off the functionality.'
-      - name: "Draft a professional email"
-        message: "Help me craft a professional email. Let's establish the context and the anticipated outcomes of the email before proposing a draft."
-      - name: "Learn something new"
-        message: "What is the difference between a Gantt chart, a Burndown chart and a Kanban board?"
+      - name: "Обобщение документа"
+        message: "Если я предоставил документ, пожалуйста, кратко опиши его для меня. Если нет, пожалуйста, попроси меня загрузить документ, перетащив его на панель ввода или нажав на значок +файл."
+      - name: "Помоги мне с кодированием"
+        message: 'Напиши мне сценарий "Hello World" на 5 произвольных языках, чтобы продемонстрировать функциональность.'
+      - name: "Подготовь профессиональное электронное письмо"
+        message: "Помоги мне составить профессиональное электронное письмо. Давай определим контекст и ожидаемые результаты электронного письма, прежде чем предлагать черновой вариант."
+      - name: "Узнать что-то новое"
+        message: "В чем разница между диаграммой Ганта, графиком выгорания и канбан-доской?"
 
   - id: 2
     name: "Paraphrase"
     description: >
-      Assistant that is heavily constrained and only provides exact quotes from Connected Sources.
+      Помощник, который сильно ограничен и предоставляет точные цитаты только из подключенных источников.
     prompts:
       - "Paraphrase"
     num_chunks: 10
@@ -97,19 +97,19 @@ personas:
     is_visible: false
     is_default_persona: true
     starter_messages:
-      - name: "Document Search"
-        message: "Hi! Could you help me find information about our team structure and reporting lines from our internal documents?"
-      - name: "Process Verification"
-        message: "Hello! I need to understand our project approval process. Could you find the exact steps from our documentation?"
-      - name: "Technical Documentation"
-        message: "Hi there! I'm looking for information about our deployment procedures. Can you find the specific steps from our technical guides?"
-      - name: "Policy Reference"
-        message: "Hello! Could you help me find our official guidelines about client communication? I need the exact wording from our documentation."
+      - name: "Поиск документов"
+        message: "Привет! Не мог бы ты помочь мне найти информацию о структуре нашей команды и порядке подчинения в наших внутренних документах?"
+      - name: "Проверка процесса"
+        message: "Привет! Мне нужно разобраться в процессе утверждения нашего проекта. Не мог бы ты ознакомиться с точными шагами в нашей документации?"
+      - name: "Техническая документация"
+        message: "Привет! Я ищу информацию о наших процедурах развертывания. Можешь ли ты найти конкретные шаги в наших технических руководствах?"
+      - name: "Ссылка на политику"
+        message: "Привет! Не мог бы ты помочь мне найти наши официальные рекомендации по взаимодействию с клиентами? Мне нужна точная формулировка из нашей документации."
 
   - id: 3
     name: "Art"
     description: >
-      Assistant for generating images based on descriptions.
+      Помощник для создания изображений на основе описаний.
     prompts:
       - "ImageGeneration"
     num_chunks: 0
@@ -124,11 +124,11 @@ personas:
     is_visible: true
     is_default_persona: true
     starter_messages:
-      - name: "Create visuals for a presentation"
-        message: "Generate someone presenting a graph which clearly demonstrates an upwards trajectory."
-      - name: "Find inspiration for a marketing campaign"
-        message: "Generate an image of two happy individuals sipping on a soda drink in a glass bottle."
-      - name: "Visualize a product design"
-        message: "I want to add a search bar to my Iphone app. Generate me generic examples of how other apps implement this."
-      - name: "Generate a humorous image response"
-        message: "My teammate just made a silly mistake and I want to respond with a facepalm. Can you generate me one?"
+      - name: "Создание визуальных элементов для презентации"
+        message: "Создай описание выступления человека, представляющего график, ясно демонстрирующий восходящую траекторию.."
+      - name: "Найди вдохновение для маркетинговой кампании."
+        message: "Создай образ двух счастливых людей, потягивающих газировку из стеклянной бутылки."
+      - name: "Визуализируй дизайн продукта"
+        message: "Я хочу добавить строку поиска в свое приложение для Iphone. Создайте для меня общие примеры того, как это реализовано в других приложениях."
+      - name: "Создай юмористический образный отклик"
+        message: "Мой напарник только что совершил глупейшую ошибку, и я хочу отреагировать лицом в ладонь. Можешь сделать такой смайлик?"
