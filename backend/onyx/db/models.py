@@ -914,6 +914,7 @@ class KGEntityExtractionStaging(Base):
     # Primary identifier
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
+        primary_key=True,
         nullable=False,
         index=True,
     )
@@ -1079,7 +1080,6 @@ class KGRelationshipExtractionStaging(Base):
     # Primary identifier - now part of composite key
     id_name: Mapped[str] = mapped_column(
         NullFilteredString,
-        primary_key=True,
         nullable=False,
         index=True,
     )
@@ -1089,12 +1089,18 @@ class KGRelationshipExtractionStaging(Base):
     )
 
     # Source and target nodes (foreign keys to Entity table)
-    source_node: Mapped[UUID] = mapped_column(
-        ForeignKey("kg_entity_extraction_staging.id"), nullable=False, index=True
+    source_node: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_extraction_staging.id_name"),
+        nullable=False,
+        index=True,
     )
 
-    target_node: Mapped[UUID] = mapped_column(
-        ForeignKey("kg_entity_extraction_staging.id"), nullable=False, index=True
+    target_node: Mapped[str] = mapped_column(
+        NullFilteredString,
+        ForeignKey("kg_entity_extraction_staging.id_name"),
+        nullable=False,
+        index=True,
     )
 
     source_node_type: Mapped[str] = mapped_column(
