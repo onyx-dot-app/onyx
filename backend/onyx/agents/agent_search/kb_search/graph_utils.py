@@ -310,6 +310,7 @@ def get_doc_information_for_entity(entity_id_name: str) -> KGEntityDocInfo:
     """
     Get document information for an entity, including its semantic name and document details.
     """
+    # FIXME:
     if "::" not in entity_id_name:
         return KGEntityDocInfo(
             doc_id=None,
@@ -388,6 +389,7 @@ def rename_entities_in_answer(answer: str) -> str:
         )
         potential_entity_id_name = f"{entity_type}::{entity_name}"
 
+        # FIXME:
         replacement_candidate = get_doc_information_for_entity(potential_entity_id_name)
 
         if replacement_candidate.doc_id:

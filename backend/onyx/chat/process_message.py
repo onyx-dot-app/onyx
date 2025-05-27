@@ -97,7 +97,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
-from onyx.kg.clustering.initial_clustering import kg_clustering
+from onyx.kg.clustering.clustering import kg_clustering
 from onyx.kg.configuration import populate_default_account_employee_definitions
 from onyx.kg.configuration import populate_default_grounded_entity_types
 from onyx.kg.extractions.extraction_processing import kg_extraction

@@ -23,8 +23,7 @@ from onyx.db.models import Document
 from onyx.db.models import KGRelationshipType
 from onyx.db.models import KGRelationshipTypeExtractionStaging
 from onyx.db.models import KGStage
-from onyx.db.relationships import add_or_increment_relationship
-from onyx.db.relationships import add_relationship
+from onyx.db.relationships import add_or_update_staging_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
@@ -980,28 +979,22 @@ def kg_extraction(
                 ):
                     continue
 
-                try:
-                    with get_session_with_current_tenant() as db_session:
-                        try:
-                            add_relationship_type(
-                                db_session=db_session,
-                                source_entity_type=source_entity_type.upper(),
-                                relationship_type=relationship_type,
-                                target_entity_type=target_entity_type.upper(),
-                                definition=False,
-                                extraction_count=extraction_count,
-                                kg_stage=KGStage.EXTRACTED,
-                            )
-                            db_session.commit()
-                        except Exception as e:
-                            logger.error(
-                                f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
-                            )
-                except Exception as e:
-                    logger.error(
-                        f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
-                    )
-
+                with get_session_with_current_tenant() as db_session:
+                    try:
+                        add_relationship_type(
+                            db_session=db_session,
+                            source_entity_type=source_entity_type.upper(),
+                            relationship_type=relationship_type,
+                            target_entity_type=target_entity_type.upper(),
+                            definition=False,
+                            extraction_count=extraction_count,
+                            kg_stage=KGStage.EXTRACTED,
+                        )
+                        db_session.commit()
+                    except Exception as e:
+                        logger.error(
+                            f"Error adding relationship type {relationship_type_id_name} to the database: {e}"
+                        )
             for (
                 relationship,
                 relationship_data,
@@ -1029,28 +1022,19 @@ def kg_extraction(
                     source_entity_type = source_entity.split("::")[0]
                     target_entity_type = target_entity.split("::")[0]
 
-                    try:
-                        with get_session_with_current_tenant() as db_session:
-                            add_relationship(
-                                db_session,
-                                KGStage.EXTRACTED,
-                                relationship,
-                                source_document_id,
-                                extraction_count,
+                    with get_session_with_current_tenant() as db_session:
+                        try:
+                            add_or_update_staging_relationship(
+                                db_session=db_session,
+                                relationship_id_name=relationship,
+                                source_document_id=source_document_id,
+                                occurrences=extraction_count,
                             )
                             db_session.commit()
-                    except Exception as e:
-                        logger.error(
-                            f"Error adding relationship {relationship} to the database: {e}"
-                        )
-                        with get_session_with_current_tenant() as db_session:
-                            add_or_increment_relationship(
-                                db_session,
-                                KGStage.EXTRACTED,
-                                relationship,
-                                source_document_id,
+                        except Exception as e:
+                            logger.error(
+                                f"Error adding relationship {relationship} to the database: {e}"
                             )
-                            db_session.commit()
 
             # Populate the Documents table with the kg information for the documents
 

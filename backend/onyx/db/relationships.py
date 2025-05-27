@@ -1,12 +1,11 @@
-from typing import cast
 from typing import List
-from typing import Union
+from uuid import UUID
 
-from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
+import onyx.db.document as dbdocument
 from onyx.db.models import KGEntity
 from onyx.db.models import KGEntityExtractionStaging
 from onyx.db.models import KGRelationship
@@ -19,27 +18,25 @@ from onyx.kg.utils.formatting_utils import format_relationship
 from onyx.kg.utils.formatting_utils import generate_relationship_type
 
 
-def add_relationship(
+def add_or_update_staging_relationship(
     db_session: Session,
-    kg_stage: KGStage,
     relationship_id_name: str,
     source_document_id: str,
-    occurrences: int | None = None,
-) -> Union["KGRelationship", "KGRelationshipExtractionStaging"]:
+    occurrences: int = 1,
+) -> KGRelationshipExtractionStaging:
     """
-    Add a relationship between two entities to the database.
+    Add or update a new staging relationship to the database.
 
     Args:
         db_session: SQLAlchemy database session
-        relationship_type: Type of relationship
+        relationship_id_name: The ID name of the relationship in format "source__relationship__target"
         source_document_id: ID of the source document
-        occurrences: Optional count of similar relationships clustered together
-
+        occurrences: Number of times this relationship has been found
     Returns:
-        The created KGRelationship object
+        The created or updated KGRelationshipExtractionStaging object
 
     Raises:
-        sqlalchemy.exc.IntegrityError: If the relationship already exists or entities don't exist
+        sqlalchemy.exc.IntegrityError: If there's an error with the database operation
     """
     # Generate a unique ID for the relationship
 
@@ -56,124 +53,96 @@ def add_relationship(
     relationship_id_name = format_relationship(relationship_id_name)
     relationship_type = generate_relationship_type(relationship_id_name)
 
-    relationship_data = {
-        "id_name": relationship_id_name,
-        "source_node": source_entity_id_name,
-        "target_node": target_entity_id_name,
-        "source_node_type": source_entity_type,
-        "target_node_type": target_entity_type,
-        "type": relationship_string.lower(),
-        "relationship_type_id_name": relationship_type,
-        "source_document": source_document_id,
-        "occurrences": occurrences or 1,
-    }
-
-    relationship: KGRelationship | KGRelationshipExtractionStaging
-    if kg_stage == KGStage.EXTRACTED:
-        relationship = KGRelationshipExtractionStaging(**relationship_data)
-        # Delete existing relationship if it exists
-        db_session.query(KGRelationshipExtractionStaging).filter(
-            KGRelationshipExtractionStaging.id_name == relationship_id_name,
-            KGRelationshipExtractionStaging.source_document == source_document_id,
-        ).delete(synchronize_session=False)
-    elif kg_stage == KGStage.NORMALIZED:
-        relationship = KGRelationship(**relationship_data)
-        # Delete existing relationship if it exists
-        db_session.query(KGRelationship).filter(
-            KGRelationship.id_name == relationship_id_name,
-            KGRelationship.source_document == source_document_id,
-        ).delete(synchronize_session=False)
-    else:
-        raise ValueError(f"Invalid kg_stage: {kg_stage}")
-
     # Insert the new relationship
-    stmt = postgresql.insert(type(relationship)).values(**relationship_data)
-    db_session.execute(stmt)
-    db_session.flush()  # Flush to get any DB errors early
-
-    # Fetch the inserted record
-    result: Union[KGRelationship, KGRelationshipExtractionStaging, None] = None
-    if kg_stage == KGStage.EXTRACTED:
-        result = (
-            db_session.query(KGRelationshipExtractionStaging)
-            .filter_by(id_name=relationship_id_name, source_document=source_document_id)
-            .first()
+    stmt = (
+        postgresql.insert(KGRelationshipExtractionStaging)
+        .values(
+            {
+                "id_name": relationship_id_name,
+                "source_node": source_entity_id_name,
+                "target_node": target_entity_id_name,
+                "source_node_type": source_entity_type,
+                "target_node_type": target_entity_type,
+                "type": relationship_string.lower(),
+                "relationship_type_id_name": relationship_type,
+                "source_document": source_document_id,
+                "occurrences": occurrences,
+            }
         )
-    else:
-        result = (
-            db_session.query(KGRelationship)
-            .filter_by(id_name=relationship_id_name, source_document=source_document_id)
-            .first()
+        .on_conflict_do_update(
+            index_elements=["id_name", "source_document"],
+            set_={
+                "id_name": relationship_id_name,
+                "source_node": source_entity_id_name,
+                "target_node": target_entity_id_name,
+                "source_node_type": source_entity_type,
+                "target_node_type": target_entity_type,
+                "type": relationship_string.lower(),
+                "relationship_type_id_name": relationship_type,
+                "source_document": source_document_id,
+                "occurrences": KGRelationshipExtractionStaging.occurrences
+                + occurrences,
+            },
         )
+        .returning(KGRelationshipExtractionStaging)
+    )
 
+    result = db_session.execute(stmt).scalar()
     if result is None:
-        raise ValueError(
-            f"Failed to create relationship with id_name: {relationship_id_name}"
+        raise RuntimeError(
+            f"Failed to create or increment relationship with id_name: {relationship_id_name}"
         )
+
+    # Update the document's kg_stage if source_document is provided
+    if source_document_id is not None:
+        dbdocument.update_document_kg_info(
+            db_session,
+            document_id=source_document_id,
+            kg_stage=KGStage.EXTRACTED,
+        )
+    db_session.flush()  # Flush to get any DB errors early
 
     return result
 
 
-def add_or_increment_relationship(
+def transfer_relationship(
     db_session: Session,
-    kg_stage: KGStage,
-    relationship_id_name: str,
-    source_document_id: str,
-    new_occurrences: int = 1,
-) -> KGRelationship | KGRelationshipExtractionStaging:
+    relationship: KGRelationshipExtractionStaging,
+    entity_translations: dict[str, UUID],
+) -> KGRelationship:
     """
-    Add a relationship between two entities to the database if it doesn't exist,
-    or increment its occurrences by 1 if it already exists.
-
-    Args:
-        db_session: SQLAlchemy database session
-        relationship_id_name: The ID name of the relationship in format "source__relationship__target"
-        source_document_id: ID of the source document
-    Returns:
-        The created or updated KGRelationship object
-
-    Raises:
-        sqlalchemy.exc.IntegrityError: If there's an error with the database operation
+    Transfer a relationship from the staging table to the normalized table.
     """
-    # Format the relationship_id_name
-    relationship_id_name = format_relationship(relationship_id_name)
+    # Translate the source and target nodes
+    source_node = entity_translations[relationship.source_node]
+    target_node = entity_translations[relationship.target_node]
+    relationship_id_name = f"{source_node}__{relationship.type}__{target_node}"
 
-    _KGTable: type[KGRelationship] | type[KGRelationshipExtractionStaging]
-    if kg_stage == KGStage.EXTRACTED:
-        _KGTable = KGRelationshipExtractionStaging
-    elif kg_stage == KGStage.NORMALIZED:
-        _KGTable = KGRelationship
-    else:
-        raise ValueError(f"Invalid kg_stage: {kg_stage}")
-
-    # Check if the relationship already exists
-    existing_relationship = (
-        db_session.query(_KGTable)
-        .filter(_KGTable.id_name == relationship_id_name)
-        .filter(_KGTable.source_document == source_document_id)
-        .first()
+    # Create the transferred relationship
+    relationship = KGRelationship(
+        id_name=relationship_id_name,
+        source_node=source_node,
+        target_node=target_node,
+        source_node_type=relationship.source_node_type,
+        target_node_type=relationship.target_node_type,
+        type=relationship.type,
+        relationship_type_id_name=relationship.relationship_type_id_name,
+        source_document=relationship.source_document,
+        occurrences=relationship.occurrences or 1,
     )
+    db_session.add(relationship)
 
-    if existing_relationship:
-        # If it exists, increment the occurrences
-        existing_relationship = cast(
-            KGRelationship | KGRelationshipExtractionStaging, existing_relationship
-        )
-        existing_relationship.occurrences = (
-            existing_relationship.occurrences or 0
-        ) + new_occurrences
-        db_session.flush()
-        return existing_relationship
-    else:
-        # If it doesn't exist, add it with occurrences=1
-        db_session.flush()
-        return add_relationship(
+    # Update the document's kg_stage if source_document is provided
+    if relationship.source_document is not None:
+        dbdocument.update_document_kg_info(
             db_session,
-            KGStage(kg_stage),
-            relationship_id_name,
-            source_document_id,
-            occurrences=new_occurrences,
+            document_id=relationship.source_document,
+            kg_stage=KGStage.NORMALIZED,
         )
+        # TODO: update vespa
+    db_session.flush()
+
+    return relationship
 
 
 def add_relationship_type(
@@ -244,7 +213,6 @@ def add_relationship_type(
                 + extraction_count,
                 "type": relationship_data["type"],
                 "active": relationship_data["active"],
-                "time_updated": func.now(),
             },
         )
     )

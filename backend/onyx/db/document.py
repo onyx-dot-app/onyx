@@ -970,6 +970,7 @@ def update_document_kg_info(
         .where(DbDocument.id == document_id)
         .values(
             kg_stage=kg_stage,
+            kg_processing_time=datetime.now(timezone.utc),
         )
     )
     db_session.execute(stmt)
