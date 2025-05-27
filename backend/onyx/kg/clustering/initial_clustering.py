@@ -7,7 +7,7 @@ from onyx.configs.kg_configs import KG_CLUSTERING_RETRIVE_THRESHOLD
 from onyx.configs.kg_configs import KG_CLUSTERING_THRESHOLD
 from onyx.db.document import update_document_kg_info
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import add_entity
+from onyx.db.entities import add_or_update_staging_entity
 from onyx.db.entities import delete_entities_by_id_names
 from onyx.db.entities import get_entities_by_grounding
 from onyx.db.entities import KGEntity
@@ -44,6 +44,7 @@ def kg_clustering(
     """
 
     logger.info(f"Starting kg clustering for tenant {tenant_id}")
+    0 / 0
 
     ## Retrieval
 
@@ -85,7 +86,7 @@ def kg_clustering(
 
         # add the entities with a document_id
         with get_session_with_current_tenant() as db_session:
-            added_entity = add_entity(
+            added_entity = add_or_update_staging_entity(
                 db_session,
                 KGStage.NORMALIZED,
                 entity_type=entity.entity_type_id_name,
@@ -162,7 +163,7 @@ def kg_clustering(
     # transfer over the remaining unclustered entities
     for entity in remaining_grounded_entities:
         with get_session_with_current_tenant() as db_session:
-            added_entity = add_entity(
+            added_entity = add_or_update_staging_entity(
                 db_session,
                 KGStage.NORMALIZED,
                 entity_type=entity.entity_type_id_name,

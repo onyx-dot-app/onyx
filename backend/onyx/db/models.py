@@ -912,8 +912,10 @@ class KGEntityExtractionStaging(Base):
     __tablename__ = "kg_entity_extraction_staging"
 
     # Primary identifier
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
     )
 
     # Basic entity information
@@ -986,7 +988,11 @@ class KGRelationship(Base):
     __tablename__ = "kg_relationship"
 
     # Primary identifier - now part of composite key
-    id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        nullable=False,
+        index=True,
+    )
 
     source_document: Mapped[str | None] = mapped_column(
         NullFilteredString, ForeignKey("document.id"), nullable=True, index=True
@@ -1071,7 +1077,12 @@ class KGRelationshipExtractionStaging(Base):
     __tablename__ = "kg_relationship_extraction_staging"
 
     # Primary identifier - now part of composite key
-    id_name: Mapped[str] = mapped_column(NullFilteredString, index=True)
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString,
+        primary_key=True,
+        nullable=False,
+        index=True,
+    )
 
     source_document: Mapped[str | None] = mapped_column(
         NullFilteredString, ForeignKey("document.id"), nullable=True, index=True

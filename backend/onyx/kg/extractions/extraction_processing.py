@@ -14,7 +14,7 @@ from onyx.db.document import get_unprocessed_kg_document_batch_for_connector
 from onyx.db.document import update_document_kg_info
 from onyx.db.document import update_document_kg_stage
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.entities import add_entity
+from onyx.db.entities import add_or_update_staging_entity
 from onyx.db.entities import delete_from_kg_entities__no_commit
 from onyx.db.entity_type import get_entity_types
 from onyx.db.kg_config import get_kg_config_settings
@@ -850,11 +850,10 @@ def kg_extraction(
                             not in aggregated_kg_extractions.grounded_entities_document_ids
                         ):
                             # Ungrounded entities
-                            add_entity(
+                            add_or_update_staging_entity(
                                 db_session=db_session,
-                                kg_stage=KGStage.EXTRACTED,
-                                entity_type=entity_type,
                                 name=entity_name,
+                                entity_type=entity_type,
                                 occurrences=extraction_count,
                             )
                         else:
@@ -909,15 +908,14 @@ def kg_extraction(
                                         }
                                     )
 
-                            add_entity(
+                            add_or_update_staging_entity(
                                 db_session=db_session,
-                                kg_stage=KGStage.EXTRACTED,
-                                entity_type=entity_type,
                                 name=entity_name,
-                                occurrences=extraction_count,
+                                entity_type=entity_type,
                                 document_id=document_id,
-                                event_time=event_time,
+                                occurrences=extraction_count,
                                 attributes=entity_attributes,
+                                event_time=event_time,
                             )
 
                         db_session.commit()
@@ -1119,6 +1117,8 @@ def _kg_chunk_batch_extraction(
     tenant_id: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGBatchExtractionStats:
+    # FIXME: in the future, we should only look at the first chunk and
+    # remove the vespa update as that's handled now by the clustering
     _, fast_llm = get_default_llms()
 
     succeeded_chunk_id: list[KGChunkId] = []

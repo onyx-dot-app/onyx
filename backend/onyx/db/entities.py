@@ -17,83 +17,149 @@ from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
 
 
-def add_entity(
+def add_or_update_staging_entity(
     db_session: Session,
-    kg_stage: KGStage,
-    entity_type: str,
     name: str,
+    entity_type: str,
     document_id: str | None = None,
-    occurrences: int = 0,
-    event_time: datetime | None = None,
+    occurrences: int = 1,
     attributes: dict[str, str] | None = None,
-    alternative_names: list[str] | None = None,
-) -> "KGEntity | KGEntityExtractionStaging | None":
-    """Add a new entity to the database.
+    event_time: datetime | None = None,
+) -> KGEntityExtractionStaging:
+    """Add or update a new staging entity to the database.
 
     Args:
         db_session: SQLAlchemy session
-        kg_stage: KGStage of the entity
-        entity_type: Type of the entity (must match an existing KGEntityType)
         name: Name of the entity
+        entity_type: Type of the entity (must match an existing KGEntityType)
+        document_id: ID of the document the entity belongs to
         occurrences: Number of clusters this entity has been found
+        attributes: Attributes of the entity
+        event_time: Time the entity was added to the database
 
     Returns:
-        KGEntity: The created entity
+        KGEntityExtractionStaging: The created entity
     """
     entity_type = entity_type.upper()
     name = name.title()
     id_name = f"{entity_type}::{name}"
-    alternative_names = alternative_names or []
-
-    _KGEntityObject: Type[KGEntity | KGEntityExtractionStaging]
-    if kg_stage == KGStage.EXTRACTED:
-        _KGEntityObject = KGEntityExtractionStaging
-    elif kg_stage == KGStage.NORMALIZED:
-        _KGEntityObject = KGEntity
-    else:
-        raise ValueError(f"Invalid KGStage: {kg_stage}")
 
     # Create new entity
     stmt = (
-        pg_insert(_KGEntityObject)
+        pg_insert(KGEntityExtractionStaging)
         .values(
             id_name=id_name,
+            name=name,
             entity_type_id_name=entity_type,
             document_id=document_id,
-            name=name,
             occurrences=occurrences,
+            attributes=attributes or {},
             event_time=event_time,
-            attributes=attributes,
-            alternative_names=alternative_names,
         )
         .on_conflict_do_update(
             index_elements=["id_name"],
             set_=dict(
                 # Direct numeric addition without text()
-                occurrences=_KGEntityObject.occurrences + occurrences,
+                occurrences=KGEntityExtractionStaging.occurrences + occurrences,
                 # Keep other fields updated as before
+                name=name,
                 entity_type_id_name=entity_type,
                 document_id=document_id,
-                name=name,
+                attributes=attributes or {},
                 event_time=event_time,
-                attributes=attributes,
-                alternative_names=alternative_names,
             ),
         )
-        .returning(_KGEntityObject)
+        .returning(KGEntityExtractionStaging)
     )
 
     result = db_session.execute(stmt).scalar()
 
     # Update the document's kg_stage if document_id is provided
     if document_id is not None:
-
         db_session.query(Document).filter(Document.id == document_id).update(
-            {"kg_stage": kg_stage, "kg_processing_time": datetime.now(timezone.utc)}
+            {
+                "kg_stage": KGStage.EXTRACTED,
+                "kg_processing_time": datetime.now(timezone.utc),
+            }
         )
     db_session.flush()
 
     return result
+
+
+def add_or_update_entity(
+    db_session: Session,
+    id: str | None = None,
+    name: str | None = None,
+    alternative_names: list[str] | None = None,
+    entity_type: str | None = None,
+    document_id: str | None = None,
+    occurrences: int | None = None,
+    attributes: dict[str, str] | None = None,
+    event_time: datetime | None = None,
+) -> KGEntity:
+    """Add or update an entity to the database.
+
+    Args:
+        db_session: SQLAlchemy session
+        id: ID of the entity to update
+        name: Name of the entity
+        entity_type: Type of the entity (must match an existing KGEntityType)
+        document_id: ID of the document the entity belongs to
+        occurrences: Number of clusters this entity has been found
+        attributes: Attributes of the entity
+        event_time: Time the entity was added to the database
+
+    Returns:
+        KGEntity: The created entity
+    """
+    entity_type = entity_type.upper()
+    name = name.title()
+    alternative_names = set(alternative_names or [])
+    attributes = attributes or {}
+
+    if id is None:
+        entity = KGEntity(
+            name=name,
+            alternative_names=alternative_names,
+            entity_type_id_name=entity_type,
+            document_id=document_id,
+            occurrences=occurrences,
+            attributes=attributes,
+            event_time=event_time,
+        )
+        db_session.add(entity)
+    else:
+        entity = db_session.query(KGEntity).get(id)
+        if entity is None:
+            raise ValueError(f"Entity with id {id} not found")
+
+        entity.name = name if name is not None else entity.name
+        entity.entity_type_id_name = (
+            entity_type if entity_type is not None else entity.entity_type_id_name
+        )
+        if entity.document_id is None:
+            # only update document_id if it's currently None
+            # in the future, we may support changing the document_id (would need to update vespa)
+            entity.document_id = document_id
+        entity.occurrences = (
+            occurrences if occurrences is not None else entity.occurrences
+        )
+        entity.attributes = attributes if attributes is not None else entity.attributes
+        entity.event_time = event_time if event_time is not None else entity.event_time
+
+    # Update the document's kg_stage if document_id is provided
+    if document_id is not None:
+        db_session.query(Document).filter(Document.id == document_id).update(
+            {
+                "kg_stage": KGStage.NORMALIZED,
+                "kg_processing_time": datetime.now(timezone.utc),
+            }
+        )
+        # TODO: update vespa
+    db_session.flush()
+
+    return entity
 
 
 def get_kg_entity_by_document(db: Session, document_id: str) -> KGEntity | None:

@@ -27,7 +27,7 @@ depends_on = None
 def upgrade() -> None:
 
     # Create a new permission-less user to be later used for knowledge graph queries.
-    # The user will later get temporary read priviledges for a specific view that will be
+    # The user will later get temporary read privileges for a specific view that will be
     # ad hoc generated specific to a knowledge graph query.
     #
     # Note: in order for the migration to run, the DB_READONLY_USER and DB_READONLY_PASSWORD
@@ -260,14 +260,7 @@ def upgrade() -> None:
     # Create KGEntityExtractionStaging table
     op.create_table(
         "kg_entity_extraction_staging",
-        sa.Column(
-            "id",
-            sa.UUID(),
-            primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-            index=True,
-        ),
+        sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
         sa.Column(
             "alternative_names",
@@ -353,8 +346,8 @@ def upgrade() -> None:
     op.create_table(
         "kg_relationship_extraction_staging",
         sa.Column("id_name", sa.String(), nullable=False, index=True),
-        sa.Column("source_node", sa.UUID(), nullable=False, index=True),
-        sa.Column("target_node", sa.UUID(), nullable=False, index=True),
+        sa.Column("source_node", sa.String(), nullable=False, index=True),
+        sa.Column("target_node", sa.String(), nullable=False, index=True),
         sa.Column("source_node_type", sa.String(), nullable=False, index=True),
         sa.Column("target_node_type", sa.String(), nullable=False, index=True),
         sa.Column("source_document", sa.String(), nullable=True, index=True),
@@ -364,8 +357,12 @@ def upgrade() -> None:
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        sa.ForeignKeyConstraint(["source_node"], ["kg_entity_extraction_staging.id"]),
-        sa.ForeignKeyConstraint(["target_node"], ["kg_entity_extraction_staging.id"]),
+        sa.ForeignKeyConstraint(
+            ["source_node"], ["kg_entity_extraction_staging.id_name"]
+        ),
+        sa.ForeignKeyConstraint(
+            ["target_node"], ["kg_entity_extraction_staging.id_name"]
+        ),
         sa.ForeignKeyConstraint(["source_node_type"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["target_node_type"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["source_document"], ["document.id"]),
