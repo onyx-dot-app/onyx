@@ -165,6 +165,7 @@ export enum SourceCategory {
   Storage = "Storage",
   Wiki = "Wiki",
   CustomerSupport = "Customer Support",
+  CustomerRelationshipManagement = "Customer Relationship Management",
   Messaging = "Messaging",
   ProjectManagement = "Project Management",
   CodeRepository = "Code Repository",

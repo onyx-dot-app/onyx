@@ -175,7 +175,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   hubspot: {
     icon: HubSpotIcon,
     displayName: "HubSpot",
-    category: SourceCategory.CustomerSupport,
+    category: SourceCategory.CustomerRelationshipManagement,
     docs: "https://docs.onyx.app/connectors/hubspot",
   },
   document360: {
@@ -210,7 +210,7 @@ export const SOURCE_METADATA_MAP: SourceMap = {
   salesforce: {
     icon: SalesforceIcon,
     displayName: "Salesforce",
-    category: SourceCategory.CustomerSupport,
+    category: SourceCategory.CustomerRelationshipManagement,
     docs: "https://docs.onyx.app/connectors/salesforce",
   },
   sharepoint: {

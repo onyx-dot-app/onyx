@@ -154,6 +154,8 @@ function getCategoryDescription(category: SourceCategory): string {
       return "Link to project management and task tracking tools.";
     case SourceCategory.CustomerSupport:
       return "Connect to customer support and helpdesk systems.";
+    case SourceCategory.CustomerRelationshipManagement:
+      return "Integrate with customer relationship management platforms.";
     case SourceCategory.CodeRepository:
       return "Integrate with code repositories and version control systems.";
     case SourceCategory.Storage:
