@@ -809,11 +809,6 @@ class KGRelationshipTypeExtractionStaging(Base):
     occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -835,31 +830,14 @@ class KGEntity(Base):
     __tablename__ = "kg_entity"
 
     # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, index=True
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
 
-    attributes: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Attributes for this entity",
-    )
-
-    document_id: Mapped[str | None] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-
-    # Data for normalization and clustering
-    clustering_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-
-    clustering_trigrams: Mapped[list[str]] = mapped_column(
+    name_trigrams: Mapped[list[str]] = mapped_column(
         postgresql.ARRAY(String(3)),
         nullable=True,
     )
@@ -879,6 +857,10 @@ class KGEntity(Base):
     # Relationship to KGEntityType
     entity_type: Mapped["KGEntityType"] = relationship("KGEntityType", backref="entity")
 
+    document_id: Mapped[str | None] = mapped_column(
+        NullFilteredString, nullable=True, index=True
+    )
+
     description: Mapped[str | None] = mapped_column(String, nullable=True)
 
     keywords: Mapped[list[str]] = mapped_column(
@@ -894,6 +876,14 @@ class KGEntity(Base):
 
     # Boosts - using JSON for flexibility
     boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
+
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
 
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -922,32 +912,19 @@ class KGEntityExtractionStaging(Base):
     __tablename__ = "kg_entity_extraction_staging"
 
     # Primary identifier
-    id_name: Mapped[str] = mapped_column(
-        NullFilteredString, primary_key=True, index=True
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Basic entity information
     name: Mapped[str] = mapped_column(NullFilteredString, nullable=False, index=True)
 
-    attributes: Mapped[dict] = mapped_column(
-        postgresql.JSONB,
-        nullable=False,
-        default=dict,
-        server_default="{}",
-        comment="Attributes for this entity",
+    alternative_names: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list
     )
 
     document_id: Mapped[str | None] = mapped_column(
         NullFilteredString, nullable=True, index=True
-    )
-
-    # Data for normalization and clustering
-    clustering_name: Mapped[str] = mapped_column(
-        NullFilteredString, nullable=True, index=True
-    )
-
-    alternative_names: Mapped[list[str]] = mapped_column(
-        postgresql.ARRAY(String), nullable=False, default=list
     )
 
     # Reference to KGEntityType
@@ -979,6 +956,14 @@ class KGEntityExtractionStaging(Base):
     # Boosts - using JSON for flexibility
     boosts: Mapped[dict] = mapped_column(postgresql.JSONB, nullable=False, default=dict)
 
+    attributes: Mapped[dict] = mapped_column(
+        postgresql.JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
+        comment="Attributes for this entity",
+    )
+
     event_time: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
@@ -986,11 +971,6 @@ class KGEntityExtractionStaging(Base):
     )
 
     # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -1013,12 +993,12 @@ class KGRelationship(Base):
     )
 
     # Source and target nodes (foreign keys to Entity table)
-    source_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+    source_node: Mapped[UUID] = mapped_column(
+        ForeignKey("kg_entity.id"), nullable=False, index=True
     )
 
-    target_node: Mapped[str] = mapped_column(
-        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
+    target_node: Mapped[UUID] = mapped_column(
+        ForeignKey("kg_entity.id"), nullable=False, index=True
     )
 
     source_node_type: Mapped[str] = mapped_column(
@@ -1098,18 +1078,12 @@ class KGRelationshipExtractionStaging(Base):
     )
 
     # Source and target nodes (foreign keys to Entity table)
-    source_node: Mapped[str] = mapped_column(
-        NullFilteredString,
-        ForeignKey("kg_entity_extraction_staging.id_name"),
-        nullable=False,
-        index=True,
+    source_node: Mapped[UUID] = mapped_column(
+        ForeignKey("kg_entity_extraction_staging.id"), nullable=False, index=True
     )
 
-    target_node: Mapped[str] = mapped_column(
-        NullFilteredString,
-        ForeignKey("kg_entity_extraction_staging.id_name"),
-        nullable=False,
-        index=True,
+    target_node: Mapped[UUID] = mapped_column(
+        ForeignKey("kg_entity_extraction_staging.id"), nullable=False, index=True
     )
 
     source_node_type: Mapped[str] = mapped_column(
@@ -1145,11 +1119,6 @@ class KGRelationshipExtractionStaging(Base):
     occurrences: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     # Tracking fields
-    time_updated: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-    )
     time_created: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
