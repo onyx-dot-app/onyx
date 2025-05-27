@@ -18,13 +18,13 @@ function SourceTile({
 }) {
   return (
     <Link
-      className={`flex 
-        flex-col 
-        items-center 
-        justify-center 
-        p-4 
-        rounded-lg 
-        w-40 
+      className={`flex
+        flex-col
+        items-center
+        justify-center
+        p-4
+        rounded-lg
+        w-40
         cursor-pointer
         shadow-md
         hover:bg-accent-background-hovered

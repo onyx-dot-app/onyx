@@ -368,7 +368,7 @@ export function getSourceMetadata(sourceType: ValidSources): SourceMetadata {
 }
 
 export function listSourceMetadata(): SourceMetadata[] {
-  /* This gives back all the viewable / common sources, primarily for 
+  /* This gives back all the viewable / common sources, primarily for
   display in the Add Connector page */
   const entries = Object.entries(SOURCE_METADATA_MAP)
     .filter(
