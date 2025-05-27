@@ -122,7 +122,7 @@ class KGUChunkUpdateRequest(BaseModel):
     chunk_id: int
     core_entity: str
     entities: set[str] | None = None
-    relationships: set[tuple[str, str, str]] | None = None
+    relationships: set[str] | None = None
     terms: set[str] | None = None
     converted_attributes: set[str] | None = None
     attributes: dict[str, str | list[str]] | None = None

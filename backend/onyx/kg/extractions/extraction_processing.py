@@ -28,10 +28,12 @@ from onyx.db.relationships import add_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
+from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.configuration import execute_kg_setting_tests
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
 from onyx.kg.models import KGBatchExtractionStats
+from onyx.kg.models import KGChunkExtraction
 from onyx.kg.models import KGChunkFormat
 from onyx.kg.models import KGChunkId
 from onyx.kg.models import KGClassificationContent
@@ -346,7 +348,7 @@ def kg_extraction(
         - For each batch of unprocessed documents:
             - Classify each document to select proper ones
             - Get and extract from chunks
-            - Update chunks in Vespa
+            - Update chunks inVespa
             - Update temporary KG extraction tables
             - Update document table to set kg_extracted = True
     """
@@ -489,7 +491,7 @@ def kg_extraction(
             #   - Get and analyze batches of chunks
             #   - Store results in postgres:
             #      - entities and relationships in temp kg extraction tables
-            #      - document classification in temp kg entity extraction table
+            #      - document classification in temp kg entity etraction table
             #      - set kg_stage = extracted in document table
 
             classification_outcomes: list[tuple[bool, KGClassificationDecisions]] = []
@@ -586,7 +588,7 @@ def kg_extraction(
                     continue
 
                 # 1. perform (implicit) KG 'extractions' on the documents that should be processed
-                # This is really about assigning document meta-data to KG entities/relationships or KG entity attributes
+                # This is really about assigning document meta-data to KG entities/relationships or KG entity attrbutes
                 # General approach:
                 #    - vendor emails to Employee-type entities + relationship to current primary grounded entity
                 #    - external account emails to Account-type entities + relationship to current primary grounded entity
@@ -855,7 +857,6 @@ def kg_extraction(
                                 name=entity_name,
                                 occurrences=extraction_count,
                             )
-                            # FIXME: get translation from entity name to entity id
                         else:
                             # Primary grounded entities
                             event_time = get_document_updated_at(
@@ -1122,7 +1123,7 @@ def _kg_chunk_batch_extraction(
 
     succeeded_chunk_id: list[KGChunkId] = []
     failed_chunk_id: list[KGChunkId] = []
-    succeeded_chunk_extraction: list[KGUChunkUpdateRequest] = []
+    succeeded_chunk_extraction: list[KGChunkExtraction] = []
 
     # preformatted_prompt = MASTER_EXTRACTION_PROMPT.format(
     #     entity_types=get_entity_types_str(active=True)
@@ -1138,6 +1139,7 @@ def _kg_chunk_batch_extraction(
         """Process a single chunk and return update request and other important KG processing information"""
 
         # Chunk treatment variables
+
         chunk, kg_document_extractions = chunk_doc_extraction
 
         # chunk_is_from_call = chunk.source_type.lower() in [
@@ -1146,10 +1148,18 @@ def _kg_chunk_batch_extraction(
 
         chunk_needs_deep_extraction = chunk.deep_extraction
 
-        # Get implied entities and relationships from chunk attributes
+        # Get core entity
+
+        chunk.document_id
+        chunk.primary_owners
+        chunk.secondary_owners
+        chunk.content
+        chunk.title.capitalize()
+
+        # Get implied entities and relationships from  chunk attributes
 
         implied_attribute_entities: set[str] = set()
-        implied_attribute_relationships: set[tuple[str, str, str]] = set()
+        implied_attribute_relationships: set[str] = set()
         converted_attributes_to_relationships: set[str] = set()
         attribute_company_participant_emails: set[str] = set()
         attribute_account_participant_emails: set[str] = set()
@@ -1215,8 +1225,8 @@ def _kg_chunk_batch_extraction(
 
         # Initialize common variables
         extracted_entities: list[str] = []
-        extracted_relationships: list[tuple[str, str, str]] = []
-        implied_extracted_relationships: list[tuple[str, str, str]] = []
+        extracted_relationships: list[str] = []
+        implied_extracted_relationships: list[str] = []
         extracted_terms: list[str] = []
 
         if chunk_needs_deep_extraction:
@@ -1251,12 +1261,8 @@ def _kg_chunk_batch_extraction(
 
                 extracted_entities = parsed_result.get("entities", [])
                 extracted_relationships = [
-                    relation
+                    relationship.replace(" ", "_")
                     for relationship in parsed_result.get("relationships", [])
-                    if len(
-                        relation := tuple(relationship.replace(" ", "_").split("__"))
-                    )
-                    == 3
                 ]
                 extracted_terms = parsed_result.get("terms", [])
             except Exception as e:
@@ -1273,11 +1279,11 @@ def _kg_chunk_batch_extraction(
                 )
 
         implied_extracted_relationships = [
-            (
-                kg_document_extractions.kg_core_document_id_name,
-                "mentions",
-                extracted_entity,
-            )
+            kg_document_extractions.kg_core_document_id_name
+            + "__"
+            + "mentions"
+            + "__"
+            + extracted_entity
             for extracted_entity in extracted_entities
         ]
 
@@ -1306,15 +1312,14 @@ def _kg_chunk_batch_extraction(
 
         if not all_relationships:
             all_relationships.append(
-                (
-                    "VENDOR::" + kg_config_settings.KG_VENDOR,
-                    "relates_to",
-                    kg_document_extractions.kg_core_document_id_name,
-                )
+                f"VENDOR::{kg_config_settings.KG_VENDOR}"
+                + "__"
+                + "relates_to"
+                + "__"
+                + kg_document_extractions.kg_core_document_id_name
             )
 
-        return (
-            True,
+        kg_updates = [
             KGUChunkUpdateRequest(
                 document_id=chunk.document_id,
                 chunk_id=chunk.chunk_id,
@@ -1325,7 +1330,17 @@ def _kg_chunk_batch_extraction(
                 converted_attributes=converted_attributes_to_relationships,
                 attributes=kg_attributes,
             ),
+        ]
+
+        update_kg_chunks_vespa_info(
+            kg_update_requests=kg_updates,
+            index_name=index_name,
+            tenant_id=tenant_id,
         )
+
+        logger.info(f"KG updated: {chunk.chunk_id} from doc {chunk.document_id}")
+
+        return True, kg_updates[0]  # only single chunk
 
     # Assume for prototype: use_threads = True. TODO: Make thread safe!
 
@@ -1374,16 +1389,22 @@ def _kg_chunk_batch_extraction(
 
         mentioned_chunk_entities: set[str] = set()
         for relationship in chunk_result.relationships:
-            assert len(relationship) == 3
-            source_entity, _, target_entity = relationship
-            if "*" in source_entity or "*" in target_entity:
-                continue
-            for entity in [source_entity, target_entity]:
-                if entity not in mentioned_chunk_entities:
-                    aggregated_kg_extractions.entities[entity] = 1
-                    mentioned_chunk_entities.add(entity)
+            relationship_split = relationship.split("__")
+            if len(relationship_split) == 3:
+                source_entity = relationship_split[0]
+                target_entity = relationship_split[2]
+                if "*" in source_entity or "*" in target_entity:
+                    continue
+                if source_entity not in mentioned_chunk_entities:
+                    aggregated_kg_extractions.entities[source_entity] = 1
+                    mentioned_chunk_entities.add(source_entity)
                 else:
-                    aggregated_kg_extractions.entities[entity] += 1
+                    aggregated_kg_extractions.entities[source_entity] += 1
+                if target_entity not in mentioned_chunk_entities:
+                    aggregated_kg_extractions.entities[target_entity] = 1
+                    mentioned_chunk_entities.add(target_entity)
+                else:
+                    aggregated_kg_extractions.entities[target_entity] += 1
             if relationship not in aggregated_kg_extractions.relationships:
                 aggregated_kg_extractions.relationships[relationship] = defaultdict(int)
             aggregated_kg_extractions.relationships[relationship][
