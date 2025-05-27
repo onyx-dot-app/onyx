@@ -26,13 +26,15 @@ def _update_implied_entities_relationships(
     kg_core_document_id_name: str,
     owner_list: list[str],
     implied_entities: set[str],
-    implied_relationships: set[str],
+    implied_relationships: set[tuple[str, str, str]],
     company_participant_emails: set[str],
     account_participant_emails: set[str],
     relationship_type: str,
     kg_config_settings: KGConfigSettings,
     converted_relationships_to_attributes: dict[str, list[str]],
-) -> tuple[set[str], set[str], set[str], set[str], dict[str, list[str]]]:
+) -> tuple[
+    set[str], set[tuple[str, str, str]], set[str], set[str], dict[str, list[str]]
+]:
 
     for owner in owner_list or []:
         if is_email(owner):
@@ -81,7 +83,7 @@ def kg_document_entities_relationships_attribute_generation(
     document_attributes = doc_metadata.document_attributes
 
     implied_entities: set[str] = set()
-    implied_relationships: set[str] = (
+    implied_relationships: set[tuple[str, str, str]] = (
         set()
     )  # 'Relationships' that will be captured as KG relationships
     converted_relationships_to_attributes: dict[str, list[str]] = defaultdict(
@@ -185,25 +187,41 @@ def kg_document_entities_relationships_attribute_generation(
                     implied_entity = f"{attribute.upper()}::{value.capitalize()}"
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                        (
+                            implied_entity,
+                            f"is_{attribute.lower()}_of",
+                            kg_core_document_id_name,
+                        )
                     )
 
                     implied_entity = f"{attribute.upper()}::*"
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                        (
+                            implied_entity,
+                            f"is_{attribute.lower()}_of",
+                            kg_core_document_id_name,
+                        )
                     )
 
                     implied_entity = f"{attribute.upper()}::*"
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{document_entity_type.upper()}::*"
+                        (
+                            implied_entity,
+                            f"is_{attribute.lower()}_of",
+                            f"{document_entity_type.upper()}::*",
+                        )
                     )
 
                     implied_entity = f"{attribute.upper()}::{value.capitalize()}"
                     implied_entities.add(implied_entity)
                     implied_relationships.add(
-                        f"{implied_entity}__is_{attribute.lower()}_of__{document_entity_type.upper()}::*"
+                        (
+                            implied_entity,
+                            f"is_{attribute.lower()}_of",
+                            f"{document_entity_type.upper()}::*",
+                        )
                     )
 
                     cleaned_document_attributes.pop(attribute)
@@ -213,7 +231,11 @@ def kg_document_entities_relationships_attribute_generation(
                         implied_entity = f"{attribute.upper()}::{item.capitalize()}"
                         implied_entities.add(implied_entity)
                         implied_relationships.add(
-                            f"{implied_entity}__is_{attribute.lower()}_of__{kg_core_document_id_name}"
+                            (
+                                implied_entity,
+                                f"is_{attribute.lower()}_of",
+                                kg_core_document_id_name,
+                            )
                         )
                         cleaned_document_attributes.pop(attribute)
             if attribute.lower().endswith("_id") or attribute.endswith("Id"):
@@ -259,12 +281,12 @@ def kg_process_person(
     person: str,
     core_document_id_name: str,
     implied_entities: set[str],
-    implied_relationships: set[str],
+    implied_relationships: set[tuple[str, str, str]],
     company_participant_emails: set[str],
     account_participant_emails: set[str],
     relationship_type: str,
     kg_config_settings: KGConfigSettings,
-) -> tuple[set[str], set[str], set[str], set[str]]:
+) -> tuple[set[str], set[tuple[str, str, str]], set[str], set[str]]:
     """
     Process a single owner and return updated sets with entities and relationships.
 
@@ -302,16 +324,40 @@ def kg_process_person(
 
             implied_entities = implied_entities | {f"EMPLOYEE::{kg_person.name}"}
             implied_relationships = implied_relationships | {
-                f"EMPLOYEE::{kg_person.name}__{relationship_type}__{core_document_id_name}",
-                f"EMPLOYEE::{kg_person.name}__{relationship_type}__{generalized_target_entity}",
-                f"EMPLOYEE::*__{relationship_type}__{core_document_id_name}",
-                f"EMPLOYEE::*__{relationship_type}__{generalized_target_entity}",
+                (
+                    f"EMPLOYEE::{kg_person.name}",
+                    relationship_type,
+                    core_document_id_name,
+                ),
+                (
+                    f"EMPLOYEE::{kg_person.name}",
+                    relationship_type,
+                    generalized_target_entity,
+                ),
+                (
+                    "EMPLOYEE::*",
+                    relationship_type,
+                    core_document_id_name,
+                ),
+                (
+                    "EMPLOYEE::*",
+                    relationship_type,
+                    generalized_target_entity,
+                ),
             }
             if kg_person.company not in implied_entities:
                 implied_entities = implied_entities | {f"VENDOR::{kg_person.company}"}
                 implied_relationships = implied_relationships | {
-                    f"VENDOR::{kg_person.company}__{relationship_type}__{core_document_id_name}",
-                    f"VENDOR::{kg_person.company}__{relationship_type}__{generalized_target_entity}",
+                    (
+                        f"VENDOR::{kg_person.company}",
+                        relationship_type,
+                        core_document_id_name,
+                    ),
+                    (
+                        f"VENDOR::{kg_person.company}",
+                        relationship_type,
+                        generalized_target_entity,
+                    ),
                 }
 
     else:
@@ -324,8 +370,16 @@ def kg_process_person(
                 "ACCOUNT::*",
             }
             implied_relationships = implied_relationships | {
-                f"ACCOUNT::{kg_person.company}__{relationship_type}__{core_document_id_name}",
-                f"ACCOUNT::*__{relationship_type}__{core_document_id_name}",
+                (
+                    f"ACCOUNT::{kg_person.company}",
+                    relationship_type,
+                    core_document_id_name,
+                ),
+                (
+                    "ACCOUNT::*",
+                    relationship_type,
+                    core_document_id_name,
+                ),
             }
 
             generalized_target_entity = list(
@@ -333,8 +387,16 @@ def kg_process_person(
             )[0]
 
             implied_relationships = implied_relationships | {
-                f"ACCOUNT::*__{relationship_type}__{generalized_target_entity}",
-                f"ACCOUNT::{kg_person.company}__{relationship_type}__{generalized_target_entity}",
+                (
+                    f"ACCOUNT::{kg_person.company}",
+                    relationship_type,
+                    generalized_target_entity,
+                ),
+                (
+                    "ACCOUNT::*",
+                    relationship_type,
+                    generalized_target_entity,
+                ),
             }
 
     return (

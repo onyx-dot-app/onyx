@@ -50,7 +50,7 @@ class KGChunkExtraction(BaseModel):
     chunk_id: int
     core_entity: str
     entities: list[str]
-    relationships: list[str]
+    relationships: list[tuple[str, str, str]]
     terms: list[str]
     attributes: dict[str, str | list[str]]
 
@@ -69,7 +69,7 @@ class KGRelationshipExtraction(BaseModel):
 class KGAggregatedExtractions(BaseModel):
     grounded_entities_document_ids: dict[str, str]
     entities: dict[str, int]
-    relationships: dict[str, dict[str, int]]
+    relationships: dict[tuple[str, str, str], dict[str, int]]
     terms: dict[str, int]
     attributes: dict[str, dict[str, str | list[str]]]
 
@@ -200,7 +200,7 @@ class KGStage(str, Enum):
 class KGDocumentEntitiesRelationshipsAttributes(BaseModel):
     kg_core_document_id_name: str
     implied_entities: set[str]
-    implied_relationships: set[str]
+    implied_relationships: set[tuple[str, str, str]]
     converted_relationships_to_attributes: dict[str, list[str]]
     company_participant_emails: set[str]
     account_participant_emails: set[str]

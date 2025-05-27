@@ -97,9 +97,6 @@ from onyx.file_store.models import FileDescriptor
 from onyx.file_store.models import InMemoryChatFile
 from onyx.file_store.utils import load_all_chat_files
 from onyx.file_store.utils import save_files
-from onyx.kg.clustering.incremental_cluster_updates import (
-    kg_incremental_cluster_updates,
-)
 from onyx.kg.clustering.initial_clustering import kg_clustering
 from onyx.kg.configuration import populate_default_account_employee_definitions
 from onyx.kg.configuration import populate_default_grounded_entity_types
@@ -671,10 +668,6 @@ def stream_chat_message_objects(
         elif new_msg_req.message == "kg_c":
             kg_clustering(tenant_id, index_str)
             raise Exception("Clustering done")
-
-        elif new_msg_req.message == "kg_i":
-            kg_incremental_cluster_updates(tenant_id, index_str)
-            raise Exception("Incremental clustering done")
 
         elif new_msg_req.message == "kg_rs_full":
             reset_full_kg_index()
