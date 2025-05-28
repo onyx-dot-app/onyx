@@ -680,8 +680,6 @@ class VespaIndex(DocumentIndex):
     ) -> None:
 
         processed_updates_requests: list[KGVespaChunkUpdateRequest] = []
-        logger.debug(f"Updating {len(kg_update_requests)} documents in Vespa")
-
         update_start = time.monotonic()
 
         # Build the _VespaUpdateRequest objects
@@ -689,27 +687,14 @@ class VespaIndex(DocumentIndex):
         for kg_update_request in kg_update_requests:
             kg_update_dict: dict[str, dict] = {"fields": {}}
 
-            implied_entities = set()
             if kg_update_request.relationships is not None:
-                for kg_relationship in kg_update_request.relationships:
-                    kg_relationship_split = kg_relationship.split("__")
-                    if len(kg_relationship_split) == 3:
-                        implied_entities.add(kg_relationship_split[0])
-                        implied_entities.add(kg_relationship_split[2])
-
                 kg_update_dict = update_kg_type_dict(
                     kg_update_dict, "kg_relationships", kg_update_request.relationships
                 )
 
-            if kg_update_request.entities is not None or implied_entities:
-                if kg_update_request.entities is None:
-                    kg_entities = implied_entities
-                else:
-                    kg_entities = set(kg_update_request.entities)
-                    kg_entities.update(implied_entities)
-
+            if kg_update_request.entities is not None:
                 kg_update_dict = update_kg_type_dict(
-                    kg_update_dict, "kg_entities", kg_entities
+                    kg_update_dict, "kg_entities", kg_update_request.entities
                 )
 
             if kg_update_request.terms is not None:
@@ -742,7 +727,8 @@ class VespaIndex(DocumentIndex):
                 processed_updates_requests, httpx_client
             )
         logger.debug(
-            "Finished updating Vespa documents in %.2f seconds",
+            "Updated %d vespa documents in %.2f seconds",
+            len(processed_updates_requests),
             time.monotonic() - update_start,
         )
 

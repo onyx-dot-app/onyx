@@ -104,6 +104,7 @@ from onyx.kg.extractions.extraction_processing import kg_extraction
 from onyx.kg.resets.reset_extractions import reset_extraction_kg_index
 from onyx.kg.resets.reset_index import reset_full_kg_index
 from onyx.kg.resets.reset_normalizations import reset_normalization_kg_index
+from onyx.kg.resets.reset_vespa import reset_vespa_kg_index
 from onyx.llm.exceptions import GenAIDisabledException
 from onyx.llm.factory import get_llms_for_persona
 from onyx.llm.factory import get_main_llm_from_tuple
@@ -662,7 +663,6 @@ def stream_chat_message_objects(
 
         if new_msg_req.message == "kg_e":
             kg_extraction(tenant_id, index_str)
-
             raise Exception("Extractions done")
 
         elif new_msg_req.message == "kg_c":
@@ -680,6 +680,10 @@ def stream_chat_message_objects(
         elif new_msg_req.message == "kg_rs_normalization":
             reset_normalization_kg_index()
             raise Exception("Normalization KG index reset done")
+
+        elif new_msg_req.message == "kg_rs_vespa":
+            reset_vespa_kg_index(tenant_id, index_str)
+            raise Exception("Vespa KG index reset done")
 
         elif new_msg_req.message == "kg_setup":
             populate_default_grounded_entity_types()

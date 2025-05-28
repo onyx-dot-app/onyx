@@ -27,7 +27,6 @@ from onyx.db.relationships import add_or_update_staging_relationship
 from onyx.db.relationships import add_relationship_type
 from onyx.db.relationships import delete_from_kg_relationships__no_commit
 from onyx.document_index.vespa.index import KGUChunkUpdateRequest
-from onyx.document_index.vespa.kg_interactions import update_kg_chunks_vespa_info
 from onyx.kg.configuration import execute_kg_setting_tests
 from onyx.kg.models import ConnectorExtractionStats
 from onyx.kg.models import KGAggregatedExtractions
@@ -347,7 +346,7 @@ def kg_extraction(
         - For each batch of unprocessed documents:
             - Classify each document to select proper ones
             - Get and extract from chunks
-            - Update chunks inVespa
+            - Update chunks in Vespa
             - Update temporary KG extraction tables
             - Update document table to set kg_extracted = True
     """
@@ -609,6 +608,7 @@ def kg_extraction(
 
                 # 2. perform KG extraction on the chunks that should be processed
 
+                # TODO: kg-id-refactor: just grab first chunk as we update vespa in clustering
                 formatted_chunk_batches = get_document_chunks_for_kg_processing(
                     document_id=unprocessed_document.id,
                     deep_extraction=batch_metadata[
@@ -1101,8 +1101,6 @@ def _kg_chunk_batch_extraction(
     tenant_id: str,
     kg_config_settings: KGConfigSettings,
 ) -> KGBatchExtractionStats:
-    # FIXME: in the future, we should only look at the first chunk and
-    # remove the vespa update as that's handled now by the clustering
     _, fast_llm = get_default_llms()
 
     succeeded_chunk_id: list[KGChunkId] = []
@@ -1133,12 +1131,6 @@ def _kg_chunk_batch_extraction(
         chunk_needs_deep_extraction = chunk.deep_extraction
 
         # Get core entity
-
-        chunk.document_id
-        chunk.primary_owners
-        chunk.secondary_owners
-        chunk.content
-        chunk.title.capitalize()
 
         # Get implied entities and relationships from  chunk attributes
 
@@ -1282,8 +1274,6 @@ def _kg_chunk_batch_extraction(
             )
         )
 
-        logger.debug(f"All entities: {all_entities}")
-
         all_relationships = (
             list(implied_attribute_relationships)
             + list(extracted_relationships)
@@ -1303,28 +1293,17 @@ def _kg_chunk_batch_extraction(
                 + kg_document_extractions.kg_core_document_id_name
             )
 
-        kg_updates = [
-            KGUChunkUpdateRequest(
-                document_id=chunk.document_id,
-                chunk_id=chunk.chunk_id,
-                core_entity=kg_document_extractions.kg_core_document_id_name,
-                entities=all_entities,
-                relationships=set(all_relationships),
-                terms=set(extracted_terms),
-                converted_attributes=converted_attributes_to_relationships,
-                attributes=kg_attributes,
-            ),
-        ]
-
-        update_kg_chunks_vespa_info(
-            kg_update_requests=kg_updates,
-            index_name=index_name,
-            tenant_id=tenant_id,
+        logger.info(f"KG extracted: doc {chunk.document_id} chunk {chunk.chunk_id}")
+        return True, KGUChunkUpdateRequest(
+            document_id=chunk.document_id,
+            chunk_id=chunk.chunk_id,
+            core_entity=kg_document_extractions.kg_core_document_id_name,
+            entities=all_entities,
+            relationships=set(all_relationships),
+            terms=set(extracted_terms),
+            converted_attributes=converted_attributes_to_relationships,
+            attributes=kg_attributes,
         )
-
-        logger.info(f"KG updated: {chunk.chunk_id} from doc {chunk.document_id}")
-
-        return True, kg_updates[0]  # only single chunk
 
     # Assume for prototype: use_threads = True. TODO: Make thread safe!
 

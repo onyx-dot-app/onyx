@@ -20,16 +20,22 @@ from onyx.db.relationships import delete_relationships_by_id_names
 from onyx.db.relationships import get_all_relationship_types
 from onyx.db.relationships import get_all_relationships
 from onyx.db.relationships import transfer_relationship
+from onyx.document_index.vespa.kg_interactions import (
+    update_kg_chunks_vespa_info_for_entity,
+)
+from onyx.document_index.vespa.kg_interactions import (
+    update_kg_chunks_vespa_info_for_relationship,
+)
 from onyx.kg.models import KGGroundingType
 from onyx.kg.models import KGStage
 from onyx.utils.logger import setup_logger
 
-# from sklearn.cluster import SpectralClustering  # type: ignore
-
 logger = setup_logger()
 
 
-def _cluster_one_grounded_entity(entity: KGEntityExtractionStaging) -> KGEntity:
+def _cluster_one_grounded_entity(
+    entity: KGEntityExtractionStaging, tenant_id: str, index_name: str
+) -> KGEntity:
     """
     Cluster a single grounded entity.
     """
@@ -84,13 +90,24 @@ def _cluster_one_grounded_entity(entity: KGEntityExtractionStaging) -> KGEntity:
     with get_session_with_current_tenant() as db_session:
         if best_entity:
             logger.debug(f"Merged {entity.name} with {best_entity.name}")
+            update_vespa = (
+                best_entity.document_id is None and entity.document_id is not None
+            )
             entity = merge_entities(
                 db_session=db_session, parent=best_entity, child=entity
             )
         else:
+            update_vespa = entity.document_id is not None
             entity = transfer_entity(db_session=db_session, entity=entity)
         db_session.commit()
-        return entity
+
+    # update vespa
+    if update_vespa:
+        update_kg_chunks_vespa_info_for_entity(
+            entity=entity, index_name=index_name, tenant_id=tenant_id
+        )
+
+    return entity
 
 
 def kg_clustering(
@@ -138,7 +155,7 @@ def kg_clustering(
     entity_translations: dict[str, UUID] = {}
 
     for entity in grounded_entities:
-        added_entity = _cluster_one_grounded_entity(entity)
+        added_entity = _cluster_one_grounded_entity(entity, tenant_id, index_name)
         transferred_entities.append(entity.id_name)
         entity_translations[entity.id_name] = added_entity.id_name
 
@@ -161,7 +178,7 @@ def kg_clustering(
     transferred_relationships: list[str] = []
     for relationship in relationships:
         with get_session_with_current_tenant() as db_session:
-            transfer_relationship(
+            added_relationship = transfer_relationship(
                 db_session=db_session,
                 relationship=relationship,
                 entity_translations=entity_translations,
@@ -169,8 +186,12 @@ def kg_clustering(
             db_session.commit()
             transferred_relationships.append(relationship.id_name)
 
-    # TODO: remove the /relationship types & entities that correspond to relationships
-    # source documents that failed to transfer. I.e, do a proper rollback
+            # update vespa
+            update_kg_chunks_vespa_info_for_relationship(
+                relationship=added_relationship,
+                index_name=index_name,
+                tenant_id=tenant_id,
+            )
 
     # delete the added objects from the staging tables
     logger.info(f"Transferred {len(transferred_entities)} entities")

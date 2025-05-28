@@ -108,7 +108,7 @@ def transfer_entity(
     """
     # Create the transferred entity
     entity = KGEntity(
-        id_name=f"{entity.entity_type_id_name}::{uuid.uuid4()}",
+        id_name=f"{entity.entity_type_id_name}::{uuid.uuid4().hex[:20]}",
         name=entity.name,
         alternative_names=entity.alternative_names or [],
         entity_type_id_name=entity.entity_type_id_name,
@@ -126,7 +126,6 @@ def transfer_entity(
             document_id=entity.document_id,
             kg_stage=KGStage.NORMALIZED,
         )
-        # TODO: update vespa
     db_session.flush()
 
     return entity
@@ -186,7 +185,6 @@ def merge_entities(
             document_id=child.document_id,
             kg_stage=KGStage.NORMALIZED,
         )
-        # TODO: update vespa
     db_session.flush()
 
     return result

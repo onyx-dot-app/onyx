@@ -138,7 +138,6 @@ def transfer_relationship(
             document_id=relationship.source_document,
             kg_stage=KGStage.NORMALIZED,
         )
-        # TODO: update vespa
     db_session.flush()
 
     return relationship
