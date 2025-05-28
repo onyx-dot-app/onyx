@@ -15,9 +15,8 @@ import {
   StreamingPhaseText,
 } from "./message/StreamingMessages";
 import { Badge } from "@/components/ui/badge";
-import next from "next";
 
-export function useOrderedPhases(externalPhase: StreamingPhase) {
+function useOrderedPhases(externalPhase: StreamingPhase) {
   const [phaseQueue, setPhaseQueue] = useState<StreamingPhase[]>([]);
   const [displayedPhases, setDisplayedPhases] = useState<StreamingPhase[]>([]);
   const lastDisplayTimeRef = useRef<number>(Date.now());
@@ -82,7 +81,7 @@ export function useOrderedPhases(externalPhase: StreamingPhase) {
   return displayedPhases;
 }
 
-export function RefinemenetBadge({
+function RefinementBadge({
   setToolTipHovered,
   overallAnswer,
   secondLevelSubquestions,
@@ -273,7 +272,7 @@ export function RefinemenetBadge({
     </TooltipProvider>
   );
 }
-export const NoNewAnswerMessage = () => {
+const NoNewAnswerMessage = () => {
   const [opacity, setOpacity] = useState(1);
   const [isVisible, setIsVisible] = useState(true);
 
@@ -338,85 +337,86 @@ export function StatusRefinement({
   noShowingMessage?: boolean;
 }) {
   const [toolTipHovered, setToolTipHovered] = useState(false);
+
   if (!secondLevelGenerating && isImprovement == undefined) {
     return null;
   }
   if (noShowingMessage && !isImprovement) {
     return <></>;
   }
+
+  if (
+    (!canShowResponse || isImprovement == null) &&
+    subQuestions &&
+    subQuestions.length > 0
+  ) {
+    return (
+      <RefinementBadge
+        setToolTipHovered={setToolTipHovered}
+        setCanShowResponse={setCanShowResponse}
+        canShowResponse={canShowResponse || false}
+        finished={!secondLevelGenerating}
+        overallAnswer={secondLevelAssistantMessage || ""}
+        secondLevelSubquestions={secondLevelSubquestions}
+      />
+    );
+  }
+
+  if (!secondLevelAssistantMessage) {
+    return <></>;
+  }
+
+  if (!isImprovement) {
+    return <NoNewAnswerMessage />;
+  }
+
   return (
-    <>
-      {(!canShowResponse || isImprovement == null) &&
-      subQuestions &&
-      subQuestions.length > 0 ? (
-        <RefinemenetBadge
-          setToolTipHovered={setToolTipHovered}
-          setCanShowResponse={setCanShowResponse}
-          canShowResponse={canShowResponse || false}
-          finished={!secondLevelGenerating}
-          overallAnswer={secondLevelAssistantMessage || ""}
-          secondLevelSubquestions={secondLevelSubquestions}
-        />
-      ) : secondLevelAssistantMessage ? (
-        isImprovement ? (
-          <TooltipProvider delayDuration={0}>
-            <Tooltip open={toolTipHovered}>
-              <TooltipTrigger
-                onMouseLeave={() => setToolTipHovered(false)}
-                asChild
-              >
-                <Badge
-                  // NOTE: This is a hack to make the badge slightly higher
-                  className="cursor-pointer mt-[1px]"
-                  variant={`${
-                    isViewingInitialAnswer ? "agent" : "agent-faded"
-                  }`}
-                  onClick={() => {
-                    const viewInitialAnswer = !isViewingInitialAnswer;
-                    setIsViewingInitialAnswer(viewInitialAnswer);
-                    toggleDocDisplay && toggleDocDisplay(viewInitialAnswer);
-                  }}
-                >
-                  {isViewingInitialAnswer
-                    ? "See Refined Answer"
-                    : "See Original Answer"}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent
-                onMouseLeave={() => setToolTipHovered(false)}
-                side="bottom"
-                align="start"
-                width="w-fit"
-                className="w-fit p-4 bg-[#fff] border-2 border-border dark:border-neutral-800 shadow-lg rounded-md"
-              >
-                {/* If not done, show the "Refining" box + a chevron */}
+    <TooltipProvider delayDuration={0}>
+      <Tooltip open={toolTipHovered}>
+        <TooltipTrigger onMouseLeave={() => setToolTipHovered(false)} asChild>
+          <Badge
+            // NOTE: This is a hack to make the badge slightly higher
+            className="cursor-pointer mt-[1px]"
+            variant={`${isViewingInitialAnswer ? "agent" : "agent-faded"}`}
+            onClick={() => {
+              const viewInitialAnswer = !isViewingInitialAnswer;
+              setIsViewingInitialAnswer(viewInitialAnswer);
+              toggleDocDisplay && toggleDocDisplay(viewInitialAnswer);
+            }}
+          >
+            {isViewingInitialAnswer
+              ? "See Refined Answer"
+              : "See Original Answer"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent
+          onMouseLeave={() => setToolTipHovered(false)}
+          side="bottom"
+          align="start"
+          width="w-fit"
+          className="w-fit p-4 bg-[#fff] border-2 border-border dark:border-neutral-800 shadow-lg rounded-md"
+        >
+          {/* If not done, show the "Refining" box + a chevron */}
 
-                {/* Expanded area: each displayed phase in order */}
+          {/* Expanded area: each displayed phase in order */}
 
-                <div className="items-start flex flex-col gap-y-2">
-                  {PHASES_ORDER.map((phase) => (
-                    <div
-                      key={phase}
-                      className="text-text flex items-center justify-start gap-x-2"
-                    >
-                      <div className="w-3 h-3">
-                        <StatusIndicator status={ToggleState.Done} />
-                      </div>
-                      <span className="text-neutral-800 text-sm font-medium">
-                        {StreamingPhaseText[phase]}
-                      </span>
-                    </div>
-                  ))}
+          <div className="items-start flex flex-col gap-y-2">
+            {PHASES_ORDER.map((phase) => (
+              <div
+                key={phase}
+                className="text-text flex items-center justify-start gap-x-2"
+              >
+                <div className="w-3 h-3">
+                  <StatusIndicator status={ToggleState.Done} />
                 </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <NoNewAnswerMessage />
-        )
-      ) : (
-        <></>
-      )}
-    </>
+                <span className="text-neutral-800 text-sm font-medium">
+                  {StreamingPhaseText[phase]}
+                </span>
+              </div>
+            ))}
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
