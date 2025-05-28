@@ -55,7 +55,6 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import SubQuestionsDisplay from "./SubQuestionsDisplay";
-import { StatusRefinement } from "../Refinement";
 import { copyAll, handleCopy } from "./copyingUtils";
 import { ErrorBanner } from "./Resubmit";
 import { transformLinkUri } from "@/lib/utils";
@@ -64,7 +63,6 @@ export const AgenticMessage = ({
   isStreamingQuestions,
   isGenerating,
   docSidebarToggled,
-  isImprovement,
   secondLevelAssistantMessage,
   secondLevelGenerating,
   regenerate,
@@ -90,7 +88,6 @@ export const AgenticMessage = ({
   subQuestions,
   agenticDocs,
   secondLevelSubquestions,
-  toggleDocDisplay,
   error,
   resubmit,
 }: {
@@ -98,7 +95,6 @@ export const AgenticMessage = ({
   isStreamingQuestions: boolean;
   isGenerating: boolean;
   docSidebarToggled?: boolean;
-  isImprovement?: boolean | null;
   secondLevelSubquestions?: SubQuestionDetail[] | null;
   agenticDocs?: OnyxDocument[] | null;
   secondLevelGenerating?: boolean;
@@ -124,7 +120,6 @@ export const AgenticMessage = ({
   overriddenModel?: string;
   regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
   setPresentingDocument?: (document: OnyxDocument) => void;
-  toggleDocDisplay?: (agentic: boolean) => void;
   error?: string | null;
 }) => {
   const [lastKnownContentLength, setLastKnownContentLength] = useState(0);
@@ -209,9 +204,8 @@ export const AgenticMessage = ({
     }
   }, [hasThinkingTokens]);
 
-  const [isViewingInitialAnswer, setIsViewingInitialAnswer] = useState(true);
+  const isViewingInitialAnswer = true;
 
-  const [canShowResponse, setCanShowResponse] = useState(isComplete);
   const [isRegenerateDropdownVisible, setIsRegenerateDropdownVisible] =
     useState(false);
 
@@ -484,31 +478,6 @@ export const AgenticMessage = ({
                           <div className="text-black text-lg font-medium">
                             Answer
                           </div>
-
-                          <StatusRefinement
-                            noShowingMessage={isComplete}
-                            canShowResponse={canShowResponse || false}
-                            setCanShowResponse={setCanShowResponse}
-                            isImprovement={isImprovement}
-                            isViewingInitialAnswer={isViewingInitialAnswer}
-                            toggleDocDisplay={toggleDocDisplay!}
-                            secondLevelSubquestions={
-                              secondLevelSubquestions || []
-                            }
-                            secondLevelAssistantMessage={
-                              secondLevelAssistantMessage || ""
-                            }
-                            secondLevelGenerating={
-                              (secondLevelGenerating &&
-                                finalContent.length ==
-                                  streamedContent.length) ||
-                              false
-                            }
-                            subQuestions={subQuestions}
-                            setIsViewingInitialAnswer={
-                              setIsViewingInitialAnswer
-                            }
-                          />
                         </div>
 
                         <div className="px-4">
