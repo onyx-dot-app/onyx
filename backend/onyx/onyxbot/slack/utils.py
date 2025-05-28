@@ -117,30 +117,33 @@ def update_emote_react(
     remove: bool,
     client: WebClient,
 ) -> None:
-    try:
-        if not message_ts:
-            logger.error(
-                f"Tried to remove a react in {channel} but no message specified"
-            )
-            return
+    if not message_ts:
+        action = "remove" if remove else "add"
+        logger.error(f"update_emote_react - no message specified: {channel=} {action=}")
+        return
 
-        if remove:
+    if remove:
+        try:
             client.reactions_remove(
                 name=emoji,
                 channel=channel,
                 timestamp=message_ts,
             )
-        else:
-            client.reactions_add(
-                name=emoji,
-                channel=channel,
-                timestamp=message_ts,
-            )
-    except SlackApiError as e:
-        if remove:
+        except SlackApiError as e:
             logger.error(f"Failed to remove Reaction due to: {e}")
-        else:
-            logger.error(f"Was not able to react to user message due to: {e}")
+
+        return
+
+    try:
+        client.reactions_add(
+            name=emoji,
+            channel=channel,
+            timestamp=message_ts,
+        )
+    except SlackApiError as e:
+        logger.error(f"Was not able to react to user message due to: {e}")
+
+    return
 
 
 def remove_onyx_bot_tag(message_str: str, client: WebClient) -> str:
@@ -676,6 +679,7 @@ class TenantSocketModeClient(SocketModeClient):
         super().__init__(*args, **kwargs)
         self._tenant_id = tenant_id
         self.slack_bot_id = slack_bot_id
+        self.bot_name: str = "Unnamed"
 
     @contextmanager
     def _set_tenant_context(self) -> Generator[None, None, None]:
