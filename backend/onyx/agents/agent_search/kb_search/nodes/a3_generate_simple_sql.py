@@ -25,7 +25,6 @@ from onyx.configs.kg_configs import KG_MAX_DEEP_SEARCH_RESULTS
 from onyx.configs.kg_configs import KG_SQL_GENERATION_TIMEOUT
 from onyx.db.engine import get_db_readonly_user_session_with_current_tenant
 from onyx.db.engine import get_session_with_current_tenant
-from onyx.db.kg_temp_view import create_views
 from onyx.db.kg_temp_view import drop_views
 from onyx.llm.interfaces import LLM
 from onyx.prompts.kg_prompts import SIMPLE_SQL_CORRECTION_PROMPT
@@ -134,6 +133,9 @@ def generate_simple_sql(
 
     single_doc_id = state.single_doc_id
 
+    if state.kg_doc_temp_view_name is None or state.kg_rel_temp_view_name is None:
+        raise ValueError("kg_doc_temp_view_name or kg_rel_temp_view_name is not set")
+
     ## STEP 3 - articulate goals
 
     stream_write_step_activities(writer, _KG_STEP_NR)
@@ -202,25 +204,6 @@ def generate_simple_sql(
             .replace("---user_name---", f"EMPLOYEE:{user_name}")
         )
 
-        # Create temporary view
-
-        allowed_docs_view_name = f"allowed_docs_{user_email}".replace("@", "_").replace(
-            ".", "_"
-        )
-        kg_relationships_view_name = (
-            f"kg_relationships_with_access_{user_email}".replace("@", "_").replace(
-                ".", "_"
-            )
-        )
-
-        with get_session_with_current_tenant() as db_session:
-            create_views(
-                db_session,
-                user_email=user_email,
-                allowed_docs_view_name=allowed_docs_view_name,
-                kg_relationships_view_name=kg_relationships_view_name,
-            )
-
         # prepare SQL query generation
 
         msg = [
@@ -249,7 +232,7 @@ def generate_simple_sql(
             sql_statement = sql_statement.split(";")[0].strip() + ";"
             sql_statement = sql_statement.replace("sql", "").strip()
             sql_statement = sql_statement.replace(
-                "kg_relationship", kg_relationships_view_name
+                "kg_relationship", state.kg_rel_temp_view_name
             )
 
             reasoning = (
@@ -262,8 +245,8 @@ def generate_simple_sql(
             logger.error(f"Error in strategy generation: {e}")
 
             _drop_temp_views(
-                allowed_docs_view_name=allowed_docs_view_name,
-                kg_relationships_view_name=kg_relationships_view_name,
+                allowed_docs_view_name=state.kg_doc_temp_view_name,
+                kg_relationships_view_name=state.kg_rel_temp_view_name,
             )
             raise e
 
@@ -306,8 +289,8 @@ def generate_simple_sql(
             )
 
             _drop_temp_views(
-                allowed_docs_view_name=allowed_docs_view_name,
-                kg_relationships_view_name=kg_relationships_view_name,
+                allowed_docs_view_name=state.kg_doc_temp_view_name,
+                kg_relationships_view_name=state.kg_rel_temp_view_name,
             )
 
             raise e
@@ -319,8 +302,8 @@ def generate_simple_sql(
         source_documents_sql = _get_source_documents(
             sql_statement,
             llm=primary_llm,
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
+            allowed_docs_view_name=state.kg_doc_temp_view_name,
+            kg_relationships_view_name=state.kg_rel_temp_view_name,
         )
 
         logger.info(f"A3 source_documents_sql: {source_documents_sql}")
@@ -368,8 +351,8 @@ def generate_simple_sql(
             source_document_results = None
 
         _drop_temp_views(
-            allowed_docs_view_name=allowed_docs_view_name,
-            kg_relationships_view_name=kg_relationships_view_name,
+            allowed_docs_view_name=state.kg_doc_temp_view_name,
+            kg_relationships_view_name=state.kg_rel_temp_view_name,
         )
 
         logger.info(f"A3 - Number of query_results: {len(query_results)}")

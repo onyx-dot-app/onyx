@@ -25,6 +25,7 @@ from onyx.agents.agent_search.shared_graph_utils.utils import (
 from onyx.configs.kg_configs import KG_ENTITY_EXTRACTION_TIMEOUT
 from onyx.configs.kg_configs import KG_RELATIONSHIP_EXTRACTION_TIMEOUT
 from onyx.db.engine import get_session_with_current_tenant
+from onyx.db.kg_temp_view import create_views
 from onyx.db.relationships import get_allowed_relationship_type_pairs
 from onyx.kg.extractions.extraction_processing import get_entity_types_str
 from onyx.kg.extractions.extraction_processing import get_relationship_types_str
@@ -75,6 +76,23 @@ def extract_ert(
 
     # Now specify core activities in the step (step 1)
     stream_write_step_activities(writer, _KG_STEP_NR)
+
+    # Create temporary views. TODO: move into parallel step, if ultimately materialized
+
+    allowed_docs_view_name = f"allowed_docs_{user_email}".replace("@", "_").replace(
+        ".", "_"
+    )
+    kg_relationships_view_name = f"kg_relationships_with_access_{user_email}".replace(
+        "@", "_"
+    ).replace(".", "_")
+
+    with get_session_with_current_tenant() as db_session:
+        create_views(
+            db_session,
+            user_email=user_email,
+            allowed_docs_view_name=allowed_docs_view_name,
+            kg_relationships_view_name=kg_relationships_view_name,
+        )
 
     ### get the entities, terms, and filters
 
@@ -243,6 +261,8 @@ Entities: {extracted_entity_string} - \n Relationships: {extracted_relationship_
         extracted_relationships=relationship_extraction_result.relationships,
         extracted_terms=entity_extraction_result.terms,
         time_filter=entity_extraction_result.time_filter,
+        kg_doc_temp_view_name=allowed_docs_view_name,
+        kg_rel_temp_view_name=kg_relationships_view_name,
         log_messages=[
             get_langgraph_node_log_string(
                 graph_component="main",

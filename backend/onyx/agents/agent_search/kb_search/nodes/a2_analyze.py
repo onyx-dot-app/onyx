@@ -155,7 +155,9 @@ def analyze(
 
     # Continue with node
 
-    normalized_entities = normalize_entities(entities)
+    normalized_entities = normalize_entities(
+        entities, allowed_docs_temp_view_name=state.kg_doc_temp_view_name
+    )
 
     query_graph_entities_w_attributes = normalize_entities_w_attributes_from_map(
         state.extracted_entities_w_attributes,

@@ -446,7 +446,9 @@ def kg_extraction(
             batch_metadata: dict[str, KGEnhancedDocumentMetadata] = _get_batch_metadata(
                 unprocessed_document_batch,
                 connector_source,
-                document_classification_extraction_instructions[connector_source],
+                document_classification_extraction_instructions.get(
+                    connector_source, {}
+                ),
                 index_name,
                 kg_config_settings,
                 processing_chunk_batch_size,

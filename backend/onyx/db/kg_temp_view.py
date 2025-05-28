@@ -19,9 +19,16 @@ def create_views(
     allowed_docs_view = text(
         f"""
     CREATE OR REPLACE VIEW {allowed_docs_view_name} AS
-    WITH public_docs AS (
+    WITH kg_used_docs AS (
+        SELECT document_id as kg_used_doc_id
+        FROM kg_entity d
+        WHERE document_id IS NOT NULL
+    ),
+
+    public_docs AS (
         SELECT d.id as allowed_doc_id
         FROM document d
+        INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
         WHERE d.is_public
     ),
     user_owned_docs AS (
@@ -32,6 +39,7 @@ def create_views(
             d.connector_id = ccp.connector_id AND
             d.credential_id = ccp.credential_id
         JOIN "user" u ON c.user_id = u.id
+        INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
         WHERE ccp.status != 'DELETING'
         AND ccp.access_type != 'SYNC'
         AND u.email = :user_email
@@ -47,21 +55,27 @@ def create_views(
         JOIN user__user_group uug ON
             uug.user_group_id = ugccp.user_group_id
         JOIN "user" u ON uug.user_id = u.id
-        WHERE ccp.status != 'DELETING'
+        INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
+        WHERE kud.kg_used_doc_id IS NOT NULL
+        AND ccp.status != 'DELETING'
         AND ccp.access_type != 'SYNC'
         AND u.email = :user_email
     ),
     external_user_docs AS (
-        SELECT id as allowed_doc_id
-        FROM document
-        WHERE :user_email = ANY(external_user_emails)
+        SELECT d.id as allowed_doc_id
+        FROM document d
+        INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
+        WHERE kud.kg_used_doc_id IS NOT NULL
+        AND :user_email = ANY(external_user_emails)
     ),
     external_group_docs AS (
         SELECT d.id as allowed_doc_id
         FROM document d
+        INNER JOIN kg_used_docs kud ON kud.kg_used_doc_id = d.id
         JOIN user__external_user_group_id ueg ON ueg.external_user_group_id = ANY(d.external_user_group_ids)
         JOIN "user" u ON ueg.user_id = u.id
-        WHERE u.email = :user_email
+        WHERE kud.kg_used_doc_id IS NOT NULL
+        AND u.email = :user_email
     )
     SELECT DISTINCT allowed_doc_id FROM (
         SELECT allowed_doc_id FROM public_docs

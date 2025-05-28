@@ -1,5 +1,4 @@
 from datetime import datetime
-from datetime import timedelta
 from typing import cast
 
 from langchain_core.messages import HumanMessage
@@ -261,12 +260,6 @@ def generate_answer(
         # simply stream out here the full text in one.
         if reference_results_str:
             # Get the LLM's tokenizer
-            hundred_days_ago = (datetime.now() - timedelta(days=100)).strftime(
-                "%Y-%m-%d"
-            )
-            reference_results_str = (
-                f"Date from 100 days ago: {hundred_days_ago}\n" + reference_results_str
-            )
 
             _stream_augmentations(llm_tokenizer, reference_results_str, writer)
 

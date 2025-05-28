@@ -8,8 +8,10 @@ from rapidfuzz.distance.DamerauLevenshtein import normalized_similarity
 from sqlalchemy import desc
 from sqlalchemy import Float
 from sqlalchemy import func
+from sqlalchemy import MetaData
 from sqlalchemy import select
 from sqlalchemy import String
+from sqlalchemy import Table
 from sqlalchemy.dialects.postgresql import ARRAY
 
 from onyx.configs.kg_configs import KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
@@ -49,7 +51,9 @@ def _split_entity_type_v_name(entity: str) -> tuple[str, str]:
     return entity_type, entity_name
 
 
-def _normalize_one_entity(entity: str) -> str | None:
+def _normalize_one_entity(
+    entity: str, allowed_docs_temp_view_name: str | None = None
+) -> str | None:
     """
     Matches a single entity to the best matching entity of the same type.
     """
@@ -65,6 +69,19 @@ def _normalize_one_entity(entity: str) -> str | None:
 
     # step 1: find entities containing the entity_name or something similar
     with get_session_with_current_tenant() as db_session:
+
+        # get allowed documents
+
+        metadata = MetaData()
+        if allowed_docs_temp_view_name is not None:
+            allowed_docs_temp_view = Table(
+                allowed_docs_temp_view_name,
+                metadata,
+                autoload_with=db_session.get_bind(),
+            )
+        else:
+            raise ValueError("allowed_docs_temp_view_name is not available")
+
         # generate trigrams of the queried entity Q
         query_trigrams = db_session.query(
             func.show_trgm(cleaned_entity).cast(ARRAY(String(3))).label("trigrams")
@@ -96,9 +113,18 @@ def _normalize_one_entity(entity: str) -> str | None:
                 ).label("score"),
             )
             .select_from(KGEntity, query_trigrams)
+            .outerjoin(
+                allowed_docs_temp_view,
+                KGEntity.document_id == allowed_docs_temp_view.c.allowed_doc_id,
+            )
             .filter(
                 KGEntity.entity_type_id_name == entity_type,
                 KGEntity.clustering_trigrams.overlap(query_trigrams.c.trigrams),
+                # Add filter for allowed docs - either document_id is NULL or it's in allowed_docs
+                (
+                    KGEntity.document_id.is_(None)
+                    | allowed_docs_temp_view.c.allowed_doc_id.isnot(None)
+                ),
             )
             .order_by(desc("score"))
             .limit(KG_NORMALIZATION_RETRIEVE_ENTITIES_LIMIT)
@@ -108,9 +134,17 @@ def _normalize_one_entity(entity: str) -> str | None:
         return None
 
     # step 2: do a weighted ngram analysis and damerau levenshtein distance to rerank
-    n1, n2 = (set(ngrams(cleaned_entity, 1)), set(ngrams(cleaned_entity, 2)))
+    n1, n2, n3 = (
+        set(ngrams(cleaned_entity, 1)),
+        set(ngrams(cleaned_entity, 2)),
+        set(ngrams(cleaned_entity, 3)),
+    )
     for i, (id_name, semantic_id, score_n3) in enumerate(candidates):
-        h_n1, h_n2 = (set(ngrams(semantic_id, 1)), set(ngrams(semantic_id, 2)))
+        h_n1, h_n2, h_n3 = (
+            set(ngrams(semantic_id, 1)),
+            set(ngrams(semantic_id, 2)),
+            set(ngrams(semantic_id, 3)),
+        )
         # renormalize scores if the names are too short for larger ngrams
         grams_used = min(2, len(cleaned_entity) - 1, len(semantic_id) - 1)
         W_n1, W_n2, W_n3 = KG_NORMALIZATION_RERANK_NGRAM_WEIGHTS
@@ -118,7 +152,7 @@ def _normalize_one_entity(entity: str) -> str | None:
             # compute | Q ∩ E | / min(|Q|, |E|) for unigrams and bigrams (trigrams already computed)
             W_n1 * len(n1 & h_n1) / max(1, min(len(n1), len(h_n1)))
             + W_n2 * len(n2 & h_n2) / max(1, min(len(n2), len(h_n2)))
-            + W_n3 * score_n3
+            + W_n3 * len(n3 & h_n3) / max(1, min(len(n3), len(h_n3)))
         ) / (W_n1, W_n1 + W_n2, 1.0)[grams_used]
         # compute damerau levenshtein distance to fuzzy match against typos
         W_leven = KG_NORMALIZATION_RERANK_LEVENSHTEIN_WEIGHT
@@ -175,6 +209,7 @@ def _get_existing_normalized_relationships(
 
 def normalize_entities(
     raw_entities_no_attributes: list[str],
+    allowed_docs_temp_view_name: str | None = None,
 ) -> NormalizedEntities:
     """
     Match each entity against a list of normalized entities using fuzzy matching.
@@ -190,7 +225,10 @@ def normalize_entities(
     normalized_map: dict[str, str] = {}
 
     mapping: list[str | None] = run_functions_tuples_in_parallel(
-        [(_normalize_one_entity, (entity,)) for entity in raw_entities_no_attributes]
+        [
+            (_normalize_one_entity, (entity, allowed_docs_temp_view_name))
+            for entity in raw_entities_no_attributes
+        ]
     )
     for entity, normalized_entity in zip(raw_entities_no_attributes, mapping):
         if normalized_entity is not None:

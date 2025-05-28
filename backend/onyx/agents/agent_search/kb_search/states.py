@@ -117,6 +117,8 @@ class ERTExtractionUpdate(LoggerUpdate):
     extracted_relationships: list[str] = []
     extracted_terms: list[str] = []
     time_filter: str | None = None
+    kg_doc_temp_view_name: str | None = None
+    kg_rel_temp_view_name: str | None = None
 
 
 class ResultsDataUpdate(LoggerUpdate):
