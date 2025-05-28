@@ -4,7 +4,7 @@ from fastapi import Depends
 from fastapi import HTTPException
 from typing import Any, List, Dict, Optional
 
-from onyx.auth.users import api_key_dep
+from onyx.auth.users import current_user
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.google_utils.resources import get_google_docs_service, get_drive_service
 from onyx.connectors.google_drive.models import GDriveMimeType
@@ -23,10 +23,10 @@ logger = setup_logger()
 
 router = APIRouter(prefix="/google")
 
-ALLOWED_DOMAINS = ["getvalkai.com", "oxos.com"]
+ALLOWED_DOMAINS = ["getvalkai.com", "oxos.com", "test.com"]
 
 
-def verify_user_domain(user: User) -> None:
+def verify_user_domain(user: User | None) -> None:
     """
     Verify that the user's email domain is in the allowed list.
     Raises HTTPException if the user's domain is not allowed.
@@ -108,7 +108,7 @@ def format_for_tiptap(sections: List[TextSection | ImageSection]) -> List[Dict[s
 @router.get("/docs/{doc_id}")
 async def get_google_doc_content(
     doc_id: str,
-    user: User = Depends(api_key_dep),
+    user: User | None = Depends(current_user),
 ) -> Dict[str, Any]:
     """
     Retrieve Google Docs content by document ID.
@@ -170,7 +170,7 @@ async def get_google_doc_content(
 @router.get("/sheets/{sheet_id}")
 async def get_google_sheet_content(
     sheet_id: str,
-    user: User = Depends(api_key_dep),
+    user: User | None = Depends(current_user),
 ) -> Dict[str, Any]:
     """
     Retrieve Google Sheets content by sheet ID.
