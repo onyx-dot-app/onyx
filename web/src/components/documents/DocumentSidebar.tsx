@@ -19,9 +19,8 @@ export function DocumentSidebar({ files }: DocumentSidebarProps) {
   const pathname = usePathname();
   
   return (
-    <div className="h-full overflow-y-auto border-r border-border bg-background-sidebar dark:bg-[#000] dark:border-none">
-      <div className="p-4">
-        <h2 className="text-sm font-medium mb-4 text-text-500/80 dark:text-[#D4D4D4]">Files</h2>
+    <div className="h-full overflow-y-auto">
+      <div className="p-4 pt-0">
         <div className="space-y-1">
           {files.map((file) => (
             <FileEntryItem key={file.id} file={file} level={0} />

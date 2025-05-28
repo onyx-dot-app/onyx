@@ -21,11 +21,16 @@ export function DocumentLayout({ children }: DocumentLayoutProps) {
       {/* Main content with sidebar */}
       <div className="flex h-screen">
         {/* Sidebar with Logo */}
-        <div className="flex-none w-[250px] flex flex-col">
+        <div className="flex-none w-[250px] flex flex-col border-r border-border bg-background-sidebar dark:bg-[#000] dark:border-none">
           {/* Logo at top of sidebar */}
-          <div className="p-4 flex items-center border-b border-border">
+          <div className="p-4 flex items-center">
             <Logo height={24} width={24} />
             <span className="ml-2 font-semibold text-lg">onyx</span>
+          </div>
+          
+          {/* Files heading */}
+          <div className="px-4 pb-2">
+            <h2 className="text-sm font-medium text-text-500/80 dark:text-[#D4D4D4]">Files</h2>
           </div>
           
           {/* Sidebar content */}
