@@ -236,6 +236,28 @@ export function UserDropdown({
                     openInNewTab
                   />
                 ))}
+                
+                {/* Document Editor Section */}
+                {page !== "documents" && (
+                  <>
+                    <div className="border-t border-border my-1" />
+                    <DropdownOption
+                      href="/documents"
+                      icon={<UserIcon size={16} className="my-auto" />}
+                      label="Documents"
+                    />
+                    <DropdownOption
+                      href="/documents/regular"
+                      icon={<UserIcon size={16} className="my-auto" />}
+                      label="Regular Editor"
+                    />
+                    <DropdownOption
+                      href="/documents/constants"
+                      icon={<UserIcon size={16} className="my-auto" />}
+                      label="Constants Editor"
+                    />
+                  </>
+                )}
 
                 {showAdminPanel ? (
                   <DropdownOption
