@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime
 from datetime import timezone
 from typing import List
@@ -107,6 +108,7 @@ def transfer_entity(
     """
     # Create the transferred entity
     entity = KGEntity(
+        id_name=f"{entity.entity_type_id_name}::{uuid.uuid4()}",
         name=entity.name,
         alternative_names=entity.alternative_names or [],
         entity_type_id_name=entity.entity_type_id_name,
@@ -164,7 +166,7 @@ def merge_entities(
 
     stmt = (
         update(KGEntity)
-        .where(KGEntity.id == parent.id)
+        .where(KGEntity.id_name == parent.id_name)
         .values(
             document_id=document_id,
             alternative_names=list(alternative_names),
@@ -175,7 +177,7 @@ def merge_entities(
 
     result = db_session.execute(stmt).scalar()
     if result is None:
-        raise RuntimeError(f"Failed to merge entities with id: {parent.id}")
+        raise RuntimeError(f"Failed to merge entities with id_name: {parent.id_name}")
 
     # Update the document's kg_stage if document_id is set
     if setting_doc:
@@ -287,17 +289,19 @@ def get_entities_by_document_ids(
     return list(result)
 
 
-def get_document_id_for_entity(db_session: Session, entity_id: str) -> str | None:
+def get_document_id_for_entity(db_session: Session, entity_id_name: str) -> str | None:
     """Get the document ID associated with an entity.
 
     Args:
         db_session: SQLAlchemy database session
-        entity_id: The entity id to look up
+        entity_id_name: The entity id_name to look up
 
     Returns:
         The document ID if found, None otherwise
     """
-    entity = db_session.query(KGEntity).filter(KGEntity.id == entity_id).first()
+    entity = (
+        db_session.query(KGEntity).filter(KGEntity.id_name == entity_id_name).first()
+    )
     return entity.document_id if entity else None
 
 

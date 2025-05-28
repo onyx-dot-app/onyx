@@ -208,14 +208,7 @@ def upgrade() -> None:
     # Create KGEntity table
     op.create_table(
         "kg_entity",
-        sa.Column(
-            "id",
-            sa.UUID(),
-            primary_key=True,
-            server_default=sa.text("gen_random_uuid()"),
-            nullable=False,
-            index=True,
-        ),
+        sa.Column("id_name", sa.String(), primary_key=True, nullable=False, index=True),
         sa.Column("name", sa.String(), nullable=False, index=True),
         sa.Column("name_trigrams", postgresql.ARRAY(sa.String(3)), nullable=True),
         sa.Column(
@@ -305,8 +298,8 @@ def upgrade() -> None:
     op.create_table(
         "kg_relationship",
         sa.Column("id_name", sa.String(), nullable=False, index=True),
-        sa.Column("source_node", sa.UUID(), nullable=False, index=True),
-        sa.Column("target_node", sa.UUID(), nullable=False, index=True),
+        sa.Column("source_node", sa.String(), nullable=False, index=True),
+        sa.Column("target_node", sa.String(), nullable=False, index=True),
         sa.Column("source_node_type", sa.String(), nullable=False, index=True),
         sa.Column("target_node_type", sa.String(), nullable=False, index=True),
         sa.Column("source_document", sa.String(), nullable=True, index=True),
@@ -322,8 +315,8 @@ def upgrade() -> None:
         sa.Column(
             "time_created", sa.DateTime(timezone=True), server_default=sa.text("now()")
         ),
-        sa.ForeignKeyConstraint(["source_node"], ["kg_entity.id"]),
-        sa.ForeignKeyConstraint(["target_node"], ["kg_entity.id"]),
+        sa.ForeignKeyConstraint(["source_node"], ["kg_entity.id_name"]),
+        sa.ForeignKeyConstraint(["target_node"], ["kg_entity.id_name"]),
         sa.ForeignKeyConstraint(["source_node_type"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["target_node_type"], ["kg_entity_type.id_name"]),
         sa.ForeignKeyConstraint(["source_document"], ["document.id"]),

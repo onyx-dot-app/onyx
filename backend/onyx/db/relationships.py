@@ -1,5 +1,4 @@
 from typing import List
-from uuid import UUID
 
 from sqlalchemy import or_
 from sqlalchemy.dialects import postgresql
@@ -108,7 +107,7 @@ def add_or_update_staging_relationship(
 def transfer_relationship(
     db_session: Session,
     relationship: KGRelationshipExtractionStaging,
-    entity_translations: dict[str, UUID],
+    entity_translations: dict[str, str],
 ) -> KGRelationship:
     """
     Transfer a relationship from the staging table to the normalized table.

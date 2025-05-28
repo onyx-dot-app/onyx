@@ -140,7 +140,7 @@ def kg_clustering(
     for entity in grounded_entities:
         added_entity = _cluster_one_grounded_entity(entity)
         transferred_entities.append(entity.id_name)
-        entity_translations[entity.id_name] = added_entity.id
+        entity_translations[entity.id_name] = added_entity.id_name
 
     ## Database operations
 

@@ -830,8 +830,8 @@ class KGEntity(Base):
     __tablename__ = "kg_entity"
 
     # Primary identifier
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    id_name: Mapped[str] = mapped_column(
+        NullFilteredString, primary_key=True, index=True
     )
 
     # Basic entity information
@@ -1000,12 +1000,12 @@ class KGRelationship(Base):
     )
 
     # Source and target nodes (foreign keys to Entity table)
-    source_node: Mapped[UUID] = mapped_column(
-        ForeignKey("kg_entity.id"), nullable=False, index=True
+    source_node: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
     )
 
-    target_node: Mapped[UUID] = mapped_column(
-        ForeignKey("kg_entity.id"), nullable=False, index=True
+    target_node: Mapped[str] = mapped_column(
+        NullFilteredString, ForeignKey("kg_entity.id_name"), nullable=False, index=True
     )
 
     source_node_type: Mapped[str] = mapped_column(

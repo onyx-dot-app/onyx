@@ -97,7 +97,7 @@ def process_individual_deep_search(
     # Step 4 - stream out the research query
     write_custom_event(
         "subqueries",
-        SubQueryPiece(  # FIXME:
+        SubQueryPiece(
             sub_query=f"{get_doc_information_for_entity(object).semantic_entity_name}",
             level=0,
             level_question_num=_KG_STEP_NR,
