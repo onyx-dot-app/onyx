@@ -41,6 +41,18 @@ export function TiptapEditor({ content = '', onChange, editable = true }: Tiptap
             Italic
           </button>
           <button
+            onClick={() => editor.chain().focus().toggleStrike().run()}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('strike') ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
+          >
+            Strikethrough
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleCode().run()}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('code') ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
+          >
+            Code
+          </button>
+          <button
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('heading', { level: 1 }) ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
           >
@@ -51,6 +63,24 @@ export function TiptapEditor({ content = '', onChange, editable = true }: Tiptap
             className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('heading', { level: 2 }) ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
           >
             H2
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('bulletList') ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
+          >
+            Bullet List
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('orderedList') ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
+          >
+            Numbered List
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${editor.isActive('blockquote') ? 'bg-accent text-accent-foreground' : 'bg-background border border-border hover:bg-accent/50'}`}
+          >
+            Quote
           </button>
         </div>
       )}
