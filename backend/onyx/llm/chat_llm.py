@@ -7,7 +7,6 @@ from typing import Any
 from typing import cast
 
 import litellm  # type: ignore
-from litellm.integrations.langfuse import LangFuseLogger
 from httpx import RemoteProtocolError
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
@@ -26,6 +25,7 @@ from langchain_core.messages.tool import ToolCallChunk
 from langchain_core.messages.tool import ToolMessage
 from langchain_core.prompt_values import PromptValue
 from langfuse import Langfuse
+from litellm.integrations.langfuse.langfuse import LangFuseLogger
 
 from onyx.configs.app_configs import LOG_DANSWER_MODEL_INTERACTIONS
 from onyx.configs.app_configs import MOCK_LLM_RESPONSE
@@ -427,6 +427,7 @@ class DefaultMultiLLM(LLM):
         # to a dict representation
         processed_prompt = _prompt_to_dict(prompt)
         self._record_call(processed_prompt)
+        logger.info(processed_prompt)
 
         try:
             return litellm.completion(
@@ -523,6 +524,7 @@ class DefaultMultiLLM(LLM):
     ) -> BaseMessage:
         if LOG_DANSWER_MODEL_INTERACTIONS:
             self.log_model_configs()
+        logger.info(prompt)
 
         response = cast(
             litellm.ModelResponse,
