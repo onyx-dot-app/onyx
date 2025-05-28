@@ -5,10 +5,11 @@ import { FileEntry } from '@/lib/documents/types';
 import { 
   FileIcon, 
   ChevronRightIcon, 
-  ChevronDownIcon 
+  ChevronDownIcon
 } from '@/components/icons/icons';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { FiFileText, FiGrid } from 'react-icons/fi';
 
 interface DocumentSidebarProps {
   files: FileEntry[];
@@ -18,7 +19,7 @@ export function DocumentSidebar({ files }: DocumentSidebarProps) {
   const pathname = usePathname();
   
   return (
-    <div className="h-full overflow-y-auto border-r border-border bg-background-sidebar dark:bg-[#000] dark:border-none pt-16">
+    <div className="h-full overflow-y-auto border-r border-border bg-background-sidebar dark:bg-[#000] dark:border-none">
       <div className="p-4">
         <h2 className="text-sm font-medium mb-4 text-text-500/80 dark:text-[#D4D4D4]">Files</h2>
         <div className="space-y-1">
@@ -53,6 +54,20 @@ function FileEntryItem({ file, level }: FileEntryItemProps) {
     }
   };
   
+  const getFileIcon = () => {
+    if (file.type === 'folder') {
+      return expanded ? (
+        <ChevronDownIcon size={16} className="text-text-history-sidebar-button" />
+      ) : (
+        <ChevronRightIcon size={16} className="text-text-history-sidebar-button" />
+      );
+    } else if (file.fileType === 'spreadsheet') {
+      return <FiGrid size={16} className="mr-1 flex-none text-green-600" />;
+    } else {
+      return <FiFileText size={16} className="mr-1 flex-none text-blue-600" />;
+    }
+  };
+  
   return (
     <div>
       <div 
@@ -67,14 +82,10 @@ function FileEntryItem({ file, level }: FileEntryItemProps) {
             onClick={toggleExpanded}
             className="mr-1 flex-none"
           >
-            {expanded ? (
-              <ChevronDownIcon size={16} className="text-text-history-sidebar-button" />
-            ) : (
-              <ChevronRightIcon size={16} className="text-text-history-sidebar-button" />
-            )}
+            {getFileIcon()}
           </button>
         ) : (
-          <FileIcon size={16} className="mr-1 flex-none" />
+          getFileIcon()
         )}
         
         <span className="truncate text-sm">
