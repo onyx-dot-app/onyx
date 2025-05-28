@@ -11,7 +11,7 @@ import React, {
   useState,
 } from "react";
 import ReactMarkdown from "react-markdown";
-import { OnyxDocument, FilteredOnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/interfaces";
 import remarkGfm from "remark-gfm";
 import { CopyButton } from "@/components/CopyButton";
 import {
@@ -35,7 +35,6 @@ import {
   CustomTooltip,
   TooltipGroup,
 } from "@/components/tooltip/CustomTooltip";
-import { ValidSources } from "@/lib/types";
 import { useMouseTracking } from "./hooks";
 import { SettingsContext } from "@/components/settings/SettingsProvider";
 import RegenerateOption from "../RegenerateOption";
@@ -79,7 +78,6 @@ export const AgenticMessage = ({
   messageId,
   content,
   files,
-  selectedDocuments,
   query,
   citedDocuments,
   toolCall,
@@ -111,7 +109,6 @@ export const AgenticMessage = ({
   continueGenerating?: () => void;
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (messageId: number) => void;
-  selectedDocuments?: OnyxDocument[] | null;
   toggleDocumentSelection?: (second: boolean) => void;
   docs?: OnyxDocument[] | null;
   alternativeAssistant?: Persona | null;
@@ -130,8 +127,6 @@ export const AgenticMessage = ({
   toggleDocDisplay?: (agentic: boolean) => void;
   error?: string | null;
 }) => {
-  const [noShowingMessage, setNoShowingMessage] = useState(isComplete);
-
   const [lastKnownContentLength, setLastKnownContentLength] = useState(0);
 
   const [allowStreaming, setAllowStreaming] = useState(isComplete);
@@ -224,8 +219,6 @@ export const AgenticMessage = ({
 
   const settings = useContext(SettingsContext);
 
-  const selectedDocumentIds =
-    selectedDocuments?.map((document) => document.document_id) || [];
   const citedDocumentIds: string[] = [];
 
   citedDocuments?.forEach((doc) => {
@@ -248,27 +241,6 @@ export const AgenticMessage = ({
       return content;
     };
     content = trimIncompleteCodeSection(content);
-  }
-
-  let filteredDocs: FilteredOnyxDocument[] = [];
-
-  if (docs) {
-    filteredDocs = docs
-      .filter(
-        (doc, index, self) =>
-          doc.document_id &&
-          doc.document_id !== "" &&
-          index === self.findIndex((d) => d.document_id === doc.document_id)
-      )
-      .filter((doc) => {
-        return citedDocumentIds.includes(doc.document_id);
-      })
-      .map((doc: OnyxDocument, ind: number) => {
-        return {
-          ...doc,
-          included: selectedDocumentIds.includes(doc.document_id),
-        };
-      });
   }
 
   const paragraphCallback = useCallback(
@@ -331,10 +303,6 @@ export const AgenticMessage = ({
   const currentMessageInd = messageId
     ? otherMessagesCanSwitchTo?.indexOf(messageId)
     : undefined;
-
-  const uniqueSources: ValidSources[] = Array.from(
-    new Set((docs || []).map((doc) => doc.source_type))
-  ).slice(0, 3);
 
   const markdownComponents = useMemo(
     () => ({
@@ -415,10 +383,8 @@ export const AgenticMessage = ({
 
     if (typeof finalContent !== "string") return;
 
-    let currentIndex = streamedContent.length;
     let intervalId: NodeJS.Timeout | null = null;
 
-    // if (finalContent.length > currentIndex) {
     intervalId = setInterval(() => {
       setStreamedContent((prev) => {
         if (prev.length < finalContent.length) {
@@ -430,9 +396,6 @@ export const AgenticMessage = ({
         }
       });
     }, 10);
-    // } else {
-    //   setStreamedContent(finalContent);
-    // }
 
     return () => {
       if (intervalId) clearInterval(intervalId);
@@ -523,7 +486,7 @@ export const AgenticMessage = ({
                           </div>
 
                           <StatusRefinement
-                            noShowingMessage={noShowingMessage}
+                            noShowingMessage={isComplete}
                             canShowResponse={canShowResponse || false}
                             setCanShowResponse={setCanShowResponse}
                             isImprovement={isImprovement}

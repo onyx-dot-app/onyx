@@ -2977,7 +2977,6 @@ export function ChatPage({
                                           messageHistory.length - 1 == i ||
                                           messageHistory.length - 2 == i
                                         }
-                                        selectedDocuments={selectedDocuments}
                                         toggleDocumentSelection={(
                                           second: boolean
                                         ) => {

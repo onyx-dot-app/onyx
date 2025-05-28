@@ -328,7 +328,6 @@ export function SharedChatDisplay({
                               )}
                               toolCall={message.toolCall}
                               isComplete={true}
-                              selectedDocuments={[]}
                               toggleDocumentSelection={() => {
                                 if (
                                   !documentSidebarVisible ||
