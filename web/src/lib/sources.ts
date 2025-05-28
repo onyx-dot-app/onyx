@@ -120,7 +120,7 @@ const SOURCE_METADATA_MAP: SourceMap = {
     icon: PostgreSQLIcon,
     displayName: "PostgreSQL",
     category: SourceCategory.AppConnection,
-    adminUrl: "postgresql",
+    adminUrl: "postgres",
   },
 };
 

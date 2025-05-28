@@ -152,7 +152,7 @@ export const UserGroupsTable = ({
                       </div>
                     ) : (
                       <div className="w-10">
-                        <LoadingAnimation text="Syncing" />
+                        <LoadingAnimation text="Синхронизация" />
                       </div>
                     )}
                   </TableCell>
@@ -271,7 +271,7 @@ export const UserGroupsTable = ({
                 <div className="text-emerald-600">{i18n.t(k.UP_TO_DATE1)}</div>
               ) : (
                 <div className="text-text-300 w-10">
-                  <LoadingAnimation text="Syncing" />
+                  <LoadingAnimation text="Синхронизация" />
                 </div>
               ),
 

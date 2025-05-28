@@ -7,8 +7,8 @@ SEPARATOR_LINE = "-------"
 SEPARATOR_LINE_LONG = "---------------"
 UNKNOWN_ANSWER = "У меня недостаточно информации, чтобы ответить на этот вопрос."
 NO_RECOVERED_DOCS = "Соответствующая информация не была восстановлена"
-YES = "Да"
-NO = "Нет"
+YES = "yes"
+NO = "no"
 # Framing/Support/Template Prompts
 HISTORY_FRAMING_PROMPT = f"""
 Для получения более подробной информации, вот история разговора, который предшествовал этому вопросу:
@@ -20,7 +20,7 @@ HISTORY_FRAMING_PROMPT = f"""
 
 COMMON_RAG_RULES = f"""
 ВАЖНЫЕ ПРАВИЛА:
- - Если ты не можещь достоверно ответить на вопрос, используя только предоставленную информацию, скажи, что ты не можешь достоверно ответить.\
+ - Если ты не можешь достоверно ответить на вопрос, используя только предоставленную информацию, скажи, что ты не можешь достоверно ответить.\
 ТЫ можешь привести какие-то дополнительные факты, которые ты узнал, но не пытайся выдумать ответ.
 
  - Если информация пустая или не относящаяся к делу, просто скажи "{UNKNOWN_ANSWER}".
@@ -1034,8 +1034,8 @@ Analysis: <think through your reasoning as outlined in the 'IMPORTANT RULES AND 
 but keep it short. Come to a conclusion whether the proposed answer can be trusted>
 Comments: <state your condensed comments you would give to a user reading the proposed answer, regarding the accuracy and \
 specificity.>
-{AGENT_ANSWER_SEPARATOR} <answer here only with yes or no, whether the proposed answer can be trusted. Base this on your \
-analysis, but only say 'yes' (trustworthy) or 'no' (not trustworthy)>
+{AGENT_ANSWER_SEPARATOR} <answer here only with {YES} or {NO}, whether the proposed answer can be trusted. Base this on your \
+analysis, but only say '{YES}' (trustworthy) or '{NO}' (not trustworthy)>
 """.strip()
 
 

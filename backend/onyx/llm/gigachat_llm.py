@@ -1,10 +1,12 @@
 import json
 import os
+import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta
 
 import requests
 import uuid
+
 from langchain.schema.language_model import LanguageModelInput
 from langchain_core.messages import AIMessage
 from langchain_core.messages import BaseMessage
@@ -135,16 +137,39 @@ class GigachatModelServer(LLM):
             "stream": False,
             "repetition_penalty": 1
         })
-        logger.info(data)
         try:
-            response = requests.request("POST", self._endpoint, headers=headers, data=data, verify=False)
-            response_content = json.loads(response.text)
-            logger.info(response_content)
-            response_content = response_content["choices"][0]["message"]["content"]
-            langfuse_context.update_current_observation(
-                output=response_content
-            )
-            return AIMessage(content=response_content)
+            max_retries = 10
+            base_delay = 2
+            response_content_request: dict | None = None
+            for attempt in range(max_retries):
+                response = requests.request("POST", self._endpoint, headers=headers, data=data, verify=False)
+                response_content_request = json.loads(response.text)
+                logger.info(response_content_request)
+                if response.status_code != 429:
+                    break
+                retry_after = response.headers.get('Retry-After')
+
+                # Определяем время ожидания
+                if retry_after:
+                    try:
+                        # Пытаемся преобразовать в секунды
+                        wait_time = int(retry_after)
+                    except ValueError:
+                        # Если заголовок содержит дату (не реализовано для краткости),
+                        # используем экспоненциальную задержку
+                        wait_time = base_delay * (2 ** attempt)
+                else:
+                    # Экспоненциальная задержка
+                    wait_time = base_delay * (2 ** attempt)
+                time.sleep(wait_time)
+            if response_content_request:
+                response_content = response_content_request["choices"][0]["message"]["content"]
+                langfuse_context.update_current_observation(
+                    output=response_content
+                )
+                return AIMessage(content=response_content)
+            else:
+                raise Timeout()
         except Timeout as error:
             langfuse_context.update_current_observation(
                 level="ERROR",

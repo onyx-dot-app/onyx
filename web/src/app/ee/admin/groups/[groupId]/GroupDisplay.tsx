@@ -201,7 +201,7 @@ export const GroupDisplay = ({
           <div className="text-success font-bold">{i18n.t(k.UP_TO_DATE2)}</div>
         ) : (
           <div className="text-accent font-bold">
-            <LoadingAnimation text="Syncing" />
+            <LoadingAnimation text="Синхронизация" />
           </div>
         )}
       </div>
