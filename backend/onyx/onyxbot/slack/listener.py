@@ -264,6 +264,8 @@ class SlackbotHandler:
         - If a tenant in self.tenant_ids no longer has Slack bots, remove it (and release the lock in this scope).
         """
 
+        token: Token[str | None]
+
         # tenants that are disabled (e.g. their trial is over and haven't subscribed)
         # for non-cloud, this will return an empty set
         gated_tenants = fetch_ee_implementation_or_noop(
@@ -271,16 +273,14 @@ class SlackbotHandler:
             "get_gated_tenants",
             set(),
         )()
-        all_tenants = [
+        all_active_tenants = [
             tenant_id
             for tenant_id in get_all_tenant_ids()
             if tenant_id not in gated_tenants
         ]
 
-        token: Token[str | None]
-
         # 1) Try to acquire locks for new tenants
-        for tenant_id in all_tenants:
+        for tenant_id in all_active_tenants:
             if (
                 DISALLOWED_SLACK_BOT_TENANT_LIST is not None
                 and tenant_id in DISALLOWED_SLACK_BOT_TENANT_LIST
