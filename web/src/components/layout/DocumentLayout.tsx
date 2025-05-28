@@ -1,19 +1,17 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Logo } from '@/components/logo/Logo';
 import { UserDropdown } from '@/components/UserDropdown';
 import { DocumentSidebar } from '@/components/documents/DocumentSidebar';
 import { DocumentChatSidebar } from '@/components/documents/DocumentChatSidebar';
 import { defaultSidebarFiles } from '@/lib/documents/types';
-import { FiMessageSquare } from 'react-icons/fi';
 
 interface DocumentLayoutProps {
   children: React.ReactNode;
 }
 
 export function DocumentLayout({ children }: DocumentLayoutProps) {
-  const [chatSidebarOpen, setChatSidebarOpen] = useState(true);
   const chatSidebarWidth = 350;
 
   return (
@@ -21,16 +19,6 @@ export function DocumentLayout({ children }: DocumentLayoutProps) {
       {/* User Dropdown in top right */}
       <div className="fixed top-3 right-4 z-40">
         <UserDropdown page="documents" />
-      </div>
-      
-      {/* Chat toggle button */}
-      <div className="fixed top-3 right-16 z-40">
-        <button
-          onClick={() => setChatSidebarOpen(!chatSidebarOpen)}
-          className="p-2 rounded-md bg-background border border-border hover:bg-accent/50 transition-colors"
-        >
-          <FiMessageSquare size={18} />
-        </button>
       </div>
       
       {/* Main content with sidebars */}
@@ -56,27 +44,23 @@ export function DocumentLayout({ children }: DocumentLayoutProps) {
         
         {/* Content */}
         <div 
-          className="flex-grow overflow-auto transition-all duration-300"
+          className="flex-grow overflow-auto"
           style={{ 
-            marginRight: chatSidebarOpen ? `${chatSidebarWidth}px` : '0px' 
+            marginRight: `${chatSidebarWidth}px` 
           }}
         >
           {children}
         </div>
 
-        {/* Right Chat Sidebar */}
-        {chatSidebarOpen && (
-          <div 
-            className="fixed right-0 top-0 h-full z-30"
-            style={{ width: `${chatSidebarWidth}px` }}
-          >
-            <DocumentChatSidebar
-              isOpen={chatSidebarOpen}
-              onClose={() => setChatSidebarOpen(false)}
-              initialWidth={chatSidebarWidth}
-            />
-          </div>
-        )}
+        {/* Right Chat Sidebar - Always visible */}
+        <div 
+          className="fixed right-0 top-0 h-full z-30"
+          style={{ width: `${chatSidebarWidth}px` }}
+        >
+          <DocumentChatSidebar
+            initialWidth={chatSidebarWidth}
+          />
+        </div>
       </div>
     </div>
   );

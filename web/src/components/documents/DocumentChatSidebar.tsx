@@ -6,12 +6,10 @@ import { XIcon } from 'lucide-react';
 import { FiMessageSquare } from 'react-icons/fi';
 
 interface DocumentChatSidebarProps {
-  isOpen: boolean;
-  onClose: () => void;
   initialWidth: number;
 }
 
-export function DocumentChatSidebar({ isOpen, onClose, initialWidth }: DocumentChatSidebarProps) {
+export function DocumentChatSidebar({ initialWidth }: DocumentChatSidebarProps) {
   const [message, setMessage] = useState('');
   const [messages, setMessages] = useState<Array<{id: number, text: string, isUser: boolean}>>([]);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
@@ -39,20 +37,17 @@ export function DocumentChatSidebar({ isOpen, onClose, initialWidth }: DocumentC
 
   return (
     <div
-      className={`relative bg-background max-w-full border-l border-t border-sidebar-border dark:border-neutral-700 h-[105vh]`}
+      className={`relative bg-background max-w-full border-l border-t border-sidebar-border dark:border-neutral-700 h-screen`}
       style={{ width: initialWidth }}
     >
-      <div className={`h-full transition-transform ease-in-out duration-300 ${isOpen ? 'translate-x-0' : 'translate-x-[10%]'}`}>
+      <div className="h-full">
         <div className="flex flex-col h-full">
           {/* Header */}
-          <div className="p-4 flex items-center justify-between gap-x-2">
+          <div className="p-4 flex items-center gap-x-2">
             <div className="flex items-center gap-x-2">
               <FiMessageSquare size={18} />
               <h2 className="text-xl font-bold text-text-900">Document Chat</h2>
             </div>
-            <button className="my-auto" onClick={onClose}>
-              <XIcon size={16} />
-            </button>
           </div>
           <div className="border-b border-divider-history-sidebar-bar mx-3" />
 
