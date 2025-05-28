@@ -2,10 +2,13 @@ import React from 'react';
 import Link from 'next/link';
 import { FileIcon, TableIcon } from 'lucide-react';
 import { DocumentLayout } from '@/components/layout/DocumentLayout';
+import { fetchSettingsSS } from '@/components/settings/lib';
 
-export default function DocumentsPage() {
+export default async function DocumentsPage() {
+  const settings = await fetchSettingsSS();
+  
   return (
-    <DocumentLayout>
+    <DocumentLayout settings={settings || undefined}>
       <div className="container mx-auto p-6 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">Documents</h1>
